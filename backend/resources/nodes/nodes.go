@@ -18,6 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -455,20 +456,26 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 	var cpuRequests, cpuLimits, memRequests, memLimits int64
 	var podsList []restypes.PodSimpleInfo
 	var nodeRestarts int32
+	model := resourcemodel.BuildNodeResourceModel(s.deps.ClusterID, node)
+	nodeFacts := model.Facts.Node
 
 	for _, pod := range pods {
-		var podRestarts int32
-		for _, cs := range pod.Status.ContainerStatuses {
-			podRestarts += cs.RestartCount
-		}
+		podModel := resourcemodel.BuildPodResourceModel(s.deps.ClusterID, &pod)
+		podFacts := podModel.Facts.Pod
+		podRestarts := podFacts.RestartCount
 		nodeRestarts += podRestarts
 
 		podsList = append(podsList, restypes.PodSimpleInfo{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
-			Status:    string(pod.Status.Phase),
-			Restarts:  podRestarts,
-			Age:       common.FormatAge(pod.CreationTimestamp.Time),
+			Kind:               "Pod",
+			Name:               pod.Name,
+			Namespace:          pod.Namespace,
+			Status:             podModel.Status.Label,
+			StatusState:        podModel.Status.State,
+			StatusPresentation: podModel.Status.Presentation,
+			StatusReason:       podModel.Status.Reason,
+			Ready:              fmt.Sprintf("%d/%d", podFacts.ReadyContainers, podFacts.TotalContainers),
+			Restarts:           podRestarts,
+			Age:                common.FormatAge(pod.CreationTimestamp.Time),
 		})
 
 		if pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending {
@@ -494,30 +501,27 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 	}
 
 	details := &restypes.NodeDetails{
-		Name:             node.Name,
-		Age:              common.FormatAge(node.CreationTimestamp.Time),
-		Unschedulable:    node.Spec.Unschedulable,
-		Architecture:     node.Status.NodeInfo.Architecture,
-		OS:               node.Status.NodeInfo.OperatingSystem,
-		OSImage:          node.Status.NodeInfo.OSImage,
-		KernelVersion:    node.Status.NodeInfo.KernelVersion,
-		ContainerRuntime: node.Status.NodeInfo.ContainerRuntimeVersion,
-		KubeletVersion:   node.Status.NodeInfo.KubeletVersion,
-		Labels:           node.Labels,
-		Annotations:      node.Annotations,
-		PodsList:         podsList,
-		PodsCount:        len(podsList),
-		Restarts:         nodeRestarts,
+		Name:               node.Name,
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		Age:                common.FormatAge(node.CreationTimestamp.Time),
+		Unschedulable:      nodeFacts != nil && nodeFacts.Unschedulable,
+		Architecture:       node.Status.NodeInfo.Architecture,
+		OS:                 node.Status.NodeInfo.OperatingSystem,
+		OSImage:            node.Status.NodeInfo.OSImage,
+		KernelVersion:      node.Status.NodeInfo.KernelVersion,
+		ContainerRuntime:   node.Status.NodeInfo.ContainerRuntimeVersion,
+		KubeletVersion:     node.Status.NodeInfo.KubeletVersion,
+		Labels:             node.Labels,
+		Annotations:        node.Annotations,
+		PodsList:           podsList,
+		PodsCount:          len(podsList),
+		Restarts:           nodeRestarts,
 	}
 
 	for _, condition := range node.Status.Conditions {
-		if condition.Type == corev1.NodeReady {
-			if condition.Status == corev1.ConditionTrue {
-				details.Status = "Ready"
-			} else {
-				details.Status = "NotReady"
-			}
-		}
 		details.Conditions = append(details.Conditions, restypes.NodeCondition{
 			Kind:    string(condition.Type),
 			Status:  string(condition.Status),

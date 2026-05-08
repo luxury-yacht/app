@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
-import './NsViewHelm.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
@@ -22,6 +21,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Data interface for Helm releases
 export interface HelmData {
@@ -39,6 +39,9 @@ export interface HelmData {
   appVersion?: string;
   app_version?: string;
   status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   info?: {
     status?: string;
     revision?: number;
@@ -49,7 +52,6 @@ export interface HelmData {
   updated?: string;
   lastDeployed?: string;
   description?: string;
-  notes?: string;
   age?: string;
   [key: string]: any; // Allow additional fields
 }
@@ -180,10 +182,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
             return status;
           },
           {
-            getClassName: (resource) => {
-              const status = (resource.status || resource.info?.status || 'unknown').toLowerCase();
-              return `helm-status status-${status}`;
-            },
+            getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
           }
         ),
         cf.createTextColumn<HelmData>(
@@ -239,8 +238,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           'description',
           'Description',
           (resource) => {
-            const description =
-              resource.description || resource.info?.description || resource.notes;
+            const description = resource.description || resource.info?.description;
             if (!description) {
               return '-';
             }
@@ -248,11 +246,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           },
           {
             getClassName: (resource) =>
-              resource.description || resource.info?.description || resource.notes
-                ? 'helm-description'
-                : undefined,
-            getTitle: (resource) =>
-              resource.description || resource.info?.description || resource.notes,
+              resource.description || resource.info?.description ? 'helm-description' : undefined,
+            getTitle: (resource) => resource.description || resource.info?.description,
             sortable: false,
           }
         ),

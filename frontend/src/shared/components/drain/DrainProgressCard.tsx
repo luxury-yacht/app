@@ -60,12 +60,7 @@ export function DrainProgressCard({
   return (
     <div className="drain-progress-card">
       <div className="drain-progress-card-header">
-        <span
-          className={`status-badge ${getStatusClass(job.status)}${
-            isActive && job.status === 'running' ? ' pulse' : ''
-          }`}
-          data-test="drain-job-status"
-        >
+        <span className={`status-text ${getStatusClass(job.status)}`} data-test="drain-job-status">
           {getStatusLabel(job.status)}
         </span>
         <div className="drain-progress-card-meta">
@@ -190,7 +185,7 @@ function PodTable({ pods }: { pods: DrainPodProgress[] }) {
               <span className="name">{pod.name}</span>
             </td>
             <td>
-              <span className={`status-badge ${podStatusClass(pod.status)}`}>
+              <span className={`status-text ${podStatusClass(pod.status)}`}>
                 {podStatusLabel(pod.status)}
               </span>
             </td>

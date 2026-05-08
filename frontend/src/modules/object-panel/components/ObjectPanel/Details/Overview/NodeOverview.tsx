@@ -33,6 +33,8 @@ interface NodeOverviewProps {
   name: string;
   age: string;
   status?: string;
+  statusState?: string;
+  statusPresentation?: string;
   roles?: string;
   os?: string;
   osImage?: string;
@@ -60,6 +62,8 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
   name,
   age,
   status,
+  statusState,
+  statusPresentation,
   roles,
   os,
   osImage,
@@ -88,7 +92,11 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
       {/* Use composed component for status */}
       {status && (
         <div className="node-overview-status-row">
-          <ResourceStatus status={status} />
+          <ResourceStatus
+            status={status}
+            statusState={statusState}
+            statusPresentation={statusPresentation}
+          />
           {drainInProgress && onOpenDrain && (
             <button
               type="button"

@@ -108,19 +108,28 @@ const objectMapStatusFill = (
   status: PositionedNode['status'] | undefined,
   palette: ObjectMapG6Palette
 ): string | undefined => {
-  switch (status?.state) {
-    case 'healthy':
+  switch (status?.presentation) {
+    case 'ready':
       return palette.statusHealthy;
+    case 'not-ready':
+      return palette.statusUnhealthy;
+    case 'cordoned':
+    case 'terminating':
+    case 'warning':
+      return palette.statusDegraded;
+    case 'unknown':
+      return palette.statusInactive;
     case 'refreshing':
       return palette.statusRefreshing;
     case 'degraded':
       return palette.statusDegraded;
     case 'unhealthy':
+    case 'error':
       return palette.statusUnhealthy;
     case 'inactive':
       return palette.statusInactive;
     default:
-      return undefined;
+      return palette.statusInactive;
   }
 };
 

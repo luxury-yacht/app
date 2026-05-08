@@ -6,23 +6,14 @@ import React from 'react';
 import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
+import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { StatusChip } from '@shared/components/StatusChip';
 import './shared/OverviewBlocks.css';
 
 interface ServiceOverviewProps {
   serviceDetails: types.ServiceDetails | null;
 }
-
-const healthVariant = (status: string): StatusChipVariant => {
-  if (status === 'Healthy') return 'healthy';
-  if (status === 'No endpoints') return 'unhealthy';
-  if (status === 'External') return 'info';
-  return 'warning';
-};
-
-const lbStatusVariant = (status: string): StatusChipVariant =>
-  status === 'Ready' ? 'healthy' : 'warning';
 
 // Above this count, render a count instead of the full IP list.
 const ENDPOINT_LIST_LIMIT = 20;
@@ -83,14 +74,10 @@ export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails
       />
 
       <OverviewItem label="Type" value={serviceDetails.serviceType} />
-      <OverviewItem
-        label="Health"
-        value={
-          <StatusChip variant={healthVariant(serviceDetails.healthStatus)}>
-            {serviceDetails.healthStatus}
-          </StatusChip>
-        }
-        hidden={!serviceDetails.healthStatus}
+      <ResourceStatus
+        status={serviceDetails.status}
+        statusState={serviceDetails.statusState}
+        statusPresentation={serviceDetails.statusPresentation}
       />
 
       <OverviewItem
@@ -110,14 +97,7 @@ export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails
         <OverviewItem label="Load Balancer IP" value={serviceDetails.loadBalancerIP} />
       )}
       {isLoadBalancer && serviceDetails.loadBalancerStatus && (
-        <OverviewItem
-          label="LB Status"
-          value={
-            <StatusChip variant={lbStatusVariant(serviceDetails.loadBalancerStatus)}>
-              {serviceDetails.loadBalancerStatus}
-            </StatusChip>
-          }
-        />
+        <OverviewItem label="LB Status" value={serviceDetails.loadBalancerStatus} />
       )}
 
       {isExternalName && serviceDetails.externalName && (

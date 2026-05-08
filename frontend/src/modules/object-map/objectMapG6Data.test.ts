@@ -81,7 +81,7 @@ const layout: ObjectMapLayout = {
   bounds: { minX: -320, minY: 20, maxX: 540, maxY: 84 },
 };
 
-layout.nodes[0].status = { state: 'healthy', label: '2/2 ready' };
+layout.nodes[0].status = { state: '2/2', label: '2/2 ready', presentation: 'ready' };
 
 const palette: ObjectMapG6Palette = {
   accent: '#2563eb',
@@ -213,7 +213,7 @@ describe('objectMapG6Data', () => {
         nameLabel: 'web',
         namespaceLabel: 'default',
         ageLabel: formatAge('2024-01-01T00:00:00Z'),
-        status: { state: 'healthy', label: '2/2 ready' },
+        status: { state: '2/2', label: '2/2 ready', presentation: 'ready' },
       })
     );
     expect(deploy?.style).toEqual(
@@ -274,6 +274,68 @@ describe('objectMapG6Data', () => {
         ],
       })
     );
+  });
+
+  it('does not style raw status state when backend presentation is missing', () => {
+    const statusCases = [
+      { state: 'True', fill: '#94a3b8' },
+      { state: 'False', fill: '#94a3b8' },
+      { state: 'Unknown', fill: '#94a3b8' },
+    ];
+
+    for (const { state, fill } of statusCases) {
+      const graphData = toObjectMapG6Data(
+        {
+          ...layout,
+          nodes: [{ ...layout.nodes[2], status: { state, label: state } }],
+          edges: [],
+        },
+        selectionState(null),
+        () => null,
+        palette
+      );
+
+      expect(graphData.nodes?.[0].data?.status).toEqual({ state, label: state });
+      expect(graphData.nodes?.[0].style).toEqual(
+        expect.objectContaining({
+          cardStatusFill: fill,
+        })
+      );
+    }
+  });
+
+  it('uses backend status presentation for object-map color without changing raw state', () => {
+    const cases = [
+      { state: 'True', label: 'Terminating', presentation: 'terminating', fill: '#f59e0b' },
+      { state: 'Running', label: 'Running', presentation: 'warning', fill: '#f59e0b' },
+      { state: 'Pending', label: 'ErrImagePull', presentation: 'error', fill: '#ef4444' },
+    ];
+
+    for (const statusCase of cases) {
+      const { fill, ...status } = statusCase;
+      const graphData = toObjectMapG6Data(
+        {
+          ...layout,
+          nodes: [
+            {
+              ...layout.nodes[2],
+              status,
+            },
+          ],
+          edges: [],
+        },
+        selectionState(null),
+        () => null,
+        palette
+      );
+
+      expect(graphData.nodes?.[0].data?.status).toEqual(status);
+      expect(graphData.nodes?.[0].style).toEqual(
+        expect.objectContaining({
+          cardStatusFill: fill,
+        })
+      );
+    }
   });
 
   it('uses the centralized kind badge style resolver for card kind badges', () => {

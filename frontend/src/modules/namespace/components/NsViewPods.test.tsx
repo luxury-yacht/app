@@ -167,10 +167,6 @@ vi.mock('@/core/capabilities', () => ({
   useUserPermissions: () => useUserPermissionsMock(),
 }));
 
-vi.mock('@/utils/podStatusSeverity', () => ({
-  getPodStatusSeverity: () => 'warning',
-}));
-
 vi.mock('@/core/refresh/hooks/useMetricsAvailability', () => ({
   useClusterMetricsAvailability: () => clusterMetricsMock.current,
 }));
@@ -195,6 +191,7 @@ const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry =
   clusterName: 'alpha',
   node: 'node-a',
   status: 'Running',
+  statusPresentation: 'ready',
   ready: '1/1',
   restarts: 0,
   age: '1h',
@@ -313,6 +310,23 @@ describe('NsViewPods', () => {
     expect(gridProps.columns.map((col: any) => col.key)).toEqual(
       expect.arrayContaining(['name', 'status', 'cpu', 'memory'])
     );
+  });
+
+  it('uses backend statusPresentation for the pod status class', async () => {
+    const pods = [
+      createPod({
+        name: 'api',
+        status: 'Running',
+        statusState: 'Running',
+        statusPresentation: 'warning',
+      }),
+    ];
+    await renderPods({ data: pods });
+
+    const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
+    const cell = statusColumn.render(gridTablePropsRef.current.data[0]);
+    expect(React.isValidElement(cell)).toBe(true);
+    expect(cell.props.className).toBe('status-text warning');
   });
 
   it('passes keyed sort reuse and numeric pod sort values into useTableSort', async () => {
@@ -548,8 +562,20 @@ describe('NsViewPods', () => {
   it('filters pods when the unhealthy toggle is enabled', async () => {
     const pods = [
       createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      createPod({ name: 'pending', status: 'Pending', ready: '0/1', restarts: 0 }),
-      createPod({ name: 'restarting', status: 'Running', ready: '1/1', restarts: 2 }),
+      createPod({
+        name: 'pending',
+        status: 'Pending',
+        statusPresentation: 'warning',
+        ready: '0/1',
+        restarts: 0,
+      }),
+      createPod({
+        name: 'failing',
+        status: 'CrashLoopBackOff',
+        statusPresentation: 'error',
+        ready: '0/1',
+        restarts: 2,
+      }),
     ];
 
     await renderPods({ data: pods });
@@ -579,12 +605,23 @@ describe('NsViewPods', () => {
     expect(gridTablePropsRef.current.data).toEqual(pods);
   });
 
-  it('treats succeeded pods with readiness mismatch as healthy', async () => {
+  it('uses backend statusPresentation for the unhealthy filter', async () => {
     const pods = [
       createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      // Succeeded pods should not be marked unhealthy for readiness mismatch.
-      createPod({ name: 'cron', status: 'Succeeded', ready: '0/1', restarts: 0 }),
-      createPod({ name: 'pending', status: 'Pending', ready: '0/1', restarts: 0 }),
+      createPod({
+        name: 'frontend-mismatch-only',
+        status: 'Pending',
+        statusPresentation: 'ready',
+        ready: '0/1',
+        restarts: 5,
+      }),
+      createPod({
+        name: 'pending',
+        status: 'Running',
+        statusPresentation: 'warning',
+        ready: '1/1',
+        restarts: 0,
+      }),
     ];
 
     await renderPods({ data: pods });
@@ -605,7 +642,13 @@ describe('NsViewPods', () => {
   it('enables the unhealthy filter when an event targets the namespace and cluster', async () => {
     const pods = [
       createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      createPod({ name: 'pending', status: 'Pending', ready: '0/1', restarts: 0 }),
+      createPod({
+        name: 'pending',
+        status: 'Pending',
+        statusPresentation: 'warning',
+        ready: '0/1',
+        restarts: 0,
+      }),
     ];
 
     await renderPods({ data: pods });
@@ -621,7 +664,13 @@ describe('NsViewPods', () => {
   it('ignores unhealthy filter events for other clusters', async () => {
     const pods = [
       createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      createPod({ name: 'pending', status: 'Pending', ready: '0/1', restarts: 0 }),
+      createPod({
+        name: 'pending',
+        status: 'Pending',
+        statusPresentation: 'warning',
+        ready: '0/1',
+        restarts: 0,
+      }),
     ];
 
     await renderPods({ data: pods });
@@ -641,7 +690,13 @@ describe('NsViewPods', () => {
     window.sessionStorage.setItem(storageKey, 'team-a');
     const pods = [
       createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      createPod({ name: 'failing', status: 'CrashLoopBackOff', ready: '0/1', restarts: 5 }),
+      createPod({
+        name: 'failing',
+        status: 'CrashLoopBackOff',
+        statusPresentation: 'error',
+        ready: '0/1',
+        restarts: 5,
+      }),
     ];
 
     await renderPods({ data: pods });

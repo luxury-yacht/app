@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
@@ -35,16 +36,18 @@ type NamespaceHelmSnapshot struct {
 // NamespaceHelmSummary captures the fields required by the Helm table.
 type NamespaceHelmSummary struct {
 	ClusterMeta
-	Name        string `json:"name"`
-	Namespace   string `json:"namespace"`
-	Chart       string `json:"chart"`
-	AppVersion  string `json:"appVersion"`
-	Status      string `json:"status"`
-	Revision    int    `json:"revision"`
-	Updated     string `json:"updated"`
-	Description string `json:"description,omitempty"`
-	Notes       string `json:"notes,omitempty"`
-	Age         string `json:"age"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	Chart              string `json:"chart"`
+	AppVersion         string `json:"appVersion"`
+	Status             string `json:"status"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Revision           int    `json:"revision"`
+	Updated            string `json:"updated"`
+	Description        string `json:"description,omitempty"`
+	Age                string `json:"age"`
 }
 
 // RegisterNamespaceHelmDomain registers the Helm snapshot builder.
@@ -244,42 +247,42 @@ func mapHelmReleases(
 		if namespaceFilter != "" && ns != namespaceFilter {
 			continue
 		}
-		chartName := ""
-		appVersion := ""
-		if chart := release.Chart; chart != nil {
-			chartName = fmt.Sprintf("%s-%s", chart.Name(), chart.Metadata.Version)
-			appVersion = chart.Metadata.AppVersion
-		}
-		status := "unknown"
+		model := resourcemodel.BuildHelmReleaseResourceModel(
+			meta.ClusterID,
+			release,
+			namespaceFilter,
+			nil,
+			nil,
+			resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts},
+		)
+		facts := model.Facts.HelmRelease
+		chartName := facts.Chart
+		appVersion := facts.AppVersion
+		status := model.Status.Label
 		updated := ""
 		description := ""
-		notes := ""
 		age := ""
-		if info := release.Info; info != nil {
-			if info.Status.String() != "" {
-				status = info.Status.String()
-			}
-			if !info.LastDeployed.IsZero() {
-				updated = info.LastDeployed.Time.Format(time.RFC3339)
-			}
-			description = info.Description
-			notes = info.Notes
-			if !info.FirstDeployed.IsZero() {
-				age = formatAge(info.FirstDeployed.Time)
-			}
+		if facts.Updated != nil && !facts.Updated.IsZero() {
+			updated = facts.Updated.Time.Format(time.RFC3339)
+		}
+		description = facts.Description
+		if !model.Metadata.CreationTimestamp.IsZero() {
+			age = formatAge(model.Metadata.CreationTimestamp.Time)
 		}
 		summaries = append(summaries, NamespaceHelmSummary{
-			ClusterMeta: meta,
-			Name:        release.Name,
-			Namespace:   ns,
-			Chart:       chartName,
-			AppVersion:  appVersion,
-			Status:      status,
-			Revision:    release.Version,
-			Updated:     updated,
-			Description: description,
-			Notes:       notes,
-			Age:         age,
+			ClusterMeta:        meta,
+			Name:               release.Name,
+			Namespace:          ns,
+			Chart:              chartName,
+			AppVersion:         appVersion,
+			Status:             status,
+			StatusState:        model.Status.State,
+			StatusPresentation: model.Status.Presentation,
+			StatusReason:       model.Status.Reason,
+			Revision:           release.Version,
+			Updated:            updated,
+			Description:        description,
+			Age:                age,
 		})
 		if v := uint64(release.Version); v > version {
 			version = v

@@ -51,7 +51,6 @@
    bar's track background. We don't define a fill class for it. */
 
 .podstate-caption {
-  font-size: 0.75rem;
   color: var(--color-text-secondary);
 }
 

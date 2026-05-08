@@ -60,27 +60,43 @@ describe('ResourceStatus', () => {
     result.cleanup();
   });
 
-  it('renders status badge with severity class', async () => {
+  it('renders status text with the backend statusPresentation class', async () => {
     const { container: root, cleanup } = await renderStatus({
-      status: 'Running',
-      statusSeverity: 'Warning',
+      status: 'Ready (Cordoned)',
+      statusState: 'True',
+      statusPresentation: 'cordoned',
     });
     container = root;
 
-    const badge = root.querySelector('.status-badge');
-    expect(badge?.textContent).toBe('Running');
-    expect(badge?.classList.contains('warning')).toBe(true);
+    const statusText = root.querySelector('.status-text');
+    expect(statusText?.textContent).toBe('Ready (Cordoned)');
+    expect(statusText?.classList.contains('cordoned')).toBe(true);
+    expect(statusText?.classList.contains('True')).toBe(false);
     cleanup();
   });
 
-  it('renders ready badge and highlights when counts mismatch', async () => {
+  it('does not use backend statusState as a presentation class', async () => {
+    const { container: root, cleanup } = await renderStatus({
+      status: 'Ready',
+      statusState: 'True',
+    });
+    container = root;
+
+    const statusText = root.querySelector('.status-text');
+    expect(statusText?.textContent).toBe('Ready');
+    expect(statusText?.classList.contains('unknown')).toBe(true);
+    expect(statusText?.classList.contains('True')).toBe(false);
+    cleanup();
+  });
+
+  it('renders ready text and highlights when counts mismatch', async () => {
     const { container: root, cleanup } = await renderStatus({
       ready: '1/3',
     });
     container = root;
 
-    const badge = root.querySelector('.status-badge.warning');
-    expect(badge?.textContent).toBe('1/3');
+    const statusText = root.querySelector('.status-text.warning');
+    expect(statusText?.textContent).toBe('1/3');
     cleanup();
   });
 

@@ -244,16 +244,8 @@
   color: var(--color-warning, #f59e0b);
 }
 
-.sidebar-item .namespace-status-badge {
+.sidebar-item .namespace-status-label {
   margin-left: auto;
-  padding: 0 0.4rem;
-  border-radius: var(--border-radius-round);
-  background-color: var(--color-warning-bg, rgba(255, 193, 7, 0.2));
-  color: var(--color-warning, #f59e0b);
-  font-size: 0.675rem;
-  font-weight: var(--font-weight-semibold, 600);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 /* Sidebar toggle button */

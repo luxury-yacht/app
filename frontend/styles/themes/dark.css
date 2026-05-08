@@ -97,13 +97,18 @@
 
   /* Status colors */
   --status-available-bg: rgba(34, 197, 94, 0.25);
-  --status-available-text: #86efac;
+  --status-available-text: var(--color-text);
   --status-failed-bg: rgba(239, 68, 68, 0.2);
-  --status-failed-text: #f87171;
+  --status-failed-text: var(--badge-red-text);
   --status-released-bg: rgba(249, 115, 22, 0.25);
-  --status-released-text: #f97316;
-  --status-warning-text: var(--color-accent-dark-400);
+  --status-released-text: var(--badge-orange-text);
+  --status-warning-text: var(--badge-warning-text);
   --status-warning-bg: rgba(245, 158, 11, 0.25);
+  --status-text-ready: var(--color-text);
+  --status-text-warning: var(--status-warning-text);
+  --status-text-error: var(--status-failed-text);
+  --status-text-unknown: var(--color-text-secondary);
+  --status-text-info: var(--color-accent);
 
   /* Object map relationship colors */
   --object-map-edge-owner: #c084fc;

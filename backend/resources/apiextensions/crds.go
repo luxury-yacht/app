@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -55,58 +56,78 @@ func (s *Service) CustomResourceDefinitions() ([]*types.CustomResourceDefinition
 }
 
 func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition) *types.CustomResourceDefinitionDetails {
+	model := resourcemodel.BuildCustomResourceDefinitionResourceModel(s.deps.ClusterID, crd)
+	facts := model.Facts.CustomResourceDefinition
 	details := &types.CustomResourceDefinitionDetails{
 		Kind:        "CustomResourceDefinition",
 		Name:        crd.Name,
-		Group:       crd.Spec.Group,
-		Scope:       string(crd.Spec.Scope),
 		Age:         common.FormatAge(crd.CreationTimestamp.Time),
-		Labels:      crd.Labels,
-		Annotations: crd.Annotations,
+		Labels:      model.Metadata.Labels,
+		Annotations: model.Metadata.Annotations,
 	}
 
-	for _, version := range crd.Spec.Versions {
-		entry := types.CRDVersion{
-			Name:       version.Name,
-			Served:     version.Served,
-			Storage:    version.Storage,
-			Deprecated: version.Deprecated,
+	if facts != nil {
+		details.Group = facts.Group
+		details.Scope = facts.Scope
+		details.Versions = crdVersionsFromFacts(facts.Versions)
+		details.Names = crdNamesFromFacts(facts.Names)
+		details.ConversionStrategy = facts.ConversionStrategy
+		details.Conditions = crdConditionsFromFacts(facts.Conditions)
+		details.Details = fmt.Sprintf("Group: %s, Scope: %s", facts.Group, facts.Scope)
+		if len(facts.Versions) > 0 {
+			details.Details += fmt.Sprintf(", Versions: %d", len(facts.Versions))
 		}
-		if version.Schema != nil && version.Schema.OpenAPIV3Schema != nil {
-			entry.Schema = map[string]interface{}{"type": "object", "hasSchema": true}
-		}
-		details.Versions = append(details.Versions, entry)
-	}
-
-	details.Names = types.CRDNames{
-		Plural:     crd.Spec.Names.Plural,
-		Singular:   crd.Spec.Names.Singular,
-		Kind:       crd.Spec.Names.Kind,
-		ListKind:   crd.Spec.Names.ListKind,
-		ShortNames: append([]string{}, crd.Spec.Names.ShortNames...),
-		Categories: append([]string{}, crd.Spec.Names.Categories...),
-	}
-
-	if crd.Spec.Conversion != nil {
-		details.ConversionStrategy = string(crd.Spec.Conversion.Strategy)
-	}
-
-	for _, condition := range crd.Status.Conditions {
-		details.Conditions = append(details.Conditions, types.CRDCondition{
-			Kind:               string(condition.Type),
-			Status:             string(condition.Status),
-			Reason:             condition.Reason,
-			Message:            condition.Message,
-			LastTransitionTime: condition.LastTransitionTime,
-		})
-	}
-
-	details.Details = fmt.Sprintf("Group: %s, Scope: %s", crd.Spec.Group, crd.Spec.Scope)
-	if len(crd.Spec.Versions) > 0 {
-		details.Details += fmt.Sprintf(", Versions: %d", len(crd.Spec.Versions))
 	}
 
 	return details
+}
+
+func crdVersionsFromFacts(facts []resourcemodel.CRDVersionFacts) []types.CRDVersion {
+	if len(facts) == 0 {
+		return nil
+	}
+	versions := make([]types.CRDVersion, 0, len(facts))
+	for _, fact := range facts {
+		version := types.CRDVersion{
+			Name:       fact.Name,
+			Served:     fact.Served,
+			Storage:    fact.Storage,
+			Deprecated: fact.Deprecated,
+		}
+		if fact.HasSchema {
+			version.Schema = map[string]interface{}{"type": "object", "hasSchema": true}
+		}
+		versions = append(versions, version)
+	}
+	return versions
+}
+
+func crdNamesFromFacts(facts resourcemodel.CRDNamesFacts) types.CRDNames {
+	return types.CRDNames{
+		Plural:     facts.Plural,
+		Singular:   facts.Singular,
+		Kind:       facts.Kind,
+		ListKind:   facts.ListKind,
+		ShortNames: append([]string(nil), facts.ShortNames...),
+		Categories: append([]string(nil), facts.Categories...),
+	}
+}
+
+func crdConditionsFromFacts(facts []resourcemodel.ConditionFacts) []types.CRDCondition {
+	if len(facts) == 0 {
+		return nil
+	}
+	conditions := make([]types.CRDCondition, 0, len(facts))
+	for _, fact := range facts {
+		conditions = append(conditions, types.CRDCondition{
+			Kind:               fact.Type,
+			Status:             fact.Status,
+			Reason:             fact.Reason,
+			Message:            fact.Message,
+			LastTransitionTime: fact.LastTransitionTime,
+		})
+	}
+	return conditions
 }
 
 func (s *Service) ensureAPIExtensions(resource string) error {

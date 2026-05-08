@@ -203,6 +203,12 @@ Run the prerelease checks. This should surface any problems that could cause the
 mage qc:prerelease
 ```
 
+You should also run the benchmark tests if you're going to make changes to the backend code. Compare the numbers before and after your change to make sure you haven't introduced any major performance hits.
+
+```bash
+mage qc:benchmark
+```
+
 1. Update the version in [wails.json](wails.json)
 
 1. Commit and push the change.

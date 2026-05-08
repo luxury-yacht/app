@@ -52,6 +52,7 @@ var Aliases = map[string]interface{}{
 	"npm-update-fix":      QC.NpmUpdate,
 	"go-mod-update-check": QC.GoModUpdateCheck,
 	"go-mod-update":       QC.GoModUpdate,
+	"benchmark":           QC.Benchmark,
 	"knip":                QC.Knip,
 	"vet":                 QC.Vet,
 	"trivy":               QC.Trivy,
@@ -287,6 +288,12 @@ func (QC) NpmUpdate() error {
 	return sh.RunV("npx", "npm-check-updates", "-u")
 }
 
+// Runs backend performance benchmarks that guard shared resource model regressions.
+func (QC) Benchmark() error {
+	fmt.Println("\n🔎 Running shared resource model benchmarks...")
+	return sh.RunV("go", "test", "./backend/resourcemodel", "./backend/refresh/snapshot", "-run", "^$", "-bench", "Benchmark(ResourceRelationship|SharedModel)", "-benchtime=20x")
+}
+
 // Runs knip to find unused files, dependencies, and exports in the frontend
 func (QC) Knip() error {
 	if err := isNpxInstalled(); err != nil {
@@ -318,7 +325,7 @@ func (QC) Reset() error {
 
 // Runs all checks that could cause a release to fail.
 func (QC) PreRelease() error {
-	mg.SerialDeps(QC.Vet, Test.Race, QC.LintFix, QC.Lint, QC.Typecheck, Test.Frontend, QC.Trivy)
+	mg.SerialDeps(QC.Vet, Test.Race, QC.LintFix, QC.Lint, QC.Typecheck, Test.Frontend, QC.Knip, QC.Trivy)
 	return nil
 }
 

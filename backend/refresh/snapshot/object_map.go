@@ -12,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
@@ -166,13 +167,14 @@ type ObjectMapNode struct {
 	Status            *ObjectMapStatus   `json:"status,omitempty"`
 }
 
-// ObjectMapStatus is a compact card-level status indicator. State mirrors the
-// shared frontend StatusIndicator states so object-map dots use the same visual
-// vocabulary as the rest of the app.
+// ObjectMapStatus is a compact card-level status indicator. State is the source
+// status value selected by the resource-specific status builder. Presentation is
+// the backend-selected rendering token for migrated resources that need one.
 type ObjectMapStatus struct {
-	State  string `json:"state"`
-	Label  string `json:"label"`
-	Reason string `json:"reason,omitempty"`
+	State        string `json:"state"`
+	Label        string `json:"label"`
+	Presentation string `json:"presentation,omitempty"`
+	Reason       string `json:"reason,omitempty"`
 }
 
 // ObjectMapEdge captures a directed relationship between two graph nodes.
@@ -520,7 +522,7 @@ func (idx *objectMapIndex) collectPods(ctx context.Context, client kubernetes.In
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&pod.ObjectMeta, "", "v1", "Pod", "pods", pod.Namespace),
 			creationTimestamp: objectCreationTimestamp(&pod.ObjectMeta),
-			status:            objectMapPodStatus(pod),
+			status:            objectMapPodStatus(idx.meta.ClusterID, pod),
 			owners:            pod.OwnerReferences,
 			labels:            cloneStringMap(pod.Labels),
 			pod:               &pod,
@@ -538,7 +540,7 @@ func (idx *objectMapIndex) collectServices(ctx context.Context, client kubernete
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&svc.ObjectMeta, "", "v1", "Service", "services", svc.Namespace),
 			creationTimestamp: objectCreationTimestamp(&svc.ObjectMeta),
-			status:            objectMapServiceStatus(svc),
+			status:            objectMapServiceStatus(idx.meta.ClusterID, svc),
 			owners:            svc.OwnerReferences,
 			labels:            cloneStringMap(svc.Labels),
 			service:           &svc,
@@ -556,6 +558,7 @@ func (idx *objectMapIndex) collectEndpointSlices(ctx context.Context, client kub
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&slice.ObjectMeta, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", slice.Namespace),
 			creationTimestamp: objectCreationTimestamp(&slice.ObjectMeta),
+			status:            objectMapEndpointSliceStatus(idx.meta.ClusterID, slice),
 			owners:            slice.OwnerReferences,
 			labels:            cloneStringMap(slice.Labels),
 			slice:             &slice,
@@ -573,7 +576,7 @@ func (idx *objectMapIndex) collectPVCs(ctx context.Context, client kubernetes.In
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&pvc.ObjectMeta, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", pvc.Namespace),
 			creationTimestamp: objectCreationTimestamp(&pvc.ObjectMeta),
-			status:            objectMapPVCStatus(pvc),
+			status:            objectMapPVCStatus(idx.meta.ClusterID, pvc),
 			owners:            pvc.OwnerReferences,
 			labels:            cloneStringMap(pvc.Labels),
 			pvc:               &pvc,
@@ -591,7 +594,7 @@ func (idx *objectMapIndex) collectPVs(ctx context.Context, client kubernetes.Int
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&pv.ObjectMeta, "", "v1", "PersistentVolume", "persistentvolumes", ""),
 			creationTimestamp: objectCreationTimestamp(&pv.ObjectMeta),
-			status:            objectMapPVStatus(pv),
+			status:            objectMapPVStatus(idx.meta.ClusterID, pv),
 			owners:            pv.OwnerReferences,
 			labels:            cloneStringMap(pv.Labels),
 			pv:                &pv,
@@ -609,6 +612,7 @@ func (idx *objectMapIndex) collectStorageClasses(ctx context.Context, client kub
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&sc.ObjectMeta, "storage.k8s.io", "v1", "StorageClass", "storageclasses", ""),
 			creationTimestamp: objectCreationTimestamp(&sc.ObjectMeta),
+			status:            objectMapStorageClassStatus(idx.meta.ClusterID, sc),
 			owners:            sc.OwnerReferences,
 			labels:            cloneStringMap(sc.Labels),
 			storage:           &sc,
@@ -626,6 +630,7 @@ func (idx *objectMapIndex) collectConfigMaps(ctx context.Context, client kuberne
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&cm.ObjectMeta, "", "v1", "ConfigMap", "configmaps", cm.Namespace),
 			creationTimestamp: objectCreationTimestamp(&cm.ObjectMeta),
+			status:            objectMapConfigMapStatus(idx.meta.ClusterID, cm),
 			owners:            cm.OwnerReferences,
 			labels:            cloneStringMap(cm.Labels),
 		})
@@ -642,6 +647,7 @@ func (idx *objectMapIndex) collectSecrets(ctx context.Context, client kubernetes
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&secret.ObjectMeta, "", "v1", "Secret", "secrets", secret.Namespace),
 			creationTimestamp: objectCreationTimestamp(&secret.ObjectMeta),
+			status:            objectMapSecretStatus(idx.meta.ClusterID, secret),
 			owners:            secret.OwnerReferences,
 			labels:            cloneStringMap(secret.Labels),
 		})
@@ -658,6 +664,7 @@ func (idx *objectMapIndex) collectServiceAccounts(ctx context.Context, client ku
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&sa.ObjectMeta, "", "v1", "ServiceAccount", "serviceaccounts", sa.Namespace),
 			creationTimestamp: objectCreationTimestamp(&sa.ObjectMeta),
+			status:            objectMapServiceAccountStatus(idx.meta.ClusterID, sa),
 			owners:            sa.OwnerReferences,
 			labels:            cloneStringMap(sa.Labels),
 		})
@@ -674,7 +681,7 @@ func (idx *objectMapIndex) collectNodes(ctx context.Context, client kubernetes.I
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&node.ObjectMeta, "", "v1", "Node", "nodes", ""),
 			creationTimestamp: objectCreationTimestamp(&node.ObjectMeta),
-			status:            objectMapNodeStatus(node),
+			status:            objectMapNodeStatus(idx.meta.ClusterID, node),
 			owners:            node.OwnerReferences,
 			labels:            cloneStringMap(node.Labels),
 		})
@@ -691,7 +698,7 @@ func (idx *objectMapIndex) collectDeployments(ctx context.Context, client kubern
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&deploy.ObjectMeta, "apps", "v1", "Deployment", "deployments", deploy.Namespace),
 			creationTimestamp: objectCreationTimestamp(&deploy.ObjectMeta),
-			status:            objectMapDeploymentStatus(deploy),
+			status:            objectMapDeploymentStatus(idx.meta.ClusterID, deploy),
 			owners:            deploy.OwnerReferences,
 			labels:            cloneStringMap(deploy.Labels),
 			template:          &deploy.Spec.Template,
@@ -709,6 +716,7 @@ func (idx *objectMapIndex) collectReplicaSets(ctx context.Context, client kubern
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&rs.ObjectMeta, "apps", "v1", "ReplicaSet", "replicasets", rs.Namespace),
 			creationTimestamp: objectCreationTimestamp(&rs.ObjectMeta),
+			status:            objectMapReplicaSetStatus(idx.meta.ClusterID, rs),
 			owners:            rs.OwnerReferences,
 			labels:            cloneStringMap(rs.Labels),
 			template:          &rs.Spec.Template,
@@ -726,7 +734,7 @@ func (idx *objectMapIndex) collectStatefulSets(ctx context.Context, client kuber
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&sts.ObjectMeta, "apps", "v1", "StatefulSet", "statefulsets", sts.Namespace),
 			creationTimestamp: objectCreationTimestamp(&sts.ObjectMeta),
-			status:            objectMapStatefulSetStatus(sts),
+			status:            objectMapStatefulSetStatus(idx.meta.ClusterID, sts),
 			owners:            sts.OwnerReferences,
 			labels:            cloneStringMap(sts.Labels),
 			template:          &sts.Spec.Template,
@@ -744,7 +752,7 @@ func (idx *objectMapIndex) collectDaemonSets(ctx context.Context, client kuberne
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&ds.ObjectMeta, "apps", "v1", "DaemonSet", "daemonsets", ds.Namespace),
 			creationTimestamp: objectCreationTimestamp(&ds.ObjectMeta),
-			status:            objectMapDaemonSetStatus(ds),
+			status:            objectMapDaemonSetStatus(idx.meta.ClusterID, ds),
 			owners:            ds.OwnerReferences,
 			labels:            cloneStringMap(ds.Labels),
 			template:          &ds.Spec.Template,
@@ -762,7 +770,7 @@ func (idx *objectMapIndex) collectJobs(ctx context.Context, client kubernetes.In
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&job.ObjectMeta, "batch", "v1", "Job", "jobs", job.Namespace),
 			creationTimestamp: objectCreationTimestamp(&job.ObjectMeta),
-			status:            objectMapJobStatus(job),
+			status:            objectMapJobStatus(idx.meta.ClusterID, job),
 			owners:            job.OwnerReferences,
 			labels:            cloneStringMap(job.Labels),
 			template:          job.Spec.Template.DeepCopy(),
@@ -780,7 +788,7 @@ func (idx *objectMapIndex) collectCronJobs(ctx context.Context, client kubernete
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&cron.ObjectMeta, "batch", "v1", "CronJob", "cronjobs", cron.Namespace),
 			creationTimestamp: objectCreationTimestamp(&cron.ObjectMeta),
-			status:            objectMapCronJobStatus(cron),
+			status:            objectMapCronJobStatus(idx.meta.ClusterID, cron),
 			owners:            cron.OwnerReferences,
 			labels:            cloneStringMap(cron.Labels),
 			cronJobTpl:        cron.Spec.JobTemplate.Spec.Template.DeepCopy(),
@@ -798,7 +806,7 @@ func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.In
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&hpa.ObjectMeta, "autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", hpa.Namespace),
 			creationTimestamp: objectCreationTimestamp(&hpa.ObjectMeta),
-			status:            objectMapHPAStatus(hpa),
+			status:            objectMapHPAStatus(idx.meta.ClusterID, hpa),
 			owners:            hpa.OwnerReferences,
 			labels:            cloneStringMap(hpa.Labels),
 			hpa:               &hpa,
@@ -816,7 +824,7 @@ func (idx *objectMapIndex) collectIngresses(ctx context.Context, client kubernet
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&ing.ObjectMeta, "networking.k8s.io", "v1", "Ingress", "ingresses", ing.Namespace),
 			creationTimestamp: objectCreationTimestamp(&ing.ObjectMeta),
-			status:            objectMapIngressStatus(ing),
+			status:            objectMapIngressStatus(idx.meta.ClusterID, ing),
 			owners:            ing.OwnerReferences,
 			labels:            cloneStringMap(ing.Labels),
 			ingress:           &ing,
@@ -834,6 +842,7 @@ func (idx *objectMapIndex) collectIngressClasses(ctx context.Context, client kub
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&ingClass.ObjectMeta, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", ""),
 			creationTimestamp: objectCreationTimestamp(&ingClass.ObjectMeta),
+			status:            objectMapIngressClassStatus(idx.meta.ClusterID, ingClass),
 			owners:            ingClass.OwnerReferences,
 			labels:            cloneStringMap(ingClass.Labels),
 			ingClass:          &ingClass,
@@ -851,6 +860,7 @@ func (idx *objectMapIndex) collectClusterRoles(ctx context.Context, client kuber
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&role.ObjectMeta, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", ""),
 			creationTimestamp: objectCreationTimestamp(&role.ObjectMeta),
+			status:            objectMapClusterRoleStatus(idx.meta.ClusterID, role),
 			owners:            role.OwnerReferences,
 			labels:            cloneStringMap(role.Labels),
 			clusterRole:       &role,
@@ -868,6 +878,7 @@ func (idx *objectMapIndex) collectClusterRoleBindings(ctx context.Context, clien
 		idx.addRecord(&objectMapRecord{
 			ref:                refFromObject(&binding.ObjectMeta, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings", ""),
 			creationTimestamp:  objectCreationTimestamp(&binding.ObjectMeta),
+			status:             objectMapClusterRoleBindingStatus(idx.meta.ClusterID, binding),
 			owners:             binding.OwnerReferences,
 			labels:             cloneStringMap(binding.Labels),
 			clusterRoleBinding: &binding,
@@ -1014,267 +1025,119 @@ func objectMapStatus(state, label string, reasons ...string) *ObjectMapStatus {
 	return status
 }
 
-func objectMapReplicasStatus(ready, desired int32) *ObjectMapStatus {
-	if desired == 0 {
-		return objectMapStatus("inactive", "Scaled to 0")
-	}
-	label := fmt.Sprintf("%d/%d ready", ready, desired)
-	if ready >= desired {
-		return objectMapStatus("healthy", label)
-	}
-	if ready > 0 {
-		return objectMapStatus("degraded", label)
-	}
-	return objectMapStatus("degraded", label)
+func objectMapPodStatus(clusterID string, pod corev1.Pod) *ObjectMapStatus {
+	model := resourcemodel.BuildPodResourceModel(clusterID, &pod)
+	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
+	status.Presentation = model.Status.Presentation
+	return status
 }
 
-func objectMapPodStatus(pod corev1.Pod) *ObjectMapStatus {
-	label := objectMapPodStatusLabel(pod)
-	switch {
-	case label == "Running":
-		ready, total := objectMapPodReadyContainers(pod)
-		if total > 0 && ready == total {
-			return objectMapStatus("healthy", label)
-		}
-		if total > 0 {
-			return objectMapStatus("degraded", fmt.Sprintf("%d/%d ready", ready, total))
-		}
-		return objectMapStatus("degraded", label)
-	case label == "Succeeded":
-		return objectMapStatus("healthy", label)
-	case label == "Unknown":
-		return objectMapStatus("inactive", label)
-	case objectMapPodDegradedStatusLabel(label):
-		return objectMapStatus("degraded", label)
-	default:
-		return objectMapStatus("unhealthy", label)
-	}
+func objectMapServiceStatus(clusterID string, service corev1.Service) *ObjectMapStatus {
+	model := resourcemodel.BuildServiceResourceModel(clusterID, &service, nil)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapPodStatusLabel(pod corev1.Pod) string {
-	if pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted" {
-		return "Evicted"
-	}
-	for _, status := range pod.Status.InitContainerStatuses {
-		if status.State.Terminated != nil && status.State.Terminated.ExitCode != 0 {
-			if status.State.Terminated.Reason != "" {
-				return "Init:" + status.State.Terminated.Reason
-			}
-			return "Init:Error"
-		}
-		if status.State.Waiting != nil && status.State.Waiting.Reason != "" && status.State.Waiting.Reason != "PodInitializing" {
-			return "Init:" + status.State.Waiting.Reason
-		}
-	}
-	for _, status := range pod.Status.ContainerStatuses {
-		if status.State.Waiting != nil && status.State.Waiting.Reason != "" {
-			return status.State.Waiting.Reason
-		}
-		if status.State.Terminated != nil && status.State.Terminated.Reason != "" {
-			return status.State.Terminated.Reason
-		}
-	}
-	if pod.DeletionTimestamp != nil {
-		return "Terminating"
-	}
-	if pod.Status.Phase != "" {
-		return string(pod.Status.Phase)
-	}
-	return "Unknown"
+func objectMapEndpointSliceStatus(clusterID string, slice discoveryv1.EndpointSlice) *ObjectMapStatus {
+	model := resourcemodel.BuildEndpointSliceResourceModel(clusterID, &slice)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapPodReadyContainers(pod corev1.Pod) (int, int) {
-	statusByName := make(map[string]corev1.ContainerStatus, len(pod.Status.ContainerStatuses))
-	for _, status := range pod.Status.ContainerStatuses {
-		statusByName[status.Name] = status
-	}
-
-	if len(pod.Spec.Containers) == 0 {
-		ready := 0
-		for _, status := range pod.Status.ContainerStatuses {
-			if status.Ready {
-				ready++
-			}
-		}
-		return ready, len(pod.Status.ContainerStatuses)
-	}
-
-	ready := 0
-	for _, container := range pod.Spec.Containers {
-		if status, ok := statusByName[container.Name]; ok && status.Ready {
-			ready++
-		}
-	}
-	return ready, len(pod.Spec.Containers)
+func objectMapPVCStatus(clusterID string, pvc corev1.PersistentVolumeClaim) *ObjectMapStatus {
+	model := resourcemodel.BuildPersistentVolumeClaimResourceModel(clusterID, &pvc)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapPodDegradedStatusLabel(label string) bool {
-	switch label {
-	case "Pending", "Terminating", "ContainerCreating", "PodInitializing":
-		return true
-	default:
-		return strings.HasPrefix(label, "Init:")
-	}
+func objectMapPVStatus(clusterID string, pv corev1.PersistentVolume) *ObjectMapStatus {
+	model := resourcemodel.BuildPersistentVolumeResourceModel(clusterID, &pv)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapServiceStatus(service corev1.Service) *ObjectMapStatus {
-	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
-		if len(service.Status.LoadBalancer.Ingress) > 0 {
-			return objectMapStatus("healthy", "LoadBalancer active")
-		}
-		return objectMapStatus("degraded", "LoadBalancer pending")
-	}
-	return nil
+func objectMapStorageClassStatus(clusterID string, storageClass storagev1.StorageClass) *ObjectMapStatus {
+	model := resourcemodel.BuildStorageClassResourceModel(clusterID, &storageClass)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapPVCStatus(pvc corev1.PersistentVolumeClaim) *ObjectMapStatus {
-	switch pvc.Status.Phase {
-	case corev1.ClaimBound:
-		return objectMapStatus("healthy", string(pvc.Status.Phase))
-	case corev1.ClaimLost:
-		return objectMapStatus("unhealthy", string(pvc.Status.Phase))
-	case corev1.ClaimPending:
-		return objectMapStatus("degraded", string(pvc.Status.Phase))
-	default:
-		if pvc.Status.Phase == "" {
-			return nil
-		}
-		return objectMapStatus("inactive", string(pvc.Status.Phase))
-	}
+func objectMapConfigMapStatus(clusterID string, configMap corev1.ConfigMap) *ObjectMapStatus {
+	model := resourcemodel.BuildConfigMapResourceModel(clusterID, &configMap, nil)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapPVStatus(pv corev1.PersistentVolume) *ObjectMapStatus {
-	switch pv.Status.Phase {
-	case corev1.VolumeBound, corev1.VolumeAvailable:
-		return objectMapStatus("healthy", string(pv.Status.Phase))
-	case corev1.VolumeFailed:
-		return objectMapStatus("unhealthy", string(pv.Status.Phase), pv.Status.Reason)
-	case corev1.VolumePending:
-		return objectMapStatus("degraded", string(pv.Status.Phase))
-	case corev1.VolumeReleased:
-		return objectMapStatus("inactive", string(pv.Status.Phase))
-	default:
-		if pv.Status.Phase == "" {
-			return nil
-		}
-		return objectMapStatus("inactive", string(pv.Status.Phase))
-	}
+func objectMapSecretStatus(clusterID string, secret corev1.Secret) *ObjectMapStatus {
+	model := resourcemodel.BuildSecretResourceModel(clusterID, &secret, nil)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapNodeStatus(node corev1.Node) *ObjectMapStatus {
-	for _, condition := range node.Status.Conditions {
-		if condition.Type != corev1.NodeReady {
-			continue
-		}
-		if condition.Status == corev1.ConditionTrue {
-			if objectMapNodeCordoned(node) {
-				return objectMapStatus("degraded", "Ready (Cordoned)", condition.Reason)
-			}
-			return objectMapStatus("healthy", "Ready", condition.Reason)
-		}
-		if condition.Status == corev1.ConditionUnknown {
-			return objectMapStatus("inactive", "Unknown", condition.Reason)
-		}
-		return objectMapStatus("unhealthy", "NotReady", condition.Reason)
-	}
-	return objectMapStatus("inactive", "Unknown")
+func objectMapServiceAccountStatus(clusterID string, sa corev1.ServiceAccount) *ObjectMapStatus {
+	model := resourcemodel.BuildServiceAccountResourceModel(clusterID, &sa, nil)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapNodeCordoned(node corev1.Node) bool {
-	if node.Spec.Unschedulable {
-		return true
-	}
-	for _, taint := range node.Spec.Taints {
-		if taint.Key == corev1.TaintNodeUnschedulable {
-			return true
-		}
-	}
-	return false
+func objectMapNodeStatus(clusterID string, node corev1.Node) *ObjectMapStatus {
+	model := resourcemodel.BuildNodeResourceModel(clusterID, &node)
+	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
+	status.Presentation = model.Status.Presentation
+	return status
 }
 
-func objectMapDeploymentStatus(deploy appsv1.Deployment) *ObjectMapStatus {
-	for _, condition := range deploy.Status.Conditions {
-		if condition.Type == appsv1.DeploymentProgressing && condition.Reason == "ProgressDeadlineExceeded" && condition.Status == corev1.ConditionFalse {
-			return objectMapStatus("unhealthy", "Progress deadline", condition.Message)
-		}
-	}
-	desired := int32(1)
-	if deploy.Spec.Replicas != nil {
-		desired = *deploy.Spec.Replicas
-	}
-	return objectMapReplicasStatus(deploy.Status.ReadyReplicas, desired)
+func objectMapDeploymentStatus(clusterID string, deploy appsv1.Deployment) *ObjectMapStatus {
+	model := resourcemodel.BuildDeploymentResourceModel(clusterID, &deploy)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapStatefulSetStatus(sts appsv1.StatefulSet) *ObjectMapStatus {
-	desired := int32(1)
-	if sts.Spec.Replicas != nil {
-		desired = *sts.Spec.Replicas
-	}
-	return objectMapReplicasStatus(sts.Status.ReadyReplicas, desired)
+func objectMapReplicaSetStatus(clusterID string, rs appsv1.ReplicaSet) *ObjectMapStatus {
+	model := resourcemodel.BuildReplicaSetResourceModel(clusterID, &rs)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapDaemonSetStatus(ds appsv1.DaemonSet) *ObjectMapStatus {
-	if ds.Status.DesiredNumberScheduled == 0 {
-		return objectMapStatus("inactive", "Scaled to 0")
-	}
-	if ds.Status.NumberReady >= ds.Status.DesiredNumberScheduled {
-		return objectMapStatus("healthy", fmt.Sprintf("%d/%d ready", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled))
-	}
-	return objectMapStatus("degraded", fmt.Sprintf("%d/%d ready", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled))
+func objectMapStatefulSetStatus(clusterID string, sts appsv1.StatefulSet) *ObjectMapStatus {
+	model := resourcemodel.BuildStatefulSetResourceModel(clusterID, &sts)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapJobStatus(job batchv1.Job) *ObjectMapStatus {
-	for _, condition := range job.Status.Conditions {
-		if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
-			return objectMapStatus("unhealthy", "Failed", condition.Message)
-		}
-		if condition.Type == batchv1.JobComplete && condition.Status == corev1.ConditionTrue {
-			return objectMapStatus("healthy", "Complete", condition.Message)
-		}
-	}
-	if job.Spec.Suspend != nil && *job.Spec.Suspend {
-		return objectMapStatus("inactive", "Suspended")
-	}
-	if job.Status.Active > 0 {
-		return objectMapStatus("healthy", "Running")
-	}
-	if job.Status.Failed > 0 {
-		return objectMapStatus("unhealthy", "Failed")
-	}
-	return objectMapStatus("degraded", "Pending")
+func objectMapDaemonSetStatus(clusterID string, ds appsv1.DaemonSet) *ObjectMapStatus {
+	model := resourcemodel.BuildDaemonSetResourceModel(clusterID, &ds)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapCronJobStatus(cron batchv1.CronJob) *ObjectMapStatus {
-	if cron.Spec.Suspend != nil && *cron.Spec.Suspend {
-		return objectMapStatus("inactive", "Suspended")
-	}
-	if len(cron.Status.Active) > 0 {
-		return objectMapStatus("healthy", "Active")
-	}
-	return objectMapStatus("inactive", "Idle")
+func objectMapJobStatus(clusterID string, job batchv1.Job) *ObjectMapStatus {
+	model := resourcemodel.BuildJobResourceModel(clusterID, &job)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapHPAStatus(hpa autoscalingv2.HorizontalPodAutoscaler) *ObjectMapStatus {
-	for _, condition := range hpa.Status.Conditions {
-		if condition.Status != corev1.ConditionFalse {
-			continue
-		}
-		switch condition.Type {
-		case autoscalingv2.AbleToScale, autoscalingv2.ScalingActive:
-			return objectMapStatus("unhealthy", string(condition.Type), condition.Message)
-		}
-	}
-	if hpa.Status.DesiredReplicas != hpa.Status.CurrentReplicas {
-		return objectMapStatus("degraded", fmt.Sprintf("%d/%d replicas", hpa.Status.CurrentReplicas, hpa.Status.DesiredReplicas))
-	}
-	return objectMapStatus("healthy", fmt.Sprintf("%d replicas", hpa.Status.CurrentReplicas))
+func objectMapCronJobStatus(clusterID string, cron batchv1.CronJob) *ObjectMapStatus {
+	model := resourcemodel.BuildCronJobResourceModel(clusterID, &cron)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapIngressStatus(ingress networkingv1.Ingress) *ObjectMapStatus {
-	if len(ingress.Status.LoadBalancer.Ingress) > 0 {
-		return objectMapStatus("healthy", "Address assigned")
-	}
-	return objectMapStatus("degraded", "Address pending")
+func objectMapStatusFromResourceModel(model resourcemodel.ResourceModel) *ObjectMapStatus {
+	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
+	status.Presentation = model.Status.Presentation
+	return status
+}
+
+func objectMapHPAStatus(clusterID string, hpa autoscalingv2.HorizontalPodAutoscaler) *ObjectMapStatus {
+	model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(clusterID, &hpa)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapIngressStatus(clusterID string, ingress networkingv1.Ingress) *ObjectMapStatus {
+	model := resourcemodel.BuildIngressResourceModel(clusterID, &ingress)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapIngressClassStatus(clusterID string, ingressClass networkingv1.IngressClass) *ObjectMapStatus {
+	model := resourcemodel.BuildIngressClassResourceModel(clusterID, &ingressClass)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapClusterRoleStatus(clusterID string, role rbacv1.ClusterRole) *ObjectMapStatus {
+	model := resourcemodel.BuildClusterRoleResourceModel(clusterID, &role, nil)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapClusterRoleBindingStatus(clusterID string, binding rbacv1.ClusterRoleBinding) *ObjectMapStatus {
+	model := resourcemodel.BuildClusterRoleBindingResourceModel(clusterID, &binding)
+	return objectMapStatusFromResourceModel(model)
 }
 
 func (idx *objectMapIndex) findIdentity(namespace string, gvk schema.GroupVersionKind, name string) (*objectMapRecord, bool) {
@@ -1713,11 +1576,8 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 			}
 		}
 		if record.hpa != nil {
-			gv, err := schema.ParseGroupVersion(record.hpa.Spec.ScaleTargetRef.APIVersion)
-			if err != nil {
-				continue
-			}
-			target := idx.byIdent[objectMapIdentityKey(record.ref.Namespace, gv.Group, gv.Version, record.hpa.Spec.ScaleTargetRef.Kind, record.hpa.Spec.ScaleTargetRef.Name)]
+			model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(idx.meta.ClusterID, record.hpa)
+			target := idx.recordForResourceLink(model.Facts.HorizontalPodAutoscaler.ScaleTarget)
 			relationship := objectMapRelationships[objectMapEdgeScales]
 			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 		}
@@ -1730,11 +1590,15 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 			}
 		}
 		if record.clusterRoleBinding != nil {
-			target := idx.clusterRoleBindingRoleRef(record.clusterRoleBinding.RoleRef)
+			model := resourcemodel.BuildClusterRoleBindingResourceModel(idx.meta.ClusterID, record.clusterRoleBinding)
+			target := idx.recordForResourceLink(model.Facts.ClusterRoleBinding.RoleRef)
 			relationship := objectMapRelationships[objectMapEdgeGrants]
 			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-			for _, subject := range record.clusterRoleBinding.Subjects {
-				target := idx.clusterRoleBindingSubject(subject)
+			for _, subject := range model.Facts.ClusterRoleBinding.Subjects {
+				if subject.Link == nil {
+					continue
+				}
+				target := idx.recordForResourceLink(*subject.Link)
 				relationship := objectMapRelationships[objectMapEdgeBinds]
 				add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 			}
@@ -1883,22 +1747,14 @@ func (idx *objectMapIndex) findIngressClass(name string) *objectMapRecord {
 	return idx.byIdent[objectMapIdentityKey("", "networking.k8s.io", "v1", "IngressClass", name)]
 }
 
-func (idx *objectMapIndex) findClusterRole(name string) *objectMapRecord {
-	return idx.byIdent[objectMapIdentityKey("", "rbac.authorization.k8s.io", "v1", "ClusterRole", name)]
-}
-
-func (idx *objectMapIndex) clusterRoleBindingRoleRef(ref rbacv1.RoleRef) *objectMapRecord {
-	if ref.Kind != "ClusterRole" || ref.Name == "" {
-		return nil
+func (idx *objectMapIndex) recordForResourceLink(link resourcemodel.ResourceLink) *objectMapRecord {
+	if link.Ref != nil {
+		return idx.byIdent[objectMapIdentityKey(link.Ref.Namespace, link.Ref.Group, link.Ref.Version, link.Ref.Kind, link.Ref.Name)]
 	}
-	return idx.findClusterRole(ref.Name)
-}
-
-func (idx *objectMapIndex) clusterRoleBindingSubject(subject rbacv1.Subject) *objectMapRecord {
-	if subject.Kind != "ServiceAccount" || subject.Name == "" || subject.Namespace == "" {
-		return nil
+	if link.Display != nil {
+		return idx.byIdent[objectMapIdentityKey(link.Display.Namespace, link.Display.Group, link.Display.Version, link.Display.Kind, link.Display.Name)]
 	}
-	return idx.findCore(subject.Namespace, "v1", "ServiceAccount", subject.Name)
+	return nil
 }
 
 func (idx *objectMapIndex) clusterRolesMatchingSelector(selector metav1.LabelSelector) []*objectMapRecord {

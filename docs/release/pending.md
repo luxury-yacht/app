@@ -1,19 +1,10 @@
 ### Changed
 
-- Object Map improvements
-  - Improved performance on very large maps
-    - Progressively reduce card detail at low zoom levels to save on redraw overhead
-    - Switched to simple straight connections for very large maps instead of computationally expensive curved connections
-  - Added a toolbar icon for Reset Zoom
-  - Added a Map Debug overlay, invoked with `ctrl+alt+m`
-    - When in Map Debug mode, there is an overlay showing the coordinated on the map
-  - Added Object and Link counts to the Legend
-  - Added a close button to the Legend with a tooltip explaining how to reopen it
-  - Added clearer visual feedback for manual map refresh
-- Removed dead CSS and migrated hardcoded colors to tokens in the theme files
+- Removed the Maintenance tab in the Node Object Panel. Cordon, Drain, and Delete are now available in the context and actions menus.
+  - Performing a drain opens an info modal. The modal exposes advanced options and shows the status of all drain attempts on that node.
+- Backend resource semantics now live in a shared model under `backend/resourcemodel`. Previously, views would decide on how interpret the data, which allowed statuses and references to drift between tables, detail panels, streams, and maps. The backend now canonically manages resource identity, status, lifecycle, and object relationships, while the frontend renders the app-level models instead of reinterpreting Kubernetes semantics. The upshot of all this is more consistent data presentation throughout the app, and less risk of future drift.
 
 ### Fixed
 
-- The Object Map would sometimes generate incomplete payloads, resulting in missing objects. Imcomplete data should now be rejected before it is passed to the frontend.
-- The Object Map would appear to jump unpredictably when using Focus mode without Auto-Fit. This behavior should be more predictable.
-- Updated vite config to fix error on startup when running in development mode
+- Links color in the theme was not being applied at startup
+- Inconsistent object link colors in Events views

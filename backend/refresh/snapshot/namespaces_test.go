@@ -40,6 +40,9 @@ func TestNamespaceBuilderSortsByName(t *testing.T) {
 		if ns.WorkloadsUnknown {
 			t.Fatalf("expected workloads unknown to be false for namespace %s", ns.Name)
 		}
+		if ns.StatusState == "" || ns.StatusPresentation == "" {
+			t.Fatalf("expected namespace status projection for %s, got state=%q presentation=%q", ns.Name, ns.StatusState, ns.StatusPresentation)
+		}
 	}
 }
 
@@ -49,7 +52,10 @@ func TestNamespaceBuilderUsesTrackerWhenKnown(t *testing.T) {
 
 	tracker.handleAdd(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "alpha", Name: "web"}}, resourceDeployment)
 
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "100"}}
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "100"},
+		Status:     corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
+	}
 
 	builder := &NamespaceBuilder{
 		namespaces: testsupport.NewNamespaceLister(t, ns),
@@ -75,6 +81,9 @@ func TestNamespaceBuilderUsesTrackerWhenKnown(t *testing.T) {
 	}
 	if summary.WorkloadsUnknown {
 		t.Fatalf("expected WorkloadsUnknown false when tracker has data")
+	}
+	if summary.Status != "Active" || summary.StatusState != "Active" || summary.StatusPresentation != "ready" {
+		t.Fatalf("expected shared namespace status projection, got %#v", summary)
 	}
 }
 

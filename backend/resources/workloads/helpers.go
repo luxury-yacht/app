@@ -176,30 +176,10 @@ func parseReadyStatus(value string) (ready, total int) {
 // supplied by the workload caller (Deployment, StatefulSet, DaemonSet, ReplicaSet —
 // all apps/v1). The apiVersion lets the panel open the owner with a fully-qualified
 // GVK; see PodSimpleInfo.OwnerAPIVersion
-func buildPodSummaries(ownerKind, ownerName, ownerAPIVersion string, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) []restypes.PodSimpleInfo {
+func buildPodSummaries(clusterID, ownerKind, ownerName, ownerAPIVersion string, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) []restypes.PodSimpleInfo {
 	podInfos := make([]restypes.PodSimpleInfo, 0, len(podsList))
 	for _, pod := range podsList {
-		cpuReq, cpuLim, memReq, memLim := pods.CalculatePodResources(pod)
-		cpuUse, memUse := pods.PodUsageFromMetrics(pod.Name, podMetrics)
-
-		podInfos = append(podInfos, restypes.PodSimpleInfo{
-			Name:            pod.Name,
-			Kind:            "Pod",
-			Namespace:       pod.Namespace,
-			Status:          string(pod.Status.Phase),
-			Ready:           pods.PodReadyStatus(pod),
-			Restarts:        pods.PodRestartCount(pod),
-			Age:             common.FormatAge(pod.CreationTimestamp.Time),
-			CPURequest:      common.FormatCPU(cpuReq),
-			CPULimit:        common.FormatCPU(cpuLim),
-			CPUUsage:        common.FormatCPU(cpuUse),
-			MemRequest:      common.FormatMemory(memReq),
-			MemLimit:        common.FormatMemory(memLim),
-			MemUsage:        common.FormatMemory(memUse),
-			OwnerKind:       ownerKind,
-			OwnerName:       ownerName,
-			OwnerAPIVersion: ownerAPIVersion,
-		})
+		podInfos = append(podInfos, pods.SummarizePod(clusterID, pod, podMetrics, ownerKind, ownerName, ownerAPIVersion))
 	}
 
 	return podInfos

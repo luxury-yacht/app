@@ -9,8 +9,8 @@ package rbac
 
 import (
 	"fmt"
-	"sort"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -61,74 +61,35 @@ func (s *Service) ServiceAccounts(namespace string) ([]*types.ServiceAccountDeta
 }
 
 func (s *Service) buildServiceAccountDetails(sa *corev1.ServiceAccount, pods *corev1.PodList, roleBindings *rbacv1.RoleBindingList, clusterRoleBindings *rbacv1.ClusterRoleBindingList) *types.ServiceAccountDetails {
+	relationships := resourcemodel.NewResourceRelationshipIndex(
+		s.deps.ClusterID,
+		resourcemodel.ResourceRelationshipIndexOptions{
+			Pods:                pods,
+			RoleBindings:        roleBindings,
+			ClusterRoleBindings: clusterRoleBindings,
+		},
+	)
+	model := resourcemodel.BuildServiceAccountResourceModel(
+		s.deps.ClusterID,
+		sa,
+		relationships,
+		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
+	)
+	facts := model.Facts.ServiceAccount
 	details := &types.ServiceAccountDetails{
 		Kind:                         "ServiceAccount",
 		Name:                         sa.Name,
 		Namespace:                    sa.Namespace,
 		Age:                          common.FormatAge(sa.CreationTimestamp.Time),
-		AutomountServiceAccountToken: sa.AutomountServiceAccountToken,
+		Details:                      serviceAccountDetailsSummary(facts),
+		Secrets:                      resourcemodel.ResourceLinkNames(facts.Secrets),
+		ImagePullSecrets:             resourcemodel.ResourceLinkNames(facts.ImagePullSecrets),
+		AutomountServiceAccountToken: facts.AutomountToken,
 		Labels:                       sa.Labels,
 		Annotations:                  sa.Annotations,
+		UsedByPods:                   resourcemodel.ResourceLinkNames(facts.UsedByPods),
+		RoleBindings:                 resourcemodel.ResourceLinkNames(facts.RoleBindings),
+		ClusterRoleBindings:          resourcemodel.ResourceLinkNames(facts.ClusterRoleBindings),
 	}
-
-	for _, secret := range sa.Secrets {
-		details.Secrets = append(details.Secrets, secret.Name)
-	}
-	for _, secret := range sa.ImagePullSecrets {
-		details.ImagePullSecrets = append(details.ImagePullSecrets, secret.Name)
-	}
-
-	if pods != nil {
-		usedBy := make(map[string]bool)
-		for _, pod := range pods.Items {
-			if pod.Spec.ServiceAccountName == sa.Name || (pod.Spec.ServiceAccountName == "" && sa.Name == "default") {
-				usedBy[pod.Name] = true
-			}
-		}
-		for name := range usedBy {
-			details.UsedByPods = append(details.UsedByPods, name)
-		}
-		sort.Strings(details.UsedByPods)
-	}
-
-	if roleBindings != nil {
-		for _, rb := range roleBindings.Items {
-			for _, subject := range rb.Subjects {
-				if subject.Kind == "ServiceAccount" && subject.Name == sa.Name && (subject.Namespace == "" || subject.Namespace == sa.Namespace) {
-					details.RoleBindings = append(details.RoleBindings, rb.Name)
-					break
-				}
-			}
-		}
-		sort.Strings(details.RoleBindings)
-	}
-
-	if clusterRoleBindings != nil {
-		for _, crb := range clusterRoleBindings.Items {
-			for _, subject := range crb.Subjects {
-				if subject.Kind == "ServiceAccount" && subject.Name == sa.Name && subject.Namespace == sa.Namespace {
-					details.ClusterRoleBindings = append(details.ClusterRoleBindings, crb.Name)
-					break
-				}
-			}
-		}
-		sort.Strings(details.ClusterRoleBindings)
-	}
-
-	summary := fmt.Sprintf("Secrets: %d", len(details.Secrets))
-	if len(details.ImagePullSecrets) > 0 {
-		summary += fmt.Sprintf(", ImagePullSecrets: %d", len(details.ImagePullSecrets))
-	}
-	if len(details.UsedByPods) > 0 {
-		summary += fmt.Sprintf(", Used by %d pod(s)", len(details.UsedByPods))
-	}
-	if len(details.RoleBindings) > 0 {
-		summary += fmt.Sprintf(", RoleBindings: %d", len(details.RoleBindings))
-	}
-	if len(details.ClusterRoleBindings) > 0 {
-		summary += fmt.Sprintf(", ClusterRoleBindings: %d", len(details.ClusterRoleBindings))
-	}
-	details.Details = summary
-
 	return details
 }

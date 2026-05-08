@@ -195,7 +195,10 @@ func TestNodeBuilderBuild(t *testing.T) {
 	summary := payload.Nodes[0]
 
 	require.Equal(t, "node-1", summary.Name)
-	require.Equal(t, "Ready", summary.Status)
+	require.Equal(t, "Ready (Cordoned)", summary.Status)
+	require.Equal(t, "True", summary.StatusState)
+	require.Equal(t, "cordoned", summary.StatusPresentation)
+	require.Equal(t, "Unschedulable", summary.StatusReason)
 	require.Equal(t, "control-plane,custom,worker", summary.Roles)
 	require.Equal(t, "v1.29.0", summary.Version)
 	require.Equal(t, "10.0.0.5", summary.InternalIP)

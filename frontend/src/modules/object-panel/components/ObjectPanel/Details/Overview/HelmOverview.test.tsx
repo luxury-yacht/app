@@ -27,7 +27,11 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: any) => <div data-testid="resource-status">{props.status}</div>,
+  ResourceStatus: (props: any) => (
+    <div data-testid="resource-status" data-presentation={props.statusPresentation}>
+      {props.status}
+    </div>
+  ),
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
@@ -80,12 +84,25 @@ describe('HelmOverview', () => {
         version: '1.2.3',
         appVersion: '2.0.0',
         status: 'Deployed',
+        statusPresentation: 'ready',
         revision: 5,
         updated: '2024-01-01T00:00:00Z',
         description: 'Upgrade complete',
         resources: [
-          { kind: 'Deployment', name: 'api', namespace: 'prod' },
-          { kind: 'Service', name: 'api-svc', namespace: 'prod' },
+          {
+            kind: 'Deployment',
+            apiVersion: 'apps/v1',
+            name: 'api',
+            namespace: 'prod',
+            scope: 'namespaced',
+          },
+          {
+            kind: 'Service',
+            apiVersion: 'v1',
+            name: 'api-svc',
+            namespace: 'prod',
+            scope: 'namespaced',
+          },
         ],
         history: [
           { revision: 5, status: 'Deployed', updated: '2024-01-01', chart: 'api-chart-1.2.3' },
@@ -100,6 +117,9 @@ describe('HelmOverview', () => {
     });
 
     expect(getValueForLabel('Chart')?.textContent).toBe('api-chart');
+    expect(
+      container.querySelector('[data-testid="resource-status"]')?.getAttribute('data-presentation')
+    ).toBe('ready');
     expect(getValueForLabel('Chart Version')?.textContent).toBe('1.2.3');
     expect(getValueForLabel('App Version')?.textContent).toBe('2.0.0');
     expect(getValueForLabel('Revision')?.textContent).toBe('5');
@@ -112,7 +132,7 @@ describe('HelmOverview', () => {
     });
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'deployment',
+        kind: 'Deployment',
         name: 'api',
         namespace: 'prod',
         clusterId: defaultClusterId,
@@ -133,5 +153,44 @@ describe('HelmOverview', () => {
 
     expect(getValueForLabel('Chart')?.textContent).toBe('fallback-chart');
     expect(container.textContent).toContain('Pending');
+  });
+
+  it('does not link managed resources whose scope is unknown', async () => {
+    await renderComponent({
+      helmReleaseDetails: {
+        name: 'api-release',
+        namespace: 'prod',
+        status: 'Deployed',
+        resources: [
+          {
+            kind: 'Database',
+            apiVersion: 'databases.example.com/v1alpha1',
+            name: 'orders',
+            namespace: 'prod',
+          },
+          {
+            kind: 'ClusterRole',
+            apiVersion: 'rbac.authorization.k8s.io/v1',
+            name: 'reader',
+            namespace: '',
+            scope: 'cluster',
+          },
+        ],
+      } as any,
+    });
+
+    const resourceLinks = container.querySelectorAll('.metadata-pair .object-panel-link');
+    expect(resourceLinks).toHaveLength(1);
+    act(() => {
+      resourceLinks[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'ClusterRole',
+        name: 'reader',
+        namespace: undefined,
+        clusterId: defaultClusterId,
+      })
+    );
   });
 });

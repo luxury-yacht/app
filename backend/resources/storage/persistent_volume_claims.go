@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -63,16 +64,30 @@ func (s *Service) PersistentVolumeClaims(namespace string) ([]*types.PersistentV
 }
 
 func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolumeClaim, pods *corev1.PodList) *types.PersistentVolumeClaimDetails {
+	relationships := resourcemodel.NewResourceRelationshipIndex(
+		s.deps.ClusterID,
+		resourcemodel.ResourceRelationshipIndexOptions{Pods: pods},
+	)
+	model := resourcemodel.BuildPersistentVolumeClaimResourceModelWithRelationships(
+		s.deps.ClusterID,
+		pvc,
+		relationships,
+		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
+	)
+	facts := model.Facts.PersistentVolumeClaim
 	details := &types.PersistentVolumeClaimDetails{
-		Kind:         "PersistentVolumeClaim",
-		Name:         pvc.Name,
-		Namespace:    pvc.Namespace,
-		Age:          common.FormatAge(pvc.CreationTimestamp.Time),
-		Status:       string(pvc.Status.Phase),
-		StorageClass: pvc.Spec.StorageClassName,
-		VolumeName:   pvc.Spec.VolumeName,
-		Labels:       pvc.Labels,
-		Annotations:  pvc.Annotations,
+		Kind:               "PersistentVolumeClaim",
+		Name:               pvc.Name,
+		Namespace:          pvc.Namespace,
+		Age:                common.FormatAge(pvc.CreationTimestamp.Time),
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		StorageClass:       pvc.Spec.StorageClassName,
+		VolumeName:         pvc.Spec.VolumeName,
+		Labels:             pvc.Labels,
+		Annotations:        pvc.Annotations,
 	}
 
 	for _, mode := range pvc.Spec.AccessModes {
@@ -122,15 +137,8 @@ func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolu
 		details.Conditions = append(details.Conditions, condStr)
 	}
 
-	if pods != nil {
-		for _, pod := range pods.Items {
-			for _, volume := range pod.Spec.Volumes {
-				if volume.PersistentVolumeClaim != nil && volume.PersistentVolumeClaim.ClaimName == pvc.Name {
-					details.MountedBy = append(details.MountedBy, pod.Name)
-					break
-				}
-			}
-		}
+	if facts != nil {
+		details.MountedBy = resourcemodel.ResourceLinkNames(facts.MountedBy)
 	}
 
 	storageClassInfo := "default"

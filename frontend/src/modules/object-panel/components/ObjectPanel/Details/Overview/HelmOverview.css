@@ -25,10 +25,6 @@
   gap: 0.5rem;
 }
 
-.helm-history-status {
-  font-size: var(--font-size-x-small);
-}
-
 .helm-history-description {
   margin-left: 1rem;
   margin-top: 0.25rem;

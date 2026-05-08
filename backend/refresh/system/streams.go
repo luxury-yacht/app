@@ -40,6 +40,7 @@ func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.M
 		deps.informerFactory.SharedInformerFactory().Core().V1().Events(),
 		deps.cfg.Logger,
 		deps.telemetry,
+		deps.clusterMeta.ClusterID,
 	)
 	eventHandler, err := eventstream.NewHandler(deps.snapshotService, eventManager, deps.cfg.Logger)
 	if err != nil {

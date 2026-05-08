@@ -697,5 +697,26 @@ describe('NsViewCustom', () => {
       // directly (no wrapping span, no role="button", no onClick).
       expect(rendered).toBe('-');
     });
+
+    it('uses backend statusPresentation for custom-resource status styling', async () => {
+      const resource: CustomResourceData = {
+        ...baseResource,
+        apiGroup: 'rds.services.k8s.aws',
+        apiVersion: 'v1alpha1',
+        kind: 'DBInstance',
+        status: 'Not Ready',
+        statusState: 'false',
+        statusPresentation: 'warning',
+      };
+
+      await renderComponent({ data: [resource], loaded: true });
+
+      const gridProps = gridTableMock.mock.calls[0][0];
+      const statusCol = findColumn(gridProps, 'status');
+      const rendered = statusCol.render(resource) as React.ReactElement<any>;
+
+      expect((rendered as any).props.children).toBe('Not Ready');
+      expect((rendered as any).props.className).toBe('status-text warning');
+    });
   });
 });

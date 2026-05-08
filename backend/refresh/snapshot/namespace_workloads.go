@@ -24,6 +24,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
@@ -69,6 +70,9 @@ type WorkloadSummary struct {
 	Namespace            string `json:"namespace"`
 	Ready                string `json:"ready"`
 	Status               string `json:"status"`
+	StatusState          string `json:"statusState,omitempty"`
+	StatusPresentation   string `json:"statusPresentation,omitempty"`
+	StatusReason         string `json:"statusReason,omitempty"`
 	Restarts             int32  `json:"restarts"`
 	Age                  string `json:"age"`
 	CPUUsage             string `json:"cpuUsage,omitempty"`
@@ -266,7 +270,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		if deployment == nil {
 			continue
 		}
-		summary := b.buildDeploymentSummary(deployment, podsByOwner, podUsage)
+		summary := b.buildDeploymentSummary(meta.ClusterID, deployment, podsByOwner, podUsage)
 		appendSummary(summary, deployment)
 	}
 
@@ -274,7 +278,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		if stateful == nil {
 			continue
 		}
-		summary := b.buildStatefulSetSummary(stateful, podsByOwner, podUsage)
+		summary := b.buildStatefulSetSummary(meta.ClusterID, stateful, podsByOwner, podUsage)
 		appendSummary(summary, stateful)
 	}
 
@@ -282,7 +286,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		if daemon == nil {
 			continue
 		}
-		summary := b.buildDaemonSetSummary(daemon, podsByOwner, podUsage)
+		summary := b.buildDaemonSetSummary(meta.ClusterID, daemon, podsByOwner, podUsage)
 		appendSummary(summary, daemon)
 	}
 
@@ -290,7 +294,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		if job == nil {
 			continue
 		}
-		summary := b.buildJobSummary(job, podsByOwner, podUsage)
+		summary := b.buildJobSummary(meta.ClusterID, job, podsByOwner, podUsage)
 		appendSummary(summary, job)
 	}
 
@@ -298,7 +302,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		if cron == nil {
 			continue
 		}
-		summary := b.buildCronJobSummary(cron, podsByOwner, podUsage)
+		summary := b.buildCronJobSummary(meta.ClusterID, cron, podsByOwner, podUsage)
 		appendSummary(summary, cron)
 	}
 
@@ -320,7 +324,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 				continue
 			}
 		}
-		summary := buildStandalonePodSummary(pod, podUsage)
+		summary := buildStandalonePodSummary(meta.ClusterID, pod, podUsage)
 		appendSummary(summary, pod)
 	}
 
@@ -361,6 +365,7 @@ func sortWorkloadSummaries(items []WorkloadSummary) {
 }
 
 func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
+	clusterID string,
 	deployment *appsv1.Deployment,
 	podsByOwner map[string][]*corev1.Pod,
 	usage map[string]metrics.PodUsage,
@@ -379,13 +384,17 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 	if deployment != nil {
 		ready = deployment.Status.ReadyReplicas
 	}
+	model := resourcemodel.BuildDeploymentResourceModel(clusterID, deployment)
 
 	return WorkloadSummary{
 		Kind:                 "Deployment",
 		Name:                 deployment.Name,
 		Namespace:            deployment.Namespace,
 		Ready:                fmt.Sprintf("%d/%d", ready, desired),
-		Status:               getDeploymentStatus(deployment),
+		Status:               model.Status.Label,
+		StatusState:          model.Status.State,
+		StatusPresentation:   model.Status.Presentation,
+		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(deployment.CreationTimestamp.Time),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
@@ -399,6 +408,7 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 }
 
 func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
+	clusterID string,
 	stateful *appsv1.StatefulSet,
 	podsByOwner map[string][]*corev1.Pod,
 	usage map[string]metrics.PodUsage,
@@ -417,13 +427,17 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 	if stateful != nil {
 		ready = stateful.Status.ReadyReplicas
 	}
+	model := resourcemodel.BuildStatefulSetResourceModel(clusterID, stateful)
 
 	return WorkloadSummary{
 		Kind:                 "StatefulSet",
 		Name:                 stateful.Name,
 		Namespace:            stateful.Namespace,
 		Ready:                fmt.Sprintf("%d/%d", ready, desired),
-		Status:               getStatefulSetStatus(stateful),
+		Status:               model.Status.Label,
+		StatusState:          model.Status.State,
+		StatusPresentation:   model.Status.Presentation,
+		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(stateful.CreationTimestamp.Time),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
@@ -437,6 +451,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 }
 
 func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
+	clusterID string,
 	daemon *appsv1.DaemonSet,
 	podsByOwner map[string][]*corev1.Pod,
 	usage map[string]metrics.PodUsage,
@@ -453,13 +468,17 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 		ready = daemon.Status.NumberReady
 		desired = daemon.Status.DesiredNumberScheduled
 	}
+	model := resourcemodel.BuildDaemonSetResourceModel(clusterID, daemon)
 
 	return WorkloadSummary{
 		Kind:                 "DaemonSet",
 		Name:                 daemon.Name,
 		Namespace:            daemon.Namespace,
 		Ready:                fmt.Sprintf("%d/%d", ready, desired),
-		Status:               getDaemonSetStatus(daemon),
+		Status:               model.Status.Label,
+		StatusState:          model.Status.State,
+		StatusPresentation:   model.Status.Presentation,
+		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(daemon.CreationTimestamp.Time),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
@@ -473,6 +492,7 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 }
 
 func (b *NamespaceWorkloadsBuilder) buildJobSummary(
+	clusterID string,
 	job *batchv1.Job,
 	podsByOwner map[string][]*corev1.Pod,
 	usage map[string]metrics.PodUsage,
@@ -491,13 +511,17 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 	if job != nil {
 		completed = job.Status.Succeeded
 	}
+	model := resourcemodel.BuildJobResourceModel(clusterID, job)
 
 	return WorkloadSummary{
 		Kind:                 "Job",
 		Name:                 job.Name,
 		Namespace:            job.Namespace,
 		Ready:                fmt.Sprintf("%d/%d", completed, desired),
-		Status:               getJobStatus(job),
+		Status:               model.Status.Label,
+		StatusState:          model.Status.State,
+		StatusPresentation:   model.Status.Presentation,
+		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(job.CreationTimestamp.Time),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
@@ -511,6 +535,7 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 }
 
 func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
+	clusterID string,
 	cron *batchv1.CronJob,
 	podsByOwner map[string][]*corev1.Pod,
 	usage map[string]metrics.PodUsage,
@@ -525,13 +550,17 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 	if cron != nil {
 		active = len(cron.Status.Active)
 	}
+	model := resourcemodel.BuildCronJobResourceModel(clusterID, cron)
 
 	return WorkloadSummary{
 		Kind:                 "CronJob",
 		Name:                 cron.Name,
 		Namespace:            cron.Namespace,
 		Ready:                fmt.Sprintf("%d", active),
-		Status:               getCronJobStatus(cron),
+		Status:               model.Status.Label,
+		StatusState:          model.Status.State,
+		StatusPresentation:   model.Status.Presentation,
+		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(cron.CreationTimestamp.Time),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
@@ -544,17 +573,20 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 	}
 }
 
-func buildStandalonePodSummary(pod *corev1.Pod, usage map[string]metrics.PodUsage) WorkloadSummary {
+func buildStandalonePodSummary(clusterID string, pod *corev1.Pod, usage map[string]metrics.PodUsage) WorkloadSummary {
 	resources := aggregateWorkloadPodResources([]*corev1.Pod{pod}, usage)
 	ready := podReadyStatus(pod)
-	status := podStatus(pod)
+	model := resourcemodel.BuildPodResourceModel(clusterID, pod)
 
 	return WorkloadSummary{
 		Kind:                 "Pod",
 		Name:                 pod.Name,
 		Namespace:            pod.Namespace,
 		Ready:                ready,
-		Status:               status,
+		Status:               model.Status.Label,
+		StatusState:          model.Status.State,
+		StatusPresentation:   model.Status.Presentation,
+		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(pod.CreationTimestamp.Time),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
@@ -587,9 +619,7 @@ func aggregateWorkloadPodResources(pods []*corev1.Pod, usage map[string]metrics.
 			continue
 		}
 
-		for _, status := range pod.Status.ContainerStatuses {
-			totals.Restarts += status.RestartCount
-		}
+		totals.Restarts += resourcemodel.BuildPodFacts(pod).RestartCount
 
 		for _, container := range pod.Spec.Containers {
 			if req := container.Resources.Requests; req != nil {
@@ -658,14 +688,8 @@ func podReadyStatus(pod *corev1.Pod) string {
 	if pod == nil {
 		return "0/0"
 	}
-	ready := 0
-	total := len(pod.Status.ContainerStatuses)
-	for _, status := range pod.Status.ContainerStatuses {
-		if status.Ready {
-			ready++
-		}
-	}
-	return fmt.Sprintf("%d/%d", ready, total)
+	facts := resourcemodel.BuildPodFacts(pod)
+	return fmt.Sprintf("%d/%d", facts.ReadyContainers, facts.TotalContainers)
 }
 
 func (b *NamespaceWorkloadsBuilder) listPods(namespace string) ([]*corev1.Pod, error) {
@@ -735,16 +759,6 @@ func buildHPATargetSet(hpas []*autoscalingv1.HorizontalPodAutoscaler) map[string
 	}
 	return targets
 }
-func podStatus(pod *corev1.Pod) string {
-	if pod == nil {
-		return "Unknown"
-	}
-	if pod.Status.Reason != "" {
-		return pod.Status.Reason
-	}
-	return string(pod.Status.Phase)
-}
-
 func formatWorkloadCPUMilli(value int64) string {
 	if value <= 0 {
 		return "-"
@@ -774,79 +788,4 @@ func formatWorkloadMemory(value int64) string {
 		return fmt.Sprintf("%.0fKi", float64(value)/float64(ki))
 	}
 	return fmt.Sprintf("%d", value)
-}
-
-// Status helper functions replicated from the legacy workload builder.
-func getDeploymentStatus(d *appsv1.Deployment) string {
-	if d == nil {
-		return "Unknown"
-	}
-	if d.Status.Replicas == 0 {
-		return "Scaled to 0"
-	}
-	if d.Spec.Replicas != nil && d.Status.ReadyReplicas == *d.Spec.Replicas {
-		return "Running"
-	}
-	if d.Status.ReadyReplicas > 0 {
-		return "Updating"
-	}
-	return "Pending"
-}
-
-func getStatefulSetStatus(s *appsv1.StatefulSet) string {
-	if s == nil {
-		return "Unknown"
-	}
-	if s.Status.Replicas == 0 {
-		return "Scaled to 0"
-	}
-	if s.Spec.Replicas != nil && s.Status.ReadyReplicas == *s.Spec.Replicas {
-		return "Running"
-	}
-	if s.Status.ReadyReplicas > 0 {
-		return "Updating"
-	}
-	return "Pending"
-}
-
-func getDaemonSetStatus(d *appsv1.DaemonSet) string {
-	if d == nil {
-		return "Unknown"
-	}
-	if d.Status.NumberReady == d.Status.DesiredNumberScheduled {
-		return "Running"
-	}
-	if d.Status.NumberReady > 0 {
-		return "Updating"
-	}
-	return "Pending"
-}
-
-func getJobStatus(j *batchv1.Job) string {
-	if j == nil {
-		return "Unknown"
-	}
-	if j.Status.Succeeded > 0 {
-		return "Completed"
-	}
-	if j.Status.Failed > 0 {
-		return "Failed"
-	}
-	if j.Status.Active > 0 {
-		return "Running"
-	}
-	return "Pending"
-}
-
-func getCronJobStatus(c *batchv1.CronJob) string {
-	if c == nil {
-		return "Unknown"
-	}
-	if c.Spec.Suspend != nil && *c.Spec.Suspend {
-		return "Suspended"
-	}
-	if len(c.Status.Active) > 0 {
-		return "Active"
-	}
-	return "Idle"
 }

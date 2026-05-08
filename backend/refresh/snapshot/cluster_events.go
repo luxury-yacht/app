@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
@@ -35,21 +36,22 @@ type ClusterEventsSnapshot struct {
 // ClusterEventEntry mirrors the fields consumed by the frontend grid.
 type ClusterEventEntry struct {
 	ClusterMeta
-	Kind             string `json:"kind"`
-	Name             string `json:"name"`
-	UID              string `json:"uid"`
-	ResourceVersion  string `json:"resourceVersion"`
-	Namespace        string `json:"namespace"`
-	ObjectNamespace  string `json:"objectNamespace"`
-	ObjectUID        string `json:"objectUid"`
-	ObjectAPIVersion string `json:"objectApiVersion"`
-	Type             string `json:"type"`
-	Source           string `json:"source"`
-	Reason           string `json:"reason"`
-	Object           string `json:"object"`
-	Message          string `json:"message"`
-	Age              string `json:"age"`
-	AgeTimestamp     int64  `json:"ageTimestamp"`
+	Kind             string                      `json:"kind"`
+	Name             string                      `json:"name"`
+	UID              string                      `json:"uid"`
+	ResourceVersion  string                      `json:"resourceVersion"`
+	Namespace        string                      `json:"namespace"`
+	ObjectNamespace  string                      `json:"objectNamespace"`
+	ObjectUID        string                      `json:"objectUid"`
+	ObjectAPIVersion string                      `json:"objectApiVersion"`
+	InvolvedObject   *resourcemodel.ResourceLink `json:"involvedObject,omitempty"`
+	Type             string                      `json:"type"`
+	Source           string                      `json:"source"`
+	Reason           string                      `json:"reason"`
+	Object           string                      `json:"object"`
+	Message          string                      `json:"message"`
+	Age              string                      `json:"age"`
+	AgeTimestamp     int64                       `json:"ageTimestamp"`
 }
 
 // RegisterClusterEventsDomain registers the cluster events domain.
@@ -89,10 +91,20 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		if evt == nil {
 			continue
 		}
-		timestamp := eventTimestamp(evt)
+		model := resourcemodel.BuildEventResourceModel(meta.ClusterID, evt)
+		facts := model.Facts.Event
+		timestamp := resourcemodel.EventTimestamp(evt).Time
 		objectNamespace := evt.InvolvedObject.Namespace
 		if strings.TrimSpace(objectNamespace) != "" {
 			continue
+		}
+		eventType := facts.EventType
+		if eventType == "" {
+			eventType = "-"
+		}
+		source := facts.Source
+		if source == "" {
+			source = "-"
 		}
 		entries = append(entries, ClusterEventEntry{
 			ClusterMeta:      meta,
@@ -104,11 +116,12 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 			ObjectNamespace:  objectNamespace,
 			ObjectUID:        string(evt.InvolvedObject.UID),
 			ObjectAPIVersion: evt.InvolvedObject.APIVersion,
-			Type:             eventSeverity(evt),
-			Source:           eventSource(evt),
-			Reason:           evt.Reason,
-			Object:           eventObject(evt),
-			Message:          eventMessage(evt),
+			InvolvedObject:   facts.InvolvedObject,
+			Type:             eventType,
+			Source:           source,
+			Reason:           facts.Reason,
+			Object:           resourcemodel.EventObjectDisplay(evt),
+			Message:          resourcemodel.EventMessage(evt),
 			Age:              formatAge(timestamp),
 			AgeTimestamp:     timestamp.UnixMilli(),
 		})
@@ -148,60 +161,6 @@ func eventTimestamp(evt *corev1.Event) time.Time {
 		return evt.FirstTimestamp.Time
 	}
 	return evt.CreationTimestamp.Time
-}
-
-func eventSeverity(evt *corev1.Event) string {
-	if evt == nil || evt.Type == "" {
-		return "-"
-	}
-	return evt.Type
-}
-
-func eventSource(evt *corev1.Event) string {
-	if evt == nil {
-		return "-"
-	}
-	if evt.Source.Component != "" {
-		if evt.Source.Host != "" {
-			return fmt.Sprintf("%s on %s", evt.Source.Component, evt.Source.Host)
-		}
-		return evt.Source.Component
-	}
-	if evt.ReportingController != "" {
-		if evt.ReportingInstance != "" {
-			return fmt.Sprintf("%s (%s)", evt.ReportingController, evt.ReportingInstance)
-		}
-		return evt.ReportingController
-	}
-	return "-"
-}
-
-func eventObject(evt *corev1.Event) string {
-	if evt == nil {
-		return "-"
-	}
-	kind := strings.TrimSpace(evt.InvolvedObject.Kind)
-	name := strings.TrimSpace(evt.InvolvedObject.Name)
-	if kind != "" && name != "" {
-		return fmt.Sprintf("%s/%s", kind, name)
-	}
-	if name != "" {
-		return name
-	}
-	if kind != "" {
-		return kind
-	}
-	return "-"
-}
-
-func eventMessage(evt *corev1.Event) string {
-	if evt == nil {
-		return ""
-	}
-	if msg := strings.TrimSpace(evt.Message); msg != "" {
-		return msg
-	}
-	return strings.TrimSpace(evt.Reason)
 }
 
 func compareEventOrder(left, right *corev1.Event) int {

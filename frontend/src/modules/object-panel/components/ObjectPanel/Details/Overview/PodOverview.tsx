@@ -49,7 +49,8 @@ interface PodOverviewProps {
   podIP?: string;
   owner?: string | { kind: string; name: string; apiVersion?: string };
   status?: string;
-  statusSeverity?: string;
+  statusState?: string;
+  statusPresentation?: string;
   ready?: string;
   restarts?: number;
   qosClass?: string;
@@ -73,7 +74,8 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
   podIP,
   owner,
   status,
-  statusSeverity,
+  statusState,
+  statusPresentation,
   ready,
   restarts,
   qosClass,
@@ -117,7 +119,12 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
       <ResourceHeader kind="Pod" name={name} namespace={namespace} age={age} />
 
       {/* Use composed component for status */}
-      <ResourceStatus status={status} statusSeverity={statusSeverity} ready={ready} />
+      <ResourceStatus
+        status={status}
+        statusState={statusState}
+        statusPresentation={statusPresentation}
+        ready={ready}
+      />
 
       {((restarts !== undefined && restarts > 0) || owner || node || nodeIP || podIP) && (
         <div className="metadata-section-separator" />
@@ -127,7 +134,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
       {restarts !== undefined && restarts > 0 && (
         <OverviewItem
           label="Restarts"
-          value={<span className="status-badge warning">{restarts}</span>}
+          value={<span className="status-text warning">{restarts}</span>}
         />
       )}
 

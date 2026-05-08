@@ -39,6 +39,8 @@ interface ClusterResourceOverviewProps {
   name?: string;
   age?: string;
   status?: string;
+  statusState?: string;
+  statusPresentation?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
   // Namespace-specific fields
@@ -158,7 +160,7 @@ const renderCRDVersions = (versions: CRDVersionLike[] | undefined): React.ReactN
 };
 
 export const ClusterResourceOverview: React.FC<ClusterResourceOverviewProps> = (props) => {
-  const { kind, name, age, status } = props;
+  const { kind, name, age, status, statusState, statusPresentation } = props;
   const normalizedKind = kind?.toLowerCase();
   const { objectData } = useObjectPanel();
   const clusterMeta = {
@@ -169,7 +171,11 @@ export const ClusterResourceOverview: React.FC<ClusterResourceOverviewProps> = (
   return (
     <>
       <ResourceHeader kind={kind || ''} name={name || ''} age={age} />
-      <ResourceStatus status={status} />
+      <ResourceStatus
+        status={status}
+        statusState={statusState}
+        statusPresentation={statusPresentation}
+      />
 
       {/* Namespace-specific fields */}
       {normalizedKind === 'namespace' && (
@@ -178,7 +184,7 @@ export const ClusterResourceOverview: React.FC<ClusterResourceOverviewProps> = (
             label="Has Workloads"
             value={
               props.workloadsUnknown ? (
-                <span className="status-badge warning">Unknown</span>
+                <span className="status-text warning">Unknown</span>
               ) : props.hasWorkloads ? (
                 'Yes'
               ) : (

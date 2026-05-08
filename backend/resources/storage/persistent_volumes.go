@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -51,16 +52,20 @@ func (s *Service) PersistentVolumes() ([]*types.PersistentVolumeDetails, error) 
 }
 
 func (s *Service) processPersistentVolumeDetails(pv *corev1.PersistentVolume) *types.PersistentVolumeDetails {
+	model := resourcemodel.BuildPersistentVolumeResourceModel(s.deps.ClusterID, pv)
 	details := &types.PersistentVolumeDetails{
-		Kind:          "PersistentVolume",
-		Name:          pv.Name,
-		Age:           common.FormatAge(pv.CreationTimestamp.Time),
-		Status:        string(pv.Status.Phase),
-		StorageClass:  pv.Spec.StorageClassName,
-		ReclaimPolicy: string(pv.Spec.PersistentVolumeReclaimPolicy),
-		MountOptions:  pv.Spec.MountOptions,
-		Labels:        pv.Labels,
-		Annotations:   pv.Annotations,
+		Kind:               "PersistentVolume",
+		Name:               pv.Name,
+		Age:                common.FormatAge(pv.CreationTimestamp.Time),
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		StorageClass:       pv.Spec.StorageClassName,
+		ReclaimPolicy:      string(pv.Spec.PersistentVolumeReclaimPolicy),
+		MountOptions:       pv.Spec.MountOptions,
+		Labels:             pv.Labels,
+		Annotations:        pv.Annotations,
 	}
 
 	if storage, ok := pv.Spec.Capacity[corev1.ResourceStorage]; ok {

@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // PodBuilder constructs pod snapshots scoped by node or workload.
@@ -44,6 +45,9 @@ type PodSummary struct {
 	Namespace            string `json:"namespace"`
 	Node                 string `json:"node"`
 	Status               string `json:"status"`
+	StatusState          string `json:"statusState,omitempty"`
+	StatusPresentation   string `json:"statusPresentation,omitempty"`
+	StatusReason         string `json:"statusReason,omitempty"`
 	Ready                string `json:"ready"`
 	Restarts             int32  `json:"restarts"`
 	Age                  string `json:"age"`
@@ -339,8 +343,16 @@ func buildPodSummary(
 	usage map[string]metrics.PodUsage,
 	rsMap map[string]string,
 ) PodSummary {
-	ready, total, restarts := podReadiness(pod)
-	status := derivePodStatus(pod)
+	model := resourcemodel.BuildPodResourceModel(meta.ClusterID, pod)
+	podFacts := model.Facts.Pod
+	ready := int32(0)
+	total := int32(0)
+	restarts := int32(0)
+	if podFacts != nil {
+		ready = podFacts.ReadyContainers
+		total = podFacts.TotalContainers
+		restarts = podFacts.RestartCount
+	}
 	ownerKind, ownerName, ownerAPIVersion := resolvePodOwner(pod, rsMap)
 	cpuReq, cpuLim, memReq, memLim := computeResourceTotals(pod)
 	metricKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
@@ -351,7 +363,10 @@ func buildPodSummary(
 		Name:                 pod.Name,
 		Namespace:            pod.Namespace,
 		Node:                 pod.Spec.NodeName,
-		Status:               status,
+		Status:               model.Status.Label,
+		StatusState:          model.Status.State,
+		StatusPresentation:   model.Status.Presentation,
+		StatusReason:         model.Status.Reason,
 		Ready:                fmt.Sprintf("%d/%d", ready, total),
 		Restarts:             restarts,
 		Age:                  formatAge(pod.CreationTimestamp.Time),
@@ -384,30 +399,6 @@ func hasForwardableContainerPorts(containers []corev1.Container) bool {
 		}
 	}
 	return false
-}
-
-func podReadiness(pod *corev1.Pod) (ready int32, total int32, restarts int32) {
-	for _, cs := range pod.Status.ContainerStatuses {
-		total++
-		if cs.Ready {
-			ready++
-		}
-		restarts += cs.RestartCount
-	}
-	return ready, total, restarts
-}
-
-func derivePodStatus(pod *corev1.Pod) string {
-	status := string(pod.Status.Phase)
-	for _, cs := range pod.Status.ContainerStatuses {
-		if cs.State.Waiting != nil {
-			reason := cs.State.Waiting.Reason
-			if reason == "CrashLoopBackOff" || reason == "ImagePullBackOff" || reason == "ErrImagePull" {
-				return reason
-			}
-		}
-	}
-	return status
 }
 
 // resolvePodOwner returns (kind, name, apiVersion) for the controlling

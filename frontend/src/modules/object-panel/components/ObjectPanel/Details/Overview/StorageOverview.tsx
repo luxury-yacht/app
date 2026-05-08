@@ -53,44 +53,10 @@ interface VolumeSourceLike {
   details?: Record<string, string>;
 }
 
-// PV phase semantics — Bound = healthy, Available = info (waiting to be
-// claimed), Released = warning (claim is gone but the PV hasn't been
-// reclaimed; orphan state worth flagging), Failed = unhealthy, Pending = info.
-const pvStatusVariant = (status?: string): StatusChipVariant => {
-  if (status === 'Bound') return 'healthy';
-  if (status === 'Released') return 'warning';
-  if (status === 'Failed') return 'unhealthy';
-  return 'info';
-};
-
-const pvStatusTooltip = (status?: string): string | undefined => {
-  if (status === 'Released')
-    return 'The bound PVC has been deleted but this volume has not yet been reclaimed. Manual cleanup may be required.';
-  if (status === 'Failed') return 'Automatic reclamation of this volume has failed.';
-  return undefined;
-};
-
 interface DataSourceLike {
   kind: string;
   name: string;
 }
-
-// PVC phase semantics — Bound = healthy, Pending = info (waiting for a
-// matching PV / dynamic provisioning), Lost = unhealthy (the bound PV is
-// gone — data-loss state).
-const pvcStatusVariant = (status?: string): StatusChipVariant => {
-  if (status === 'Bound') return 'healthy';
-  if (status === 'Lost') return 'unhealthy';
-  return 'info';
-};
-
-const pvcStatusTooltip = (status?: string): string | undefined => {
-  if (status === 'Lost')
-    return 'The volume that was bound to this claim is no longer accessible. Data may be lost.';
-  if (status === 'Pending')
-    return 'The claim is waiting for a matching PersistentVolume or for dynamic provisioning.';
-  return undefined;
-};
 
 // Kubernetes access mode semantics. ReadWriteOncePod was added in 1.22 and
 // is stricter than ReadWriteOnce (single pod cluster-wide vs. single node).
@@ -115,6 +81,9 @@ interface StorageOverviewProps {
   namespace?: string;
   age?: string;
   status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
   // PVC fields
@@ -145,7 +114,7 @@ interface StorageOverviewProps {
 // Storage resources Overview
 export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
   const { objectData } = useObjectPanel();
-  const { kind, name, namespace, age, status } = props;
+  const { kind, name, namespace, age, status, statusState, statusPresentation } = props;
   const normalizedKind = kind?.toLowerCase();
   const clusterMeta = {
     clusterId: objectData?.clusterId ?? undefined,
@@ -157,25 +126,15 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
       {/* Use composed component for header */}
       <ResourceHeader kind={kind || ''} name={name || ''} namespace={namespace} age={age || ''} />
 
-      {/* PVs and PVCs render their own chip-styled status row inline (with
-          semantic variant) — skip the shared ResourceStatus for those kinds. */}
-      {status &&
-        normalizedKind !== 'persistentvolume' &&
-        normalizedKind !== 'persistentvolumeclaim' && <ResourceStatus status={status} />}
+      <ResourceStatus
+        status={status}
+        statusState={statusState}
+        statusPresentation={statusPresentation}
+      />
 
       {/* PVC-specific fields */}
       {normalizedKind === 'persistentvolumeclaim' && (
         <>
-          {status && (
-            <OverviewItem
-              label="Status"
-              value={
-                <StatusChip variant={pvcStatusVariant(status)} tooltip={pvcStatusTooltip(status)}>
-                  {status}
-                </StatusChip>
-              }
-            />
-          )}
           <OverviewItem
             label="Volume"
             value={
@@ -290,16 +249,6 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
       {/* PV-specific fields */}
       {normalizedKind === 'persistentvolume' && (
         <>
-          {status && (
-            <OverviewItem
-              label="Status"
-              value={
-                <StatusChip variant={pvStatusVariant(status)} tooltip={pvStatusTooltip(status)}>
-                  {status}
-                </StatusChip>
-              }
-            />
-          )}
           {props.claimRef && (
             <OverviewItem
               label="Claim"

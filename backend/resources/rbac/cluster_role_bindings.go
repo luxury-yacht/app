@@ -10,6 +10,7 @@ package rbac
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -22,7 +23,7 @@ func (s *Service) ClusterRoleBinding(name string) (*types.ClusterRoleBindingDeta
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get cluster role binding %s: %v", name, err), "RBAC")
 		return nil, fmt.Errorf("failed to get cluster role binding: %v", err)
 	}
-	return buildClusterRoleBindingDetails(crb), nil
+	return s.buildClusterRoleBindingDetails(crb), nil
 }
 
 func (s *Service) ClusterRoleBindings() ([]*types.ClusterRoleBindingDetails, error) {
@@ -34,35 +35,24 @@ func (s *Service) ClusterRoleBindings() ([]*types.ClusterRoleBindingDetails, err
 
 	results := make([]*types.ClusterRoleBindingDetails, 0, len(bindings.Items))
 	for i := range bindings.Items {
-		results = append(results, buildClusterRoleBindingDetails(&bindings.Items[i]))
+		results = append(results, s.buildClusterRoleBindingDetails(&bindings.Items[i]))
 	}
 	return results, nil
 }
 
-func buildClusterRoleBindingDetails(crb *rbacv1.ClusterRoleBinding) *types.ClusterRoleBindingDetails {
+func (s *Service) buildClusterRoleBindingDetails(crb *rbacv1.ClusterRoleBinding) *types.ClusterRoleBindingDetails {
+	model := resourcemodel.BuildClusterRoleBindingResourceModel(s.deps.ClusterID, crb)
+	facts := model.Facts.ClusterRoleBinding
 	details := &types.ClusterRoleBindingDetails{
 		Kind:        "ClusterRoleBinding",
 		Name:        crb.Name,
 		Age:         common.FormatAge(crb.CreationTimestamp.Time),
+		Details:     clusterRoleBindingDetailsSummary(facts),
 		Labels:      crb.Labels,
 		Annotations: crb.Annotations,
-		RoleRef: types.RoleRef{
-			APIGroup: crb.RoleRef.APIGroup,
-			Kind:     crb.RoleRef.Kind,
-			Name:     crb.RoleRef.Name,
-		},
+		RoleRef:     roleRefFromResourceLink(facts.RoleRef),
+		Subjects:    subjectsFromFacts(facts.Subjects),
 	}
-
-	for _, subject := range crb.Subjects {
-		details.Subjects = append(details.Subjects, types.Subject{
-			Kind:      subject.Kind,
-			APIGroup:  subject.APIGroup,
-			Name:      subject.Name,
-			Namespace: subject.Namespace,
-		})
-	}
-
-	details.Details = fmt.Sprintf("Role: %s, Subjects: %d", crb.RoleRef.Name, len(crb.Subjects))
 	return details
 }
 

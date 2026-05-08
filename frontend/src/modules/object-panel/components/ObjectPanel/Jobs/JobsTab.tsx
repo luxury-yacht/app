@@ -28,6 +28,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Row type for the jobs table, combining job info with cluster context.
 interface JobRow {
@@ -35,6 +36,9 @@ interface JobRow {
   name: string;
   namespace: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   completions: string;
   succeeded: number;
   failed: number;
@@ -62,22 +66,6 @@ const COLUMN_SIZING: ColumnSizingMap = {
   namespace: { autoWidth: true },
   duration: { autoWidth: true },
   age: { autoWidth: true },
-};
-
-// Map job statuses to severity classes for the status badge.
-const getJobStatusSeverity = (status: string): string => {
-  switch (status) {
-    case 'Failed':
-      return 'error';
-    case 'Running':
-      return 'info';
-    case 'Suspended':
-    case 'Pending':
-      return 'warning';
-    case 'Completed':
-    default:
-      return '';
-  }
 };
 
 export const JobsTab: React.FC<JobsTabProps> = ({
@@ -186,10 +174,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
         getTitle: (job) => job.name,
       }),
       createTextColumn<JobRow>('status', 'Status', (job) => job.status || '\u2014', {
-        getClassName: (job) => {
-          const severity = getJobStatusSeverity(job.status);
-          return ['status-badge', severity].join(' ').trim();
-        },
+        getClassName: (job) => backendStatusTextClass(job.statusPresentation),
       }),
       createTextColumn<JobRow>('completions', 'Completions', (job) => job.completions || '\u2014', {
         className: 'text-right',

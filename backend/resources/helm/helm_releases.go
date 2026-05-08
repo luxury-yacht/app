@@ -12,10 +12,9 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"gopkg.in/yaml.v2"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/cli"
@@ -45,37 +44,61 @@ func (s *Service) ReleaseDetails(namespace, name string) (*types.HelmReleaseDeta
 		s.logWarn(fmt.Sprintf("Failed to get Helm history for %s/%s: %v", namespace, name, err))
 	}
 
+	resources := s.extractResourcesFromManifest(release.Manifest, namespace)
+	resourceLinks := s.extractResourceLinksFromManifest(release.Manifest, namespace)
+	model := resourcemodel.BuildHelmReleaseResourceModel(
+		s.deps.Common.ClusterID,
+		release,
+		namespace,
+		resourceLinks,
+		history,
+		resourcemodel.ResourceModelBuildOptions{
+			Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeRelationshipFacts | resourcemodel.MaterializeDetailFacts,
+		},
+	)
+	facts := model.Facts.HelmRelease
+
 	details := &types.HelmReleaseDetails{
-		Kind:        "helmrelease",
-		Name:        release.Name,
-		Namespace:   release.Namespace,
-		Age:         common.FormatAge(release.Info.FirstDeployed.Time),
-		Chart:       fmt.Sprintf("%s-%s", release.Chart.Name(), release.Chart.Metadata.Version),
-		Version:     release.Chart.Metadata.Version,
-		AppVersion:  release.Chart.Metadata.AppVersion,
-		Status:      cases.Title(language.English).String(strings.ToLower(release.Info.Status.String())),
-		Revision:    release.Version,
-		Updated:     common.FormatAge(release.Info.LastDeployed.Time),
-		Description: release.Info.Description,
-		Notes:       release.Info.Notes,
-		Values:      release.Config,
-		Labels:      release.Labels,
-		Annotations: release.Chart.Metadata.Annotations,
+		Kind:               "helmrelease",
+		Name:               model.Ref.Name,
+		Namespace:          model.Ref.Namespace,
+		Age:                helmAge(model),
+		Chart:              facts.Chart,
+		Version:            facts.Version,
+		AppVersion:         facts.AppVersion,
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		Revision:           facts.Revision,
+		Updated:            helmUpdatedAge(facts),
+		Description:        facts.Description,
+		Notes:              facts.Notes,
+		Values:             release.Config,
+		Labels:             model.Metadata.Labels,
+		Annotations:        model.Metadata.Annotations,
 	}
 
-	for _, h := range history {
+	for _, h := range facts.History {
+		status := resourcemodel.BuildHelmReleaseStatusPresentation(resourcemodel.HelmReleaseFacts{
+			RawStatus:   h.Status,
+			Description: h.Description,
+		})
 		details.History = append(details.History, types.HelmRevision{
-			Revision:    h.Version,
-			Updated:     common.FormatAge(h.Info.LastDeployed.Time),
-			Status:      cases.Title(language.English).String(strings.ToLower(h.Info.Status.String())),
-			Chart:       fmt.Sprintf("%s-%s", h.Chart.Name(), h.Chart.Metadata.Version),
-			AppVersion:  h.Chart.Metadata.AppVersion,
-			Description: h.Info.Description,
+			Revision:           h.Revision,
+			Updated:            helmRevisionUpdatedAge(h),
+			Status:             status.Label,
+			StatusState:        status.State,
+			StatusPresentation: status.Presentation,
+			StatusReason:       status.Reason,
+			Chart:              h.Chart,
+			AppVersion:         h.AppVersion,
+			Description:        h.Description,
 		})
 	}
 
 	s.logDebug(fmt.Sprintf("Release %s/%s manifest size: %d", namespace, name, len(release.Manifest)))
-	details.Resources = s.extractResourcesFromManifest(release.Manifest, namespace)
+	details.Resources = resources
 	s.logDebug(fmt.Sprintf("Extracted %d resources for release %s/%s", len(details.Resources), namespace, name))
 
 	return details, nil
@@ -246,10 +269,11 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 				if itemAPIVersion == "" {
 					itemAPIVersion = apiVersion
 				}
-				name, namespace := extractNameNamespace(itemMap, defaultNamespace)
+				name, namespace, namespaceExplicit := extractNameNamespace(itemMap, defaultNamespace)
 				if name == "" {
 					continue
 				}
+				identity := resourcemodel.ResolveHelmManifestResourceIdentity(itemAPIVersion, itemKind, namespace, name, namespaceExplicit)
 				key := fmt.Sprintf("%s/%s/%s/%s", itemAPIVersion, itemKind, namespace, name)
 				if resourceMap[key] {
 					continue
@@ -259,16 +283,18 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 					Kind:       itemKind,
 					APIVersion: itemAPIVersion,
 					Name:       name,
-					Namespace:  namespace,
+					Namespace:  identity.Namespace,
+					Scope:      string(identity.Scope),
 				})
 			}
 			continue
 		}
 
-		name, namespace := extractNameNamespace(obj, defaultNamespace)
+		name, namespace, namespaceExplicit := extractNameNamespace(obj, defaultNamespace)
 		if name == "" {
 			continue
 		}
+		identity := resourcemodel.ResolveHelmManifestResourceIdentity(apiVersion, kind, namespace, name, namespaceExplicit)
 
 		key := fmt.Sprintf("%s/%s/%s/%s", apiVersion, kind, namespace, name)
 		if resourceMap[key] {
@@ -279,17 +305,18 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 			Kind:       kind,
 			APIVersion: apiVersion,
 			Name:       name,
-			Namespace:  namespace,
+			Namespace:  identity.Namespace,
+			Scope:      string(identity.Scope),
 		})
 	}
 
 	return resources
 }
 
-func extractNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string) {
+func extractNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string, bool) {
 	metadataRaw, ok := obj["metadata"]
 	if !ok {
-		return "", defaultNamespace
+		return "", defaultNamespace, false
 	}
 
 	metadata := make(map[string]interface{})
@@ -303,15 +330,17 @@ func extractNameNamespace(obj map[string]interface{}, defaultNamespace string) (
 			}
 		}
 	default:
-		return "", defaultNamespace
+		return "", defaultNamespace, false
 	}
 
 	name, _ := metadata["name"].(string)
 	namespace := defaultNamespace
+	namespaceExplicit := false
 	if ns, ok := metadata["namespace"].(string); ok && ns != "" {
 		namespace = ns
+		namespaceExplicit = true
 	}
-	return name, namespace
+	return name, namespace, namespaceExplicit
 }
 
 func toStringMap(value interface{}) (map[string]interface{}, bool) {
@@ -331,6 +360,49 @@ func toStringMap(value interface{}) (map[string]interface{}, bool) {
 	default:
 		return nil, false
 	}
+}
+
+func (s *Service) extractResourceLinksFromManifest(manifest, defaultNamespace string) []resourcemodel.ResourceLink {
+	resources := s.extractResourcesFromManifest(manifest, defaultNamespace)
+	if len(resources) == 0 {
+		return nil
+	}
+	links := make([]resourcemodel.ResourceLink, 0, len(resources))
+	for _, resource := range resources {
+		link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSource(
+			s.deps.Common.ClusterID,
+			resource.APIVersion,
+			resource.Kind,
+			resource.Namespace,
+			resource.Name,
+			resource.Scope == string(resourcemodel.ResourceScopeNamespaced),
+		)
+		if link.Ref != nil || link.Display != nil {
+			links = append(links, link)
+		}
+	}
+	return links
+}
+
+func helmAge(model resourcemodel.ResourceModel) string {
+	if model.Metadata.CreationTimestamp.IsZero() {
+		return ""
+	}
+	return common.FormatAge(model.Metadata.CreationTimestamp.Time)
+}
+
+func helmUpdatedAge(facts *resourcemodel.HelmReleaseFacts) string {
+	if facts == nil || facts.Updated == nil || facts.Updated.IsZero() {
+		return ""
+	}
+	return common.FormatAge(facts.Updated.Time)
+}
+
+func helmRevisionUpdatedAge(facts resourcemodel.HelmRevisionFacts) string {
+	if facts.Updated == nil || facts.Updated.IsZero() {
+		return ""
+	}
+	return common.FormatAge(facts.Updated.Time)
 }
 
 func (s *Service) logDebug(msg string) {

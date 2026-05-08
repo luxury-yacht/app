@@ -105,9 +105,11 @@ func TestNamespaceHelmBuilder(t *testing.T) {
 	require.Equal(t, "nginx-1.2.3", entry.Chart)
 	require.Equal(t, "2.0.0", entry.AppVersion)
 	require.Equal(t, "deployed", entry.Status)
+	require.Equal(t, "deployed", entry.StatusState)
+	require.Equal(t, "ready", entry.StatusPresentation)
+	require.Equal(t, "info.status", entry.StatusReason)
 	require.Equal(t, 2, entry.Revision)
 	require.Equal(t, "Deployed successfully", entry.Description)
-	require.Equal(t, "Follow the notes", entry.Notes)
 	require.NotEmpty(t, entry.Age)
 	require.NotEmpty(t, entry.Updated)
 }

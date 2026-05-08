@@ -98,6 +98,8 @@ const makeJob = (overrides: Partial<types.JobSimpleInfo> = {}): types.JobSimpleI
     name: 'test-job-1',
     namespace: 'default',
     status: 'Completed',
+    statusState: 'True',
+    statusPresentation: 'ready',
     completions: '1/1',
     succeeded: 1,
     failed: 0,
@@ -189,6 +191,20 @@ describe('JobsTab', () => {
     expect(gridTablePropsRef.current.keyExtractor({ ...job, clusterId: PANEL_CLUSTER_ID })).toBe(
       'panel-cluster-A|batch/v1/Job/ops/nightly'
     );
+  });
+
+  it('uses backend statusPresentation for the job status class', () => {
+    const job = makeJob({ name: 'nightly', namespace: 'ops', statusPresentation: 'error' });
+
+    act(() => {
+      root.render(
+        <JobsTab jobs={[job]} loading={false} isActive={true} clusterId={PANEL_CLUSTER_ID} />
+      );
+    });
+
+    const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
+    const cell = statusColumn.render(gridTablePropsRef.current.data[0]);
+    expect(cell.props.className).toBe('status-text error');
   });
 
   it('opens the Map from the job context menu', () => {

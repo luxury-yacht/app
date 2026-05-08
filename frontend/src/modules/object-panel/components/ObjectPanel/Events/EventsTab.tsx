@@ -359,6 +359,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           onAltClick: (item) => {
             void navigateToRelatedObject(item);
           },
+          getClassName: () => 'object-panel-link',
           isInteractive: canOpenRelatedObject,
         }
       ),

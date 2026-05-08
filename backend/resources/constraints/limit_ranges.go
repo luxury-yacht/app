@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -55,49 +56,18 @@ func (s *Service) LimitRanges(namespace string) ([]*types.LimitRangeDetails, err
 }
 
 func (s *Service) buildLimitRangeDetails(lr *corev1.LimitRange) *types.LimitRangeDetails {
+	model := resourcemodel.BuildLimitRangeResourceModel(s.deps.ClusterID, lr)
+	facts := model.Facts.LimitRange
 	details := &types.LimitRangeDetails{
 		Kind:        "LimitRange",
 		Name:        lr.Name,
 		Namespace:   lr.Namespace,
 		Age:         common.FormatAge(lr.CreationTimestamp.Time),
+		Details:     model.Status.Label,
+		Limits:      limitRangeItemsFromFacts(facts.Limits),
 		Labels:      lr.Labels,
 		Annotations: lr.Annotations,
 	}
-
-	for _, limit := range lr.Spec.Limits {
-		item := types.LimitRangeItem{
-			Kind:                 string(limit.Type),
-			Max:                  make(map[string]string),
-			Min:                  make(map[string]string),
-			Default:              make(map[string]string),
-			DefaultRequest:       make(map[string]string),
-			MaxLimitRequestRatio: make(map[string]string),
-		}
-
-		for resourceName, quantity := range limit.Max {
-			item.Max[string(resourceName)] = quantity.String()
-		}
-		for resourceName, quantity := range limit.Min {
-			item.Min[string(resourceName)] = quantity.String()
-		}
-		for resourceName, quantity := range limit.Default {
-			item.Default[string(resourceName)] = quantity.String()
-		}
-		for resourceName, quantity := range limit.DefaultRequest {
-			item.DefaultRequest[string(resourceName)] = quantity.String()
-		}
-		for resourceName, quantity := range limit.MaxLimitRequestRatio {
-			item.MaxLimitRequestRatio[string(resourceName)] = quantity.String()
-		}
-
-		details.Limits = append(details.Limits, item)
-	}
-
-	details.Details = fmt.Sprintf("%d limit(s)", len(details.Limits))
-	if len(details.Limits) > 0 {
-		details.Details += fmt.Sprintf(" - Type: %s", details.Limits[0].Kind)
-	}
-
 	return details
 }
 

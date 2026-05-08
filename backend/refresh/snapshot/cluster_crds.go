@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const clusterCRDDomainName = "cluster-crds"
@@ -124,45 +124,13 @@ func crdVersionSummary(crd *apiextensionsv1.CustomResourceDefinition) (storageVe
 	if crd == nil || len(crd.Spec.Versions) == 0 {
 		return "", 0
 	}
-	for _, v := range crd.Spec.Versions {
-		if v.Storage {
-			storageVersion = v.Name
-			break
-		}
-	}
-	if storageVersion == "" {
-		for _, v := range crd.Spec.Versions {
-			if v.Served {
-				storageVersion = v.Name
-				break
-			}
-		}
-	}
-	if storageVersion == "" {
-		storageVersion = crd.Spec.Versions[0].Name
-	}
-	for _, v := range crd.Spec.Versions {
-		if v.Served && v.Name != storageVersion {
-			extraServed++
-		}
-	}
-	return storageVersion, extraServed
+	facts := resourcemodel.BuildCustomResourceDefinitionFacts(crd)
+	return facts.StorageVersion, facts.ExtraServedVersionCount
 }
 
 func describeCRDVersions(crd *apiextensionsv1.CustomResourceDefinition) string {
 	if crd == nil {
 		return ""
 	}
-	if len(crd.Spec.Versions) == 0 {
-		return "Versions: -"
-	}
-	versions := make([]string, 0, len(crd.Spec.Versions))
-	for _, version := range crd.Spec.Versions {
-		label := version.Name
-		if version.Served && version.Storage {
-			label += "*"
-		}
-		versions = append(versions, label)
-	}
-	return fmt.Sprintf("Versions: %s", strings.Join(versions, ","))
+	return resourcemodel.CustomResourceDefinitionVersionDetails(resourcemodel.BuildCustomResourceDefinitionFacts(crd))
 }

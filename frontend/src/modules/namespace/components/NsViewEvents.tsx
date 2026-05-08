@@ -32,6 +32,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { ResourceLink } from '@core/refresh/types';
 
 export interface EventData {
   kind: string;
@@ -46,6 +47,7 @@ export interface EventData {
   objectNamespace?: string;
   objectUid?: string;
   objectApiVersion?: string;
+  involvedObject?: ResourceLink;
   namespace?: string;
   age?: string;
   ageTimestamp?: number;
@@ -92,6 +94,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     const getEventObjectRefInput = useCallback(
       (event: EventData) => ({
         object: event.object,
+        involvedObject: event.involvedObject,
         objectUid: event.objectUid,
         objectApiVersion: event.objectApiVersion,
         objectNamespace: event.objectNamespace,
@@ -205,6 +208,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             onAltClick: (event) => {
               void handleEventAltClick(event);
             },
+            getClassName: () => 'object-panel-link',
             isInteractive: canOpenEventObject,
           }
         ),

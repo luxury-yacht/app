@@ -15,6 +15,7 @@ import type {
   NamespaceEventSummary,
   NamespaceEventsSnapshotPayload,
   PermissionDeniedStatus,
+  ResourceLink,
 } from '../types';
 import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
 import { formatAge } from '@/utils/ageFormatter';
@@ -39,6 +40,7 @@ interface StreamEventPayload {
     objectNamespace?: string;
     objectUid?: string;
     objectApiVersion?: string;
+    involvedObject?: ResourceLink;
     source?: string;
     reason?: string;
     object?: string;
@@ -842,6 +844,7 @@ function transformClusterEvent(
     objectNamespace: event?.objectNamespace ?? '',
     objectUid: event?.objectUid || '',
     objectApiVersion: event?.objectApiVersion || '',
+    involvedObject: event?.involvedObject,
     type: event?.type || '-',
     source: event?.source || '-',
     reason: event?.reason || '-',
@@ -871,6 +874,7 @@ function transformNamespaceEvent(
     objectNamespace: event?.objectNamespace ?? '',
     objectUid: event?.objectUid || '',
     objectApiVersion: event?.objectApiVersion || '',
+    involvedObject: event?.involvedObject,
     type: event?.type || '-',
     source: event?.source || '-',
     reason: event?.reason || '-',
@@ -925,17 +929,35 @@ function mergeEvents<T extends ClusterEventEntry | NamespaceEventSummary>(
 const hasSameArrayItems = <T>(left: T[], right: T[]): boolean =>
   left.length === right.length && left.every((item, index) => Object.is(item, right[index]));
 
-const shallowEqualRecord = (left: Record<string, unknown>, right: Record<string, unknown>) => {
+function shallowEqualRecord(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>
+): boolean {
   const leftKeys = Object.keys(left);
   const rightKeys = Object.keys(right);
 
   return (
     leftKeys.length === rightKeys.length &&
     leftKeys.every(
-      (key) => Object.prototype.hasOwnProperty.call(right, key) && Object.is(left[key], right[key])
+      (key) =>
+        Object.prototype.hasOwnProperty.call(right, key) && recordValuesEqual(left[key], right[key])
     )
   );
-};
+}
+
+function recordValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (isComparableRecord(left) && isComparableRecord(right)) {
+    return shallowEqualRecord(left, right);
+  }
+  return false;
+}
+
+function isComparableRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function normalizeAndReuseEvents<T extends ClusterEventEntry | NamespaceEventSummary>(
   previous: T[],

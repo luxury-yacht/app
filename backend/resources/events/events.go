@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -82,7 +83,7 @@ func (s *Service) Events(filter Filter) ([]types.Event, error) {
 			continue
 		}
 
-		events = append(events, convertEvent(kubeEvent))
+		events = append(events, convertEvent(s.deps.ClusterID, kubeEvent))
 	}
 
 	sortEventsByTime(events)
@@ -127,41 +128,23 @@ func (s *Service) ensureClient() error {
 	return nil
 }
 
-func convertEvent(kubeEvent corev1.Event) types.Event {
+func convertEvent(clusterID string, kubeEvent corev1.Event) types.Event {
+	facts := resourcemodel.BuildEventFacts(clusterID, &kubeEvent)
 	e := types.Event{
 		Kind:               "event",
-		EventType:          kubeEvent.Type,
-		Reason:             kubeEvent.Reason,
-		Message:            kubeEvent.Message,
-		Count:              kubeEvent.Count,
+		EventType:          facts.EventType,
+		Reason:             facts.Reason,
+		Message:            facts.Message,
+		Count:              facts.Count,
 		InvolvedObjectName: kubeEvent.InvolvedObject.Name,
 		InvolvedObjectKind: kubeEvent.InvolvedObject.Kind,
 		Namespace:          kubeEvent.Namespace,
+		FirstTimestamp:     facts.FirstTimestamp.Time,
+		LastTimestamp:      facts.LastTimestamp.Time,
 	}
 
-	if !kubeEvent.EventTime.IsZero() {
-		e.FirstTimestamp = kubeEvent.EventTime.Time
-		e.LastTimestamp = kubeEvent.EventTime.Time
-	} else {
-		if !kubeEvent.FirstTimestamp.IsZero() {
-			e.FirstTimestamp = kubeEvent.FirstTimestamp.Time
-		}
-		if !kubeEvent.LastTimestamp.IsZero() {
-			e.LastTimestamp = kubeEvent.LastTimestamp.Time
-		}
-	}
-
-	if kubeEvent.Source.Component != "" {
-		e.Source = kubeEvent.Source.Component
-		if kubeEvent.Source.Host != "" {
-			e.Source += " on " + kubeEvent.Source.Host
-		}
-	} else if kubeEvent.ReportingController != "" {
-		e.Source = kubeEvent.ReportingController
-		if kubeEvent.ReportingInstance != "" {
-			e.Source += " (" + kubeEvent.ReportingInstance + ")"
-		}
-	} else {
+	e.Source = facts.Source
+	if e.Source == "" {
 		e.Source = "Unknown"
 	}
 

@@ -71,7 +71,13 @@ func TestBuildClusterRoleBindingDetails(t *testing.T) {
 		},
 	}
 
-	details := buildClusterRoleBindingDetails(crb)
+	manager := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: fake.NewClientset(crb),
+		ClusterID:        "cluster-a",
+	})
+	details := manager.buildClusterRoleBindingDetails(crb)
 	require.Equal(t, "ClusterRoleBinding", details.Kind)
 	require.Equal(t, "crb", details.Name)
 	require.Len(t, details.Subjects, 2)

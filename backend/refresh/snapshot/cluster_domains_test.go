@@ -146,6 +146,8 @@ func TestClusterStorageBuilder(t *testing.T) {
 	require.Equal(t, "10Gi", entry.Capacity)
 	require.Equal(t, string(corev1.ReadWriteMany), entry.AccessModes)
 	require.Equal(t, string(corev1.VolumeAvailable), entry.Status)
+	require.Equal(t, string(corev1.VolumeAvailable), entry.StatusState)
+	require.Equal(t, "ready", entry.StatusPresentation)
 	require.Equal(t, "prod/db", entry.Claim)
 	require.NotEmpty(t, entry.Age)
 }

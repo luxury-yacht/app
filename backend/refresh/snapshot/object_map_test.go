@@ -47,8 +47,14 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	if got := nodeByKindName(t, payload, "Deployment", "web").CreationTimestamp; got != "2024-01-02T03:04:05Z" {
 		t.Fatalf("unexpected creation timestamp for deployment node: %q", got)
 	}
-	if status := nodeByKindName(t, payload, "Deployment", "web").Status; status == nil || status.State != "healthy" || status.Label != "2/2 ready" {
+	if status := nodeByKindName(t, payload, "Deployment", "web").Status; status == nil || status.State != "2/2" || status.Label != "Running" || status.Presentation != "ready" {
 		t.Fatalf("unexpected deployment status: %#v", status)
+	}
+	if status := nodeByKindName(t, payload, "ConfigMap", "app-config").Status; status == nil || status.State != "2" || status.Label != "2 items" || status.Presentation != "ready" {
+		t.Fatalf("unexpected configmap status: %#v", status)
+	}
+	if status := nodeByKindName(t, payload, "Secret", "app-secret").Status; status == nil || status.State != "Opaque" || status.Label != "Opaque, 1 key" || status.Presentation != "ready" {
+		t.Fatalf("unexpected secret status: %#v", status)
 	}
 
 	assertEdge(t, payload, "Deployment", "web", "ReplicaSet", "web-rs", "owner")
@@ -87,10 +93,11 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		pod       corev1.Pod
-		wantState string
-		wantLabel string
+		name             string
+		pod              corev1.Pod
+		wantState        string
+		wantLabel        string
+		wantPresentation string
 	}{
 		{
 			name: "all regular containers ready",
@@ -107,8 +114,9 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 					},
 				},
 			},
-			wantState: "healthy",
-			wantLabel: "Running",
+			wantState:        "Running",
+			wantLabel:        "Running",
+			wantPresentation: "ready",
 		},
 		{
 			name: "running phase with unready running container",
@@ -125,8 +133,9 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 					},
 				},
 			},
-			wantState: "degraded",
-			wantLabel: "1/2 ready",
+			wantState:        "Running",
+			wantLabel:        "Running",
+			wantPresentation: "warning",
 		},
 		{
 			name: "running phase with missing container status",
@@ -140,8 +149,9 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 					ContainerStatuses: []corev1.ContainerStatus{readyContainer("app")},
 				},
 			},
-			wantState: "degraded",
-			wantLabel: "1/2 ready",
+			wantState:        "Running",
+			wantLabel:        "Running",
+			wantPresentation: "warning",
 		},
 		{
 			name: "running phase with no container statuses",
@@ -149,8 +159,9 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 				Spec:   corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
 				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			},
-			wantState: "degraded",
-			wantLabel: "0/1 ready",
+			wantState:        "Running",
+			wantLabel:        "Running",
+			wantPresentation: "warning",
 		},
 		{
 			name: "startup container creation stays degraded",
@@ -164,22 +175,23 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 					}},
 				},
 			},
-			wantState: "degraded",
-			wantLabel: "ContainerCreating",
+			wantState:        "Pending",
+			wantLabel:        "ContainerCreating",
+			wantPresentation: "warning",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status := objectMapPodStatus(tt.pod)
-			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel {
-				t.Fatalf("unexpected pod status: got %#v, want state=%q label=%q", status, tt.wantState, tt.wantLabel)
+			status := objectMapPodStatus("cluster-a", tt.pod)
+			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel || status.Presentation != tt.wantPresentation {
+				t.Fatalf("unexpected pod status: got %#v, want state=%q label=%q presentation=%q", status, tt.wantState, tt.wantLabel, tt.wantPresentation)
 			}
 		})
 	}
 }
 
-func TestObjectMapNodeStatusMarksReadyCordonedNodesDegraded(t *testing.T) {
+func TestObjectMapNodeStatusUsesKubernetesReadyConditionStatus(t *testing.T) {
 	readyCondition := corev1.NodeCondition{
 		Type:   corev1.NodeReady,
 		Status: corev1.ConditionTrue,
@@ -192,18 +204,20 @@ func TestObjectMapNodeStatusMarksReadyCordonedNodesDegraded(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		node      corev1.Node
-		wantState string
-		wantLabel string
+		name             string
+		node             corev1.Node
+		wantState        string
+		wantLabel        string
+		wantPresentation string
 	}{
 		{
 			name: "ready schedulable",
 			node: corev1.Node{Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{readyCondition},
 			}},
-			wantState: "healthy",
-			wantLabel: "Ready",
+			wantState:        "True",
+			wantLabel:        "Ready",
+			wantPresentation: "ready",
 		},
 		{
 			name: "ready unschedulable",
@@ -213,8 +227,9 @@ func TestObjectMapNodeStatusMarksReadyCordonedNodesDegraded(t *testing.T) {
 					Conditions: []corev1.NodeCondition{readyCondition},
 				},
 			},
-			wantState: "degraded",
-			wantLabel: "Ready (Cordoned)",
+			wantState:        "True",
+			wantLabel:        "Ready (Cordoned)",
+			wantPresentation: "cordoned",
 		},
 		{
 			name: "ready with unschedulable taint",
@@ -227,38 +242,56 @@ func TestObjectMapNodeStatusMarksReadyCordonedNodesDegraded(t *testing.T) {
 					Conditions: []corev1.NodeCondition{readyCondition},
 				},
 			},
-			wantState: "degraded",
-			wantLabel: "Ready (Cordoned)",
+			wantState:        "True",
+			wantLabel:        "Ready (Cordoned)",
+			wantPresentation: "cordoned",
 		},
 		{
-			name: "cordoned not ready remains unhealthy",
+			name: "cordoned not ready remains false",
 			node: corev1.Node{
 				Spec: corev1.NodeSpec{Unschedulable: true},
 				Status: corev1.NodeStatus{
 					Conditions: []corev1.NodeCondition{notReadyCondition},
 				},
 			},
-			wantState: "unhealthy",
-			wantLabel: "NotReady",
+			wantState:        "False",
+			wantLabel:        "NotReady",
+			wantPresentation: "not-ready",
+		},
+		{
+			name: "terminating ready keeps raw ready state with terminating presentation",
+			node: func() corev1.Node {
+				deletingAt := metav1.NewTime(time.Date(2026, time.May, 7, 20, 15, 0, 0, time.UTC))
+				return corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{DeletionTimestamp: &deletingAt},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{readyCondition},
+					},
+				}
+			}(),
+			wantState:        "True",
+			wantLabel:        "Terminating",
+			wantPresentation: "terminating",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status := objectMapNodeStatus(tt.node)
-			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel {
-				t.Fatalf("unexpected node status: got %#v, want state=%q label=%q", status, tt.wantState, tt.wantLabel)
+			status := objectMapNodeStatus("cluster-a", tt.node)
+			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel || status.Presentation != tt.wantPresentation {
+				t.Fatalf("unexpected node status: got %#v, want state=%q label=%q presentation=%q", status, tt.wantState, tt.wantLabel, tt.wantPresentation)
 			}
 		})
 	}
 }
 
-func TestObjectMapServiceStatusOnlyReportsLoadBalancer(t *testing.T) {
+func TestObjectMapServiceStatusUsesSharedServiceModel(t *testing.T) {
 	tests := []struct {
-		name      string
-		service   corev1.Service
-		wantState string
-		wantLabel string
+		name             string
+		service          corev1.Service
+		wantState        string
+		wantLabel        string
+		wantPresentation string
 	}{
 		{
 			name: "load balancer active",
@@ -270,14 +303,16 @@ func TestObjectMapServiceStatusOnlyReportsLoadBalancer(t *testing.T) {
 					},
 				},
 			},
-			wantState: "healthy",
-			wantLabel: "LoadBalancer active",
+			wantState:        "LoadBalancer",
+			wantLabel:        "LoadBalancer active",
+			wantPresentation: "ready",
 		},
 		{
-			name:      "load balancer pending",
-			service:   corev1.Service{Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer}},
-			wantState: "degraded",
-			wantLabel: "LoadBalancer pending",
+			name:             "load balancer pending",
+			service:          corev1.Service{Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer}},
+			wantState:        "LoadBalancer",
+			wantLabel:        "LoadBalancer pending",
+			wantPresentation: "warning",
 		},
 		{
 			name: "external name has no status indicator",
@@ -285,24 +320,24 @@ func TestObjectMapServiceStatusOnlyReportsLoadBalancer(t *testing.T) {
 				Type:         corev1.ServiceTypeExternalName,
 				ExternalName: "example.com",
 			}},
+			wantState:        "ExternalName",
+			wantLabel:        "ExternalName",
+			wantPresentation: "ready",
 		},
 		{
-			name:    "cluster ip has no status indicator",
-			service: corev1.Service{Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP}},
+			name:             "cluster ip reports source service type",
+			service:          corev1.Service{Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP}},
+			wantState:        "ClusterIP",
+			wantLabel:        "ClusterIP",
+			wantPresentation: "ready",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status := objectMapServiceStatus(tt.service)
-			if tt.wantState == "" {
-				if status != nil {
-					t.Fatalf("expected no service status, got %#v", status)
-				}
-				return
-			}
-			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel {
-				t.Fatalf("unexpected service status: got %#v, want state=%q label=%q", status, tt.wantState, tt.wantLabel)
+			status := objectMapServiceStatus("cluster-a", tt.service)
+			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel || status.Presentation != tt.wantPresentation {
+				t.Fatalf("unexpected service status: got %#v, want state=%q label=%q presentation=%q", status, tt.wantState, tt.wantLabel, tt.wantPresentation)
 			}
 		})
 	}
@@ -534,6 +569,15 @@ func TestObjectMapBuildsFromStorageClass(t *testing.T) {
 	assertNode(t, payload, "StorageClass", "fast")
 	assertNode(t, payload, "PersistentVolumeClaim", "data")
 	assertNode(t, payload, "PersistentVolume", "pv-data")
+	if status := nodeByKindName(t, payload, "StorageClass", "fast").Status; status == nil || status.State != "true" || status.Label != "Default" || status.Presentation != "ready" {
+		t.Fatalf("unexpected storage class status: %#v", status)
+	}
+	if status := nodeByKindName(t, payload, "PersistentVolumeClaim", "data").Status; status == nil || status.State != "Bound" || status.Label != "Bound" || status.Presentation != "ready" {
+		t.Fatalf("unexpected pvc status: %#v", status)
+	}
+	if status := nodeByKindName(t, payload, "PersistentVolume", "pv-data").Status; status == nil || status.State != "Bound" || status.Label != "Bound" || status.Presentation != "ready" {
+		t.Fatalf("unexpected pv status: %#v", status)
+	}
 	assertNode(t, payload, "PersistentVolumeClaim", "logs")
 	assertNode(t, payload, "PersistentVolume", "pv-logs")
 	assertNode(t, payload, "PersistentVolumeClaim", "scratch")
@@ -769,8 +813,16 @@ func objectMapFixtureObjects() []runtime.Object {
 		slice,
 		pvc,
 		pv,
-		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "app-config", Namespace: "default", UID: types.UID("cm-uid")}},
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "app-secret", Namespace: "default", UID: types.UID("secret-uid")}},
+		&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "app-config", Namespace: "default", UID: types.UID("cm-uid")},
+			Data:       map[string]string{"app.yaml": "enabled: true"},
+			BinaryData: map[string][]byte{"cert.der": []byte("cert")},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "app-secret", Namespace: "default", UID: types.UID("secret-uid")},
+			Type:       corev1.SecretTypeOpaque,
+			Data:       map[string][]byte{"password": []byte("secret")},
+		},
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "builder", Namespace: "default", UID: types.UID("sa-uid")}},
 		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: types.UID("node-uid")}},
 		hpa,
@@ -808,17 +860,19 @@ func objectMapHubFixtureObjects() []runtime.Object {
 
 func objectMapStorageFixtureObjects() []runtime.Object {
 	return []runtime.Object{
-		&storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast", UID: types.UID("sc-fast-uid")}},
+		&storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast", UID: types.UID("sc-fast-uid"), Annotations: map[string]string{"storageclass.kubernetes.io/is-default-class": "true"}}},
 		&corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: "data", Namespace: "default", UID: types.UID("pvc-data-uid")},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				StorageClassName: stringPtr("fast"),
 				VolumeName:       "pv-data",
 			},
+			Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
 		},
 		&corev1.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{Name: "pv-data", UID: types.UID("pv-data-uid")},
 			Spec:       corev1.PersistentVolumeSpec{StorageClassName: "fast"},
+			Status:     corev1.PersistentVolumeStatus{Phase: corev1.VolumeBound},
 		},
 		&corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: "logs", Namespace: "default", UID: types.UID("pvc-logs-uid")},
@@ -826,16 +880,19 @@ func objectMapStorageFixtureObjects() []runtime.Object {
 				StorageClassName: stringPtr("fast"),
 				VolumeName:       "pv-logs",
 			},
+			Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
 		},
 		&corev1.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{Name: "pv-logs", UID: types.UID("pv-logs-uid")},
 			Spec:       corev1.PersistentVolumeSpec{StorageClassName: "fast"},
+			Status:     corev1.PersistentVolumeStatus{Phase: corev1.VolumeBound},
 		},
 		&corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: "scratch", Namespace: "default", UID: types.UID("pvc-scratch-uid")},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				StorageClassName: stringPtr("fast"),
 			},
+			Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
 		},
 	}
 }

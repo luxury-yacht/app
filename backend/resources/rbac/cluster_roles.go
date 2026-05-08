@@ -10,6 +10,7 @@ package rbac
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -23,19 +24,14 @@ func (s *Service) ClusterRole(name string) (*types.ClusterRoleDetails, error) {
 		return nil, fmt.Errorf("failed to get cluster role: %v", err)
 	}
 
-	var clusterRoleBindings []string
+	var clusterRoleBindings *rbacv1.ClusterRoleBindingList
 	if crbs, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Context, metav1.ListOptions{}); err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
 	} else {
-		for i := range crbs.Items {
-			binding := crbs.Items[i]
-			if binding.RoleRef.Kind == "ClusterRole" && binding.RoleRef.Name == name {
-				clusterRoleBindings = append(clusterRoleBindings, binding.Name)
-			}
-		}
+		clusterRoleBindings = crbs
 	}
 
-	return s.buildClusterRoleDetails(cr, clusterRoleBindings, nil), nil
+	return s.buildClusterRoleDetails(cr, clusterRoleBindings, s.listAllRoleBindings()), nil
 }
 
 func (s *Service) ClusterRoles() ([]*types.ClusterRoleDetails, error) {
@@ -45,61 +41,57 @@ func (s *Service) ClusterRoles() ([]*types.ClusterRoleDetails, error) {
 		return nil, fmt.Errorf("failed to list cluster roles: %v", err)
 	}
 
-	var crbMap map[string][]string
+	var clusterRoleBindings *rbacv1.ClusterRoleBindingList
 	if crbs, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Context, metav1.ListOptions{}); err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
 	} else {
-		crbMap = make(map[string][]string)
-		for i := range crbs.Items {
-			binding := crbs.Items[i]
-			if binding.RoleRef.Kind == "ClusterRole" {
-				crbMap[binding.RoleRef.Name] = append(crbMap[binding.RoleRef.Name], binding.Name)
-			}
-		}
+		clusterRoleBindings = crbs
 	}
+	roleBindings := s.listAllRoleBindings()
 
 	results := make([]*types.ClusterRoleDetails, 0, len(roles.Items))
 	for i := range roles.Items {
 		role := roles.Items[i]
-		results = append(results, s.buildClusterRoleDetails(&role, crbMap[role.Name], nil))
+		results = append(results, s.buildClusterRoleDetails(&role, clusterRoleBindings, roleBindings))
 	}
 	return results, nil
 }
 
-func (s *Service) buildClusterRoleDetails(cr *rbacv1.ClusterRole, clusterRoleBindings []string, roleBindings []string) *types.ClusterRoleDetails {
+func (s *Service) buildClusterRoleDetails(cr *rbacv1.ClusterRole, clusterRoleBindings *rbacv1.ClusterRoleBindingList, roleBindings *rbacv1.RoleBindingList) *types.ClusterRoleDetails {
+	relationships := resourcemodel.NewResourceRelationshipIndex(
+		s.deps.ClusterID,
+		resourcemodel.ResourceRelationshipIndexOptions{
+			RoleBindings:        roleBindings,
+			ClusterRoleBindings: clusterRoleBindings,
+		},
+	)
+	model := resourcemodel.BuildClusterRoleResourceModel(
+		s.deps.ClusterID,
+		cr,
+		relationships,
+		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
+	)
+	facts := model.Facts.ClusterRole
 	details := &types.ClusterRoleDetails{
 		Kind:                "ClusterRole",
 		Name:                cr.Name,
 		Age:                 common.FormatAge(cr.CreationTimestamp.Time),
+		Details:             clusterRoleDetailsSummary(facts),
+		Rules:               policyRulesFromFacts(facts.Rules),
+		AggregationRule:     aggregationRuleFromFacts(facts.AggregationRule),
 		Labels:              cr.Labels,
 		Annotations:         cr.Annotations,
-		ClusterRoleBindings: clusterRoleBindings,
-		RoleBindings:        roleBindings,
+		ClusterRoleBindings: resourcemodel.ResourceLinkNames(facts.ClusterRoleBindings),
+		RoleBindings:        resourcemodel.ResourceLinkNames(facts.RoleBindings),
 	}
-
-	for _, rule := range cr.Rules {
-		details.Rules = append(details.Rules, types.PolicyRule{
-			APIGroups:       rule.APIGroups,
-			Resources:       rule.Resources,
-			ResourceNames:   rule.ResourceNames,
-			Verbs:           rule.Verbs,
-			NonResourceURLs: rule.NonResourceURLs,
-		})
-	}
-
-	if cr.AggregationRule != nil {
-		agg := &types.AggregationRule{}
-		for _, selector := range cr.AggregationRule.ClusterRoleSelectors {
-			agg.ClusterRoleSelectors = append(agg.ClusterRoleSelectors, selector.MatchLabels)
-		}
-		details.AggregationRule = agg
-	}
-
-	summary := fmt.Sprintf("Rules: %d", len(cr.Rules))
-	if cr.AggregationRule != nil {
-		summary += " (aggregated)"
-	}
-	details.Details = summary
-
 	return details
+}
+
+func (s *Service) listAllRoleBindings() *rbacv1.RoleBindingList {
+	bindings, err := s.deps.KubernetesClient.RbacV1().RoleBindings(metav1.NamespaceAll).List(s.deps.Context, metav1.ListOptions{})
+	if err != nil {
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list role bindings across all namespaces: %v", err), "RBAC")
+		return nil
+	}
+	return bindings
 }

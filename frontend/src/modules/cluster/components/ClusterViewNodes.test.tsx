@@ -215,6 +215,97 @@ describe('ClusterViewNodes', () => {
     expect(memoryColumn?.sortValue?.(baseNode)).toBe(2048);
   });
 
+  it('renders the backend node status without reinterpreting cordon state', async () => {
+    const node = {
+      ...baseNode,
+      status: 'Ready',
+      statusState: 'True',
+      statusPresentation: 'ready',
+      unschedulable: true,
+      taints: [{ key: 'node.kubernetes.io/unschedulable', effect: 'NoSchedule' }],
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const statusColumn = props.columns.find((column: any) => column.key === 'status');
+    const statusCell = statusColumn.render(props.data[0]);
+    const badge = statusCell.props.children[0];
+
+    expect(badge.props.children).toBe('Ready');
+    expect(badge.props.className).toBe('status-text ready');
+  });
+
+  it('uses backend statusPresentation for node status styling', async () => {
+    const node = {
+      ...baseNode,
+      status: 'Ready (Cordoned)',
+      statusState: 'True',
+      statusPresentation: 'cordoned',
+      unschedulable: true,
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const statusColumn = props.columns.find((column: any) => column.key === 'status');
+    const statusCell = statusColumn.render(props.data[0]);
+    const badge = statusCell.props.children[0];
+
+    expect(badge.props.children).toBe('Ready (Cordoned)');
+    expect(badge.props.className).toBe('status-text cordoned');
+  });
+
+  it('styles terminating from backend presentation without changing raw ready state', async () => {
+    const node = {
+      ...baseNode,
+      status: 'Terminating',
+      statusState: 'True',
+      statusPresentation: 'terminating',
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const statusColumn = props.columns.find((column: any) => column.key === 'status');
+    const statusCell = statusColumn.render(props.data[0]);
+    const badge = statusCell.props.children[0];
+
+    expect(badge.props.children).toBe('Terminating');
+    expect(badge.props.className).toBe('status-text terminating');
+  });
+
+  it('does not use statusState as a node status class fallback', async () => {
+    const node = {
+      ...baseNode,
+      status: 'Ready',
+      statusState: 'True',
+      statusPresentation: undefined,
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const statusColumn = props.columns.find((column: any) => column.key === 'status');
+    const statusCell = statusColumn.render(props.data[0]);
+    const badge = statusCell.props.children[0];
+
+    expect(badge.props.children).toBe('Ready');
+    expect(badge.props.className).toBe('status-text unknown');
+  });
+
   it('opens the object panel with cluster metadata when clicking a node name', async () => {
     await act(async () => {
       root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);

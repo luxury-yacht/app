@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const namespaceEventsDomainName = "namespace-events"
@@ -32,21 +33,22 @@ type NamespaceEventsSnapshot struct {
 // EventSummary captures the essential event fields for display.
 type EventSummary struct {
 	ClusterMeta
-	Kind             string `json:"kind"`
-	Name             string `json:"name"`
-	UID              string `json:"uid"`
-	ResourceVersion  string `json:"resourceVersion"`
-	Namespace        string `json:"namespace"`
-	ObjectNamespace  string `json:"objectNamespace"`
-	ObjectUID        string `json:"objectUid"`
-	ObjectAPIVersion string `json:"objectApiVersion"`
-	Type             string `json:"type"`
-	Source           string `json:"source"`
-	Reason           string `json:"reason"`
-	Object           string `json:"object"`
-	Message          string `json:"message"`
-	Age              string `json:"age"`
-	AgeTimestamp     int64  `json:"ageTimestamp"`
+	Kind             string                      `json:"kind"`
+	Name             string                      `json:"name"`
+	UID              string                      `json:"uid"`
+	ResourceVersion  string                      `json:"resourceVersion"`
+	Namespace        string                      `json:"namespace"`
+	ObjectNamespace  string                      `json:"objectNamespace"`
+	ObjectUID        string                      `json:"objectUid"`
+	ObjectAPIVersion string                      `json:"objectApiVersion"`
+	InvolvedObject   *resourcemodel.ResourceLink `json:"involvedObject,omitempty"`
+	Type             string                      `json:"type"`
+	Source           string                      `json:"source"`
+	Reason           string                      `json:"reason"`
+	Object           string                      `json:"object"`
+	Message          string                      `json:"message"`
+	Age              string                      `json:"age"`
+	AgeTimestamp     int64                       `json:"ageTimestamp"`
 }
 
 // RegisterNamespaceEventsDomain registers the events domain.
@@ -139,7 +141,9 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		if event.InvolvedObject.Namespace == "" {
 			continue
 		}
-		timestamp := eventTimestamp(event)
+		model := resourcemodel.BuildEventResourceModel(meta.ClusterID, event)
+		facts := model.Facts.Event
+		timestamp := resourcemodel.EventTimestamp(event).Time
 		summary := EventSummary{
 			ClusterMeta:      meta,
 			Kind:             event.InvolvedObject.Kind,
@@ -150,11 +154,12 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			ObjectNamespace:  event.InvolvedObject.Namespace,
 			ObjectUID:        string(event.InvolvedObject.UID),
 			ObjectAPIVersion: event.InvolvedObject.APIVersion,
-			Type:             event.Type,
-			Source:           namespaceEventSource(event),
-			Reason:           event.Reason,
-			Object:           namespaceInvolvedObject(event),
-			Message:          event.Message,
+			InvolvedObject:   facts.InvolvedObject,
+			Type:             facts.EventType,
+			Source:           facts.Source,
+			Reason:           facts.Reason,
+			Object:           resourcemodel.EventObjectDisplay(event),
+			Message:          facts.Message,
 			Age:              formatAge(timestamp),
 			AgeTimestamp:     timestamp.UnixMilli(),
 		}
@@ -180,26 +185,4 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		Payload: NamespaceEventsSnapshot{ClusterMeta: meta, Events: summaries},
 		Stats:   stats,
 	}, nil
-}
-
-func namespaceEventSource(event *corev1.Event) string {
-	if event == nil {
-		return ""
-	}
-	source := event.Source.Component
-	if event.Source.Host != "" {
-		source = fmt.Sprintf("%s/%s", source, event.Source.Host)
-	}
-	return source
-}
-
-func namespaceInvolvedObject(event *corev1.Event) string {
-	if event == nil {
-		return ""
-	}
-	obj := event.InvolvedObject
-	if obj.Name == "" {
-		return obj.Kind
-	}
-	return fmt.Sprintf("%s/%s", obj.Kind, obj.Name)
 }

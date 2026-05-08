@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
@@ -50,10 +51,16 @@ type ClusterCustomSummary struct {
 	// frontend's CRD column renders it as a clickable cell that opens
 	// the owning CRD in the object panel. See NamespaceCustomSummary
 	// for the same-shape field on the namespace-scoped variant.
-	CRDName     string            `json:"crdName,omitempty"`
-	Age         string            `json:"age"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
+	CRDName            string                         `json:"crdName,omitempty"`
+	Status             string                         `json:"status,omitempty"`
+	StatusState        string                         `json:"statusState,omitempty"`
+	StatusPresentation string                         `json:"statusPresentation,omitempty"`
+	Ready              *bool                          `json:"ready,omitempty"`
+	ObservedGeneration *int64                         `json:"observedGeneration,omitempty"`
+	Conditions         []resourcemodel.ConditionFacts `json:"conditions,omitempty"`
+	Age                string                         `json:"age"`
+	Labels             map[string]string              `json:"labels,omitempty"`
+	Annotations        map[string]string              `json:"annotations,omitempty"`
 }
 
 // ClusterCustomSnapshot is returned to clients.

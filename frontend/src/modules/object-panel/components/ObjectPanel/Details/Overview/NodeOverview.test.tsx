@@ -17,7 +17,15 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: any) => <div data-testid="resource-status">{props.status}</div>,
+  ResourceStatus: (props: any) => (
+    <div
+      data-testid="resource-status"
+      data-state={props.statusState}
+      data-presentation={props.statusPresentation}
+    >
+      {props.status}
+    </div>
+  ),
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
@@ -65,6 +73,8 @@ describe('NodeOverview', () => {
       name: 'node-a',
       age: '5d',
       status: 'Ready',
+      statusState: 'True',
+      statusPresentation: 'ready',
       roles: 'control-plane,master',
       internalIP: '10.0.0.10',
       externalIP: '34.1.1.1',
@@ -99,6 +109,12 @@ describe('NodeOverview', () => {
     expect(getValueForLabel(container, 'Runtime')?.textContent).toBe('containerd://1.7.0');
     expect(container.textContent).toContain('NoSchedule');
     expect(container.textContent).toContain('MemoryPressure');
+    expect(
+      container.querySelector('[data-testid="resource-status"]')?.getAttribute('data-state')
+    ).toBe('True');
+    expect(
+      container.querySelector('[data-testid="resource-status"]')?.getAttribute('data-presentation')
+    ).toBe('ready');
   });
 
   it('renders every condition as a status chip with the correct variant', async () => {

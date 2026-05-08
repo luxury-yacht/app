@@ -14,6 +14,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -213,23 +214,26 @@ func (s *Service) buildPodDetailInfo(pod corev1.Pod, podMetrics map[string]*metr
 	// Get owner
 	ownerKind, ownerName, ownerAPIVersion := getPodOwnerWithMap(pod, rsToDeployment)
 
-	// Get status
-	status := getPodStatus(pod)
+	model := resourcemodel.BuildPodResourceModel(s.deps.ClusterID, &pod)
+	podFacts := model.Facts.Pod
 
 	return &types.PodDetailInfo{
 		// Basic info
-		Name:       pod.Name,
-		Namespace:  pod.Namespace,
-		Status:     status,
-		Ready:      getNsPodReadyStatus(pod),
-		Restarts:   getPodRestartCount(pod),
-		Age:        common.FormatAge(pod.CreationTimestamp.Time),
-		CPURequest: common.FormatCPU(cpuRequest),
-		CPULimit:   common.FormatCPU(cpuLimit),
-		CPUUsage:   common.FormatCPU(cpuUsage),
-		MemRequest: common.FormatMemory(memRequest),
-		MemLimit:   common.FormatMemory(memLimit),
-		MemUsage:   common.FormatMemory(memUsage),
+		Name:               pod.Name,
+		Namespace:          pod.Namespace,
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		Ready:              formatPodFactsReady(podFacts),
+		Restarts:           podFacts.RestartCount,
+		Age:                common.FormatAge(pod.CreationTimestamp.Time),
+		CPURequest:         common.FormatCPU(cpuRequest),
+		CPULimit:           common.FormatCPU(cpuLimit),
+		CPUUsage:           common.FormatCPU(cpuUsage),
+		MemRequest:         common.FormatMemory(memRequest),
+		MemLimit:           common.FormatMemory(memLimit),
+		MemUsage:           common.FormatMemory(memUsage),
 
 		// Ownership
 		OwnerKind:       ownerKind,
@@ -472,82 +476,27 @@ func getPodUsageFromMetrics(podName string, metrics map[string]*metricsv1beta1.P
 
 // getNsPodReadyStatus calculates ready/total containers
 func getNsPodReadyStatus(pod corev1.Pod) string {
-	ready := 0
-	total := len(pod.Status.ContainerStatuses)
+	facts := resourcemodel.BuildPodFacts(&pod)
+	return formatPodFactsReady(&facts)
+}
 
-	for _, status := range pod.Status.ContainerStatuses {
-		if status.Ready {
-			ready++
-		}
+func formatPodFactsReady(facts *resourcemodel.PodFacts) string {
+	if facts == nil {
+		return "0/0"
 	}
-
-	return fmt.Sprintf("%d/%d", ready, total)
+	return fmt.Sprintf("%d/%d", facts.ReadyContainers, facts.TotalContainers)
 }
 
 // getPodStatus returns the pod status similar to kubectl's display logic
 // It checks container states to provide more specific status information
 func getPodStatus(pod corev1.Pod) string {
-	// Check if pod was evicted (Failed phase with Evicted reason)
-	if pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted" {
-		return "Evicted"
-	}
-
-	// Check init container statuses first
-	for _, status := range pod.Status.InitContainerStatuses {
-		if status.State.Terminated != nil && status.State.Terminated.ExitCode != 0 {
-			if status.State.Terminated.Reason != "" {
-				return "Init:" + status.State.Terminated.Reason
-			}
-			return "Init:Error"
-		}
-		if status.State.Waiting != nil && status.State.Waiting.Reason != "" && status.State.Waiting.Reason != "PodInitializing" {
-			return "Init:" + status.State.Waiting.Reason
-		}
-	}
-
-	// Check regular container statuses
-	for _, status := range pod.Status.ContainerStatuses {
-		if status.State.Waiting != nil && status.State.Waiting.Reason != "" {
-			return status.State.Waiting.Reason
-		}
-		if status.State.Terminated != nil && status.State.Terminated.Reason != "" {
-			return status.State.Terminated.Reason
-		}
-	}
-
-	// Check if pod is being deleted
-	if pod.DeletionTimestamp != nil {
-		return "Terminating"
-	}
-
-	// Fall back to pod phase
-	if pod.Status.Phase != "" {
-		return string(pod.Status.Phase)
-	}
-
-	return "Unknown"
+	return resourcemodel.BuildPodStatusPresentation(&pod).Label
 }
 
 // getPodRestartCount calculates the total restart count across all containers
 func getPodRestartCount(pod corev1.Pod) int32 {
-	var totalRestarts int32 = 0
-
-	// Count restarts from regular containers
-	for _, containerStatus := range pod.Status.ContainerStatuses {
-		totalRestarts += containerStatus.RestartCount
-	}
-
-	// Count restarts from init containers
-	for _, initContainerStatus := range pod.Status.InitContainerStatuses {
-		totalRestarts += initContainerStatus.RestartCount
-	}
-
-	// Count restarts from ephemeral containers (if any)
-	for _, ephemeralContainerStatus := range pod.Status.EphemeralContainerStatuses {
-		totalRestarts += ephemeralContainerStatus.RestartCount
-	}
-
-	return totalRestarts
+	facts := resourcemodel.BuildPodFacts(&pod)
+	return facts.RestartCount
 }
 
 // formatPodConditions formats pod conditions for display
@@ -847,27 +796,32 @@ func (s *Service) NodeIP(nodeName string) string {
 }
 
 // SummarizePod converts a pod object and optional metrics into a PodSimpleInfo for list views.
-func SummarizePod(pod corev1.Pod, metrics map[string]*metricsv1beta1.PodMetrics, ownerKind, ownerName, ownerAPIVersion string) types.PodSimpleInfo {
+func SummarizePod(clusterID string, pod corev1.Pod, metrics map[string]*metricsv1beta1.PodMetrics, ownerKind, ownerName, ownerAPIVersion string) types.PodSimpleInfo {
 	cpuRequest, cpuLimit, memRequest, memLimit := CalculatePodResources(pod)
 	cpuUsage, memUsage := PodUsageFromMetrics(pod.Name, metrics)
+	model := resourcemodel.BuildPodResourceModel(clusterID, &pod)
+	podFacts := model.Facts.Pod
 
 	return types.PodSimpleInfo{
-		Kind:            "Pod",
-		Name:            pod.Name,
-		Namespace:       pod.Namespace,
-		Status:          PodStatus(pod),
-		Ready:           PodReadyStatus(pod),
-		Restarts:        PodRestartCount(pod),
-		Age:             common.FormatAge(pod.CreationTimestamp.Time),
-		CPURequest:      formatCPUQuantity(cpuRequest),
-		CPULimit:        formatCPUQuantity(cpuLimit),
-		CPUUsage:        formatCPUQuantity(cpuUsage),
-		MemRequest:      formatMemoryQuantity(memRequest),
-		MemLimit:        formatMemoryQuantity(memLimit),
-		MemUsage:        formatMemoryQuantity(memUsage),
-		OwnerKind:       ownerKind,
-		OwnerName:       ownerName,
-		OwnerAPIVersion: ownerAPIVersion,
+		Kind:               "Pod",
+		Name:               pod.Name,
+		Namespace:          pod.Namespace,
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		Ready:              formatPodFactsReady(podFacts),
+		Restarts:           podFacts.RestartCount,
+		Age:                common.FormatAge(pod.CreationTimestamp.Time),
+		CPURequest:         formatCPUQuantity(cpuRequest),
+		CPULimit:           formatCPUQuantity(cpuLimit),
+		CPUUsage:           formatCPUQuantity(cpuUsage),
+		MemRequest:         formatMemoryQuantity(memRequest),
+		MemLimit:           formatMemoryQuantity(memLimit),
+		MemUsage:           formatMemoryQuantity(memUsage),
+		OwnerKind:          ownerKind,
+		OwnerName:          ownerName,
+		OwnerAPIVersion:    ownerAPIVersion,
 	}
 }
 

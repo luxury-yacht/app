@@ -6,12 +6,15 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	v1 "k8s.io/client-go/listers/apps/v1"
 	"k8s.io/client-go/tools/cache"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/stretchr/testify/require"
 )
@@ -101,6 +104,9 @@ func TestBuildWorkloadSummaryDeployment(t *testing.T) {
 	require.Equal(t, "web", summary.Name)
 	require.Equal(t, "default", summary.Namespace)
 	require.Equal(t, "c1", summary.ClusterID)
+	require.Equal(t, "Updating", summary.Status)
+	require.Equal(t, "2/3", summary.StatusState)
+	require.Equal(t, "warning", summary.StatusPresentation)
 	require.True(t, summary.PortForwardAvailable)
 }
 
@@ -123,12 +129,208 @@ func TestBuildPodSummaryMarksNoForwardablePorts(t *testing.T) {
 	require.False(t, summary.PortForwardAvailable)
 }
 
+func TestBuildPodSummaryUsesSharedPodStatusPresentation(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod-1",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}, {Name: "sidecar"}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:  "app",
+				Ready: true,
+				State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			}},
+		},
+	}
+
+	summary := BuildPodSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, pod, nil, nil)
+	require.Equal(t, "Running", summary.Status)
+	require.Equal(t, "Running", summary.StatusState)
+	require.Equal(t, "warning", summary.StatusPresentation)
+	require.Equal(t, "1/2", summary.Ready)
+}
+
+func TestBuildConfigSummariesUseSharedConfigFacts(t *testing.T) {
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "app-config", Namespace: "default"},
+		Data:       map[string]string{"app.yaml": "enabled: true"},
+		BinaryData: map[string][]byte{"cert.der": []byte("cert")},
+	}
+	configMapSummary := BuildConfigMapSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, configMap)
+	require.Equal(t, "ConfigMap", configMapSummary.Kind)
+	require.Equal(t, "CM", configMapSummary.TypeAlias)
+	require.Equal(t, 2, configMapSummary.Data)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "app-secret", Namespace: "default"},
+		Type:       corev1.SecretTypeTLS,
+		Data:       map[string][]byte{"tls.crt": []byte("cert")},
+		StringData: map[string]string{"write-only": "not-returned-by-api"},
+	}
+	secretSummary := BuildSecretSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, secret)
+	require.Equal(t, "Secret", secretSummary.Kind)
+	require.Equal(t, "TLS", secretSummary.TypeAlias)
+	require.Equal(t, 1, secretSummary.Data)
+}
+
+func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
+	ready := true
+	port := int32(443)
+	protocol := corev1.ProtocolTCP
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: corev1.ServiceSpec{
+			Type:      corev1.ServiceTypeClusterIP,
+			ClusterIP: "10.0.0.10",
+			Ports:     []corev1.ServicePort{{Port: 443, Protocol: corev1.ProtocolTCP}},
+		},
+	}
+	slice := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "api-a",
+			Namespace: "default",
+			Labels:    map[string]string{discoveryv1.LabelServiceName: "api"},
+		},
+		AddressType: discoveryv1.AddressTypeIPv4,
+		Ports:       []discoveryv1.EndpointPort{{Port: &port, Protocol: &protocol}},
+		Endpoints: []discoveryv1.Endpoint{{
+			Addresses:  []string{"10.244.0.10"},
+			Conditions: discoveryv1.EndpointConditions{Ready: &ready},
+		}},
+	}
+
+	serviceSummary := BuildServiceNetworkSummary(meta, service, []*discoveryv1.EndpointSlice{slice})
+	require.Equal(t, "Service", serviceSummary.Kind)
+	require.Equal(t, "api", serviceSummary.Name)
+	require.Equal(t, "Type: ClusterIP, ClusterIP: 10.0.0.10, Ports: 443/TCP, Addresses: 1", serviceSummary.Details)
+
+	sliceSummary := BuildEndpointSliceSummary(meta, slice)
+	require.Equal(t, "EndpointSlice", sliceSummary.Kind)
+	require.Equal(t, "Slices: 1, Ready addresses: 1", sliceSummary.Details)
+
+	ingress := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+		Spec: networkingv1.IngressSpec{
+			IngressClassName: stringPtr("nginx"),
+			Rules:            []networkingv1.IngressRule{{Host: "web.example.com"}},
+		},
+	}
+	ingressSummary := BuildIngressNetworkSummary(meta, ingress)
+	require.Equal(t, "Ingress", ingressSummary.Kind)
+	require.Equal(t, "Class: nginx, Hosts: web.example.com, Rules: 1", ingressSummary.Details)
+
+	policy := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "egress", Namespace: "default"},
+		Spec: networkingv1.NetworkPolicySpec{
+			Egress: []networkingv1.NetworkPolicyEgressRule{{}},
+		},
+	}
+	policySummary := BuildNetworkPolicySummary(meta, policy)
+	require.Equal(t, "NetworkPolicy", policySummary.Kind)
+	require.Equal(t, "Policy types: Ingress,Egress", policySummary.Details)
+}
+
+func TestBuildClusterIngressClassSummaryUsesSharedNetworkFacts(t *testing.T) {
+	ingressClass := &networkingv1.IngressClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "nginx",
+			Annotations: map[string]string{"ingressclass.kubernetes.io/is-default-class": "true"},
+		},
+		Spec: networkingv1.IngressClassSpec{Controller: "k8s.io/ingress-nginx"},
+	}
+
+	summary := BuildClusterIngressClassSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, ingressClass)
+	require.Equal(t, "IngressClass", summary.Kind)
+	require.Equal(t, "nginx", summary.Name)
+	require.Equal(t, "k8s.io/ingress-nginx", summary.Details)
+	require.True(t, summary.IsDefault)
+}
+
+func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "edge", Namespace: "default"},
+		Spec: gatewayv1.GatewaySpec{
+			GatewayClassName: gatewayv1.ObjectName("public"),
+			Listeners:        []gatewayv1.Listener{{Name: gatewayv1.SectionName("http"), Port: gatewayv1.PortNumber(80), Protocol: gatewayv1.HTTPProtocolType}},
+		},
+	}
+	gatewaySummary := BuildGatewayNetworkSummary(meta, gateway)
+	require.Equal(t, "Gateway", gatewaySummary.Kind)
+	require.Equal(t, "Class: public, 1 listener(s)", gatewaySummary.Details)
+
+	route := &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: gatewayv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: []gatewayv1.ParentReference{{Name: gatewayv1.ObjectName("edge")}}},
+			Hostnames:       []gatewayv1.Hostname{"api.example.com"},
+			Rules:           []gatewayv1.HTTPRouteRule{{}},
+		},
+	}
+	routeSummary := BuildHTTPRouteNetworkSummary(meta, route)
+	require.Equal(t, "HTTPRoute", routeSummary.Kind)
+	require.Equal(t, "1 rule(s), 1 parent(s), 1 hostname(s)", routeSummary.Details)
+
+	listenerSet := &gatewayv1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "extra", Namespace: "default"},
+		Spec: gatewayv1.ListenerSetSpec{
+			ParentRef: gatewayv1.ParentGatewayReference{Name: gatewayv1.ObjectName("edge")},
+			Listeners: []gatewayv1.ListenerEntry{{Name: gatewayv1.SectionName("http"), Port: gatewayv1.PortNumber(80), Protocol: gatewayv1.HTTPProtocolType}},
+		},
+	}
+	listenerSetSummary := BuildListenerSetNetworkSummary(meta, listenerSet)
+	require.Equal(t, "ListenerSet", listenerSetSummary.Kind)
+	require.Equal(t, "Parent: edge, 1 listener(s)", listenerSetSummary.Details)
+
+	grant := &gatewayv1.ReferenceGrant{
+		ObjectMeta: metav1.ObjectMeta{Name: "allow", Namespace: "default"},
+		Spec: gatewayv1.ReferenceGrantSpec{
+			From: []gatewayv1.ReferenceGrantFrom{{Group: gatewayv1.Group("gateway.networking.k8s.io"), Kind: gatewayv1.Kind("HTTPRoute"), Namespace: gatewayv1.Namespace("apps")}},
+			To:   []gatewayv1.ReferenceGrantTo{{Group: gatewayv1.Group(""), Kind: gatewayv1.Kind("Service"), Name: gatewayObjectNamePtr("api")}},
+		},
+	}
+	grantSummary := BuildReferenceGrantNetworkSummary(meta, grant)
+	require.Equal(t, "ReferenceGrant", grantSummary.Kind)
+	require.Equal(t, "1 from, 1 to", grantSummary.Details)
+
+	policy := &gatewayv1.BackendTLSPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "tls", Namespace: "default"},
+		Spec: gatewayv1.BackendTLSPolicySpec{TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{{
+			LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{Group: gatewayv1.Group(""), Kind: gatewayv1.Kind("Service"), Name: gatewayv1.ObjectName("api")},
+		}}},
+	}
+	policySummary := BuildBackendTLSPolicyNetworkSummary(meta, policy)
+	require.Equal(t, "BackendTLSPolicy", policySummary.Kind)
+	require.Equal(t, "1 target(s)", policySummary.Details)
+
+	gatewayClass := &gatewayv1.GatewayClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "public"},
+		Spec:       gatewayv1.GatewayClassSpec{ControllerName: "example.com/controller"},
+	}
+	classSummary := BuildClusterGatewayClassSummary(meta, gatewayClass)
+	require.Equal(t, "GatewayClass", classSummary.Kind)
+	require.Equal(t, "example.com/controller", classSummary.Details)
+}
+
 func TestBuildNodeSummary(t *testing.T) {
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-1",
 		},
+		Spec: corev1.NodeSpec{
+			Unschedulable: true,
+		},
 		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{{
+				Type:   corev1.NodeReady,
+				Status: corev1.ConditionTrue,
+			}},
 			Capacity: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("4"),
 				corev1.ResourceMemory: resource.MustParse("8Gi"),
@@ -146,6 +348,9 @@ func TestBuildNodeSummary(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "node-1", summary.Name)
 	require.Equal(t, "c1", summary.ClusterID)
+	require.Equal(t, "Ready (Cordoned)", summary.Status)
+	require.Equal(t, "True", summary.StatusState)
+	require.Equal(t, "cordoned", summary.StatusPresentation)
 }
 
 func ptrBool(value bool) *bool {
@@ -154,6 +359,11 @@ func ptrBool(value bool) *bool {
 
 func ptrInt32(value int32) *int32 {
 	return &value
+}
+
+func gatewayObjectNamePtr(value string) *gatewayv1.ObjectName {
+	name := gatewayv1.ObjectName(value)
+	return &name
 }
 
 // TestBuildClusterCRDSummaryPopulatesAllFields is a regression guard for
@@ -362,6 +572,9 @@ func TestBuildClusterCustomSummaryThreadsCRDName(t *testing.T) {
 	require.Equal(t, "rds.services.k8s.aws", row.APIGroup)
 	require.Equal(t, "v1alpha1", row.APIVersion)
 	require.Equal(t, "dbclusters.rds.services.k8s.aws", row.CRDName)
+	require.Equal(t, "Unknown", row.Status)
+	require.Equal(t, "unknown", row.StatusState)
+	require.Equal(t, "unknown", row.StatusPresentation)
 }
 
 // TestBuildClusterCustomSummaryNilResourceIsSafe ensures the streaming
@@ -406,4 +619,7 @@ func TestBuildNamespaceCustomSummaryThreadsCRDName(t *testing.T) {
 		"data",
 	)
 	require.Equal(t, "dbinstances.rds.services.k8s.aws", row.CRDName)
+	require.Equal(t, "Unknown", row.Status)
+	require.Equal(t, "unknown", row.StatusState)
+	require.Equal(t, "unknown", row.StatusPresentation)
 }

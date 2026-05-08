@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -58,7 +59,8 @@ func (s *ReplicaSetService) buildReplicaSetDetails(
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
 ) *restypes.ReplicaSetDetails {
 	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
-	podInfos := buildPodSummaries("ReplicaSet", replicaSet.Name, "apps/v1", podsList, podMetrics)
+	model := resourcemodel.BuildReplicaSetResourceModel(s.deps.ClusterID, replicaSet)
+	podInfos := buildPodSummaries(s.deps.ClusterID, "ReplicaSet", replicaSet.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 	desiredReplicas := int32(0)
 	if replicaSet.Spec.Replicas != nil {
@@ -69,6 +71,10 @@ func (s *ReplicaSetService) buildReplicaSetDetails(
 		Kind:               "ReplicaSet",
 		Name:               replicaSet.Name,
 		Namespace:          replicaSet.Namespace,
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
 		Details:            "",
 		Replicas:           fmt.Sprintf("%d/%d", replicaSet.Status.Replicas, desiredReplicas),
 		Ready:              fmt.Sprintf("%d/%d", replicaSet.Status.ReadyReplicas, replicaSet.Status.Replicas),

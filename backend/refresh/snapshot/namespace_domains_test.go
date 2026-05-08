@@ -444,6 +444,8 @@ func TestNamespaceStorageBuilder(t *testing.T) {
 	require.Equal(t, "PersistentVolumeClaim", entry.Kind)
 	require.Equal(t, "2Gi", entry.Capacity)
 	require.Equal(t, string(corev1.ClaimBound), entry.Status)
+	require.Equal(t, string(corev1.ClaimBound), entry.StatusState)
+	require.Equal(t, "ready", entry.StatusPresentation)
 	require.NotEmpty(t, entry.Age)
 }
 
@@ -1122,6 +1124,8 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "1/1", deploySummary.Ready)
 	require.Equal(t, "Running", deploySummary.Status)
+	require.Equal(t, "1/1", deploySummary.StatusState)
+	require.Equal(t, "ready", deploySummary.StatusPresentation)
 	require.False(t, deploySummary.PortForwardAvailable)
 	require.NotEmpty(t, deploySummary.Age)
 

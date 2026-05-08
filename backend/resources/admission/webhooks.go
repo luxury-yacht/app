@@ -13,98 +13,81 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/types"
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func convertWebhook(
-	name string,
-	admissionVersions []string,
-	clientConfig admissionregistrationv1.WebhookClientConfig,
-	rules []admissionregistrationv1.RuleWithOperations,
-	namespaceSelector *metav1.LabelSelector,
-	objectSelector *metav1.LabelSelector,
-	failurePolicy *admissionregistrationv1.FailurePolicyType,
-	matchPolicy *admissionregistrationv1.MatchPolicyType,
-	sideEffects *admissionregistrationv1.SideEffectClass,
-	timeoutSeconds *int32,
-	reinvocationPolicy *admissionregistrationv1.ReinvocationPolicyType,
-) types.WebhookDetails {
+func mutatingWebhookDetailsFromFacts(webhooks []resourcemodel.MutatingWebhookFacts) []types.WebhookDetails {
+	result := make([]types.WebhookDetails, 0, len(webhooks))
+	for _, webhook := range webhooks {
+		result = append(result, webhookDetailsFromFacts(webhook.WebhookFacts, webhook.ReinvocationPolicy))
+	}
+	return result
+}
+
+func validatingWebhookDetailsFromFacts(webhooks []resourcemodel.ValidatingWebhookFacts) []types.WebhookDetails {
+	result := make([]types.WebhookDetails, 0, len(webhooks))
+	for _, webhook := range webhooks {
+		result = append(result, webhookDetailsFromFacts(webhook.WebhookFacts, ""))
+	}
+	return result
+}
+
+func webhookDetailsFromFacts(facts resourcemodel.WebhookFacts, reinvocationPolicy string) types.WebhookDetails {
 	details := types.WebhookDetails{
-		Name:                    name,
-		AdmissionReviewVersions: append([]string{}, admissionVersions...),
+		Name:                    facts.Name,
+		AdmissionReviewVersions: append([]string(nil), facts.AdmissionReviewVersions...),
+		FailurePolicy:           facts.FailurePolicy,
+		MatchPolicy:             facts.MatchPolicy,
+		SideEffects:             facts.SideEffects,
+		TimeoutSeconds:          copyInt32Ptr(facts.TimeoutSeconds),
+		ReinvocationPolicy:      reinvocationPolicy,
 	}
 
-	if clientConfig.Service != nil {
+	if facts.ClientConfig.Service != nil {
 		details.ClientConfig.Service = &types.WebhookService{
-			Namespace: clientConfig.Service.Namespace,
-			Name:      clientConfig.Service.Name,
-			Path:      clientConfig.Service.Path,
-			Port:      clientConfig.Service.Port,
+			Namespace: facts.ClientConfig.Service.Namespace,
+			Name:      facts.ClientConfig.Service.Name,
+			Path:      copyStringPtr(facts.ClientConfig.Service.Path),
+			Port:      copyInt32Ptr(facts.ClientConfig.Service.Port),
 		}
 	}
-	if clientConfig.URL != nil {
-		details.ClientConfig.URL = *clientConfig.URL
-	}
+	details.ClientConfig.URL = facts.ClientConfig.URL
 
-	if failurePolicy != nil {
-		details.FailurePolicy = string(*failurePolicy)
-	}
-	if matchPolicy != nil {
-		details.MatchPolicy = string(*matchPolicy)
-	}
-	if sideEffects != nil {
-		details.SideEffects = string(*sideEffects)
-	}
-	if timeoutSeconds != nil {
-		details.TimeoutSeconds = timeoutSeconds
-	}
-	if reinvocationPolicy != nil {
-		details.ReinvocationPolicy = string(*reinvocationPolicy)
-	}
-
-	for _, rule := range rules {
+	for _, rule := range facts.Rules {
 		converted := types.WebhookRule{
-			APIGroups:   append([]string{}, rule.APIGroups...),
-			APIVersions: append([]string{}, rule.APIVersions...),
-			Resources:   append([]string{}, rule.Resources...),
-		}
-		for _, op := range rule.Operations {
-			converted.Operations = append(converted.Operations, string(op))
-		}
-		if rule.Scope != nil {
-			converted.Scope = string(*rule.Scope)
+			APIGroups:   append([]string(nil), rule.APIGroups...),
+			APIVersions: append([]string(nil), rule.APIVersions...),
+			Resources:   append([]string(nil), rule.Resources...),
+			Operations:  append([]string(nil), rule.Operations...),
+			Scope:       rule.Scope,
 		}
 		details.Rules = append(details.Rules, converted)
 	}
 
-	if namespaceSelector != nil {
-		details.NamespaceSelector = convertSelector(namespaceSelector)
-	}
-	if objectSelector != nil {
-		details.ObjectSelector = convertSelector(objectSelector)
-	}
+	details.NamespaceSelector = webhookSelectorFromFacts(facts.NamespaceSelector)
+	details.ObjectSelector = webhookSelectorFromFacts(facts.ObjectSelector)
 
 	return details
 }
 
-func convertSelector(selector *metav1.LabelSelector) *types.WebhookSelector {
-	converted := &types.WebhookSelector{}
-	if selector.MatchLabels != nil {
-		converted.MatchLabels = selector.MatchLabels
+func webhookSelectorFromFacts(selector *resourcemodel.LabelSelectorFacts) *types.WebhookSelector {
+	if selector == nil {
+		return nil
 	}
+	converted := &types.WebhookSelector{}
+	converted.MatchLabels = copyStringMap(selector.MatchLabels)
 	for _, expr := range selector.MatchExpressions {
 		converted.MatchExpressions = append(converted.MatchExpressions, types.WebhookSelectorExpression{
 			Key:      expr.Key,
-			Operator: string(expr.Operator),
-			Values:   append([]string{}, expr.Values...),
+			Operator: expr.Operator,
+			Values:   append([]string(nil), expr.Values...),
 		})
 	}
 	return converted
 }
 
-func summarizeWebhookConfiguration(count int, selector *metav1.LabelSelector) string {
+func summarizeWebhookConfiguration(count int, selector *resourcemodel.LabelSelectorFacts) string {
 	summary := fmt.Sprintf("%d webhook(s)", count)
 	if count == 0 {
 		return summary
@@ -126,4 +109,31 @@ func (s *Service) logError(msg string) {
 	if s.deps.Logger != nil {
 		s.deps.Logger.Error(msg, logsources.ResourceLoader)
 	}
+}
+
+func copyStringMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return nil
+	}
+	output := make(map[string]string, len(input))
+	for key, value := range input {
+		output[key] = value
+	}
+	return output
+}
+
+func copyStringPtr(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
+}
+
+func copyInt32Ptr(value *int32) *int32 {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
 }

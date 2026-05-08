@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -48,15 +49,20 @@ func (s *CronJobService) CronJob(namespace, name string) (*restypes.CronJobDetai
 	}
 
 	podInfos, podSummary := s.collectCronJobPods(namespace, cronJob, jobs)
-	jobInfos := collectCronJobJobs(cronJob, jobs)
-	return buildCronJobDetails(cronJob, jobs, podInfos, podSummary, jobInfos), nil
+	jobInfos := collectCronJobJobs(s.deps.ClusterID, cronJob, jobs)
+	return buildCronJobDetails(s.deps.ClusterID, cronJob, jobs, podInfos, podSummary, jobInfos), nil
 }
 
-func buildCronJobDetails(cronJob *batchv1.CronJob, jobs *batchv1.JobList, podInfos []restypes.PodSimpleInfo, podSummary *restypes.PodMetricsSummary, jobInfos []restypes.JobSimpleInfo) *restypes.CronJobDetails {
+func buildCronJobDetails(clusterID string, cronJob *batchv1.CronJob, jobs *batchv1.JobList, podInfos []restypes.PodSimpleInfo, podSummary *restypes.PodMetricsSummary, jobInfos []restypes.JobSimpleInfo) *restypes.CronJobDetails {
+	model := resourcemodel.BuildCronJobResourceModel(clusterID, cronJob)
 	details := &restypes.CronJobDetails{
 		Kind:                    "CronJob",
 		Name:                    cronJob.Name,
 		Namespace:               cronJob.Namespace,
+		Status:                  model.Status.Label,
+		StatusState:             model.Status.State,
+		StatusPresentation:      model.Status.Presentation,
+		StatusReason:            model.Status.Reason,
 		Age:                     common.FormatAge(cronJob.CreationTimestamp.Time),
 		Schedule:                cronJob.Spec.Schedule,
 		Suspend:                 cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend,
@@ -241,7 +247,7 @@ func (s *CronJobService) collectCronJobPods(namespace string, cronJob *batchv1.C
 	podInfos := make([]restypes.PodSimpleInfo, 0, len(collected))
 	for _, pod := range collected {
 		ownerKind, ownerName, ownerAPIVersion := pods.ResolveOwner(pod, rsMap)
-		podInfos = append(podInfos, pods.SummarizePod(pod, metrics, ownerKind, ownerName, ownerAPIVersion))
+		podInfos = append(podInfos, pods.SummarizePod(s.deps.ClusterID, pod, metrics, ownerKind, ownerName, ownerAPIVersion))
 	}
 
 	podSummary, _ := summarizePodMetrics(collected, metrics)
@@ -249,7 +255,7 @@ func (s *CronJobService) collectCronJobPods(namespace string, cronJob *batchv1.C
 }
 
 // collectCronJobJobs returns summary info for all Jobs owned by the given CronJob.
-func collectCronJobJobs(cronJob *batchv1.CronJob, jobs *batchv1.JobList) []restypes.JobSimpleInfo {
+func collectCronJobJobs(clusterID string, cronJob *batchv1.CronJob, jobs *batchv1.JobList) []restypes.JobSimpleInfo {
 	if jobs == nil {
 		return nil
 	}
@@ -259,29 +265,32 @@ func collectCronJobJobs(cronJob *batchv1.CronJob, jobs *batchv1.JobList) []resty
 		if !ownedByCronJob(job.OwnerReferences, cronJob.UID) {
 			continue
 		}
-		result = append(result, summarizeJobSimple(job))
+		result = append(result, summarizeJobSimple(clusterID, job))
 	}
 	return result
 }
 
 // summarizeJobSimple builds a JobSimpleInfo from a Kubernetes Job object.
-func summarizeJobSimple(job *batchv1.Job) restypes.JobSimpleInfo {
+func summarizeJobSimple(clusterID string, job *batchv1.Job) restypes.JobSimpleInfo {
+	model := resourcemodel.BuildJobResourceModel(clusterID, job)
 	completions := int32(1)
 	if job.Spec.Completions != nil {
 		completions = *job.Spec.Completions
 	}
-	backoffLimit := defaultInt32(job.Spec.BackoffLimit, 6)
-
 	info := restypes.JobSimpleInfo{
-		Kind:        "Job",
-		Name:        job.Name,
-		Namespace:   job.Namespace,
-		Completions: fmt.Sprintf("%d/%d", job.Status.Succeeded, completions),
-		Succeeded:   job.Status.Succeeded,
-		Failed:      job.Status.Failed,
-		Active:      job.Status.Active,
-		StartTime:   job.Status.StartTime,
-		Age:         common.FormatAge(job.CreationTimestamp.Time),
+		Kind:               "Job",
+		Name:               job.Name,
+		Namespace:          job.Namespace,
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		Completions:        fmt.Sprintf("%d/%d", job.Status.Succeeded, completions),
+		Succeeded:          job.Status.Succeeded,
+		Failed:             job.Status.Failed,
+		Active:             job.Status.Active,
+		StartTime:          job.Status.StartTime,
+		Age:                common.FormatAge(job.CreationTimestamp.Time),
 	}
 
 	// Duration: elapsed time from start to completion, or start to now if still running.
@@ -297,21 +306,6 @@ func summarizeJobSimple(job *batchv1.Job) restypes.JobSimpleInfo {
 			info.Duration = common.FormatAge(info.StartTime.Time)
 			info.DurationSeconds = int64(time.Since(info.StartTime.Time).Seconds())
 		}
-	}
-
-	// Status determination (same logic as buildJobDetails in jobs.go).
-	suspend := job.Spec.Suspend != nil && *job.Spec.Suspend
-	switch {
-	case info.Failed > 0 && backoffLimit > 0 && info.Failed >= backoffLimit:
-		info.Status = "Failed"
-	case info.Succeeded >= completions:
-		info.Status = "Completed"
-	case info.Active > 0:
-		info.Status = "Running"
-	case suspend:
-		info.Status = "Suspended"
-	default:
-		info.Status = "Pending"
 	}
 
 	return info

@@ -7,10 +7,12 @@
 
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
+import { backendStatusClass } from '@shared/utils/backendStatusPresentation';
 
 interface ResourceStatusProps {
   status?: string;
-  statusSeverity?: string;
+  statusState?: string;
+  statusPresentation?: string;
   ready?: string;
   phase?: string;
   conditions?: Array<{
@@ -23,10 +25,10 @@ interface ResourceStatusProps {
 }
 
 export const ResourceStatus = React.memo<ResourceStatusProps>(
-  ({ status, statusSeverity, ready, phase, conditions, customLabel = 'Status' }) => {
+  ({ status, statusPresentation, ready, phase, conditions, customLabel = 'Status' }) => {
     // Determine what to display
     const displayValue = status || phase;
-    const severity = statusSeverity || 'info';
+    const statusClass = backendStatusClass(statusPresentation);
 
     if (!displayValue && !ready && (!conditions || conditions.length === 0)) {
       return null;
@@ -37,7 +39,7 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
         {displayValue && (
           <OverviewItem
             label={customLabel}
-            value={<span className={`status-badge ${severity.toLowerCase()}`}>{displayValue}</span>}
+            value={<span className={`status-text ${statusClass}`}>{displayValue}</span>}
           />
         )}
 
@@ -51,7 +53,7 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
                 const readyCount = parseInt(parts[0]);
                 const totalCount = parseInt(parts[1]);
                 if (!isNaN(readyCount) && !isNaN(totalCount) && readyCount !== totalCount) {
-                  return <span className="status-badge warning">{ready}</span>;
+                  return <span className="status-text warning">{ready}</span>;
                 }
               }
               return ready;

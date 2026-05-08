@@ -110,9 +110,9 @@ items:
 	resources := service.extractResourcesFromManifest(manifest, "default")
 
 	require.Equal(t, []types.HelmResource{
-		{Kind: "ConfigMap", APIVersion: "v1", Name: "app-config", Namespace: "default"},
-		{Kind: "Deployment", APIVersion: "apps/v1", Name: "web", Namespace: "staging"},
-		{Kind: "Service", APIVersion: "v1", Name: "web", Namespace: "prod"},
+		{Kind: "ConfigMap", APIVersion: "v1", Name: "app-config", Namespace: "default", Scope: "namespaced"},
+		{Kind: "Deployment", APIVersion: "apps/v1", Name: "web", Namespace: "staging", Scope: "namespaced"},
+		{Kind: "Service", APIVersion: "v1", Name: "web", Namespace: "prod", Scope: "namespaced"},
 	}, resources)
 }
 
@@ -150,8 +150,8 @@ items:
 	resources := service.extractResourcesFromManifest(manifest, "team-default")
 
 	require.Equal(t, []types.HelmResource{
-		{Kind: "Secret", APIVersion: "v1", Name: "credentials", Namespace: "team-a"},
-		{Kind: "Service", APIVersion: "v1", Name: "svc", Namespace: "other"},
+		{Kind: "Secret", APIVersion: "v1", Name: "credentials", Namespace: "team-a", Scope: "namespaced"},
+		{Kind: "Service", APIVersion: "v1", Name: "svc", Namespace: "other", Scope: "namespaced"},
 	}, resources)
 }
 
@@ -186,8 +186,34 @@ metadata:
 	resources := service.extractResourcesFromManifest(manifest, "default")
 
 	require.Equal(t, []types.HelmResource{
-		{Kind: "DBCluster", APIVersion: "rds.services.k8s.aws/v1alpha1", Name: "primary", Namespace: "data"},
-		{Kind: "DBCluster", APIVersion: "postgresql.cnpg.io/v1", Name: "primary", Namespace: "data"},
+		{Kind: "DBCluster", APIVersion: "rds.services.k8s.aws/v1alpha1", Name: "primary", Namespace: "data", Scope: "namespaced"},
+		{Kind: "DBCluster", APIVersion: "postgresql.cnpg.io/v1", Name: "primary", Namespace: "data", Scope: "namespaced"},
+	}, resources)
+}
+
+func TestExtractResourcesFromManifestDoesNotDefaultClusterScopedNamespace(t *testing.T) {
+	t.Helper()
+
+	manifest := `
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: reader
+---
+apiVersion: databases.example.com/v1alpha1
+kind: Database
+metadata:
+  name: orders
+---
+`
+
+	service := &Service{}
+	resources := service.extractResourcesFromManifest(manifest, "release-ns")
+
+	require.Equal(t, []types.HelmResource{
+		{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1", Name: "reader", Namespace: "", Scope: "cluster"},
+		{Kind: "Database", APIVersion: "databases.example.com/v1alpha1", Name: "orders", Namespace: "release-ns"},
 	}, resources)
 }
 
@@ -199,13 +225,15 @@ func TestExtractNameNamespaceSupportsInterfaceMap(t *testing.T) {
 		},
 	}
 
-	name, ns := extractNameNamespace(obj, "fallback")
+	name, ns, explicit := extractNameNamespace(obj, "fallback")
 	require.Equal(t, "demo", name)
 	require.Equal(t, "custom-ns", ns)
+	require.True(t, explicit)
 
-	name, ns = extractNameNamespace(map[string]interface{}{}, "fallback")
+	name, ns, explicit = extractNameNamespace(map[string]interface{}{}, "fallback")
 	require.Equal(t, "", name)
 	require.Equal(t, "fallback", ns)
+	require.False(t, explicit)
 }
 
 func TestReleaseDetailsReturnsHistoryAndResources(t *testing.T) {
@@ -246,7 +274,10 @@ metadata:
 	require.Equal(t, "demo-1.2.3", details.Chart)
 	require.Equal(t, "2.0.0", details.AppVersion)
 	require.Equal(t, 2, details.Revision)
-	require.Equal(t, "Deployed", details.Status)
+	require.Equal(t, "deployed", details.Status)
+	require.Equal(t, "deployed", details.StatusState)
+	require.Equal(t, "ready", details.StatusPresentation)
+	require.Equal(t, "info.status", details.StatusReason)
 	require.Equal(t, current.Config, details.Values)
 	require.Equal(t, "Upgrade complete", details.Description)
 	require.Equal(t, "All good", details.Notes)
@@ -254,7 +285,12 @@ metadata:
 	require.Len(t, details.Resources, 2)
 	require.Len(t, details.History, 2)
 	require.Equal(t, 1, details.History[0].Revision)
+	require.Equal(t, "superseded", details.History[0].Status)
+	require.Equal(t, "ready", details.History[0].StatusPresentation)
+	require.Equal(t, "info.status", details.History[0].StatusReason)
 	require.Equal(t, 2, details.History[1].Revision)
+	require.Equal(t, "deployed", details.History[1].Status)
+	require.Equal(t, "ready", details.History[1].StatusPresentation)
 }
 
 func TestReleaseDetailsInitError(t *testing.T) {

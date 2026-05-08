@@ -56,9 +56,7 @@ You MUST follow these at all times.
 - Add comments where the logic is not self-evident, using plain language.
 - Treat the object catalog as the source of truth for namespace and cluster
   listings. See `backend/AGENTS.md#Object-Catalog`.
-- Before presenting non-documentation work as complete, run:
-  - `mage qc:prerelease`
-  - `mage qc:knip`
+- Before presenting non-documentation work as complete, run `mage qc:prerelease`
 - You do not need to rerun these checks after every edit during a task, but the
   final reported state must be based on the latest code in the worktree.
 - If a check cannot be run, or fails because of pre-existing unrelated changes,
@@ -78,5 +76,8 @@ Add this to `.claude/settings.local.json` so memories are stored in the project
 
 ## Documentation
 
-- Developer docs go in `docs/development`.
+- Start with `docs/README.md` when you are unsure which contract applies.
+- Durable architecture docs go in `docs/architecture`; frontend infrastructure
+  docs go in `docs/frontend`; workflow-specific docs go in `docs/workflows`.
 - Phased implementation plans go in `docs/plans`; mark items ✅ as completed.
+- Release-note fragments go in `docs/release/pending.md`.

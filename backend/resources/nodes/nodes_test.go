@@ -37,10 +37,31 @@ func TestServiceNodeReturnsDetails(t *testing.T) {
 	detail, err := service.Node(node.Name)
 	require.NoError(t, err)
 	require.Equal(t, node.Name, detail.Name)
+	require.Equal(t, "Ready", detail.Status)
+	require.Equal(t, "True", detail.StatusState)
+	require.Equal(t, "ready", detail.StatusPresentation)
 	require.Equal(t, "10.0.0.5", detail.InternalIP)
 	require.Equal(t, 2, detail.PodsCount)
 	require.NotEmpty(t, detail.PodsList)
+	require.Equal(t, "ready", detail.PodsList[0].StatusPresentation)
 	require.Equal(t, int32(1), detail.Restarts)
+}
+
+func TestServiceNodeStatusUsesSharedResourceModel(t *testing.T) {
+	service, client, node := newNodeService(t)
+	current, err := client.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	current.Spec.Unschedulable = true
+	_, err = client.CoreV1().Nodes().Update(context.Background(), current, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	detail, err := service.Node(node.Name)
+	require.NoError(t, err)
+	require.Equal(t, "Ready (Cordoned)", detail.Status)
+	require.Equal(t, "True", detail.StatusState)
+	require.Equal(t, "cordoned", detail.StatusPresentation)
+	require.Equal(t, "Unschedulable", detail.StatusReason)
+	require.True(t, detail.Unschedulable)
 }
 
 func TestServiceDeleteHonorsForce(t *testing.T) {

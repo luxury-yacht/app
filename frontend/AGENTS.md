@@ -8,6 +8,13 @@ Applies to React/TypeScript code under `frontend/`.
 - Render table data with `GridTable` and shared column factories; no ad-hoc tables.
   - Column factories live in `frontend/src/shared/components/tables/columnFactories.tsx`.
 - Wire namespace/cluster data through the refresh orchestrator + diagnostics flow (`frontend/src/core/refresh`); no ad-hoc polling loops.
+  Follow `docs/architecture/refresh-system.md` and
+  `docs/architecture/data-access.md`.
+- Treat backend `statusPresentation` and `ResourceLink.ref` as authoritative.
+  Before adding frontend status styling, relationship navigation, or object
+  identity helpers, follow `docs/architecture/shared-resource-model.md`.
+- For frontend file placement and shared UI infrastructure, follow
+  `docs/frontend/component-structure.md`.
 
 ## Refresh Orchestrator Notes
 
@@ -19,6 +26,18 @@ Applies to React/TypeScript code under `frontend/`.
 - Do not call `fetch` directly; use the refresh orchestrator/client (lint allows direct fetch only in `frontend/src/core/refresh/client.ts`, see `frontend/eslint.config.js`).
 - Validate domain state in the Diagnostics panel.
 - Catalog browse: keep snapshot/manual refresh flow (see `frontend/src/core/refresh/orchestrator.ts` catalog registration); avoid SSE-driven renders for Browse.
+- Frontend reads must go through `dataAccess` or `appStateAccess` as documented
+  in `docs/architecture/data-access.md`.
+
+## UI Infrastructure Docs
+
+- Keyboard/focus and shortcut ownership: `docs/frontend/keyboard.md`.
+- Blocking modal foundation: `docs/frontend/modals.md`.
+- Shared tab component and drag coordinator: `docs/frontend/tabs.md`.
+- Dockable object panels and grouped panel tabs:
+  `docs/frontend/dockable-panels.md`.
+- Log viewers: `docs/workflows/logs/overview.md`.
+- Object map UI: `docs/workflows/object-map.md`.
 
 ## Storybook
 

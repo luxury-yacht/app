@@ -24,6 +24,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Data interface for custom resources
 export interface CustomResourceData {
@@ -54,18 +55,17 @@ export interface CustomResourceData {
     replicas?: number;
     [key: string]: any;
   };
-  status?: {
-    phase?: string;
-    state?: string;
-    conditions?: Array<{
-      kind: string;
-      status: string;
-    }>;
-    replicas?: number;
-    url?: string;
-    endpoint?: string;
-    [key: string]: any;
-  };
+  status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+  ready?: boolean;
+  observedGeneration?: number;
+  conditions?: Array<{
+    type: string;
+    status: string;
+    reason?: string;
+    message?: string;
+  }>;
   age?: string;
   [key: string]: any; // Allow additional fields
 }
@@ -263,6 +263,14 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           crdColumn.sortValue = (resource) => (resource.crdName ?? '').toLowerCase();
           return crdColumn;
         })(),
+        cf.createTextColumn<CustomResourceData>(
+          'status',
+          'Status',
+          (resource) => resource.status || 'Unknown',
+          {
+            getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
+          }
+        ),
         cf.createAgeColumn(),
       ];
 
@@ -271,6 +279,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         name: { autoWidth: true },
         crd: { autoWidth: true },
         namespace: { autoWidth: true },
+        status: { autoWidth: true },
         age: { autoWidth: true },
       };
       cf.applyColumnSizing(baseColumns, sizing);

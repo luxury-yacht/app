@@ -160,6 +160,34 @@ describe('PodsTab', () => {
     expect(gridTablePropsRef.current.keyExtractor(pod)).toBe('panel-cluster-A|/v1/Pod/team-a/api');
   });
 
+  it('uses backend statusPresentation for the pod status class', () => {
+    const pod = {
+      name: 'api',
+      namespace: 'team-a',
+      clusterId: PANEL_CLUSTER_ID,
+      clusterName: 'Panel Cluster A',
+      ownerKind: 'Deployment',
+      ownerName: 'api',
+      node: 'node-a',
+      status: 'Running',
+      statusState: 'Running',
+      statusPresentation: 'warning',
+      ready: '1/2',
+      restarts: 0,
+      age: '1m',
+    } as any;
+
+    act(() => {
+      root.render(
+        <PodsTab pods={[pod]} metrics={null} loading={false} error={null} isActive={true} />
+      );
+    });
+
+    const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
+    const cell = statusColumn.render(pod);
+    expect(cell.props.className).toBe('status-text warning');
+  });
+
   it('opens the Map from the pod context menu', () => {
     const pod = {
       name: 'api',

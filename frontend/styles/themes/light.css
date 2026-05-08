@@ -92,12 +92,17 @@
 
   /* Status colors */
   --status-available-bg: rgba(34, 197, 94, 0.15);
-  --status-available-text: #16a34a;
+  --status-available-text: var(--color-text);
   --status-failed-bg: rgba(239, 68, 68, 0.1);
-  --status-failed-text: #ef4444;
+  --status-failed-text: var(--badge-red-text);
   --status-released-bg: rgba(249, 115, 22, 0.15);
-  --status-released-text: #ea580c;
-  --status-warning-text: #d97706;
+  --status-released-text: var(--badge-orange-text);
+  --status-warning-text: var(--badge-warning-text);
+  --status-text-ready: var(--color-text);
+  --status-text-warning: var(--status-warning-text);
+  --status-text-error: var(--status-failed-text);
+  --status-text-unknown: var(--color-text-secondary);
+  --status-text-info: var(--color-accent);
 
   /* Object map relationship colors */
   --object-map-edge-owner: #7c3aed;

@@ -420,5 +420,22 @@ describe('ClusterViewCustom', () => {
       const rendered = crdCol.render(noCRD);
       expect(rendered).toBe('-');
     });
+
+    it('uses backend statusPresentation for custom-resource status styling', async () => {
+      const resource = {
+        ...resourceWithCRD,
+        status: 'Ready',
+        statusState: 'true',
+        statusPresentation: 'ready',
+      };
+      await renderWith([resource]);
+
+      const props = gridTablePropsRef.current;
+      const statusCol = findColumn(props, 'status');
+      const rendered = statusCol.render(resource) as React.ReactElement<any>;
+
+      expect((rendered as any).props.children).toBe('Ready');
+      expect((rendered as any).props.className).toBe('status-text ready');
+    });
   });
 });

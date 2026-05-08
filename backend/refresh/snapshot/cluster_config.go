@@ -236,10 +236,3 @@ func isDefaultClass(annotations map[string]string) bool {
 	}
 	return false
 }
-
-func webhookDetails(count int) string {
-	if count == 1 {
-		return "1 webhook"
-	}
-	return fmt.Sprintf("%d webhooks", count)
-}

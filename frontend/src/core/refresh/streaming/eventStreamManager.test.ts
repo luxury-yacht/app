@@ -77,6 +77,18 @@ describe('EventStreamManager', () => {
           namespace: 'default',
           objectUid: 'pod-uid-1',
           objectApiVersion: 'v1',
+          involvedObject: {
+            ref: {
+              clusterId: 'cluster-a',
+              group: '',
+              version: 'v1',
+              kind: 'Pod',
+              resource: 'pods',
+              namespace: 'default',
+              name: 'web',
+              uid: 'pod-uid-1',
+            },
+          },
           type: 'Normal',
           source: 'kubelet',
           reason: 'Started',
@@ -97,6 +109,18 @@ describe('EventStreamManager', () => {
     expect(state.data?.events?.[0].clusterName).toBe('alpha');
     expect(state.data?.events?.[0].objectUid).toBe('pod-uid-1');
     expect(state.data?.events?.[0].objectApiVersion).toBe('v1');
+    expect(state.data?.events?.[0].involvedObject).toEqual({
+      ref: {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        resource: 'pods',
+        namespace: 'default',
+        name: 'web',
+        uid: 'pod-uid-1',
+      },
+    });
   });
 
   test('applyPayload preserves backend createdAt for initial snapshot events', async () => {
@@ -275,6 +299,18 @@ describe('EventStreamManager', () => {
           namespace: 'default',
           objectUid: 'job-uid-1',
           objectApiVersion: 'batch/v1',
+          involvedObject: {
+            ref: {
+              clusterId: 'cluster-b',
+              group: 'batch',
+              version: 'v1',
+              kind: 'Job',
+              resource: 'jobs',
+              namespace: 'default',
+              name: 'foo',
+              uid: 'job-uid-1',
+            },
+          },
           type: 'Warning',
           source: 'controller',
           reason: 'Backoff',
@@ -295,6 +331,18 @@ describe('EventStreamManager', () => {
     expect(state.data?.events?.[0].objectUid).toBe('job-uid-1');
     expect(state.data?.events?.[0].objectApiVersion).toBe('batch/v1');
     expect(state.data?.events?.[0].clusterName).toBe('bravo');
+    expect(state.data?.events?.[0].involvedObject).toEqual({
+      ref: {
+        clusterId: 'cluster-b',
+        group: 'batch',
+        version: 'v1',
+        kind: 'Job',
+        resource: 'jobs',
+        namespace: 'default',
+        name: 'foo',
+        uid: 'job-uid-1',
+      },
+    });
   });
 
   test('reuses namespace event rows when an unchanged update is applied', async () => {
@@ -374,6 +422,18 @@ describe('EventStreamManager', () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();
     const createdAt = 1_700_000_001_000;
+    const involvedObject = () => ({
+      ref: {
+        clusterId: 'cluster-b',
+        group: 'batch',
+        version: 'v1',
+        kind: 'Job',
+        resource: 'jobs',
+        namespace: 'default',
+        name: 'foo',
+        uid: 'job-uid',
+      },
+    });
 
     manager.applyPayload('namespace-events', 'namespace:default', {
       domain: 'namespace-events',
@@ -394,6 +454,7 @@ describe('EventStreamManager', () => {
           source: 'controller',
           reason: 'Backoff',
           object: 'Job/foo',
+          involvedObject: involvedObject(),
           message: 'Retrying',
           createdAt,
         },
@@ -425,6 +486,7 @@ describe('EventStreamManager', () => {
           source: 'controller',
           reason: 'Backoff',
           object: 'Job/foo',
+          involvedObject: involvedObject(),
           message: 'Retrying',
           createdAt,
         },

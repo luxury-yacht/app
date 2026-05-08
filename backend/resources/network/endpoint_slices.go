@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
@@ -31,7 +32,7 @@ func (s *Service) EndpointSlice(namespace, name string) (*types.EndpointSliceDet
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get endpoint slice %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get endpoint slice: %v", err)
 	}
-	return buildEndpointSliceDetails(namespace, name, slice), nil
+	return s.buildEndpointSliceDetails(namespace, name, slice), nil
 }
 
 // EndpointSlices lists details for every EndpointSlice object in the namespace.
@@ -53,7 +54,7 @@ func (s *Service) EndpointSlices(namespace string) ([]*types.EndpointSliceDetail
 		if slice == nil {
 			continue
 		}
-		results = append(results, buildEndpointSliceDetails(namespace, slice.Name, slice))
+		results = append(results, s.buildEndpointSliceDetails(namespace, slice.Name, slice))
 	}
 	return results, nil
 }
@@ -75,20 +76,7 @@ func (s *Service) listEndpointSlices(ctx context.Context, namespace, service str
 	return result, nil
 }
 
-func endpointReady(endpoint discoveryv1.Endpoint) bool {
-	if endpoint.Conditions.Ready != nil && !*endpoint.Conditions.Ready {
-		return false
-	}
-	if endpoint.Conditions.Serving != nil && !*endpoint.Conditions.Serving {
-		return false
-	}
-	if endpoint.Conditions.Terminating != nil && *endpoint.Conditions.Terminating {
-		return false
-	}
-	return true
-}
-
-func buildEndpointSliceDetails(namespace, name string, slice *discoveryv1.EndpointSlice) *types.EndpointSliceDetails {
+func (s *Service) buildEndpointSliceDetails(namespace, name string, slice *discoveryv1.EndpointSlice) *types.EndpointSliceDetails {
 	details := &types.EndpointSliceDetails{
 		Kind:      "EndpointSlice",
 		Name:      name,
@@ -101,10 +89,13 @@ func buildEndpointSliceDetails(namespace, name string, slice *discoveryv1.Endpoi
 		return details
 	}
 
-	ready, notReady := endpointAddressesFromSlice(slice)
-	ports := slicePortsToDetails(slice.Ports)
+	model := resourcemodel.BuildEndpointSliceResourceModel(s.deps.ClusterID, slice)
+	facts := model.Facts.EndpointSlice
+	ready := endpointAddressFactsToDetails(facts.ReadyAddresses)
+	notReady := endpointAddressFactsToDetails(facts.NotReadyAddresses)
+	ports := endpointPortFactsToDetails(facts.Ports)
 
-	details.AddressType = string(slice.AddressType)
+	details.AddressType = facts.AddressType
 	details.ReadyAddresses = ready
 	details.NotReadyAddresses = notReady
 	details.Ports = ports
@@ -121,91 +112,41 @@ func buildEndpointSliceDetails(namespace, name string, slice *discoveryv1.Endpoi
 	return details
 }
 
-func slicePortsToDetails(ports []discoveryv1.EndpointPort) []types.EndpointSlicePort {
+func endpointAddressFactsToDetails(addresses []resourcemodel.EndpointAddressFacts) []types.EndpointSliceAddress {
+	if len(addresses) == 0 {
+		return nil
+	}
+	details := make([]types.EndpointSliceAddress, 0, len(addresses))
+	for _, address := range addresses {
+		next := types.EndpointSliceAddress{
+			IP:       address.IP,
+			Hostname: address.Hostname,
+			NodeName: address.NodeName,
+		}
+		if address.TargetRef != nil {
+			if address.TargetRef.Ref != nil {
+				next.TargetRef = fmt.Sprintf("%s/%s", address.TargetRef.Ref.Kind, address.TargetRef.Ref.Name)
+			} else if address.TargetRef.Display != nil {
+				next.TargetRef = fmt.Sprintf("%s/%s", address.TargetRef.Display.Kind, address.TargetRef.Display.Name)
+			}
+		}
+		details = append(details, next)
+	}
+	return details
+}
+
+func endpointPortFactsToDetails(ports []resourcemodel.EndpointPortFacts) []types.EndpointSlicePort {
 	if len(ports) == 0 {
 		return nil
 	}
-	result := make([]types.EndpointSlicePort, 0, len(ports))
+	details := make([]types.EndpointSlicePort, 0, len(ports))
 	for _, port := range ports {
-		detail := types.EndpointSlicePort{
-			Port: portNumber(port),
-		}
-		if port.Name != nil {
-			detail.Name = *port.Name
-		}
-		if port.Protocol != nil {
-			detail.Protocol = string(*port.Protocol)
-		}
-		if port.AppProtocol != nil {
-			detail.AppProtocol = *port.AppProtocol
-		}
-		result = append(result, detail)
+		details = append(details, types.EndpointSlicePort{
+			Name:        port.Name,
+			Port:        port.Port,
+			Protocol:    port.Protocol,
+			AppProtocol: port.AppProtocol,
+		})
 	}
-	return result
-}
-
-func endpointAddressesFromSlice(slice *discoveryv1.EndpointSlice) ([]types.EndpointSliceAddress, []types.EndpointSliceAddress) {
-	ready := []types.EndpointSliceAddress{}
-	notReady := []types.EndpointSliceAddress{}
-
-	for _, endpoint := range slice.Endpoints {
-		if len(endpoint.Addresses) == 0 {
-			continue
-		}
-		target := &ready
-		if !endpointReady(endpoint) {
-			target = &notReady
-		}
-		for _, address := range endpoint.Addresses {
-			targetRef := ""
-			if endpoint.TargetRef != nil {
-				targetRef = fmt.Sprintf("%s/%s", endpoint.TargetRef.Kind, endpoint.TargetRef.Name)
-			}
-			next := types.EndpointSliceAddress{
-				IP: address,
-			}
-			if endpoint.Hostname != nil {
-				next.Hostname = *endpoint.Hostname
-			}
-			if endpoint.NodeName != nil {
-				next.NodeName = *endpoint.NodeName
-			}
-			if targetRef != "" {
-				next.TargetRef = targetRef
-			}
-			*target = append(*target, next)
-		}
-	}
-
-	return ready, notReady
-}
-
-func rollupServiceEndpoints(slices []*discoveryv1.EndpointSlice) (ready []string, notReady int) {
-	for _, slice := range slices {
-		if slice == nil || len(slice.Ports) == 0 {
-			continue
-		}
-		for _, endpoint := range slice.Endpoints {
-			if len(endpoint.Addresses) == 0 {
-				continue
-			}
-			if !endpointReady(endpoint) {
-				notReady += len(endpoint.Addresses)
-				continue
-			}
-			for _, addr := range endpoint.Addresses {
-				for _, port := range slice.Ports {
-					ready = append(ready, fmt.Sprintf("%s:%d", addr, portNumber(port)))
-				}
-			}
-		}
-	}
-	return ready, notReady
-}
-
-func portNumber(port discoveryv1.EndpointPort) int32 {
-	if port.Port != nil {
-		return *port.Port
-	}
-	return 0
+	return details
 }

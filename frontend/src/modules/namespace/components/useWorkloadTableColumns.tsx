@@ -10,6 +10,7 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import * as cf from '@shared/components/tables/columnFactories';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { parseCpuToMillicores, parseMemToMB } from '@/utils/resourceCalculations';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
@@ -41,14 +42,14 @@ const useWorkloadTableColumns = ({
       if (ready && ready.includes('/')) {
         const [readyCount, total] = ready.split('/').map((value) => value.trim());
         if (readyCount && total && readyCount !== total) {
-          return 'status-badge warning';
+          return 'status-text warning';
         }
       }
       return undefined;
     };
 
     const getRestartsClassName = (workload: WorkloadData) =>
-      (workload.restarts ?? 0) > 0 ? 'status-badge warning' : undefined;
+      (workload.restarts ?? 0) > 0 ? 'status-text warning' : undefined;
 
     const metricsStale = Boolean(metrics?.stale);
     const metricsError = metrics?.lastError ?? undefined;
@@ -90,10 +91,7 @@ const useWorkloadTableColumns = ({
       'Status',
       (row) => row.status,
       {
-        getClassName: (row) => {
-          const statusClass = row.statusClass || '';
-          return ['status-badge', statusClass].filter(Boolean).join(' ').trim();
-        },
+        getClassName: (row) => backendStatusTextClass(row.statusPresentation),
       }
     );
     statusColumn.sortValue = (row) => row.status.toLowerCase();

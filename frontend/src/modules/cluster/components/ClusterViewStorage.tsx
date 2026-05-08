@@ -22,6 +22,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 const CLUSTER_STORAGE_KIND_OPTIONS = ['PersistentVolume'];
 
@@ -35,6 +36,9 @@ interface StorageData {
   capacity: string;
   accessModes: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   claim: string;
   storageClass?: string;
   age?: string;
@@ -163,10 +167,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         cf.createTextColumn('capacity', 'Capacity', (pv) => pv.capacity || '-'),
         cf.createTextColumn('accessModes', 'Access Modes', (pv) => pv.accessModes || '-'),
         cf.createTextColumn<StorageData>('status', 'Status', (pv) => pv.status || 'Unknown', {
-          getClassName: (pv) => {
-            const normalized = (pv.status || 'unknown').toLowerCase();
-            return `status-badge ${normalized}`;
-          },
+          getClassName: (pv) => backendStatusTextClass(pv.statusPresentation),
         }),
         cf.createTextColumn<StorageData>(
           'storageClass',

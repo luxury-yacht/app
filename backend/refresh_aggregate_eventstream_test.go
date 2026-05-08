@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 )
 
@@ -112,7 +113,8 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 	require.Equal(t, "cluster", managerB.scope)
 	managerB.mu.Unlock()
 
-	managerA.ch <- eventstream.StreamEvent{Entry: eventstream.Entry{Message: "event-a"}, Sequence: 2}
+	liveLink := resourcemodel.NewNamespacedResourceLink("", "", "v1", "Pod", "pods", "default", "web", "pod-uid-live")
+	managerA.ch <- eventstream.StreamEvent{Entry: eventstream.Entry{Message: "event-a", InvolvedObject: &liveLink}, Sequence: 2}
 	managerB.ch <- eventstream.StreamEvent{Entry: eventstream.Entry{Message: "event-b"}, Sequence: 3}
 
 	require.Eventually(t, func() bool {
@@ -120,8 +122,68 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 		return strings.Contains(body, "event-a") &&
 			strings.Contains(body, "event-b") &&
 			strings.Contains(body, `"clusterId":"cluster-a"`) &&
-			strings.Contains(body, `"clusterId":"cluster-b"`)
+			strings.Contains(body, `"clusterId":"cluster-b"`) &&
+			strings.Contains(body, `"involvedObject":{"ref":{"clusterId":"cluster-a"`)
 	}, time.Second, 10*time.Millisecond)
+
+	var bufferedClusterID string
+	var bufferedLinkClusterID string
+	handler.mu.Lock()
+	if buffer := handler.buffers["clusters=cluster-a,cluster-b|cluster"]; buffer != nil {
+		for i := 0; i < buffer.count; i++ {
+			item := buffer.items[(buffer.start+i)%buffer.max]
+			if item.Entry.Message != "event-a" {
+				continue
+			}
+			bufferedClusterID = item.Entry.ClusterID
+			if item.Entry.InvolvedObject != nil && item.Entry.InvolvedObject.Ref != nil {
+				bufferedLinkClusterID = item.Entry.InvolvedObject.Ref.ClusterID
+			}
+		}
+	}
+	handler.mu.Unlock()
+	require.Equal(t, "cluster-a", bufferedClusterID)
+	require.Equal(t, "cluster-a", bufferedLinkClusterID)
+}
+
+func TestConvertAggregateSnapshotPreservesEventObjectIdentity(t *testing.T) {
+	clusterLink := resourcemodel.NewClusterResourceLink("", "", "v1", "Node", "nodes", "node-a", "node-uid")
+	clusterEntries := convertAggregateSnapshot(&refresh.Snapshot{
+		Payload: snapshot.ClusterEventsSnapshot{
+			Events: []snapshot.ClusterEventEntry{{
+				ClusterMeta:      snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
+				Name:             "cluster-event",
+				ObjectUID:        "node-uid",
+				ObjectAPIVersion: "v1",
+				InvolvedObject:   &clusterLink,
+			}},
+		},
+	})
+	require.Len(t, clusterEntries, 1)
+	require.Equal(t, "node-uid", clusterEntries[0].ObjectUID)
+	require.Equal(t, "v1", clusterEntries[0].ObjectAPIVersion)
+	require.NotNil(t, clusterEntries[0].InvolvedObject)
+	require.NotNil(t, clusterEntries[0].InvolvedObject.Ref)
+	require.Equal(t, "cluster-a", clusterEntries[0].InvolvedObject.Ref.ClusterID)
+
+	namespaceLink := resourcemodel.NewNamespacedResourceLink("", "batch", "v1", "Job", "jobs", "default", "sync", "job-uid")
+	namespaceEntries := convertAggregateSnapshot(&refresh.Snapshot{
+		Payload: snapshot.NamespaceEventsSnapshot{
+			Events: []snapshot.EventSummary{{
+				ClusterMeta:      snapshot.ClusterMeta{ClusterID: "cluster-b", ClusterName: "bravo"},
+				Name:             "namespace-event",
+				ObjectUID:        "job-uid",
+				ObjectAPIVersion: "batch/v1",
+				InvolvedObject:   &namespaceLink,
+			}},
+		},
+	})
+	require.Len(t, namespaceEntries, 1)
+	require.Equal(t, "job-uid", namespaceEntries[0].ObjectUID)
+	require.Equal(t, "batch/v1", namespaceEntries[0].ObjectAPIVersion)
+	require.NotNil(t, namespaceEntries[0].InvolvedObject)
+	require.NotNil(t, namespaceEntries[0].InvolvedObject.Ref)
+	require.Equal(t, "cluster-b", namespaceEntries[0].InvolvedObject.Ref.ClusterID)
 }
 
 func TestAggregateEventStreamResumesFromBuffer(t *testing.T) {

@@ -19,6 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // NamespaceBuilder constructs namespace snapshots from informer caches.
@@ -42,12 +43,16 @@ type NamespaceSnapshot struct {
 // NamespaceSummary provides high level namespace metadata.
 type NamespaceSummary struct {
 	ClusterMeta
-	Name             string `json:"name"`
-	Phase            string `json:"phase"`
-	ResourceVersion  string `json:"resourceVersion"`
-	CreationUnix     int64  `json:"creationTimestamp"`
-	HasWorkloads     bool   `json:"hasWorkloads"`
-	WorkloadsUnknown bool   `json:"workloadsUnknown,omitempty"`
+	Name               string `json:"name"`
+	Phase              string `json:"phase"`
+	Status             string `json:"status,omitempty"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	ResourceVersion    string `json:"resourceVersion"`
+	CreationUnix       int64  `json:"creationTimestamp"`
+	HasWorkloads       bool   `json:"hasWorkloads"`
+	WorkloadsUnknown   bool   `json:"workloadsUnknown,omitempty"`
 }
 
 // RegisterNamespaceDomain registers the namespace domain with the registry.
@@ -113,14 +118,19 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	var version uint64
 	for _, ns := range namespaces {
 		hasWorkloads, workloadsUnknown := b.namespaceWorkloadsStatus(ns.Name, trackerReady)
+		model := resourcemodel.BuildNamespaceResourceModel(meta.ClusterID, ns, hasWorkloads, !workloadsUnknown, nil, nil)
 		items = append(items, NamespaceSummary{
-			ClusterMeta:     meta,
-			Name:             ns.Name,
-			Phase:            string(ns.Status.Phase),
-			ResourceVersion:  ns.ResourceVersion,
-			CreationUnix:     ns.CreationTimestamp.Unix(),
-			HasWorkloads:     hasWorkloads,
-			WorkloadsUnknown: workloadsUnknown,
+			ClusterMeta:        meta,
+			Name:               model.Ref.Name,
+			Phase:              model.Status.State,
+			Status:             model.Status.Label,
+			StatusState:        model.Status.State,
+			StatusPresentation: model.Status.Presentation,
+			StatusReason:       model.Status.Reason,
+			ResourceVersion:    model.Metadata.ResourceVersion,
+			CreationUnix:       model.Metadata.CreationTimestamp.Unix(),
+			HasWorkloads:       model.Facts.Namespace.HasWorkloads,
+			WorkloadsUnknown:   !model.Facts.Namespace.WorkloadsKnown,
 		})
 		if v := parseResourceVersion(ns); v > version {
 			version = v

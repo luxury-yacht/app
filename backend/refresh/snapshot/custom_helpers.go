@@ -2,7 +2,6 @@ package snapshot
 
 import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -22,16 +21,6 @@ func preferredCRDVersion(crd *apiextensionsv1.CustomResourceDefinition) string {
 		}
 	}
 	return ""
-}
-
-func resourceKind(obj *unstructured.Unstructured, fallback string) string {
-	if obj == nil {
-		return fallback
-	}
-	if kind := obj.GetKind(); kind != "" {
-		return kind
-	}
-	return fallback
 }
 
 func shouldSkipError(err error) bool {

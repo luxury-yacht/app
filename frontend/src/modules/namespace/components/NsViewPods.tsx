@@ -6,7 +6,6 @@
  */
 
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { getPodStatusSeverity } from '@/utils/podStatusSeverity';
 import { eventBus } from '@/core/events';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
@@ -30,6 +29,7 @@ import {
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 
 interface PodsViewProps {
@@ -42,7 +42,7 @@ interface PodsViewProps {
   error?: string | null;
 }
 
-const HEALTHY_POD_STATUSES = new Set(['running', 'succeeded', 'completed']);
+const UNHEALTHY_POD_PRESENTATIONS = new Set(['warning', 'error', 'not-ready', 'terminating']);
 
 const UnhealthyPodsIcon: React.FC<{ width?: number; height?: number }> = ({
   width = 16,
@@ -82,29 +82,9 @@ const getReadySortValue = (value?: string | null): number => {
   return counts.ready * 1000000 + counts.total;
 };
 
-// Determine if a pod is unhealthy based on its status, restarts, and ready counts.
+// The backend owns pod health semantics; this filter only reads the presentation token.
 const isPodUnhealthy = (pod: PodSnapshotEntry): boolean => {
-  const restarts = pod.restarts ?? 0;
-  if (restarts > 0) {
-    return true;
-  }
-  const normalizedStatus = (pod.status || '').trim().toLowerCase();
-  // Ignore readiness mismatch for succeeded pods (completed cron jobs).
-  const ignoreReadyMismatch = normalizedStatus === 'succeeded';
-  // If the ready count is less than total, consider unhealthy, unless ignoring ready mismatch for "succeeded" pods.
-  const readyCounts = parseReadyCounts(pod.ready);
-  if (
-    !ignoreReadyMismatch &&
-    readyCounts &&
-    readyCounts.total > 0 &&
-    readyCounts.ready < readyCounts.total
-  ) {
-    return true;
-  }
-  if (!normalizedStatus) {
-    return false;
-  }
-  return !HEALTHY_POD_STATUSES.has(normalizedStatus);
+  return UNHEALTHY_POD_PRESENTATIONS.has((pod.statusPresentation || '').trim().toLowerCase());
 };
 
 /**
@@ -276,7 +256,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const columns: GridColumnDefinition<PodSnapshotEntry>[] = useMemo(() => {
       // Use the same warning styling as workloads when restarts are non-zero.
       const getRestartsClassName = (pod: PodSnapshotEntry) =>
-        (pod.restarts ?? 0) > 0 ? 'status-badge warning' : undefined;
+        (pod.restarts ?? 0) > 0 ? 'status-text warning' : undefined;
 
       const baseColumns: GridColumnDefinition<PodSnapshotEntry>[] = [
         cf.createKindColumn<PodSnapshotEntry>({
@@ -316,10 +296,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
-          getClassName: (pod) => {
-            const severity = getPodStatusSeverity(pod.status);
-            return ['status-badge', severity].join(' ').trim();
-          },
+          getClassName: (pod) => backendStatusTextClass(pod.statusPresentation),
         }),
         cf.createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
           className: 'text-right',

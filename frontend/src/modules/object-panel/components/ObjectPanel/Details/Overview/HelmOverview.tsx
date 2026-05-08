@@ -11,6 +11,7 @@ import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import './shared/LabelsAndAnnotations.css';
 import './HelmOverview.css';
 
@@ -23,7 +24,7 @@ interface HelmOverviewProps {
   chart?: string;
   appVersion?: string;
   status?: string;
-  statusSeverity?: string;
+  statusPresentation?: string;
   revision?: number;
   updated?: string;
   labels?: Record<string, string>;
@@ -39,7 +40,7 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
   chart,
   appVersion,
   status,
-  statusSeverity,
+  statusPresentation,
   revision,
   updated,
   labels,
@@ -58,6 +59,7 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
   const displayChart = helmReleaseDetails?.chart || chart || '-';
   const displayAppVersion = helmReleaseDetails?.appVersion || appVersion;
   const displayStatus = helmReleaseDetails?.status || status;
+  const displayStatusPresentation = helmReleaseDetails?.statusPresentation || statusPresentation;
   const displayRevision = helmReleaseDetails?.revision || revision;
   const displayUpdated = helmReleaseDetails?.updated || updated;
   const displayLabels = helmReleaseDetails?.labels || labels;
@@ -73,16 +75,8 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
       />
       <ResourceStatus
         status={displayStatus}
-        statusSeverity={
-          statusSeverity ||
-          (displayStatus
-            ? displayStatus.toLowerCase() === 'deployed'
-              ? 'info'
-              : displayStatus.toLowerCase().includes('pending')
-                ? 'warning'
-                : 'error'
-            : undefined)
-        }
+        statusState={helmReleaseDetails?.statusState}
+        statusPresentation={displayStatusPresentation}
       />
 
       {/* Chart Information */}
@@ -117,14 +111,18 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
               .sort((a: types.HelmResource, b: types.HelmResource) => a.kind.localeCompare(b.kind))
               .map((resource: types.HelmResource, idx: number) => {
                 const resourceRef = (() => {
+                  const scope = (resource.scope ?? '').trim().toLowerCase();
+                  if (scope !== 'cluster' && scope !== 'namespaced') {
+                    return null;
+                  }
                   try {
                     return buildRequiredRelatedObjectReference({
-                      kind: resource.kind.toLowerCase(),
+                      kind: resource.kind,
                       // Prefer the manifest apiVersion so CRD-backed
                       // managed resources keep their real GVK.
                       apiVersion: resource.apiVersion,
                       name: resource.name,
-                      namespace: resource.namespace,
+                      namespace: scope === 'namespaced' ? resource.namespace : undefined,
                       ...clusterMeta,
                     });
                   } catch {
@@ -172,15 +170,7 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
                 <div className="helm-history-header">
                   <span className="metadata-key">Revision {h.revision}:</span>
                   <span className="metadata-value helm-history-value">
-                    <span
-                      className={`status-badge helm-history-status ${
-                        h.status && h.status.toLowerCase() === 'deployed'
-                          ? 'ready'
-                          : h.status && h.status.toLowerCase().includes('pending')
-                            ? 'warning'
-                            : 'notready'
-                      }`}
-                    >
+                    <span className={backendStatusTextClass(h.statusPresentation)}>
                       {h.status || '-'}
                     </span>
                     <span>

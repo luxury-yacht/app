@@ -13,12 +13,27 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	cgotesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/testsupport"
 )
+
+func TestServicePersistentVolumeClaimDetailsUsesSharedStatus(t *testing.T) {
+	pvc := testsupport.PersistentVolumeClaimFixture("default", "data")
+	client := fake.NewClientset(pvc.DeepCopy())
+	service := newStorageService(t, client)
+
+	detail, err := service.PersistentVolumeClaim("default", "data")
+	require.NoError(t, err)
+	require.Equal(t, "PersistentVolumeClaim", detail.Kind)
+	require.Equal(t, string(corev1.ClaimBound), detail.Status)
+	require.Equal(t, string(corev1.ClaimBound), detail.StatusState)
+	require.Equal(t, "ready", detail.StatusPresentation)
+}
 
 func TestPersistentVolumesRequireClient(t *testing.T) {
 	service := NewService(common.Dependencies{})

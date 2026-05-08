@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -60,7 +61,8 @@ func (s *DeploymentService) buildDeploymentDetails(
 ) *restypes.DeploymentDetails {
 	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
 
-	podInfos := buildPodSummaries("Deployment", deployment.Name, "apps/v1", podsList, podMetrics)
+	model := resourcemodel.BuildDeploymentResourceModel(s.deps.ClusterID, deployment)
+	podInfos := buildPodSummaries(s.deps.ClusterID, "Deployment", deployment.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 
 	rsNames, currentRevision, currentRSName := summarizeReplicaSets(deployment, replicaSets)
@@ -87,6 +89,10 @@ func (s *DeploymentService) buildDeploymentDetails(
 		Kind:               "Deployment",
 		Name:               deployment.Name,
 		Namespace:          deployment.Namespace,
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
 		Replicas:           fmt.Sprintf("%d/%d", deployment.Status.Replicas, desiredReplicas),
 		Ready:              fmt.Sprintf("%d/%d", deployment.Status.ReadyReplicas, deployment.Status.Replicas),
 		UpToDate:           deployment.Status.UpdatedReplicas,

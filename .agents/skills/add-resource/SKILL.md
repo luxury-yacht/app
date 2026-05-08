@@ -22,6 +22,9 @@ detail/action service layer.
 1. **Identify the resource's API group and package.** For rich object details/actions, look at existing resources in `backend/resources/` to find the right category directory (workloads, network, storage, config, policy, etc.). If none fits, create a new one. For table/list data, use `backend/refresh/snapshot` instead.
 2. **Read the existing pattern.** Read at least one complete example in the same category — e.g., `backend/resources/workloads/deployments.go` for workloads, `backend/resources/network/` for networking resources.
 3. **Identify related resources.** Deployments relate to ReplicaSets and Pods. What does the new resource relate to? This determines what data the detail view should aggregate.
+4. **Follow the shared resource model contracts.** Read `docs/architecture/shared-resource-model.md` before adding status, relationship links, capability checks, or object references. The backend owns status semantics; frontend status classes come from `statusPresentation`; relationship links use `resourcemodel.ResourceLink`; object references must carry `clusterId`, `group`, `version`, `kind`, and concrete object names.
+   Do not guess `resource` from `kind`, and do not treat an empty Kubernetes
+   `apiVersion` as core `v1`.
 
 ## Files to Create or Modify
 
@@ -60,6 +63,7 @@ func (s *<Kind>Service) <Kind>(namespace, name string) (*restypes.<Kind>Details,
 ```
 
 Key points:
+
 - Accept `common.Dependencies` — never construct clients directly
 - For namespaced resources, accept `(namespace, name string)`
 - For cluster-scoped resources, accept `(name string)` only
@@ -72,7 +76,10 @@ Key points:
 **File:** `backend/resources/types/types.go`
 
 Add a `<Kind>Details` struct. Include:
+
 - Basic metadata: Kind, Name, Namespace, Age, Labels, Annotations
+- Shared status projection fields when the resource has meaningful primary status:
+  `Status`, `StatusState`, `StatusPresentation`, and optionally `StatusReason`
 - Resource-specific fields from the Kubernetes spec/status
 - Related resource summaries (pods, events, etc.)
 - Computed display strings (e.g., "Ready: 2/3")
@@ -169,20 +176,20 @@ Follow the established test pattern:
 func Test<Kind>Service<Kind>(t *testing.T) {
     // 1. Create fixtures
     resource := &<apiType>{...}
-    
+
     // 2. Create fake client
     client := cgofake.NewClientset(resource)
-    
+
     // 3. Create deps with testsupport helpers
     deps := testsupport.NewResourceDependencies(
         testsupport.WithDepsContext(context.Background()),
         testsupport.WithDepsKubeClient(client),
     )
-    
+
     // 4. Instantiate service and call method
     service := <category>.New<Kind>Service(deps)
     details, err := service.<Kind>("namespace", "name")
-    
+
     // 5. Assert
     if err != nil {
         t.Fatalf("unexpected error: %v", err)
@@ -202,8 +209,11 @@ If the resource should appear quickly in the catalog, add it to `streamingResour
 ## Checklist
 
 Before marking done:
+
 - [ ] Backend service fetches the resource and related resources
 - [ ] Detail struct defined in `types.go` with display-ready fields
+- [ ] Primary status comes from the shared resource model and projects `statusPresentation`
+- [ ] Relationship links use `resourcemodel.ResourceLink` constructors and are validated
 - [ ] Detail provider dispatches to the new service
 - [ ] Frontend type added to `DetailsTabProps`
 - [ ] Overview component renders resource-specific fields

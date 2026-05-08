@@ -1451,6 +1451,9 @@ export namespace types {
 	    name: string;
 	    namespace: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    ready: string;
 	    restarts: number;
 	    age: string;
@@ -1474,6 +1477,9 @@ export namespace types {
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.ready = source["ready"];
 	        this.restarts = source["restarts"];
 	        this.age = source["age"];
@@ -1579,6 +1585,9 @@ export namespace types {
 	    name: string;
 	    namespace: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    completions: string;
 	    succeeded: number;
 	    failed: number;
@@ -1599,6 +1608,9 @@ export namespace types {
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.completions = source["completions"];
 	        this.succeeded = source["succeeded"];
 	        this.failed = source["failed"];
@@ -1664,6 +1676,10 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
+	    status?: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    details: string;
 	    age: string;
 	    schedule: string;
@@ -1695,6 +1711,10 @@ export namespace types {
 	        this.kind = source["kind"];
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.details = source["details"];
 	        this.age = source["age"];
 	        this.schedule = source["schedule"];
@@ -1792,6 +1812,10 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
+	    status?: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    details: string;
 	    desired: number;
 	    current: number;
@@ -1835,6 +1859,10 @@ export namespace types {
 	        this.kind = source["kind"];
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.details = source["details"];
 	        this.desired = source["desired"];
 	        this.current = source["current"];
@@ -1962,6 +1990,10 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
+	    status?: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    details: string;
 	    replicas: string;
 	    ready: string;
@@ -2011,6 +2043,10 @@ export namespace types {
 	        this.kind = source["kind"];
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.details = source["details"];
 	        this.replicas = source["replicas"];
 	        this.ready = source["ready"];
@@ -2330,6 +2366,7 @@ export namespace types {
 	    apiVersion?: string;
 	    name: string;
 	    namespace: string;
+	    scope?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new HelmResource(source);
@@ -2341,12 +2378,16 @@ export namespace types {
 	        this.apiVersion = source["apiVersion"];
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
+	        this.scope = source["scope"];
 	    }
 	}
 	export class HelmRevision {
 	    revision: number;
 	    updated: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    chart: string;
 	    appVersion?: string;
 	    description?: string;
@@ -2360,6 +2401,9 @@ export namespace types {
 	        this.revision = source["revision"];
 	        this.updated = source["updated"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.chart = source["chart"];
 	        this.appVersion = source["appVersion"];
 	        this.description = source["description"];
@@ -2375,6 +2419,9 @@ export namespace types {
 	    version: string;
 	    appVersion: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    revision: number;
 	    updated: string;
 	    description?: string;
@@ -2400,6 +2447,9 @@ export namespace types {
 	        this.version = source["version"];
 	        this.appVersion = source["appVersion"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.revision = source["revision"];
 	        this.updated = source["updated"];
 	        this.description = source["description"];
@@ -2823,6 +2873,9 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    details: string;
 	    age?: string;
 	    status?: string;
@@ -2856,6 +2909,9 @@ export namespace types {
 	        this.kind = source["kind"];
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.details = source["details"];
 	        this.age = source["age"];
 	        this.status = source["status"];
@@ -3257,6 +3313,9 @@ export namespace types {
 	    age: string;
 	    details: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    hasWorkloads: boolean;
 	    workloadsUnknown?: boolean;
 	    labels?: Record<string, string>;
@@ -3275,6 +3334,9 @@ export namespace types {
 	        this.age = source["age"];
 	        this.details = source["details"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.hasWorkloads = source["hasWorkloads"];
 	        this.workloadsUnknown = source["workloadsUnknown"];
 	        this.labels = source["labels"];
@@ -3457,6 +3519,9 @@ export namespace types {
 	export class NodeDetails {
 	    name: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    unschedulable: boolean;
 	    roles: string;
 	    age: string;
@@ -3502,6 +3567,9 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.unschedulable = source["unschedulable"];
 	        this.roles = source["roles"];
 	        this.age = source["age"];
@@ -3674,6 +3742,9 @@ export namespace types {
 	    age: string;
 	    details: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    volumeName?: string;
 	    storageClass?: string;
 	    accessModes: string[];
@@ -3698,6 +3769,9 @@ export namespace types {
 	        this.age = source["age"];
 	        this.details = source["details"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.volumeName = source["volumeName"];
 	        this.storageClass = source["storageClass"];
 	        this.accessModes = source["accessModes"];
@@ -3749,6 +3823,9 @@ export namespace types {
 	    age: string;
 	    details: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    storageClass: string;
 	    capacity: string;
 	    accessModes: string[];
@@ -3773,6 +3850,9 @@ export namespace types {
 	        this.age = source["age"];
 	        this.details = source["details"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.storageClass = source["storageClass"];
 	        this.capacity = source["capacity"];
 	        this.accessModes = source["accessModes"];
@@ -3809,6 +3889,9 @@ export namespace types {
 	    name: string;
 	    namespace: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    ready: string;
 	    restarts: number;
 	    age: string;
@@ -3854,6 +3937,9 @@ export namespace types {
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.ready = source["ready"];
 	        this.restarts = source["restarts"];
 	        this.age = source["age"];
@@ -4043,6 +4129,10 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
+	    status?: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    details: string;
 	    replicas: string;
 	    ready: string;
@@ -4076,6 +4166,10 @@ export namespace types {
 	        this.kind = source["kind"];
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.details = source["details"];
 	        this.replicas = source["replicas"];
 	        this.ready = source["ready"];
@@ -4499,6 +4593,10 @@ export namespace types {
 	    namespace: string;
 	    age: string;
 	    details: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    serviceType: string;
 	    clusterIP: string;
 	    clusterIPs?: string[];
@@ -4527,6 +4625,10 @@ export namespace types {
 	        this.namespace = source["namespace"];
 	        this.age = source["age"];
 	        this.details = source["details"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.serviceType = source["serviceType"];
 	        this.clusterIP = source["clusterIP"];
 	        this.clusterIPs = source["clusterIPs"];
@@ -4672,6 +4774,10 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
+	    status?: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    details: string;
 	    replicas: string;
 	    ready: string;
@@ -4721,6 +4827,10 @@ export namespace types {
 	        this.kind = source["kind"];
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.details = source["details"];
 	        this.replicas = source["replicas"];
 	        this.ready = source["ready"];
@@ -4829,6 +4939,10 @@ export namespace types {
 	    name: string;
 	    age: string;
 	    details: string;
+	    status?: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    isDefault: boolean;
 	    provisioner: string;
 	    reclaimPolicy: string;
@@ -4851,6 +4965,10 @@ export namespace types {
 	        this.name = source["name"];
 	        this.age = source["age"];
 	        this.details = source["details"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.isDefault = source["isDefault"];
 	        this.provisioner = source["provisioner"];
 	        this.reclaimPolicy = source["reclaimPolicy"];

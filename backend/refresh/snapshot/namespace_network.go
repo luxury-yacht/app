@@ -22,6 +22,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
@@ -334,7 +335,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		if svc == nil {
 			continue
 		}
-		resources = append(resources, BuildServiceNetworkSummary(meta, svc, slicesByService[svc.Name]))
+		resources = append(resources, BuildServiceNetworkSummary(meta, svc, slicesByService[serviceSliceKey(svc.Namespace, svc.Name)]))
 		if v := resourceVersionOrTimestamp(svc); v > version {
 			version = v
 		}
@@ -444,48 +445,42 @@ func sortNetworkSummaries(resources []NetworkSummary) {
 	})
 }
 
-func describeService(svc *corev1.Service, slices []*discoveryv1.EndpointSlice) string {
-	if svc == nil {
+func describeServiceFacts(facts *resourcemodel.ServiceFacts) string {
+	if facts == nil {
 		return ""
 	}
-	parts := []string{fmt.Sprintf("Type: %s", svc.Spec.Type)}
-	clusterIP := svc.Spec.ClusterIP
+	parts := []string{fmt.Sprintf("Type: %s", facts.Type)}
+	clusterIP := facts.ClusterIP
 	if clusterIP == "" {
 		clusterIP = "None"
 	}
 	parts = append(parts, fmt.Sprintf("ClusterIP: %s", clusterIP))
-	if len(svc.Spec.Ports) > 0 {
-		portStrings := make([]string, 0, len(svc.Spec.Ports))
-		for _, port := range svc.Spec.Ports {
+	if len(facts.Ports) > 0 {
+		portStrings := make([]string, 0, len(facts.Ports))
+		for _, port := range facts.Ports {
 			portStrings = append(portStrings, fmt.Sprintf("%d/%s", port.Port, port.Protocol))
 		}
 		parts = append(parts, fmt.Sprintf("Ports: %s", strings.Join(portStrings, ",")))
 	}
-	if ready, _ := countAddressesFromSlices(slices); ready > 0 {
-		parts = append(parts, fmt.Sprintf("Addresses: %d", ready))
+	if facts.ReadyEndpointCount > 0 {
+		parts = append(parts, fmt.Sprintf("Addresses: %d", facts.ReadyEndpointCount))
 	}
 	return strings.Join(parts, ", ")
 }
 
-func describeIngress(ing *networkingv1.Ingress) string {
-	if ing == nil {
+func describeIngressFacts(facts *resourcemodel.IngressFacts) string {
+	if facts == nil {
 		return ""
 	}
 	parts := []string{}
-	if ing.Spec.IngressClassName != nil && *ing.Spec.IngressClassName != "" {
-		parts = append(parts, fmt.Sprintf("Class: %s", *ing.Spec.IngressClassName))
+	if facts.ClassName != "" {
+		parts = append(parts, fmt.Sprintf("Class: %s", facts.ClassName))
 	}
-	if len(ing.Spec.Rules) > 0 {
-		hosts := make([]string, 0, len(ing.Spec.Rules))
-		for _, rule := range ing.Spec.Rules {
-			if rule.Host != "" {
-				hosts = append(hosts, rule.Host)
-			}
+	if len(facts.Rules) > 0 {
+		if len(facts.Hosts) > 0 {
+			parts = append(parts, fmt.Sprintf("Hosts: %s", strings.Join(facts.Hosts, ",")))
 		}
-		if len(hosts) > 0 {
-			parts = append(parts, fmt.Sprintf("Hosts: %s", strings.Join(hosts, ",")))
-		}
-		parts = append(parts, fmt.Sprintf("Rules: %d", len(ing.Spec.Rules)))
+		parts = append(parts, fmt.Sprintf("Rules: %d", len(facts.Rules)))
 	}
 	if len(parts) == 0 {
 		return "No rules defined"
@@ -493,26 +488,23 @@ func describeIngress(ing *networkingv1.Ingress) string {
 	return strings.Join(parts, ", ")
 }
 
-func describeNetworkPolicy(policy *networkingv1.NetworkPolicy) string {
-	if policy == nil {
+func describeNetworkPolicyFacts(facts *resourcemodel.NetworkPolicyFacts) string {
+	if facts == nil {
 		return ""
 	}
-	if len(policy.Spec.PolicyTypes) == 0 {
+	if len(facts.PolicyTypes) == 0 {
 		return "Policy types: Ingress"
 	}
-	types := make([]string, 0, len(policy.Spec.PolicyTypes))
-	for _, t := range policy.Spec.PolicyTypes {
-		types = append(types, string(t))
-	}
-	return fmt.Sprintf("Policy types: %s", strings.Join(types, ","))
+	return fmt.Sprintf("Policy types: %s", strings.Join(facts.PolicyTypes, ","))
 }
 
-func describeEndpointSlices(slices []*discoveryv1.EndpointSlice) string {
-	if len(slices) == 0 {
+func describeEndpointSliceFacts(facts *resourcemodel.EndpointSliceFacts) string {
+	if facts == nil {
 		return "No endpoint slices"
 	}
-	parts := []string{fmt.Sprintf("Slices: %d", len(slices))}
-	ready, notReady := countAddressesFromSlices(slices)
+	parts := []string{"Slices: 1"}
+	ready := len(facts.ReadyAddresses)
+	notReady := len(facts.NotReadyAddresses)
 	if ready > 0 {
 		parts = append(parts, fmt.Sprintf("Ready addresses: %d", ready))
 	}
@@ -522,23 +514,53 @@ func describeEndpointSlices(slices []*discoveryv1.EndpointSlice) string {
 	return strings.Join(parts, ", ")
 }
 
-func countAddressesFromSlices(slices []*discoveryv1.EndpointSlice) (ready, notReady int) {
-	for _, slice := range slices {
-		if slice == nil {
-			continue
-		}
-		for _, ep := range slice.Endpoints {
-			if len(ep.Addresses) == 0 {
-				continue
-			}
-			if endpointReady(ep) {
-				ready += len(ep.Addresses)
-			} else {
-				notReady += len(ep.Addresses)
-			}
-		}
+func describeGatewayFacts(facts *resourcemodel.GatewayFacts) string {
+	if facts == nil {
+		return ""
 	}
-	return ready, notReady
+	className := ""
+	if facts.Class != nil {
+		className = resourceLinkName(*facts.Class)
+	}
+	if className == "" {
+		return fmt.Sprintf("%d listener(s)", len(facts.Listeners))
+	}
+	return fmt.Sprintf("Class: %s, %d listener(s)", className, len(facts.Listeners))
+}
+
+func describeGatewayRouteFacts(facts resourcemodel.RouteCommonFacts) string {
+	return fmt.Sprintf("%d rule(s), %d parent(s), %d hostname(s)", len(facts.Rules), len(facts.ParentRefs), len(facts.Hostnames))
+}
+
+func describeListenerSetFacts(facts *resourcemodel.ListenerSetFacts) string {
+	if facts == nil {
+		return ""
+	}
+	return fmt.Sprintf("Parent: %s, %d listener(s)", resourceLinkName(facts.ParentRef), len(facts.Listeners))
+}
+
+func describeReferenceGrantFacts(facts *resourcemodel.ReferenceGrantFacts) string {
+	if facts == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d from, %d to", len(facts.From), len(facts.To))
+}
+
+func describeBackendTLSPolicyFacts(facts *resourcemodel.BackendTLSPolicyFacts) string {
+	if facts == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d target(s)", len(facts.TargetRefs))
+}
+
+func resourceLinkName(link resourcemodel.ResourceLink) string {
+	if link.Ref != nil {
+		return link.Ref.Name
+	}
+	if link.Display != nil {
+		return link.Display.Name
+	}
+	return ""
 }
 
 func groupEndpointSlicesByService(slices []*discoveryv1.EndpointSlice) map[string][]*discoveryv1.EndpointSlice {
@@ -551,20 +573,11 @@ func groupEndpointSlicesByService(slices []*discoveryv1.EndpointSlice) map[strin
 		if service == "" {
 			continue
 		}
-		result[service] = append(result[service], slice)
+		result[serviceSliceKey(slice.Namespace, service)] = append(result[serviceSliceKey(slice.Namespace, service)], slice)
 	}
 	return result
 }
 
-func endpointReady(endpoint discoveryv1.Endpoint) bool {
-	if endpoint.Conditions.Ready != nil && !*endpoint.Conditions.Ready {
-		return false
-	}
-	if endpoint.Conditions.Serving != nil && !*endpoint.Conditions.Serving {
-		return false
-	}
-	if endpoint.Conditions.Terminating != nil && *endpoint.Conditions.Terminating {
-		return false
-	}
-	return true
+func serviceSliceKey(namespace, name string) string {
+	return namespace + "/" + name
 }

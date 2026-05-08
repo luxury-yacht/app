@@ -18,7 +18,7 @@ func TestManagerBroadcastsToSubscribers(t *testing.T) {
 	factory := informers.NewSharedInformerFactory(client, 0)
 	informer := factory.Core().V1().Events()
 
-	manager := NewManager(informer, noopLogger{}, telemetry.NewRecorder())
+	manager := NewManager(informer, noopLogger{}, telemetry.NewRecorder(), "cluster-a")
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -60,11 +60,26 @@ func TestManagerBroadcastsToSubscribers(t *testing.T) {
 		if streamEvent.Entry.Name != "test-event" || streamEvent.Entry.Namespace != "default" {
 			t.Fatalf("unexpected entry: %+v", streamEvent.Entry)
 		}
+		if streamEvent.Entry.ClusterID != "cluster-a" {
+			t.Fatalf("expected cluster id to be preserved, got %+v", streamEvent.Entry)
+		}
 		if streamEvent.Entry.ObjectUID != "pod-uid-1" {
 			t.Fatalf("expected object uid to be preserved, got %+v", streamEvent.Entry)
 		}
 		if streamEvent.Entry.ObjectAPIVersion != "v1" {
 			t.Fatalf("expected object apiVersion to be preserved, got %+v", streamEvent.Entry)
+		}
+		if streamEvent.Entry.InvolvedObject == nil || streamEvent.Entry.InvolvedObject.Ref == nil {
+			t.Fatalf("expected involved object ref to be preserved, got %+v", streamEvent.Entry.InvolvedObject)
+		}
+		ref := streamEvent.Entry.InvolvedObject.Ref
+		if ref.ClusterID != "cluster-a" ||
+			ref.Group != "" ||
+			ref.Version != "v1" ||
+			ref.Kind != "Pod" ||
+			ref.Namespace != "default" ||
+			ref.Name != "web-123" {
+			t.Fatalf("unexpected involved object ref: %+v", ref)
 		}
 	}
 }
@@ -74,7 +89,7 @@ func TestManagerOnlyBroadcastsClusterScopedEventsToClusterSubscribers(t *testing
 	factory := informers.NewSharedInformerFactory(client, 0)
 	informer := factory.Core().V1().Events()
 
-	manager := NewManager(informer, noopLogger{}, telemetry.NewRecorder())
+	manager := NewManager(informer, noopLogger{}, telemetry.NewRecorder(), "cluster-a")
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)

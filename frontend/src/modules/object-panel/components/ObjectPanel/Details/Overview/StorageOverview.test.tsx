@@ -32,7 +32,22 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: any) => <div data-testid="resource-status">{props.status}</div>,
+  ResourceStatus: (props: any) =>
+    props.status ? (
+      <div>
+        <span className="overview-label">Status</span>
+        <span className="overview-value">
+          <span
+            className={`status-text ${props.statusPresentation ?? props.statusState ?? 'unknown'}`}
+            data-testid="resource-status"
+            data-state={props.statusState}
+            data-presentation={props.statusPresentation}
+          >
+            {props.status}
+          </span>
+        </span>
+      </div>
+    ) : null,
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
@@ -82,6 +97,8 @@ describe('StorageOverview', () => {
       name: 'data',
       namespace: 'storage',
       status: 'Bound',
+      statusState: 'Bound',
+      statusPresentation: 'ready',
       volumeName: 'pv-123',
       capacity: '20Gi',
       accessModes: ['ReadWriteOnce'],
@@ -92,10 +109,10 @@ describe('StorageOverview', () => {
       annotations: { owner: 'storage-admins' },
     });
 
-    // Status renders as a chip with the semantically-mapped variant.
+    // Status renders from backend statusPresentation rather than local phase mapping.
     const statusRow = getValueForLabel(container, 'Status');
     expect(statusRow?.textContent).toBe('Bound');
-    expect(statusRow?.querySelector('.status-chip--healthy')).toBeTruthy();
+    expect(statusRow?.querySelector('.status-text.ready')).toBeTruthy();
     // Access modes render as chips, not a comma-joined string.
     const accessModes = getValueForLabel(container, 'Access Modes');
     expect(accessModes?.textContent).toBe('ReadWriteOnce');
@@ -154,6 +171,8 @@ describe('StorageOverview', () => {
       name: 'restored',
       namespace: 'storage',
       status: 'Pending',
+      statusState: 'Pending',
+      statusPresentation: 'warning',
       capacity: '20Gi',
       accessModes: ['ReadWriteOnce'],
       dataSource: { kind: 'VolumeSnapshot', name: 'nightly-2026-04-27' },
@@ -161,9 +180,8 @@ describe('StorageOverview', () => {
 
     const dataSource = getValueForLabel(container, 'Data Source');
     expect(dataSource?.textContent).toBe('VolumeSnapshot/nightly-2026-04-27');
-    // Pending → info chip on Status.
     const statusRow = getValueForLabel(container, 'Status');
-    expect(statusRow?.querySelector('.status-chip--info')).toBeTruthy();
+    expect(statusRow?.querySelector('.status-text.warning')).toBeTruthy();
   });
 
   it('renders PV-specific fields including claim reference', async () => {
@@ -227,6 +245,8 @@ describe('StorageOverview', () => {
       kind: 'PersistentVolume',
       name: 'pv-csi',
       status: 'Bound',
+      statusState: 'Bound',
+      statusPresentation: 'ready',
       capacity: '100Gi',
       accessModes: ['ReadWriteOnce'],
       reclaimPolicy: 'Delete',
@@ -243,10 +263,10 @@ describe('StorageOverview', () => {
       nodeAffinity: ['topology.kubernetes.io/zone in [us-east-1a]'],
     });
 
-    // Status: Bound → healthy chip
+    // Status renders from backend statusPresentation.
     const statusRow = getValueForLabel(container, 'Status');
     expect(statusRow?.textContent).toBe('Bound');
-    expect(statusRow?.querySelector('.status-chip--healthy')).toBeTruthy();
+    expect(statusRow?.querySelector('.status-text.ready')).toBeTruthy();
     // Reclaim Policy: Delete → warning chip
     const reclaim = getValueForLabel(container, 'Reclaim Policy');
     expect(reclaim?.querySelector('.status-chip--warning')).toBeTruthy();

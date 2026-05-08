@@ -33,6 +33,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { DrainIcon } from '@shared/components/icons/MenuIcons';
 
 // Define props for NodesViewGrid component
@@ -101,22 +102,16 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
         : undefined;
 
       const resolveNodeStatus = (node: ClusterNodeRow) => {
-        const isCordoned =
-          node.unschedulable ||
-          node.taints?.some((t) => t.key === 'node.kubernetes.io/unschedulable') ||
-          false;
-        const baseStatus = node.status ?? 'Unknown';
-        const text = isCordoned && baseStatus === 'Ready' ? 'Ready (Cordoned)' : baseStatus;
-        const statusClass = isCordoned ? 'warning' : baseStatus.replace(/\s+/g, '-').toLowerCase();
+        const text = node.status ?? 'Unknown';
         return {
           text,
-          className: `status-badge ${statusClass}`,
+          className: backendStatusTextClass(node.statusPresentation),
         };
       };
 
       const resolveNodeRestarts = (node: ClusterNodeRow) => {
         const restartCount = node.restarts ?? 0;
-        const className = restartCount > 0 ? 'status-badge warning' : 'status-badge';
+        const className = restartCount > 0 ? 'status-text warning' : 'status-text';
         return {
           text: String(restartCount),
           className,

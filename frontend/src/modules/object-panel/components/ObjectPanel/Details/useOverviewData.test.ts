@@ -106,6 +106,8 @@ describe('useOverviewData', () => {
       ownerKind: 'ReplicaSet',
       ownerName: 'web-abc',
       status: 'Running',
+      statusState: 'Running',
+      statusPresentation: 'warning',
       ready: '1/1',
       restarts: 0,
       qosClass: 'Burstable',
@@ -122,6 +124,8 @@ describe('useOverviewData', () => {
     expect(result!.name).toBe('web-1');
     expect(result!.node).toBe('node-1');
     expect(result!.namespace).toBe('ns-a');
+    expect(result!.statusState).toBe('Running');
+    expect(result!.statusPresentation).toBe('warning');
     expect(result!.owner).toEqual({ kind: 'ReplicaSet', name: 'web-abc' });
     expect(result!.labels).toEqual({ app: 'web' });
   });
@@ -132,6 +136,9 @@ describe('useOverviewData', () => {
       name: 'api',
       age: '5d',
       namespace: 'prod',
+      status: 'Running',
+      statusState: '3/3',
+      statusPresentation: 'ready',
       replicas: 3,
       desiredReplicas: 3,
       ready: 3,
@@ -144,6 +151,8 @@ describe('useOverviewData', () => {
 
     const result = renderHook(params);
     expect(result!.kind).toBe('Deployment');
+    expect(result!.statusState).toBe('3/3');
+    expect(result!.statusPresentation).toBe('ready');
     expect(result!.ready).toBe('3');
     expect(result!.strategy).toBe('RollingUpdate');
   });

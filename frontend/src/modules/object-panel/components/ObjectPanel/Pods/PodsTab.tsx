@@ -16,7 +16,6 @@ import {
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { getPodStatusSeverity } from '@utils/podStatusSeverity';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
@@ -30,6 +29,7 @@ import {
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 interface PodsTabProps {
   pods: PodSnapshotEntry[];
@@ -123,7 +123,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
   const columns = useMemo<GridColumnDefinition<PodSnapshotEntry>[]>(() => {
     // Match workloads warning styling when restarts are non-zero.
     const getRestartsClassName = (pod: PodSnapshotEntry) =>
-      (pod.restarts ?? 0) > 0 ? 'status-badge warning' : undefined;
+      (pod.restarts ?? 0) > 0 ? 'status-text warning' : undefined;
 
     const base: GridColumnDefinition<PodSnapshotEntry>[] = [
       createKindColumn<PodSnapshotEntry>({
@@ -163,10 +163,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
         getTitle: (pod) => pod.name,
       }),
       createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
-        getClassName: (pod) => {
-          const severity = getPodStatusSeverity(pod.status);
-          return ['status-badge', severity].join(' ').trim();
-        },
+        getClassName: (pod) => backendStatusTextClass(pod.statusPresentation),
       }),
       createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
         className: 'text-right',

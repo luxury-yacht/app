@@ -13,7 +13,6 @@ import {
   parseCpuToMillicores,
   parseMemToMB,
 } from './resourceCalculations';
-import { getPodStatusSeverity } from './podStatusSeverity';
 
 describe('resourceCalculations utilities', () => {
   it('parses cpu strings into millicores', () => {
@@ -39,17 +38,5 @@ describe('resourceCalculations utilities', () => {
 
     expect(calculateMemoryOvercommitted('8Gi', '4Gi')).toBe(100);
     expect(calculateMemoryOvercommitted('256Mi', '512Mi')).toBe(0);
-  });
-});
-
-describe('podStatusSeverity', () => {
-  it('returns severity tiers for known status strings', () => {
-    expect(getPodStatusSeverity('Running')).toBe('info');
-    expect(getPodStatusSeverity('Failed')).toBe('error');
-    expect(getPodStatusSeverity('CrashLoopBackOff')).toBe('error');
-    expect(getPodStatusSeverity('Pending')).toBe('warning');
-    expect(getPodStatusSeverity('Init:0/2')).toBe('warning');
-    expect(getPodStatusSeverity('Init:ErrImagePull')).toBe('error');
-    expect(getPodStatusSeverity('')).toBe('info');
   });
 });

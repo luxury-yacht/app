@@ -15,6 +15,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const namespaceRBACDomainName = "namespace-rbac"
@@ -215,29 +216,29 @@ func buildNamespaceRBACSnapshot(
 	}, nil
 }
 
-func describeRole(role *rbacv1.Role) string {
-	if role == nil {
+func describeRoleFacts(facts *resourcemodel.RoleFacts) string {
+	if facts == nil {
 		return ""
 	}
-	return fmt.Sprintf("Rules: %d", len(role.Rules))
+	return fmt.Sprintf("Rules: %d", len(facts.Rules))
 }
 
-func describeRoleBinding(binding *rbacv1.RoleBinding) string {
-	if binding == nil {
+func describeRoleBindingFacts(facts *resourcemodel.RoleBindingFacts) string {
+	if facts == nil {
 		return ""
 	}
-	role := binding.RoleRef.Name
+	role := resourceLinkName(facts.RoleRef)
 	if role == "" {
 		role = "-"
 	}
-	return fmt.Sprintf("Role: %s, Subjects: %d", role, len(binding.Subjects))
+	return fmt.Sprintf("Role: %s, Subjects: %d", role, len(facts.Subjects))
 }
 
-func describeServiceAccount(sa *corev1.ServiceAccount) string {
-	if sa == nil {
+func describeServiceAccountFacts(facts *resourcemodel.ServiceAccountFacts) string {
+	if facts == nil {
 		return ""
 	}
-	return fmt.Sprintf("Secrets: %d", len(sa.Secrets))
+	return fmt.Sprintf("Secrets: %d", len(facts.Secrets))
 }
 
 func sortRBACSummaries(resources []RBACSummary) {

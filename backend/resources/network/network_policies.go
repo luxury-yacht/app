@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -23,7 +24,7 @@ func (s *Service) NetworkPolicy(namespace, name string) (*types.NetworkPolicyDet
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get network policy %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get network policy: %v", err)
 	}
-	return buildNetworkPolicyDetails(np), nil
+	return s.buildNetworkPolicyDetails(np), nil
 }
 
 func (s *Service) NetworkPolicies(namespace string) ([]*types.NetworkPolicyDetails, error) {
@@ -36,73 +37,33 @@ func (s *Service) NetworkPolicies(namespace string) ([]*types.NetworkPolicyDetai
 	var results []*types.NetworkPolicyDetails
 	for i := range policies.Items {
 		np := policies.Items[i]
-		results = append(results, buildNetworkPolicyDetails(&np))
+		results = append(results, s.buildNetworkPolicyDetails(&np))
 	}
 
 	return results, nil
 }
 
-func buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *types.NetworkPolicyDetails {
+func (s *Service) buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *types.NetworkPolicyDetails {
+	model := resourcemodel.BuildNetworkPolicyResourceModel(s.deps.ClusterID, np)
+	facts := model.Facts.NetworkPolicy
 	details := &types.NetworkPolicyDetails{
 		Kind:        "NetworkPolicy",
 		Name:        np.Name,
 		Namespace:   np.Namespace,
 		Age:         common.FormatAge(np.CreationTimestamp.Time),
-		PodSelector: np.Spec.PodSelector.MatchLabels,
+		PodSelector: facts.PodSelector,
 		Labels:      np.Labels,
 		Annotations: np.Annotations,
 	}
 
-	for _, policyType := range np.Spec.PolicyTypes {
-		details.PolicyTypes = append(details.PolicyTypes, string(policyType))
+	details.PolicyTypes = append(details.PolicyTypes, facts.PolicyTypes...)
+
+	for _, ingress := range facts.IngressRules {
+		details.IngressRules = append(details.IngressRules, networkPolicyIngressFactsToDetails(ingress))
 	}
 
-	for _, ingress := range np.Spec.Ingress {
-		rule := types.NetworkPolicyRule{}
-		for _, from := range ingress.From {
-			peer := types.NetworkPolicyPeer{}
-			if from.PodSelector != nil {
-				peer.PodSelector = from.PodSelector.MatchLabels
-			}
-			if from.NamespaceSelector != nil {
-				peer.NamespaceSelector = from.NamespaceSelector.MatchLabels
-			}
-			if from.IPBlock != nil {
-				peer.IPBlock = &types.IPBlock{
-					CIDR:   from.IPBlock.CIDR,
-					Except: from.IPBlock.Except,
-				}
-			}
-			rule.From = append(rule.From, peer)
-		}
-		for _, port := range ingress.Ports {
-			rule.Ports = append(rule.Ports, networkPolicyPort(port))
-		}
-		details.IngressRules = append(details.IngressRules, rule)
-	}
-
-	for _, egress := range np.Spec.Egress {
-		rule := types.NetworkPolicyRule{}
-		for _, to := range egress.To {
-			peer := types.NetworkPolicyPeer{}
-			if to.PodSelector != nil {
-				peer.PodSelector = to.PodSelector.MatchLabels
-			}
-			if to.NamespaceSelector != nil {
-				peer.NamespaceSelector = to.NamespaceSelector.MatchLabels
-			}
-			if to.IPBlock != nil {
-				peer.IPBlock = &types.IPBlock{
-					CIDR:   to.IPBlock.CIDR,
-					Except: to.IPBlock.Except,
-				}
-			}
-			rule.To = append(rule.To, peer)
-		}
-		for _, port := range egress.Ports {
-			rule.Ports = append(rule.Ports, networkPolicyPort(port))
-		}
-		details.EgressRules = append(details.EgressRules, rule)
+	for _, egress := range facts.EgressRules {
+		details.EgressRules = append(details.EgressRules, networkPolicyEgressFactsToDetails(egress))
 	}
 
 	podSelectorInfo := "All pods"
@@ -124,17 +85,54 @@ func buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *types.NetworkPol
 	return details
 }
 
-func networkPolicyPort(port networkingv1.NetworkPolicyPort) types.NetworkPolicyPort {
-	var npPort types.NetworkPolicyPort
-	if port.Protocol != nil {
-		npPort.Protocol = string(*port.Protocol)
+func networkPolicyIngressFactsToDetails(facts resourcemodel.NetworkPolicyRuleFacts) types.NetworkPolicyRule {
+	return types.NetworkPolicyRule{
+		From:  networkPolicyPeerFactsToDetails(facts.Peers),
+		Ports: networkPolicyPortFactsToDetails(facts.Ports),
 	}
-	if port.Port != nil {
-		portStr := port.Port.String()
-		npPort.Port = &portStr
+}
+
+func networkPolicyEgressFactsToDetails(facts resourcemodel.NetworkPolicyRuleFacts) types.NetworkPolicyRule {
+	return types.NetworkPolicyRule{
+		To:    networkPolicyPeerFactsToDetails(facts.Peers),
+		Ports: networkPolicyPortFactsToDetails(facts.Ports),
 	}
-	if port.EndPort != nil {
-		npPort.EndPort = port.EndPort
+}
+
+func networkPolicyPeerFactsToDetails(peers []resourcemodel.NetworkPolicyPeerFacts) []types.NetworkPolicyPeer {
+	if len(peers) == 0 {
+		return nil
 	}
-	return npPort
+	details := make([]types.NetworkPolicyPeer, 0, len(peers))
+	for _, peer := range peers {
+		next := types.NetworkPolicyPeer{
+			PodSelector:       peer.PodSelector,
+			NamespaceSelector: peer.NamespaceSelector,
+		}
+		if peer.IPBlock != nil {
+			next.IPBlock = &types.IPBlock{
+				CIDR:   peer.IPBlock.CIDR,
+				Except: peer.IPBlock.Except,
+			}
+		}
+		details = append(details, next)
+	}
+	return details
+}
+
+func networkPolicyPortFactsToDetails(ports []resourcemodel.NetworkPolicyPortFacts) []types.NetworkPolicyPort {
+	if len(ports) == 0 {
+		return nil
+	}
+	details := make([]types.NetworkPolicyPort, 0, len(ports))
+	for _, port := range ports {
+		next := types.NetworkPolicyPort{Protocol: port.Protocol}
+		if port.Port != "" {
+			portValue := port.Port
+			next.Port = &portValue
+		}
+		next.EndPort = port.EndPort
+		details = append(details, next)
+	}
+	return details
 }

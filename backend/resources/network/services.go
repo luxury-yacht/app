@@ -17,6 +17,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
@@ -50,60 +51,53 @@ func (s *Service) ctx() (context.Context, context.CancelFunc) {
 }
 
 func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discoveryv1.EndpointSlice) *types.ServiceDetails {
+	model := resourcemodel.BuildServiceResourceModel(s.deps.ClusterID, service, slices)
+	facts := model.Facts.Service
 	details := &types.ServiceDetails{
-		Kind:            "Service",
-		Name:            service.Name,
-		Namespace:       service.Namespace,
-		Age:             common.FormatAge(service.CreationTimestamp.Time),
-		ServiceType:     string(service.Spec.Type),
-		ClusterIP:       service.Spec.ClusterIP,
-		ClusterIPs:      service.Spec.ClusterIPs,
-		ExternalIPs:     service.Spec.ExternalIPs,
-		SessionAffinity: string(service.Spec.SessionAffinity),
-		Selector:        service.Spec.Selector,
-		Labels:          service.Labels,
-		Annotations:     service.Annotations,
+		Kind:               "Service",
+		Name:               service.Name,
+		Namespace:          service.Namespace,
+		Age:                common.FormatAge(service.CreationTimestamp.Time),
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		ServiceType:        facts.Type,
+		ClusterIP:          facts.ClusterIP,
+		ClusterIPs:         facts.ClusterIPs,
+		ExternalIPs:        facts.ExternalIPs,
+		SessionAffinity:    facts.SessionAffinity,
+		Selector:           facts.Selector,
+		Labels:             service.Labels,
+		Annotations:        service.Annotations,
 	}
 
-	if service.Spec.SessionAffinityConfig != nil &&
-		service.Spec.SessionAffinityConfig.ClientIP != nil &&
-		service.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds != nil {
-		details.SessionAffinityTimeout = *service.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds
-	}
+	details.SessionAffinityTimeout = facts.SessionAffinityTimeout
 
-	for _, port := range service.Spec.Ports {
+	for _, port := range facts.Ports {
 		portDetail := types.ServicePortDetails{
 			Name:       port.Name,
-			Protocol:   string(port.Protocol),
+			Protocol:   port.Protocol,
 			Port:       port.Port,
-			TargetPort: port.TargetPort.String(),
-		}
-		if service.Spec.Type == corev1.ServiceTypeNodePort || service.Spec.Type == corev1.ServiceTypeLoadBalancer {
-			portDetail.NodePort = port.NodePort
+			TargetPort: port.TargetPort,
+			NodePort:   port.NodePort,
 		}
 		details.Ports = append(details.Ports, portDetail)
 	}
 
 	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
 		details.LoadBalancerStatus = "Pending"
-		for _, ingress := range service.Status.LoadBalancer.Ingress {
-			if ingress.IP != "" || ingress.Hostname != "" {
-				if ingress.IP != "" {
-					details.LoadBalancerIP = ingress.IP
-				} else {
-					details.LoadBalancerIP = ingress.Hostname
-				}
-				details.LoadBalancerStatus = "Active"
-				break
-			}
+		if len(facts.LoadBalancerAddresses) > 0 {
+			details.LoadBalancerIP = facts.LoadBalancerAddresses[0]
+			details.LoadBalancerStatus = "Active"
 		}
 	}
 
 	if service.Spec.Type == corev1.ServiceTypeExternalName {
-		details.ExternalName = service.Spec.ExternalName
+		details.ExternalName = facts.ExternalName
 	}
 
-	details.Endpoints, _ = rollupServiceEndpoints(slices)
+	details.Endpoints = facts.Endpoints
 	details.EndpointCount = len(details.Endpoints)
 
 	switch {

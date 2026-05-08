@@ -10,6 +10,7 @@ package constraints
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -54,62 +55,21 @@ func (s *Service) ResourceQuotas(namespace string) ([]*types.ResourceQuotaDetail
 }
 
 func (s *Service) buildResourceQuotaDetails(rq *corev1.ResourceQuota) *types.ResourceQuotaDetails {
+	model := resourcemodel.BuildResourceQuotaResourceModel(s.deps.ClusterID, rq)
+	facts := model.Facts.ResourceQuota
 	details := &types.ResourceQuotaDetails{
 		Kind:           "ResourceQuota",
 		Name:           rq.Name,
 		Namespace:      rq.Namespace,
 		Age:            common.FormatAge(rq.CreationTimestamp.Time),
-		Hard:           make(map[string]string),
-		Used:           make(map[string]string),
-		UsedPercentage: make(map[string]int),
+		Details:        model.Status.Label,
+		Hard:           quantityMapStrings(facts.Hard),
+		Used:           quantityMapStrings(facts.Used),
+		Scopes:         append([]string(nil), facts.Scopes...),
+		ScopeSelector:  scopeSelectorFromFacts(facts.ScopeSelector),
+		UsedPercentage: copyIntMap(facts.UsedPercentage),
 		Labels:         rq.Labels,
 		Annotations:    rq.Annotations,
 	}
-
-	for resourceName, quantity := range rq.Status.Hard {
-		details.Hard[string(resourceName)] = quantity.String()
-	}
-
-	for resourceName, quantity := range rq.Status.Used {
-		key := string(resourceName)
-		details.Used[key] = quantity.String()
-
-		if hardQuantity, exists := rq.Status.Hard[resourceName]; exists {
-			if hardValue := hardQuantity.Value(); hardValue > 0 {
-				usedValue := quantity.Value()
-				details.UsedPercentage[key] = int((usedValue * 100) / hardValue)
-			}
-		}
-	}
-
-	for _, scope := range rq.Spec.Scopes {
-		details.Scopes = append(details.Scopes, string(scope))
-	}
-
-	if rq.Spec.ScopeSelector != nil {
-		selector := &types.ScopeSelector{}
-		for _, expr := range rq.Spec.ScopeSelector.MatchExpressions {
-			req := types.ScopeSelectorRequirement{
-				ScopeName: string(expr.ScopeName),
-				Operator:  string(expr.Operator),
-			}
-			req.Values = append(req.Values, expr.Values...)
-			selector.MatchExpressions = append(selector.MatchExpressions, req)
-		}
-		details.ScopeSelector = selector
-	}
-
-	summary := "No limits"
-	if len(details.Hard) > 0 {
-		summary = fmt.Sprintf("Hard limits: %d", len(details.Hard))
-	}
-	if len(details.Used) > 0 {
-		summary += fmt.Sprintf(", Used: %d", len(details.Used))
-	}
-	if len(details.Scopes) > 0 {
-		summary += fmt.Sprintf(", Scopes: %d", len(details.Scopes))
-	}
-	details.Details = summary
-
 	return details
 }

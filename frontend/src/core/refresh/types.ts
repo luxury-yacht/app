@@ -30,6 +30,41 @@ export interface PermissionDeniedStatus {
   code?: number;
 }
 
+export interface ResourceRef {
+  clusterId: string;
+  group: string;
+  version: string;
+  kind: string;
+  resource?: string;
+  namespace?: string;
+  name?: string;
+  uid?: string;
+}
+
+export interface DisplayRef {
+  clusterId: string;
+  group?: string;
+  version?: string;
+  kind: string;
+  resource?: string;
+  namespace?: string;
+  name?: string;
+  uid?: string;
+}
+
+export interface ResourceLink {
+  ref?: ResourceRef;
+  display?: DisplayRef;
+}
+
+export interface ConditionFacts {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
+  lastTransitionTime?: string;
+}
+
 // ClusterMeta identifies a cluster on every snapshot payload. The Go
 // backend at backend/refresh/snapshot/cluster_meta.go declares
 // ClusterID as a non-optional string and stamps it on every snapshot
@@ -54,6 +89,10 @@ export interface ClusterMeta {
 export interface NamespaceSummary extends ClusterMeta {
   name: string;
   phase: string;
+  status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   resourceVersion: string;
   creationTimestamp: number;
   hasWorkloads?: boolean;
@@ -109,6 +148,9 @@ export interface NodeMaintenanceSnapshotPayload extends ClusterMeta {
 export interface ClusterNodeSnapshotEntry extends ClusterMeta {
   name: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   roles: string;
   age: string;
   version: string;
@@ -254,6 +296,9 @@ export interface ClusterStorageEntry extends ClusterMeta {
   capacity: string;
   accessModes: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   claim: string;
   age: string;
 }
@@ -319,6 +364,12 @@ export interface ClusterCustomEntry extends ClusterMeta {
    * `NamespaceCustomSummary.crdName`.
    */
   crdName?: string;
+  status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+  ready?: boolean;
+  observedGeneration?: number;
+  conditions?: ConditionFacts[];
   age: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
@@ -339,6 +390,7 @@ export interface ClusterEventEntry extends ClusterMeta {
   objectNamespace?: string;
   objectUid?: string;
   objectApiVersion?: string;
+  involvedObject?: ResourceLink;
   type: string;
   source: string;
   reason: string;
@@ -422,6 +474,9 @@ export interface PodSnapshotEntry extends ClusterMeta {
   namespace: string;
   node: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   ready: string;
   restarts: number;
   age: string;
@@ -487,6 +542,7 @@ export interface ObjectEventSummary extends ClusterMeta {
   // disambiguation when opening the related object — see
 
   involvedObjectApiVersion?: string;
+  involvedObject?: ResourceLink;
   namespace: string;
 }
 
@@ -518,8 +574,9 @@ export interface ObjectMapNode {
 }
 
 export interface ObjectMapStatus {
-  state: 'healthy' | 'refreshing' | 'degraded' | 'unhealthy' | 'inactive';
+  state: string;
   label: string;
+  presentation?: string;
   reason?: string;
 }
 
@@ -553,6 +610,7 @@ export interface ObjectYAMLSnapshotPayload extends ClusterMeta {
 export interface ObjectHelmManifestSnapshotPayload extends ClusterMeta {
   manifest: string;
   revision?: number;
+  resources?: ResourceLink[];
 }
 
 export interface ObjectHelmValuesSnapshotPayload extends ClusterMeta {
@@ -566,6 +624,9 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
   namespace: string;
   ready: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   restarts: number;
   age: string;
   portForwardAvailable?: boolean;
@@ -628,6 +689,9 @@ export interface NamespaceStorageSummary extends ClusterMeta {
   namespace: string;
   capacity: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   storageClass: string;
   age: string;
 }
@@ -692,6 +756,7 @@ export interface NamespaceEventSummary extends ClusterMeta {
   objectNamespace?: string;
   objectUid?: string;
   objectApiVersion?: string;
+  involvedObject?: ResourceLink;
   type: string;
   source: string;
   reason: string;
@@ -721,6 +786,12 @@ export interface NamespaceCustomSummary extends ClusterMeta {
    */
   crdName?: string;
   namespace: string;
+  status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+  ready?: boolean;
+  observedGeneration?: number;
+  conditions?: ConditionFacts[];
   age: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
@@ -737,10 +808,12 @@ export interface NamespaceHelmSummary extends ClusterMeta {
   chart: string;
   appVersion: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   revision: number;
   updated: string;
   description?: string;
-  notes?: string;
   age: string;
 }
 
