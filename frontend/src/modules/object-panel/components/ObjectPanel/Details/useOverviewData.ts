@@ -134,6 +134,8 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
             : undefined,
         namespace: objectData.namespace,
         status: podDetails.status,
+        statusState: (podDetails as any).statusState,
+        statusPresentation: (podDetails as any).statusPresentation,
         statusSeverity: (podDetails as any).statusSeverity,
         ready: podDetails.ready,
         restarts: podDetails.restarts,

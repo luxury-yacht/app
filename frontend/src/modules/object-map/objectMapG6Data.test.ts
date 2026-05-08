@@ -305,32 +305,37 @@ describe('objectMapG6Data', () => {
   });
 
   it('uses backend status presentation for object-map color without changing raw state', () => {
-    const graphData = toObjectMapG6Data(
-      {
-        ...layout,
-        nodes: [
-          {
-            ...layout.nodes[2],
-            status: { state: 'True', label: 'Terminating', presentation: 'terminating' },
-          },
-        ],
-        edges: [],
-      },
-      selectionState(null),
-      () => null,
-      palette
-    );
+    const cases = [
+      { state: 'True', label: 'Terminating', presentation: 'terminating', fill: '#f59e0b' },
+      { state: 'Running', label: 'Running', presentation: 'warning', fill: '#f59e0b' },
+      { state: 'Pending', label: 'ErrImagePull', presentation: 'error', fill: '#ef4444' },
+    ];
 
-    expect(graphData.nodes?.[0].data?.status).toEqual({
-      state: 'True',
-      label: 'Terminating',
-      presentation: 'terminating',
-    });
-    expect(graphData.nodes?.[0].style).toEqual(
-      expect.objectContaining({
-        cardStatusFill: '#f59e0b',
-      })
-    );
+    for (const statusCase of cases) {
+      const { fill, ...status } = statusCase;
+      const graphData = toObjectMapG6Data(
+        {
+          ...layout,
+          nodes: [
+            {
+              ...layout.nodes[2],
+              status,
+            },
+          ],
+          edges: [],
+        },
+        selectionState(null),
+        () => null,
+        palette
+      );
+
+      expect(graphData.nodes?.[0].data?.status).toEqual(status);
+      expect(graphData.nodes?.[0].style).toEqual(
+        expect.objectContaining({
+          cardStatusFill: fill,
+        })
+      );
+    }
   });
 
   it('uses the centralized kind badge style resolver for card kind badges', () => {

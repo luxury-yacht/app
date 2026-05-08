@@ -87,10 +87,11 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		pod       corev1.Pod
-		wantState string
-		wantLabel string
+		name             string
+		pod              corev1.Pod
+		wantState        string
+		wantLabel        string
+		wantPresentation string
 	}{
 		{
 			name: "all regular containers ready",
@@ -107,8 +108,9 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 					},
 				},
 			},
-			wantState: "healthy",
-			wantLabel: "Running",
+			wantState:        "Running",
+			wantLabel:        "Running",
+			wantPresentation: "ready",
 		},
 		{
 			name: "running phase with unready running container",
@@ -125,8 +127,9 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 					},
 				},
 			},
-			wantState: "degraded",
-			wantLabel: "1/2 ready",
+			wantState:        "Running",
+			wantLabel:        "Running",
+			wantPresentation: "warning",
 		},
 		{
 			name: "running phase with missing container status",
@@ -140,8 +143,9 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 					ContainerStatuses: []corev1.ContainerStatus{readyContainer("app")},
 				},
 			},
-			wantState: "degraded",
-			wantLabel: "1/2 ready",
+			wantState:        "Running",
+			wantLabel:        "Running",
+			wantPresentation: "warning",
 		},
 		{
 			name: "running phase with no container statuses",
@@ -149,8 +153,9 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 				Spec:   corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
 				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			},
-			wantState: "degraded",
-			wantLabel: "0/1 ready",
+			wantState:        "Running",
+			wantLabel:        "Running",
+			wantPresentation: "warning",
 		},
 		{
 			name: "startup container creation stays degraded",
@@ -164,16 +169,17 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 					}},
 				},
 			},
-			wantState: "degraded",
-			wantLabel: "ContainerCreating",
+			wantState:        "Pending",
+			wantLabel:        "ContainerCreating",
+			wantPresentation: "warning",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status := objectMapPodStatus(tt.pod)
-			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel {
-				t.Fatalf("unexpected pod status: got %#v, want state=%q label=%q", status, tt.wantState, tt.wantLabel)
+			status := objectMapPodStatus("cluster-a", tt.pod)
+			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel || status.Presentation != tt.wantPresentation {
+				t.Fatalf("unexpected pod status: got %#v, want state=%q label=%q presentation=%q", status, tt.wantState, tt.wantLabel, tt.wantPresentation)
 			}
 		})
 	}

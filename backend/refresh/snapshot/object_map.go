@@ -522,7 +522,7 @@ func (idx *objectMapIndex) collectPods(ctx context.Context, client kubernetes.In
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&pod.ObjectMeta, "", "v1", "Pod", "pods", pod.Namespace),
 			creationTimestamp: objectCreationTimestamp(&pod.ObjectMeta),
-			status:            objectMapPodStatus(pod),
+			status:            objectMapPodStatus(idx.meta.ClusterID, pod),
 			owners:            pod.OwnerReferences,
 			labels:            cloneStringMap(pod.Labels),
 			pod:               &pod,
@@ -1030,93 +1030,11 @@ func objectMapReplicasStatus(ready, desired int32) *ObjectMapStatus {
 	return objectMapStatus("degraded", label)
 }
 
-func objectMapPodStatus(pod corev1.Pod) *ObjectMapStatus {
-	label := objectMapPodStatusLabel(pod)
-	switch {
-	case label == "Running":
-		ready, total := objectMapPodReadyContainers(pod)
-		if total > 0 && ready == total {
-			return objectMapStatus("healthy", label)
-		}
-		if total > 0 {
-			return objectMapStatus("degraded", fmt.Sprintf("%d/%d ready", ready, total))
-		}
-		return objectMapStatus("degraded", label)
-	case label == "Succeeded":
-		return objectMapStatus("healthy", label)
-	case label == "Unknown":
-		return objectMapStatus("inactive", label)
-	case objectMapPodDegradedStatusLabel(label):
-		return objectMapStatus("degraded", label)
-	default:
-		return objectMapStatus("unhealthy", label)
-	}
-}
-
-func objectMapPodStatusLabel(pod corev1.Pod) string {
-	if pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted" {
-		return "Evicted"
-	}
-	for _, status := range pod.Status.InitContainerStatuses {
-		if status.State.Terminated != nil && status.State.Terminated.ExitCode != 0 {
-			if status.State.Terminated.Reason != "" {
-				return "Init:" + status.State.Terminated.Reason
-			}
-			return "Init:Error"
-		}
-		if status.State.Waiting != nil && status.State.Waiting.Reason != "" && status.State.Waiting.Reason != "PodInitializing" {
-			return "Init:" + status.State.Waiting.Reason
-		}
-	}
-	for _, status := range pod.Status.ContainerStatuses {
-		if status.State.Waiting != nil && status.State.Waiting.Reason != "" {
-			return status.State.Waiting.Reason
-		}
-		if status.State.Terminated != nil && status.State.Terminated.Reason != "" {
-			return status.State.Terminated.Reason
-		}
-	}
-	if pod.DeletionTimestamp != nil {
-		return "Terminating"
-	}
-	if pod.Status.Phase != "" {
-		return string(pod.Status.Phase)
-	}
-	return "Unknown"
-}
-
-func objectMapPodReadyContainers(pod corev1.Pod) (int, int) {
-	statusByName := make(map[string]corev1.ContainerStatus, len(pod.Status.ContainerStatuses))
-	for _, status := range pod.Status.ContainerStatuses {
-		statusByName[status.Name] = status
-	}
-
-	if len(pod.Spec.Containers) == 0 {
-		ready := 0
-		for _, status := range pod.Status.ContainerStatuses {
-			if status.Ready {
-				ready++
-			}
-		}
-		return ready, len(pod.Status.ContainerStatuses)
-	}
-
-	ready := 0
-	for _, container := range pod.Spec.Containers {
-		if status, ok := statusByName[container.Name]; ok && status.Ready {
-			ready++
-		}
-	}
-	return ready, len(pod.Spec.Containers)
-}
-
-func objectMapPodDegradedStatusLabel(label string) bool {
-	switch label {
-	case "Pending", "Terminating", "ContainerCreating", "PodInitializing":
-		return true
-	default:
-		return strings.HasPrefix(label, "Init:")
-	}
+func objectMapPodStatus(clusterID string, pod corev1.Pod) *ObjectMapStatus {
+	model := resourcemodel.BuildPodResourceModel(clusterID, &pod)
+	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
+	status.Presentation = model.Status.Presentation
+	return status
 }
 
 func objectMapServiceStatus(service corev1.Service) *ObjectMapStatus {

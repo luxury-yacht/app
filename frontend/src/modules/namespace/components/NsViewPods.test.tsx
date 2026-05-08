@@ -167,10 +167,6 @@ vi.mock('@/core/capabilities', () => ({
   useUserPermissions: () => useUserPermissionsMock(),
 }));
 
-vi.mock('@/utils/podStatusSeverity', () => ({
-  getPodStatusSeverity: () => 'warning',
-}));
-
 vi.mock('@/core/refresh/hooks/useMetricsAvailability', () => ({
   useClusterMetricsAvailability: () => clusterMetricsMock.current,
 }));
@@ -313,6 +309,23 @@ describe('NsViewPods', () => {
     expect(gridProps.columns.map((col: any) => col.key)).toEqual(
       expect.arrayContaining(['name', 'status', 'cpu', 'memory'])
     );
+  });
+
+  it('uses backend statusPresentation for the pod status class', async () => {
+    const pods = [
+      createPod({
+        name: 'api',
+        status: 'Running',
+        statusState: 'Running',
+        statusPresentation: 'warning',
+      }),
+    ];
+    await renderPods({ data: pods });
+
+    const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
+    const cell = statusColumn.render(gridTablePropsRef.current.data[0]);
+    expect(React.isValidElement(cell)).toBe(true);
+    expect(cell.props.className).toBe('status-badge warning');
   });
 
   it('passes keyed sort reuse and numeric pod sort values into useTableSort', async () => {

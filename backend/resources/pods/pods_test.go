@@ -115,6 +115,7 @@ func TestGetPodReturnsDetailedInfo(t *testing.T) {
 		Context:          context.Background(),
 		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
+		ClusterID:        "cluster-a",
 	}
 
 	details, err := GetPod(deps, "team-a", "demo-pod", true)
@@ -130,6 +131,9 @@ func TestGetPodReturnsDetailedInfo(t *testing.T) {
 	if details.NodeIP != "192.168.10.15" {
 		t.Fatalf("expected node IP to be populated, got %q", details.NodeIP)
 	}
+	require.Equal(t, "Running", details.Status)
+	require.Equal(t, "Running", details.StatusState)
+	require.Equal(t, "ready", details.StatusPresentation)
 	if len(details.Containers) != 1 {
 		t.Fatalf("expected container details to be captured, got %#v", details.Containers)
 	}
@@ -693,13 +697,16 @@ func TestSummarizePodUsesMetricsAndOwnership(t *testing.T) {
 	}
 
 	ownerKind, ownerName, ownerAPIVersion := ResolveOwner(pod, rsToDeployment)
-	summary := SummarizePod(pod, metrics, ownerKind, ownerName, ownerAPIVersion)
+	summary := SummarizePod("cluster-a", pod, metrics, ownerKind, ownerName, ownerAPIVersion)
 	require.Equal(t, "Deployment", summary.OwnerKind)
 	require.Equal(t, "demo-deploy", summary.OwnerName)
 	require.Equal(t, "apps/v1", summary.OwnerAPIVersion)
 	require.Equal(t, "150m", summary.CPUUsage)
 	require.Equal(t, "64Mi", summary.MemUsage)
 	require.Equal(t, "1/1", summary.Ready)
+	require.Equal(t, "Running", summary.Status)
+	require.Equal(t, "Running", summary.StatusState)
+	require.Equal(t, "ready", summary.StatusPresentation)
 }
 
 func TestGetPodStatusCoversEdgeCases(t *testing.T) {

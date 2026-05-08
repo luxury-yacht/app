@@ -106,6 +106,8 @@ describe('useOverviewData', () => {
       ownerKind: 'ReplicaSet',
       ownerName: 'web-abc',
       status: 'Running',
+      statusState: 'Running',
+      statusPresentation: 'warning',
       ready: '1/1',
       restarts: 0,
       qosClass: 'Burstable',
@@ -122,6 +124,8 @@ describe('useOverviewData', () => {
     expect(result!.name).toBe('web-1');
     expect(result!.node).toBe('node-1');
     expect(result!.namespace).toBe('ns-a');
+    expect(result!.statusState).toBe('Running');
+    expect(result!.statusPresentation).toBe('warning');
     expect(result!.owner).toEqual({ kind: 'ReplicaSet', name: 'web-abc' });
     expect(result!.labels).toEqual({ app: 'web' });
   });

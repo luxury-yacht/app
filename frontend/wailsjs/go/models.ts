@@ -1451,6 +1451,9 @@ export namespace types {
 	    name: string;
 	    namespace: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    ready: string;
 	    restarts: number;
 	    age: string;
@@ -1474,6 +1477,9 @@ export namespace types {
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.ready = source["ready"];
 	        this.restarts = source["restarts"];
 	        this.age = source["age"];
@@ -3815,6 +3821,9 @@ export namespace types {
 	    name: string;
 	    namespace: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    ready: string;
 	    restarts: number;
 	    age: string;
@@ -3860,6 +3869,9 @@ export namespace types {
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.ready = source["ready"];
 	        this.restarts = source["restarts"];
 	        this.age = source["age"];

@@ -20,6 +20,8 @@ type StatusSignalType string
 
 const (
 	StatusSignalCondition     StatusSignalType = "condition"
+	StatusSignalPhase         StatusSignalType = "phase"
+	StatusSignalReadiness     StatusSignalType = "readiness"
 	StatusSignalResourceState StatusSignalType = "resourceState"
 	StatusSignalDeletion      StatusSignalType = "deletion"
 )
@@ -95,6 +97,17 @@ type NodeFacts struct {
 
 type ResourceFacts struct {
 	Node *NodeFacts `json:"node,omitempty"`
+	Pod  *PodFacts  `json:"pod,omitempty"`
+}
+
+type PodFacts struct {
+	Phase           string           `json:"phase,omitempty"`
+	NodeName        string           `json:"nodeName,omitempty"`
+	PodIP           string           `json:"podIP,omitempty"`
+	ReadyContainers int32            `json:"readyContainers"`
+	TotalContainers int32            `json:"totalContainers"`
+	RestartCount    int32            `json:"restartCount"`
+	Conditions      []ConditionFacts `json:"conditions,omitempty"`
 }
 
 type ResourceModel struct {

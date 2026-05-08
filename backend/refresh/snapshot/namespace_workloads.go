@@ -24,6 +24,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
@@ -739,10 +740,7 @@ func podStatus(pod *corev1.Pod) string {
 	if pod == nil {
 		return "Unknown"
 	}
-	if pod.Status.Reason != "" {
-		return pod.Status.Reason
-	}
-	return string(pod.Status.Phase)
+	return resourcemodel.BuildPodStatusPresentation(pod).Label
 }
 
 func formatWorkloadCPUMilli(value int64) string {

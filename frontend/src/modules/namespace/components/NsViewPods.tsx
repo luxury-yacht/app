@@ -6,7 +6,6 @@
  */
 
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { getPodStatusSeverity } from '@/utils/podStatusSeverity';
 import { eventBus } from '@/core/events';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
@@ -317,7 +316,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         }),
         cf.createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
           getClassName: (pod) => {
-            const severity = getPodStatusSeverity(pod.status);
+            const severity = pod.statusPresentation || 'unknown';
             return ['status-badge', severity].join(' ').trim();
           },
         }),

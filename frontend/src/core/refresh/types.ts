@@ -425,6 +425,9 @@ export interface PodSnapshotEntry extends ClusterMeta {
   namespace: string;
   node: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   ready: string;
   restarts: number;
   age: string;

@@ -334,21 +334,24 @@ type ClsIngressClassInfo struct {
 
 // PodSimpleInfo represents basic pod information for list views
 type PodSimpleInfo struct {
-	Kind       string `json:"kind"` // pod
-	Name       string `json:"name"`
-	Namespace  string `json:"namespace"`
-	Status     string `json:"status"`
-	Ready      string `json:"ready"`
-	Restarts   int32  `json:"restarts"` // Total restart count across all containers
-	Age        string `json:"age"`
-	CPURequest string `json:"cpuRequest"` // Aggregated CPU requests
-	CPULimit   string `json:"cpuLimit"`   // Aggregated CPU limits
-	CPUUsage   string `json:"cpuUsage"`   // Current CPU usage from metrics
-	MemRequest string `json:"memRequest"` // Aggregated memory requests
-	MemLimit   string `json:"memLimit"`   // Aggregated memory limits
-	MemUsage   string `json:"memUsage"`   // Current memory usage from metrics
-	OwnerKind  string `json:"ownerKind"`  // Kind of the owner (Deployment, StatefulSet, etc)
-	OwnerName  string `json:"ownerName"`  // Name of the owner resource
+	Kind               string `json:"kind"` // pod
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	Status             string `json:"status"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Ready              string `json:"ready"`
+	Restarts           int32  `json:"restarts"` // Total restart count across all containers
+	Age                string `json:"age"`
+	CPURequest         string `json:"cpuRequest"` // Aggregated CPU requests
+	CPULimit           string `json:"cpuLimit"`   // Aggregated CPU limits
+	CPUUsage           string `json:"cpuUsage"`   // Current CPU usage from metrics
+	MemRequest         string `json:"memRequest"` // Aggregated memory requests
+	MemLimit           string `json:"memLimit"`   // Aggregated memory limits
+	MemUsage           string `json:"memUsage"`   // Current memory usage from metrics
+	OwnerKind          string `json:"ownerKind"`  // Kind of the owner (Deployment, StatefulSet, etc)
+	OwnerName          string `json:"ownerName"`  // Name of the owner resource
 	// OwnerAPIVersion is the wire-form apiVersion of the owner (e.g.
 	// "apps/v1", "argoproj.io/v1alpha1", "kubevirt.io/v1"). Threaded from
 	// pod.OwnerReferences[*].APIVersion (or hardcoded apps/v1 for the
@@ -526,18 +529,21 @@ type PodDetailInfoContainer struct {
 // PodDetailInfo represents comprehensive pod information for the object panel
 type PodDetailInfo struct {
 	// Basic information (same as PodSimpleInfo)
-	Name       string `json:"name"`
-	Namespace  string `json:"namespace"`
-	Status     string `json:"status"`
-	Ready      string `json:"ready"`
-	Restarts   int32  `json:"restarts"`
-	Age        string `json:"age"`
-	CPURequest string `json:"cpuRequest"`
-	CPULimit   string `json:"cpuLimit"`
-	CPUUsage   string `json:"cpuUsage"`
-	MemRequest string `json:"memRequest"`
-	MemLimit   string `json:"memLimit"`
-	MemUsage   string `json:"memUsage"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	Status             string `json:"status"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Ready              string `json:"ready"`
+	Restarts           int32  `json:"restarts"`
+	Age                string `json:"age"`
+	CPURequest         string `json:"cpuRequest"`
+	CPULimit           string `json:"cpuLimit"`
+	CPUUsage           string `json:"cpuUsage"`
+	MemRequest         string `json:"memRequest"`
+	MemLimit           string `json:"memLimit"`
+	MemUsage           string `json:"memUsage"`
 
 	// Ownership information
 	OwnerKind string `json:"ownerKind"`

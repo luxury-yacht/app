@@ -118,6 +118,7 @@ const objectMapStatusFill = (
       return palette.statusUnhealthy;
     case 'cordoned':
     case 'terminating':
+    case 'warning':
       return palette.statusDegraded;
     case 'unknown':
     case 'Unknown':
@@ -127,6 +128,7 @@ const objectMapStatusFill = (
     case 'degraded':
       return palette.statusDegraded;
     case 'unhealthy':
+    case 'error':
       return palette.statusUnhealthy;
     case 'inactive':
       return palette.statusInactive;

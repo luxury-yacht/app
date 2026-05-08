@@ -16,7 +16,6 @@ import {
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { getPodStatusSeverity } from '@utils/podStatusSeverity';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
@@ -164,7 +163,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
       }),
       createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
         getClassName: (pod) => {
-          const severity = getPodStatusSeverity(pod.status);
+          const severity = pod.statusPresentation || 'unknown';
           return ['status-badge', severity].join(' ').trim();
         },
       }),

@@ -28,7 +28,13 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
   ResourceStatus: (props: any) => (
-    <div data-testid="resource-status">{props.status ?? props.ready}</div>
+    <div
+      data-testid="resource-status"
+      data-state={props.statusState}
+      data-presentation={props.statusPresentation}
+    >
+      {props.status ?? props.ready}
+    </div>
   ),
 }));
 
@@ -86,6 +92,8 @@ describe('PodOverview', () => {
       namespace: 'default',
       age: '10m',
       status: 'Running',
+      statusState: 'Running',
+      statusPresentation: 'warning',
       statusSeverity: 'info',
       ready: '1/1',
       restarts: 3,
@@ -101,6 +109,9 @@ describe('PodOverview', () => {
     expect(restartBadge?.textContent?.trim()).toBe('3');
     expect(container.textContent).toContain('QoS');
     expect(container.textContent).toContain('Guaranteed');
+    const resourceStatus = container.querySelector('[data-testid="resource-status"]');
+    expect(resourceStatus?.getAttribute('data-state')).toBe('Running');
+    expect(resourceStatus?.getAttribute('data-presentation')).toBe('warning');
     // Host networking renders as a "Host" row containing a Network chip.
     expect(container.textContent).toContain('Host');
     const hostNetworkChip = Array.from(

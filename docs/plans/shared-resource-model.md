@@ -2271,6 +2271,36 @@ detail, resource-stream, and object-map builders select primary status from the
 shared model, and frontend tests should prove that components consume the
 backend-emitted state instead of recomputing it.
 
+## Implementation Learnings From The Pod Slice
+
+The Pod migration reinforced that shared facts must be authoritative, not just
+shared labels.
+
+For Pod, `ResourceStatusPresentation.State` is the raw Kubernetes
+`status.phase` value selected by the builder: `Pending`, `Running`, `Succeeded`,
+`Failed`, `Unknown`, or `Unknown` when the API object has no phase. The display
+`Label` may still follow kubectl-style presentation, such as
+`ContainerCreating`, `ErrImagePull`, `Init:CrashLoopBackOff`, `Completed`,
+`Evicted`, or `Terminating`, but those labels must not replace the source phase.
+
+Pod `Presentation` is the backend-owned rendering token used by table, detail,
+and object-map surfaces. A Pod can have `State: "Running"` and
+`Presentation: "warning"` when its declared regular containers are not all
+ready. The frontend must consume that backend token at the rendering boundary
+instead of deciding that every `Running` pod is visually ready.
+
+Pod readiness facts must use `spec.containers` as the denominator when it is
+available. A missing regular container status means the container is not ready;
+counting only `status.containerStatuses` incorrectly turns a partially reported
+Pod into `1/1` ready. Restart facts must also be shared; the migrated Pod paths
+now use one backend fact for regular, init, and ephemeral container restarts so
+table/detail/list projections cannot drift.
+
+Legacy exported helpers may remain temporarily when unmigrated workload code
+calls them, but they must delegate to the shared Pod facts/status builder. No
+migrated path should keep its own Pod readiness, restart, waiting-reason, or
+terminated-reason derivation.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2345,14 +2375,16 @@ that actually consumes them.
 
 ### Phase 4: Pods
 
-- [ ] Add pod shared resource model.
-- [ ] Centralize pod display status logic, including waiting and terminated
+- [x] ✅ Add pod shared resource model.
+- [x] ✅ Centralize pod display status logic, including waiting and terminated
       container reasons.
-- [ ] Use pod shared resource model from pod table snapshot builders.
-- [ ] Use pod shared resource model from pod detail builders.
-- [ ] Use pod shared resource model from object-map pod builder.
-- [ ] Remove duplicated pod status helpers from migrated paths.
-- [ ] Add tests for running, pending, succeeded, failed, crashloop, image pull,
+- [x] ✅ Use pod shared resource model from pod table snapshot builders.
+- [x] ✅ Use pod shared resource model from pod detail builders.
+- [x] ✅ Use pod shared resource model from object-map pod builder.
+- [x] ✅ Remove duplicated pod status, readiness, and restart derivation from
+      migrated paths; legacy exported helpers delegate to the shared Pod model
+      for unmigrated workload callers.
+- [x] ✅ Add tests for running, pending, succeeded, failed, crashloop, image pull,
       terminating, and readiness mismatch cases.
 
 ### Phase 5: Workloads
