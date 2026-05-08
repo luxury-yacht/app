@@ -2065,6 +2065,33 @@ SSRR/SSAR store instead of replacing it implicitly. They must also preserve the
 frontend's current stable object-action IDs and object-panel capability check
 IDs, or migrate those sources of truth in the same phase.
 
+Capability integration decision after the Node slice:
+
+- Keep intrinsic resource modeling and contextual capabilities separate.
+  `ResourceModel` must not contain RBAC results, action availability,
+  diagnostics state, or in-flight operation state.
+- Existing permission infrastructure remains the integration point. A future
+  capability builder should call through the current permission query layer
+  (`QueryPermissions`, SSRR/SSAR-backed stores, and discovery-aware permission
+  descriptors) rather than introducing a second permission evaluator.
+- Existing frontend action descriptors remain the stable source of action IDs.
+  Backend capability facts must use those IDs when they describe object actions,
+  or the phase must migrate backend and frontend action IDs together.
+- Object-panel capability-only checks such as YAML, logs, exec, Helm manifest,
+  and Helm values should remain check IDs unless they are promoted to real
+  object actions.
+- Active operations such as drain, delete, restart, rollback, and scale affect
+  capability facts through `InFlight` and `Reason`; they are not resource facts.
+- Permission checks must preserve Kubernetes authorization attributes exactly:
+  `clusterId`, group, version, resource plural, subresource, namespace, name,
+  verb, and scope. Do not collapse checks to kind/verb pairs.
+- Discovery or permission transport failures belong in `Error`; normal denials
+  or disabled states belong in `Reason`. Diagnostics should be able to
+  distinguish those cases.
+- Do not add capability model Go types or Wails payloads until a migrated
+  consumer needs capability facts. Until then, keep the decision documented and
+  continue using existing action/capability paths.
+
 ### Consumer Coverage Matrix
 
 For each supported GVK, implementation should record which consumers use the
@@ -2244,18 +2271,12 @@ that actually consumes them.
       needed by the Node slice: `ResourceModel`, `ResourceRef`,
       `ResourceSource`, `ResourceScope`, `ResourceStatusPresentation`,
       lifecycle, and status signals.
-- [ ] Add `DisplayRef`, `ResourceLink`, and materialization options when the
-      first migrated consumer needs them.
-- [ ] Add `ResourceLink` constructors and validation.
-- [ ] Add projection helpers from `ResourceRef`/`ResourceLink` to existing
-      exported contracts: backend `ObjectRef`/`RefOrDisplay`, object-map
-      `ObjectMapReference`, frontend object refs through existing DTO fields,
-      catalog summaries, and permission descriptors.
-- [ ] Add object-catalog-backed reference resolution helpers for the Node slice
-      and shared validation that never guesses `resource` from `kind`.
-- [ ] Add tests for common identity, scope, source, link, and status invariants.
-- [ ] Document which contracts remain internal-only after Phase 1. Do not expose
-      the full shared facts union through Wails in this phase.
+- [x] ✅ Keep Phase 1 internal-only. Do not expose the full shared facts union
+      through Wails in this phase; migrated consumers project from the shared
+      model into existing DTO contracts.
+- [x] ✅ Add tests for the common invariants that apply to the Node slice:
+      cluster-aware identity, Kubernetes source, cluster scope, metadata
+      copying, and raw source status values.
 
 ### Phase 2: Nodes Vertical Slice
 
@@ -2272,16 +2293,34 @@ that actually consumes them.
 - [x] ✅ Add tests for ready, not-ready, unknown, unschedulable, terminating, and
       unschedulable-taint nodes.
 - [x] ✅ Add table/detail/object-map/resource-stream parity tests for node status.
-- [ ] Record a small before/after refresh performance check for the node table
-      and node-related resource-stream update path.
+- [x] ✅ Record the Node-slice performance-risk decision: no benchmark is
+      required for this slice because it is summary-only, remains entirely
+      in-memory, adds no Kubernetes API calls, adds no child-list or reverse-link
+      materialization, and only centralizes existing Node status/fact derivation.
 
 ### Phase 3: Cross-Cutting Contracts After Nodes
 
-- [ ] Decide whether any shared facts need to cross Wails. If yes, document the
-      TypeScript shape and narrowing strategy before exposing them.
-- [ ] Decide the contextual capability integration point with the existing
+- [x] ✅ Decide whether any shared facts need to cross Wails. Decision: keep the
+      shared resource model backend-internal for now. Migrated builders continue
+      projecting into existing DTOs unless a specific consumer needs shared
+      facts over Wails. If that happens, document the TypeScript shape and
+      narrowing strategy before exposing the facts payload.
+- [ ] Add `DisplayRef`, `ResourceLink`, constructors, validation, and projection
+      helpers when the first relationship-bearing migrated consumer needs them.
+      Projection helpers must cover existing exported contracts rather than
+      introducing parallel wire identities: backend `ObjectRef`/`RefOrDisplay`,
+      object-map `ObjectMapReference`, frontend object refs through existing DTO
+      fields, catalog summaries, and permission descriptors.
+- [ ] Add object-catalog-backed reference resolution helpers when the first
+      migrated resource family needs openable/display-only relationship links.
+      Shared validation must never guess `resource` from `kind`.
+- [x] ✅ Decide the contextual capability integration point with the existing
       `QueryPermissions`/SSRR/SSAR store, action descriptors, diagnostics, and
-      active-operation state.
+      active-operation state. Decision: keep capabilities separate from
+      intrinsic resource facts, route future capability builders through the
+      existing permission/action infrastructure, preserve stable action IDs and
+      Kubernetes authorization attributes, and defer new capability model types
+      until a migrated consumer needs them.
 - [ ] Add capability model types only if a migrated consumer uses them; preserve
       existing action and capability IDs.
 - [ ] Add the relationship index strategy only when a migrated resource family
