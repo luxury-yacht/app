@@ -113,37 +113,41 @@ type NodeFacts struct {
 }
 
 type ResourceFacts struct {
-	Node                  *NodeFacts                  `json:"node,omitempty"`
-	Pod                   *PodFacts                   `json:"pod,omitempty"`
-	Deployment            *WorkloadFacts              `json:"deployment,omitempty"`
-	StatefulSet           *WorkloadFacts              `json:"statefulSet,omitempty"`
-	DaemonSet             *WorkloadFacts              `json:"daemonSet,omitempty"`
-	ReplicaSet            *WorkloadFacts              `json:"replicaSet,omitempty"`
-	Job                   *WorkloadFacts              `json:"job,omitempty"`
-	CronJob               *WorkloadFacts              `json:"cronJob,omitempty"`
-	PersistentVolume      *PersistentVolumeFacts      `json:"persistentVolume,omitempty"`
-	PersistentVolumeClaim *PersistentVolumeClaimFacts `json:"persistentVolumeClaim,omitempty"`
-	StorageClass          *StorageClassFacts          `json:"storageClass,omitempty"`
-	ConfigMap             *ConfigMapFacts             `json:"configMap,omitempty"`
-	Secret                *SecretFacts                `json:"secret,omitempty"`
-	Service               *ServiceFacts               `json:"service,omitempty"`
-	EndpointSlice         *EndpointSliceFacts         `json:"endpointSlice,omitempty"`
-	Ingress               *IngressFacts               `json:"ingress,omitempty"`
-	IngressClass          *IngressClassFacts          `json:"ingressClass,omitempty"`
-	NetworkPolicy         *NetworkPolicyFacts         `json:"networkPolicy,omitempty"`
-	GatewayClass          *GatewayClassFacts          `json:"gatewayClass,omitempty"`
-	Gateway               *GatewayFacts               `json:"gateway,omitempty"`
-	HTTPRoute             *HTTPRouteFacts             `json:"httpRoute,omitempty"`
-	GRPCRoute             *GRPCRouteFacts             `json:"grpcRoute,omitempty"`
-	TLSRoute              *TLSRouteFacts              `json:"tlsRoute,omitempty"`
-	ListenerSet           *ListenerSetFacts           `json:"listenerSet,omitempty"`
-	ReferenceGrant        *ReferenceGrantFacts        `json:"referenceGrant,omitempty"`
-	BackendTLSPolicy      *BackendTLSPolicyFacts      `json:"backendTLSPolicy,omitempty"`
-	Role                  *RoleFacts                  `json:"role,omitempty"`
-	ClusterRole           *ClusterRoleFacts           `json:"clusterRole,omitempty"`
-	RoleBinding           *RoleBindingFacts           `json:"roleBinding,omitempty"`
-	ClusterRoleBinding    *ClusterRoleBindingFacts    `json:"clusterRoleBinding,omitempty"`
-	ServiceAccount        *ServiceAccountFacts        `json:"serviceAccount,omitempty"`
+	Node                    *NodeFacts                    `json:"node,omitempty"`
+	Pod                     *PodFacts                     `json:"pod,omitempty"`
+	Deployment              *WorkloadFacts                `json:"deployment,omitempty"`
+	StatefulSet             *WorkloadFacts                `json:"statefulSet,omitempty"`
+	DaemonSet               *WorkloadFacts                `json:"daemonSet,omitempty"`
+	ReplicaSet              *WorkloadFacts                `json:"replicaSet,omitempty"`
+	Job                     *WorkloadFacts                `json:"job,omitempty"`
+	CronJob                 *WorkloadFacts                `json:"cronJob,omitempty"`
+	PersistentVolume        *PersistentVolumeFacts        `json:"persistentVolume,omitempty"`
+	PersistentVolumeClaim   *PersistentVolumeClaimFacts   `json:"persistentVolumeClaim,omitempty"`
+	StorageClass            *StorageClassFacts            `json:"storageClass,omitempty"`
+	ConfigMap               *ConfigMapFacts               `json:"configMap,omitempty"`
+	Secret                  *SecretFacts                  `json:"secret,omitempty"`
+	Service                 *ServiceFacts                 `json:"service,omitempty"`
+	EndpointSlice           *EndpointSliceFacts           `json:"endpointSlice,omitempty"`
+	Ingress                 *IngressFacts                 `json:"ingress,omitempty"`
+	IngressClass            *IngressClassFacts            `json:"ingressClass,omitempty"`
+	NetworkPolicy           *NetworkPolicyFacts           `json:"networkPolicy,omitempty"`
+	GatewayClass            *GatewayClassFacts            `json:"gatewayClass,omitempty"`
+	Gateway                 *GatewayFacts                 `json:"gateway,omitempty"`
+	HTTPRoute               *HTTPRouteFacts               `json:"httpRoute,omitempty"`
+	GRPCRoute               *GRPCRouteFacts               `json:"grpcRoute,omitempty"`
+	TLSRoute                *TLSRouteFacts                `json:"tlsRoute,omitempty"`
+	ListenerSet             *ListenerSetFacts             `json:"listenerSet,omitempty"`
+	ReferenceGrant          *ReferenceGrantFacts          `json:"referenceGrant,omitempty"`
+	BackendTLSPolicy        *BackendTLSPolicyFacts        `json:"backendTLSPolicy,omitempty"`
+	Role                    *RoleFacts                    `json:"role,omitempty"`
+	ClusterRole             *ClusterRoleFacts             `json:"clusterRole,omitempty"`
+	RoleBinding             *RoleBindingFacts             `json:"roleBinding,omitempty"`
+	ClusterRoleBinding      *ClusterRoleBindingFacts      `json:"clusterRoleBinding,omitempty"`
+	ServiceAccount          *ServiceAccountFacts          `json:"serviceAccount,omitempty"`
+	HorizontalPodAutoscaler *HorizontalPodAutoscalerFacts `json:"horizontalPodAutoscaler,omitempty"`
+	PodDisruptionBudget     *PodDisruptionBudgetFacts     `json:"podDisruptionBudget,omitempty"`
+	ResourceQuota           *ResourceQuotaFacts           `json:"resourceQuota,omitempty"`
+	LimitRange              *LimitRangeFacts              `json:"limitRange,omitempty"`
 }
 
 type PodFacts struct {
@@ -465,6 +469,96 @@ type ServiceAccountFacts struct {
 	UsedByPods          []ResourceLink `json:"usedByPods,omitempty"`
 	RoleBindings        []ResourceLink `json:"roleBindings,omitempty"`
 	ClusterRoleBindings []ResourceLink `json:"clusterRoleBindings,omitempty"`
+}
+
+type HorizontalPodAutoscalerFacts struct {
+	ScaleTarget     ResourceLink          `json:"scaleTarget"`
+	MinReplicas     *int32                `json:"minReplicas,omitempty"`
+	MaxReplicas     int32                 `json:"maxReplicas"`
+	CurrentReplicas int32                 `json:"currentReplicas"`
+	DesiredReplicas int32                 `json:"desiredReplicas"`
+	Metrics         []MetricFacts         `json:"metrics,omitempty"`
+	CurrentMetrics  []MetricStatusFacts   `json:"currentMetrics,omitempty"`
+	Behavior        *ScalingBehaviorFacts `json:"behavior,omitempty"`
+	Conditions      []ConditionFacts      `json:"conditions,omitempty"`
+	LastScaleTime   *metav1.Time          `json:"lastScaleTime,omitempty"`
+}
+
+type MetricFacts struct {
+	Kind   string            `json:"kind"`
+	Target map[string]string `json:"target,omitempty"`
+}
+
+type MetricStatusFacts struct {
+	Kind    string            `json:"kind"`
+	Current map[string]string `json:"current,omitempty"`
+}
+
+type ScalingBehaviorFacts struct {
+	ScaleUp   *ScalingRulesFacts `json:"scaleUp,omitempty"`
+	ScaleDown *ScalingRulesFacts `json:"scaleDown,omitempty"`
+}
+
+type ScalingRulesFacts struct {
+	StabilizationWindowSeconds *int32   `json:"stabilizationWindowSeconds,omitempty"`
+	SelectPolicy               string   `json:"selectPolicy,omitempty"`
+	Policies                   []string `json:"policies,omitempty"`
+}
+
+type PodDisruptionBudgetFacts struct {
+	Selector           map[string]string   `json:"selector,omitempty"`
+	MinAvailable       *IntOrStringFacts   `json:"minAvailable,omitempty"`
+	MaxUnavailable     *IntOrStringFacts   `json:"maxUnavailable,omitempty"`
+	AllowedDisruptions int32               `json:"allowedDisruptions"`
+	CurrentHealthy     int32               `json:"currentHealthy"`
+	DesiredHealthy     int32               `json:"desiredHealthy"`
+	ExpectedPods       int32               `json:"expectedPods"`
+	DisruptedPods      []DisruptedPodFacts `json:"disruptedPods,omitempty"`
+	Conditions         []ConditionFacts    `json:"conditions,omitempty"`
+	ObservedGeneration int64               `json:"observedGeneration"`
+}
+
+type IntOrStringFacts struct {
+	Type   string `json:"type"`
+	Value  string `json:"value"`
+	IntVal int32  `json:"intVal,omitempty"`
+	StrVal string `json:"strVal,omitempty"`
+}
+
+type DisruptedPodFacts struct {
+	Pod            ResourceLink `json:"pod"`
+	DisruptionTime metav1.Time  `json:"disruptionTime"`
+}
+
+type ResourceQuotaFacts struct {
+	Hard           map[string]string   `json:"hard,omitempty"`
+	Used           map[string]string   `json:"used,omitempty"`
+	UsedPercentage map[string]int      `json:"usedPercentage,omitempty"`
+	Scopes         []string            `json:"scopes,omitempty"`
+	ScopeSelector  *ScopeSelectorFacts `json:"scopeSelector,omitempty"`
+}
+
+type ScopeSelectorFacts struct {
+	MatchExpressions []ScopeSelectorRequirementFacts `json:"matchExpressions,omitempty"`
+}
+
+type ScopeSelectorRequirementFacts struct {
+	ScopeName string   `json:"scopeName"`
+	Operator  string   `json:"operator"`
+	Values    []string `json:"values,omitempty"`
+}
+
+type LimitRangeFacts struct {
+	Limits []LimitRangeItemFacts `json:"limits,omitempty"`
+}
+
+type LimitRangeItemFacts struct {
+	Kind                 string            `json:"kind"`
+	Max                  map[string]string `json:"max,omitempty"`
+	Min                  map[string]string `json:"min,omitempty"`
+	Default              map[string]string `json:"default,omitempty"`
+	DefaultRequest       map[string]string `json:"defaultRequest,omitempty"`
+	MaxLimitRequestRatio map[string]string `json:"maxLimitRequestRatio,omitempty"`
 }
 
 type ResourceModel struct {

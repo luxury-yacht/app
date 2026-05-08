@@ -2448,6 +2448,29 @@ RoleBinding that grants a ClusterRole is not silently omitted. If that list is
 unavailable, the detail remains usable with partial reverse-link facts and a
 warning, matching the existing partial-RBAC behavior.
 
+## Implementation Learnings From The Policy And Autoscaling Slice
+
+HorizontalPodAutoscaler support spans two Kubernetes API versions in this app:
+namespace table snapshots still use autoscaling/v1 informers, while detail and
+object-map paths use autoscaling/v2 clients. The shared model therefore has
+separate v1 and v2 builders that project into the same HPA facts shape. That
+keeps the table path from silently dropping `scaleTargetRef.apiVersion` while
+still preserving v2 metrics, behavior, conditions, and current metrics for
+detail views.
+
+HPA scale targets are relationship refs only when the source `apiVersion`
+parses into a real group/version. Valid targets become full GVK refs with the
+current namespace and no guessed plural resource. Invalid or missing API
+versions stay display-only so the backend does not invent identity for custom
+or malformed scale targets.
+
+Quota, LimitRange, and PDB summaries are intentionally different projections
+from the same facts. Tables keep their compact existing strings, while detail
+views use richer summaries and maps. The important migration boundary is that
+quantity strings, percentages, limit items, PDB int-or-string values, disruption
+status, disrupted pod links, and conditions are now derived once in the shared
+model.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2596,13 +2619,13 @@ that actually consumes them.
 
 ### Phase 11: Policy And Autoscaling
 
-- [ ] Add shared resource models for HorizontalPodAutoscaler,
+- [x] ✅ Add shared resource models for HorizontalPodAutoscaler,
       PodDisruptionBudget, ResourceQuota, and LimitRange.
-- [ ] Centralize scale target references, metric facts, PDB disruption facts,
+- [x] ✅ Centralize scale target references, metric facts, PDB disruption facts,
       quota usage facts, and limit range facts.
-- [ ] Use policy/autoscaling shared resource models from table, detail, and
+- [x] ✅ Use policy/autoscaling shared resource models from table, detail, and
       object-map paths where applicable.
-- [ ] Add tests for scale target GVK resolution and display-only fallbacks.
+- [x] ✅ Add tests for scale target GVK resolution and display-only fallbacks.
 
 ### Phase 12: API Extensions And Admission
 

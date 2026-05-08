@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	policyv1 "k8s.io/api/policy/v1"
@@ -55,62 +56,27 @@ func (s *Service) PodDisruptionBudgets(namespace string) ([]*types.PodDisruption
 }
 
 func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBudget) *types.PodDisruptionBudgetDetails {
+	model := resourcemodel.BuildPodDisruptionBudgetResourceModel(s.deps.ClusterID, pdb)
+	facts := model.Facts.PodDisruptionBudget
 	details := &types.PodDisruptionBudgetDetails{
 		Kind:               "PodDisruptionBudget",
 		Name:               pdb.Name,
 		Namespace:          pdb.Namespace,
 		Age:                common.FormatAge(pdb.CreationTimestamp.Time),
-		CurrentHealthy:     pdb.Status.CurrentHealthy,
-		DesiredHealthy:     pdb.Status.DesiredHealthy,
-		DisruptionsAllowed: pdb.Status.DisruptionsAllowed,
-		ExpectedPods:       pdb.Status.ExpectedPods,
-		ObservedGeneration: pdb.Status.ObservedGeneration,
+		Details:            pdbDetailsSummary(facts),
+		MinAvailable:       pdbIntOrStringValue(facts.MinAvailable),
+		MaxUnavailable:     pdbIntOrStringValue(facts.MaxUnavailable),
+		Selector:           facts.Selector,
+		CurrentHealthy:     facts.CurrentHealthy,
+		DesiredHealthy:     facts.DesiredHealthy,
+		DisruptionsAllowed: facts.AllowedDisruptions,
+		ExpectedPods:       facts.ExpectedPods,
+		ObservedGeneration: facts.ObservedGeneration,
 		DisruptedPods:      pdb.Status.DisruptedPods,
+		Conditions:         pdbConditionStrings(facts.Conditions),
 		Labels:             pdb.Labels,
 		Annotations:        pdb.Annotations,
 	}
-
-	if pdb.Spec.MinAvailable != nil {
-		value := pdb.Spec.MinAvailable.String()
-		details.MinAvailable = &value
-	}
-	if pdb.Spec.MaxUnavailable != nil {
-		value := pdb.Spec.MaxUnavailable.String()
-		details.MaxUnavailable = &value
-	}
-	if pdb.Spec.Selector != nil {
-		details.Selector = pdb.Spec.Selector.MatchLabels
-	}
-
-	for _, condition := range pdb.Status.Conditions {
-		desc := fmt.Sprintf("%s: %s", condition.Type, condition.Status)
-		if condition.Reason != "" {
-			desc += fmt.Sprintf(" (%s)", condition.Reason)
-		}
-		if condition.Message != "" {
-			desc += fmt.Sprintf(" - %s", condition.Message)
-		}
-		details.Conditions = append(details.Conditions, desc)
-	}
-
-	selectorSummary := "No selector"
-	if len(details.Selector) > 0 {
-		selectorSummary = fmt.Sprintf("Selector: %d labels", len(details.Selector))
-	}
-
-	availability := ""
-	if details.MinAvailable != nil {
-		availability = fmt.Sprintf(", MinAvailable: %s", *details.MinAvailable)
-	}
-	if details.MaxUnavailable != nil {
-		availability += fmt.Sprintf(", MaxUnavailable: %s", *details.MaxUnavailable)
-	}
-
-	status := fmt.Sprintf(", Healthy: %d/%d, Disruptions Allowed: %d",
-		details.CurrentHealthy, details.DesiredHealthy, details.DisruptionsAllowed)
-
-	details.Details = selectorSummary + availability + status
-
 	return details
 }
 

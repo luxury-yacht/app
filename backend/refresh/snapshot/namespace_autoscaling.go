@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
@@ -174,17 +175,43 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 	}, nil
 }
 
-func describeHPATarget(hpa *autoscalingv1.HorizontalPodAutoscaler) string {
-	if hpa == nil {
+func describeHPATargetFacts(facts *resourcemodel.HorizontalPodAutoscalerFacts) string {
+	if facts == nil {
 		return ""
 	}
-	ref := hpa.Spec.ScaleTargetRef
-	return fmt.Sprintf("%s/%s", ref.Kind, ref.Name)
+	kind, name := resourceLinkKindName(facts.ScaleTarget)
+	return fmt.Sprintf("%s/%s", kind, name)
 }
 
-func minReplicas(hpa *autoscalingv1.HorizontalPodAutoscaler) int32 {
-	if hpa == nil || hpa.Spec.MinReplicas == nil {
+func hpaMinReplicas(facts *resourcemodel.HorizontalPodAutoscalerFacts) int32 {
+	if facts == nil || facts.MinReplicas == nil {
 		return 1
 	}
-	return *hpa.Spec.MinReplicas
+	return *facts.MinReplicas
+}
+
+func scaleTargetAPIVersion(link resourcemodel.ResourceLink) string {
+	if link.Ref != nil {
+		if link.Ref.Group == "" {
+			return link.Ref.Version
+		}
+		return link.Ref.Group + "/" + link.Ref.Version
+	}
+	if link.Display != nil {
+		if link.Display.Group == "" {
+			return link.Display.Version
+		}
+		return link.Display.Group + "/" + link.Display.Version
+	}
+	return ""
+}
+
+func resourceLinkKindName(link resourcemodel.ResourceLink) (string, string) {
+	if link.Ref != nil {
+		return link.Ref.Kind, link.Ref.Name
+	}
+	if link.Display != nil {
+		return link.Display.Kind, link.Display.Name
+	}
+	return "", ""
 }

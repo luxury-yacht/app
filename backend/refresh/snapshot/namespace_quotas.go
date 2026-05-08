@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
@@ -230,31 +231,31 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 	}, nil
 }
 
-func describeResourceQuota(quota *corev1.ResourceQuota) string {
-	if quota == nil {
+func describeResourceQuotaFacts(facts *resourcemodel.ResourceQuotaFacts) string {
+	if facts == nil {
 		return ""
 	}
-	return fmt.Sprintf("Hard: %d, Used: %d", len(quota.Status.Hard), len(quota.Status.Used))
+	return fmt.Sprintf("Hard: %d, Used: %d", len(facts.Hard), len(facts.Used))
 }
 
-func describeLimitRange(limit *corev1.LimitRange) string {
-	if limit == nil {
+func describeLimitRangeFacts(facts *resourcemodel.LimitRangeFacts) string {
+	if facts == nil {
 		return ""
 	}
-	return fmt.Sprintf("Limits: %d", len(limit.Spec.Limits))
+	return fmt.Sprintf("Limits: %d", len(facts.Limits))
 }
 
-func describePodDisruptionBudget(pdb *policyv1.PodDisruptionBudget) string {
-	if pdb == nil {
+func describePodDisruptionBudgetFacts(facts *resourcemodel.PodDisruptionBudgetFacts) string {
+	if facts == nil {
 		return ""
 	}
 	parts := []string{}
-	if pdb.Spec.MinAvailable != nil {
-		parts = append(parts, fmt.Sprintf("MinAvailable: %s", pdb.Spec.MinAvailable.String()))
+	if facts.MinAvailable != nil {
+		parts = append(parts, fmt.Sprintf("MinAvailable: %s", facts.MinAvailable.Value))
 	}
-	if pdb.Spec.MaxUnavailable != nil {
-		parts = append(parts, fmt.Sprintf("MaxUnavailable: %s", pdb.Spec.MaxUnavailable.String()))
+	if facts.MaxUnavailable != nil {
+		parts = append(parts, fmt.Sprintf("MaxUnavailable: %s", facts.MaxUnavailable.Value))
 	}
-	parts = append(parts, fmt.Sprintf("Disruptions Allowed: %d", pdb.Status.DisruptionsAllowed))
+	parts = append(parts, fmt.Sprintf("Disruptions Allowed: %d", facts.AllowedDisruptions))
 	return strings.Join(parts, ", ")
 }

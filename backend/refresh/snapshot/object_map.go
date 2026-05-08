@@ -806,7 +806,7 @@ func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.In
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&hpa.ObjectMeta, "autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", hpa.Namespace),
 			creationTimestamp: objectCreationTimestamp(&hpa.ObjectMeta),
-			status:            objectMapHPAStatus(hpa),
+			status:            objectMapHPAStatus(idx.meta.ClusterID, hpa),
 			owners:            hpa.OwnerReferences,
 			labels:            cloneStringMap(hpa.Labels),
 			hpa:               &hpa,
@@ -1115,20 +1115,9 @@ func objectMapStatusFromResourceModel(model resourcemodel.ResourceModel) *Object
 	return status
 }
 
-func objectMapHPAStatus(hpa autoscalingv2.HorizontalPodAutoscaler) *ObjectMapStatus {
-	for _, condition := range hpa.Status.Conditions {
-		if condition.Status != corev1.ConditionFalse {
-			continue
-		}
-		switch condition.Type {
-		case autoscalingv2.AbleToScale, autoscalingv2.ScalingActive:
-			return objectMapStatus("unhealthy", string(condition.Type), condition.Message)
-		}
-	}
-	if hpa.Status.DesiredReplicas != hpa.Status.CurrentReplicas {
-		return objectMapStatus("degraded", fmt.Sprintf("%d/%d replicas", hpa.Status.CurrentReplicas, hpa.Status.DesiredReplicas))
-	}
-	return objectMapStatus("healthy", fmt.Sprintf("%d replicas", hpa.Status.CurrentReplicas))
+func objectMapHPAStatus(clusterID string, hpa autoscalingv2.HorizontalPodAutoscaler) *ObjectMapStatus {
+	model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(clusterID, &hpa)
+	return objectMapStatusFromResourceModel(model)
 }
 
 func objectMapIngressStatus(clusterID string, ingress networkingv1.Ingress) *ObjectMapStatus {
@@ -1587,11 +1576,8 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 			}
 		}
 		if record.hpa != nil {
-			gv, err := schema.ParseGroupVersion(record.hpa.Spec.ScaleTargetRef.APIVersion)
-			if err != nil {
-				continue
-			}
-			target := idx.byIdent[objectMapIdentityKey(record.ref.Namespace, gv.Group, gv.Version, record.hpa.Spec.ScaleTargetRef.Kind, record.hpa.Spec.ScaleTargetRef.Name)]
+			model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(idx.meta.ClusterID, record.hpa)
+			target := idx.recordForResourceLink(model.Facts.HorizontalPodAutoscaler.ScaleTarget)
 			relationship := objectMapRelationships[objectMapEdgeScales]
 			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 		}

@@ -611,16 +611,18 @@ func BuildHPASummary(meta ClusterMeta, hpa *autoscalingv1.HorizontalPodAutoscale
 	if hpa == nil {
 		return AutoscalingSummary{ClusterMeta: meta, Kind: "HorizontalPodAutoscaler"}
 	}
+	model := resourcemodel.BuildHorizontalPodAutoscalerV1ResourceModel(meta.ClusterID, hpa)
+	facts := model.Facts.HorizontalPodAutoscaler
 	return AutoscalingSummary{
 		ClusterMeta:      meta,
 		Kind:             "HorizontalPodAutoscaler",
 		Name:             hpa.Name,
 		Namespace:        hpa.Namespace,
-		Target:           describeHPATarget(hpa),
-		TargetAPIVersion: hpa.Spec.ScaleTargetRef.APIVersion,
-		Min:              minReplicas(hpa),
-		Max:              hpa.Spec.MaxReplicas,
-		Current:          hpa.Status.CurrentReplicas,
+		Target:           describeHPATargetFacts(facts),
+		TargetAPIVersion: scaleTargetAPIVersion(facts.ScaleTarget),
+		Min:              hpaMinReplicas(facts),
+		Max:              facts.MaxReplicas,
+		Current:          facts.CurrentReplicas,
 		Age:              formatAge(hpa.CreationTimestamp.Time),
 	}
 }
@@ -651,12 +653,13 @@ func BuildResourceQuotaSummary(meta ClusterMeta, quota *corev1.ResourceQuota) Qu
 	if quota == nil {
 		return QuotaSummary{ClusterMeta: meta, Kind: "ResourceQuota"}
 	}
+	model := resourcemodel.BuildResourceQuotaResourceModel(meta.ClusterID, quota)
 	return QuotaSummary{
 		ClusterMeta: meta,
 		Kind:        "ResourceQuota",
 		Name:        quota.Name,
 		Namespace:   quota.Namespace,
-		Details:     describeResourceQuota(quota),
+		Details:     describeResourceQuotaFacts(model.Facts.ResourceQuota),
 		Age:         formatAge(quota.CreationTimestamp.Time),
 	}
 }
@@ -666,12 +669,13 @@ func BuildLimitRangeSummary(meta ClusterMeta, limit *corev1.LimitRange) QuotaSum
 	if limit == nil {
 		return QuotaSummary{ClusterMeta: meta, Kind: "LimitRange"}
 	}
+	model := resourcemodel.BuildLimitRangeResourceModel(meta.ClusterID, limit)
 	return QuotaSummary{
 		ClusterMeta: meta,
 		Kind:        "LimitRange",
 		Name:        limit.Name,
 		Namespace:   limit.Namespace,
-		Details:     describeLimitRange(limit),
+		Details:     describeLimitRangeFacts(model.Facts.LimitRange),
 		Age:         formatAge(limit.CreationTimestamp.Time),
 	}
 }
@@ -681,25 +685,27 @@ func BuildPodDisruptionBudgetSummary(meta ClusterMeta, pdb *policyv1.PodDisrupti
 	if pdb == nil {
 		return QuotaSummary{ClusterMeta: meta, Kind: "PodDisruptionBudget"}
 	}
+	model := resourcemodel.BuildPodDisruptionBudgetResourceModel(meta.ClusterID, pdb)
+	facts := model.Facts.PodDisruptionBudget
 	summary := QuotaSummary{
 		ClusterMeta: meta,
 		Kind:        "PodDisruptionBudget",
 		Name:        pdb.Name,
 		Namespace:   pdb.Namespace,
-		Details:     describePodDisruptionBudget(pdb),
+		Details:     describePodDisruptionBudgetFacts(facts),
 		Age:         formatAge(pdb.CreationTimestamp.Time),
 		Status: &QuotaStatus{
-			DisruptionsAllowed: pdb.Status.DisruptionsAllowed,
-			CurrentHealthy:     pdb.Status.CurrentHealthy,
-			DesiredHealthy:     pdb.Status.DesiredHealthy,
+			DisruptionsAllowed: facts.AllowedDisruptions,
+			CurrentHealthy:     facts.CurrentHealthy,
+			DesiredHealthy:     facts.DesiredHealthy,
 		},
 	}
-	if pdb.Spec.MinAvailable != nil {
-		value := pdb.Spec.MinAvailable.String()
+	if facts.MinAvailable != nil {
+		value := facts.MinAvailable.Value
 		summary.MinAvailable = &value
 	}
-	if pdb.Spec.MaxUnavailable != nil {
-		value := pdb.Spec.MaxUnavailable.String()
+	if facts.MaxUnavailable != nil {
+		value := facts.MaxUnavailable.Value
 		summary.MaxUnavailable = &value
 	}
 	return summary
