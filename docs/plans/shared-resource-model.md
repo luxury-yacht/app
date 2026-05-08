@@ -80,6 +80,13 @@ The shared resource model should include full object identity:
 - `namespace`, when namespaced
 - `name`, when object-specific
 
+The Kubernetes plural resource name is descriptor metadata, not the minimum
+navigation identity. Include `resource` when the catalog or discovery has
+resolved it, and require it for RBAC permission attributes. Do not make openable
+object navigation depend on a guessed plural when `clusterId`, GVK, namespace,
+and name are already sufficient to resolve safely through the catalog or strict
+GVK resolver.
+
 The shared resource model should expose shared facts such as:
 
 - canonical object reference
@@ -108,6 +115,28 @@ below.
 - `unknown`
 
 Frontend components can map those states to existing badge/chip classes.
+
+### Existing Identity Contracts
+
+The shared resource model introduces a backend semantic identity, not an
+unreviewed fourth app-wide navigation contract.
+
+Current app boundaries already use several identity shapes:
+
+- backend detail DTOs use `types.ObjectRef`, `types.DisplayRef`, and
+  `types.RefOrDisplay`
+- object-map payloads use `ObjectMapReference`
+- frontend navigation uses `KubernetesObjectReference` plus the
+  `objectIdentity` helpers
+- catalog summaries use `objectcatalog.Summary`
+- permission queries use GVK-aware permission descriptors
+
+The shared model package should own the internal canonical shape and provide
+small projection/adaptation helpers for these existing boundaries. A migration
+phase may replace one of those exported shapes only when every consumer of that
+shape is migrated in the same phase and the old shape is deleted. Until then,
+resource builders must project from `ResourceModel` into the existing DTO
+contract rather than emitting a new parallel wire contract.
 
 ## Target Object Shape Catalog
 
@@ -327,7 +356,7 @@ type ResourceRef struct {
 	Group     string
 	Version   string
 	Kind      string
-	Resource  string
+	Resource  string // Optional for navigation; required when catalog/RBAC needs a GVR.
 	Namespace string
 	Name      string
 	UID       string
@@ -442,6 +471,13 @@ scope and drives validation: namespaced resources must carry namespace when the
 reference points to a concrete object, and cluster-scoped resources must not
 invent one.
 
+`ResourceRef.Resource` should be populated from catalog or discovery metadata
+when available. It must not be guessed from `kind` just to satisfy a validator.
+Openable references validate on `clusterId`, `group`, `version`, `kind`, and
+scope-correct `namespace`/`name`; RBAC and discovery-facing projections validate
+that `resource` is present before constructing Kubernetes authorization
+attributes.
+
 `ResourceStatusPresentation.Sources` should preserve the signals used to derive
 the primary label and state. Consumers still render only the chosen
 presentation, but tests can verify whether a status came from deletion state,
@@ -499,18 +535,23 @@ type RestartActionOptions struct {
 type ActionID string
 
 const (
-	ActionDelete     ActionID = "delete"
-	ActionEdit       ActionID = "edit"
-	ActionRestart    ActionID = "restart"
-	ActionScale      ActionID = "scale"
-	ActionLogs       ActionID = "logs"
-	ActionExec       ActionID = "exec"
-	ActionTrigger    ActionID = "trigger"
-	ActionSuspend    ActionID = "suspend"
-	ActionCordon     ActionID = "cordon"
-	ActionDrain      ActionID = "drain"
-	ActionDeletePods ActionID = "deletePods"
-	ActionViewSecretValues ActionID = "viewSecretValues"
+	ActionViewDetails        ActionID = "view-details"
+	ActionViewMap            ActionID = "view-map"
+	ActionGoToTable          ActionID = "go-to-table"
+	ActionDiff               ActionID = "diff"
+	ActionViewInvolvedObject ActionID = "view-involved-object"
+	ActionTriggerNow         ActionID = "trigger-now"
+	ActionSuspend            ActionID = "suspend"
+	ActionResume             ActionID = "resume"
+	ActionRestart            ActionID = "restart"
+	ActionRollback           ActionID = "rollback"
+	ActionScale              ActionID = "scale"
+	ActionScaleHPAManaged    ActionID = "scale-hpa-managed"
+	ActionPortForward        ActionID = "port-forward"
+	ActionCordon             ActionID = "cordon"
+	ActionUncordon           ActionID = "uncordon"
+	ActionDrain              ActionID = "drain"
+	ActionDelete             ActionID = "delete"
 )
 
 type CapabilityFact struct {
@@ -522,6 +563,7 @@ type CapabilityFact struct {
 }
 
 type CapabilityCheckFact struct {
+	ID         string
 	Ref        ResourceLink
 	Attributes PermissionAttributes
 	Allowed    bool
@@ -550,6 +592,14 @@ must not embed capability facts directly. This keeps object semantics stable
 while allowing permissions, diagnostics, active operations, and option-dependent
 actions to change independently.
 
+`ActionID` values for context menus must mirror the stable IDs in
+`frontend/src/shared/actions/objectActionDescriptors.ts`. Capability-only IDs
+used by the object panel, such as `view-yaml`, `edit-yaml`, `view-logs`,
+`shell-exec-get`, `shell-exec-create`, `view-manifest`, and `view-values`,
+should be preserved as `CapabilityCheckFact.ID` values unless they are promoted
+to real object actions. Do not invent backend-only action names that require the
+frontend to maintain a translation table.
+
 `PermissionAttributes` intentionally mirrors Kubernetes authorization
 attributes, including resource plural, subresource, namespace, name, verb, and
 scope. This is required for operations such as `pods/eviction`, `pods/log`,
@@ -572,11 +622,13 @@ failure context rather than treating it as a normal denial reason.
 Resource-specific facts should stay typed. The shared model should not force all
 objects into one fake universal structure.
 
-Every supported GVK should have an explicit facts slot. Shared structs are
-allowed only for genuinely common substructure, such as pod-template facts,
-rules, subjects, ports, conditions, metrics, and route common fields. A shared
-struct should not be the only shape for multiple GVKs when those GVKs have
-different lifecycle, status, relationship, or action semantics.
+Every supported GVK should eventually have an explicit facts slot as its
+resource family migrates. Do not add unused facts slots merely to complete a
+catalog up front. Shared structs are allowed only for genuinely common
+substructure, such as pod-template facts, rules, subjects, ports, conditions,
+metrics, and route common fields. A shared struct should not be the only shape
+for multiple GVKs when those GVKs have different lifecycle, status,
+relationship, or action semantics.
 
 ```go
 type ResourceFacts struct {
@@ -625,16 +677,17 @@ type ResourceFacts struct {
 }
 ```
 
-The implementation must decide the exported TypeScript shape before Phase 2.
-The internal Go model may use explicit facts structs, but Wails-facing DTOs
-should avoid serializing dozens of null fields per object. Acceptable options:
+The internal Go model may use explicit facts structs. Wails-facing DTOs should
+continue projecting into existing response shapes until a frontend consumer
+needs shared facts directly. If a phase exposes facts through Wails, it must
+avoid serializing dozens of null fields per object. Acceptable options:
 
 - a discriminated facts payload such as `{kind: "Pod", pod: PodFacts}`
 - a Go union with `json:",omitempty"` on every facts pointer and generated
   TypeScript types verified for ergonomic narrowing
 
-Record the decision as an ADR-style note before migrating the first resource
-family. Do not let each builder invent its own exported facts shape.
+Record that decision as an ADR-style note before the first Wails-exposed facts
+payload lands. Do not let each builder invent its own exported facts shape.
 
 ### Fact Materialization Levels
 
@@ -673,10 +726,31 @@ direct relations only. Builders should expose a small helper such as
 `Materialization.Has(MaterializeDetailFacts)` so call sites are readable and do
 not hand-roll bit checks.
 
-No implementation phase is complete until its migrated table, detail, and
-object-map consumers are wired through explicit materialization options. This is
-what prevents the shared layer from becoming a single centralized expensive
-detail builder.
+No implementation phase is complete until its migrated table, detail,
+object-map, and streaming consumers are wired through explicit materialization
+options where those consumers exist. This is what prevents the shared layer from
+becoming a single centralized expensive detail builder.
+
+### Sensitive And Large Field Boundaries
+
+Shared facts are not automatically safe for every consumer. Builders must treat
+the following as detail-only unless a phase explicitly documents and tests a
+redacted summary projection:
+
+- literal environment variable values
+- command and args arrays
+- Secret data and decoded Secret values
+- storage provisioner parameters and CSI volume attributes
+- cloud-provider volume handles, keyrings, and credential-like options
+- raw YAML, raw spec, raw status, Helm manifests, Helm values, and notes
+- webhook CA bundles or other certificate/key material
+
+Summary and relationship materialization should expose references, names,
+counts, sizes, types, conditions, and status signals. Detail materialization may
+carry sensitive or large payloads only when the existing detail workflow already
+surfaces them and the DTO keeps the same access controls and user intent.
+Adding a field to a shared facts struct is not permission to include that field
+in table refreshes, object-map payloads, or diagnostics snapshots.
 
 ### Shared Supporting Shapes
 
@@ -736,9 +810,9 @@ type ContainerFacts struct {
 	StartedAt       *time.Time
 	Ports           []ContainerPortFacts
 	VolumeMounts    []string
-	Environment     []EnvVarFacts
-	Command          []string
-	Args             []string
+	Environment     []EnvVarFacts // Detail-only unless values are redacted.
+	Command          []string      // Detail-only.
+	Args             []string      // Detail-only.
 	Requests         ResourceListFacts
 	Limits           ResourceListFacts
 }
@@ -754,7 +828,7 @@ const (
 
 type EnvVarFacts struct {
 	Name                string
-	Value               string
+	LiteralValue        *string // Detail-only; omit from summary and relationship materialization.
 	ValueFromRef        *ResourceLink
 	ValueFromKey        string
 	ValueFromFieldPath  string
@@ -1868,6 +1942,9 @@ Applies to dynamic custom resources discovered from the object catalog.
 ```go
 type CustomResourceFacts struct {
 	Conditions         []ConditionFacts
+	RawPhase           string
+	RawState           string
+	Ready              *bool
 	ObservedGeneration int64
 }
 ```
@@ -1958,11 +2035,14 @@ Reverse links such as `ConfigMapFacts.UsedBy`, `SecretFacts.UsedBy`,
 workload pod lists, node pod lists, and RBAC reverse bindings must not be
 computed by ad hoc N-by-M scans in every builder.
 
-Before Phase 2 starts, add a shared relationship index for each refresh build or
-streaming update batch. The index should be built once from informers/catalog
-summaries available in that cluster context and then passed to resource model
-builders. Builders may add direct forward links from their own object, but
-reverse-link fields must come from the shared index.
+Add the shared relationship index when the first migrated resource family needs
+reverse links; do not block the minimal Node vertical slice on a generic index
+that no migrated consumer has exercised yet. Once introduced, the index must be
+per-cluster and scoped to a refresh snapshot build or streaming update batch. It
+should be built once from informers/catalog summaries available in that cluster
+context and then passed to resource model builders. Builders may add direct
+forward links from their own object, but reverse-link fields must come from the
+shared index.
 
 The index should preserve `ResourceLink` semantics:
 
@@ -1972,12 +2052,30 @@ The index should preserve `ResourceLink` semantics:
 - expose cache/version metadata so refresh diagnostics can identify stale
   relationship data
 
+The index design must explicitly cover:
+
+- partial RBAC, where an informer or list path is unavailable and reverse links
+  must be absent-with-diagnostics rather than guessed
+- stale catalog state, including the catalog version or snapshot version used to
+  resolve references
+- streaming update invalidation, including which related rows must be re-emitted
+  when child objects change derived parent facts
+- cluster add/remove lifecycle, so no relationship data crosses cluster
+  boundaries or survives a cluster teardown
+- object-map traversal, which may use the same relationships but still owns
+  graph filtering, depth, deduplication, and edge layout mechanics
+
 ### Capability Facts
 
 Capabilities are not just static booleans. They can depend on RBAC, resource
 state, selected action options, active operations, and discovery availability.
 The model must preserve the checks and failure reasons needed by Diagnostics so
 the UI does not show buttons that are disconnected from permission state.
+
+Capability builders must integrate with the existing `QueryPermissions`
+SSRR/SSAR store instead of replacing it implicitly. They must also preserve the
+frontend's current stable object-action IDs and object-panel capability check
+IDs, or migrate those sources of truth in the same phase.
 
 ### Consumer Coverage Matrix
 
@@ -2003,10 +2101,14 @@ either migrate all consumers for that resource family in one change or keep any
 temporary fields private to the phase and remove them before calling the phase
 complete.
 
-Phase 1 must lock the TypeScript facts shape and document it in
-`frontend/AGENTS.md` or a linked development note before any resource family
-migrates. The decision should cover whether facts are exposed as a discriminated
-payload or an `omitempty` union and how frontend consumers narrow the type.
+Do not expose the full shared facts union through Wails just because the
+internal Go model exists. The first vertical slice should project the shared
+model into existing DTOs unless a frontend consumer genuinely needs a typed
+facts payload. When a phase first exposes shared facts over Wails, that phase
+must document the TypeScript shape in `frontend/AGENTS.md` or a linked
+development note. The decision should cover whether facts are exposed as a
+discriminated payload or an `omitempty` union and how frontend consumers narrow
+the type.
 
 ## Consumer Responsibilities
 
@@ -2092,41 +2194,63 @@ It should not independently reinterpret Kubernetes semantics such as:
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
-completed.
+completed. The first implementation work should prove a full vertical slice
+before broadening the foundation. Do not add facts slots, Wails facts payloads,
+reverse-link indexes, or capability builders ahead of the first resource family
+that actually consumes them.
 
-### Phase 1: Shared Model Foundation
+### Phase 1: Minimal Shared Foundation
 
-- [ ] Add shared resource model types.
-- [ ] Add explicit `ResourceSource` and `ResourceScope` fields and validation.
-- [ ] Add canonical object reference type usage with `clusterId`, `group`,
-      `version`, `kind`, `namespace`, and `name`.
-- [ ] Add shared status presentation type with lifecycle and source-signal
-      provenance.
+- [ ] Add the backend shared resource model package with only the common types
+      needed by the Node slice: `ResourceModel`, `ResourceRef`, `DisplayRef`,
+      `ResourceLink`, `ResourceSource`, `ResourceScope`,
+      `ResourceStatusPresentation`, lifecycle, status signals, and
+      materialization options.
 - [ ] Add `ResourceLink` constructors and validation.
-- [ ] Add object-catalog-backed reference resolution helpers.
-- [ ] Add contextual capability model types outside `ResourceModel`, with
-      Kubernetes-shaped permission attributes and typed action options.
-- [ ] Add an explicit facts slot for every supported GVK and allow shared
-      structs only for common substructure.
-- [ ] Add explicit materialization options for summary, relationship, detail,
-      child-list, reverse-link, and metric facts.
-- [ ] Decide and document the Wails/TypeScript facts shape.
-- [ ] Add the shared reverse-link index strategy and tests.
-- [ ] Add tests for shared model identity and status invariants.
+- [ ] Add projection helpers from `ResourceRef`/`ResourceLink` to existing
+      exported contracts: backend `ObjectRef`/`RefOrDisplay`, object-map
+      `ObjectMapReference`, frontend object refs through existing DTO fields,
+      catalog summaries, and permission descriptors.
+- [ ] Add object-catalog-backed reference resolution helpers for the Node slice
+      and shared validation that never guesses `resource` from `kind`.
+- [ ] Add tests for common identity, scope, source, link, and status invariants.
+- [ ] Document which contracts remain internal-only after Phase 1. Do not expose
+      the full shared facts union through Wails in this phase.
 
-### Phase 2: Nodes
+### Phase 2: Nodes Vertical Slice
 
-- [ ] Add node shared resource model.
-- [ ] Move node status interpretation into the shared resource model layer.
-- [ ] Use node shared resource model from node table snapshot builder.
+- [ ] Add `NodeFacts` and node shared resource model builder.
+- [ ] Move node ready, not-ready, unknown, cordoned, and unschedulable-taint
+      interpretation into the shared resource model layer.
+- [ ] Use node shared resource model from node table snapshot builder and
+      resource-stream node row builder.
 - [ ] Use node shared resource model from node detail builder.
 - [ ] Use node shared resource model from object-map node builder.
-- [ ] Remove duplicated node status derivation from the migrated paths.
-- [ ] Add tests for ready, not-ready, unknown, unschedulable, and
+- [ ] Project into existing DTOs unless a DTO change is required for parity.
+- [ ] Remove duplicated node status derivation from the migrated paths,
+      including frontend node status reinterpretation.
+- [ ] Add tests for ready, not-ready, unknown, unschedulable, terminating, and
       unschedulable-taint nodes.
-- [ ] Add table/detail/object-map parity tests for node status.
+- [ ] Add table/detail/object-map/resource-stream parity tests for node status.
+- [ ] Record a small before/after refresh performance check for the node table
+      and node-related resource-stream update path.
 
-### Phase 3: Pods
+### Phase 3: Cross-Cutting Contracts After Nodes
+
+- [ ] Decide whether any shared facts need to cross Wails. If yes, document the
+      TypeScript shape and narrowing strategy before exposing them.
+- [ ] Decide the contextual capability integration point with the existing
+      `QueryPermissions`/SSRR/SSAR store, action descriptors, diagnostics, and
+      active-operation state.
+- [ ] Add capability model types only if a migrated consumer uses them; preserve
+      existing action and capability IDs.
+- [ ] Add the relationship index strategy only when a migrated resource family
+      needs reverse links. Include stale-data, partial-RBAC, streaming
+      invalidation, and cluster lifecycle tests.
+- [ ] Add facts slots for subsequent GVKs only as their resource families are
+      migrated.
+
+### Phase 4: Pods
 
 - [ ] Add pod shared resource model.
 - [ ] Centralize pod display status logic, including waiting and terminated
@@ -2138,7 +2262,7 @@ completed.
 - [ ] Add tests for running, pending, succeeded, failed, crashloop, image pull,
       terminating, and readiness mismatch cases.
 
-### Phase 4: Workloads
+### Phase 5: Workloads
 
 - [ ] Add shared resource models for Deployment, StatefulSet, DaemonSet,
       ReplicaSet, Job, and CronJob.
@@ -2148,7 +2272,7 @@ completed.
 - [ ] Use workload shared resource models from object-map builders.
 - [ ] Add parity tests for primary workload status.
 
-### Phase 5: Storage
+### Phase 6: Storage
 
 - [ ] Add shared resource models for PersistentVolumeClaim, PersistentVolume, and
       StorageClass.
@@ -2158,7 +2282,7 @@ completed.
       paths.
 - [ ] Add parity tests for primary storage status.
 
-### Phase 6: Config
+### Phase 7: Config
 
 - [ ] Add shared resource models for ConfigMap and Secret.
 - [ ] Keep Secret values out of shared facts; expose only keys/count/type and
@@ -2168,7 +2292,7 @@ completed.
       paths.
 - [ ] Add parity tests for config identity, usage links, and status.
 
-### Phase 7: Network
+### Phase 8: Network
 
 - [ ] Add shared resource models for Service, EndpointSlice, Ingress,
       IngressClass, and NetworkPolicy.
@@ -2179,7 +2303,7 @@ completed.
 - [ ] Add parity tests for network identity, primary status, and relationship
       links.
 
-### Phase 8: Gateway API
+### Phase 9: Gateway API
 
 - [ ] Add shared resource models for GatewayClass, Gateway, HTTPRoute,
       GRPCRoute, TLSRoute, ListenerSet, ReferenceGrant, and BackendTLSPolicy.
@@ -2188,7 +2312,7 @@ completed.
 - [ ] Use Gateway API shared resource models from table and detail paths.
 - [ ] Add parity tests for status summaries and `ResourceLink` behavior.
 
-### Phase 9: RBAC
+### Phase 10: RBAC
 
 - [ ] Add shared resource models for Role, ClusterRole, RoleBinding,
       ClusterRoleBinding, and ServiceAccount.
@@ -2198,7 +2322,7 @@ completed.
       paths, and object-map paths where applicable.
 - [ ] Add tests for namespaced vs cluster-scoped references.
 
-### Phase 10: Policy And Autoscaling
+### Phase 11: Policy And Autoscaling
 
 - [ ] Add shared resource models for HorizontalPodAutoscaler,
       PodDisruptionBudget, ResourceQuota, and LimitRange.
@@ -2208,7 +2332,7 @@ completed.
       object-map paths where applicable.
 - [ ] Add tests for scale target GVK resolution and display-only fallbacks.
 
-### Phase 11: API Extensions And Admission
+### Phase 12: API Extensions And Admission
 
 - [ ] Add shared resource models for CustomResourceDefinition,
       MutatingWebhookConfiguration, and ValidatingWebhookConfiguration.
@@ -2218,7 +2342,7 @@ completed.
       detail paths.
 - [ ] Add tests for webhook service links and CRD version facts.
 
-### Phase 12: Helm, Events, And Custom Resources
+### Phase 13: Helm, Events, And Custom Resources
 
 - [ ] Add shared resource model support for HelmRelease synthetic refs.
 - [ ] Add shared resource model support for Event involved-object links.
@@ -2229,7 +2353,7 @@ completed.
 - [ ] Add tests for synthetic Helm identity, stale/partial event references, and
       custom-resource status extraction.
 
-### Phase 13: Frontend Semantic Cleanup
+### Phase 14: Frontend Semantic Cleanup
 
 - [ ] Remove migrated frontend status interpretation helpers.
 - [ ] Replace per-surface status class derivation with state-to-UI rendering.
@@ -2252,7 +2376,11 @@ Each migrated resource family should include:
 - tests proving `ResourceLink` values are either openable refs or display-only
   refs, never ambiguous hybrids
 - tests proving contextual capabilities preserve RBAC checks, discovery errors,
-  option-dependent failures, and in-flight operation state
+  option-dependent failures, and in-flight operation state once a phase
+  introduces capability builders
+- a before/after performance check for any table, object-map, or streaming path
+  whose builder changes; each phase should name the fixture or benchmark used
+  and the acceptable threshold before implementation
 
 Regression tests should specifically prevent per-surface status drift from
 returning.
@@ -2265,7 +2393,8 @@ returning.
   identity and primary status from the same shared resource model.
 - Every supported built-in GVK has an explicit facts type; dynamic custom
   resources use `CustomResourceFacts` only when they are not promoted to
-  first-class support.
+  first-class support. Facts slots are added by migration phase, not all
+  front-loaded before the first resource family.
 - Every `ResourceModel` records whether it is Kubernetes-backed or synthetic and
   whether it is cluster-scoped or namespaced.
 - Every openable `ResourceRef` produced by the shared resource model includes
@@ -2281,18 +2410,22 @@ returning.
   by consumer DTO builders.
 - Capability checks preserve Kubernetes authorization attributes, including
   resource plural, subresource, namespace, name, verb, and scope.
+- Action and capability identifiers preserve existing frontend stable IDs unless
+  a phase intentionally migrates the frontend source of truth at the same time.
 - Action options are typed; no shared resource or capability model uses untyped
   option maps for option semantics.
-- Secret values are not exposed through shared facts.
+- Secret values, literal env values, credential-like parameters, and other
+  sensitive detail-only fields are not exposed through summary facts or
+  non-detail materialization.
 - Capabilities are produced by contextual capability builders, not embedded in
   intrinsic resource facts.
-- Reverse links are computed through a shared relationship index, not repeated
-  per-builder scans.
+- Reverse links are computed through a shared relationship index once a migrated
+  resource family needs reverse links, not repeated per-builder scans.
 - Table, detail, and object-map consumers request explicit materialization
   levels and do not build detail-only facts for table refreshes.
-- Table/detail/map projection of the shared model has no measurable refresh
-  latency regression against the largest cluster fixture used by prerelease
-  quality checks.
+- Table/detail/map projection of the shared model stays within the
+  phase-specific refresh and streaming performance threshold recorded before the
+  phase starts.
 - Duplicated semantic helpers are removed as each resource family migrates.
 - Existing table, detail, and object-map UI behavior is preserved except where
   behavior is intentionally corrected for consistency.
@@ -2307,6 +2440,10 @@ This should be implemented as a deliberate backend simplification, not as a
 visual redesign. Each phase should leave the migrated resource family complete:
 shared resource model in place, consumers wired to it, old duplicated logic
 removed, and parity tests added.
+
+The foundation should grow from completed vertical slices. Prefer one proven
+resource-family migration over a broad platform change whose exported contracts
+have not been exercised by table, detail, object-map, and streaming consumers.
 
 The implementation should avoid temporary dual paths. During a phase, short-lived
 local work-in-progress is acceptable, but no migrated resource family should be
