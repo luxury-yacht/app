@@ -57,6 +57,9 @@ describe('ServiceOverview', () => {
         name: 'web-lb',
         namespace: 'prod',
         age: '4h',
+        status: 'LoadBalancer active',
+        statusState: 'LoadBalancer',
+        statusPresentation: 'ready',
         serviceType: 'LoadBalancer',
         clusterIP: '10.0.0.1',
         clusterIPs: ['10.0.0.1', '10.0.0.2'],
@@ -84,14 +87,11 @@ describe('ServiceOverview', () => {
     expect(getValueForLabel(container, 'IP addresses')?.textContent).toContain('10.0.0.2');
     expect(getValueForLabel(container, 'External IPs')?.textContent).toContain('35.1.2.3');
     expect(getValueForLabel(container, 'Load Balancer IP')?.textContent).toBe('35.1.2.3');
-    // LB status is wrapped in a healthy StatusChip when "Ready".
     const lbStatus = getValueForLabel(container, 'LB Status');
     expect(lbStatus?.textContent).toBe('Ready');
-    expect(lbStatus?.querySelector('.status-chip--healthy')).not.toBeNull();
-    // Health Status is wrapped in a healthy StatusChip when "Healthy".
-    const health = getValueForLabel(container, 'Health');
-    expect(health?.textContent).toBe('Healthy');
-    expect(health?.querySelector('.status-chip--healthy')).not.toBeNull();
+    const status = getValueForLabel(container, 'Status');
+    expect(status?.textContent).toBe('LoadBalancer active');
+    expect(status?.querySelector('.status-badge.ready')).not.toBeNull();
     expect(getValueForLabel(container, 'Session Timeout')?.textContent).toBe('10800 seconds');
     // Endpoints row now shows the IP list directly (≤5 endpoints).
     expect(getValueForLabel(container, 'Endpoints')?.textContent).toContain('10.244.0.10:80');

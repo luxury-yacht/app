@@ -285,7 +285,12 @@ metadata:
 	require.Len(t, details.Resources, 2)
 	require.Len(t, details.History, 2)
 	require.Equal(t, 1, details.History[0].Revision)
+	require.Equal(t, "superseded", details.History[0].Status)
+	require.Equal(t, "ready", details.History[0].StatusPresentation)
+	require.Equal(t, "info.status", details.History[0].StatusReason)
 	require.Equal(t, 2, details.History[1].Revision)
+	require.Equal(t, "deployed", details.History[1].Status)
+	require.Equal(t, "ready", details.History[1].StatusPresentation)
 }
 
 func TestReleaseDetailsInitError(t *testing.T) {

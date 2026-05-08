@@ -251,7 +251,6 @@
    Status Badges
    ========================================================================== */
 .status-badge {
-  font-weight: 500;
   text-transform: capitalize;
 }
 
@@ -276,7 +275,7 @@
 
 .status-badge.unknown,
 .status-badge.inactive {
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
 }
 
 .status-badge.refreshing {

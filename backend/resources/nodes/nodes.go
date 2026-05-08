@@ -460,18 +460,22 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 	nodeFacts := model.Facts.Node
 
 	for _, pod := range pods {
-		var podRestarts int32
-		for _, cs := range pod.Status.ContainerStatuses {
-			podRestarts += cs.RestartCount
-		}
+		podModel := resourcemodel.BuildPodResourceModel(s.deps.ClusterID, &pod)
+		podFacts := podModel.Facts.Pod
+		podRestarts := podFacts.RestartCount
 		nodeRestarts += podRestarts
 
 		podsList = append(podsList, restypes.PodSimpleInfo{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
-			Status:    string(pod.Status.Phase),
-			Restarts:  podRestarts,
-			Age:       common.FormatAge(pod.CreationTimestamp.Time),
+			Kind:               "Pod",
+			Name:               pod.Name,
+			Namespace:          pod.Namespace,
+			Status:             podModel.Status.Label,
+			StatusState:        podModel.Status.State,
+			StatusPresentation: podModel.Status.Presentation,
+			StatusReason:       podModel.Status.Reason,
+			Ready:              fmt.Sprintf("%d/%d", podFacts.ReadyContainers, podFacts.TotalContainers),
+			Restarts:           podRestarts,
+			Age:                common.FormatAge(pod.CreationTimestamp.Time),
 		})
 
 		if pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending {

@@ -485,12 +485,15 @@ type HelmReleaseDetails struct {
 
 // HelmRevision represents a single revision in the Helm release history
 type HelmRevision struct {
-	Revision    int    `json:"revision"`
-	Updated     string `json:"updated"`
-	Status      string `json:"status"`
-	Chart       string `json:"chart"`
-	AppVersion  string `json:"appVersion,omitempty"`
-	Description string `json:"description,omitempty"`
+	Revision           int    `json:"revision"`
+	Updated            string `json:"updated"`
+	Status             string `json:"status"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Chart              string `json:"chart"`
+	AppVersion         string `json:"appVersion,omitempty"`
+	Description        string `json:"description,omitempty"`
 }
 
 // HelmResource represents a Kubernetes resource managed by a Helm release.
@@ -618,6 +621,10 @@ type ServiceDetails struct {
 	Namespace              string               `json:"namespace"`
 	Age                    string               `json:"age"`
 	Details                string               `json:"details"`
+	Status                 string               `json:"status"`
+	StatusState            string               `json:"statusState,omitempty"`
+	StatusPresentation     string               `json:"statusPresentation,omitempty"`
+	StatusReason           string               `json:"statusReason,omitempty"`
 	ServiceType            string               `json:"serviceType"`
 	ClusterIP              string               `json:"clusterIP"`
 	ClusterIPs             []string             `json:"clusterIPs,omitempty"`

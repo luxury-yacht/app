@@ -2382,6 +2382,9 @@ export namespace types {
     revision: number;
     updated: string;
     status: string;
+    statusState?: string;
+    statusPresentation?: string;
+    statusReason?: string;
     chart: string;
     appVersion?: string;
     description?: string;
@@ -2395,6 +2398,9 @@ export namespace types {
       this.revision = source['revision'];
       this.updated = source['updated'];
       this.status = source['status'];
+      this.statusState = source['statusState'];
+      this.statusPresentation = source['statusPresentation'];
+      this.statusReason = source['statusReason'];
       this.chart = source['chart'];
       this.appVersion = source['appVersion'];
       this.description = source['description'];
@@ -4572,6 +4578,10 @@ export namespace types {
     namespace: string;
     age: string;
     details: string;
+    status: string;
+    statusState?: string;
+    statusPresentation?: string;
+    statusReason?: string;
     serviceType: string;
     clusterIP: string;
     clusterIPs?: string[];
@@ -4600,6 +4610,10 @@ export namespace types {
       this.namespace = source['namespace'];
       this.age = source['age'];
       this.details = source['details'];
+      this.status = source['status'];
+      this.statusState = source['statusState'];
+      this.statusPresentation = source['statusPresentation'];
+      this.statusReason = source['statusReason'];
       this.serviceType = source['serviceType'];
       this.clusterIP = source['clusterIP'];
       this.clusterIPs = source['clusterIPs'];

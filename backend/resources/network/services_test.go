@@ -63,6 +63,9 @@ func TestBuildServiceDetailsVariants(t *testing.T) {
 	if detail.HealthStatus != "Healthy" || detail.LoadBalancerStatus != "Active" || detail.LoadBalancerIP != "1.2.3.4" {
 		t.Fatalf("unexpected load balancer detail: %+v", detail)
 	}
+	require.Equal(t, "LoadBalancer active", detail.Status)
+	require.Equal(t, "LoadBalancer", detail.StatusState)
+	require.Equal(t, "ready", detail.StatusPresentation)
 	if detail.EndpointCount != 1 || len(detail.Endpoints) != 1 {
 		t.Fatalf("expected endpoint count =1 got %+v", detail.EndpointCount)
 	}
@@ -79,6 +82,8 @@ func TestBuildServiceDetailsVariants(t *testing.T) {
 	if extDetail.HealthStatus != "External" {
 		t.Fatalf("expected External health for external name service, got %s", extDetail.HealthStatus)
 	}
+	require.Equal(t, "ExternalName", extDetail.Status)
+	require.Equal(t, "ready", extDetail.StatusPresentation)
 	if extDetail.ExternalName != "example.com" {
 		t.Fatalf("expected external name to be set, got %s", extDetail.ExternalName)
 	}

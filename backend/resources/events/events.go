@@ -83,7 +83,7 @@ func (s *Service) Events(filter Filter) ([]types.Event, error) {
 			continue
 		}
 
-		events = append(events, convertEvent(kubeEvent))
+		events = append(events, convertEvent(s.deps.ClusterID, kubeEvent))
 	}
 
 	sortEventsByTime(events)
@@ -128,8 +128,8 @@ func (s *Service) ensureClient() error {
 	return nil
 }
 
-func convertEvent(kubeEvent corev1.Event) types.Event {
-	facts := resourcemodel.BuildEventFacts("", &kubeEvent)
+func convertEvent(clusterID string, kubeEvent corev1.Event) types.Event {
+	facts := resourcemodel.BuildEventFacts(clusterID, &kubeEvent)
 	e := types.Event{
 		Kind:               "event",
 		EventType:          facts.EventType,

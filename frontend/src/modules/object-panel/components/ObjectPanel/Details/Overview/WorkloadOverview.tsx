@@ -76,7 +76,7 @@ const PodStateBar: React.FC<PodStateBarProps> = ({
     return (
       <div className="podstate-summary">
         <div className="podstate-caption">
-          <span className="podstate-caption-zero">Scaled to 0</span>
+          <span className="podstate-caption-zero">None</span>
           {hpaManaged && <span className="podstate-caption-hpa">(HPA managed)</span>}
         </div>
       </div>

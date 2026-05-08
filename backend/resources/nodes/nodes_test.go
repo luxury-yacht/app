@@ -43,6 +43,7 @@ func TestServiceNodeReturnsDetails(t *testing.T) {
 	require.Equal(t, "10.0.0.5", detail.InternalIP)
 	require.Equal(t, 2, detail.PodsCount)
 	require.NotEmpty(t, detail.PodsList)
+	require.Equal(t, "ready", detail.PodsList[0].StatusPresentation)
 	require.Equal(t, int32(1), detail.Restarts)
 }
 

@@ -1,7 +1,7 @@
 # Shared Resource Model Contracts
 
 The shared resource model is the backend source of truth for Kubernetes object
-identity, primary status, relationship links, and future relationship indexes.
+identity, primary status, relationship links, and reverse-link materialization.
 New resource work must follow these rules before adding frontend interpretation
 or parallel DTO shapes.
 
@@ -9,8 +9,10 @@ The implementation lives primarily in:
 
 - `backend/resourcemodel` for semantic builders, facts, status, links, and
   validation
-- `backend/resources/types` for projections into existing rich-detail DTO
-  contracts
+- `backend/refresh/snapshot` for refresh, table, stream, and object-map
+  projections
+- `backend/resources` and `backend/resources/types` for projections into
+  existing rich-detail DTO contracts
 - `frontend/src/shared/utils/backendStatusPresentation.ts` for status CSS token
   selection
 - `frontend/src/shared/utils/resourceLinkIdentity.ts` for frontend relationship
@@ -19,6 +21,49 @@ The implementation lives primarily in:
 The full migration plan and phase history are in
 `docs/plans/shared-resource-model.md`. This document is the standing contract
 for new work.
+
+## Scope
+
+The shared resource model owns Kubernetes resource semantics. It should be used
+when code needs to decide what a Kubernetes object means: canonical identity,
+primary status presentation, lifecycle, relationship links, and durable
+resource-specific facts.
+
+Use it for Kubernetes resource surfaces where applicable:
+
+- namespace and cluster resource table rows
+- resource-stream rows
+- object-panel detail summaries and overview data
+- object-map nodes, edges, and relationship references
+- event involved-object links
+- Helm release summary/status and manifest resource links
+- dynamic custom-resource status extraction
+
+The frontend should consume DTO fields projected from the shared model. Frontend
+components do not import `backend/resourcemodel` directly; they render app-level
+fields such as `status`, `statusState`, `statusPresentation`, and
+`ResourceLink`.
+
+The shared model is intentionally not the model for every app screen or
+workflow. Do not force these surfaces through `backend/resourcemodel` unless
+they are rendering Kubernetes resource semantics:
+
+- Browse/catalog discovery views and backend object-catalog services. The
+  object catalog remains the source of truth for what objects exist, GVK/GVR,
+  scope, and exact catalog lookup.
+- Cluster overview aggregate health, counts, capacity, usage, and summary
+  charts.
+- Refresh diagnostics, stream health, broker-read diagnostics, and telemetry.
+- Settings, kubeconfig selection, app lifecycle, app logs, auth, update, and
+  persistence screens.
+- Raw or workflow-specific object-panel tabs such as YAML, logs, shell, node
+  logs, Helm manifest, and Helm values. These may use shared identity or links
+  where useful, but their payloads remain workflow-specific.
+- Port-forward sessions, shell sessions, node maintenance, drain progress,
+  workload actions, rollback, scale, delete, and other operation state.
+- Capability and permission models. Those depend on RBAC, discovery, action
+  options, selected cluster, and in-flight operations, so they stay contextual
+  and separate from intrinsic resource facts.
 
 ## Identity
 
@@ -41,6 +86,10 @@ required for RBAC permission attributes, but it must not be guessed from `kind`.
 Populate it only when discovery, typed code, or the object catalog supplies it.
 An empty Kubernetes `apiVersion` is unknown; do not silently treat it as core
 `v1`.
+
+Synthetic app resources must still use stable identity. Helm releases use the
+shared synthetic identity `helm.sh/v3`, `HelmRelease`; lowercase legacy values
+such as `helmrelease` are DTO compatibility details, not canonical identity.
 
 ## Status
 
@@ -146,17 +195,40 @@ resource facts into `backend/resourcemodel`.
 
 ## Relationship Indexes
 
-Reverse relationships belong in the existing object-map index strategy unless a
-future resource proves that a different index is required. New reverse-link work
-must account for:
+Reverse relationships that feed shared facts belong in
+`resourcemodel.ResourceRelationshipIndex`. Build the index once for the
+available per-cluster snapshot or detail inputs, pass it into migrated builders,
+and request reverse-link facts explicitly with `MaterializeReverseLinks`.
+
+The object map may still own graph traversal, filtering, deduplication, and edge
+layout, but it should consume shared `ResourceLink` facts instead of inventing
+parallel relationship semantics.
+
+New reverse-link work must account for:
 
 - stale catalog data
 - partial RBAC/list-watch failures
 - resource stream invalidation
 - cluster lifecycle and clusterId isolation
 
-Do not add facts slots or relationship indexes ahead of the resource family that
-consumes them.
+Do not add facts slots or relationship-index inputs ahead of the resource family
+that consumes them.
+
+## Materialization And Sensitive Data
+
+Shared builders must not make every consumer pay to build detail-heavy facts.
+Use explicit materialization options:
+
+- summary/table paths should request summary facts only
+- detail paths may request detail facts, child lists, or container templates
+- relationship paths may request relationship facts
+- reverse-link paths must request `MaterializeReverseLinks`
+
+Keep sensitive and large fields out of summary facts and non-detail payloads.
+Examples include Secret values, literal environment values, command and args
+arrays, raw YAML/spec/status, Helm manifests and values, credential-like storage
+parameters, and certificate/key material. Detail-only DTOs may continue to
+expose data that an existing explicit workflow already surfaces.
 
 ## Adding Or Migrating A Resource Family
 

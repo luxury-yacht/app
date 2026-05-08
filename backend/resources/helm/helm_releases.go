@@ -15,8 +15,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"gopkg.in/yaml.v2"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/cli"
@@ -82,13 +80,20 @@ func (s *Service) ReleaseDetails(namespace, name string) (*types.HelmReleaseDeta
 	}
 
 	for _, h := range facts.History {
-		details.History = append(details.History, types.HelmRevision{
-			Revision:    h.Revision,
-			Updated:     helmRevisionUpdatedAge(h),
-			Status:      helmDisplayStatus(h.Status),
-			Chart:       h.Chart,
-			AppVersion:  h.AppVersion,
+		status := resourcemodel.BuildHelmReleaseStatusPresentation(resourcemodel.HelmReleaseFacts{
+			RawStatus:   h.Status,
 			Description: h.Description,
+		})
+		details.History = append(details.History, types.HelmRevision{
+			Revision:           h.Revision,
+			Updated:            helmRevisionUpdatedAge(h),
+			Status:             status.Label,
+			StatusState:        status.State,
+			StatusPresentation: status.Presentation,
+			StatusReason:       status.Reason,
+			Chart:              h.Chart,
+			AppVersion:         h.AppVersion,
+			Description:        h.Description,
 		})
 	}
 
@@ -398,13 +403,6 @@ func helmRevisionUpdatedAge(facts resourcemodel.HelmRevisionFacts) string {
 		return ""
 	}
 	return common.FormatAge(facts.Updated.Time)
-}
-
-func helmDisplayStatus(raw string) string {
-	if strings.TrimSpace(raw) == "" {
-		return ""
-	}
-	return cases.Title(language.English).String(strings.ToLower(raw))
 }
 
 func (s *Service) logDebug(msg string) {
