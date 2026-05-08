@@ -9,8 +9,8 @@ package rbac
 
 import (
 	"fmt"
-	"sort"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -56,50 +56,18 @@ func (s *Service) Roles(namespace string) ([]*types.RoleDetails, error) {
 }
 
 func (s *Service) buildRoleDetails(role *rbacv1.Role, bindings *rbacv1.RoleBindingList) *types.RoleDetails {
+	model := resourcemodel.BuildRoleResourceModel(s.deps.ClusterID, role, bindings)
+	facts := model.Facts.Role
 	details := &types.RoleDetails{
 		Kind:        "Role",
 		Name:        role.Name,
 		Namespace:   role.Namespace,
 		Age:         common.FormatAge(role.CreationTimestamp.Time),
+		Details:     roleDetailsSummary(facts),
+		Rules:       policyRulesFromFacts(facts.Rules),
 		Labels:      role.Labels,
 		Annotations: role.Annotations,
 	}
-
-	for _, rule := range role.Rules {
-		details.Rules = append(details.Rules, types.PolicyRule{
-			APIGroups:       rule.APIGroups,
-			Resources:       rule.Resources,
-			ResourceNames:   rule.ResourceNames,
-			Verbs:           rule.Verbs,
-			NonResourceURLs: rule.NonResourceURLs,
-		})
-	}
-
-	if bindings != nil {
-		for _, rb := range bindings.Items {
-			if rb.RoleRef.Kind == "Role" && rb.RoleRef.Name == role.Name {
-				details.UsedByRoleBindings = append(details.UsedByRoleBindings, rb.Name)
-			}
-		}
-		sort.Strings(details.UsedByRoleBindings)
-	}
-
-	ruleCount := len(role.Rules)
-	resourceCount := 0
-	verbCount := 0
-	for _, rule := range role.Rules {
-		resourceCount += len(rule.Resources)
-		verbCount += len(rule.Verbs)
-	}
-
-	summary := fmt.Sprintf("Rules: %d", ruleCount)
-	if resourceCount > 0 || verbCount > 0 {
-		summary += fmt.Sprintf(" (%d resources, %d verbs)", resourceCount, verbCount)
-	}
-	if len(details.UsedByRoleBindings) > 0 {
-		summary += fmt.Sprintf(", Used by %d binding(s)", len(details.UsedByRoleBindings))
-	}
-	details.Details = summary
-
+	details.UsedByRoleBindings = resourcemodel.ResourceLinkNames(facts.UsedByRoleBindings)
 	return details
 }

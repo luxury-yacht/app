@@ -10,6 +10,7 @@ package rbac
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -22,7 +23,7 @@ func (s *Service) RoleBinding(namespace, name string) (*types.RoleBindingDetails
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get role binding %s/%s: %v", namespace, name, err), "RBAC")
 		return nil, fmt.Errorf("failed to get role binding: %v", err)
 	}
-	return buildRoleBindingDetails(rb), nil
+	return s.buildRoleBindingDetails(rb), nil
 }
 
 func (s *Service) RoleBindings(namespace string) ([]*types.RoleBindingDetails, error) {
@@ -34,55 +35,25 @@ func (s *Service) RoleBindings(namespace string) ([]*types.RoleBindingDetails, e
 
 	results := make([]*types.RoleBindingDetails, 0, len(roleBindings.Items))
 	for i := range roleBindings.Items {
-		results = append(results, buildRoleBindingDetails(&roleBindings.Items[i]))
+		results = append(results, s.buildRoleBindingDetails(&roleBindings.Items[i]))
 	}
 	return results, nil
 }
 
-func buildRoleBindingDetails(rb *rbacv1.RoleBinding) *types.RoleBindingDetails {
+func (s *Service) buildRoleBindingDetails(rb *rbacv1.RoleBinding) *types.RoleBindingDetails {
+	model := resourcemodel.BuildRoleBindingResourceModel(s.deps.ClusterID, rb)
+	facts := model.Facts.RoleBinding
 	details := &types.RoleBindingDetails{
 		Kind:        "RoleBinding",
 		Name:        rb.Name,
 		Namespace:   rb.Namespace,
 		Age:         common.FormatAge(rb.CreationTimestamp.Time),
+		Details:     roleBindingDetailsSummary(facts),
 		Labels:      rb.Labels,
 		Annotations: rb.Annotations,
-		RoleRef: types.RoleRef{
-			APIGroup: rb.RoleRef.APIGroup,
-			Kind:     rb.RoleRef.Kind,
-			Name:     rb.RoleRef.Name,
-		},
+		RoleRef:     roleRefFromResourceLink(facts.RoleRef),
+		Subjects:    subjectsFromFacts(facts.Subjects),
 	}
-
-	subjectTypes := make(map[string]int)
-	for _, subject := range rb.Subjects {
-		details.Subjects = append(details.Subjects, types.Subject{
-			Kind:      subject.Kind,
-			APIGroup:  subject.APIGroup,
-			Name:      subject.Name,
-			Namespace: subject.Namespace,
-		})
-		subjectTypes[subject.Kind]++
-	}
-
-	summary := fmt.Sprintf("Subjects: %d", len(rb.Subjects))
-	if len(subjectTypes) > 0 {
-		summary += " ("
-		first := true
-		for kind, count := range subjectTypes {
-			if !first {
-				summary += ", "
-			}
-			summary += fmt.Sprintf("%d %s", count, kind)
-			first = false
-		}
-		summary += ")"
-	}
-	if rb.RoleRef.Name != "" {
-		summary += fmt.Sprintf(", %s: %s", rb.RoleRef.Kind, rb.RoleRef.Name)
-	}
-	details.Details = summary
-
 	return details
 }
 

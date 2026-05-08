@@ -1852,6 +1852,14 @@ type ClusterRoleBindingFacts struct {
 	Subjects []SubjectFacts
 }
 
+type SubjectFacts struct {
+	Kind      string
+	APIGroup  string
+	Name      string
+	Namespace string
+	Link      *ResourceLink
+}
+
 type ServiceAccountFacts struct {
 	Secrets             []ResourceLink
 	ImagePullSecrets    []ResourceLink
@@ -2420,6 +2428,26 @@ TLSRoute share common parent/backend/status behavior. This keeps today's common
 logic centralized without hiding future route-specific fields in one generic
 bucket.
 
+## Implementation Learnings From The RBAC Slice
+
+RBAC references need different handling from ordinary object refs because
+`roleRef` and subjects do not carry a Kubernetes `apiVersion`. The shared model
+emits real object refs only for source shapes the app can identify safely:
+`Role`, `ClusterRole`, and `ServiceAccount` use their stable Kubernetes GVKs,
+while unknown role-ref kinds stay display-only instead of inventing a version.
+
+`User` and `Group` subjects are RBAC identities, not Kubernetes objects. They
+remain subject facts with display-only links for consistent rendering, and
+object-map traversal ignores them. ServiceAccount subjects become real refs
+only when the namespace is safe: RoleBinding subjects may inherit the binding
+namespace, but ClusterRoleBinding subjects need an explicit namespace.
+
+ClusterRole reverse links require both ClusterRoleBindings and namespaced
+RoleBindings. The detail path now lists RoleBindings across all namespaces so a
+RoleBinding that grants a ClusterRole is not silently omitted. If that list is
+unavailable, the detail remains usable with partial reverse-link facts and a
+warning, matching the existing partial-RBAC behavior.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2558,13 +2586,13 @@ that actually consumes them.
 
 ### Phase 10: RBAC
 
-- [ ] Add shared resource models for Role, ClusterRole, RoleBinding,
+- [x] ✅ Add shared resource models for Role, ClusterRole, RoleBinding,
       ClusterRoleBinding, and ServiceAccount.
-- [ ] Centralize role refs, subjects, aggregation rules, service account
+- [x] ✅ Centralize role refs, subjects, aggregation rules, service account
       reverse links, and display-only user/group subjects.
-- [ ] Use RBAC shared resource models from namespace/cluster tables, detail
+- [x] ✅ Use RBAC shared resource models from namespace/cluster tables, detail
       paths, and object-map paths where applicable.
-- [ ] Add tests for namespaced vs cluster-scoped references.
+- [x] ✅ Add tests for namespaced vs cluster-scoped references.
 
 ### Phase 11: Policy And Autoscaling
 

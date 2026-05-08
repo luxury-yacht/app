@@ -83,12 +83,13 @@ func BuildRoleSummary(meta ClusterMeta, role *rbacv1.Role) RBACSummary {
 	if role == nil {
 		return RBACSummary{ClusterMeta: meta, Kind: "Role"}
 	}
+	model := resourcemodel.BuildRoleResourceModel(meta.ClusterID, role, nil)
 	return RBACSummary{
 		ClusterMeta: meta,
 		Kind:        "Role",
 		Name:        role.Name,
 		Namespace:   role.Namespace,
-		Details:     describeRole(role),
+		Details:     describeRoleFacts(model.Facts.Role),
 		Age:         formatAge(role.CreationTimestamp.Time),
 	}
 }
@@ -98,12 +99,13 @@ func BuildRoleBindingSummary(meta ClusterMeta, binding *rbacv1.RoleBinding) RBAC
 	if binding == nil {
 		return RBACSummary{ClusterMeta: meta, Kind: "RoleBinding"}
 	}
+	model := resourcemodel.BuildRoleBindingResourceModel(meta.ClusterID, binding)
 	return RBACSummary{
 		ClusterMeta: meta,
 		Kind:        "RoleBinding",
 		Name:        binding.Name,
 		Namespace:   binding.Namespace,
-		Details:     describeRoleBinding(binding),
+		Details:     describeRoleBindingFacts(model.Facts.RoleBinding),
 		Age:         formatAge(binding.CreationTimestamp.Time),
 	}
 }
@@ -113,12 +115,13 @@ func BuildServiceAccountSummary(meta ClusterMeta, sa *corev1.ServiceAccount) RBA
 	if sa == nil {
 		return RBACSummary{ClusterMeta: meta, Kind: "ServiceAccount"}
 	}
+	model := resourcemodel.BuildServiceAccountResourceModel(meta.ClusterID, sa, nil, nil, nil)
 	return RBACSummary{
 		ClusterMeta: meta,
 		Kind:        "ServiceAccount",
 		Name:        sa.Name,
 		Namespace:   sa.Namespace,
-		Details:     describeServiceAccount(sa),
+		Details:     describeServiceAccountFacts(model.Facts.ServiceAccount),
 		Age:         formatAge(sa.CreationTimestamp.Time),
 	}
 }
@@ -346,11 +349,12 @@ func BuildClusterRoleSummary(meta ClusterMeta, role *rbacv1.ClusterRole) Cluster
 	if role == nil {
 		return ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRole"}
 	}
+	model := resourcemodel.BuildClusterRoleResourceModel(meta.ClusterID, role, nil, nil)
 	return ClusterRBACEntry{
 		ClusterMeta: meta,
 		Kind:        "ClusterRole",
 		Name:        role.Name,
-		Details:     describeClusterRole(role),
+		Details:     describeClusterRoleFacts(model.Facts.ClusterRole),
 		Age:         formatAge(role.CreationTimestamp.Time),
 		TypeAlias:   "CR",
 	}
@@ -361,11 +365,12 @@ func BuildClusterRoleBindingSummary(meta ClusterMeta, binding *rbacv1.ClusterRol
 	if binding == nil {
 		return ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRoleBinding"}
 	}
+	model := resourcemodel.BuildClusterRoleBindingResourceModel(meta.ClusterID, binding)
 	return ClusterRBACEntry{
 		ClusterMeta: meta,
 		Kind:        "ClusterRoleBinding",
 		Name:        binding.Name,
-		Details:     describeClusterRoleBinding(binding),
+		Details:     describeClusterRoleBindingFacts(model.Facts.ClusterRoleBinding),
 		Age:         formatAge(binding.CreationTimestamp.Time),
 		TypeAlias:   "CRB",
 	}

@@ -664,6 +664,7 @@ func (idx *objectMapIndex) collectServiceAccounts(ctx context.Context, client ku
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&sa.ObjectMeta, "", "v1", "ServiceAccount", "serviceaccounts", sa.Namespace),
 			creationTimestamp: objectCreationTimestamp(&sa.ObjectMeta),
+			status:            objectMapServiceAccountStatus(idx.meta.ClusterID, sa),
 			owners:            sa.OwnerReferences,
 			labels:            cloneStringMap(sa.Labels),
 		})
@@ -859,6 +860,7 @@ func (idx *objectMapIndex) collectClusterRoles(ctx context.Context, client kuber
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&role.ObjectMeta, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", ""),
 			creationTimestamp: objectCreationTimestamp(&role.ObjectMeta),
+			status:            objectMapClusterRoleStatus(idx.meta.ClusterID, role),
 			owners:            role.OwnerReferences,
 			labels:            cloneStringMap(role.Labels),
 			clusterRole:       &role,
@@ -876,6 +878,7 @@ func (idx *objectMapIndex) collectClusterRoleBindings(ctx context.Context, clien
 		idx.addRecord(&objectMapRecord{
 			ref:                refFromObject(&binding.ObjectMeta, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings", ""),
 			creationTimestamp:  objectCreationTimestamp(&binding.ObjectMeta),
+			status:             objectMapClusterRoleBindingStatus(idx.meta.ClusterID, binding),
 			owners:             binding.OwnerReferences,
 			labels:             cloneStringMap(binding.Labels),
 			clusterRoleBinding: &binding,
@@ -1064,6 +1067,11 @@ func objectMapSecretStatus(clusterID string, secret corev1.Secret) *ObjectMapSta
 	return objectMapStatusFromResourceModel(model)
 }
 
+func objectMapServiceAccountStatus(clusterID string, sa corev1.ServiceAccount) *ObjectMapStatus {
+	model := resourcemodel.BuildServiceAccountResourceModel(clusterID, &sa, nil, nil, nil)
+	return objectMapStatusFromResourceModel(model)
+}
+
 func objectMapNodeStatus(clusterID string, node corev1.Node) *ObjectMapStatus {
 	model := resourcemodel.BuildNodeResourceModel(clusterID, &node)
 	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
@@ -1130,6 +1138,16 @@ func objectMapIngressStatus(clusterID string, ingress networkingv1.Ingress) *Obj
 
 func objectMapIngressClassStatus(clusterID string, ingressClass networkingv1.IngressClass) *ObjectMapStatus {
 	model := resourcemodel.BuildIngressClassResourceModel(clusterID, &ingressClass)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapClusterRoleStatus(clusterID string, role rbacv1.ClusterRole) *ObjectMapStatus {
+	model := resourcemodel.BuildClusterRoleResourceModel(clusterID, &role, nil, nil)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapClusterRoleBindingStatus(clusterID string, binding rbacv1.ClusterRoleBinding) *ObjectMapStatus {
+	model := resourcemodel.BuildClusterRoleBindingResourceModel(clusterID, &binding)
 	return objectMapStatusFromResourceModel(model)
 }
 
@@ -1586,11 +1604,15 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 			}
 		}
 		if record.clusterRoleBinding != nil {
-			target := idx.clusterRoleBindingRoleRef(record.clusterRoleBinding.RoleRef)
+			model := resourcemodel.BuildClusterRoleBindingResourceModel(idx.meta.ClusterID, record.clusterRoleBinding)
+			target := idx.recordForResourceLink(model.Facts.ClusterRoleBinding.RoleRef)
 			relationship := objectMapRelationships[objectMapEdgeGrants]
 			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-			for _, subject := range record.clusterRoleBinding.Subjects {
-				target := idx.clusterRoleBindingSubject(subject)
+			for _, subject := range model.Facts.ClusterRoleBinding.Subjects {
+				if subject.Link == nil {
+					continue
+				}
+				target := idx.recordForResourceLink(*subject.Link)
 				relationship := objectMapRelationships[objectMapEdgeBinds]
 				add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 			}
@@ -1739,22 +1761,14 @@ func (idx *objectMapIndex) findIngressClass(name string) *objectMapRecord {
 	return idx.byIdent[objectMapIdentityKey("", "networking.k8s.io", "v1", "IngressClass", name)]
 }
 
-func (idx *objectMapIndex) findClusterRole(name string) *objectMapRecord {
-	return idx.byIdent[objectMapIdentityKey("", "rbac.authorization.k8s.io", "v1", "ClusterRole", name)]
-}
-
-func (idx *objectMapIndex) clusterRoleBindingRoleRef(ref rbacv1.RoleRef) *objectMapRecord {
-	if ref.Kind != "ClusterRole" || ref.Name == "" {
-		return nil
+func (idx *objectMapIndex) recordForResourceLink(link resourcemodel.ResourceLink) *objectMapRecord {
+	if link.Ref != nil {
+		return idx.byIdent[objectMapIdentityKey(link.Ref.Namespace, link.Ref.Group, link.Ref.Version, link.Ref.Kind, link.Ref.Name)]
 	}
-	return idx.findClusterRole(ref.Name)
-}
-
-func (idx *objectMapIndex) clusterRoleBindingSubject(subject rbacv1.Subject) *objectMapRecord {
-	if subject.Kind != "ServiceAccount" || subject.Name == "" || subject.Namespace == "" {
-		return nil
+	if link.Display != nil {
+		return idx.byIdent[objectMapIdentityKey(link.Display.Namespace, link.Display.Group, link.Display.Version, link.Display.Kind, link.Display.Name)]
 	}
-	return idx.findCore(subject.Namespace, "v1", "ServiceAccount", subject.Name)
+	return nil
 }
 
 func (idx *objectMapIndex) clusterRolesMatchingSelector(selector metav1.LabelSelector) []*objectMapRecord {

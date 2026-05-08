@@ -42,8 +42,16 @@ func TestManagerClusterRolesIncludeBindings(t *testing.T) {
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "rb-1", Namespace: "team-a"},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "cluster-reader",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
 
-	client := fake.NewClientset(cr, crb)
+	client := fake.NewClientset(cr, crb, rb)
 	manager := NewService(common.Dependencies{
 		Context:          context.Background(),
 		Logger:           testsupport.NoopLogger{},
@@ -61,6 +69,9 @@ func TestManagerClusterRolesIncludeBindings(t *testing.T) {
 		t.Fatalf("expected single fetch to resolve cluster role bindings, got %#v",
 			details.ClusterRoleBindings)
 	}
+	if len(details.RoleBindings) != 1 || details.RoleBindings[0] != "rb-1" {
+		t.Fatalf("expected single fetch to resolve role bindings, got %#v", details.RoleBindings)
+	}
 
 	all, err := manager.ClusterRoles()
 	if err != nil {
@@ -71,6 +82,9 @@ func TestManagerClusterRolesIncludeBindings(t *testing.T) {
 	}
 	if len(all[0].ClusterRoleBindings) != 1 || all[0].ClusterRoleBindings[0] != "crb-1" {
 		t.Fatalf("expected cluster role binding association, got %#v", all[0].ClusterRoleBindings)
+	}
+	if len(all[0].RoleBindings) != 1 || all[0].RoleBindings[0] != "rb-1" {
+		t.Fatalf("expected role binding association, got %#v", all[0].RoleBindings)
 	}
 }
 

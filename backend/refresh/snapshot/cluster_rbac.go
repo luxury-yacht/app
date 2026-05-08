@@ -12,6 +12,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const clusterRBACDomainName = "cluster-rbac"
@@ -131,28 +132,28 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 			Resources:   entries,
 			Kinds:       snapshotSortedKinds(entries, func(entry ClusterRBACEntry) string { return entry.Kind }),
 		},
-		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
+		Stats: refresh.SnapshotStats{ItemCount: len(entries)},
 	}, nil
 }
 
-func describeClusterRole(role *rbacv1.ClusterRole) string {
-	if role == nil {
+func describeClusterRoleFacts(facts *resourcemodel.ClusterRoleFacts) string {
+	if facts == nil {
 		return ""
 	}
-	details := fmt.Sprintf("Rules: %d", len(role.Rules))
-	if role.AggregationRule != nil {
+	details := fmt.Sprintf("Rules: %d", len(facts.Rules))
+	if facts.AggregationRule != nil {
 		details += " (aggregated)"
 	}
 	return details
 }
 
-func describeClusterRoleBinding(binding *rbacv1.ClusterRoleBinding) string {
-	if binding == nil {
+func describeClusterRoleBindingFacts(facts *resourcemodel.ClusterRoleBindingFacts) string {
+	if facts == nil {
 		return ""
 	}
-	role := binding.RoleRef.Name
+	role := resourceLinkName(facts.RoleRef)
 	if role == "" {
 		role = "-"
 	}
-	return fmt.Sprintf("Role: %s, Subjects: %d", role, len(binding.Subjects))
+	return fmt.Sprintf("Role: %s, Subjects: %d", role, len(facts.Subjects))
 }
