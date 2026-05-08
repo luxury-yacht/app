@@ -1,0 +1,1101 @@
+/**
+ * frontend/src/ui/settings/sections/AppearanceSection.tsx
+ *
+ * Appearance tab content: Mode (System/Light/Dark) + Theme (tint sliders,
+ * accent, link, saved themes).
+ */
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { types } from '@wailsjs/go/models';
+import { errorHandler } from '@utils/errorHandler';
+import { changeAppearanceMode } from '@/utils/appearanceMode';
+import Tooltip from '@shared/components/Tooltip';
+import {
+  hydrateAppPreferences,
+  setPaletteTint as persistPaletteTint,
+  getPaletteTint,
+  getAccentColor,
+  setAccentColor as persistAccentColor,
+  getLinkColor,
+  setLinkColor as persistLinkColor,
+  getThemes,
+  saveTheme,
+  deleteTheme as deleteThemeApi,
+  reorderThemes,
+  applyTheme as applyThemeApi,
+} from '@/core/settings/appPreferences';
+import { useAppearanceMode } from '@/core/contexts/AppearanceModeContext';
+import {
+  applyTintedPalette,
+  savePaletteTintToLocalStorage,
+  isPaletteActive,
+} from '@utils/paletteTint';
+import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '@utils/accentColor';
+import { applyLinkColor, saveLinkColorToLocalStorage } from '@utils/linkColor';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import SegmentedButton from '@shared/components/SegmentedButton';
+
+function AppearanceSection() {
+  const { mode, resolvedMode } = useAppearanceMode();
+
+  // Palette tint state for hue/saturation/brightness sliders.
+  const [paletteHue, setPaletteHue] = useState(0);
+  const [paletteSaturation, setPaletteSaturation] = useState(0);
+  const [paletteBrightness, setPaletteBrightness] = useState(0);
+  const palettePersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Accent color state.
+  const [accentColor, setAccentColorState] = useState('');
+  const accentPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isEditingAccentHex, setIsEditingAccentHex] = useState(false);
+  const [accentHexDraft, setAccentHexDraft] = useState('');
+  const accentHexInputRef = useRef<HTMLInputElement>(null);
+
+  // Link color state.
+  const [linkColor, setLinkColorState] = useState('');
+  const linkPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isEditingLinkHex, setIsEditingLinkHex] = useState(false);
+  const [linkHexDraft, setLinkHexDraft] = useState('');
+  const linkHexInputRef = useRef<HTMLInputElement>(null);
+
+  // Inline editing for palette slider values.
+  const [editingPaletteField, setEditingPaletteField] = useState<
+    'hue' | 'saturation' | 'brightness' | null
+  >(null);
+  const [paletteDraft, setPaletteDraft] = useState('');
+  const paletteInputRef = useRef<HTMLInputElement>(null);
+
+  // Saved themes.
+  const [themes, setThemes] = useState<types.Theme[]>([]);
+  const [themesLoading, setThemesLoading] = useState(false);
+  const [activeThemeId, setActiveThemeId] = useState<string | null>(null);
+  const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
+  const [themeDraft, setThemeDraft] = useState({ name: '', clusterPattern: '' });
+  const [editingThemeField, setEditingThemeField] = useState<{
+    themeId: string;
+    field: 'name' | 'clusterPattern';
+  } | null>(null);
+  const [themeFieldDraft, setThemeFieldDraft] = useState('');
+  const themeFieldInputRef = useRef<HTMLInputElement>(null);
+  const [draggingThemeId, setDraggingThemeId] = useState<string | null>(null);
+  const [dropTargetThemeId, setDropTargetThemeId] = useState<string | null>(null);
+  const [deleteConfirmThemeId, setDeleteConfirmThemeId] = useState<string | null>(null);
+
+  // Load saved themes once on mount.
+  useEffect(() => {
+    const loadThemes = async () => {
+      setThemesLoading(true);
+      try {
+        const result = await getThemes();
+        setThemes(result);
+      } catch (error) {
+        errorHandler.handle(error, { action: 'loadThemes' });
+      } finally {
+        setThemesLoading(false);
+      }
+    };
+    loadThemes();
+  }, []);
+
+  // Reload slider/accent/link values when the resolved appearance mode changes.
+  useEffect(() => {
+    const tint = getPaletteTint(resolvedMode);
+    setPaletteHue(tint.hue);
+    setPaletteSaturation(tint.saturation);
+    setPaletteBrightness(tint.brightness);
+    setAccentColorState(getAccentColor(resolvedMode));
+    setLinkColorState(getLinkColor(resolvedMode));
+  }, [resolvedMode]);
+
+  // Auto-focus the palette inline edit input when it appears.
+  useEffect(() => {
+    if (editingPaletteField && paletteInputRef.current) {
+      paletteInputRef.current.focus();
+      paletteInputRef.current.select();
+    }
+  }, [editingPaletteField]);
+
+  // Auto-focus the theme field inline edit input when it appears.
+  useEffect(() => {
+    if (editingThemeField && themeFieldInputRef.current) {
+      themeFieldInputRef.current.focus();
+      themeFieldInputRef.current.select();
+    }
+  }, [editingThemeField]);
+
+  // Clean up persist timers on unmount.
+  useEffect(() => {
+    return () => {
+      if (palettePersistTimer.current) clearTimeout(palettePersistTimer.current);
+      if (accentPersistTimer.current) clearTimeout(accentPersistTimer.current);
+      if (linkPersistTimer.current) clearTimeout(linkPersistTimer.current);
+    };
+  }, []);
+
+  const handleAppearanceModeChange = async (nextMode: string) => {
+    try {
+      if (nextMode !== 'light' && nextMode !== 'dark' && nextMode !== 'system') {
+        return;
+      }
+      await changeAppearanceMode(nextMode);
+    } catch (error) {
+      errorHandler.handle(error, { action: 'setAppearanceMode', mode: nextMode });
+    }
+  };
+
+  // Debounced palette tint persistence — avoids backend hammering during fast drags.
+  const debouncePalettePersist = useCallback(
+    (hue: number, saturation: number, brightness: number) => {
+      if (palettePersistTimer.current) clearTimeout(palettePersistTimer.current);
+      palettePersistTimer.current = setTimeout(() => {
+        persistPaletteTint(resolvedMode, hue, saturation, brightness);
+        savePaletteTintToLocalStorage(resolvedMode, hue, saturation, brightness);
+      }, 300);
+    },
+    [resolvedMode]
+  );
+
+  const handlePaletteHueChange = (value: number) => {
+    setPaletteHue(value);
+    applyTintedPalette(value, paletteSaturation, paletteBrightness);
+    debouncePalettePersist(value, paletteSaturation, paletteBrightness);
+  };
+
+  const handlePaletteSaturationChange = (value: number) => {
+    setPaletteSaturation(value);
+    applyTintedPalette(paletteHue, value, paletteBrightness);
+    debouncePalettePersist(paletteHue, value, paletteBrightness);
+  };
+
+  const handlePaletteBrightnessChange = (value: number) => {
+    setPaletteBrightness(value);
+    applyTintedPalette(paletteHue, paletteSaturation, value);
+    debouncePalettePersist(paletteHue, paletteSaturation, value);
+  };
+
+  const handleHueReset = () => {
+    setPaletteHue(0);
+    applyTintedPalette(0, paletteSaturation, paletteBrightness);
+    debouncePalettePersist(0, paletteSaturation, paletteBrightness);
+  };
+
+  const handleSaturationReset = () => {
+    setPaletteSaturation(0);
+    applyTintedPalette(paletteHue, 0, paletteBrightness);
+    debouncePalettePersist(paletteHue, 0, paletteBrightness);
+  };
+
+  const handleBrightnessReset = () => {
+    setPaletteBrightness(0);
+    applyTintedPalette(paletteHue, paletteSaturation, 0);
+    debouncePalettePersist(paletteHue, paletteSaturation, 0);
+  };
+
+  const debounceAccentPersist = useCallback(
+    (color: string) => {
+      if (accentPersistTimer.current) clearTimeout(accentPersistTimer.current);
+      accentPersistTimer.current = setTimeout(() => {
+        persistAccentColor(resolvedMode, color);
+        saveAccentColorToLocalStorage(resolvedMode, color);
+      }, 300);
+    },
+    [resolvedMode]
+  );
+
+  const handleAccentColorChange = (hex: string) => {
+    setAccentColorState(hex);
+    applyAccentColor(
+      resolvedMode === 'light' ? hex : getAccentColor('light'),
+      resolvedMode === 'dark' ? hex : getAccentColor('dark')
+    );
+    applyAccentBg(hex, resolvedMode);
+    debounceAccentPersist(hex);
+  };
+
+  const handleAccentReset = () => {
+    if (accentPersistTimer.current) {
+      clearTimeout(accentPersistTimer.current);
+      accentPersistTimer.current = null;
+    }
+    setAccentColorState('');
+    applyAccentColor(
+      resolvedMode === 'light' ? '' : getAccentColor('light'),
+      resolvedMode === 'dark' ? '' : getAccentColor('dark')
+    );
+    applyAccentBg('', resolvedMode);
+    persistAccentColor(resolvedMode, '');
+    saveAccentColorToLocalStorage(resolvedMode, '');
+  };
+
+  const validHexRe = /^#[0-9a-fA-F]{6}$/;
+  const defaultAccent = resolvedMode === 'light' ? '#0d9488' : '#f59e0b';
+
+  const handleAccentHexClick = () => {
+    setAccentHexDraft(accentColor || defaultAccent);
+    setIsEditingAccentHex(true);
+    requestAnimationFrame(() => accentHexInputRef.current?.select());
+  };
+
+  const handleAccentHexCommit = () => {
+    let trimmed = accentHexDraft.trim().toLowerCase();
+    if (!trimmed.startsWith('#')) trimmed = '#' + trimmed;
+    if (/^#[0-9a-f]{3}$/.test(trimmed)) {
+      trimmed = '#' + trimmed[1] + trimmed[1] + trimmed[2] + trimmed[2] + trimmed[3] + trimmed[3];
+    }
+    if (validHexRe.test(trimmed)) {
+      handleAccentColorChange(trimmed);
+    }
+    setIsEditingAccentHex(false);
+  };
+
+  const handleAccentHexCancel = () => setIsEditingAccentHex(false);
+
+  const debounceLinkPersist = useCallback(
+    (color: string) => {
+      if (linkPersistTimer.current) clearTimeout(linkPersistTimer.current);
+      linkPersistTimer.current = setTimeout(() => {
+        persistLinkColor(resolvedMode, color);
+        saveLinkColorToLocalStorage(resolvedMode, color);
+      }, 300);
+    },
+    [resolvedMode]
+  );
+
+  const handleLinkColorChange = (hex: string) => {
+    setLinkColorState(hex);
+    applyLinkColor(hex, resolvedMode);
+    debounceLinkPersist(hex);
+  };
+
+  const handleLinkReset = () => {
+    if (linkPersistTimer.current) {
+      clearTimeout(linkPersistTimer.current);
+      linkPersistTimer.current = null;
+    }
+    setLinkColorState('');
+    applyLinkColor('', resolvedMode);
+    persistLinkColor(resolvedMode, '');
+    saveLinkColorToLocalStorage(resolvedMode, '');
+  };
+
+  const defaultLink = resolvedMode === 'light' ? '#525252' : '#aaaaaa';
+
+  const handleLinkHexClick = () => {
+    setLinkHexDraft(linkColor || defaultLink);
+    setIsEditingLinkHex(true);
+    requestAnimationFrame(() => linkHexInputRef.current?.select());
+  };
+
+  const handleLinkHexCommit = () => {
+    let trimmed = linkHexDraft.trim().toLowerCase();
+    if (!trimmed.startsWith('#')) trimmed = '#' + trimmed;
+    if (/^#[0-9a-f]{3}$/.test(trimmed)) {
+      trimmed = '#' + trimmed[1] + trimmed[1] + trimmed[2] + trimmed[2] + trimmed[3] + trimmed[3];
+    }
+    if (validHexRe.test(trimmed)) {
+      handleLinkColorChange(trimmed);
+    }
+    setIsEditingLinkHex(false);
+  };
+
+  const handleLinkHexCancel = () => setIsEditingLinkHex(false);
+
+  const handlePaletteValueClick = (field: 'hue' | 'saturation' | 'brightness') => {
+    const current =
+      field === 'hue' ? paletteHue : field === 'saturation' ? paletteSaturation : paletteBrightness;
+    setPaletteDraft(String(current));
+    setEditingPaletteField(field);
+  };
+
+  const handlePaletteValueCommit = () => {
+    if (!editingPaletteField) return;
+    const parsed = parseInt(paletteDraft, 10);
+    if (isNaN(parsed)) {
+      setEditingPaletteField(null);
+      return;
+    }
+    if (editingPaletteField === 'hue') {
+      handlePaletteHueChange(Math.max(0, Math.min(360, parsed)));
+    } else if (editingPaletteField === 'saturation') {
+      handlePaletteSaturationChange(Math.max(0, Math.min(100, parsed)));
+    } else if (editingPaletteField === 'brightness') {
+      handlePaletteBrightnessChange(Math.max(-50, Math.min(50, parsed)));
+    }
+    setEditingPaletteField(null);
+  };
+
+  const handlePaletteValueCancel = () => setEditingPaletteField(null);
+
+  const reloadThemes = async () => {
+    try {
+      const result = await getThemes();
+      setThemes(result);
+    } catch (error) {
+      errorHandler.handle(error, { action: 'loadThemes' });
+    }
+  };
+
+  const handleSaveCurrentAsTheme = () => {
+    setEditingThemeId('new');
+    setThemeDraft({ name: '', clusterPattern: '' });
+  };
+
+  const handleThemeFieldClick = (
+    themeId: string,
+    field: 'name' | 'clusterPattern',
+    currentValue: string
+  ) => {
+    setThemeFieldDraft(currentValue);
+    setEditingThemeField({ themeId, field });
+  };
+
+  const handleThemeFieldCommit = async () => {
+    if (!editingThemeField) return;
+    const { themeId, field } = editingThemeField;
+    const trimmed = themeFieldDraft.trim();
+
+    if (field === 'name' && !trimmed) {
+      setEditingThemeField(null);
+      return;
+    }
+
+    const existing = themes.find((t) => t.id === themeId);
+    if (existing) {
+      const updated = new types.Theme({
+        ...existing,
+        [field]: trimmed,
+      });
+      try {
+        await saveTheme(updated);
+        await reloadThemes();
+      } catch (error) {
+        errorHandler.handle(error, { action: 'saveTheme' });
+      }
+    }
+    setEditingThemeField(null);
+  };
+
+  const handleThemeFieldCancel = () => setEditingThemeField(null);
+
+  const handleThemeSave = async () => {
+    if (!themeDraft.name.trim()) return;
+
+    try {
+      const lightTint = getPaletteTint('light');
+      const darkTint = getPaletteTint('dark');
+      const newTheme = new types.Theme({
+        id: crypto.randomUUID(),
+        name: themeDraft.name.trim(),
+        clusterPattern: themeDraft.clusterPattern.trim(),
+        paletteHueLight: lightTint.hue,
+        paletteSaturationLight: lightTint.saturation,
+        paletteBrightnessLight: lightTint.brightness,
+        paletteHueDark: darkTint.hue,
+        paletteSaturationDark: darkTint.saturation,
+        paletteBrightnessDark: darkTint.brightness,
+        accentColorLight: getAccentColor('light'),
+        accentColorDark: getAccentColor('dark'),
+        linkColorLight: getLinkColor('light'),
+        linkColorDark: getLinkColor('dark'),
+      });
+      await saveTheme(newTheme);
+      await reloadThemes();
+      setEditingThemeId(null);
+    } catch (error) {
+      errorHandler.handle(error, { action: 'saveTheme' });
+    }
+  };
+
+  const handleThemeEditCancel = () => setEditingThemeId(null);
+
+  const handleDeleteThemeConfirm = async () => {
+    if (!deleteConfirmThemeId) return;
+    try {
+      await deleteThemeApi(deleteConfirmThemeId);
+      await reloadThemes();
+    } catch (error) {
+      errorHandler.handle(error, { action: 'deleteTheme' });
+    } finally {
+      setDeleteConfirmThemeId(null);
+    }
+  };
+
+  const handleApplyTheme = async (id: string) => {
+    try {
+      await applyThemeApi(id);
+      setActiveThemeId(id);
+      await hydrateAppPreferences({ force: true });
+
+      const currentMode = resolvedMode === 'dark' ? 'dark' : 'light';
+      const tint = getPaletteTint(currentMode);
+      if (isPaletteActive(tint.saturation, tint.brightness)) {
+        applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
+      } else {
+        applyTintedPalette(0, 0, 0);
+      }
+      savePaletteTintToLocalStorage(currentMode, tint.hue, tint.saturation, tint.brightness);
+
+      const lightAccent = getAccentColor('light');
+      const darkAccent = getAccentColor('dark');
+      applyAccentColor(lightAccent, darkAccent);
+      applyAccentBg(currentMode === 'light' ? lightAccent : darkAccent, currentMode);
+      saveAccentColorToLocalStorage('light', lightAccent);
+      saveAccentColorToLocalStorage('dark', darkAccent);
+
+      const currentLinkColor = getLinkColor(currentMode);
+      applyLinkColor(currentLinkColor, currentMode);
+      saveLinkColorToLocalStorage('light', getLinkColor('light'));
+      saveLinkColorToLocalStorage('dark', getLinkColor('dark'));
+
+      setPaletteHue(tint.hue);
+      setPaletteSaturation(tint.saturation);
+      setPaletteBrightness(tint.brightness);
+      setAccentColorState(getAccentColor(currentMode));
+      setLinkColorState(getLinkColor(currentMode));
+    } catch (error) {
+      errorHandler.handle(error, { action: 'applyTheme' });
+    }
+  };
+
+  const handleSaveToTheme = async (id: string) => {
+    const existing = themes.find((t) => t.id === id);
+    if (!existing) return;
+
+    try {
+      const lightTint = getPaletteTint('light');
+      const darkTint = getPaletteTint('dark');
+      const updated = new types.Theme({
+        ...existing,
+        paletteHueLight: lightTint.hue,
+        paletteSaturationLight: lightTint.saturation,
+        paletteBrightnessLight: lightTint.brightness,
+        paletteHueDark: darkTint.hue,
+        paletteSaturationDark: darkTint.saturation,
+        paletteBrightnessDark: darkTint.brightness,
+        accentColorLight: getAccentColor('light'),
+        accentColorDark: getAccentColor('dark'),
+        linkColorLight: getLinkColor('light'),
+        linkColorDark: getLinkColor('dark'),
+      });
+      await saveTheme(updated);
+      await reloadThemes();
+      setActiveThemeId(null);
+    } catch (error) {
+      errorHandler.handle(error, { action: 'saveTheme' });
+    }
+  };
+
+  // True when the current live values match the saved theme exactly.
+  const themeMatchesCurrent = useCallback(
+    (theme: types.Theme): boolean => {
+      const isLight = resolvedMode === 'light';
+
+      const activeHueMatch = isLight
+        ? theme.paletteHueLight === paletteHue
+        : theme.paletteHueDark === paletteHue;
+      const activeSatMatch = isLight
+        ? theme.paletteSaturationLight === paletteSaturation
+        : theme.paletteSaturationDark === paletteSaturation;
+      const activeBrtMatch = isLight
+        ? theme.paletteBrightnessLight === paletteBrightness
+        : theme.paletteBrightnessDark === paletteBrightness;
+      const activeAccentMatch = isLight
+        ? (theme.accentColorLight || '') === (accentColor || '')
+        : (theme.accentColorDark || '') === (accentColor || '');
+      const activeLinkMatch = isLight
+        ? (theme.linkColorLight || '') === (linkColor || '')
+        : (theme.linkColorDark || '') === (linkColor || '');
+
+      const otherTint = getPaletteTint(isLight ? 'dark' : 'light');
+      const otherAccent = getAccentColor(isLight ? 'dark' : 'light');
+      const otherLink = getLinkColor(isLight ? 'dark' : 'light');
+      const otherHueMatch = isLight
+        ? theme.paletteHueDark === otherTint.hue
+        : theme.paletteHueLight === otherTint.hue;
+      const otherSatMatch = isLight
+        ? theme.paletteSaturationDark === otherTint.saturation
+        : theme.paletteSaturationLight === otherTint.saturation;
+      const otherBrtMatch = isLight
+        ? theme.paletteBrightnessDark === otherTint.brightness
+        : theme.paletteBrightnessLight === otherTint.brightness;
+      const otherAccentMatch = isLight
+        ? (theme.accentColorDark || '') === (otherAccent || '')
+        : (theme.accentColorLight || '') === (otherAccent || '');
+      const otherLinkMatch = isLight
+        ? (theme.linkColorDark || '') === (otherLink || '')
+        : (theme.linkColorLight || '') === (otherLink || '');
+
+      return (
+        activeHueMatch &&
+        activeSatMatch &&
+        activeBrtMatch &&
+        activeAccentMatch &&
+        activeLinkMatch &&
+        otherHueMatch &&
+        otherSatMatch &&
+        otherBrtMatch &&
+        otherAccentMatch &&
+        otherLinkMatch
+      );
+    },
+    [resolvedMode, paletteHue, paletteSaturation, paletteBrightness, accentColor, linkColor]
+  );
+
+  const handleThemeDrop = async (targetId: string) => {
+    if (!draggingThemeId || draggingThemeId === targetId) {
+      setDraggingThemeId(null);
+      setDropTargetThemeId(null);
+      return;
+    }
+    const ids = themes.map((t) => t.id);
+    const fromIdx = ids.indexOf(draggingThemeId);
+    const toIdx = ids.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const reordered = [...ids];
+    reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, draggingThemeId);
+
+    try {
+      await reorderThemes(reordered);
+      await reloadThemes();
+    } catch (error) {
+      errorHandler.handle(error, { action: 'reorderThemes' });
+    } finally {
+      setDraggingThemeId(null);
+      setDropTargetThemeId(null);
+    }
+  };
+
+  const renderEditableValue = (
+    field: 'hue' | 'saturation' | 'brightness',
+    value: number,
+    suffix: string
+  ) => {
+    if (editingPaletteField === field) {
+      return (
+        <input
+          ref={paletteInputRef}
+          className="palette-slider-value palette-hex-input"
+          value={paletteDraft}
+          onChange={(e) => setPaletteDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handlePaletteValueCommit();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              handlePaletteValueCancel();
+            } else {
+              e.stopPropagation();
+            }
+          }}
+          onBlur={handlePaletteValueCancel}
+          maxLength={4}
+        />
+      );
+    }
+    return (
+      <span
+        className="palette-slider-value palette-hex-clickable"
+        onClick={() => handlePaletteValueClick(field)}
+        title="Click to edit value"
+      >
+        {value > 0 && field === 'brightness' ? '+' : ''}
+        {value}
+        {suffix}
+      </span>
+    );
+  };
+
+  return (
+    <div className="settings-panel">
+      <h2 className="settings-panel-title">Appearance</h2>
+
+      <div className="settings-subgroup-label">Mode</div>
+      <hr className="settings-subgroup-divider" />
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Mode</div>
+          <div className="settings-row-label-help">
+            Match your operating system or pick a fixed mode.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <SegmentedButton
+            options={[
+              { value: 'system', label: 'System' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+            value={mode}
+            onChange={handleAppearanceModeChange}
+          />
+        </div>
+      </div>
+
+      <div className="settings-subgroup-label">Theme</div>
+      <hr className="settings-subgroup-divider" />
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Tint</div>
+          <div className="settings-row-label-help">
+            Shifts every surface in the UI. Hue rotates the chrome color, saturation increases the
+            tint strength, and brightness lifts or darkens the base.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <div className="palette-tint-controls">
+            <label htmlFor="palette-hue">Hue</label>
+            <input
+              type="range"
+              id="palette-hue"
+              className="palette-slider palette-slider-hue"
+              min={0}
+              max={360}
+              value={paletteHue}
+              onChange={(e) => handlePaletteHueChange(Number(e.target.value))}
+            />
+            {renderEditableValue('hue', paletteHue, '°')}
+            <button
+              type="button"
+              className="palette-row-reset"
+              onClick={handleHueReset}
+              disabled={paletteHue === 0}
+              title="Reset Hue"
+            >
+              ↺
+            </button>
+
+            <label htmlFor="palette-saturation">Saturation</label>
+            <input
+              type="range"
+              id="palette-saturation"
+              className="palette-slider palette-slider-saturation"
+              min={0}
+              max={100}
+              value={paletteSaturation}
+              onChange={(e) => handlePaletteSaturationChange(Number(e.target.value))}
+              style={{
+                background: `linear-gradient(to right, hsl(0, 0%, 50%), hsl(${paletteHue}, 20%, 50%))`,
+              }}
+            />
+            {renderEditableValue('saturation', paletteSaturation, '%')}
+            <button
+              type="button"
+              className="palette-row-reset"
+              onClick={handleSaturationReset}
+              disabled={paletteSaturation === 0}
+              title="Reset Saturation"
+            >
+              ↺
+            </button>
+
+            <label htmlFor="palette-brightness">Brightness</label>
+            <input
+              type="range"
+              id="palette-brightness"
+              className="palette-slider palette-slider-brightness"
+              min={-50}
+              max={50}
+              value={paletteBrightness}
+              onChange={(e) => handlePaletteBrightnessChange(Number(e.target.value))}
+            />
+            {renderEditableValue('brightness', paletteBrightness, '')}
+            <button
+              type="button"
+              className="palette-row-reset"
+              onClick={handleBrightnessReset}
+              disabled={paletteBrightness === 0}
+              title="Reset Brightness"
+            >
+              ↺
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Accent color</div>
+          <div className="settings-row-label-help">
+            Used for active states, focus rings, and primary buttons.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <div className="palette-color-field">
+            <input
+              type="color"
+              className="palette-accent-swatch"
+              value={accentColor || defaultAccent}
+              onChange={(e) => handleAccentColorChange(e.target.value)}
+            />
+            {isEditingAccentHex ? (
+              <input
+                ref={accentHexInputRef}
+                className="palette-slider-value palette-hex-input"
+                value={accentHexDraft}
+                onChange={(e) => setAccentHexDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAccentHexCommit();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    handleAccentHexCancel();
+                  } else e.stopPropagation();
+                }}
+                onBlur={handleAccentHexCancel}
+                maxLength={7}
+              />
+            ) : (
+              <span
+                className="palette-slider-value palette-hex-clickable"
+                onClick={handleAccentHexClick}
+                title="Click to edit hex value"
+              >
+                {accentColor || defaultAccent}
+              </span>
+            )}
+            <button
+              type="button"
+              className="palette-row-reset"
+              onClick={handleAccentReset}
+              disabled={!accentColor}
+              title="Reset Accent Color"
+            >
+              ↺
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Link color</div>
+          <div className="settings-row-label-help">Color of inline links in resource details.</div>
+        </div>
+        <div className="settings-row-control">
+          <div className="palette-color-field">
+            <input
+              type="color"
+              className="palette-accent-swatch"
+              value={linkColor || defaultLink}
+              onChange={(e) => handleLinkColorChange(e.target.value)}
+            />
+            {isEditingLinkHex ? (
+              <input
+                ref={linkHexInputRef}
+                className="palette-slider-value palette-hex-input"
+                value={linkHexDraft}
+                onChange={(e) => setLinkHexDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleLinkHexCommit();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    handleLinkHexCancel();
+                  } else e.stopPropagation();
+                }}
+                onBlur={handleLinkHexCancel}
+                maxLength={7}
+              />
+            ) : (
+              <span
+                className="palette-slider-value palette-hex-clickable"
+                onClick={handleLinkHexClick}
+                title="Click to edit hex value"
+              >
+                {linkColor || defaultLink}
+              </span>
+            )}
+            <button
+              type="button"
+              className="palette-row-reset"
+              onClick={handleLinkReset}
+              disabled={!linkColor}
+              title="Reset Link Color"
+            >
+              ↺
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Saved themes</div>
+          <div className="settings-row-label-help">
+            Themes apply automatically to clusters whose name matches the pattern. Use * as a
+            wildcard. First match wins. Use the drag handles to change the order.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <div className="palette-bottom-actions">
+            {editingThemeId !== 'new' && (
+              <>
+                {activeThemeId && (
+                  <>
+                    <button
+                      type="button"
+                      className="button generic"
+                      onClick={() => handleSaveToTheme(activeThemeId)}
+                      disabled={themeMatchesCurrent(themes.find((t) => t.id === activeThemeId)!)}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      className="button generic"
+                      onClick={async () => {
+                        await handleApplyTheme(activeThemeId);
+                        setActiveThemeId(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {editingThemeId === 'new' && (
+            <div className="themes-new-form">
+              <input
+                className="theme-name-input"
+                value={themeDraft.name}
+                onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
+                placeholder="Theme name"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleThemeSave();
+                  else if (e.key === 'Escape') handleThemeEditCancel();
+                  else e.stopPropagation();
+                }}
+              />
+              <input
+                className="theme-pattern-input"
+                value={themeDraft.clusterPattern}
+                onChange={(e) =>
+                  setThemeDraft((d) => ({
+                    ...d,
+                    clusterPattern: e.target.value,
+                  }))
+                }
+                placeholder="Cluster pattern (optional)"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleThemeSave();
+                  else if (e.key === 'Escape') handleThemeEditCancel();
+                  else e.stopPropagation();
+                }}
+              />
+              <button type="button" className="button generic" onClick={handleThemeSave}>
+                Save
+              </button>
+              <button type="button" className="button generic" onClick={handleThemeEditCancel}>
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {(themesLoading || themes.length > 0) && (
+            <div className="themes-section">
+              {themesLoading ? (
+                <div className="themes-loading">Loading themes...</div>
+              ) : (
+                <div className="themes-table">
+                  <div className="themes-table-header">
+                    <span className="themes-header-name">Theme Name</span>
+                    <span>
+                      Pattern{' '}
+                      <Tooltip
+                        content={
+                          <>
+                            Auto-apply the theme when the cluster name matches the pattern.
+                            <br />
+                            <br />
+                            Supports wildcards <code>*</code> and <code>?</code>
+                            <br />
+                            <br />
+                            Examples:
+                            <br />
+                            &nbsp;&nbsp;- <code>prod*</code> matches <code>prod-us</code> and{' '}
+                            <code>prod-eu</code>
+                            <br />
+                            &nbsp;&nbsp;- <code>*</code> matches any name
+                            <br />
+                            <br />
+                            First matching pattern will be applied. Use the drag handles to reorder
+                            themes.
+                          </>
+                        }
+                      />
+                    </span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  {themes.map((theme) => {
+                    const isDragging = theme.id === draggingThemeId;
+                    const isDropTarget =
+                      theme.id === dropTargetThemeId && theme.id !== draggingThemeId;
+                    const isEditingName =
+                      editingThemeField?.themeId === theme.id && editingThemeField.field === 'name';
+                    const isEditingPattern =
+                      editingThemeField?.themeId === theme.id &&
+                      editingThemeField.field === 'clusterPattern';
+                    return (
+                      <div
+                        key={theme.id}
+                        className={`themes-table-row${isDragging ? ' themes-table-row--dragging' : ''}${isDropTarget ? ' themes-table-row--drop-target' : ''}${activeThemeId && activeThemeId !== theme.id ? ' themes-table-row--dimmed' : ''}`}
+                        onDragOver={(e) => {
+                          if (!draggingThemeId) return;
+                          e.preventDefault();
+                          setDropTargetThemeId(theme.id);
+                        }}
+                        onDragLeave={() => {
+                          setDropTargetThemeId((c) => (c === theme.id ? null : c));
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          handleThemeDrop(theme.id);
+                        }}
+                      >
+                        <span
+                          className="themes-drag-handle"
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = 'move';
+                            setDraggingThemeId(theme.id);
+                          }}
+                          onDragEnd={() => {
+                            setDraggingThemeId(null);
+                            setDropTargetThemeId(null);
+                          }}
+                          title="Drag to reorder"
+                        >
+                          &#x2807;
+                        </span>
+                        {isEditingName ? (
+                          <input
+                            ref={themeFieldInputRef}
+                            className="theme-name-input"
+                            value={themeFieldDraft}
+                            onChange={(e) => setThemeFieldDraft(e.target.value)}
+                            placeholder="Theme name"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleThemeFieldCommit();
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                handleThemeFieldCancel();
+                              } else {
+                                e.stopPropagation();
+                              }
+                            }}
+                            onBlur={handleThemeFieldCancel}
+                          />
+                        ) : (
+                          <span
+                            className="theme-name theme-field-clickable"
+                            onClick={() => handleThemeFieldClick(theme.id, 'name', theme.name)}
+                            title="Click to edit name"
+                          >
+                            {theme.name}
+                          </span>
+                        )}
+                        {isEditingPattern ? (
+                          <input
+                            ref={themeFieldInputRef}
+                            className="theme-pattern-input"
+                            value={themeFieldDraft}
+                            onChange={(e) => setThemeFieldDraft(e.target.value)}
+                            placeholder="e.g. prod*"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleThemeFieldCommit();
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                handleThemeFieldCancel();
+                              } else {
+                                e.stopPropagation();
+                              }
+                            }}
+                            onBlur={handleThemeFieldCancel}
+                          />
+                        ) : (
+                          <span
+                            className="theme-pattern theme-field-clickable"
+                            onClick={() =>
+                              handleThemeFieldClick(
+                                theme.id,
+                                'clusterPattern',
+                                theme.clusterPattern
+                              )
+                            }
+                            title="Click to edit pattern"
+                          >
+                            {theme.clusterPattern || '—'}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="theme-action-button"
+                          onClick={() => handleApplyTheme(theme.id)}
+                          title="Load this theme's settings"
+                        >
+                          Open
+                        </button>
+                        <button
+                          type="button"
+                          className="theme-action-button theme-action-delete"
+                          onClick={() => setDeleteConfirmThemeId(theme.id)}
+                          title="Delete theme"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    className="themes-save-new-row"
+                    onClick={handleSaveCurrentAsTheme}
+                  >
+                    + Save new theme
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {!themesLoading && themes.length === 0 && (
+            <button
+              type="button"
+              className="themes-save-new-row"
+              onClick={handleSaveCurrentAsTheme}
+            >
+              + Save new theme
+            </button>
+          )}
+        </div>
+      </div>
+
+      <ConfirmationModal
+        isOpen={deleteConfirmThemeId !== null}
+        title="Delete Theme"
+        message={`Delete "${themes.find((t) => t.id === deleteConfirmThemeId)?.name || 'this theme'}"?`}
+        confirmText="Confirm"
+        confirmButtonClass="danger"
+        onConfirm={handleDeleteThemeConfirm}
+        onCancel={() => setDeleteConfirmThemeId(null)}
+      />
+    </div>
+  );
+}
+
+export default AppearanceSection;

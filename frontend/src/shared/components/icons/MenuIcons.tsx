@@ -588,6 +588,57 @@ export const FavoritePinIcon: React.FC<IconProps> = ({ width = 14, height = 14 }
   </svg>
 );
 
+// Funnel/filter icon for the Kubeconfigs settings tab.
+export const KubeconfigsIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill={fill}
+    width={width}
+    height={height}
+  >
+    <path d="M21 4V6L14 14V21H10V14L3 6V4H21ZM5.4254 6L12 13.5114L18.5746 6H5.4254Z" />
+  </svg>
+);
+
+// Monitor icon for the Display settings tab.
+export const DisplayIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill={fill}
+    width={width}
+    height={height}
+  >
+    <path d="M13 18V20H17V22H7V20H11V18H3.00094C2.4485 18 2 17.5551 2 17.0066V3.9934C2 3.44476 2.45531 3 2.9918 3H21.0082C21.556 3 22 3.44495 22 3.9934V17.0066C22 17.5552 21.5447 18 21.0091 18H13ZM4 5V16H20V5H4Z" />
+  </svg>
+);
+
+// Sliders icon for the Advanced settings tab.
+export const AdvancedIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill={fill}
+    width={width}
+    height={height}
+  >
+    <path d="M17 16V18H22V20H17V22H15V20H2V18H15V16H17ZM7 10V12H2V14H7V16H9V10H7ZM22 12V14H11V12H22ZM17 4V6H22V8H17V10H15V4H17ZM2 6H13V8H2V6Z" />
+  </svg>
+);
+
 export const AppearanceModeIcon: React.FC<IconProps> = ({
   width = 16,
   height = 16,

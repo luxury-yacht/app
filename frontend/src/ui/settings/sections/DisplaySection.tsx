@@ -1,0 +1,77 @@
+/**
+ * frontend/src/ui/settings/sections/DisplaySection.tsx
+ *
+ * Display tab content: short resource names toggle.
+ */
+
+import { useState, useEffect } from 'react';
+import { errorHandler } from '@utils/errorHandler';
+import Tooltip from '@shared/components/Tooltip';
+import {
+  hydrateAppPreferences,
+  setUseShortResourceNames as persistUseShortResourceNames,
+} from '@/core/settings/appPreferences';
+
+function DisplaySection() {
+  const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const prefs = await hydrateAppPreferences({ force: true });
+        if (!cancelled) {
+          setUseShortResourceNames(prefs.useShortResourceNames);
+        }
+      } catch (error) {
+        errorHandler.handle(error, { action: 'loadDisplaySettings' });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleShortNamesToggle = async (useShort: boolean) => {
+    setUseShortResourceNames(useShort);
+    try {
+      await persistUseShortResourceNames(useShort);
+    } catch (error) {
+      errorHandler.handle(error, { action: 'setUseShortResourceNames', useShort });
+      // Revert on failure.
+      setUseShortResourceNames(!useShort);
+    }
+  };
+
+  return (
+    <div className="settings-panel">
+      <h2 className="settings-panel-title">Display</h2>
+
+      <div className="settings-subgroup-label">Resources</div>
+      <hr className="settings-subgroup-divider" />
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Short resource names</div>
+          <div className="settings-row-label-help">
+            Display short resource names (e.g., "sts" instead of "StatefulSets").
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <label htmlFor="short-resource-names" className="settings-checkbox-label">
+            <input
+              type="checkbox"
+              id="short-resource-names"
+              checked={useShortResourceNames}
+              onChange={(e) => handleShortNamesToggle(e.target.checked)}
+            />
+            Enable
+            <Tooltip content='Display short resource names (e.g., "sts" instead of "StatefulSets").' />
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default DisplaySection;

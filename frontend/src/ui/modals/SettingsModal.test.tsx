@@ -1,8 +1,7 @@
 /**
- * frontend/src/components/modals/SettingsModal.test.tsx
+ * frontend/src/ui/modals/SettingsModal.test.tsx
  *
- * Test suite for SettingsModal.
- * Covers key behaviors and edge cases for SettingsModal.
+ * Test suite for SettingsModal — tabbed shell behavior + section switching.
  */
 
 import ReactDOM from 'react-dom/client';
@@ -10,7 +9,6 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SettingsModal from './SettingsModal';
-import Settings from '@ui/settings/Settings';
 import { KeyboardProvider } from '@ui/shortcuts';
 
 const runtimeMocks = vi.hoisted(() => ({
@@ -23,15 +21,41 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOff: runtimeMocks.eventsOff,
 }));
 
-vi.mock('@ui/settings/Settings', () => ({
+vi.mock('@ui/settings/sections/AppearanceSection', () => ({
   __esModule: true,
-  default: vi.fn(() => <div data-testid="settings-content" />),
+  default: vi.fn(() => <div data-testid="section-appearance" />),
+}));
+
+vi.mock('@ui/settings/sections/KubeconfigsSection', () => ({
+  __esModule: true,
+  default: vi.fn(() => <div data-testid="section-kubeconfigs" />),
+}));
+
+vi.mock('@ui/settings/sections/DisplaySection', () => ({
+  __esModule: true,
+  default: vi.fn(() => <div data-testid="section-display" />),
+}));
+
+vi.mock('@ui/settings/sections/ObjectPanelSection', () => ({
+  __esModule: true,
+  default: vi.fn(() => <div data-testid="section-object-panel" />),
+}));
+
+vi.mock('@ui/settings/sections/AdvancedSection', () => ({
+  __esModule: true,
+  default: vi.fn(() => <div data-testid="section-advanced" />),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetAppSettings: vi.fn().mockResolvedValue({ useShortResourceNames: false }),
   GetAppearanceModeInfo: vi.fn().mockResolvedValue({ currentMode: 'dark', userMode: 'dark' }),
   SetUseShortResourceNames: vi.fn().mockResolvedValue(undefined),
+  GetAppInfo: vi.fn().mockResolvedValue({ version: '4.2.1' }),
+}));
+
+vi.mock('@/core/app-state-access', () => ({
+  readAppInfo: vi.fn().mockResolvedValue({ version: '4.2.1' }),
+  requestAppState: vi.fn(({ read }: { read: () => Promise<unknown> }) => read()),
 }));
 
 vi.mock('@/utils/appearanceMode', () => ({
@@ -51,7 +75,7 @@ vi.mock('@/core/refresh/RefreshManager', () => ({
   },
 }));
 
-describe('SettingsModal shortcuts', () => {
+describe('SettingsModal', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
@@ -62,6 +86,12 @@ describe('SettingsModal shortcuts', () => {
   beforeEach(async () => {
     runtimeMocks.eventsOn.mockReset();
     runtimeMocks.eventsOff.mockReset();
+    // Reset persisted-tab so each test starts on the default tab.
+    try {
+      localStorage.removeItem('app-settings-last-tab');
+    } catch {
+      /* ignore */
+    }
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -157,9 +187,58 @@ describe('SettingsModal shortcuts', () => {
     vi.useRealTimers();
   });
 
-  it('renders Settings content on open', async () => {
-    const settingsSpy = vi.mocked(Settings);
-    settingsSpy.mockClear();
+  it('renders Appearance section by default and switches to Kubeconfigs on tab click', async () => {
+    expect(document.querySelector('[data-testid="section-appearance"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="section-kubeconfigs"]')).toBeNull();
+
+    const tabs = Array.from(
+      document.querySelectorAll('.settings-modal-tab')
+    ) as HTMLButtonElement[];
+    const kubeconfigTab = tabs.find((t) => t.textContent?.includes('Kubeconfigs'));
+    expect(kubeconfigTab).toBeTruthy();
+
+    await act(async () => {
+      kubeconfigTab!.click();
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('[data-testid="section-appearance"]')).toBeNull();
+    expect(document.querySelector('[data-testid="section-kubeconfigs"]')).toBeTruthy();
+  });
+
+  it('honors initialTab prop on open', async () => {
+    const onClose = vi.fn();
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <SettingsModal isOpen onClose={onClose} initialTab="advanced" />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+    expect(document.querySelector('[data-testid="section-advanced"]')).toBeTruthy();
+  });
+
+  it('persists the active tab across opens via localStorage', async () => {
+    const tabs = Array.from(
+      document.querySelectorAll('.settings-modal-tab')
+    ) as HTMLButtonElement[];
+    const displayTab = tabs.find((t) => t.textContent?.includes('Display'));
+    await act(async () => {
+      displayTab!.click();
+      await Promise.resolve();
+    });
+    expect(localStorage.getItem('app-settings-last-tab')).toBe('display');
+
+    // Re-open the modal with no initialTab and verify it restores 'display'.
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <SettingsModal isOpen={false} onClose={vi.fn()} />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
     await act(async () => {
       root.render(
         <KeyboardProvider>
@@ -168,6 +247,6 @@ describe('SettingsModal shortcuts', () => {
       );
       await Promise.resolve();
     });
-    expect(settingsSpy).toHaveBeenCalled();
+    expect(document.querySelector('[data-testid="section-display"]')).toBeTruthy();
   });
 });

@@ -1,8 +1,140 @@
 /* ==========================================================================
-   Settings Modal Specific Styles
+   Settings Modal — two-pane layout (sidebar + content)
    ========================================================================== */
 
-/* Modal Sizing */
 .settings-modal {
-  max-width: 600px;
+  /* Responsive: fill most of the viewport, but constrain to a sensible range
+     so the layout looks right on both narrow and ultrawide displays. */
+  width: 90vw;
+  min-width: 720px;
+  max-width: 1100px;
+  /* Keep the modal a consistent height regardless of active tab, scaled to
+     the app window. The base .modal-container caps height at 85vh. */
+  min-height: 80vh;
+}
+
+/* Cap min-width on very narrow viewports so the modal still fits. */
+@media (max-width: 760px) {
+  .settings-modal {
+    min-width: 0;
+    width: 95vw;
+  }
+}
+
+/* Header with breadcrumb instead of plain title */
+.settings-modal-header {
+  padding: 0.75rem 1.25rem;
+}
+
+.settings-modal-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-family-display, var(--font-family-base));
+  font-size: 1rem;
+  color: var(--color-text-secondary);
+}
+
+.settings-modal-breadcrumb svg {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.settings-modal-breadcrumb-root {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.settings-modal-breadcrumb-sep {
+  color: var(--color-text-tertiary);
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+.settings-modal-breadcrumb-leaf {
+  color: var(--color-text-secondary);
+}
+
+/* Body splits into sidebar + scrollable content */
+.settings-modal-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  background: var(--modal-content-bg);
+}
+
+/* Sidebar nav */
+.settings-modal-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--color-border);
+  padding: 0.75rem 0.5rem;
+  overflow-y: auto;
+  background: var(--modal-footer-bg);
+}
+
+.settings-modal-tabs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.settings-modal-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.settings-modal-tab svg {
+  flex-shrink: 0;
+}
+
+.settings-modal-tab:hover {
+  background: var(--color-bg-tertiary, var(--color-bg-secondary));
+  color: var(--color-text);
+}
+
+.settings-modal-tab--active,
+.settings-modal-tab--active:hover {
+  background: var(--color-accent);
+  color: var(--color-accent-text, var(--color-bg));
+}
+
+.settings-modal-tab--active svg {
+  color: var(--color-accent-text, var(--color-bg));
+}
+
+/* Version footer at the bottom of the sidebar */
+.settings-modal-version {
+  margin-top: 1rem;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--font-size-small);
+  color: var(--color-text-tertiary);
+  letter-spacing: 0.04em;
+}
+
+/* Content panel — scrollable, holds the active section */
+.settings-modal-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 1.5rem 2rem;
 }
