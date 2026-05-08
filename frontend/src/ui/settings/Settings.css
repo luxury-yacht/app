@@ -444,7 +444,10 @@
   overflow: hidden;
   width: 100%;
   display: grid;
-  grid-template-columns: 32px 1fr 1fr auto auto;
+  /* Fixed-width edge columns make subgrid alignment deterministic — auto
+     columns can resolve to slightly different widths between header and
+     body when their content widths differ. */
+  grid-template-columns: 32px 1fr 1fr 32px 36px;
 }
 
 .themes-table-header,
@@ -482,27 +485,15 @@
   grid-column: 3;
 }
 
-/* Body container — also a subgrid pass-through so each row's cells align
-   with the header columns. */
-.themes-table {
-  /* `.themes-table` doesn't introduce visual structure; rows render
-     directly into the master grid via subgrid. */
-}
-
-.themes-table-row + .themes-table-row {
-  /* Row separator drawn on the first cell with negative margin trick — see
-     border-top rule below for cells. */
-}
-
 .themes-table-row > * {
   padding: 0.5rem 0.75rem;
   min-width: 0;
 }
 
-/* Row dividers: a top border on every cell of every row except the first.
-   This guarantees a continuous line across the full grid width regardless
-   of how many cells the row has. */
-.themes-table-row + .themes-table-row > * {
+/* Row divider on the row element itself (which spans all columns via
+   grid-column: 1 / -1) so the line is always continuous full-width,
+   independent of individual cell heights. */
+.themes-table-row + .themes-table-row {
   border-top: 1px solid var(--color-border);
 }
 
@@ -525,12 +516,13 @@
   padding-right: 0;
 }
 
-/* Action button cells reset cell padding — buttons supply their own. */
+/* Action button cells: zero cell padding, button supplies its own padding.
+   Buttons are placed via grid-cell, so they fill the fixed-width column. */
 .themes-table-row > .theme-action-button {
-  padding: 0.25rem;
-}
-.themes-table-row > .theme-action-button:last-child {
-  padding-right: 0.5rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .themes-drag-handle {
