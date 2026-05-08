@@ -208,6 +208,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             onAltClick: (event) => {
               void handleEventAltClick(event);
             },
+            getClassName: () => 'object-panel-link',
             isInteractive: canOpenEventObject,
           }
         ),
