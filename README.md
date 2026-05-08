@@ -203,13 +203,9 @@ Run the prerelease checks. This should surface any problems that could cause the
 mage qc:prerelease
 ```
 
-Optional tests:
+You should also run the benchmark tests if you're going to make changes to the backend code. Compare the numbers before and after your change to make sure you haven't introduced any major performance hits.
 
 ```bash
-# Check for unused dependencies, exports, and files in the frontend
-mage qc:knip
-
-# Benchmark building the backend's ResourceRelationshipIndex
 mage qc:benchmark
 ```
 
