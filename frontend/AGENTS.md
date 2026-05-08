@@ -8,6 +8,9 @@ Applies to React/TypeScript code under `frontend/`.
 - Render table data with `GridTable` and shared column factories; no ad-hoc tables.
   - Column factories live in `frontend/src/shared/components/tables/columnFactories.tsx`.
 - Wire namespace/cluster data through the refresh orchestrator + diagnostics flow (`frontend/src/core/refresh`); no ad-hoc polling loops.
+- Treat backend `statusPresentation` and `ResourceLink.ref` as authoritative.
+  Before adding frontend status styling, relationship navigation, or object
+  identity helpers, follow `docs/development/shared-resource-model.md`.
 
 ## Refresh Orchestrator Notes
 

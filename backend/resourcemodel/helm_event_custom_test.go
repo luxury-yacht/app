@@ -77,6 +77,16 @@ func TestBuildHelmReleaseResourceModelSyntheticIdentityAndFacts(t *testing.T) {
 	require.Equal(t, "superseded", facts.History[0].Status)
 }
 
+func TestBuildHelmManifestResourceLinkDoesNotGuessMissingAPIVersion(t *testing.T) {
+	link := BuildHelmManifestResourceLink("cluster-a", "", "Deployment", "apps", "orders")
+
+	require.Nil(t, link.Ref)
+	require.NotNil(t, link.Display)
+	require.Equal(t, "Deployment", link.Display.Kind)
+	require.Equal(t, "orders", link.Display.Name)
+	require.Equal(t, "", link.Display.Version)
+}
+
 func TestBuildEventResourceModelInvolvedObjectLinks(t *testing.T) {
 	eventTime := metav1.NewMicroTime(time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC))
 	event := &corev1.Event{
@@ -104,6 +114,8 @@ func TestBuildEventResourceModelInvolvedObjectLinks(t *testing.T) {
 	require.NotNil(t, facts)
 	require.Equal(t, "kubelet on node-a", facts.Source)
 	require.Equal(t, "BackOff", facts.Reason)
+	require.NotNil(t, facts.InvolvedObject)
+	require.Nil(t, facts.InvolvedObject.Display)
 	require.Equal(t, "Deployment", facts.InvolvedObject.Ref.Kind)
 	require.Equal(t, "apps", facts.InvolvedObject.Ref.Group)
 	require.Equal(t, "v1", facts.InvolvedObject.Ref.Version)

@@ -137,20 +137,18 @@ func eventInvolvedObjectLink(clusterID string, ref corev1.ObjectReference) *Reso
 	name := strings.TrimSpace(ref.Name)
 	namespace := strings.TrimSpace(ref.Namespace)
 	uid := string(ref.UID)
-	display := DisplayRef{
-		ClusterID: clusterID,
-		Group:     group,
-		Version:   version,
-		Kind:      kind,
-		Namespace: namespace,
-		Name:      name,
-		UID:       uid,
+	if kind == "" || name == "" {
+		return nil
 	}
-	if kind == "" || name == "" || version == "" {
-		return &ResourceLink{Display: &display}
+	if version == "" {
+		link := NewDisplayResourceLink(clusterID, group, version, kind, "", namespace, name)
+		if link.Display != nil {
+			link.Display.UID = uid
+		}
+		return &link
 	}
-	resourceRef := ResourceRef(display)
-	return &ResourceLink{Ref: &resourceRef, Display: &display}
+	link := NewNamespacedResourceLink(clusterID, group, version, kind, "", namespace, name, uid)
+	return &link
 }
 
 func eventPresentation(state string) string {

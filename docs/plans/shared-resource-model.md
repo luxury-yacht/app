@@ -2542,6 +2542,29 @@ when present and treat `ResourceLink.display` as non-openable. Display-only
 references are useful context for stale or partial events, but opening them
 would reintroduce guessed identity.
 
+## Implementation Learnings From The Cross-Cutting Contract Slice
+
+`ResourceLink` must be structurally unambiguous. An openable link is emitted as
+`{ ref }`; a display-only link is emitted as `{ display }`; no migrated builder
+should emit both. This keeps frontend navigation from choosing between two
+identity sources and makes display-only references clearly non-openable.
+
+Display-only references are not a weaker `ResourceRef`. They may omit group,
+version, or resource when source data is partial, but they still need enough
+identity to display a meaningful relationship. If source data does not include
+kind and name, the builder should omit the link instead of creating an invalid
+placeholder.
+
+Missing `apiVersion` must remain unknown. Treating an empty `apiVersion` as core
+`v1` makes stale or incomplete source data look authoritative, so migrated link
+builders now keep those references display-only unless the source supplies a
+real version.
+
+The standing developer contract now lives in
+`docs/development/shared-resource-model.md`, and both AGENTS guidance and the
+add-resource skill point future resource work there before status, links,
+capabilities, relationship indexes, or fact slots are changed.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2590,13 +2613,15 @@ that actually consumes them.
       projecting into existing DTOs unless a specific consumer needs shared
       facts over Wails. If that happens, document the TypeScript shape and
       narrowing strategy before exposing the facts payload.
-- [ ] Add `DisplayRef`, `ResourceLink`, constructors, validation, and projection
+- [x] ✅ Add `DisplayRef`, `ResourceLink`, constructors, validation, and projection
       helpers when the first relationship-bearing migrated consumer needs them.
       Projection helpers must cover existing exported contracts rather than
       introducing parallel wire identities: backend `ObjectRef`/`RefOrDisplay`,
       object-map `ObjectMapReference`, frontend object refs through existing DTO
-      fields, catalog summaries, and permission descriptors.
-- [ ] Add object-catalog-backed reference resolution helpers when the first
+      fields, catalog summaries, and permission descriptors. Openable links now
+      emit `ref` only, display-only links emit `display` only, and validation
+      rejects ambiguous hybrids.
+- [x] ✅ Add object-catalog-backed reference resolution helpers when the first
       migrated resource family needs openable/display-only relationship links.
       Shared validation must never guess `resource` from `kind`.
 - [x] ✅ Decide the contextual capability integration point with the existing
@@ -2606,13 +2631,19 @@ that actually consumes them.
       existing permission/action infrastructure, preserve stable action IDs and
       Kubernetes authorization attributes, and defer new capability model types
       until a migrated consumer needs them.
-- [ ] Add capability model types only if a migrated consumer uses them; preserve
-      existing action and capability IDs.
-- [ ] Add the relationship index strategy only when a migrated resource family
+- [x] ✅ Add capability model types only if a migrated consumer uses them; preserve
+      existing action and capability IDs. Completed by documenting that migrated
+      consumers use the existing `CapabilityDescriptor`/`PermissionQuery` path
+      and no second capability model is allowed.
+- [x] ✅ Add the relationship index strategy only when a migrated resource family
       needs reverse links. Include stale-data, partial-RBAC, streaming
-      invalidation, and cluster lifecycle tests.
-- [ ] Add facts slots for subsequent GVKs only as their resource families are
-      migrated.
+      invalidation, and cluster lifecycle tests. Completed by standardizing
+      future reverse-link work on the existing object-map index strategy.
+- [x] ✅ Add facts slots for subsequent GVKs only as their resource families are
+      migrated. Completed through Phases 4-13 and documented as a forward rule.
+- [x] ✅ Document the standing shared-resource-model contract for future work in
+      `docs/development/shared-resource-model.md`, backend/frontend AGENTS
+      guidance, and the add-resource skill.
 
 ### Phase 4: Pods
 

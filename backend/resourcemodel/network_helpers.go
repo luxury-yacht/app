@@ -83,35 +83,15 @@ func networkLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
 }
 
 func namespacedResourceLink(clusterID, group, version, kind, resource, namespace, name, uid string) ResourceLink {
-	ref := ResourceRef{
-		ClusterID: clusterID,
-		Group:     group,
-		Version:   version,
-		Kind:      kind,
-		Resource:  resource,
-		Namespace: namespace,
-		Name:      name,
-		UID:       uid,
-	}
-	display := DisplayRef(ref)
-	return ResourceLink{Ref: &ref, Display: &display}
+	return NewNamespacedResourceLink(clusterID, group, version, kind, resource, namespace, name, uid)
 }
 
 func clusterResourceLink(clusterID, group, version, kind, resource, name, uid string) ResourceLink {
-	return namespacedResourceLink(clusterID, group, version, kind, resource, "", name, uid)
+	return NewClusterResourceLink(clusterID, group, version, kind, resource, name, uid)
 }
 
 func displayResourceLink(clusterID, group, version, kind, resource, namespace, name string) ResourceLink {
-	display := DisplayRef{
-		ClusterID: clusterID,
-		Group:     group,
-		Version:   version,
-		Kind:      kind,
-		Resource:  resource,
-		Namespace: namespace,
-		Name:      name,
-	}
-	return ResourceLink{Display: &display}
+	return NewDisplayResourceLink(clusterID, group, version, kind, resource, namespace, name)
 }
 
 func EndpointReady(endpoint discoveryv1.Endpoint) bool {
@@ -138,21 +118,24 @@ func endpointAddressFacts(clusterID, fallbackNamespace string, endpoint discover
 			next.NodeName = *endpoint.NodeName
 		}
 		if endpoint.TargetRef != nil && endpoint.TargetRef.Kind != "" && endpoint.TargetRef.Name != "" {
-			group, version := splitAPIVersion(endpoint.TargetRef.APIVersion)
+			apiVersion := strings.TrimSpace(endpoint.TargetRef.APIVersion)
+			group, version := "", ""
+			if apiVersion != "" {
+				group, version = splitAPIVersion(apiVersion)
+			}
 			namespace := endpoint.TargetRef.Namespace
 			if namespace == "" {
 				namespace = fallbackNamespace
 			}
-			next.TargetRef = &ResourceLink{
-				Display: &DisplayRef{
-					ClusterID: clusterID,
-					Group:     group,
-					Version:   version,
-					Kind:      endpoint.TargetRef.Kind,
-					Namespace: namespace,
-					Name:      endpoint.TargetRef.Name,
-					UID:       string(endpoint.TargetRef.UID),
-				},
+			if version == "" {
+				link := NewDisplayResourceLink(clusterID, group, version, endpoint.TargetRef.Kind, "", namespace, endpoint.TargetRef.Name)
+				if link.Display != nil {
+					link.Display.UID = string(endpoint.TargetRef.UID)
+				}
+				next.TargetRef = &link
+			} else {
+				link := NewNamespacedResourceLink(clusterID, group, version, endpoint.TargetRef.Kind, "", namespace, endpoint.TargetRef.Name, string(endpoint.TargetRef.UID))
+				next.TargetRef = &link
 			}
 		}
 		addresses = append(addresses, next)
@@ -162,7 +145,7 @@ func endpointAddressFacts(clusterID, fallbackNamespace string, endpoint discover
 
 func splitAPIVersion(apiVersion string) (string, string) {
 	if apiVersion == "" {
-		return "", "v1"
+		return "", ""
 	}
 	parts := strings.Split(apiVersion, "/")
 	if len(parts) == 1 {

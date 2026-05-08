@@ -110,18 +110,16 @@ func sortedBytesMapKeys(values map[string][]byte) []string {
 }
 
 func podResourceLink(clusterID string, pod corev1.Pod) ResourceLink {
-	ref := ResourceRef{
-		ClusterID: clusterID,
-		Group:     "",
-		Version:   "v1",
-		Kind:      "Pod",
-		Resource:  "pods",
-		Namespace: pod.Namespace,
-		Name:      pod.Name,
-		UID:       string(pod.UID),
-	}
-	display := DisplayRef(ref)
-	return ResourceLink{Ref: &ref, Display: &display}
+	return NewNamespacedResourceLink(
+		clusterID,
+		"",
+		"v1",
+		"Pod",
+		"pods",
+		pod.Namespace,
+		pod.Name,
+		string(pod.UID),
+	)
 }
 
 func sortResourceLinksByObjectName(links []ResourceLink) {

@@ -12,6 +12,9 @@ Applies to Go code under `backend/`.
     request-shaped and pass cluster-scoped dependencies in from callers.
   - `backend/objectcatalog` is the discovery/catalog source of truth; use it for
     resource identity and browse/catalog listings.
+  - `backend/resourcemodel` owns shared Kubernetes semantics. Before adding or
+    changing resource status, relationship links, object references, capability
+    integration, or fact slots, follow `docs/development/shared-resource-model.md`.
   - Resource handlers follow `resource_<Kind>.go` with adjacent `_test.go` suites (for example `kubeconfigs_test.go`).
 - Manual refreshes and streaming domains belong to the backend refresh registry + ManualQueue; avoid bespoke refresh/streaming code.
 

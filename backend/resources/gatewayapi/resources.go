@@ -398,51 +398,18 @@ func listenerDetailsFromFacts(facts []resourcemodel.GatewayListenerFacts) []type
 }
 
 func resourceLinksToRefOrDisplay(links []resourcemodel.ResourceLink) []types.RefOrDisplay {
-	if len(links) == 0 {
-		return nil
-	}
-	refs := make([]types.RefOrDisplay, 0, len(links))
-	for _, link := range links {
-		refs = append(refs, refOrDisplayFromResourceLink(link))
-	}
-	return refs
+	return types.RefOrDisplaySliceFromResourceLinks(links)
 }
 
 func refOrDisplayFromResourceLink(link resourcemodel.ResourceLink) types.RefOrDisplay {
-	if link.Ref != nil {
-		return types.RefOrDisplay{Ref: &types.ObjectRef{
-			ClusterID: link.Ref.ClusterID,
-			Group:     link.Ref.Group,
-			Version:   link.Ref.Version,
-			Kind:      link.Ref.Kind,
-			Namespace: link.Ref.Namespace,
-			Name:      link.Ref.Name,
-		}}
-	}
-	if link.Display != nil {
-		return types.RefOrDisplay{Display: &types.DisplayRef{
-			ClusterID: link.Display.ClusterID,
-			Group:     link.Display.Group,
-			Kind:      link.Display.Kind,
-			Namespace: link.Display.Namespace,
-			Name:      link.Display.Name,
-		}}
-	}
-	return types.RefOrDisplay{}
+	return types.RefOrDisplayFromResourceLink(link)
 }
 
 func objectRefFromResourceLink(link *resourcemodel.ResourceLink) types.ObjectRef {
 	if link == nil || link.Ref == nil {
 		return types.ObjectRef{}
 	}
-	return types.ObjectRef{
-		ClusterID: link.Ref.ClusterID,
-		Group:     link.Ref.Group,
-		Version:   link.Ref.Version,
-		Kind:      link.Ref.Kind,
-		Namespace: link.Ref.Namespace,
-		Name:      link.Ref.Name,
-	}
+	return types.ObjectRefFromResourceRef(*link.Ref)
 }
 
 func conditionStatesFromFacts(facts []resourcemodel.ConditionFacts) []types.ConditionState {

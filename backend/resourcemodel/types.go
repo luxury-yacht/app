@@ -39,8 +39,8 @@ type ResourceRef struct {
 
 type DisplayRef struct {
 	ClusterID string `json:"clusterId"`
-	Group     string `json:"group"`
-	Version   string `json:"version"`
+	Group     string `json:"group,omitempty"`
+	Version   string `json:"version,omitempty"`
 	Kind      string `json:"kind"`
 	Resource  string `json:"resource,omitempty"`
 	Namespace string `json:"namespace,omitempty"`

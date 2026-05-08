@@ -41,7 +41,16 @@ export interface ResourceRef {
   uid?: string;
 }
 
-export type DisplayRef = ResourceRef;
+export interface DisplayRef {
+  clusterId: string;
+  group?: string;
+  version?: string;
+  kind: string;
+  resource?: string;
+  namespace?: string;
+  name?: string;
+  uid?: string;
+}
 
 export interface ResourceLink {
   ref?: ResourceRef;

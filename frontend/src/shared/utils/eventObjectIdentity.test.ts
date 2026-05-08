@@ -158,6 +158,28 @@ describe('buildEventObjectReference', () => {
     expect(buildEventObjectReference(input)).toBeUndefined();
     expect(canResolveEventObjectReference(input)).toBe(false);
   });
+
+  it('fails closed for invalid ResourceLink values instead of falling back to legacy fields', async () => {
+    const input = {
+      involvedObject: {
+        ref: {
+          clusterId: 'cluster-a',
+          group: 'apps',
+          version: '',
+          kind: 'Deployment',
+          name: 'api',
+        },
+      },
+      object: 'Pod/api',
+      objectApiVersion: 'v1',
+      objectNamespace: 'default',
+      objectUid: 'pod-uid',
+      clusterId: 'cluster-a',
+    };
+
+    await expect(resolveEventObjectReference(input)).resolves.toBeUndefined();
+    expect(findCatalogObjectByUIDMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('resolveEventObjectReference', () => {

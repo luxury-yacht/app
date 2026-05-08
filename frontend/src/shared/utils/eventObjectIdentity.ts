@@ -2,12 +2,16 @@ import {
   parseApiVersion,
   resolveBuiltinGroupVersion,
 } from '@shared/constants/builtinGroupVersions';
-import { readCatalogObjectByUID, requestData } from '@/core/data-access';
 import {
   buildRequiredObjectReference,
   type ResolvedObjectReference,
 } from '@shared/utils/objectIdentity';
 import type { ResourceLink } from '@core/refresh/types';
+import {
+  resourceLinkToObjectReference,
+  resolveCatalogObjectByUID,
+  validateResourceLink,
+} from '@shared/utils/resourceLinkIdentity';
 
 export interface ParsedEventObjectTarget {
   objectType: string;
@@ -57,14 +61,8 @@ export function buildEventObjectReference(
   input: EventObjectReferenceInput
 ): ResolvedObjectReference | undefined {
   if (input.involvedObject) {
-    if (!input.involvedObject.ref) {
-      return undefined;
-    }
     try {
-      return buildRequiredObjectReference({
-        ...input.involvedObject.ref,
-        clusterName: input.clusterName,
-      });
+      return resourceLinkToObjectReference(input.involvedObject, input.clusterName);
     } catch {
       return undefined;
     }
@@ -107,7 +105,7 @@ export function buildEventObjectReference(
 
 export function canResolveEventObjectReference(input: EventObjectReferenceInput): boolean {
   if (input.involvedObject) {
-    return Boolean(input.involvedObject.ref);
+    return Boolean(input.involvedObject.ref && validateResourceLink(input.involvedObject));
   }
 
   return Boolean(
@@ -119,8 +117,8 @@ export function canResolveEventObjectReference(input: EventObjectReferenceInput)
 export async function resolveEventObjectReference(
   input: EventObjectReferenceInput
 ): Promise<ResolvedObjectReference | undefined> {
-  if (input.involvedObject && !input.involvedObject.ref) {
-    return undefined;
+  if (input.involvedObject) {
+    return buildEventObjectReference(input);
   }
 
   const direct = buildEventObjectReference(input);
@@ -135,17 +133,7 @@ export async function resolveEventObjectReference(
   }
 
   try {
-    const result = await requestData({
-      resource: 'catalog-object-by-uid',
-      reason: 'user',
-      read: () => readCatalogObjectByUID(clusterId, objectUid),
-    });
-    const match = result.status === 'executed' ? result.data : null;
-    if (!match) {
-      return undefined;
-    }
-
-    return buildRequiredObjectReference(match);
+    return await resolveCatalogObjectByUID(clusterId, objectUid);
   } catch {
     return undefined;
   }
