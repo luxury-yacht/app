@@ -229,11 +229,13 @@ type ResourceMetadata struct {
 	Annotations       map[string]string
 	CreationTimestamp time.Time
 	ResourceVersion   string
+	DeletionTimestamp *time.Time
+	Finalizers        []string
 }
 
 type ResourceStatusPresentation struct {
 	Label              string
-	State              string
+	State              ResourceState
 	Reason             string
 	Message            string
 	ObservedGeneration int64
@@ -249,9 +251,20 @@ type ResourceStatusSource struct {
 
 type ResourceStatusBadge struct {
 	Label  string
-	State  string
+	State  ResourceState
 	Reason string
 }
+
+type ResourceState string
+
+const (
+	ResourceStateHealthy    ResourceState = "healthy"
+	ResourceStateDegraded   ResourceState = "degraded"
+	ResourceStateUnhealthy  ResourceState = "unhealthy"
+	ResourceStateInactive   ResourceState = "inactive"
+	ResourceStateRefreshing ResourceState = "refreshing"
+	ResourceStateUnknown    ResourceState = "unknown"
+)
 
 type ResourceRelation struct {
 	Type     string
@@ -282,7 +295,7 @@ Capabilities must be modeled separately from intrinsic resource facts.
 type ResourceCapabilityModel struct {
 	Target   ResourceLink
 	Context  CapabilityContext
-	Actions  ResourceCapabilities
+	Actions  map[ActionID]CapabilityFact
 }
 
 type CapabilityContext struct {
@@ -292,19 +305,22 @@ type CapabilityContext struct {
 	ActionOptions    map[string]any
 }
 
-type ResourceCapabilities struct {
-	Delete     CapabilityFact
-	Edit       CapabilityFact
-	Restart    CapabilityFact
-	Scale      CapabilityFact
-	Logs       CapabilityFact
-	Exec       CapabilityFact
-	Trigger    CapabilityFact
-	Suspend    CapabilityFact
-	Cordon     CapabilityFact
-	Drain      CapabilityFact
-	DeletePods CapabilityFact
-}
+type ActionID string
+
+const (
+	ActionDelete     ActionID = "delete"
+	ActionEdit       ActionID = "edit"
+	ActionRestart    ActionID = "restart"
+	ActionScale      ActionID = "scale"
+	ActionLogs       ActionID = "logs"
+	ActionExec       ActionID = "exec"
+	ActionTrigger    ActionID = "trigger"
+	ActionSuspend    ActionID = "suspend"
+	ActionCordon     ActionID = "cordon"
+	ActionDrain      ActionID = "drain"
+	ActionDeletePods ActionID = "deletePods"
+	ActionViewSecretValues ActionID = "viewSecretValues"
+)
 
 type CapabilityFact struct {
 	Allowed  bool
@@ -330,6 +346,11 @@ Capability builders may consume `ResourceModel`, but the shared resource model
 must not embed capability facts directly. This keeps object semantics stable
 while allowing permissions, diagnostics, active operations, and option-dependent
 actions to change independently.
+
+`Reason` explains a known denial or disabled state, such as missing RBAC or an
+in-flight operation. `Error` records a failed check, such as discovery or
+permission-check transport failure. Consumers should show `Error` as diagnostic
+failure context rather than treating it as a normal denial reason.
 
 ### Resource Facts Union
 
@@ -389,6 +410,17 @@ type ResourceFacts struct {
 }
 ```
 
+The implementation must decide the exported TypeScript shape before Phase 2.
+The internal Go model may use explicit facts structs, but Wails-facing DTOs
+should avoid serializing dozens of null fields per object. Acceptable options:
+
+- a discriminated facts payload such as `{kind: "Pod", pod: PodFacts}`
+- a Go union with `json:",omitempty"` on every facts pointer and generated
+  TypeScript types verified for ergonomic narrowing
+
+Record the decision as an ADR-style note before migrating the first resource
+family. Do not let each builder invent its own exported facts shape.
+
 ### Shared Supporting Shapes
 
 These supporting shapes are shared by multiple resource facts.
@@ -411,6 +443,7 @@ type ResourceListFacts struct {
 	Storage          *resource.Quantity
 	EphemeralStorage *resource.Quantity
 	Pods             *resource.Quantity
+	// Extended resource map presence distinguishes absence from a zero quantity.
 	ExtendedResources map[string]resource.Quantity
 }
 
@@ -440,17 +473,36 @@ type ContainerFacts struct {
 	ImagePullPolicy string
 	Ready           bool
 	RestartCount    int32
-	State           string
+	State           ContainerState
 	Reason          string
 	Message         string
 	StartedAt       *time.Time
 	Ports           []ContainerPortFacts
 	VolumeMounts    []string
-	Environment     map[string]string
+	Environment     []EnvVarFacts
 	Command          []string
 	Args             []string
 	Requests         ResourceListFacts
 	Limits           ResourceListFacts
+}
+
+type ContainerState string
+
+const (
+	ContainerStateWaiting    ContainerState = "waiting"
+	ContainerStateRunning    ContainerState = "running"
+	ContainerStateTerminated ContainerState = "terminated"
+	ContainerStateUnknown    ContainerState = "unknown"
+)
+
+type EnvVarFacts struct {
+	Name                string
+	Value               string
+	ValueFromRef        *ResourceLink
+	ValueFromKey        string
+	ValueFromFieldPath  string
+	ValueFromResource   string
+	Optional            *bool
 }
 
 type ContainerPortFacts struct {
@@ -534,6 +586,7 @@ type NetworkPolicyRuleFacts struct {
 
 type NetworkPolicyPortFacts struct {
 	Protocol string
+	// String because Kubernetes network policy ports may be numeric or named.
 	Port     string
 	EndPort   *int32
 }
@@ -576,13 +629,36 @@ type VolumeSourceFacts struct {
 }
 
 type MetricFacts struct {
-	Type   string
-	Target map[string]string
+	Type            string
+	ResourceName    string
+	ContainerName   string
+	MetricName      string
+	DescribedObject *ResourceLink
+	Selector        map[string]string
+	Target          MetricTargetFacts
 }
 
 type MetricStatusFacts struct {
-	Type    string
-	Current map[string]string
+	Type            string
+	ResourceName    string
+	ContainerName   string
+	MetricName      string
+	DescribedObject *ResourceLink
+	Selector        map[string]string
+	Current         MetricCurrentFacts
+}
+
+type MetricTargetFacts struct {
+	Type               string
+	Value              *resource.Quantity
+	AverageValue       *resource.Quantity
+	AverageUtilization *int32
+}
+
+type MetricCurrentFacts struct {
+	Value              *resource.Quantity
+	AverageValue       *resource.Quantity
+	AverageUtilization *int32
 }
 
 type ScalingBehaviorFacts struct {
@@ -649,7 +725,6 @@ type CRDVersionFacts struct {
 	Served     bool
 	Storage    bool
 	Deprecated bool
-	Schema     map[string]any
 }
 
 type WebhookFacts struct {
@@ -716,12 +791,19 @@ Applies to `Namespace`.
 
 ```go
 type NamespaceFacts struct {
-	Phase            string
-	HasWorkloads     bool
-	WorkloadsUnknown bool
-	ResourceQuotas   []ResourceLink
-	LimitRanges      []ResourceLink
+	RawPhase       string
+	WorkloadState  NamespaceWorkloadState
+	ResourceQuotas []ResourceLink
+	LimitRanges    []ResourceLink
 }
+
+type NamespaceWorkloadState string
+
+const (
+	NamespaceWorkloadStateUnknown NamespaceWorkloadState = "unknown"
+	NamespaceWorkloadStateNone    NamespaceWorkloadState = "none"
+	NamespaceWorkloadStatePresent NamespaceWorkloadState = "present"
+)
 ```
 
 ### Node
@@ -754,7 +836,7 @@ Applies to `Pod`.
 
 ```go
 type PodFacts struct {
-	Phase            string
+	RawPhase         string
 	ReadyContainers  int
 	TotalContainers  int
 	RestartCount     int32
@@ -777,11 +859,13 @@ type PodFacts struct {
 	InitContainers    []ContainerFacts
 	Volumes           []VolumeFacts
 	Tolerations       []TolerationFacts
-	Affinity          map[string]any
-	SecurityContext   map[string]any
 	Conditions        []ConditionFacts
 }
 ```
+
+`RawPhase` fields preserve Kubernetes API phase values for detail display and
+debugging. Consumers must use `ResourceModel.Status` for primary status labels,
+sorting, filtering, and severity instead of reinterpreting raw phase values.
 
 ### Workload Controllers
 
@@ -932,8 +1016,6 @@ Applies to `ConfigMap` and `Secret`.
 
 ```go
 type ConfigMapFacts struct {
-	Data           map[string]string
-	BinaryData     map[string]string
 	DataKeys       []string
 	BinaryDataKeys []string
 	DataCount      int
@@ -948,7 +1030,6 @@ type SecretFacts struct {
 	DataSizeBytes int64
 	Immutable     *bool
 	UsedBy        []ResourceLink
-	ValuesAvailableInDetail bool
 }
 ```
 
@@ -1080,7 +1161,7 @@ Applies to `PersistentVolume`, `PersistentVolumeClaim`, and `StorageClass`.
 
 ```go
 type PersistentVolumeFacts struct {
-	Phase          string
+	RawPhase       string
 	Capacity       ResourceListFacts
 	AccessModes    []string
 	ReclaimPolicy  string
@@ -1094,7 +1175,7 @@ type PersistentVolumeFacts struct {
 }
 
 type PersistentVolumeClaimFacts struct {
-	Phase        string
+	RawPhase     string
 	Requested    ResourceListFacts
 	Capacity     ResourceListFacts
 	AccessModes  []string
@@ -1239,7 +1320,6 @@ Applies to `helmrelease`.
 
 ```go
 type HelmReleaseFacts struct {
-	Namespace   string
 	TypeAlias   string
 	Chart       string
 	Version     string
@@ -1248,8 +1328,6 @@ type HelmReleaseFacts struct {
 	Status      string
 	Updated     *time.Time
 	Description string
-	Notes       string
-	Values      map[string]any
 	Resources   []ResourceLink
 	History     []HelmRevisionFacts
 }
@@ -1261,26 +1339,17 @@ Applies to `Event`.
 
 ```go
 type EventFacts struct {
-	Name           string
-	UID            string
-	ResourceVersion string
-	Type           string
-	EventType      string
-	Reason         string
-	Message        string
-	Count          int32
-	FirstTimestamp *time.Time
-	LastTimestamp  *time.Time
-	EventTime      *time.Time
-	InvolvedObject ResourceLink
-	InvolvedObjectName string
-	InvolvedObjectKind string
-	InvolvedObjectNamespace string
-	InvolvedObjectUID string
-	InvolvedObjectAPIVersion string
-	Source         string
-	Object         string
-	AgeTimestamp  int64
+	Name                string
+	UID                 string
+	ResourceVersion     string
+	Type                string
+	Reason              string
+	Message             string
+	Count               int32
+	FirstTimestamp      *time.Time
+	LastTimestamp       *time.Time
+	EventTime           *time.Time
+	InvolvedObject      ResourceLink
 	ReportingController string
 	ReportingInstance   string
 }
@@ -1295,11 +1364,15 @@ type CustomResourceFacts struct {
 	APIVersion string
 	Plural     string
 	Scope      string
-	Summary    map[string]string
 	Conditions []ConditionFacts
-	RawStatus  map[string]any
 }
 ```
+
+`CustomResourceFacts` is the generic fallback for custom resources and known
+kinds that have not been promoted to an explicit facts type. Raw custom-resource
+spec/status payloads are detail-only data. The shared model should extract only
+semantic status conventions it owns, such as conditions, phase/state labels,
+ready markers, and observed generation.
 
 Generic fallback resources still need the common `ResourceModel` fields. They
 should not be allowed to drop `clusterId`, `group`, `version`, or `kind` just
@@ -1352,8 +1425,8 @@ navigation easier.
 
 ### Custom Resource Status
 
-`CustomResourceFacts` cannot stop at raw status forever. It needs explicit,
-tested extraction rules for common conventions:
+`CustomResourceFacts` cannot treat raw status as shared semantics. It needs
+explicit, tested extraction rules for common conventions:
 
 - `status.conditions[]`
 - `status.phase`
@@ -1361,8 +1434,30 @@ tested extraction rules for common conventions:
 - `status.ready`
 - `status.observedGeneration`
 
-When a CRD has no known convention, the fallback should expose raw status and an
-`unknown` or neutral status presentation rather than guessing.
+When a CRD has no known convention, the shared model should produce an `unknown`
+or neutral status presentation rather than guessing. Raw status remains
+detail-only data for inspection workflows.
+
+### Reverse-Link Derivation
+
+Reverse links such as `ConfigMapFacts.UsedBy`, `SecretFacts.UsedBy`,
+`ServiceAccountFacts.UsedByPods`, `PersistentVolumeClaimFacts.MountedBy`,
+workload pod lists, node pod lists, and RBAC reverse bindings must not be
+computed by ad hoc N-by-M scans in every builder.
+
+Before Phase 2 starts, add a shared relationship index for each refresh build or
+streaming update batch. The index should be built once from informers/catalog
+summaries available in that cluster context and then passed to resource model
+builders. Builders may add direct forward links from their own object, but
+reverse-link fields must come from the shared index.
+
+The index should preserve `ResourceLink` semantics:
+
+- use openable `ResourceRef` only when the catalog or typed object provides full
+  `clusterId`, `group`, `version`, `kind`, namespace, and name
+- use `DisplayRef` for unresolved, external, deleted, or partial references
+- expose cache/version metadata so refresh diagnostics can identify stale
+  relationship data
 
 ### Capability Facts
 
@@ -1394,6 +1489,11 @@ refresh payloads. Each migration phase needs an explicit compatibility decision:
 either migrate all consumers for that resource family in one change or keep any
 temporary fields private to the phase and remove them before calling the phase
 complete.
+
+Phase 1 must lock the TypeScript facts shape and document it in
+`frontend/AGENTS.md` or a linked development note before any resource family
+migrates. The decision should cover whether facts are exposed as a discriminated
+payload or an `omitempty` union and how frontend consumers narrow the type.
 
 ## Consumer Responsibilities
 
@@ -1492,6 +1592,8 @@ completed.
 - [ ] Add contextual capability model types outside `ResourceModel`.
 - [ ] Add an explicit facts slot for every supported GVK and allow shared
       structs only for common substructure.
+- [ ] Decide and document the Wails/TypeScript facts shape.
+- [ ] Add the shared reverse-link index strategy and tests.
 - [ ] Add tests for shared model identity and status invariants.
 
 ### Phase 2: Nodes
@@ -1656,6 +1758,11 @@ returning.
 - Secret values are not exposed through shared facts.
 - Capabilities are produced by contextual capability builders, not embedded in
   intrinsic resource facts.
+- Reverse links are computed through a shared relationship index, not repeated
+  per-builder scans.
+- Table/detail/map projection of the shared model has no measurable refresh
+  latency regression against the largest cluster fixture used by prerelease
+  quality checks.
 - Duplicated semantic helpers are removed as each resource family migrates.
 - Existing table, detail, and object-map UI behavior is preserved except where
   behavior is intentionally corrected for consistency.
