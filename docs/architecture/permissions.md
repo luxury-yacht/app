@@ -1,4 +1,4 @@
-# Permissions system
+# Permissions
 
 This document explains how Luxury Yacht checks Kubernetes RBAC permissions, how domains degrade gracefully when a user has partial access, and what to watch out for when adding or modifying domains.
 
@@ -14,11 +14,11 @@ These systems are independent. The refresh subsystem's `permissions.Checker` and
 
 ---
 
-# Refresh subsystem permissions (SSAR)
+## Refresh Domain Permissions
 
 This section covers the backend refresh subsystem's permission checking, which gates domain registration and runtime access.
 
-## Key files
+### Key Files
 
 | File                                            | Role                                                                                  |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -31,11 +31,11 @@ This section covers the backend refresh subsystem's permission checking, which g
 | `backend/internal/config/config.go`             | Timing constants (`PermissionCacheTTL`, `PermissionCacheStaleGracePeriod`, etc.)      |
 | `backend/refresh/types.go`                      | `DomainConfig` struct including the `PermissionDenied` flag                           |
 
-## Permission checker (`permissions.Checker`)
+### Permission Checker (`permissions.Checker`)
 
 The checker wraps Kubernetes SSAR calls with caching and deduplication.
 
-### Cache layers
+#### Cache Layers
 
 Each permission decision flows through these layers, in order:
 
@@ -46,11 +46,11 @@ Each permission decision flows through these layers, in order:
 
 Concurrent SSAR calls for the same cache key are deduplicated via `singleflight`.
 
-### Why stale-while-revalidate matters
+#### Why Stale-While-Revalidate Matters
 
 Without it, every snapshot request hitting an expired cache entry blocks on an SSAR call. When multiple domains need permission re-validation simultaneously (e.g., after a namespace switch triggers new domain registrations), the combined SSAR load can cause multi-second delays. Stale-while-revalidate lets domain requests proceed with the last-known-good decision while the refresh happens in the background.
 
-## Startup registration flow
+### Startup Registration Flow
 
 The startup flow is driven by `registrations.go`:
 
@@ -66,25 +66,25 @@ NewSubsystemWithServices()
          3. Register the domain's builder with the registry
 ```
 
-### Permission-denied placeholder domains
+#### Permission-Denied Placeholder Domains
 
 When a domain fails its permission checks at startup, `RegisterPermissionDeniedDomain` registers a stub `BuildSnapshot` that always returns `PermissionDeniedError`. The `DomainConfig.PermissionDenied` flag is set to `true`.
 
 At runtime, `ensurePermissions()` checks this flag and **short-circuits** -- it skips SSAR calls entirely for placeholder domains. The stub builder returns the correct `PermissionDeniedError` on its own. This eliminates redundant SSAR calls for every denied domain on every request once the 2-minute cache expires.
 
-## Runtime permission checks (`defaultPermissionChecks`)
+### Runtime Permission Checks (`defaultPermissionChecks`)
 
 The function `defaultPermissionChecks()` in `permission_checks.go` is the single source of truth for which permissions each domain requires. It maps domain names to `permissionCheck` structs that specify:
 
 - A list of `permissionRequirement` entries (group, resource, verb)
 - A mode: `requireAll` or `requireAny`
 
-### `requireAll` vs `requireAny`
+#### `requireAll` vs `requireAny`
 
 - **`requireAll`** -- The domain is blocked unless every listed resource is accessible. Used for single-resource domains (e.g., `namespaces`, `pods`, `nodes`).
 - **`requireAny`** -- The domain is allowed if at least one resource is accessible. Used for multi-resource domains where partial data is useful (e.g., `namespace-workloads`, `namespace-config`, `cluster-rbac`).
 
-### Which domains use which mode
+#### Which Domains Use Which Mode
 
 **`requireAll` (single-resource or all-or-nothing)**:
 
@@ -104,7 +104,7 @@ The function `defaultPermissionChecks()` in `permission_checks.go` is the single
 - `cluster-config` (storageclasses, ingressclasses, webhooks)
 - `cluster-overview` (nodes, namespaces)
 
-## Partial-data pattern for multi-resource domains
+### Partial-Data Pattern For Multi-Resource Domains
 
 Multi-resource domains that use `requireAny` follow the `cluster-config` reference pattern:
 
@@ -113,7 +113,7 @@ Multi-resource domains that use `requireAny` follow the `cluster-config` referen
 3. **Nil-lister guards in Build()** -- The builder checks each lister for nil before calling it. If nil, that resource type is simply omitted from the snapshot.
 4. **`listRegistration` with `allowAny: true`** -- In `registrations.go`, the domain uses `listRegistration` instead of `directRegistration` or `listWatchRegistration`. The `allowAny` flag tells the permission gate to register the domain if any check passes, passing the per-resource allow map to the register callback.
 
-### Example: namespace-rbac
+#### Example: namespace-rbac
 
 ```go
 // permission_checks.go
@@ -153,9 +153,9 @@ if b.roleLister != nil {
 }
 ```
 
-## Guidelines for future changes
+### Guidelines For Future Changes
 
-### Adding a new multi-resource domain
+#### Adding A New Multi-Resource Domain
 
 1. Define a `*Permissions` struct with `Include*` booleans for each resource.
 2. Update `Register*Domain()` to accept the struct and conditionally wire listers.
@@ -165,11 +165,11 @@ if b.roleLister != nil {
 6. Add the domain's resources to `preflightRequests` (usually automatic from the registration checks).
 7. Update `TestDomainRegistrationOrder` in `registrations_test.go` if the domain is new.
 
-### Adding a new single-resource domain
+#### Adding A New Single-Resource Domain
 
 Use `requireAll` in `permission_checks.go` and `directRegistration` in `registrations.go`. No permissions struct is needed.
 
-### Common mistakes to avoid
+#### Common Mistakes To Avoid
 
 - **Using `requireAll` for multi-resource domains** -- This blocks the entire domain when any single resource is denied, even when the user has valid access to other resources. Use `requireAny` with the partial-data pattern instead.
 - **Forgetting nil-lister guards** -- If a domain uses the partial-data pattern, every lister access in `Build()` must check for nil. Otherwise a nil pointer panic will crash the snapshot build.
@@ -177,13 +177,13 @@ Use `requireAll` in `permission_checks.go` and `directRegistration` in `registra
 - **Adding SSAR checks without considering cache pressure** -- Each new permission requirement adds SSAR calls at startup and potentially at runtime. Keep the number of resources per domain reasonable and rely on `preflightRequests` to pre-warm the cache.
 - **Modifying `PermissionCacheTTL` or `PermissionCacheStaleGracePeriod` without understanding the tradeoff** -- Shorter TTLs detect RBAC changes faster but increase SSAR load. The stale grace period must be shorter than the TTL to be meaningful. Current values: TTL=2m, grace=30s.
 
-### Testing
+#### Testing
 
 - **`registrations_test.go`** -- `TestDomainRegistrationOrder` must list every domain in the exact registration order. Update it when adding or reordering domains.
 - **`service_test.go`** -- Tests the runtime permission gate. `TestServiceBuildBlocksPermissionDenied` must deny ALL resources for `requireAny` domains. `TestServiceBuildAllowsPartialPermissions` verifies that partial access works. `TestServiceBuildSkipsEnsureForPermissionDeniedDomain` verifies the SSAR skip optimization.
 - **`checker_test.go`** -- Tests cache behavior including stale-while-revalidate. `TestCheckerStaleWhileRevalidate` verifies stale returns + background refresh. `TestCheckerStaleGracePeriodExpired` verifies blocking fetch beyond grace.
 
-### Timing constants reference
+#### Timing Constants Reference
 
 | Constant                          | Default | Purpose                                                 |
 | --------------------------------- | ------- | ------------------------------------------------------- |
@@ -195,11 +195,11 @@ Use `requireAll` in `permission_checks.go` and `directRegistration` in `registra
 
 ---
 
-# UI permission map (SSRR + SSAR)
+## UI Action Permissions
 
 This section covers the frontend permission system that gates context menu actions. It is completely independent of the refresh subsystem permissions above.
 
-## Architecture
+### Architecture
 
 The UI permission system replaces per-check SSAR calls with per-namespace SSRR (SelfSubjectRulesReview) calls. One SSRR API call returns all RBAC rules for the current user in a given namespace. The backend matches permission queries locally against the cached rules.
 

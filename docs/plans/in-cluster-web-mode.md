@@ -15,16 +15,16 @@ Add a web application mode to Luxury Yacht so it can run in-cluster as a multi-c
 
 ## Architecture Decisions
 
-| Decision        | Choice                                         | Rationale                                                |
-| --------------- | ---------------------------------------------- | -------------------------------------------------------- |
-| Backend API     | REST + WebSocket                               | Natural extension of existing HTTP refresh API pattern   |
-| Build strategy  | Go build tags, separate entrypoints            | Server binary has zero Wails/CGo dependency              |
-| Persistence     | CRDs + Secrets in home cluster                 | Kubernetes-native, no external database                  |
-| User auth       | Per-user stateless JWT per-request             | No shared session store needed across pods               |
-| Cluster auth    | Pluggable provider interface                   | Extensible to cloud-specific providers                   |
+| Decision        | Choice                                           | Rationale                                                |
+| --------------- | ------------------------------------------------ | -------------------------------------------------------- |
+| Backend API     | REST + WebSocket                                 | Natural extension of existing HTTP refresh API pattern   |
+| Build strategy  | Go build tags, separate entrypoints              | Server binary has zero Wails/CGo dependency              |
+| Persistence     | CRDs + Secrets in home cluster                   | Kubernetes-native, no external database                  |
+| User auth       | Per-user stateless JWT per-request               | No shared session store needed across pods               |
+| Cluster auth    | Pluggable provider interface                     | Extensible to cloud-specific providers                   |
 | Multi-pod       | Stateless main pods + singleton session pod (v1) | API path scales horizontally without sticky sessions     |
-| Port forwarding | HTTP proxy (v1), WebSocket TCP tunnel (future) | HTTP proxy covers majority of use cases                  |
-| Authorization   | K8s RBAC via user impersonation                | No app-level authz logic, leverages standard K8s tooling |
+| Port forwarding | HTTP proxy (v1), WebSocket TCP tunnel (future)   | HTTP proxy covers majority of use cases                  |
+| Authorization   | K8s RBAC via user impersonation                  | No app-level authz logic, leverages standard K8s tooling |
 
 ## Project Structure
 

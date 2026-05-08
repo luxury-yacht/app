@@ -22,7 +22,7 @@ detail/action service layer.
 1. **Identify the resource's API group and package.** For rich object details/actions, look at existing resources in `backend/resources/` to find the right category directory (workloads, network, storage, config, policy, etc.). If none fits, create a new one. For table/list data, use `backend/refresh/snapshot` instead.
 2. **Read the existing pattern.** Read at least one complete example in the same category — e.g., `backend/resources/workloads/deployments.go` for workloads, `backend/resources/network/` for networking resources.
 3. **Identify related resources.** Deployments relate to ReplicaSets and Pods. What does the new resource relate to? This determines what data the detail view should aggregate.
-4. **Follow the shared resource model contracts.** Read `docs/development/shared-resource-model.md` before adding status, relationship links, capability checks, or object references. The backend owns status semantics; frontend status classes come from `statusPresentation`; relationship links use `resourcemodel.ResourceLink`; object references must carry `clusterId`, `group`, `version`, `kind`, and concrete object names.
+4. **Follow the shared resource model contracts.** Read `docs/architecture/shared-resource-model.md` before adding status, relationship links, capability checks, or object references. The backend owns status semantics; frontend status classes come from `statusPresentation`; relationship links use `resourcemodel.ResourceLink`; object references must carry `clusterId`, `group`, `version`, `kind`, and concrete object names.
    Do not guess `resource` from `kind`, and do not treat an empty Kubernetes
    `apiVersion` as core `v1`.
 

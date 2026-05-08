@@ -228,7 +228,7 @@ Notably missing:
 1. Low: Source names are still accepted as free-form values at API boundaries,
    so non-canonical or one-off sources can still drift.
 2. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
-    buffer, but becomes a concern if the buffer grows.
+   buffer, but becomes a concern if the buffer grows.
 
 ### Application Logs Are Not Structured Enough For Multi-Cluster Diagnosis
 

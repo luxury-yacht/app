@@ -139,7 +139,7 @@ interface TabsProps {
   onActivate: (id: string) => void;
 
   /** Required, for screen readers. Per-consumer values listed below. */
-  "aria-label": string;
+  'aria-label': string;
 
   /**
    * Overflow behavior. Default 'scroll'. When 'scroll', the strip measures
@@ -150,7 +150,7 @@ interface TabsProps {
    * (250ms ease-out-cubic). The active tab is auto-scrolled into view on
    * activation. Set to 'none' to disable overflow entirely.
    */
-  overflow?: "scroll" | "none";
+  overflow?: 'scroll' | 'none';
 
   /**
    * - 'fit' (default): each tab takes its content width, clamped between
@@ -158,7 +158,7 @@ interface TabsProps {
    * - 'equal': all tabs share the strip width equally (flex: 1 1 0),
    *   each clamped between minTabWidth and maxTabWidth.
    */
-  tabSizing?: "fit" | "equal";
+  tabSizing?: 'fit' | 'equal';
 
   /**
    * Floor for tab width. Mode-specific default:
@@ -177,7 +177,7 @@ interface TabsProps {
    * Object Panel and Diagnostics use 'uppercase'; Cluster and Dockable
    * use 'none'. Implemented via a modifier class on the strip root.
    */
-  textTransform?: "none" | "uppercase";
+  textTransform?: 'none' | 'uppercase';
 
   /** Merged onto the root <div className="tab-strip">. */
   className?: string;
@@ -348,14 +348,14 @@ pointer events later without changing wrapper-side code.
 ```ts
 // frontend/src/shared/components/tabs/dragCoordinator/types.ts
 type TabDragPayload =
-  | { kind: "cluster-tab"; clusterId: string }
-  | { kind: "dockable-tab"; panelId: string; sourceGroupId: string };
+  | { kind: 'cluster-tab'; clusterId: string }
+  | { kind: 'dockable-tab'; panelId: string; sourceGroupId: string };
 
-type TabDragKind = TabDragPayload["kind"];
+type TabDragKind = TabDragPayload['kind'];
 
 // Wire format key for DataTransfer. Namespaced so it doesn't collide
 // with anything the OS or other apps put in the clipboard during drag.
-const TAB_DRAG_DATA_TYPE = "application/x-luxury-yacht-tab";
+const TAB_DRAG_DATA_TYPE = 'application/x-luxury-yacht-tab';
 ```
 
 This is the load-bearing type that makes cross-system drops **impossible
@@ -388,7 +388,7 @@ function useTabDragSource(
       offsetX: number;
       offsetY: number;
     } | null;
-  },
+  }
 ): TabDragSourceProps;
 ```
 
@@ -403,7 +403,7 @@ function useTabDragSource(
  */
 function useTabDragSourceFactory(): (
   payload: TabDragPayload | null,
-  options?: UseTabDragSourceOptions,
+  options?: UseTabDragSourceOptions
 ) => TabDragSourceProps;
 ```
 
@@ -425,7 +425,7 @@ function useTabDropTarget<K extends TabDragKind>(opts: {
   onDrop: (
     payload: Extract<TabDragPayload, { kind: K }>,
     event: DragEvent,
-    insertIndex: number,
+    insertIndex: number
   ) => void;
   onDragEnter?: (payload: Extract<TabDragPayload, { kind: K }>) => void;
   onDragLeave?: () => void;
@@ -449,10 +449,7 @@ function useTabDropTarget<K extends TabDragKind>(opts: {
  */
 function TabDragProvider(props: {
   children: ReactNode;
-  onTearOff?: (
-    payload: TabDragPayload,
-    cursor: { x: number; y: number },
-  ) => void;
+  onTearOff?: (payload: TabDragPayload, cursor: { x: number; y: number }) => void;
 }): JSX.Element;
 ```
 
@@ -480,7 +477,7 @@ const tabDescriptors: TabDescriptor[] = tabs.map((tab) => ({
   id: tab.id,
   label: tab.label,
   extraProps: {
-    ...makeDragSource({ kind: "cluster-tab", clusterId: tab.id }),
+    ...makeDragSource({ kind: 'cluster-tab', clusterId: tab.id }),
   } as HTMLAttributes<HTMLElement>,
 }));
 ```
@@ -537,8 +534,7 @@ left: -9999px`) and provide `getDragImage` returning a ref to it. The
   position left by one, so the adjusted insert index is:
 
   ```ts
-  const adjustedInsert =
-    sourceIdx >= 0 && sourceIdx < insertIndex ? insertIndex - 1 : insertIndex;
+  const adjustedInsert = sourceIdx >= 0 && sourceIdx < insertIndex ? insertIndex - 1 : insertIndex;
   if (adjustedInsert === sourceIdx) return; // no-op drop on self
   ```
 
@@ -631,24 +627,24 @@ the list is fully static):
 
 ```tsx
 const DIAGNOSTICS_FOCUSABLE_PROPS = {
-  "data-diagnostics-focusable": "true",
+  'data-diagnostics-focusable': 'true',
 } as HTMLAttributes<HTMLElement>;
 
 const DIAGNOSTICS_TAB_DESCRIPTORS: TabDescriptor[] = [
   {
-    id: "refresh-domains",
-    label: "Refresh Domains",
+    id: 'refresh-domains',
+    label: 'Refresh Domains',
     extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
   },
-  { id: "streams", label: "Streams", extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
+  { id: 'streams', label: 'Streams', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   {
-    id: "capability-checks",
-    label: "Capabilities Checks",
+    id: 'capability-checks',
+    label: 'Capabilities Checks',
     extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
   },
   {
-    id: "effective-permissions",
-    label: "Effective Permissions",
+    id: 'effective-permissions',
+    label: 'Effective Permissions',
     extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
   },
 ];
@@ -701,12 +697,11 @@ Drag wiring:
 const makeDragSource = useTabDragSourceFactory();
 
 const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
-  accepts: ["cluster-tab"],
+  accepts: ['cluster-tab'],
   onDrop: (payload, _event, insertIndex) => {
     const sourceIdx = mergedOrder.indexOf(payload.clusterId);
     if (sourceIdx < 0) return;
-    const adjustedInsert =
-      sourceIdx < insertIndex ? insertIndex - 1 : insertIndex;
+    const adjustedInsert = sourceIdx < insertIndex ? insertIndex - 1 : insertIndex;
     if (adjustedInsert === sourceIdx) return; // no-op drop on self
     const nextOrder = [...mergedOrder];
     nextOrder.splice(sourceIdx, 1);
@@ -724,7 +719,7 @@ const assignRootRef = useCallback(
     tabsRef.current = el;
     dropRef(el);
   },
-  [dropRef],
+  [dropRef]
 );
 ```
 
@@ -772,7 +767,7 @@ compensation above is correct for every source/insert combination.
 ### DockableTabBar (`frontend/src/ui/dockable/DockableTabBar.tsx`)
 
 Most complex wrapper. Reads `dragPreviewRef` and `movePanel` from
-`useDockablePanelContext()`. See `docs/development/UI/dockable-panels.md`
+`useDockablePanelContext()`. See `docs/frontend/dockable-panels.md`
 for the full dockable subsystem — this section only covers the tab
 strip.
 
@@ -781,7 +776,7 @@ const { dragPreviewRef, movePanel, closeTab } = useDockablePanelContext();
 const makeDragSource = useTabDragSourceFactory();
 
 const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
-  accepts: ["dockable-tab"],
+  accepts: ['dockable-tab'],
   onDrop: (payload, _event, insertIndex) => {
     movePanel(payload.panelId, payload.sourceGroupId, groupKey, insertIndex);
   },
@@ -789,7 +784,7 @@ const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
 
 const tabDescriptors: TabDescriptor[] = tabs.map((tab) => {
   const dragProps = makeDragSource(
-    { kind: "dockable-tab", panelId: tab.panelId, sourceGroupId: groupKey },
+    { kind: 'dockable-tab', panelId: tab.panelId, sourceGroupId: groupKey },
     {
       getDragImage: () => {
         // Write label + kind class into the provider's always-mounted
@@ -797,18 +792,16 @@ const tabDescriptors: TabDescriptor[] = tabs.map((tab) => {
         const previewEl = dragPreviewRef.current;
         if (!previewEl) return null;
         const labelEl = previewEl.querySelector<HTMLSpanElement>(
-          ".dockable-tab-drag-preview__label",
+          '.dockable-tab-drag-preview__label'
         );
         if (labelEl) labelEl.textContent = tab.title;
-        const kindEl = previewEl.querySelector<HTMLSpanElement>(
-          ".dockable-tab-drag-preview__kind",
-        );
+        const kindEl = previewEl.querySelector<HTMLSpanElement>('.dockable-tab-drag-preview__kind');
         if (kindEl) {
-          kindEl.className = `dockable-tab-drag-preview__kind kind-badge${tab.kindClass ? ` ${tab.kindClass}` : ""}`;
+          kindEl.className = `dockable-tab-drag-preview__kind kind-badge${tab.kindClass ? ` ${tab.kindClass}` : ''}`;
         }
         return { element: previewEl, offsetX: 14, offsetY: 16 };
       },
-    },
+    }
   );
   return {
     id: tab.panelId,
@@ -823,17 +816,14 @@ const tabDescriptors: TabDescriptor[] = tabs.map((tab) => {
     closeAriaLabel: `Close ${tab.title}`,
     onClose: () => closeTab(tab.panelId),
     extraProps: {
-      "data-panel-id": tab.panelId,
+      'data-panel-id': tab.panelId,
       ...dragProps,
     } as HTMLAttributes<HTMLElement>,
   };
 });
 
 return (
-  <div
-    ref={dropRef as (el: HTMLDivElement | null) => void}
-    className="dockable-tab-bar-shell"
-  >
+  <div ref={dropRef as (el: HTMLDivElement | null) => void} className="dockable-tab-bar-shell">
     <Tabs
       aria-label="Object Tabs"
       tabs={tabDescriptors}
@@ -860,7 +850,7 @@ via a small hook at
 export function useDockablePanelEmptySpaceDropTarget() {
   const { createFloatingGroupWithPanel } = useDockablePanelContext();
   return useTabDropTarget({
-    accepts: ["dockable-tab"],
+    accepts: ['dockable-tab'],
     onDrop: (payload, event) => {
       createFloatingGroupWithPanel(payload.panelId, payload.sourceGroupId, {
         x: event.clientX,
@@ -978,9 +968,9 @@ Recorded here so they don't get re-opened:
 
 ## Cross-references
 
-- `docs/development/UI/dockable-panels.md` — full dockable subsystem:
+- `docs/frontend/dockable-panels.md` — full dockable subsystem:
   panel registry, group state, layout persistence, content area, z-index
   rules. The drag-specific notes there now reference the shared
   coordinator described above.
-- `docs/development/UI/component-structure.md` — general frontend
+- `docs/frontend/component-structure.md` — general frontend
   component layout conventions.

@@ -54,12 +54,12 @@ The snapshot payload is `ObjectMapSnapshotPayload`:
 
 Default backend limits:
 
-| Setting | Value |
-| --- | ---: |
-| Default depth | 4 |
-| Default nodes | 250 |
-| Max depth | 12 |
-| Max nodes | 1000 |
+| Setting       | Value |
+| ------------- | ----: |
+| Default depth |     4 |
+| Default nodes |   250 |
+| Max depth     |    12 |
+| Max nodes     |  1000 |
 
 The frontend scope builder can request `maxDepth` and `maxNodes`, but both are
 clamped to the same backend caps.
@@ -122,21 +122,21 @@ frontend keeps a matching relationship registry in
 `frontend/src/modules/object-map/objectMapEdgeStyle.ts` for legend ordering and
 edge styling.
 
-| Type | Backend label | Legend label | Reverse traversal |
-| --- | --- | --- | --- |
-| `owner` | owns | Ownership | Any depth |
-| `selector` | selects | Selector | Any depth |
-| `endpoint` | has endpoints | Endpoint | Any depth |
-| `routes` | routes to | Ingress Route | Any depth |
-| `scales` | scales | Scaling | Any depth |
-| `schedules` | scheduled on | Scheduled On | Seed only |
-| `grants` | grants | Grants | Any depth |
-| `binds` | binds | Binds | Any depth |
-| `aggregates` | aggregates | Aggregates | Any depth |
-| `uses` | uses | Used By | Seed only |
-| `mounts` | mounts | Mounts | Seed only |
-| `volume-binding` | binds volume | Volume Binding | Depth one |
-| `storage-class` | uses class | Storage Class | Seed only |
+| Type             | Backend label | Legend label   | Reverse traversal |
+| ---------------- | ------------- | -------------- | ----------------- |
+| `owner`          | owns          | Ownership      | Any depth         |
+| `selector`       | selects       | Selector       | Any depth         |
+| `endpoint`       | has endpoints | Endpoint       | Any depth         |
+| `routes`         | routes to     | Ingress Route  | Any depth         |
+| `scales`         | scales        | Scaling        | Any depth         |
+| `schedules`      | scheduled on  | Scheduled On   | Seed only         |
+| `grants`         | grants        | Grants         | Any depth         |
+| `binds`          | binds         | Binds          | Any depth         |
+| `aggregates`     | aggregates    | Aggregates     | Any depth         |
+| `uses`           | uses          | Used By        | Seed only         |
+| `mounts`         | mounts        | Mounts         | Seed only         |
+| `volume-binding` | binds volume  | Volume Binding | Depth one         |
+| `storage-class`  | uses class    | Storage Class  | Seed only         |
 
 Reverse traversal matters because shared infrastructure objects can otherwise
 pull unrelated parts of the cluster into a map. For example, many pods can share
@@ -254,12 +254,12 @@ check these invariants first:
 Card rendering uses zoom-based detail levels to keep larger maps responsive.
 The thresholds are:
 
-| Zoom | Card detail |
-| ---: | --- |
-| `>= 0.75` | Full: kind badge, name, namespace, age, status, collapse badge. |
-| `>= 0.45` | Compact: kind badge, name, status, collapse badge. |
+|      Zoom | Card detail                                                      |
+| --------: | ---------------------------------------------------------------- |
+| `>= 0.75` | Full: kind badge, name, namespace, age, status, collapse badge.  |
+| `>= 0.45` | Compact: kind badge, name, status, collapse badge.               |
 | `>= 0.20` | Minimal: card outline, kind color strip, status, collapse badge. |
-| `< 0.20` | Dot: kind-colored dot only. |
+|  `< 0.20` | Dot: kind-colored dot only.                                      |
 
 The renderer only changes detail level when crossing a threshold. Plain panning
 at the same zoom must not reapply graph data.
@@ -295,11 +295,11 @@ computed default layout.
 Object context menus should stay consistent across map and table surfaces. The
 default object menu is:
 
-| Action | Shortcut | Notes |
-| --- | --- | --- |
-| Open Details | Cmd-click on macOS, Ctrl-click elsewhere | Opens the object panel. |
-| Open Map | Shift-click | Opens a map for the object. |
-| Go to Table View | Alt-click | Omitted when the object already lives in a table view. |
+| Action           | Shortcut                                 | Notes                                                  |
+| ---------------- | ---------------------------------------- | ------------------------------------------------------ |
+| Open Details     | Cmd-click on macOS, Ctrl-click elsewhere | Opens the object panel.                                |
+| Open Map         | Shift-click                              | Opens a map for the object.                            |
+| Go to Table View | Alt-click                                | Omitted when the object already lives in a table view. |
 
 Do not put shortcut help in the map legend. The legend explains relationship
 types and object/link counts only.
@@ -355,9 +355,9 @@ active.
 Frontend polling for `object-map` is set in
 `frontend/src/core/refresh/refresherConfig.ts`:
 
-| Domain | Interval | Cooldown | Timeout |
-| --- | ---: | ---: | ---: |
-| `object-map` | 2000 ms | 1000 ms | 10 s |
+| Domain       | Interval | Cooldown | Timeout |
+| ------------ | -------: | -------: | ------: |
+| `object-map` |  2000 ms |  1000 ms |    10 s |
 
 The backend snapshot cache is global and remains `SnapshotCacheTTL = 5s` in
 `backend/internal/config/config.go`. There is no object-map-specific backend TTL.

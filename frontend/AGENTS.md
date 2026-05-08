@@ -10,7 +10,7 @@ Applies to React/TypeScript code under `frontend/`.
 - Wire namespace/cluster data through the refresh orchestrator + diagnostics flow (`frontend/src/core/refresh`); no ad-hoc polling loops.
 - Treat backend `statusPresentation` and `ResourceLink.ref` as authoritative.
   Before adding frontend status styling, relationship navigation, or object
-  identity helpers, follow `docs/development/shared-resource-model.md`.
+  identity helpers, follow `docs/architecture/shared-resource-model.md`.
 
 ## Refresh Orchestrator Notes
 

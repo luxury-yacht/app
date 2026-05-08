@@ -76,5 +76,6 @@ Add this to `.claude/settings.local.json` so memories are stored in the project
 
 ## Documentation
 
-- Developer docs go in `docs/development`.
+- Durable architecture docs go in `docs/architecture`; frontend infrastructure
+  docs go in `docs/frontend`; workflow-specific docs go in `docs/workflows`.
 - Phased implementation plans go in `docs/plans`; mark items ✅ as completed.

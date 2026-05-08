@@ -21,7 +21,7 @@
  * filter post-processes the snapshot to enforce directional purity
  * without requiring a backend change. The same logic could be
  * pushed to the backend later for bandwidth efficiency — see the
- * docs/development handoff note.
+ * object-map workflow docs.
  */
 
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';

@@ -267,8 +267,7 @@ Some node log paths return an empty HTML listing like:
 
 ```html
 <!doctype html>
-<pre>
-</pre>
+<pre></pre>
 ```
 
 Those are directories, not text logs. Earlier versions of the code misclassified them as text

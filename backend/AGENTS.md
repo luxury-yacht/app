@@ -14,7 +14,7 @@ Applies to Go code under `backend/`.
     resource identity and browse/catalog listings.
   - `backend/resourcemodel` owns shared Kubernetes semantics. Before adding or
     changing resource status, relationship links, object references, capability
-    integration, or fact slots, follow `docs/development/shared-resource-model.md`.
+    integration, or fact slots, follow `docs/architecture/shared-resource-model.md`.
   - Resource handlers follow `resource_<Kind>.go` with adjacent `_test.go` suites (for example `kubeconfigs_test.go`).
 - Manual refreshes and streaming domains belong to the backend refresh registry + ManualQueue; avoid bespoke refresh/streaming code.
 

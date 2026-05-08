@@ -10,7 +10,7 @@ The app now uses one shared runtime keyboard model centered on:
 
 - global shortcut registration and dispatch in [context.tsx](/Volumes/git/luxury-yacht/app/frontend/src/ui/shortcuts/context.tsx)
 - explicit surface ownership through [surfaces.ts](/Volumes/git/luxury-yacht/app/frontend/src/ui/shortcuts/surfaces.ts)
-- shared modal behavior documented in [modals.md](/Volumes/git/luxury-yacht/app/docs/development/UI/modals.md)
+- shared modal behavior documented in [modals.md](modals.md)
 
 The old split between shortcut routing and `Tab` scope routing is gone:
 
@@ -312,7 +312,7 @@ That behavior includes:
 
 ## Modals
 
-Modal mechanics are documented in [modals.md](/Volumes/git/luxury-yacht/app/docs/development/UI/modals.md).
+Modal mechanics are documented in [modals.md](modals.md).
 
 Keyboard-relevant modal rules:
 
