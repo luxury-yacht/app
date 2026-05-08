@@ -110,4 +110,25 @@ describe('useWorkloadTableColumns', () => {
     expect((cell as React.ReactElement<any>).props.className).toBe('status-badge warning');
     hook.cleanup();
   });
+
+  it('does not use statusState as the status class fallback', () => {
+    const hook = renderHook(() =>
+      useWorkloadTableColumns({
+        handleWorkloadClick: vi.fn(),
+        showNamespaceColumn: false,
+        useShortResourceNames: false,
+        metrics: null,
+      })
+    );
+    const columns = hook.get();
+    const statusColumn = columns.find((column) => column.key === 'status');
+    const cell = statusColumn?.render({
+      ...workload,
+      statusState: 'true',
+      statusPresentation: undefined,
+    });
+    expect(React.isValidElement(cell)).toBe(true);
+    expect((cell as React.ReactElement<any>).props.className).toBe('status-badge unknown');
+    hook.cleanup();
+  });
 });

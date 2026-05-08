@@ -51,7 +51,6 @@ interface PodOverviewProps {
   status?: string;
   statusState?: string;
   statusPresentation?: string;
-  statusSeverity?: string;
   ready?: string;
   restarts?: number;
   qosClass?: string;
@@ -77,7 +76,6 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
   status,
   statusState,
   statusPresentation,
-  statusSeverity,
   ready,
   restarts,
   qosClass,
@@ -125,7 +123,6 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
         status={status}
         statusState={statusState}
         statusPresentation={statusPresentation}
-        statusSeverity={statusSeverity}
         ready={ready}
       />
 

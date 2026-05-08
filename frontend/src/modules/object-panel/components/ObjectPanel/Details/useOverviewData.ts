@@ -383,6 +383,8 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         chart: helmReleaseDetails.chart,
         appVersion: helmReleaseDetails.appVersion,
         status: helmReleaseDetails.status,
+        statusState: helmReleaseDetails.statusState,
+        statusPresentation: helmReleaseDetails.statusPresentation,
         revision: helmReleaseDetails.revision,
         updated: helmReleaseDetails.updated,
         helmReleaseDetails: helmReleaseDetails,

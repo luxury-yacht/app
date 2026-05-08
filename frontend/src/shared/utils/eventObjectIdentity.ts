@@ -7,6 +7,7 @@ import {
   buildRequiredObjectReference,
   type ResolvedObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { ResourceLink } from '@core/refresh/types';
 
 export interface ParsedEventObjectTarget {
   objectType: string;
@@ -15,6 +16,7 @@ export interface ParsedEventObjectTarget {
 }
 
 export interface EventObjectReferenceInput {
+  involvedObject?: ResourceLink | null;
   object: string | null | undefined;
   objectUid?: string | null;
   objectApiVersion?: string | null;
@@ -54,6 +56,20 @@ export function splitEventObjectTarget(value?: string | null): ParsedEventObject
 export function buildEventObjectReference(
   input: EventObjectReferenceInput
 ): ResolvedObjectReference | undefined {
+  if (input.involvedObject) {
+    if (!input.involvedObject.ref) {
+      return undefined;
+    }
+    try {
+      return buildRequiredObjectReference({
+        ...input.involvedObject.ref,
+        clusterName: input.clusterName,
+      });
+    } catch {
+      return undefined;
+    }
+  }
+
   const parsed = splitEventObjectTarget(input.object);
   if (!parsed.isLinkable) {
     return undefined;
@@ -90,6 +106,10 @@ export function buildEventObjectReference(
 }
 
 export function canResolveEventObjectReference(input: EventObjectReferenceInput): boolean {
+  if (input.involvedObject) {
+    return Boolean(input.involvedObject.ref);
+  }
+
   return Boolean(
     buildEventObjectReference(input) ||
     (normalizeOptional(input.clusterId) && normalizeOptional(input.objectUid))
@@ -99,6 +119,10 @@ export function canResolveEventObjectReference(input: EventObjectReferenceInput)
 export async function resolveEventObjectReference(
   input: EventObjectReferenceInput
 ): Promise<ResolvedObjectReference | undefined> {
+  if (input.involvedObject && !input.involvedObject.ref) {
+    return undefined;
+  }
+
   const direct = buildEventObjectReference(input);
   if (direct) {
     return direct;

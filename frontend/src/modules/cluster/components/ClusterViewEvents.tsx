@@ -30,6 +30,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { ResourceLink } from '@core/refresh/types';
 
 interface EventData {
   kind: string;
@@ -41,6 +42,7 @@ interface EventData {
   objectNamespace?: string;
   objectUid?: string;
   objectApiVersion?: string;
+  involvedObject?: ResourceLink;
   type: string; // Event severity (Normal, Warning)
   source: string;
   reason: string;
@@ -87,6 +89,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       (event: EventData) => {
         return {
           object: event.object,
+          involvedObject: event.involvedObject,
           objectUid: event.objectUid,
           objectApiVersion: event.objectApiVersion,
           objectNamespace: event.objectNamespace,

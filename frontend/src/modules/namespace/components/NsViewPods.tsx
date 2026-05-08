@@ -29,6 +29,7 @@ import {
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
+import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
 import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 
 interface PodsViewProps {
@@ -315,10 +316,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
-          getClassName: (pod) => {
-            const severity = pod.statusPresentation || 'unknown';
-            return ['status-badge', severity].join(' ').trim();
-          },
+          getClassName: (pod) => backendStatusBadgeClass(pod.statusPresentation),
         }),
         cf.createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
           className: 'text-right',

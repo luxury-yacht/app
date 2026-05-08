@@ -36,16 +36,19 @@ type NamespaceHelmSnapshot struct {
 // NamespaceHelmSummary captures the fields required by the Helm table.
 type NamespaceHelmSummary struct {
 	ClusterMeta
-	Name        string `json:"name"`
-	Namespace   string `json:"namespace"`
-	Chart       string `json:"chart"`
-	AppVersion  string `json:"appVersion"`
-	Status      string `json:"status"`
-	Revision    int    `json:"revision"`
-	Updated     string `json:"updated"`
-	Description string `json:"description,omitempty"`
-	Notes       string `json:"notes,omitempty"`
-	Age         string `json:"age"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	Chart              string `json:"chart"`
+	AppVersion         string `json:"appVersion"`
+	Status             string `json:"status"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Revision           int    `json:"revision"`
+	Updated            string `json:"updated"`
+	Description        string `json:"description,omitempty"`
+	Notes              string `json:"notes,omitempty"`
+	Age                string `json:"age"`
 }
 
 // RegisterNamespaceHelmDomain registers the Helm snapshot builder.
@@ -249,10 +252,7 @@ func mapHelmReleases(
 		facts := model.Facts.HelmRelease
 		chartName := facts.Chart
 		appVersion := facts.AppVersion
-		status := model.Status.State
-		if status == "" {
-			status = "unknown"
-		}
+		status := model.Status.Label
 		updated := ""
 		description := ""
 		notes := ""
@@ -266,17 +266,20 @@ func mapHelmReleases(
 			age = formatAge(model.Metadata.CreationTimestamp.Time)
 		}
 		summaries = append(summaries, NamespaceHelmSummary{
-			ClusterMeta: meta,
-			Name:        release.Name,
-			Namespace:   ns,
-			Chart:       chartName,
-			AppVersion:  appVersion,
-			Status:      status,
-			Revision:    release.Version,
-			Updated:     updated,
-			Description: description,
-			Notes:       notes,
-			Age:         age,
+			ClusterMeta:        meta,
+			Name:               release.Name,
+			Namespace:          ns,
+			Chart:              chartName,
+			AppVersion:         appVersion,
+			Status:             status,
+			StatusState:        model.Status.State,
+			StatusPresentation: model.Status.Presentation,
+			StatusReason:       model.Status.Reason,
+			Revision:           release.Version,
+			Updated:            updated,
+			Description:        description,
+			Notes:              notes,
+			Age:                age,
 		})
 		if v := uint64(release.Version); v > version {
 			version = v

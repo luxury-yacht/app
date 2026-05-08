@@ -103,6 +103,61 @@ describe('buildEventObjectReference', () => {
       })
     ).toBeUndefined();
   });
+
+  it('prefers openable ResourceLink refs over legacy flat event fields', () => {
+    expect(
+      buildEventObjectReference({
+        involvedObject: {
+          ref: {
+            clusterId: 'cluster-a',
+            group: 'apps',
+            version: 'v1',
+            kind: 'Deployment',
+            resource: 'deployments',
+            namespace: 'prod',
+            name: 'api',
+            uid: 'deploy-uid',
+          },
+        },
+        object: 'Pod/stale',
+        objectApiVersion: 'v1',
+        objectNamespace: 'default',
+        clusterId: 'cluster-a',
+      })
+    ).toEqual(
+      expect.objectContaining({
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'prod',
+        group: 'apps',
+        version: 'v1',
+        clusterId: 'cluster-a',
+        uid: 'deploy-uid',
+      })
+    );
+  });
+
+  it('treats display-only ResourceLink values as non-openable', () => {
+    const input = {
+      involvedObject: {
+        display: {
+          clusterId: 'cluster-a',
+          group: 'example.io',
+          version: 'v1',
+          kind: 'DeletedThing',
+          name: 'gone',
+        },
+      },
+      object: 'Pod/api',
+      objectApiVersion: 'v1',
+      objectNamespace: 'default',
+      objectUid: 'pod-uid',
+      clusterId: 'cluster-a',
+    };
+
+    expect(buildEventObjectReference(input)).toBeUndefined();
+    expect(canResolveEventObjectReference(input)).toBe(false);
+  });
 });
 
 describe('resolveEventObjectReference', () => {

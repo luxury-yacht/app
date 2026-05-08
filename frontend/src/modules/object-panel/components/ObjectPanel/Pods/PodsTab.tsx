@@ -29,6 +29,7 @@ import {
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
+import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
 
 interface PodsTabProps {
   pods: PodSnapshotEntry[];
@@ -162,10 +163,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
         getTitle: (pod) => pod.name,
       }),
       createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
-        getClassName: (pod) => {
-          const severity = pod.statusPresentation || 'unknown';
-          return ['status-badge', severity].join(' ').trim();
-        },
+        getClassName: (pod) => backendStatusBadgeClass(pod.statusPresentation),
       }),
       createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
         className: 'text-right',

@@ -27,7 +27,11 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: any) => <div data-testid="resource-status">{props.status}</div>,
+  ResourceStatus: (props: any) => (
+    <div data-testid="resource-status" data-presentation={props.statusPresentation}>
+      {props.status}
+    </div>
+  ),
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
@@ -80,6 +84,7 @@ describe('HelmOverview', () => {
         version: '1.2.3',
         appVersion: '2.0.0',
         status: 'Deployed',
+        statusPresentation: 'ready',
         revision: 5,
         updated: '2024-01-01T00:00:00Z',
         description: 'Upgrade complete',
@@ -100,6 +105,9 @@ describe('HelmOverview', () => {
     });
 
     expect(getValueForLabel('Chart')?.textContent).toBe('api-chart');
+    expect(
+      container.querySelector('[data-testid="resource-status"]')?.getAttribute('data-presentation')
+    ).toBe('ready');
     expect(getValueForLabel('Chart Version')?.textContent).toBe('1.2.3');
     expect(getValueForLabel('App Version')?.textContent).toBe('2.0.0');
     expect(getValueForLabel('Revision')?.textContent).toBe('5');

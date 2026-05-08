@@ -10,6 +10,7 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import * as cf from '@shared/components/tables/columnFactories';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { parseCpuToMillicores, parseMemToMB } from '@/utils/resourceCalculations';
+import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
 
 import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
@@ -90,10 +91,7 @@ const useWorkloadTableColumns = ({
       'Status',
       (row) => row.status,
       {
-        getClassName: (row) => {
-          const statusClass = row.statusPresentation || row.statusClass || 'unknown';
-          return ['status-badge', statusClass].filter(Boolean).join(' ').trim();
-        },
+        getClassName: (row) => backendStatusBadgeClass(row.statusPresentation),
       }
     );
     statusColumn.sortValue = (row) => row.status.toLowerCase();

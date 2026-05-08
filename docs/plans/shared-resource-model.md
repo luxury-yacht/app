@@ -2522,6 +2522,26 @@ fallbacks only have object scope, not the object body, so they emit identity
 only instead of guessing status. Custom list rows and object-content paths that
 have raw objects or manifests project richer shared facts.
 
+## Implementation Learnings From The Frontend Semantic Cleanup Slice
+
+Frontend status rendering must consume backend `statusPresentation` tokens, not
+reinterpret raw Kubernetes or Helm status strings. `statusState` remains source
+state for diagnostics and parity checks; it is not a CSS class fallback. Missing
+presentation should render as `unknown` so missing backend projection is visible
+instead of being hidden by frontend heuristics.
+
+The custom-resource and Helm DTOs need the same status projection fields as the
+already-migrated node, pod, workload, and storage DTOs: `status`, `statusState`,
+`statusPresentation`, and where applicable `statusReason`. Without
+`statusPresentation`, the frontend is forced either to invent styling or to
+style raw API values directly, which recreates the duplication this migration is
+removing.
+
+Event involved-object navigation should prefer the shared `ResourceLink.ref`
+when present and treat `ResourceLink.display` as non-openable. Display-only
+references are useful context for stale or partial events, but opening them
+would reintroduce guessed identity.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2701,11 +2721,11 @@ that actually consumes them.
 
 ### Phase 14: Frontend Semantic Cleanup
 
-- [ ] Remove migrated frontend status interpretation helpers.
-- [ ] Replace per-surface status class derivation with state-to-UI rendering.
-- [ ] Verify action menus, diagnostics, logs, exec, and port-forward flows use
+- [x] ✅ Remove migrated frontend status interpretation helpers.
+- [x] ✅ Replace per-surface status class derivation with state-to-UI rendering.
+- [x] ✅ Verify action menus, diagnostics, logs, exec, and port-forward flows use
       shared identity and contextual capabilities.
-- [ ] Add regression tests for table/detail/object-map parity where each
+- [x] ✅ Add regression tests for table/detail/object-map parity where each
       consumer exists.
 
 ## Testing Requirements

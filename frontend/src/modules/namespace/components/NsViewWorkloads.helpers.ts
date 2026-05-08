@@ -14,7 +14,6 @@ export interface WorkloadData {
   statusState?: string;
   statusPresentation?: string;
   statusReason?: string;
-  statusClass?: string;
   ready?: string;
   restarts?: number;
   cpuUsage?: number | string;

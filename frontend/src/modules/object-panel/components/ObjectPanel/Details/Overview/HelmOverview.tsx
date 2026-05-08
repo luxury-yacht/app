@@ -23,7 +23,7 @@ interface HelmOverviewProps {
   chart?: string;
   appVersion?: string;
   status?: string;
-  statusSeverity?: string;
+  statusPresentation?: string;
   revision?: number;
   updated?: string;
   labels?: Record<string, string>;
@@ -39,7 +39,7 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
   chart,
   appVersion,
   status,
-  statusSeverity,
+  statusPresentation,
   revision,
   updated,
   labels,
@@ -58,6 +58,7 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
   const displayChart = helmReleaseDetails?.chart || chart || '-';
   const displayAppVersion = helmReleaseDetails?.appVersion || appVersion;
   const displayStatus = helmReleaseDetails?.status || status;
+  const displayStatusPresentation = helmReleaseDetails?.statusPresentation || statusPresentation;
   const displayRevision = helmReleaseDetails?.revision || revision;
   const displayUpdated = helmReleaseDetails?.updated || updated;
   const displayLabels = helmReleaseDetails?.labels || labels;
@@ -73,16 +74,8 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
       />
       <ResourceStatus
         status={displayStatus}
-        statusSeverity={
-          statusSeverity ||
-          (displayStatus
-            ? displayStatus.toLowerCase() === 'deployed'
-              ? 'info'
-              : displayStatus.toLowerCase().includes('pending')
-                ? 'warning'
-                : 'error'
-            : undefined)
-        }
+        statusState={helmReleaseDetails?.statusState}
+        statusPresentation={displayStatusPresentation}
       />
 
       {/* Chart Information */}

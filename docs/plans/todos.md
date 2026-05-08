@@ -1,5 +1,8 @@
 # TODO
 
+- Link color in events
+- Status colors always match in tables and details views
+
 ## Feature Ideas
 
 - In daemonset details, show a "NOT RUNNING ON" label that lists the nodes where the ds is missing

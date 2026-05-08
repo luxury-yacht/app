@@ -460,9 +460,12 @@ type HelmReleaseDetails struct {
 	AppVersion string `json:"appVersion"`
 
 	// Status information
-	Status   string `json:"status"`
-	Revision int    `json:"revision"`
-	Updated  string `json:"updated"`
+	Status             string `json:"status"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Revision           int    `json:"revision"`
+	Updated            string `json:"updated"`
 
 	// Additional details
 	Description string                 `json:"description,omitempty"`

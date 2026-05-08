@@ -258,24 +258,22 @@
 .status-badge.degraded,
 .status-badge.cordoned,
 .status-badge.terminating,
+.status-badge.progressing,
 .status-badge.warning {
   color: var(--status-warning-text);
 }
 
-.status-badge.True,
 .status-badge.ready,
 .status-badge.healthy {
   color: var(--status-available-text);
 }
 
-.status-badge.False,
 .status-badge.not-ready,
 .status-badge.unhealthy,
 .status-badge.error {
   color: var(--status-failed-text);
 }
 
-.status-badge.Unknown,
 .status-badge.unknown,
 .status-badge.inactive {
   color: var(--text-secondary);

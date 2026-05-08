@@ -26,6 +26,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
 
 const NAMESPACE_STORAGE_KIND_OPTIONS = ['PersistentVolumeClaim'];
 
@@ -144,10 +145,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           'Status',
           (resource) => resource.status || 'Unknown',
           {
-            getClassName: (resource) => {
-              const statusClass = resource.statusPresentation || 'unknown';
-              return `status-badge ${statusClass}`;
-            },
+            getClassName: (resource) => backendStatusBadgeClass(resource.statusPresentation),
           }
         ),
         cf.createTextColumn<StorageData>(

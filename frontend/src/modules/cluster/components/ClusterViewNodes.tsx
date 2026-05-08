@@ -33,6 +33,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
 import { DrainIcon } from '@shared/components/icons/MenuIcons';
 
 // Define props for NodesViewGrid component
@@ -102,10 +103,9 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
 
       const resolveNodeStatus = (node: ClusterNodeRow) => {
         const text = node.status ?? 'Unknown';
-        const statusClass = node.statusPresentation || node.statusState || 'unknown';
         return {
           text,
-          className: `status-badge ${statusClass}`,
+          className: backendStatusBadgeClass(node.statusPresentation),
         };
       };
 

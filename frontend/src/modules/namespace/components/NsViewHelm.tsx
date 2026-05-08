@@ -22,6 +22,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
+import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
 
 // Data interface for Helm releases
 export interface HelmData {
@@ -39,6 +40,9 @@ export interface HelmData {
   appVersion?: string;
   app_version?: string;
   status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   info?: {
     status?: string;
     revision?: number;
@@ -180,10 +184,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
             return status;
           },
           {
-            getClassName: (resource) => {
-              const status = (resource.status || resource.info?.status || 'unknown').toLowerCase();
-              return `helm-status status-${status}`;
-            },
+            getClassName: (resource) =>
+              `helm-status ${backendStatusBadgeClass(resource.statusPresentation)}`,
           }
         ),
         cf.createTextColumn<HelmData>(

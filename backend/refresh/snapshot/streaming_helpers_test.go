@@ -572,6 +572,9 @@ func TestBuildClusterCustomSummaryThreadsCRDName(t *testing.T) {
 	require.Equal(t, "rds.services.k8s.aws", row.APIGroup)
 	require.Equal(t, "v1alpha1", row.APIVersion)
 	require.Equal(t, "dbclusters.rds.services.k8s.aws", row.CRDName)
+	require.Equal(t, "Unknown", row.Status)
+	require.Equal(t, "unknown", row.StatusState)
+	require.Equal(t, "unknown", row.StatusPresentation)
 }
 
 // TestBuildClusterCustomSummaryNilResourceIsSafe ensures the streaming
@@ -616,4 +619,7 @@ func TestBuildNamespaceCustomSummaryThreadsCRDName(t *testing.T) {
 		"data",
 	)
 	require.Equal(t, "dbinstances.rds.services.k8s.aws", row.CRDName)
+	require.Equal(t, "Unknown", row.Status)
+	require.Equal(t, "unknown", row.StatusState)
+	require.Equal(t, "unknown", row.StatusPresentation)
 }

@@ -67,6 +67,7 @@ type NamespaceCustomSummary struct {
 	Namespace          string                         `json:"namespace"`
 	Status             string                         `json:"status,omitempty"`
 	StatusState        string                         `json:"statusState,omitempty"`
+	StatusPresentation string                         `json:"statusPresentation,omitempty"`
 	Ready              *bool                          `json:"ready,omitempty"`
 	ObservedGeneration *int64                         `json:"observedGeneration,omitempty"`
 	Conditions         []resourcemodel.ConditionFacts `json:"conditions,omitempty"`

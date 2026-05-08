@@ -94,7 +94,6 @@ describe('PodOverview', () => {
       status: 'Running',
       statusState: 'Running',
       statusPresentation: 'warning',
-      statusSeverity: 'info',
       ready: '1/1',
       restarts: 3,
       qosClass: 'Guaranteed',

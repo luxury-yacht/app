@@ -23,6 +23,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
 
 // Define the data structure for cluster custom resources
 interface ClusterCustomData {
@@ -43,6 +44,17 @@ interface ClusterCustomData {
    * that opens the owning CRD in the object panel.
    */
   crdName?: string;
+  status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+  ready?: boolean;
+  observedGeneration?: number;
+  conditions?: Array<{
+    type: string;
+    status: string;
+    reason?: string;
+    message?: string;
+  }>;
   age?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
@@ -225,6 +237,14 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           crdColumn.sortValue = (resource) => (resource.crdName ?? '').toLowerCase();
           return crdColumn;
         })(),
+        cf.createTextColumn<ClusterCustomData>(
+          'status',
+          'Status',
+          (resource) => resource.status || 'Unknown',
+          {
+            getClassName: (resource) => backendStatusBadgeClass(resource.statusPresentation),
+          }
+        ),
         cf.createAgeColumn(),
       ];
 
@@ -232,6 +252,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         kind: { autoWidth: true },
         name: { autoWidth: true },
         crd: { autoWidth: true },
+        status: { autoWidth: true },
         age: { autoWidth: true },
       };
       cf.applyColumnSizing(baseColumns, sizing);
