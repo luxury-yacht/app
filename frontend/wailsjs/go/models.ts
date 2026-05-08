@@ -3299,6 +3299,9 @@ export namespace types {
     age: string;
     details: string;
     status: string;
+    statusState?: string;
+    statusPresentation?: string;
+    statusReason?: string;
     hasWorkloads: boolean;
     workloadsUnknown?: boolean;
     labels?: Record<string, string>;
@@ -3317,6 +3320,9 @@ export namespace types {
       this.age = source['age'];
       this.details = source['details'];
       this.status = source['status'];
+      this.statusState = source['statusState'];
+      this.statusPresentation = source['statusPresentation'];
+      this.statusReason = source['statusReason'];
       this.hasWorkloads = source['hasWorkloads'];
       this.workloadsUnknown = source['workloadsUnknown'];
       this.labels = source['labels'];

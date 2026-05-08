@@ -53,7 +53,6 @@ export interface HelmData {
   updated?: string;
   lastDeployed?: string;
   description?: string;
-  notes?: string;
   age?: string;
   [key: string]: any; // Allow additional fields
 }
@@ -241,8 +240,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           'description',
           'Description',
           (resource) => {
-            const description =
-              resource.description || resource.info?.description || resource.notes;
+            const description = resource.description || resource.info?.description;
             if (!description) {
               return '-';
             }
@@ -250,11 +248,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           },
           {
             getClassName: (resource) =>
-              resource.description || resource.info?.description || resource.notes
-                ? 'helm-description'
-                : undefined,
-            getTitle: (resource) =>
-              resource.description || resource.info?.description || resource.notes,
+              resource.description || resource.info?.description ? 'helm-description' : undefined,
+            getTitle: (resource) => resource.description || resource.info?.description,
             sortable: false,
           }
         ),

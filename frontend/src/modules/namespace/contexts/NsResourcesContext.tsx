@@ -708,7 +708,6 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           revision: release.revision,
           updated: release.updated,
           description: release.description,
-          notes: release.notes,
           age: release.age,
         })
       ),

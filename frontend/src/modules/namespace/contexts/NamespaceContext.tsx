@@ -167,8 +167,8 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       return {
         name: ns.name,
         scope: ns.name,
-        status: ns.phase,
-        details: `Status: ${ns.phase} • ${workloadSummary}`,
+        status: ns.status || ns.phase,
+        details: `Status: ${ns.status || ns.phase} • ${workloadSummary}`,
         age,
         hasWorkloads: ns.hasWorkloads ?? false,
         workloadsUnknown,

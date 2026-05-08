@@ -15,8 +15,10 @@ func BuildHelmReleaseResourceModel(
 	namespaceFallback string,
 	resources []ResourceLink,
 	history []*release.Release,
+	options ...ResourceModelBuildOptions,
 ) ResourceModel {
-	facts := BuildHelmReleaseFacts(rel, resources, history)
+	buildOptions := BuildOptions(options...)
+	facts := BuildHelmReleaseFacts(rel, resources, history, buildOptions)
 	status := BuildHelmReleaseStatusPresentation(facts)
 	namespace := strings.TrimSpace(namespaceFallback)
 	name := ""
@@ -58,9 +60,10 @@ func BuildHelmReleaseResourceModel(
 	}
 }
 
-func BuildHelmReleaseFacts(rel *release.Release, resources []ResourceLink, history []*release.Release) HelmReleaseFacts {
-	facts := HelmReleaseFacts{
-		Resources: append([]ResourceLink(nil), resources...),
+func BuildHelmReleaseFacts(rel *release.Release, resources []ResourceLink, history []*release.Release, options ResourceModelBuildOptions) HelmReleaseFacts {
+	facts := HelmReleaseFacts{}
+	if options.Materialization.Has(MaterializeRelationshipFacts) || options.Materialization.Has(MaterializeDetailFacts) {
+		facts.Resources = append([]ResourceLink(nil), resources...)
 	}
 	if rel == nil {
 		return facts
@@ -78,9 +81,11 @@ func BuildHelmReleaseFacts(rel *release.Release, resources []ResourceLink, histo
 			facts.Updated = &updated
 		}
 		facts.Description = rel.Info.Description
+	}
+	if options.Materialization.Has(MaterializeDetailFacts) && rel.Info != nil {
 		facts.Notes = rel.Info.Notes
 	}
-	if len(history) > 0 {
+	if options.Materialization.Has(MaterializeDetailFacts) && len(history) > 0 {
 		facts.History = make([]HelmRevisionFacts, 0, len(history))
 		for _, rev := range history {
 			if rev == nil {

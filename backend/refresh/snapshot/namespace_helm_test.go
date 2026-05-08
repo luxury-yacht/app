@@ -110,7 +110,6 @@ func TestNamespaceHelmBuilder(t *testing.T) {
 	require.Equal(t, "info.status", entry.StatusReason)
 	require.Equal(t, 2, entry.Revision)
 	require.Equal(t, "Deployed successfully", entry.Description)
-	require.Equal(t, "Follow the notes", entry.Notes)
 	require.NotEmpty(t, entry.Age)
 	require.NotEmpty(t, entry.Updated)
 }

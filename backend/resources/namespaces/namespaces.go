@@ -14,6 +14,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -46,27 +47,41 @@ func (s *Service) Namespace(name string) (*types.NamespaceDetails, error) {
 }
 
 func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *types.NamespaceDetails {
-	details := &types.NamespaceDetails{
-		Kind:        "Namespace",
-		Name:        namespace.Name,
-		Age:         common.FormatAge(namespace.CreationTimestamp.Time),
-		Status:      string(namespace.Status.Phase),
-		Labels:      namespace.Labels,
-		Annotations: namespace.Annotations,
-	}
-
 	hasWorkloads, workloadsUnknown := s.hasWorkloads(namespace.Name)
-	details.HasWorkloads = hasWorkloads
-	if workloadsUnknown {
-		details.WorkloadsUnknown = true
+	quotas, limits := s.collectQuotasAndLimits(namespace.Name)
+	model := resourcemodel.BuildNamespaceResourceModel(
+		s.deps.ClusterID,
+		namespace,
+		hasWorkloads,
+		!workloadsUnknown,
+		quotas,
+		limits,
+		resourcemodel.ResourceModelBuildOptions{
+			Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeRelationshipFacts | resourcemodel.MaterializeDetailFacts,
+		},
+	)
+	facts := model.Facts.Namespace
+	details := &types.NamespaceDetails{
+		Kind:               model.Ref.Kind,
+		Name:               model.Ref.Name,
+		Age:                common.FormatAge(model.Metadata.CreationTimestamp.Time),
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		Labels:             model.Metadata.Labels,
+		Annotations:        model.Metadata.Annotations,
+		HasWorkloads:       facts.HasWorkloads,
+		WorkloadsUnknown:   !facts.WorkloadsKnown,
+		ResourceQuotas:     resourcemodel.ResourceLinkNames(facts.ResourceQuotas),
+		LimitRanges:        resourcemodel.ResourceLinkNames(facts.LimitRanges),
 	}
-	details.ResourceQuotas, details.LimitRanges = s.collectQuotasAndLimits(namespace.Name)
 
 	detailParts := []string{fmt.Sprintf("Status: %s", details.Status)}
-	switch {
-	case workloadsUnknown:
+	switch facts.WorkloadState {
+	case resourcemodel.NamespaceWorkloadStateUnknown:
 		detailParts = append(detailParts, "Workloads status unknown")
-	case details.HasWorkloads:
+	case resourcemodel.NamespaceWorkloadStatePresent:
 		detailParts = append(detailParts, "Has workloads")
 	default:
 		detailParts = append(detailParts, "No workloads")

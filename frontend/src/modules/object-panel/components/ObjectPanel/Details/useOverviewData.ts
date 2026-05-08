@@ -778,6 +778,8 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         name: namespaceDetails.name,
         age: namespaceDetails.age,
         status: namespaceDetails.status,
+        statusState: namespaceDetails.statusState,
+        statusPresentation: namespaceDetails.statusPresentation,
         hasWorkloads: namespaceDetails.hasWorkloads,
         workloadsUnknown: namespaceDetails.workloadsUnknown,
         labels: namespaceDetails.labels,

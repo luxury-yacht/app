@@ -16,6 +16,33 @@ const (
 	ResourceScopeNamespaced ResourceScope = "namespaced"
 )
 
+type ResourceModelBuildOptions struct {
+	Materialization ResourceFactMaterialization
+}
+
+type ResourceFactMaterialization uint64
+
+const (
+	MaterializeSummaryFacts ResourceFactMaterialization = 1 << iota
+	MaterializeRelationshipFacts
+	MaterializeDetailFacts
+	MaterializeReverseLinks
+	MaterializeContainerTemplates
+	MaterializeChildLists
+	MaterializeMetrics
+)
+
+func (m ResourceFactMaterialization) Has(flag ResourceFactMaterialization) bool {
+	return m&flag != 0
+}
+
+func BuildOptions(options ...ResourceModelBuildOptions) ResourceModelBuildOptions {
+	if len(options) == 0 {
+		return ResourceModelBuildOptions{Materialization: MaterializeSummaryFacts}
+	}
+	return options[0]
+}
+
 type StatusSignalType string
 
 const (
@@ -113,6 +140,7 @@ type NodeFacts struct {
 }
 
 type ResourceFacts struct {
+	Namespace                      *NamespaceFacts                      `json:"namespace,omitempty"`
 	Node                           *NodeFacts                           `json:"node,omitempty"`
 	Pod                            *PodFacts                            `json:"pod,omitempty"`
 	Deployment                     *WorkloadFacts                       `json:"deployment,omitempty"`
@@ -154,6 +182,15 @@ type ResourceFacts struct {
 	HelmRelease                    *HelmReleaseFacts                    `json:"helmRelease,omitempty"`
 	Event                          *EventFacts                          `json:"event,omitempty"`
 	CustomResource                 *CustomResourceFacts                 `json:"customResource,omitempty"`
+}
+
+type NamespaceFacts struct {
+	RawPhase       string         `json:"rawPhase,omitempty"`
+	WorkloadState  string         `json:"workloadState,omitempty"`
+	ResourceQuotas []ResourceLink `json:"resourceQuotas,omitempty"`
+	LimitRanges    []ResourceLink `json:"limitRanges,omitempty"`
+	WorkloadsKnown bool           `json:"workloadsKnown"`
+	HasWorkloads   bool           `json:"hasWorkloads"`
 }
 
 type PodFacts struct {

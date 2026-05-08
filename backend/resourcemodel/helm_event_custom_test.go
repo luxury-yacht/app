@@ -43,7 +43,16 @@ func TestBuildHelmReleaseResourceModelSyntheticIdentityAndFacts(t *testing.T) {
 	}}
 	resources := []ResourceLink{BuildHelmManifestResourceLink("cluster-a", "apps/v1", "Deployment", "apps", "orders")}
 
-	model := BuildHelmReleaseResourceModel("cluster-a", rel, "", resources, history)
+	model := BuildHelmReleaseResourceModel(
+		"cluster-a",
+		rel,
+		"",
+		resources,
+		history,
+		ResourceModelBuildOptions{
+			Materialization: MaterializeSummaryFacts | MaterializeRelationshipFacts | MaterializeDetailFacts,
+		},
+	)
 
 	require.Equal(t, ResourceSourceSynthetic, model.Source)
 	require.Equal(t, ResourceRef{
@@ -75,6 +84,39 @@ func TestBuildHelmReleaseResourceModelSyntheticIdentityAndFacts(t *testing.T) {
 	require.Equal(t, "apps", facts.Resources[0].Ref.Namespace)
 	require.Len(t, facts.History, 1)
 	require.Equal(t, "superseded", facts.History[0].Status)
+}
+
+func TestBuildHelmReleaseResourceModelSummaryMaterializationOmitsDetailPayloads(t *testing.T) {
+	rel := &release.Release{
+		Name:      "orders",
+		Namespace: "apps",
+		Version:   3,
+		Chart:     &chart.Chart{Metadata: &chart.Metadata{Name: "orders-chart", Version: "1.2.3"}},
+		Info: &release.Info{
+			Status:      release.StatusDeployed,
+			Description: "Upgrade complete",
+			Notes:       "detail notes should not be in table payloads",
+		},
+	}
+	history := []*release.Release{{Version: 2, Info: &release.Info{Status: release.StatusSuperseded}}}
+	resources := []ResourceLink{BuildHelmManifestResourceLink("cluster-a", "apps/v1", "Deployment", "apps", "orders")}
+
+	model := BuildHelmReleaseResourceModel(
+		"cluster-a",
+		rel,
+		"",
+		resources,
+		history,
+		ResourceModelBuildOptions{Materialization: MaterializeSummaryFacts},
+	)
+
+	facts := model.Facts.HelmRelease
+	require.Equal(t, "orders-chart-1.2.3", facts.Chart)
+	require.Equal(t, "deployed", facts.RawStatus)
+	require.Equal(t, "Upgrade complete", facts.Description)
+	require.Empty(t, facts.Notes)
+	require.Empty(t, facts.History)
+	require.Empty(t, facts.Resources)
 }
 
 func TestBuildHelmManifestResourceLinkDoesNotGuessMissingAPIVersion(t *testing.T) {
@@ -181,4 +223,36 @@ func TestBuildCustomResourceModelExtractsDynamicStatus(t *testing.T) {
 	require.Equal(t, "False", facts.Conditions[0].Status)
 	require.Equal(t, "CustomResourceDefinition", facts.CRD.Ref.Kind)
 	require.Equal(t, "databases.databases.example.com", facts.CRD.Ref.Name)
+}
+
+func TestBuildCustomResourceModelMaterializationControlsRawStatus(t *testing.T) {
+	resource := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "databases.example.com/v1alpha1",
+		"kind":       "Database",
+		"metadata": map[string]any{
+			"name":      "orders",
+			"namespace": "apps",
+		},
+		"status": map[string]any{
+			"phase":   "Reconciling",
+			"message": "large provider-specific payload",
+		},
+	}}
+	gvr := schema.GroupVersionResource{Group: "databases.example.com", Version: "v1alpha1", Resource: "databases"}
+
+	summary := BuildCustomResourceModel("cluster-a", resource, gvr, "Database", "", ResourceScopeNamespaced, "")
+	require.Equal(t, "Reconciling", summary.Facts.CustomResource.Phase)
+	require.Empty(t, summary.Facts.CustomResource.RawStatus)
+
+	detail := BuildCustomResourceModel(
+		"cluster-a",
+		resource,
+		gvr,
+		"Database",
+		"",
+		ResourceScopeNamespaced,
+		"",
+		ResourceModelBuildOptions{Materialization: MaterializeSummaryFacts | MaterializeDetailFacts},
+	)
+	require.Equal(t, "large provider-specific payload", detail.Facts.CustomResource.RawStatus["message"])
 }

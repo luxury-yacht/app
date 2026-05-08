@@ -18,8 +18,10 @@ func BuildCustomResourceModel(
 	crdName string,
 	scope ResourceScope,
 	namespaceFallback string,
+	options ...ResourceModelBuildOptions,
 ) ResourceModel {
-	facts := BuildCustomResourceFacts(clusterID, resource, gvr, crdName)
+	buildOptions := BuildOptions(options...)
+	facts := BuildCustomResourceFacts(clusterID, resource, gvr, crdName, buildOptions)
 	status := BuildCustomResourceStatusPresentation(resource, facts)
 	meta := metav1.ObjectMeta{}
 	if resource != nil {
@@ -37,6 +39,7 @@ func BuildCustomResourceFacts(
 	resource *unstructured.Unstructured,
 	gvr schema.GroupVersionResource,
 	crdName string,
+	options ResourceModelBuildOptions,
 ) CustomResourceFacts {
 	facts := CustomResourceFacts{}
 	if crdName != "" {
@@ -51,8 +54,10 @@ func BuildCustomResourceFacts(
 	facts.Ready = customResourceReady(resource.Object)
 	facts.ObservedGeneration = nestedInt64Ptr(resource.Object, "status", "observedGeneration")
 	facts.Conditions = customResourceConditions(resource.Object)
-	if rawStatus, ok, _ := unstructured.NestedMap(resource.Object, "status"); ok {
-		facts.RawStatus = rawStatus
+	if options.Materialization.Has(MaterializeDetailFacts) {
+		if rawStatus, ok, _ := unstructured.NestedMap(resource.Object, "status"); ok {
+			facts.RawStatus = rawStatus
+		}
 	}
 	return facts
 }

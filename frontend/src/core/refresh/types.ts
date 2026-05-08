@@ -89,6 +89,10 @@ export interface ClusterMeta {
 export interface NamespaceSummary extends ClusterMeta {
   name: string;
   phase: string;
+  status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   resourceVersion: string;
   creationTimestamp: number;
   hasWorkloads?: boolean;
@@ -810,7 +814,6 @@ export interface NamespaceHelmSummary extends ClusterMeta {
   revision: number;
   updated: string;
   description?: string;
-  notes?: string;
   age: string;
 }
 

@@ -48,7 +48,16 @@ func (s *Service) ReleaseDetails(namespace, name string) (*types.HelmReleaseDeta
 
 	resources := s.extractResourcesFromManifest(release.Manifest, namespace)
 	resourceLinks := helmResourceLinks(s.deps.Common.ClusterID, resources)
-	model := resourcemodel.BuildHelmReleaseResourceModel(s.deps.Common.ClusterID, release, namespace, resourceLinks, history)
+	model := resourcemodel.BuildHelmReleaseResourceModel(
+		s.deps.Common.ClusterID,
+		release,
+		namespace,
+		resourceLinks,
+		history,
+		resourcemodel.ResourceModelBuildOptions{
+			Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeRelationshipFacts | resourcemodel.MaterializeDetailFacts,
+		},
+	)
 	facts := model.Facts.HelmRelease
 
 	details := &types.HelmReleaseDetails{

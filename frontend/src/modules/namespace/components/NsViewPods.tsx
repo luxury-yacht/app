@@ -42,7 +42,7 @@ interface PodsViewProps {
   error?: string | null;
 }
 
-const HEALTHY_POD_STATUSES = new Set(['running', 'succeeded', 'completed']);
+const UNHEALTHY_POD_PRESENTATIONS = new Set(['warning', 'error', 'not-ready', 'terminating']);
 
 const UnhealthyPodsIcon: React.FC<{ width?: number; height?: number }> = ({
   width = 16,
@@ -82,29 +82,9 @@ const getReadySortValue = (value?: string | null): number => {
   return counts.ready * 1000000 + counts.total;
 };
 
-// Determine if a pod is unhealthy based on its status, restarts, and ready counts.
+// The backend owns pod health semantics; this filter only reads the presentation token.
 const isPodUnhealthy = (pod: PodSnapshotEntry): boolean => {
-  const restarts = pod.restarts ?? 0;
-  if (restarts > 0) {
-    return true;
-  }
-  const normalizedStatus = (pod.status || '').trim().toLowerCase();
-  // Ignore readiness mismatch for succeeded pods (completed cron jobs).
-  const ignoreReadyMismatch = normalizedStatus === 'succeeded';
-  // If the ready count is less than total, consider unhealthy, unless ignoring ready mismatch for "succeeded" pods.
-  const readyCounts = parseReadyCounts(pod.ready);
-  if (
-    !ignoreReadyMismatch &&
-    readyCounts &&
-    readyCounts.total > 0 &&
-    readyCounts.ready < readyCounts.total
-  ) {
-    return true;
-  }
-  if (!normalizedStatus) {
-    return false;
-  }
-  return !HEALTHY_POD_STATUSES.has(normalizedStatus);
+  return UNHEALTHY_POD_PRESENTATIONS.has((pod.statusPresentation || '').trim().toLowerCase());
 };
 
 /**

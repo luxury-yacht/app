@@ -47,7 +47,6 @@ type NamespaceHelmSummary struct {
 	Revision           int    `json:"revision"`
 	Updated            string `json:"updated"`
 	Description        string `json:"description,omitempty"`
-	Notes              string `json:"notes,omitempty"`
 	Age                string `json:"age"`
 }
 
@@ -248,20 +247,25 @@ func mapHelmReleases(
 		if namespaceFilter != "" && ns != namespaceFilter {
 			continue
 		}
-		model := resourcemodel.BuildHelmReleaseResourceModel(meta.ClusterID, release, namespaceFilter, nil, nil)
+		model := resourcemodel.BuildHelmReleaseResourceModel(
+			meta.ClusterID,
+			release,
+			namespaceFilter,
+			nil,
+			nil,
+			resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts},
+		)
 		facts := model.Facts.HelmRelease
 		chartName := facts.Chart
 		appVersion := facts.AppVersion
 		status := model.Status.Label
 		updated := ""
 		description := ""
-		notes := ""
 		age := ""
 		if facts.Updated != nil && !facts.Updated.IsZero() {
 			updated = facts.Updated.Time.Format(time.RFC3339)
 		}
 		description = facts.Description
-		notes = facts.Notes
 		if !model.Metadata.CreationTimestamp.IsZero() {
 			age = formatAge(model.Metadata.CreationTimestamp.Time)
 		}
@@ -278,7 +282,6 @@ func mapHelmReleases(
 			Revision:           release.Version,
 			Updated:            updated,
 			Description:        description,
-			Notes:              notes,
 			Age:                age,
 		})
 		if v := uint64(release.Version); v > version {
