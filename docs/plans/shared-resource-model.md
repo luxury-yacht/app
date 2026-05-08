@@ -181,7 +181,115 @@ The scan also finds names that should not become first-class facts:
   not Kubernetes resources.
 - fixture/custom examples such as `Widget`, `Gadget`, `DBCluster`,
   `DBInstance`, `DbInstance`, and `Rollout` are covered by
-  `CustomResourceFacts` unless promoted to explicit support later.
+  dynamic custom-resource handling unless promoted to explicit support later.
+
+### Modeling Rules
+
+For every resource family, decide the shared model from Kubernetes API
+semantics, not from the current table or detail DTO shape.
+
+Use this decision process:
+
+- Start from the typed Kubernetes object and the object catalog GVK/GVR/scope.
+- Put identity, metadata, lifecycle, primary status, owners, and relationships
+  in common `ResourceModel` fields.
+- Put durable, resource-specific Kubernetes semantics in that kind's facts type.
+- Put large, raw, sensitive, tab-specific, or workflow-specific payloads in
+  detail-only DTOs.
+- Represent object relationships with `ResourceLink`; use `DisplayRef` when the
+  source does not provide enough identity for safe navigation.
+- Preserve semantic values such as quantities, int-or-string fields, conditions,
+  refs, and typed action options until the final table/detail DTO formatting
+  boundary.
+- Reject a shared field when its only purpose is to mimic today's frontend
+  display string.
+
+The current backend detail structs are useful as an inventory of what users can
+see today, but they are not the source of truth for the new model. When they
+contain flattened strings, kind-only references, or large payloads, the shared
+model should correct the shape and the consumer DTO should adapt.
+
+### Concrete Node Example
+
+Today the same node is represented differently depending on the consumer:
+
+```go
+// Cluster table row.
+types.ClsNodeInfo{
+	Kind:       "node",
+	Name:       "ip-10-121-42-110",
+	Status:     "Ready (Cordoned)",
+	Roles:      "worker",
+	Version:    "v1.35.2",
+	InternalIP: "10.121.42.110",
+	CPU:        "8",
+	Memory:     "32Gi",
+	Pods:       "28/110",
+	Age:        "12d",
+}
+
+// Object-panel details.
+types.NodeDetails{
+	Kind:          "node",
+	Name:          "ip-10-121-42-110",
+	Status:        "Ready",
+	Unschedulable: true,
+	Roles:         "worker",
+	Conditions:    []types.NodeCondition{{Kind: "Ready", Status: "True"}},
+	PodsList:      []types.PodSimpleInfo{...},
+}
+```
+
+The proposed shared model derives node meaning once:
+
+```go
+ResourceModel{
+	Ref: ResourceRef{
+		ClusterID: "fusionauth-dev-us-east-1",
+		Group:     "",
+		Version:   "v1",
+		Kind:      "Node",
+		Resource:  "nodes",
+		Name:      "ip-10-121-42-110",
+		UID:       "8f0f...",
+	},
+	Source: ResourceSourceKubernetes,
+	Scope:  ResourceScopeCluster,
+	Metadata: ResourceMetadata{
+		CreationTimestamp: node.CreationTimestamp.Time,
+		ResourceVersion:   node.ResourceVersion,
+		Labels:            node.Labels,
+		Annotations:       node.Annotations,
+		Finalizers:        node.Finalizers,
+	},
+	Status: ResourceStatusPresentation{
+		Label:  "Ready (Cordoned)",
+		State:  ResourceStateDegraded,
+		Reason: "Unschedulable",
+		Sources: []ResourceStatusSignal{
+			{Type: StatusSignalCondition, Name: "Ready", Value: "True"},
+			{Type: StatusSignalResourceState, Name: "Unschedulable", Value: "true"},
+		},
+		Badges: []ResourceStatusBadge{
+			{Label: "Cordoned", State: ResourceStateDegraded, Reason: "Unschedulable"},
+		},
+	},
+	Facts: ResourceFacts{
+		Node: &NodeFacts{
+			Roles:          []string{"worker"},
+			Unschedulable: true,
+			PodCount:       28,
+			PodCapacity:    110,
+			Conditions:     []ConditionFacts{{Type: "Ready", Status: "True"}},
+		},
+	},
+}
+```
+
+The node table and object-panel details can still expose different DTOs, but
+both select status from `ResourceModel.Status`. The table may format pod counts
+as `28/110`; the detail panel may request `MaterializeChildLists` to render
+pods. Neither should rederive whether the node is cordoned.
 
 ### Common Shape
 
@@ -191,12 +299,28 @@ start from the same common shape.
 ```go
 type ResourceModel struct {
 	Ref       ResourceRef
+	Source    ResourceSource
+	Scope     ResourceScope
 	Metadata  ResourceMetadata
 	Status    ResourceStatusPresentation
 	Owners    []ResourceLink
 	Relations []ResourceRelation
 	Facts     ResourceFacts
 }
+
+type ResourceSource string
+
+const (
+	ResourceSourceKubernetes ResourceSource = "kubernetes"
+	ResourceSourceSynthetic  ResourceSource = "synthetic"
+)
+
+type ResourceScope string
+
+const (
+	ResourceScopeCluster    ResourceScope = "cluster"
+	ResourceScopeNamespaced ResourceScope = "namespaced"
+)
 
 type ResourceRef struct {
 	ClusterID string
@@ -217,6 +341,7 @@ type DisplayRef struct {
 	Resource  string
 	Namespace string
 	Name      string
+	UID       string
 }
 
 type ResourceLink struct {
@@ -239,15 +364,39 @@ type ResourceStatusPresentation struct {
 	Reason             string
 	Message            string
 	ObservedGeneration int64
-	Source             ResourceStatusSource
+	Lifecycle          ResourceLifecycle
+	Sources            []ResourceStatusSignal
 	Badges             []ResourceStatusBadge
 }
 
-type ResourceStatusSource struct {
-	ConditionType      string
-	ConditionStatus    string
+type ResourceLifecycle struct {
+	Terminating        bool
+	DeletionTimestamp  *time.Time
+	FinalizerBlocked   bool
+	FinalizerCount     int
+	ObservedGeneration int64
+}
+
+type ResourceStatusSignal struct {
+	Type               StatusSignalType
+	Name               string
+	Value              string
+	Reason             string
+	Message            string
 	LastTransitionTime *time.Time
 }
+
+type StatusSignalType string
+
+const (
+	StatusSignalCondition       StatusSignalType = "condition"
+	StatusSignalPhase           StatusSignalType = "phase"
+	StatusSignalDeletion        StatusSignalType = "deletion"
+	StatusSignalReadiness       StatusSignalType = "readiness"
+	StatusSignalGeneration      StatusSignalType = "generation"
+	StatusSignalResourceState   StatusSignalType = "resourceState"
+	StatusSignalControllerState StatusSignalType = "controllerState"
+)
 
 type ResourceStatusBadge struct {
 	Label  string
@@ -287,6 +436,18 @@ The shared model package should provide:
 - `ResourceLink.IsOpenable() bool`
 - `ResourceLink.Validate() error`
 
+`ResourceSource` distinguishes real Kubernetes API objects from app-synthetic
+objects such as Helm releases. `ResourceScope` records the resolved catalog
+scope and drives validation: namespaced resources must carry namespace when the
+reference points to a concrete object, and cluster-scoped resources must not
+invent one.
+
+`ResourceStatusPresentation.Sources` should preserve the signals used to derive
+the primary label and state. Consumers still render only the chosen
+presentation, but tests can verify whether a status came from deletion state,
+phase, readiness, generation, conditions, controller state, or resource-specific
+signals such as `spec.unschedulable`.
+
 ### Contextual Capabilities
 
 Capabilities must be modeled separately from intrinsic resource facts.
@@ -302,7 +463,37 @@ type CapabilityContext struct {
 	ClusterID        string
 	PrincipalKey     string
 	DiscoveryVersion string
-	ActionOptions    map[string]any
+	ActionOptions    ActionOptionFacts
+}
+
+type ActionOptionFacts struct {
+	Drain      *DrainActionOptions
+	DeletePods *DeletePodsActionOptions
+	Scale      *ScaleActionOptions
+	Restart    *RestartActionOptions
+}
+
+type DrainActionOptions struct {
+	GracePeriodSeconds         *int
+	TimeoutSeconds             *int
+	IgnoreDaemonSets           bool
+	DeleteEmptyDirData         bool
+	Force                      bool
+	DisableEviction            bool
+	SkipWaitForPodsToTerminate bool
+}
+
+type DeletePodsActionOptions struct {
+	GracePeriodSeconds *int
+	Force              bool
+}
+
+type ScaleActionOptions struct {
+	Replicas int32
+}
+
+type RestartActionOptions struct {
+	Strategy string
 }
 
 type ActionID string
@@ -331,14 +522,26 @@ type CapabilityFact struct {
 }
 
 type CapabilityCheckFact struct {
-	Ref     ResourceLink
-	Group   string
-	Version string
-	Kind    string
-	Verb    string
-	Allowed bool
-	Reason  string
-	Error   string
+	Ref        ResourceLink
+	Attributes PermissionAttributes
+	Allowed    bool
+	Reason     string
+	Error      string
+}
+
+type PermissionAttributes struct {
+	ClusterID    string
+	Namespace    string
+	Name         string
+	Group        string
+	Version      string
+	Resource     string
+	Subresource  string
+	Kind         string
+	Verb         string
+	Scope        ResourceScope
+	NonResource  bool
+	ResourcePath string
 }
 ```
 
@@ -346,6 +549,18 @@ Capability builders may consume `ResourceModel`, but the shared resource model
 must not embed capability facts directly. This keeps object semantics stable
 while allowing permissions, diagnostics, active operations, and option-dependent
 actions to change independently.
+
+`PermissionAttributes` intentionally mirrors Kubernetes authorization
+attributes, including resource plural, subresource, namespace, name, verb, and
+scope. This is required for operations such as `pods/eviction`, `pods/log`,
+`pods/exec`, node patch/update, and namespaced deletes. Capability builders
+must not reduce these checks to kind/verb pairs.
+
+`ActionOptionFacts` is typed because options can change which checks are
+required. For example, drain with eviction enabled needs `pods/eviction create`,
+while drain with eviction disabled needs direct pod delete permissions. Adding a
+new action option should extend the typed option model, not add another untyped
+option branch.
 
 `Reason` explains a known denial or disabled state, such as missing RBAC or an
 in-flight operation. `Error` records a failed check, such as discovery or
@@ -420,6 +635,48 @@ should avoid serializing dozens of null fields per object. Acceptable options:
 
 Record the decision as an ADR-style note before migrating the first resource
 family. Do not let each builder invent its own exported facts shape.
+
+### Fact Materialization Levels
+
+The shared resource model must not make every consumer pay to build every fact.
+Centralizing semantics is correct only if the model can be materialized at the
+size each consumer needs.
+
+Builders should accept explicit materialization options:
+
+```go
+type ResourceModelBuildOptions struct {
+	Materialization ResourceFactMaterialization
+}
+
+type ResourceFactMaterialization uint64
+
+const (
+	MaterializeSummaryFacts ResourceFactMaterialization = 1 << iota
+	MaterializeRelationshipFacts
+	MaterializeDetailFacts
+	MaterializeReverseLinks
+	MaterializeContainerTemplates
+	MaterializeChildLists
+	MaterializeMetrics
+)
+```
+
+The default table path should build identity, metadata, status, and summary
+facts only. Detail paths may request container templates, child lists, and
+detail facts. Object-map paths may request relationships without detail-heavy
+payloads. Reverse links must be explicitly requested and served from the shared
+relationship index.
+
+The zero materialization value means identity, metadata, status, owners, and
+direct relations only. Builders should expose a small helper such as
+`Materialization.Has(MaterializeDetailFacts)` so call sites are readable and do
+not hand-roll bit checks.
+
+No implementation phase is complete until its migrated table, detail, and
+object-map consumers are wired through explicit materialization options. This is
+what prevents the shared layer from becoming a single centralized expensive
+detail builder.
 
 ### Shared Supporting Shapes
 
@@ -546,7 +803,7 @@ type ServicePortFacts struct {
 	Name       string
 	Protocol   string
 	Port       int32
-	TargetPort string
+	TargetPort IntOrStringFacts
 	NodePort   int32
 }
 
@@ -576,7 +833,22 @@ type IngressRuleFacts struct {
 type IngressPathFacts struct {
 	Path     string
 	PathType string
-	Backend  ResourceLink
+	Backend  IngressBackendFacts
+}
+
+type IngressBackendFacts struct {
+	Service  *IngressServiceBackendFacts
+	Resource *ResourceLink
+}
+
+type IngressServiceBackendFacts struct {
+	Service ResourceLink
+	Port    ServiceBackendPortFacts
+}
+
+type ServiceBackendPortFacts struct {
+	Name   string
+	Number int32
 }
 
 type NetworkPolicyRuleFacts struct {
@@ -612,9 +884,64 @@ type GatewayListenerFacts struct {
 }
 
 type RouteRuleFacts struct {
-	Matches  []string
-	Filters  []string
-	Backends []ResourceLink
+	Matches  []RouteMatchFacts
+	Filters  []RouteFilterFacts
+	Backends []RouteBackendFacts
+}
+
+type RouteMatchFacts struct {
+	Path        *RoutePathMatchFacts
+	Headers     []RouteHeaderMatchFacts
+	QueryParams []RouteHeaderMatchFacts
+	Method      string
+	GRPCService string
+	GRPCMethod  string
+}
+
+type RoutePathMatchFacts struct {
+	Type  string
+	Value string
+}
+
+type RouteHeaderMatchFacts struct {
+	Name  string
+	Type  string
+	Value string
+}
+
+type RouteFilterFacts struct {
+	Type               string
+	RequestHeaderMods  *HeaderModifierFacts
+	ResponseHeaderMods *HeaderModifierFacts
+	RequestRedirect    *RequestRedirectFacts
+	URLRewrite         *URLRewriteFacts
+	RequestMirror      *RouteBackendFacts
+	ExtensionRef       *ResourceLink
+}
+
+type HeaderModifierFacts struct {
+	Set    map[string]string
+	Add    map[string]string
+	Remove []string
+}
+
+type RequestRedirectFacts struct {
+	Scheme     string
+	Hostname   string
+	Path       *RoutePathMatchFacts
+	Port       *int32
+	StatusCode *int
+}
+
+type URLRewriteFacts struct {
+	Hostname string
+	Path     *RoutePathMatchFacts
+}
+
+type RouteBackendFacts struct {
+	Ref    ResourceLink
+	Port   *int32
+	Weight *int32
 }
 
 type ReferenceGrantFromFacts struct {
@@ -624,8 +951,163 @@ type ReferenceGrantFromFacts struct {
 }
 
 type VolumeSourceFacts struct {
-	Type       string
-	Attributes map[string]string
+	Type                    string
+	AWSElasticBlockStore    *AWSElasticBlockStoreFacts
+	AzureDisk               *AzureDiskFacts
+	AzureFile               *AzureFileFacts
+	CSI                     *CSIVolumeSourceFacts
+	FC                      *FCVolumeSourceFacts
+	FlexVolume              *FlexVolumeSourceFacts
+	GCEPersistentDisk       *GCEPersistentDiskFacts
+	HostPath                *HostPathFacts
+	ISCSI                   *ISCSIVolumeSourceFacts
+	Local                   *LocalVolumeSourceFacts
+	NFS                     *NFSVolumeSourceFacts
+	PhotonPersistentDisk    *PhotonPersistentDiskFacts
+	PortworxVolume          *PortworxVolumeFacts
+	Quobyte                 *QuobyteVolumeFacts
+	RBD                     *RBDVolumeSourceFacts
+	ScaleIO                 *ScaleIOVolumeSourceFacts
+	StorageOS               *StorageOSVolumeSourceFacts
+	VsphereVolume           *VsphereVirtualDiskFacts
+}
+
+type AWSElasticBlockStoreFacts struct {
+	VolumeID  string
+	FSType    string
+	Partition int32
+	ReadOnly  bool
+}
+
+type AzureDiskFacts struct {
+	DiskName    string
+	DiskURI     string
+	Kind        string
+	CachingMode string
+	FSType      string
+	ReadOnly    bool
+}
+
+type AzureFileFacts struct {
+	SecretRef ResourceLink
+	ShareName string
+	ReadOnly  bool
+}
+
+type CSIVolumeSourceFacts struct {
+	Driver           string
+	VolumeHandle     string
+	FSType           string
+	ReadOnly         bool
+	VolumeAttributes map[string]string
+	NodePublishSecret *ResourceLink
+}
+
+type FCVolumeSourceFacts struct {
+	TargetWWNs []string
+	Lun        *int32
+	FSType     string
+	ReadOnly   bool
+}
+
+type FlexVolumeSourceFacts struct {
+	Driver    string
+	FSType    string
+	ReadOnly  bool
+	SecretRef *ResourceLink
+	Options   map[string]string
+}
+
+type GCEPersistentDiskFacts struct {
+	PDName    string
+	FSType    string
+	Partition int32
+	ReadOnly  bool
+}
+
+type HostPathFacts struct {
+	Path string
+	Type string
+}
+
+type ISCSIVolumeSourceFacts struct {
+	TargetPortal string
+	IQN          string
+	Lun          int32
+	ISCSIInterface string
+	FSType       string
+	ReadOnly     bool
+	Portals      []string
+	SecretRef    *ResourceLink
+	InitiatorName string
+}
+
+type LocalVolumeSourceFacts struct {
+	Path string
+	FSType string
+}
+
+type NFSVolumeSourceFacts struct {
+	Server   string
+	Path     string
+	ReadOnly bool
+}
+
+type PhotonPersistentDiskFacts struct {
+	PDID   string
+	FSType string
+}
+
+type PortworxVolumeFacts struct {
+	VolumeID string
+	FSType   string
+	ReadOnly bool
+}
+
+type QuobyteVolumeFacts struct {
+	Registry string
+	Volume   string
+	ReadOnly bool
+	User     string
+	Group    string
+}
+
+type RBDVolumeSourceFacts struct {
+	Monitors []string
+	Image    string
+	FSType   string
+	Pool     string
+	User     string
+	Keyring  string
+	SecretRef *ResourceLink
+	ReadOnly bool
+}
+
+type ScaleIOVolumeSourceFacts struct {
+	Gateway          string
+	System           string
+	ProtectionDomain string
+	StoragePool      string
+	StorageMode      string
+	VolumeName       string
+	FSType           string
+	ReadOnly         bool
+	SecretRef        *ResourceLink
+}
+
+type StorageOSVolumeSourceFacts struct {
+	VolumeName      string
+	VolumeNamespace string
+	FSType          string
+	ReadOnly        bool
+	SecretRef       *ResourceLink
+}
+
+type VsphereVirtualDiskFacts struct {
+	VolumePath        string
+	FSType            string
+	StoragePolicyName string
+	StoragePolicyID   string
 }
 
 type MetricFacts struct {
@@ -669,7 +1151,13 @@ type ScalingBehaviorFacts struct {
 type ScalingRulesFacts struct {
 	StabilizationWindowSeconds *int32
 	SelectPolicy               string
-	Policies                   []string
+	Policies                   []ScalingPolicyFacts
+}
+
+type ScalingPolicyFacts struct {
+	Type          string
+	Value         int32
+	PeriodSeconds int32
 }
 
 type ScopeSelectorFacts struct {
@@ -684,11 +1172,24 @@ type ScopeSelectorRequirementFacts struct {
 
 type LimitRangeItemFacts struct {
 	Type                 string
-	Max                  map[string]string
-	Min                  map[string]string
-	Default              map[string]string
-	DefaultRequest       map[string]string
-	MaxLimitRequestRatio map[string]string
+	Max                  ResourceQuantityMapFacts
+	Min                  ResourceQuantityMapFacts
+	Default              ResourceQuantityMapFacts
+	DefaultRequest       ResourceQuantityMapFacts
+	MaxLimitRequestRatio ResourceQuantityMapFacts
+}
+
+type ResourceQuantityMapFacts map[string]resource.Quantity
+
+type IntOrStringFacts struct {
+	Type   string
+	IntVal *int32
+	StrVal string
+}
+
+type StatefulSetPVCRetentionPolicyFacts struct {
+	WhenDeleted string
+	WhenScaled  string
 }
 
 type PolicyRuleFacts struct {
@@ -923,7 +1424,7 @@ type StatefulSetFacts struct {
 	CurrentReplicas            int32
 	UpdatedReplicas            int32
 	CollisionCount             *int32
-	PVCRetentionPolicy         map[string]string
+	PVCRetentionPolicy         *StatefulSetPVCRetentionPolicyFacts
 	VolumeClaimTemplates       []VolumeClaimTemplateFacts
 }
 
@@ -1053,8 +1554,8 @@ type ServiceFacts struct {
 	SessionAffinityTimeout int32
 	Selector               map[string]string
 	Endpoints              []ResourceLink
-	EndpointCount          int
-	HealthStatus           string
+	ReadyEndpointCount     int
+	TotalEndpointCount     int
 }
 
 type EndpointSliceFacts struct {
@@ -1072,7 +1573,7 @@ type IngressFacts struct {
 	Addresses      []string
 	TLS            []IngressTLSFacts
 	Rules          []IngressRuleFacts
-	DefaultBackend *ResourceLink
+	DefaultBackend *IngressBackendFacts
 }
 
 type IngressClassFacts struct {
@@ -1222,20 +1723,25 @@ type HorizontalPodAutoscalerFacts struct {
 
 type PodDisruptionBudgetFacts struct {
 	Selector             map[string]string
-	MinAvailable         string
-	MaxUnavailable       string
+	MinAvailable         *IntOrStringFacts
+	MaxUnavailable       *IntOrStringFacts
 	AllowedDisruptions   int32
 	CurrentHealthy       int32
 	DesiredHealthy       int32
 	ExpectedPods         int32
-	DisruptedPods        []ResourceLink
+	DisruptedPods        []DisruptedPodFacts
 	Conditions           []ConditionFacts
 	ObservedGeneration   int64
 }
 
+type DisruptedPodFacts struct {
+	Pod             ResourceLink
+	DisruptionTime  time.Time
+}
+
 type ResourceQuotaFacts struct {
-	Hard           map[string]string
-	Used           map[string]string
+	Hard           ResourceQuantityMapFacts
+	Used           ResourceQuantityMapFacts
 	UsedPercentage map[string]int
 	Scopes         []string
 	ScopeSelector  ScopeSelectorFacts
@@ -1320,12 +1826,11 @@ Applies to `helmrelease`.
 
 ```go
 type HelmReleaseFacts struct {
-	TypeAlias   string
 	Chart       string
 	Version     string
 	AppVersion  string
 	Revision    int
-	Status      string
+	RawStatus   string
 	Updated     *time.Time
 	Description string
 	Resources   []ResourceLink
@@ -1333,15 +1838,16 @@ type HelmReleaseFacts struct {
 }
 ```
 
+`RawStatus` preserves Helm's release status for detail display and debugging.
+Consumers must use `ResourceModel.Status` for the primary label, severity,
+sorting, and filtering.
+
 ### Events
 
 Applies to `Event`.
 
 ```go
 type EventFacts struct {
-	Name                string
-	UID                 string
-	ResourceVersion     string
 	Type                string
 	Reason              string
 	Message             string
@@ -1355,28 +1861,30 @@ type EventFacts struct {
 }
 ```
 
-### Custom Resources And Generic Fallback
+### Custom Resources
 
-Applies to custom resources and any known kind without a typed facts model yet.
+Applies to dynamic custom resources discovered from the object catalog.
 
 ```go
 type CustomResourceFacts struct {
-	APIVersion string
-	Plural     string
-	Scope      string
-	Conditions []ConditionFacts
+	Conditions         []ConditionFacts
+	ObservedGeneration int64
 }
 ```
 
-`CustomResourceFacts` is the generic fallback for custom resources and known
-kinds that have not been promoted to an explicit facts type. Raw custom-resource
-spec/status payloads are detail-only data. The shared model should extract only
-semantic status conventions it owns, such as conditions, phase/state labels,
-ready markers, and observed generation.
+`CustomResourceFacts` is only for dynamic custom resources. It must not be used
+as a migration escape hatch for app-supported built-in kinds listed in the
+Supported Resource Inventory. If a built-in resource family is in scope for a
+phase, that phase must add its explicit facts type and consumers before it is
+marked complete.
 
-Generic fallback resources still need the common `ResourceModel` fields. They
-should not be allowed to drop `clusterId`, `group`, `version`, or `kind` just
-because no typed facts model exists yet.
+Raw custom-resource spec/status payloads are detail-only data. The shared model
+should extract only semantic status conventions it owns, such as conditions,
+phase/state labels, ready markers, and observed generation.
+
+Custom resources still need the common `ResourceModel` fields. They should not
+be allowed to drop `clusterId`, `group`, `version`, or `kind` just because no
+typed facts model exists yet.
 
 ## Open Modeling Risks To Resolve
 
@@ -1404,6 +1912,11 @@ ResourceRef{
 	Name:      releaseName,
 }
 ```
+
+The corresponding `ResourceModel` must set `Source:
+ResourceSourceSynthetic` and `Scope: ResourceScopeNamespaced`. Real Kubernetes
+objects must set `Source: ResourceSourceKubernetes` and the scope resolved by
+the object catalog.
 
 Legacy frontend values such as lowercase `helmrelease` should be treated as
 view compatibility concerns during migration, not as the canonical identity of
@@ -1508,7 +2021,7 @@ The shared resource model layer owns Kubernetes semantics:
 - PV/PVC bound, pending, released, failed, and lost interpretation
 - service and ingress address readiness
 - owner and relationship references
-- shared capability facts that come from resource state
+- resource-state signals consumed by contextual capability builders
 
 ### Table Builders
 
@@ -1584,14 +2097,19 @@ completed.
 ### Phase 1: Shared Model Foundation
 
 - [ ] Add shared resource model types.
+- [ ] Add explicit `ResourceSource` and `ResourceScope` fields and validation.
 - [ ] Add canonical object reference type usage with `clusterId`, `group`,
       `version`, `kind`, `namespace`, and `name`.
-- [ ] Add shared status presentation type.
+- [ ] Add shared status presentation type with lifecycle and source-signal
+      provenance.
 - [ ] Add `ResourceLink` constructors and validation.
 - [ ] Add object-catalog-backed reference resolution helpers.
-- [ ] Add contextual capability model types outside `ResourceModel`.
+- [ ] Add contextual capability model types outside `ResourceModel`, with
+      Kubernetes-shaped permission attributes and typed action options.
 - [ ] Add an explicit facts slot for every supported GVK and allow shared
       structs only for common substructure.
+- [ ] Add explicit materialization options for summary, relationship, detail,
+      child-list, reverse-link, and metric facts.
 - [ ] Decide and document the Wails/TypeScript facts shape.
 - [ ] Add the shared reverse-link index strategy and tests.
 - [ ] Add tests for shared model identity and status invariants.
@@ -1694,8 +2212,8 @@ completed.
 
 - [ ] Add shared resource models for CustomResourceDefinition,
       MutatingWebhookConfiguration, and ValidatingWebhookConfiguration.
-- [ ] Centralize CRD version/schema/condition facts and webhook rule/client
-      reference facts.
+- [ ] Centralize CRD version/name/condition facts and webhook rule/client
+      reference facts. Keep CRD schemas detail-only.
 - [ ] Use API extension/admission shared resource models from cluster tables and
       detail paths.
 - [ ] Add tests for webhook service links and CRD version facts.
@@ -1704,7 +2222,7 @@ completed.
 
 - [ ] Add shared resource model support for HelmRelease synthetic refs.
 - [ ] Add shared resource model support for Event involved-object links.
-- [ ] Add custom resource fallback extraction for conditions, phase, state,
+- [ ] Add dynamic custom-resource extraction for conditions, phase, state,
       ready, and observedGeneration.
 - [ ] Use these models from Helm, event, custom-resource, generic detail, and
       object-content paths where applicable.
@@ -1745,21 +2263,33 @@ returning.
   frontend table or panel components.
 - Table, detail, and object-map payloads for migrated resources derive shared
   identity and primary status from the same shared resource model.
-- Every supported GVK has an explicit facts type or generic custom-resource
-  fallback; no distinct resource kinds are hidden behind one overly broad facts
-  struct.
+- Every supported built-in GVK has an explicit facts type; dynamic custom
+  resources use `CustomResourceFacts` only when they are not promoted to
+  first-class support.
+- Every `ResourceModel` records whether it is Kubernetes-backed or synthetic and
+  whether it is cluster-scoped or namespaced.
 - Every openable `ResourceRef` produced by the shared resource model includes
   `clusterId`, `group`, `version`, and `kind`, plus `namespace` and `name` when
   object-specific.
 - Display-only references preserve all identity fields supplied by the source
-  object and are never presented as openable navigation targets.
+  object, including UID when present, and are never presented as openable
+  navigation targets.
+- Primary status includes lifecycle and source-signal provenance so terminating,
+  finalizer-blocked, phase-derived, condition-derived, readiness-derived, and
+  resource-state-derived statuses are testable.
 - Resource quantities remain semantic in the shared model and are formatted only
   by consumer DTO builders.
+- Capability checks preserve Kubernetes authorization attributes, including
+  resource plural, subresource, namespace, name, verb, and scope.
+- Action options are typed; no shared resource or capability model uses untyped
+  option maps for option semantics.
 - Secret values are not exposed through shared facts.
 - Capabilities are produced by contextual capability builders, not embedded in
   intrinsic resource facts.
 - Reverse links are computed through a shared relationship index, not repeated
   per-builder scans.
+- Table, detail, and object-map consumers request explicit materialization
+  levels and do not build detail-only facts for table refreshes.
 - Table/detail/map projection of the shared model has no measurable refresh
   latency regression against the largest cluster fixture used by prerelease
   quality checks.
