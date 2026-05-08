@@ -131,6 +131,14 @@ type ResourceFacts struct {
 	Ingress               *IngressFacts               `json:"ingress,omitempty"`
 	IngressClass          *IngressClassFacts          `json:"ingressClass,omitempty"`
 	NetworkPolicy         *NetworkPolicyFacts         `json:"networkPolicy,omitempty"`
+	GatewayClass          *GatewayClassFacts          `json:"gatewayClass,omitempty"`
+	Gateway               *GatewayFacts               `json:"gateway,omitempty"`
+	HTTPRoute             *HTTPRouteFacts             `json:"httpRoute,omitempty"`
+	GRPCRoute             *GRPCRouteFacts             `json:"grpcRoute,omitempty"`
+	TLSRoute              *TLSRouteFacts              `json:"tlsRoute,omitempty"`
+	ListenerSet           *ListenerSetFacts           `json:"listenerSet,omitempty"`
+	ReferenceGrant        *ReferenceGrantFacts        `json:"referenceGrant,omitempty"`
+	BackendTLSPolicy      *BackendTLSPolicyFacts      `json:"backendTLSPolicy,omitempty"`
 }
 
 type PodFacts struct {
@@ -319,6 +327,88 @@ type NetworkPolicyPortFacts struct {
 type IPBlockFacts struct {
 	CIDR   string   `json:"cidr,omitempty"`
 	Except []string `json:"except,omitempty"`
+}
+
+type ConditionsSummaryFacts struct {
+	Accepted   *ConditionFacts `json:"accepted,omitempty"`
+	Programmed *ConditionFacts `json:"programmed,omitempty"`
+	Ready      *ConditionFacts `json:"ready,omitempty"`
+	Resolved   *ConditionFacts `json:"resolvedRefs,omitempty"`
+}
+
+type GatewayClassFacts struct {
+	ControllerName string                 `json:"controllerName,omitempty"`
+	Parameters     *ResourceLink          `json:"parameters,omitempty"`
+	UsedBy         []ResourceLink         `json:"usedBy,omitempty"`
+	Conditions     []ConditionFacts       `json:"conditions,omitempty"`
+	Summary        ConditionsSummaryFacts `json:"summary,omitempty"`
+}
+
+type GatewayFacts struct {
+	Class      *ResourceLink          `json:"class,omitempty"`
+	Addresses  []string               `json:"addresses,omitempty"`
+	Listeners  []GatewayListenerFacts `json:"listeners,omitempty"`
+	Conditions []ConditionFacts       `json:"conditions,omitempty"`
+	Summary    ConditionsSummaryFacts `json:"summary,omitempty"`
+}
+
+type GatewayListenerFacts struct {
+	Name           string           `json:"name,omitempty"`
+	Hostname       string           `json:"hostname,omitempty"`
+	Port           int32            `json:"port"`
+	Protocol       string           `json:"protocol,omitempty"`
+	AttachedRoutes int32            `json:"attachedRoutes"`
+	Conditions     []ConditionFacts `json:"conditions,omitempty"`
+}
+
+type ListenerSetFacts struct {
+	ParentRef  ResourceLink           `json:"parentRef"`
+	Listeners  []GatewayListenerFacts `json:"listeners,omitempty"`
+	Conditions []ConditionFacts       `json:"conditions,omitempty"`
+	Summary    ConditionsSummaryFacts `json:"summary,omitempty"`
+}
+
+type RouteCommonFacts struct {
+	ParentRefs []ResourceLink         `json:"parentRefs,omitempty"`
+	Hostnames  []string               `json:"hostnames,omitempty"`
+	Rules      []RouteRuleFacts       `json:"rules,omitempty"`
+	Backends   []ResourceLink         `json:"backends,omitempty"`
+	Conditions []ConditionFacts       `json:"conditions,omitempty"`
+	Summary    ConditionsSummaryFacts `json:"summary,omitempty"`
+}
+
+type RouteRuleFacts struct {
+	Matches  []string       `json:"matches,omitempty"`
+	Backends []ResourceLink `json:"backends,omitempty"`
+}
+
+type HTTPRouteFacts struct {
+	RouteCommonFacts
+}
+
+type GRPCRouteFacts struct {
+	RouteCommonFacts
+}
+
+type TLSRouteFacts struct {
+	RouteCommonFacts
+}
+
+type ReferenceGrantFacts struct {
+	From []ReferenceGrantFromFacts `json:"from,omitempty"`
+	To   []ResourceLink            `json:"to,omitempty"`
+}
+
+type ReferenceGrantFromFacts struct {
+	Group     string `json:"group,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+}
+
+type BackendTLSPolicyFacts struct {
+	TargetRefs []ResourceLink         `json:"targetRefs,omitempty"`
+	Conditions []ConditionFacts       `json:"conditions,omitempty"`
+	Summary    ConditionsSummaryFacts `json:"summary,omitempty"`
 }
 
 type ResourceModel struct {

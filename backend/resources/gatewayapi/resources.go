@@ -3,6 +3,7 @@ package gatewayapi
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -221,47 +222,43 @@ func (s *Service) BackendTLSPolicies(namespace string) ([]*types.BackendTLSPolic
 }
 
 func (s *Service) buildGatewayClassDetails(item *gatewayv1.GatewayClass) *types.GatewayClassDetails {
+	model := resourcemodel.BuildGatewayClassResourceModel(s.deps.ClusterID, item)
+	facts := model.Facts.GatewayClass
 	detail := &types.GatewayClassDetails{
 		Kind:        "GatewayClass",
 		Name:        item.Name,
-		Controller:  string(item.Spec.ControllerName),
+		Controller:  facts.ControllerName,
 		Age:         common.FormatAge(item.CreationTimestamp.Time),
-		Conditions:  conditionStates(item.Status.Conditions),
-		Summary:     summarizeConditions(item.Status.Conditions),
+		Conditions:  conditionStatesFromFacts(facts.Conditions),
+		Summary:     conditionsSummaryFromFacts(facts.Summary),
 		Labels:      item.Labels,
 		Annotations: item.Annotations,
 	}
-	if item.Spec.ParametersRef != nil {
-		detail.Parameters = &types.RefOrDisplay{Display: &types.DisplayRef{
-			ClusterID: s.deps.ClusterID,
-			Group:     string(item.Spec.ParametersRef.Group),
-			Kind:      string(item.Spec.ParametersRef.Kind),
-			Namespace: stringValue(item.Spec.ParametersRef.Namespace),
-			Name:      string(item.Spec.ParametersRef.Name),
-		}}
+	if facts.Parameters != nil {
+		ref := refOrDisplayFromResourceLink(*facts.Parameters)
+		detail.Parameters = &ref
 	}
 	detail.Details = fmt.Sprintf("Controller: %s", detail.Controller)
 	return detail
 }
 
 func (s *Service) buildGatewayDetails(item *gatewayv1.Gateway) *types.GatewayDetails {
-	conditions := conditionStates(item.Status.Conditions)
+	model := resourcemodel.BuildGatewayResourceModel(s.deps.ClusterID, item)
+	facts := model.Facts.Gateway
 	detail := &types.GatewayDetails{
 		Kind:            "Gateway",
 		Name:            item.Name,
 		Namespace:       item.Namespace,
 		Age:             common.FormatAge(item.CreationTimestamp.Time),
-		GatewayClassRef: gatewayClassRef(s.deps, item.Spec.GatewayClassName),
-		Listeners:       s.gatewayListeners(item.Spec.Listeners, item.Status.Listeners),
-		Conditions:      conditions,
-		Summary:         summarizeConditions(item.Status.Conditions),
+		GatewayClassRef: objectRefFromResourceLink(facts.Class),
+		Addresses:       append([]string(nil), facts.Addresses...),
+		Listeners:       listenerDetailsFromFacts(facts.Listeners),
+		Conditions:      conditionStatesFromFacts(facts.Conditions),
+		Summary:         conditionsSummaryFromFacts(facts.Summary),
 		Labels:          item.Labels,
 		Annotations:     item.Annotations,
 	}
-	for _, address := range item.Status.Addresses {
-		detail.Addresses = append(detail.Addresses, string(address.Value))
-	}
-	detail.Details = fmt.Sprintf("%d listener(s)", len(item.Spec.Listeners))
+	detail.Details = fmt.Sprintf("%d listener(s)", len(facts.Listeners))
 	if len(detail.Addresses) > 0 {
 		detail.Details = fmt.Sprintf("%s, %s", detail.Details, detail.Addresses[0])
 	}
@@ -269,103 +266,50 @@ func (s *Service) buildGatewayDetails(item *gatewayv1.Gateway) *types.GatewayDet
 }
 
 func (s *Service) buildHTTPRouteDetails(item *gatewayv1.HTTPRoute) *types.HTTPRouteDetails {
-	detail := s.routeBase("HTTPRoute", item.ObjectMeta, item.Spec.Hostnames, item.Spec.ParentRefs, item.Status.Parents)
-	for _, rule := range item.Spec.Rules {
-		ruleDetail := types.RouteRuleDetails{}
-		for _, match := range rule.Matches {
-			ruleDetail.Matches = append(ruleDetail.Matches, httpMatchSummary(match))
-		}
-		for _, backendRef := range rule.BackendRefs {
-			ref := backendObjectReferenceRef(s.deps, item.Namespace, backendRef.BackendObjectReference)
-			ruleDetail.BackendRefs = append(ruleDetail.BackendRefs, ref)
-			detail.BackendRefs = append(detail.BackendRefs, ref)
-		}
-		detail.Rules = append(detail.Rules, ruleDetail)
-	}
-	detail.Details = routeDetailsText(len(item.Spec.Rules), len(detail.ParentRefs), len(detail.BackendRefs))
+	model := resourcemodel.BuildHTTPRouteResourceModel(s.deps.ClusterID, item)
+	facts := model.Facts.HTTPRoute.RouteCommonFacts
+	detail := routeDetailsFromFacts("HTTPRoute", item.ObjectMeta, facts)
+	detail.Details = routeDetailsText(len(facts.Rules), len(detail.ParentRefs), len(detail.BackendRefs))
 	return detail
 }
 
 func (s *Service) buildGRPCRouteDetails(item *gatewayv1.GRPCRoute) *types.GRPCRouteDetails {
-	detail := s.routeBase("GRPCRoute", item.ObjectMeta, item.Spec.Hostnames, item.Spec.ParentRefs, item.Status.Parents)
-	for _, rule := range item.Spec.Rules {
-		ruleDetail := types.RouteRuleDetails{}
-		for _, match := range rule.Matches {
-			ruleDetail.Matches = append(ruleDetail.Matches, grpcMatchSummary(match))
-		}
-		for _, backendRef := range rule.BackendRefs {
-			ref := backendObjectReferenceRef(s.deps, item.Namespace, backendRef.BackendObjectReference)
-			ruleDetail.BackendRefs = append(ruleDetail.BackendRefs, ref)
-			detail.BackendRefs = append(detail.BackendRefs, ref)
-		}
-		detail.Rules = append(detail.Rules, ruleDetail)
-	}
-	detail.Details = routeDetailsText(len(item.Spec.Rules), len(detail.ParentRefs), len(detail.BackendRefs))
+	model := resourcemodel.BuildGRPCRouteResourceModel(s.deps.ClusterID, item)
+	facts := model.Facts.GRPCRoute.RouteCommonFacts
+	detail := routeDetailsFromFacts("GRPCRoute", item.ObjectMeta, facts)
+	detail.Details = routeDetailsText(len(facts.Rules), len(detail.ParentRefs), len(detail.BackendRefs))
 	return detail
 }
 
 func (s *Service) buildTLSRouteDetails(item *gatewayv1.TLSRoute) *types.TLSRouteDetails {
-	detail := s.routeBase("TLSRoute", item.ObjectMeta, item.Spec.Hostnames, item.Spec.ParentRefs, item.Status.Parents)
-	for _, rule := range item.Spec.Rules {
-		ruleDetail := types.RouteRuleDetails{}
-		for _, backendRef := range rule.BackendRefs {
-			ref := backendObjectReferenceRef(s.deps, item.Namespace, backendRef.BackendObjectReference)
-			ruleDetail.BackendRefs = append(ruleDetail.BackendRefs, ref)
-			detail.BackendRefs = append(detail.BackendRefs, ref)
-		}
-		detail.Rules = append(detail.Rules, ruleDetail)
-	}
-	detail.Details = routeDetailsText(len(item.Spec.Rules), len(detail.ParentRefs), len(detail.BackendRefs))
-	return detail
-}
-
-func (s *Service) routeBase(
-	kind string,
-	meta metav1.ObjectMeta,
-	hostnames []gatewayv1.Hostname,
-	parentRefs []gatewayv1.ParentReference,
-	parentStatuses []gatewayv1.RouteParentStatus,
-) *types.RouteDetails {
-	var conditions []metav1.Condition
-	for _, status := range parentStatuses {
-		conditions = append(conditions, status.Conditions...)
-	}
-	detail := &types.RouteDetails{
-		Kind:        kind,
-		Name:        meta.Name,
-		Namespace:   meta.Namespace,
-		Age:         common.FormatAge(meta.CreationTimestamp.Time),
-		Conditions:  conditionStates(conditions),
-		Summary:     summarizeConditions(conditions),
-		Labels:      meta.Labels,
-		Annotations: meta.Annotations,
-	}
-	for _, hostname := range hostnames {
-		detail.Hostnames = append(detail.Hostnames, string(hostname))
-	}
-	for _, parentRef := range parentRefs {
-		detail.ParentRefs = append(detail.ParentRefs, parentReferenceRef(s.deps, meta.Namespace, parentRef))
-	}
+	model := resourcemodel.BuildTLSRouteResourceModel(s.deps.ClusterID, item)
+	facts := model.Facts.TLSRoute.RouteCommonFacts
+	detail := routeDetailsFromFacts("TLSRoute", item.ObjectMeta, facts)
+	detail.Details = routeDetailsText(len(facts.Rules), len(detail.ParentRefs), len(detail.BackendRefs))
 	return detail
 }
 
 func (s *Service) buildListenerSetDetails(item *gatewayv1.ListenerSet) *types.ListenerSetDetails {
+	model := resourcemodel.BuildListenerSetResourceModel(s.deps.ClusterID, item)
+	facts := model.Facts.ListenerSet
 	return &types.ListenerSetDetails{
 		Kind:        "ListenerSet",
 		Name:        item.Name,
 		Namespace:   item.Namespace,
 		Age:         common.FormatAge(item.CreationTimestamp.Time),
-		Details:     fmt.Sprintf("%d listener(s)", len(item.Spec.Listeners)),
-		ParentRef:   parentGatewayReferenceRef(s.deps, item.Namespace, item.Spec.ParentRef),
-		Listeners:   listenerEntryDetails(item.Spec.Listeners, item.Status.Listeners),
-		Conditions:  conditionStates(item.Status.Conditions),
-		Summary:     summarizeConditions(item.Status.Conditions),
+		Details:     fmt.Sprintf("%d listener(s)", len(facts.Listeners)),
+		ParentRef:   refOrDisplayFromResourceLink(facts.ParentRef),
+		Listeners:   listenerDetailsFromFacts(facts.Listeners),
+		Conditions:  conditionStatesFromFacts(facts.Conditions),
+		Summary:     conditionsSummaryFromFacts(facts.Summary),
 		Labels:      item.Labels,
 		Annotations: item.Annotations,
 	}
 }
 
 func (s *Service) buildReferenceGrantDetails(item *gatewayv1.ReferenceGrant) *types.ReferenceGrantDetails {
+	model := resourcemodel.BuildReferenceGrantResourceModel(s.deps.ClusterID, item)
+	facts := model.Facts.ReferenceGrant
 	detail := &types.ReferenceGrantDetails{
 		Kind:        "ReferenceGrant",
 		Name:        item.Name,
@@ -374,122 +318,174 @@ func (s *Service) buildReferenceGrantDetails(item *gatewayv1.ReferenceGrant) *ty
 		Labels:      item.Labels,
 		Annotations: item.Annotations,
 	}
-	for _, from := range item.Spec.From {
+	for _, from := range facts.From {
 		detail.From = append(detail.From, types.ReferenceGrantFromInfo{
-			Group:     string(from.Group),
-			Kind:      string(from.Kind),
-			Namespace: string(from.Namespace),
+			Group:     from.Group,
+			Kind:      from.Kind,
+			Namespace: from.Namespace,
 		})
 	}
-	for _, to := range item.Spec.To {
-		detail.To = append(detail.To, referenceGrantToRef(s.deps, item.Namespace, to))
+	for _, to := range facts.To {
+		detail.To = append(detail.To, refOrDisplayFromResourceLink(to))
 	}
 	detail.Details = fmt.Sprintf("%d from, %d to", len(detail.From), len(detail.To))
 	return detail
 }
 
 func (s *Service) buildBackendTLSPolicyDetails(item *gatewayv1.BackendTLSPolicy) *types.BackendTLSPolicyDetails {
-	var conditions []metav1.Condition
-	for _, ancestor := range item.Status.Ancestors {
-		conditions = append(conditions, ancestor.Conditions...)
-	}
+	model := resourcemodel.BuildBackendTLSPolicyResourceModel(s.deps.ClusterID, item)
+	facts := model.Facts.BackendTLSPolicy
 	detail := &types.BackendTLSPolicyDetails{
 		Kind:        "BackendTLSPolicy",
 		Name:        item.Name,
 		Namespace:   item.Namespace,
 		Age:         common.FormatAge(item.CreationTimestamp.Time),
-		Conditions:  conditionStates(conditions),
-		Summary:     summarizeConditions(conditions),
+		Conditions:  conditionStatesFromFacts(facts.Conditions),
+		Summary:     conditionsSummaryFromFacts(facts.Summary),
 		Labels:      item.Labels,
 		Annotations: item.Annotations,
 	}
-	for _, targetRef := range item.Spec.TargetRefs {
-		detail.TargetRefs = append(detail.TargetRefs, policyTargetReferenceRef(s.deps, item.Namespace, targetRef))
+	for _, targetRef := range facts.TargetRefs {
+		detail.TargetRefs = append(detail.TargetRefs, refOrDisplayFromResourceLink(targetRef))
 	}
 	detail.Details = fmt.Sprintf("%d target(s)", len(detail.TargetRefs))
 	return detail
-}
-
-func (s *Service) gatewayListeners(spec []gatewayv1.Listener, status []gatewayv1.ListenerStatus) []types.GatewayListenerDetails {
-	statusByName := map[string]gatewayv1.ListenerStatus{}
-	for _, listenerStatus := range status {
-		statusByName[string(listenerStatus.Name)] = listenerStatus
-	}
-	out := make([]types.GatewayListenerDetails, 0, len(spec))
-	for _, listener := range spec {
-		detail := types.GatewayListenerDetails{
-			Name:     string(listener.Name),
-			Port:     int32(listener.Port),
-			Protocol: string(listener.Protocol),
-		}
-		if listener.Hostname != nil {
-			detail.Hostname = string(*listener.Hostname)
-		}
-		if status, ok := statusByName[string(listener.Name)]; ok {
-			detail.AttachedRoutes = int32(status.AttachedRoutes)
-			detail.Conditions = conditionStates(status.Conditions)
-		}
-		out = append(out, detail)
-	}
-	return out
-}
-
-func listenerEntryDetails(spec []gatewayv1.ListenerEntry, status []gatewayv1.ListenerEntryStatus) []types.GatewayListenerDetails {
-	statusByName := map[string]gatewayv1.ListenerEntryStatus{}
-	for _, listenerStatus := range status {
-		statusByName[string(listenerStatus.Name)] = listenerStatus
-	}
-	out := make([]types.GatewayListenerDetails, 0, len(spec))
-	for _, listener := range spec {
-		detail := types.GatewayListenerDetails{
-			Name:     string(listener.Name),
-			Port:     int32(listener.Port),
-			Protocol: string(listener.Protocol),
-		}
-		if listener.Hostname != nil {
-			detail.Hostname = string(*listener.Hostname)
-		}
-		if status, ok := statusByName[string(listener.Name)]; ok {
-			detail.AttachedRoutes = int32(status.AttachedRoutes)
-			detail.Conditions = conditionStates(status.Conditions)
-		}
-		out = append(out, detail)
-	}
-	return out
 }
 
 func routeDetailsText(rules, parents, backends int) string {
 	return fmt.Sprintf("%d rule(s), %d parent(s), %d backend(s)", rules, parents, backends)
 }
 
-func httpMatchSummary(match gatewayv1.HTTPRouteMatch) string {
-	if match.Path != nil && match.Path.Value != nil {
-		return fmt.Sprintf("Path %s", *match.Path.Value)
+func routeDetailsFromFacts(kind string, meta metav1.ObjectMeta, facts resourcemodel.RouteCommonFacts) *types.RouteDetails {
+	detail := &types.RouteDetails{
+		Kind:        kind,
+		Name:        meta.Name,
+		Namespace:   meta.Namespace,
+		Age:         common.FormatAge(meta.CreationTimestamp.Time),
+		Hostnames:   append([]string(nil), facts.Hostnames...),
+		ParentRefs:  resourceLinksToRefOrDisplay(facts.ParentRefs),
+		BackendRefs: resourceLinksToRefOrDisplay(facts.Backends),
+		Conditions:  conditionStatesFromFacts(facts.Conditions),
+		Summary:     conditionsSummaryFromFacts(facts.Summary),
+		Labels:      meta.Labels,
+		Annotations: meta.Annotations,
 	}
-	if match.Method != nil {
-		return fmt.Sprintf("Method %s", *match.Method)
+	for _, rule := range facts.Rules {
+		detail.Rules = append(detail.Rules, types.RouteRuleDetails{
+			Matches:     append([]string(nil), rule.Matches...),
+			BackendRefs: resourceLinksToRefOrDisplay(rule.Backends),
+		})
 	}
-	return "Any"
+	return detail
 }
 
-func grpcMatchSummary(match gatewayv1.GRPCRouteMatch) string {
-	if match.Method != nil {
-		if match.Method.Service != nil && match.Method.Method != nil {
-			return fmt.Sprintf("%s/%s", *match.Method.Service, *match.Method.Method)
-		}
-		if match.Method.Service != nil {
-			return *match.Method.Service
-		}
-		if match.Method.Method != nil {
-			return *match.Method.Method
-		}
+func listenerDetailsFromFacts(facts []resourcemodel.GatewayListenerFacts) []types.GatewayListenerDetails {
+	if len(facts) == 0 {
+		return nil
 	}
-	return "Any"
+	details := make([]types.GatewayListenerDetails, 0, len(facts))
+	for _, listener := range facts {
+		details = append(details, types.GatewayListenerDetails{
+			Name:           listener.Name,
+			Hostname:       listener.Hostname,
+			Port:           listener.Port,
+			Protocol:       listener.Protocol,
+			AttachedRoutes: listener.AttachedRoutes,
+			Conditions:     conditionStatesFromFacts(listener.Conditions),
+		})
+	}
+	return details
 }
 
-func stringValue(value *gatewayv1.Namespace) string {
-	if value == nil {
-		return ""
+func resourceLinksToRefOrDisplay(links []resourcemodel.ResourceLink) []types.RefOrDisplay {
+	if len(links) == 0 {
+		return nil
 	}
-	return string(*value)
+	refs := make([]types.RefOrDisplay, 0, len(links))
+	for _, link := range links {
+		refs = append(refs, refOrDisplayFromResourceLink(link))
+	}
+	return refs
+}
+
+func refOrDisplayFromResourceLink(link resourcemodel.ResourceLink) types.RefOrDisplay {
+	if link.Ref != nil {
+		return types.RefOrDisplay{Ref: &types.ObjectRef{
+			ClusterID: link.Ref.ClusterID,
+			Group:     link.Ref.Group,
+			Version:   link.Ref.Version,
+			Kind:      link.Ref.Kind,
+			Namespace: link.Ref.Namespace,
+			Name:      link.Ref.Name,
+		}}
+	}
+	if link.Display != nil {
+		return types.RefOrDisplay{Display: &types.DisplayRef{
+			ClusterID: link.Display.ClusterID,
+			Group:     link.Display.Group,
+			Kind:      link.Display.Kind,
+			Namespace: link.Display.Namespace,
+			Name:      link.Display.Name,
+		}}
+	}
+	return types.RefOrDisplay{}
+}
+
+func objectRefFromResourceLink(link *resourcemodel.ResourceLink) types.ObjectRef {
+	if link == nil || link.Ref == nil {
+		return types.ObjectRef{}
+	}
+	return types.ObjectRef{
+		ClusterID: link.Ref.ClusterID,
+		Group:     link.Ref.Group,
+		Version:   link.Ref.Version,
+		Kind:      link.Ref.Kind,
+		Namespace: link.Ref.Namespace,
+		Name:      link.Ref.Name,
+	}
+}
+
+func conditionStatesFromFacts(facts []resourcemodel.ConditionFacts) []types.ConditionState {
+	if len(facts) == 0 {
+		return nil
+	}
+	states := make([]types.ConditionState, 0, len(facts))
+	for _, condition := range facts {
+		state := types.ConditionState{
+			Type:    condition.Type,
+			Status:  condition.Status,
+			Reason:  condition.Reason,
+			Message: condition.Message,
+		}
+		if !condition.LastTransitionTime.IsZero() {
+			state.LastTransitionTime = condition.LastTransitionTime.Time.Format("2006-01-02 15:04:05")
+		}
+		states = append(states, state)
+	}
+	return states
+}
+
+func conditionsSummaryFromFacts(facts resourcemodel.ConditionsSummaryFacts) types.ConditionsSummary {
+	return types.ConditionsSummary{
+		Accepted:   conditionStatePointerFromFacts(facts.Accepted),
+		Programmed: conditionStatePointerFromFacts(facts.Programmed),
+		Ready:      conditionStatePointerFromFacts(facts.Ready),
+		Resolved:   conditionStatePointerFromFacts(facts.Resolved),
+	}
+}
+
+func conditionStatePointerFromFacts(facts *resourcemodel.ConditionFacts) *types.ConditionState {
+	if facts == nil {
+		return nil
+	}
+	state := types.ConditionState{
+		Type:    facts.Type,
+		Status:  facts.Status,
+		Reason:  facts.Reason,
+		Message: facts.Message,
+	}
+	if !facts.LastTransitionTime.IsZero() {
+		state.LastTransitionTime = facts.LastTransitionTime.Time.Format("2006-01-02 15:04:05")
+	}
+	return &state
 }

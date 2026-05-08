@@ -2400,6 +2400,26 @@ the Kubernetes `IngressClassParametersReference` source does not include a
 version. Detail DTOs can still display the source parameter fields, but shared
 object references must not invent missing identity.
 
+## Implementation Learnings From The Gateway API Slice
+
+Gateway API reference fields need stricter shared handling than the core
+networking resources. Parent refs, backend refs, policy target refs, and
+ReferenceGrant targets can omit fields or point at implementation-specific
+groups. The shared model now emits full `ResourceLink.Ref` values only when the
+source supplies a safe name and the app can know the version (`v1` core or
+Gateway API `v1`). Unknown custom groups and nameless references remain
+display-only; the backend must not invent versions for them.
+
+Gateway API status is condition-driven. `Accepted`, `Programmed`, `Ready`, and
+`ResolvedRefs` are preserved as source condition facts and summarized once in
+the shared model. Table and detail paths project that shared condition summary
+instead of reinterpreting each resource's status separately.
+
+Route facts are explicit per route kind even though HTTPRoute, GRPCRoute, and
+TLSRoute share common parent/backend/status behavior. This keeps today's common
+logic centralized without hiding future route-specific fields in one generic
+bucket.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2529,12 +2549,12 @@ that actually consumes them.
 
 ### Phase 9: Gateway API
 
-- [ ] Add shared resource models for GatewayClass, Gateway, HTTPRoute,
+- [x] ✅ Add shared resource models for GatewayClass, Gateway, HTTPRoute,
       GRPCRoute, TLSRoute, ListenerSet, ReferenceGrant, and BackendTLSPolicy.
-- [ ] Centralize Gateway API conditions, summaries, parent refs, backend refs,
+- [x] ✅ Centralize Gateway API conditions, summaries, parent refs, backend refs,
       target refs, and display-only reference handling.
-- [ ] Use Gateway API shared resource models from table and detail paths.
-- [ ] Add parity tests for status summaries and `ResourceLink` behavior.
+- [x] ✅ Use Gateway API shared resource models from table and detail paths.
+- [x] ✅ Add parity tests for status summaries and `ResourceLink` behavior.
 
 ### Phase 10: RBAC
 

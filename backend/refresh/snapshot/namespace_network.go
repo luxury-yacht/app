@@ -514,6 +514,55 @@ func describeEndpointSliceFacts(facts *resourcemodel.EndpointSliceFacts) string 
 	return strings.Join(parts, ", ")
 }
 
+func describeGatewayFacts(facts *resourcemodel.GatewayFacts) string {
+	if facts == nil {
+		return ""
+	}
+	className := ""
+	if facts.Class != nil {
+		className = resourceLinkName(*facts.Class)
+	}
+	if className == "" {
+		return fmt.Sprintf("%d listener(s)", len(facts.Listeners))
+	}
+	return fmt.Sprintf("Class: %s, %d listener(s)", className, len(facts.Listeners))
+}
+
+func describeGatewayRouteFacts(facts resourcemodel.RouteCommonFacts) string {
+	return fmt.Sprintf("%d rule(s), %d parent(s), %d hostname(s)", len(facts.Rules), len(facts.ParentRefs), len(facts.Hostnames))
+}
+
+func describeListenerSetFacts(facts *resourcemodel.ListenerSetFacts) string {
+	if facts == nil {
+		return ""
+	}
+	return fmt.Sprintf("Parent: %s, %d listener(s)", resourceLinkName(facts.ParentRef), len(facts.Listeners))
+}
+
+func describeReferenceGrantFacts(facts *resourcemodel.ReferenceGrantFacts) string {
+	if facts == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d from, %d to", len(facts.From), len(facts.To))
+}
+
+func describeBackendTLSPolicyFacts(facts *resourcemodel.BackendTLSPolicyFacts) string {
+	if facts == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d target(s)", len(facts.TargetRefs))
+}
+
+func resourceLinkName(link resourcemodel.ResourceLink) string {
+	if link.Ref != nil {
+		return link.Ref.Name
+	}
+	if link.Display != nil {
+		return link.Display.Name
+	}
+	return ""
+}
+
 func groupEndpointSlicesByService(slices []*discoveryv1.EndpointSlice) map[string][]*discoveryv1.EndpointSlice {
 	result := make(map[string][]*discoveryv1.EndpointSlice)
 	for _, slice := range slices {

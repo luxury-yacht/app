@@ -179,12 +179,13 @@ func BuildGatewayNetworkSummary(meta ClusterMeta, gateway *gatewayv1.Gateway) Ne
 	if gateway == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "Gateway"}
 	}
+	model := resourcemodel.BuildGatewayResourceModel(meta.ClusterID, gateway)
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "Gateway",
 		Name:        gateway.Name,
 		Namespace:   gateway.Namespace,
-		Details:     fmt.Sprintf("Class: %s, %d listener(s)", gateway.Spec.GatewayClassName, len(gateway.Spec.Listeners)),
+		Details:     describeGatewayFacts(model.Facts.Gateway),
 		Age:         formatAge(gateway.CreationTimestamp.Time),
 	}
 }
@@ -193,12 +194,13 @@ func BuildHTTPRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.HTTPRoute) 
 	if route == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "HTTPRoute"}
 	}
+	model := resourcemodel.BuildHTTPRouteResourceModel(meta.ClusterID, route)
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "HTTPRoute",
 		Name:        route.Name,
 		Namespace:   route.Namespace,
-		Details:     describeGatewayRoute(len(route.Spec.Rules), len(route.Spec.ParentRefs), len(route.Spec.Hostnames)),
+		Details:     describeGatewayRouteFacts(model.Facts.HTTPRoute.RouteCommonFacts),
 		Age:         formatAge(route.CreationTimestamp.Time),
 	}
 }
@@ -207,12 +209,13 @@ func BuildGRPCRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.GRPCRoute) 
 	if route == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "GRPCRoute"}
 	}
+	model := resourcemodel.BuildGRPCRouteResourceModel(meta.ClusterID, route)
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "GRPCRoute",
 		Name:        route.Name,
 		Namespace:   route.Namespace,
-		Details:     describeGatewayRoute(len(route.Spec.Rules), len(route.Spec.ParentRefs), len(route.Spec.Hostnames)),
+		Details:     describeGatewayRouteFacts(model.Facts.GRPCRoute.RouteCommonFacts),
 		Age:         formatAge(route.CreationTimestamp.Time),
 	}
 }
@@ -221,12 +224,13 @@ func BuildTLSRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.TLSRoute) Ne
 	if route == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "TLSRoute"}
 	}
+	model := resourcemodel.BuildTLSRouteResourceModel(meta.ClusterID, route)
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "TLSRoute",
 		Name:        route.Name,
 		Namespace:   route.Namespace,
-		Details:     describeGatewayRoute(len(route.Spec.Rules), len(route.Spec.ParentRefs), len(route.Spec.Hostnames)),
+		Details:     describeGatewayRouteFacts(model.Facts.TLSRoute.RouteCommonFacts),
 		Age:         formatAge(route.CreationTimestamp.Time),
 	}
 }
@@ -235,12 +239,13 @@ func BuildListenerSetNetworkSummary(meta ClusterMeta, listenerSet *gatewayv1.Lis
 	if listenerSet == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "ListenerSet"}
 	}
+	model := resourcemodel.BuildListenerSetResourceModel(meta.ClusterID, listenerSet)
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "ListenerSet",
 		Name:        listenerSet.Name,
 		Namespace:   listenerSet.Namespace,
-		Details:     fmt.Sprintf("Parent: %s, %d listener(s)", listenerSet.Spec.ParentRef.Name, len(listenerSet.Spec.Listeners)),
+		Details:     describeListenerSetFacts(model.Facts.ListenerSet),
 		Age:         formatAge(listenerSet.CreationTimestamp.Time),
 	}
 }
@@ -249,12 +254,13 @@ func BuildReferenceGrantNetworkSummary(meta ClusterMeta, grant *gatewayv1.Refere
 	if grant == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "ReferenceGrant"}
 	}
+	model := resourcemodel.BuildReferenceGrantResourceModel(meta.ClusterID, grant)
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "ReferenceGrant",
 		Name:        grant.Name,
 		Namespace:   grant.Namespace,
-		Details:     fmt.Sprintf("%d from, %d to", len(grant.Spec.From), len(grant.Spec.To)),
+		Details:     describeReferenceGrantFacts(model.Facts.ReferenceGrant),
 		Age:         formatAge(grant.CreationTimestamp.Time),
 	}
 }
@@ -263,18 +269,15 @@ func BuildBackendTLSPolicyNetworkSummary(meta ClusterMeta, policy *gatewayv1.Bac
 	if policy == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "BackendTLSPolicy"}
 	}
+	model := resourcemodel.BuildBackendTLSPolicyResourceModel(meta.ClusterID, policy)
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "BackendTLSPolicy",
 		Name:        policy.Name,
 		Namespace:   policy.Namespace,
-		Details:     fmt.Sprintf("%d target(s)", len(policy.Spec.TargetRefs)),
+		Details:     describeBackendTLSPolicyFacts(model.Facts.BackendTLSPolicy),
 		Age:         formatAge(policy.CreationTimestamp.Time),
 	}
-}
-
-func describeGatewayRoute(ruleCount, parentCount, hostnameCount int) string {
-	return fmt.Sprintf("%d rule(s), %d parent(s), %d hostname(s)", ruleCount, parentCount, hostnameCount)
 }
 
 // BuildNamespaceCustomSummary builds a custom resource row payload that
@@ -441,11 +444,16 @@ func BuildClusterGatewayClassSummary(meta ClusterMeta, gc *gatewayv1.GatewayClas
 	if gc == nil {
 		return ClusterConfigEntry{ClusterMeta: meta, Kind: "GatewayClass"}
 	}
+	model := resourcemodel.BuildGatewayClassResourceModel(meta.ClusterID, gc)
+	details := string(gc.Spec.ControllerName)
+	if model.Facts.GatewayClass != nil {
+		details = model.Facts.GatewayClass.ControllerName
+	}
 	return ClusterConfigEntry{
 		ClusterMeta: meta,
 		Kind:        "GatewayClass",
 		Name:        gc.Name,
-		Details:     string(gc.Spec.ControllerName),
+		Details:     details,
 		Age:         formatAge(gc.CreationTimestamp.Time),
 	}
 }

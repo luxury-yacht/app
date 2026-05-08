@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	v1 "k8s.io/client-go/listers/apps/v1"
 	"k8s.io/client-go/tools/cache"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/stretchr/testify/require"
 )
@@ -251,6 +252,72 @@ func TestBuildClusterIngressClassSummaryUsesSharedNetworkFacts(t *testing.T) {
 	require.True(t, summary.IsDefault)
 }
 
+func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "edge", Namespace: "default"},
+		Spec: gatewayv1.GatewaySpec{
+			GatewayClassName: gatewayv1.ObjectName("public"),
+			Listeners:        []gatewayv1.Listener{{Name: gatewayv1.SectionName("http"), Port: gatewayv1.PortNumber(80), Protocol: gatewayv1.HTTPProtocolType}},
+		},
+	}
+	gatewaySummary := BuildGatewayNetworkSummary(meta, gateway)
+	require.Equal(t, "Gateway", gatewaySummary.Kind)
+	require.Equal(t, "Class: public, 1 listener(s)", gatewaySummary.Details)
+
+	route := &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: gatewayv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: []gatewayv1.ParentReference{{Name: gatewayv1.ObjectName("edge")}}},
+			Hostnames:       []gatewayv1.Hostname{"api.example.com"},
+			Rules:           []gatewayv1.HTTPRouteRule{{}},
+		},
+	}
+	routeSummary := BuildHTTPRouteNetworkSummary(meta, route)
+	require.Equal(t, "HTTPRoute", routeSummary.Kind)
+	require.Equal(t, "1 rule(s), 1 parent(s), 1 hostname(s)", routeSummary.Details)
+
+	listenerSet := &gatewayv1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "extra", Namespace: "default"},
+		Spec: gatewayv1.ListenerSetSpec{
+			ParentRef: gatewayv1.ParentGatewayReference{Name: gatewayv1.ObjectName("edge")},
+			Listeners: []gatewayv1.ListenerEntry{{Name: gatewayv1.SectionName("http"), Port: gatewayv1.PortNumber(80), Protocol: gatewayv1.HTTPProtocolType}},
+		},
+	}
+	listenerSetSummary := BuildListenerSetNetworkSummary(meta, listenerSet)
+	require.Equal(t, "ListenerSet", listenerSetSummary.Kind)
+	require.Equal(t, "Parent: edge, 1 listener(s)", listenerSetSummary.Details)
+
+	grant := &gatewayv1.ReferenceGrant{
+		ObjectMeta: metav1.ObjectMeta{Name: "allow", Namespace: "default"},
+		Spec: gatewayv1.ReferenceGrantSpec{
+			From: []gatewayv1.ReferenceGrantFrom{{Group: gatewayv1.Group("gateway.networking.k8s.io"), Kind: gatewayv1.Kind("HTTPRoute"), Namespace: gatewayv1.Namespace("apps")}},
+			To:   []gatewayv1.ReferenceGrantTo{{Group: gatewayv1.Group(""), Kind: gatewayv1.Kind("Service"), Name: gatewayObjectNamePtr("api")}},
+		},
+	}
+	grantSummary := BuildReferenceGrantNetworkSummary(meta, grant)
+	require.Equal(t, "ReferenceGrant", grantSummary.Kind)
+	require.Equal(t, "1 from, 1 to", grantSummary.Details)
+
+	policy := &gatewayv1.BackendTLSPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "tls", Namespace: "default"},
+		Spec: gatewayv1.BackendTLSPolicySpec{TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{{
+			LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{Group: gatewayv1.Group(""), Kind: gatewayv1.Kind("Service"), Name: gatewayv1.ObjectName("api")},
+		}}},
+	}
+	policySummary := BuildBackendTLSPolicyNetworkSummary(meta, policy)
+	require.Equal(t, "BackendTLSPolicy", policySummary.Kind)
+	require.Equal(t, "1 target(s)", policySummary.Details)
+
+	gatewayClass := &gatewayv1.GatewayClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "public"},
+		Spec:       gatewayv1.GatewayClassSpec{ControllerName: "example.com/controller"},
+	}
+	classSummary := BuildClusterGatewayClassSummary(meta, gatewayClass)
+	require.Equal(t, "GatewayClass", classSummary.Kind)
+	require.Equal(t, "example.com/controller", classSummary.Details)
+}
+
 func TestBuildNodeSummary(t *testing.T) {
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -292,6 +359,11 @@ func ptrBool(value bool) *bool {
 
 func ptrInt32(value int32) *int32 {
 	return &value
+}
+
+func gatewayObjectNamePtr(value string) *gatewayv1.ObjectName {
+	name := gatewayv1.ObjectName(value)
+	return &name
 }
 
 // TestBuildClusterCRDSummaryPopulatesAllFields is a regression guard for
