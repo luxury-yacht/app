@@ -70,6 +70,10 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  /* Children hug their content by default. Controls that need to fill the
+     row's content area (sliders grid, themes table, etc.) opt in with
+     width: 100%. */
+  align-items: flex-start;
 }
 
 /* Inline checkbox label inside a row control */
@@ -91,6 +95,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
+  width: 100%;
 }
 
 .setting-item {
@@ -210,6 +215,7 @@
   grid-template-columns: auto 1fr auto auto;
   gap: var(--spacing-xs) var(--spacing-sm);
   align-items: center;
+  width: 100%;
 }
 
 .palette-tint-controls > label {
@@ -422,6 +428,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   overflow: hidden;
+  width: 100%;
 }
 
 /* 5-column grid: drag handle | name | pattern | open | delete */
@@ -587,6 +594,7 @@
   gap: var(--spacing-sm);
   align-items: center;
   margin-top: var(--spacing-sm);
+  width: 100%;
 }
 
 .themes-new-form .theme-name-input,
