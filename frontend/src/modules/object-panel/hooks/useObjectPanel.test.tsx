@@ -101,7 +101,14 @@ describe('useObjectPanel', () => {
   });
 
   it('opens the panel with object details', () => {
-    const pod = { kind: 'Pod', group: '', version: 'v1', name: 'api', namespace: 'default' };
+    const pod = {
+      kind: 'Pod',
+      group: '',
+      version: 'v1',
+      name: 'api',
+      namespace: 'default',
+      clusterId: 'test-cluster',
+    };
 
     act(() => {
       hookResult.openWithObject(pod);
@@ -122,7 +129,14 @@ describe('useObjectPanel', () => {
   });
 
   it('activates existing tab instead of duplicating', () => {
-    const pod = { kind: 'Pod', group: '', version: 'v1', name: 'api', namespace: 'default' };
+    const pod = {
+      kind: 'Pod',
+      group: '',
+      version: 'v1',
+      name: 'api',
+      namespace: 'default',
+      clusterId: 'test-cluster',
+    };
 
     act(() => {
       hookResult.openWithObject(pod);
@@ -137,7 +151,14 @@ describe('useObjectPanel', () => {
   });
 
   it('focuses a newly opened panel after it joins a dockable tab group', async () => {
-    const pod = { kind: 'Pod', group: '', version: 'v1', name: 'api', namespace: 'default' };
+    const pod = {
+      kind: 'Pod',
+      group: '',
+      version: 'v1',
+      name: 'api',
+      namespace: 'default',
+      clusterId: 'test-cluster',
+    };
     const enrichedPod = {
       ...pod,
       clusterId: 'test-cluster',
@@ -173,6 +194,7 @@ describe('useObjectPanel', () => {
       version: 'v1',
       name: 'settings',
       namespace: 'default',
+      clusterId: 'test-cluster',
     };
 
     act(() => {
@@ -198,6 +220,7 @@ describe('useObjectPanel', () => {
       version: 'v1',
       name: 'credentials',
       namespace: 'default',
+      clusterId: 'test-cluster',
     };
 
     act(() => {
@@ -229,6 +252,7 @@ describe('useObjectPanel', () => {
         kind: 'DBInstance',
         name: 'primary',
         namespace: 'default',
+        clusterId: 'test-cluster',
       };
 
       expect(() => {
@@ -240,7 +264,7 @@ describe('useObjectPanel', () => {
     });
 
     it('throws with a hint pointing to the fix helpers', () => {
-      const brokenRef = { kind: 'Rollout', name: 'canary' };
+      const brokenRef = { kind: 'Rollout', name: 'canary', clusterId: 'test-cluster' };
 
       expect(() => {
         act(() => {
@@ -253,7 +277,12 @@ describe('useObjectPanel', () => {
       // HelmRelease is the panel's synthetic name for a Helm CLI release.
       // It is not a Kubernetes resource and never resolves through
       // discovery. The guard must not block it.
-      const helmRelease = { kind: 'HelmRelease', name: 'demo', namespace: 'default' };
+      const helmRelease = {
+        kind: 'HelmRelease',
+        name: 'demo',
+        namespace: 'default',
+        clusterId: 'test-cluster',
+      };
 
       expect(() => {
         act(() => {
@@ -270,6 +299,7 @@ describe('useObjectPanel', () => {
         version: 'v1',
         name: 'api',
         namespace: 'default',
+        clusterId: 'test-cluster',
       };
 
       expect(() => {
@@ -289,6 +319,7 @@ describe('useObjectPanel', () => {
         version: 'v1alpha1',
         name: 'primary',
         namespace: 'default',
+        clusterId: 'test-cluster',
       };
 
       expect(() => {

@@ -180,6 +180,58 @@ func TestQueryPermissions_BuiltinPodBypassesDiscovery(t *testing.T) {
 	}
 }
 
+func TestQueryPermissions_NamespacedResourceWithoutNamespaceUsesSSAR(t *testing.T) {
+	const clusterID = "cluster-drain"
+	client := cgofake.NewClientset()
+	client.Fake.PrependReactor("create", "selfsubjectrulesreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		t.Fatalf("expected cluster-wide pod drain permission to use SSAR, got SSRR action %#v", action)
+		return true, nil, nil
+	})
+	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		attrs := review.Spec.ResourceAttributes
+		if attrs == nil {
+			t.Fatalf("expected resource attributes")
+		}
+		if attrs.Namespace != "" || attrs.Group != "" || attrs.Resource != "pods" || attrs.Subresource != "eviction" || attrs.Verb != "create" {
+			t.Fatalf("unexpected SSAR attrs: %#v", attrs)
+		}
+		review.Status.Allowed = true
+		return true, review, nil
+	})
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "Drain"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
+
+	resp, err := app.QueryPermissions([]capabilities.PermissionQuery{{
+		ID:           "drain-pods",
+		ClusterId:    clusterID,
+		Group:        "",
+		Version:      "v1",
+		ResourceKind: "Pod",
+		Verb:         "create",
+		Subresource:  "eviction",
+	}})
+	if err != nil {
+		t.Fatalf("QueryPermissions returned error: %v", err)
+	}
+	if len(resp.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(resp.Results))
+	}
+	result := resp.Results[0]
+	if !result.Allowed || result.Source != "ssar" || result.Error != "" {
+		t.Fatalf("expected allowed SSAR result, got %+v", result)
+	}
+}
+
 func TestQueryPermissions_CachesCRDResolutionWithinBatch(t *testing.T) {
 	const clusterID = "cluster-crd"
 	client := cgofake.NewClientset()

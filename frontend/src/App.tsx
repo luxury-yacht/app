@@ -33,7 +33,10 @@ import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
-import { ClusterLifecycleProvider } from '@core/contexts/ClusterLifecycleContext';
+import {
+  ClusterLifecycleProvider,
+  useClusterLifecycle,
+} from '@core/contexts/ClusterLifecycleContext';
 import { FavoritesProvider } from '@core/contexts/FavoritesContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { ErrorProvider } from '@core/contexts/ErrorContext';
@@ -85,11 +88,13 @@ function AppContent() {
   const viewState = useViewState();
   const connectionStatus = useConnectionStatus();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
+  const { isClusterReady } = useClusterLifecycle();
+  const selectedClusterReady = selectedClusterId ? isClusterReady(selectedClusterId) : false;
 
   // Initialize permissions bootstrap
   useEffect(() => {
-    initializeUserPermissionsBootstrap(selectedClusterId);
-  }, [selectedClusterId]);
+    initializeUserPermissionsBootstrap(selectedClusterId, { ready: selectedClusterReady });
+  }, [selectedClusterId, selectedClusterReady]);
 
   // Hydrate persisted preferences before applying refresh settings and palette tint.
   useEffect(() => {

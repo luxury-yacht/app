@@ -19,6 +19,9 @@ export const OBJECT_ACTION_IDS = {
   scale: 'scale',
   scaleHpaManaged: 'scale-hpa-managed',
   portForward: 'port-forward',
+  cordon: 'cordon',
+  uncordon: 'uncordon',
+  drain: 'drain',
   delete: 'delete',
 } as const;
 
@@ -38,6 +41,9 @@ const OBJECT_ACTION_LABELS: Record<ObjectActionId, string> = {
   [OBJECT_ACTION_IDS.scale]: 'Scale',
   [OBJECT_ACTION_IDS.scaleHpaManaged]: 'Scale (HPA managed)',
   [OBJECT_ACTION_IDS.portForward]: 'Port Forward',
+  [OBJECT_ACTION_IDS.cordon]: 'Cordon',
+  [OBJECT_ACTION_IDS.uncordon]: 'Uncordon',
+  [OBJECT_ACTION_IDS.drain]: 'Drain',
   [OBJECT_ACTION_IDS.delete]: 'Delete',
 };
 

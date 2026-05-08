@@ -18,17 +18,22 @@ vi.mock('@/core/data-access', () => ({
 
 import {
   __resetForTests,
+  getUserPermissionMap,
   getPermissionKey,
+  initializePermissionStore,
   makePermissionStatus,
+  queryClusterPermissions,
   queryNamespacesPermissions,
   resetPermissionStore,
   subscribeUserPermissions,
 } from './permissionStore';
+import { eventBus } from '@/core/events';
 import { POD_PERMISSIONS, WORKLOAD_PERMISSIONS } from './permissionSpecs';
 import type { PermissionEntry } from './permissionTypes';
 
 afterEach(() => {
   __resetForTests();
+  eventBus.clear();
   hoisted.readQueryPermissions.mockReset();
   hoisted.requestData.mockReset();
   vi.restoreAllMocks();
@@ -257,6 +262,85 @@ describe('queryNamespacesPermissions', () => {
     }>;
     expect(secondPayload).toHaveLength(WORKLOAD_PERMISSIONS.specs.length);
     expect(new Set(secondPayload.map((item) => item.resourceKind))).toContain('Deployment');
+  });
+});
+
+describe('queryClusterPermissions', () => {
+  it('does not cache cluster-not-active responses as permission errors', async () => {
+    hoisted.requestData.mockImplementation(async (options: any) => ({
+      status: 'executed',
+      data: await options.read(),
+    }));
+    hoisted.readQueryPermissions.mockImplementation(async (queries: any[]) => ({
+      results: queries.map((query) => ({
+        ...query,
+        allowed: false,
+        source: 'error',
+        reason: '',
+        error: 'failed to resolve resource kind "Node": cluster cluster-1:cluster-1 not active',
+      })),
+      diagnostics: [],
+    }));
+
+    queryClusterPermissions('cluster-1');
+
+    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(getUserPermissionMap().size).toBe(0));
+
+    const permissionMap = getUserPermissionMap();
+    expect(permissionMap.size).toBe(0);
+    expect(
+      permissionMap.get(getPermissionKey('Node', 'patch', null, null, 'cluster-1'))
+    ).toBeUndefined();
+  });
+
+  it('retries cluster permissions when the selected cluster becomes ready', async () => {
+    hoisted.requestData.mockImplementation(async (options: any) => ({
+      status: 'executed',
+      data: await options.read(),
+    }));
+    hoisted.readQueryPermissions
+      .mockImplementationOnce(async (queries: any[]) => ({
+        results: queries.map((query) => ({
+          ...query,
+          allowed: false,
+          source: 'error',
+          reason: 'failed to resolve resource kind "Node": cluster cluster-1:cluster-1 not active',
+          error: '',
+        })),
+        diagnostics: [],
+      }))
+      .mockImplementationOnce(async (queries: any[]) => ({
+        results: queries.map((query) => ({
+          ...query,
+          allowed: true,
+          source: 'ssar',
+          reason: '',
+          error: '',
+        })),
+        diagnostics: [],
+      }));
+
+    initializePermissionStore('cluster-1');
+
+    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(getUserPermissionMap().size).toBe(0));
+
+    eventBus.emit('cluster:lifecycle', {
+      clusterId: 'cluster-1',
+      state: 'ready',
+      previousState: 'loading',
+    });
+
+    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(
+        getUserPermissionMap().get(getPermissionKey('Node', 'patch', null, null, 'cluster-1'))
+      ).toMatchObject({
+        allowed: true,
+        pending: false,
+      })
+    );
   });
 });
 

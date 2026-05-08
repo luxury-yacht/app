@@ -75,6 +75,9 @@ const toNamespaceKey = (clusterId: string | undefined, scope: string): string =>
   return scoped || scope;
 };
 
+const escapeAttributeSelectorValue = (value: string): string =>
+  value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
 function Sidebar() {
   const {
     namespaces,
@@ -315,8 +318,9 @@ function Sidebar() {
     if (expandedNamespaceKey) {
       // Delay to allow expansion animation to complete
       const scrollTimer = setTimeout(() => {
+        const escapedNamespaceKey = escapeAttributeSelectorValue(expandedNamespaceKey);
         const namespaceElement = document.querySelector(
-          `.sidebar-item[data-namespace="${expandedNamespaceKey}"]`
+          `.sidebar-item[data-namespace="${escapedNamespaceKey}"]`
         );
         if (namespaceElement) {
           const parentContainer = namespaceElement.closest('.namespace-items');

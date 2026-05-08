@@ -8,6 +8,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { readQueryPermissions, requestData } from '@/core/data-access';
+import { eventBus } from '@/core/events';
+import { useOptionalClusterLifecycle } from '@/core/contexts/ClusterLifecycleContext';
 
 import type { CapabilityDescriptor, CapabilityState } from './types';
 import { normalizeDescriptor } from './utils';
@@ -18,6 +20,11 @@ import {
 } from './permissionStore';
 import { useUserPermissions } from './bootstrap';
 import type { PermissionQueryDiagnostics } from './permissionTypes';
+import {
+  getPermissionResultErrorMessage,
+  isTransientClusterInactivePermissionError,
+  isTransientPermissionResultError,
+} from './transientPermissionErrors';
 
 interface QueryPayloadItem {
   id: string;
@@ -122,10 +129,12 @@ export const useCapabilities = (
   const enabled = options.enabled ?? true;
   const { ttlMs, force, refreshKey } = options;
   const permissionMap = useUserPermissions();
+  const clusterLifecycle = useOptionalClusterLifecycle();
 
   // Hook-local storage for named-resource query results.
   const namedResultsRef = useRef<Map<string, CapabilityState>>(new Map());
   const [namedResultsVersion, setNamedResultsVersion] = useState(0);
+  const [retryVersion, setRetryVersion] = useState(0);
 
   const normalizedDescriptors = useMemo(
     () =>
@@ -141,9 +150,75 @@ export const useCapabilities = (
     [normalizedDescriptors]
   );
 
-  // Query named-resource descriptors directly via QueryPermissions RPC.
+  const waitingForReadyNamedDescriptors = useMemo(
+    () =>
+      namedDescriptors.filter(
+        (descriptor) =>
+          descriptor.clusterId &&
+          clusterLifecycle !== undefined &&
+          !clusterLifecycle.isClusterReady(descriptor.clusterId)
+      ),
+    [clusterLifecycle, namedDescriptors]
+  );
+
+  const queryableNamedDescriptors = useMemo(
+    () =>
+      namedDescriptors.filter(
+        (descriptor) =>
+          !descriptor.clusterId ||
+          clusterLifecycle === undefined ||
+          clusterLifecycle.isClusterReady(descriptor.clusterId)
+      ),
+    [clusterLifecycle, namedDescriptors]
+  );
+
   useEffect(() => {
     if (!enabled || namedDescriptors.length === 0) {
+      return;
+    }
+
+    const clusterIds = new Set(
+      namedDescriptors
+        .map((descriptor) => descriptor.clusterId)
+        .filter((clusterId): clusterId is string => Boolean(clusterId))
+    );
+
+    const unsubscribeSelection = eventBus.on('kubeconfig:selection-changed', () => {
+      setRetryVersion((version) => version + 1);
+    });
+    const unsubscribeLifecycle = eventBus.on('cluster:lifecycle', (payload) => {
+      if (payload.state === 'ready' && clusterIds.has(payload.clusterId)) {
+        setRetryVersion((version) => version + 1);
+      }
+    });
+
+    return () => {
+      unsubscribeSelection();
+      unsubscribeLifecycle();
+    };
+  }, [enabled, namedDescriptors]);
+
+  useEffect(() => {
+    if (!enabled || waitingForReadyNamedDescriptors.length === 0) {
+      return;
+    }
+
+    const nextMap = new Map(namedResultsRef.current);
+    for (const descriptor of waitingForReadyNamedDescriptors) {
+      nextMap.set(descriptor.id, {
+        allowed: false,
+        pending: true,
+        status: 'loading',
+        reason: 'Cluster is not ready',
+      });
+    }
+    namedResultsRef.current = nextMap;
+    setNamedResultsVersion((version) => version + 1);
+  }, [enabled, waitingForReadyNamedDescriptors]);
+
+  // Query named-resource descriptors directly via QueryPermissions RPC.
+  useEffect(() => {
+    if (!enabled || queryableNamedDescriptors.length === 0) {
       return;
     }
 
@@ -152,7 +227,7 @@ export const useCapabilities = (
     // and warn so the upstream producer surfaces the bug, rather than
     // sending a garbage RPC the backend would reject anyway.
     const payload: QueryPayloadItem[] = [];
-    for (const d of namedDescriptors) {
+    for (const d of queryableNamedDescriptors) {
       if (!d.clusterId) {
         console.warn(
           `capabilities: dropping named permission query for ${d.resourceKind}/${d.name ?? ''} — clusterId is missing`,
@@ -178,7 +253,7 @@ export const useCapabilities = (
 
     // Mark named descriptors as pending while the query is in-flight.
     const nextPending = new Map(namedResultsRef.current);
-    for (const d of namedDescriptors) {
+    for (const d of queryableNamedDescriptors) {
       const existing = nextPending.get(d.id);
       if (!existing || existing.status === 'idle') {
         nextPending.set(d.id, { allowed: false, pending: true, status: 'loading' });
@@ -193,6 +268,15 @@ export const useCapabilities = (
         for (const r of response.results) {
           if (!r.name) continue;
           const isError = r.source === 'error' || !!r.error;
+          if (isTransientPermissionResultError(r)) {
+            nextMap.set(r.id, {
+              allowed: false,
+              pending: true,
+              status: 'loading',
+              reason: getPermissionResultErrorMessage(r),
+            });
+            continue;
+          }
           if (isError) {
             nextMap.set(r.id, {
               allowed: false,
@@ -215,7 +299,16 @@ export const useCapabilities = (
       .catch((err) => {
         const errMsg = String(err);
         const nextMap = new Map(namedResultsRef.current);
-        for (const d of namedDescriptors) {
+        for (const d of queryableNamedDescriptors) {
+          if (isTransientClusterInactivePermissionError(errMsg)) {
+            nextMap.set(d.id, {
+              allowed: false,
+              pending: true,
+              status: 'loading',
+              reason: errMsg,
+            });
+            continue;
+          }
           nextMap.set(d.id, {
             allowed: false,
             pending: false,
@@ -226,7 +319,7 @@ export const useCapabilities = (
         namedResultsRef.current = nextMap;
         setNamedResultsVersion((v) => v + 1);
       });
-  }, [enabled, force, namedDescriptors, ttlMs, refreshKey]);
+  }, [enabled, force, queryableNamedDescriptors, ttlMs, refreshKey, retryVersion]);
 
   // Build the unified state map from both sources.
   const stateById = useMemo(() => {
@@ -250,7 +343,9 @@ export const useCapabilities = (
         descriptor.verb,
         descriptor.namespace ?? null,
         descriptor.subresource ?? null,
-        descriptor.clusterId ?? null
+        descriptor.clusterId ?? null,
+        descriptor.group ?? null,
+        descriptor.version ?? null
       );
       const permissionStatus = permissionMap.get(permissionKey);
 

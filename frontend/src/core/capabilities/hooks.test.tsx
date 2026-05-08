@@ -16,6 +16,19 @@ import type { CapabilityDescriptor } from './types';
 import type { PermissionQueryDiagnostics } from './permissionTypes';
 import type { PermissionStatus } from './bootstrap';
 import { useCapabilities, type UseCapabilitiesOptions, useCapabilityDiagnostics } from './hooks';
+import { eventBus } from '@/core/events';
+
+const lifecycleMock = vi.hoisted(() => ({
+  current: undefined as
+    | undefined
+    | {
+        isClusterReady: (clusterId: string) => boolean;
+      },
+}));
+
+vi.mock('@/core/contexts/ClusterLifecycleContext', () => ({
+  useOptionalClusterLifecycle: () => lifecycleMock.current,
+}));
 
 const permissionStore: { map: Map<string, PermissionStatus> } = { map: new Map() };
 const setPermissionMap = (map: Map<string, PermissionStatus>) => {
@@ -183,12 +196,15 @@ const renderDiagnosticsHook = async () => {
 describe('useCapabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    eventBus.clear();
+    lifecycleMock.current = undefined;
     setPermissionMap(new Map());
     setDiagnosticsSnapshot([]);
     diagnosticListeners.clear();
   });
 
   afterEach(() => {
+    eventBus.clear();
     vi.clearAllMocks();
   });
 
@@ -426,6 +442,179 @@ describe('useCapabilities', () => {
     await hook.unmount();
 
     // Clean up.
+    delete (window as any).go;
+  });
+
+  it('waits for cluster readiness before querying named-resource descriptors', async () => {
+    lifecycleMock.current = {
+      isClusterReady: () => false,
+    };
+    const mockQueryPermissions = vi.fn().mockResolvedValue({
+      results: [
+        {
+          id: 'named:nodes:patch:node-a',
+          clusterId: 'test-cluster',
+          resourceKind: 'Node',
+          verb: 'patch',
+          namespace: '',
+          subresource: '',
+          name: 'node-a',
+          allowed: true,
+          source: 'ssar',
+          reason: '',
+          error: '',
+        },
+      ],
+    });
+
+    (globalThis as any).window = globalThis.window ?? {};
+    (window as any).go = {
+      backend: {
+        App: {
+          QueryPermissions: mockQueryPermissions,
+        },
+      },
+    };
+
+    const hook = await renderCapabilitiesHook([
+      {
+        id: 'named:nodes:patch:node-a',
+        clusterId: 'test-cluster',
+        group: '',
+        version: 'v1',
+        resourceKind: 'Node',
+        verb: 'patch',
+        name: 'node-a',
+      },
+    ]);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockQueryPermissions).not.toHaveBeenCalled();
+    expect(hook.current.getState('named:nodes:patch:node-a')).toMatchObject({
+      allowed: false,
+      pending: true,
+      status: 'loading',
+      reason: 'Cluster is not ready',
+    });
+
+    lifecycleMock.current = {
+      isClusterReady: (clusterId: string) => clusterId === 'test-cluster',
+    };
+    await act(async () => {
+      eventBus.emit('cluster:lifecycle', {
+        clusterId: 'test-cluster',
+        state: 'ready',
+        previousState: 'loading',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => expect(mockQueryPermissions).toHaveBeenCalledTimes(1));
+    expect(hook.current.getState('named:nodes:patch:node-a')).toMatchObject({
+      allowed: true,
+      pending: false,
+      status: 'ready',
+    });
+
+    await hook.unmount();
+    delete (window as any).go;
+  });
+
+  it('keeps transient cluster activation errors pending and retries named descriptors on ready', async () => {
+    const mockQueryPermissions = vi
+      .fn()
+      .mockResolvedValueOnce({
+        results: [
+          {
+            id: 'named:nodes:patch:node-a',
+            clusterId: 'test-cluster',
+            resourceKind: 'Node',
+            verb: 'patch',
+            namespace: '',
+            subresource: '',
+            name: 'node-a',
+            allowed: false,
+            source: 'error',
+            reason:
+              'failed to resolve resource kind "Node": cluster test-cluster:test-cluster not active',
+            error: '',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        results: [
+          {
+            id: 'named:nodes:patch:node-a',
+            clusterId: 'test-cluster',
+            resourceKind: 'Node',
+            verb: 'patch',
+            namespace: '',
+            subresource: '',
+            name: 'node-a',
+            allowed: true,
+            source: 'ssar',
+            reason: '',
+            error: '',
+          },
+        ],
+      });
+
+    (globalThis as any).window = globalThis.window ?? {};
+    (window as any).go = {
+      backend: {
+        App: {
+          QueryPermissions: mockQueryPermissions,
+        },
+      },
+    };
+
+    const hook = await renderCapabilitiesHook([
+      {
+        id: 'named:nodes:patch:node-a',
+        clusterId: 'test-cluster',
+        group: '',
+        version: 'v1',
+        resourceKind: 'Node',
+        verb: 'patch',
+        name: 'node-a',
+      },
+    ]);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockQueryPermissions).toHaveBeenCalledTimes(1);
+    expect(hook.current.getState('named:nodes:patch:node-a')).toMatchObject({
+      allowed: false,
+      pending: true,
+      status: 'loading',
+    });
+
+    await act(async () => {
+      eventBus.emit('cluster:lifecycle', {
+        clusterId: 'test-cluster',
+        state: 'ready',
+        previousState: 'loading',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => expect(mockQueryPermissions).toHaveBeenCalledTimes(2));
+    expect(hook.current.getState('named:nodes:patch:node-a')).toMatchObject({
+      allowed: true,
+      pending: false,
+      status: 'ready',
+    });
+
+    await hook.unmount();
     delete (window as any).go;
   });
 });

@@ -10,8 +10,30 @@ import ReactDOM from 'react-dom/client';
 import React, { act } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
-import { useAuthErrorHandler, ClusterAuthState } from './useAuthErrorHandler';
-import { useClusterHealthListener, ClusterHealthStatus } from './useWailsRuntimeEvents';
+import {
+  AuthErrorProvider,
+  useActiveClusterAuthState,
+  useAuthError,
+  type ClusterAuthState,
+} from '@/core/contexts/AuthErrorContext';
+import {
+  useClusterHealthListener,
+  useWailsRuntimeEvents,
+  ClusterHealthStatus,
+} from './useWailsRuntimeEvents';
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  RetryClusterAuth: vi.fn(),
+}));
+
+vi.mock('@/core/app-state-access', () => ({
+  readAllClusterAuthStates: vi.fn(),
+  requestAppState: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('@/core/events', () => ({
+  eventBus: { emit: vi.fn() },
+}));
 
 /**
  * Type for capturing hook results for testing.
@@ -55,6 +77,11 @@ function createMockRuntime(): MockRuntime {
     handlers,
     EventsOn: vi.fn((event: string, handler: EventHandler) => {
       handlers.set(event, handler);
+      return () => {
+        if (handlers.get(event) === handler) {
+          handlers.delete(event);
+        }
+      };
     }),
     EventsOff: vi.fn((event: string) => {
       handlers.delete(event);
@@ -67,6 +94,61 @@ function createMockRuntime(): MockRuntime {
     },
   };
 }
+
+describe('Wails Runtime Event Listener Cleanup', () => {
+  let mockRuntime: MockRuntime;
+  let originalRuntime: unknown;
+
+  beforeAll(() => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  beforeEach(() => {
+    mockRuntime = createMockRuntime();
+    originalRuntime = (window as any).runtime;
+    (window as any).runtime = mockRuntime;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    (window as any).runtime = originalRuntime;
+    document.body.textContent = '';
+  });
+
+  it('uses EventsOn disposers instead of clearing whole runtime event names', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+    const handlers = {
+      onOpenSettings: vi.fn(),
+      onOpenAbout: vi.fn(),
+      onToggleSidebar: vi.fn(),
+      onToggleAppLogsPanel: vi.fn(),
+      onToggleDiagnostics: vi.fn(),
+      onToggleObjectDiff: vi.fn(),
+    };
+
+    await act(async () => {
+      root.render(
+        React.createElement(() => {
+          useWailsRuntimeEvents(handlers);
+          return null;
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockRuntime.handlers.has('open-settings')).toBe(true);
+
+    act(() => {
+      root.unmount();
+      container.remove();
+    });
+
+    expect(mockRuntime.handlers.size).toBe(0);
+    expect(mockRuntime.EventsOff).not.toHaveBeenCalled();
+  });
+});
 
 // Tests for pods filter isolation
 describe('Pods Filter Isolation', () => {
@@ -91,7 +173,7 @@ describe('Pods Filter Isolation', () => {
 });
 
 // Tests for auth error tracking per cluster
-describe('Auth Error Handler Isolation', () => {
+describe('Auth Error Context Isolation', () => {
   let mockRuntime: MockRuntime;
   let originalRuntime: unknown;
 
@@ -113,7 +195,7 @@ describe('Auth Error Handler Isolation', () => {
   });
 
   /**
-   * Helper to render the useAuthErrorHandler hook and capture its result.
+   * Helper to render the auth context hooks and capture their result.
    */
   const renderAuthHook = async (
     activeClusterId: string = ''
@@ -128,13 +210,17 @@ describe('Auth Error Handler Isolation', () => {
     let hookResult: AuthHookResult | null = null;
 
     const HookHost = () => {
-      const result = useAuthErrorHandler(activeClusterId);
-      hookResult = result;
+      const result = useAuthError();
+      const activeState = useActiveClusterAuthState(activeClusterId);
+      hookResult = {
+        ...result,
+        getActiveClusterAuthState: () => activeState,
+      };
       return null;
     };
 
     await act(async () => {
-      root.render(React.createElement(HookHost));
+      root.render(React.createElement(AuthErrorProvider, null, React.createElement(HookHost)));
       await Promise.resolve();
     });
 
@@ -448,6 +534,40 @@ describe('Cluster Health Listener Isolation', () => {
     expect(result.getActiveClusterHealth()).toBe('unknown');
 
     unmount();
+  });
+
+  it('does not log raw health payloads when clusterId is missing', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { getResult, unmount } = await renderHealthHook();
+
+    await act(async () => {
+      mockRuntime.emit('cluster:health:healthy', {
+        clusterName: 'private-cluster-name',
+        token: 'private-token',
+      });
+      await Promise.resolve();
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[ClusterHealthListener] Received health:healthy without clusterId'
+    );
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.any(String), expect.anything());
+    expect(getResult().clusterHealth.size).toBe(0);
+
+    unmount();
+  });
+
+  it('cleans up health listeners with the EventsOn disposers', async () => {
+    const { unmount } = await renderHealthHook();
+
+    expect(mockRuntime.handlers.has('cluster:health:healthy')).toBe(true);
+    expect(mockRuntime.handlers.has('cluster:health:degraded')).toBe(true);
+
+    unmount();
+
+    expect(mockRuntime.handlers.has('cluster:health:healthy')).toBe(false);
+    expect(mockRuntime.handlers.has('cluster:health:degraded')).toBe(false);
+    expect(mockRuntime.EventsOff).not.toHaveBeenCalled();
   });
 
   it('updates health status when cluster transitions between states', async () => {

@@ -147,7 +147,6 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
 
         if (initialErrors.size > 0) {
-          console.log('[AuthErrorContext] Loaded initial auth errors:', initialErrors);
           setClusterAuthErrors(initialErrors);
         }
       } catch (err) {
@@ -166,11 +165,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     // Handler for auth failure events.
     const handleAuthFailed = (...args: unknown[]) => {
-      console.log('[AuthErrorContext] Received cluster:auth:failed', args);
-
       const payload = args[0] as AuthEventPayload | undefined;
       if (!payload?.clusterId) {
-        console.warn('[AuthErrorContext] Received auth:failed without clusterId', args);
+        console.warn('[AuthErrorContext] Received auth:failed without clusterId');
         return;
       }
 
@@ -196,11 +193,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     // Handler for auth recovering events (auth is being retried).
     const handleAuthRecovering = (...args: unknown[]) => {
-      console.log('[AuthErrorContext] Received cluster:auth:recovering', args);
-
       const payload = args[0] as AuthEventPayload | undefined;
       if (!payload?.clusterId) {
-        console.warn('[AuthErrorContext] Received auth:recovering without clusterId', args);
+        console.warn('[AuthErrorContext] Received auth:recovering without clusterId');
         return;
       }
 
@@ -251,11 +246,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     // Handler for auth recovery events.
     const handleAuthRecovered = (...args: unknown[]) => {
-      console.log('[AuthErrorContext] Received cluster:auth:recovered', args);
-
       const payload = args[0] as AuthEventPayload | undefined;
       if (!payload?.clusterId) {
-        console.warn('[AuthErrorContext] Received auth:recovered without clusterId', args);
+        console.warn('[AuthErrorContext] Received auth:recovered without clusterId');
         return;
       }
 

@@ -1,0 +1,32 @@
+.node-overview-status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.node-overview-drain-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--color-accent);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--border-radius-sm);
+  animation: node-overview-drain-pulse 1.6s ease-in-out infinite;
+}
+
+.node-overview-drain-icon:hover {
+  background-color: var(--color-info-bg);
+}
+
+@keyframes node-overview-drain-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
+  DeleteNode,
   DeletePod,
   DeleteResourceByGVK,
   RestartWorkload,
@@ -22,11 +23,17 @@ import {
   type ObjectActionData,
   type ObjectActionHandlers,
 } from '@shared/hooks/useObjectActions';
+import { resolveNodeActionPermissionStatuses } from '@shared/hooks/nodeActionPermissions';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { KubernetesObjectReference } from '@/types/view-state';
 
 type ObjectActionContext = 'gridtable' | 'object-map' | 'object-panel';
 type ObjectActionReference = ObjectActionData & KubernetesObjectReference;
+
+interface PerObjectHandlers {
+  onCordon?: (object: ObjectActionData) => void;
+  onDrain?: (object: ObjectActionData) => void;
+}
 
 interface ObjectActionControllerOptions {
   context: ObjectActionContext;
@@ -38,6 +45,12 @@ interface ObjectActionControllerOptions {
   onNavigateView?: (object: ObjectActionReference) => void;
   onViewInvolvedObject?: (object: ObjectActionReference) => void;
   handlerOverrides?: ObjectActionHandlers;
+  /**
+   * Per-row handlers that receive the resolved object when the menu item
+   * is clicked. Use this for kind-specific actions (cordon/drain) where
+   * each row needs to dispatch with its own context.
+   */
+  perObjectHandlers?: PerObjectHandlers;
   onAfterAction?: (object: ObjectActionData, action: string) => void;
   onAfterDelete?: (object: ObjectActionData) => void;
 }
@@ -116,6 +129,7 @@ export const useObjectActionController = ({
   onNavigateView,
   onViewInvolvedObject,
   handlerOverrides,
+  perObjectHandlers,
   onAfterAction,
   onAfterDelete,
 }: ObjectActionControllerOptions) => {
@@ -164,6 +178,27 @@ export const useObjectActionController = ({
         permissionMap.get(
           getPermissionKey('Pod', 'create', namespace, 'portforward', clusterId, '', 'v1')
         ) ?? null;
+      const nodeActionPermissions =
+        normalizedKind === 'Node'
+          ? resolveNodeActionPermissionStatuses({
+              nodeGet:
+                permissionMap.get(
+                  getPermissionKey('Node', 'get', null, null, clusterId, '', 'v1')
+                ) ?? null,
+              nodePatch:
+                permissionMap.get(
+                  getPermissionKey('Node', 'patch', null, null, clusterId, '', 'v1')
+                ) ?? null,
+              podEvictionCreate:
+                permissionMap.get(
+                  getPermissionKey('Pod', 'create', null, 'eviction', clusterId, '', 'v1')
+                ) ?? null,
+              podDelete:
+                permissionMap.get(
+                  getPermissionKey('Pod', 'delete', null, null, clusterId, '', 'v1')
+                ) ?? null,
+            })
+          : { cordon: null, drain: null };
 
       if (queryMissingPermissions && !deleteStatus) {
         queryKindPermissions(object.kind, namespace, clusterId, group, version);
@@ -213,6 +248,12 @@ export const useObjectActionController = ({
           onDelete:
             handlerOverrides?.onDelete ??
             (useDefaultHandlers ? () => setDeleteTarget(object) : undefined),
+          onCordon:
+            handlerOverrides?.onCordon ??
+            (perObjectHandlers?.onCordon ? () => perObjectHandlers.onCordon!(object) : undefined),
+          onDrain:
+            handlerOverrides?.onDrain ??
+            (perObjectHandlers?.onDrain ? () => perObjectHandlers.onDrain!(object) : undefined),
           onPortForward:
             handlerOverrides?.onPortForward ??
             (useDefaultHandlers
@@ -260,6 +301,8 @@ export const useObjectActionController = ({
           scale: scaleStatus,
           delete: deleteStatus,
           portForward: portForwardStatus,
+          cordon: nodeActionPermissions.cordon,
+          drain: nodeActionPermissions.drain,
         },
         actionLoading,
       });
@@ -268,6 +311,7 @@ export const useObjectActionController = ({
       actionLoading,
       context,
       handlerOverrides,
+      perObjectHandlers,
       onAfterAction,
       onOpen,
       onOpenObjectMap,
@@ -307,8 +351,13 @@ export const useObjectActionController = ({
     if (!object) return;
     try {
       const clusterId = requireClusterId(object, 'delete');
-      if (normalizeKind(object.kind) === 'Pod') {
+      const kind = normalizeKind(object.kind);
+      if (kind === 'Pod') {
         await DeletePod(clusterId, object.namespace ?? '', object.name);
+      } else if (kind === 'Node') {
+        // The Node delete API enforces its own RBAC pre-flight check, which
+        // mirrors the kind-aware behaviour we want here.
+        await DeleteNode(clusterId, object.name);
       } else {
         await DeleteResourceByGVK(
           clusterId,
@@ -380,9 +429,14 @@ export const useObjectActionController = ({
       };
     }
     if (deleteTarget) {
+      const isUndrainedNode =
+        normalizeKind(deleteTarget.kind) === 'Node' && !deleteTarget.unschedulable;
       return {
         title: `Delete ${deleteTarget.kind || 'Resource'}`,
         message: `Are you sure you want to delete ${deleteTarget.kind.toLowerCase()} "${deleteTarget.name}"?\n\nThis action cannot be undone.`,
+        warning: isUndrainedNode
+          ? 'This node has not been drained. Pods running on it will be terminated abruptly when the node is removed.'
+          : undefined,
         confirmText: 'Delete',
         confirmButtonClass: 'danger',
         onConfirm: confirmDelete,
@@ -409,6 +463,7 @@ export const useObjectActionController = ({
           isOpen={Boolean(confirmation)}
           title={confirmation?.title ?? ''}
           message={confirmation?.message ?? ''}
+          warning={confirmation?.warning}
           confirmText={confirmation?.confirmText ?? 'Confirm'}
           cancelText="Cancel"
           confirmButtonClass={confirmation?.confirmButtonClass}

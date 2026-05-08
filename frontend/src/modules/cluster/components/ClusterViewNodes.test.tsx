@@ -110,7 +110,20 @@ vi.mock('@/core/refresh', () => ({
     };
   },
   refreshManager: { triggerManualRefresh: vi.fn() },
+  refreshOrchestrator: {
+    setScopedDomainEnabled: vi.fn(),
+    resetScopedDomain: vi.fn(),
+    fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
+  },
 }));
+
+vi.mock('@/core/data-access', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    requestRefreshDomain: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => false,

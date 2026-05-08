@@ -9,6 +9,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { eventBus } from '@/core/events';
 import { ClusterLifecycleProvider, useClusterLifecycle } from './ClusterLifecycleContext';
 
 // Mock useKubeconfig — tests control selectedClusterIds via this ref.
@@ -42,6 +43,7 @@ describe('ClusterLifecycleContext', () => {
   });
 
   beforeEach(() => {
+    eventBus.clear();
     listeners = new Map();
     disposerCalls = [];
     mockSelectedClusterIds.current = ['cluster-a', 'cluster-b'];
@@ -82,6 +84,7 @@ describe('ClusterLifecycleContext', () => {
   });
 
   afterEach(() => {
+    eventBus.clear();
     act(() => {
       root.unmount();
     });
@@ -158,6 +161,29 @@ describe('ClusterLifecycleContext', () => {
     });
 
     expect(stateRef.current?.getClusterState('cluster-a')).toBe('loading');
+  });
+
+  it('bridges backend lifecycle events onto the frontend event bus', async () => {
+    const frontendListener = vi.fn();
+    const unsubscribe = eventBus.on('cluster:lifecycle', frontendListener);
+
+    await renderProvider();
+
+    act(() => {
+      listeners.get('cluster:lifecycle')![0]({
+        clusterId: 'cluster-a',
+        state: 'ready',
+        previousState: 'loading',
+      });
+    });
+
+    expect(frontendListener).toHaveBeenCalledWith({
+      clusterId: 'cluster-a',
+      state: 'ready',
+      previousState: 'loading',
+    });
+
+    unsubscribe();
   });
 
   it('calls disposer on unmount', async () => {

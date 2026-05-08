@@ -143,8 +143,7 @@ export type ViewType =
   | 'yaml'
   | 'map'
   | 'manifest'
-  | 'values'
-  | 'maintenance';
+  | 'values';
 
 export type LogDisplayMode = 'raw' | 'structured' | 'pretty' | 'parsed';
 

@@ -1,6 +1,8 @@
 package nodemaintenance
 
 import (
+	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -15,9 +17,13 @@ type DrainStatus string
 
 const (
 	DrainStatusRunning   DrainStatus = "running"
+	DrainStatusCanceling DrainStatus = "canceling"
+	DrainStatusCancelled DrainStatus = "cancelled"
 	DrainStatusSucceeded DrainStatus = "succeeded"
 	DrainStatusFailed    DrainStatus = "failed"
 )
+
+const AggregateScope = "aggregate"
 
 // DrainEventKind represents the type of drain event emitted.
 type DrainEventKind string
@@ -66,6 +72,7 @@ type Store struct {
 	mu         sync.RWMutex
 	jobs       map[string]*DrainJob
 	byNode     map[drainHistoryKey][]*DrainJob
+	cancels    map[string]context.CancelFunc
 	version    uint64
 	maxHistory int
 }
@@ -90,6 +97,7 @@ func NewStore(maxHistory int) *Store {
 	return &Store{
 		jobs:       make(map[string]*DrainJob),
 		byNode:     make(map[drainHistoryKey][]*DrainJob),
+		cancels:    make(map[string]context.CancelFunc),
 		maxHistory: maxHistory,
 	}
 }
@@ -104,6 +112,26 @@ func (s *Store) StartDrainForCluster(nodeName string, opts restypes.DrainNodeOpt
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.startDrainForClusterLocked(nodeName, opts, clusterID, clusterName)
+}
+
+// StartDrainForClusterIfIdle records a drain job unless that cluster/node already has one active.
+func (s *Store) StartDrainForClusterIfIdle(nodeName string, opts restypes.DrainNodeOptions, clusterID, clusterName string) (*DrainJob, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := drainHistoryKey{
+		clusterID: strings.TrimSpace(clusterID),
+		nodeName:  normalizeNodeName(nodeName),
+	}
+	if active := s.activeJobForKeyLocked(key); active != nil {
+		return nil, fmt.Errorf("drain already running for node %s (job %s)", key.nodeName, active.ID)
+	}
+
+	return s.startDrainForClusterLocked(nodeName, opts, clusterID, clusterName), nil
+}
+
+func (s *Store) startDrainForClusterLocked(nodeName string, opts restypes.DrainNodeOptions, clusterID, clusterName string) *DrainJob {
 	id := uuid.NewString()
 	normalizedNode := normalizeNodeName(nodeName)
 	job := &DrainJob{
@@ -128,6 +156,68 @@ func (s *Store) StartDrainForCluster(nodeName string, opts restypes.DrainNodeOpt
 	s.addJobToHistoryLocked(job)
 	s.version++
 	return job
+}
+
+// RegisterCancel stores the cancellation callback for a running job.
+func (s *Store) RegisterCancel(jobID string, cancel context.CancelFunc) {
+	if cancel == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.jobs[jobID] == nil {
+		return
+	}
+	s.cancels[jobID] = cancel
+}
+
+// ClearCancel removes a job cancellation callback once execution is finished.
+func (s *Store) ClearCancel(jobID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.cancels, jobID)
+}
+
+// CancelDrainForCluster requests cancellation for an active drain job in the given cluster.
+func (s *Store) CancelDrainForCluster(jobID, clusterID string) error {
+	trimmedID := strings.TrimSpace(jobID)
+	if trimmedID == "" {
+		return fmt.Errorf("job ID is required")
+	}
+	expectedCluster := strings.TrimSpace(clusterID)
+
+	var cancel context.CancelFunc
+	s.mu.Lock()
+	job := s.jobs[trimmedID]
+	if job == nil {
+		s.mu.Unlock()
+		return fmt.Errorf("drain job %s not found", trimmedID)
+	}
+	if strings.TrimSpace(job.ClusterID) != expectedCluster {
+		s.mu.Unlock()
+		return fmt.Errorf("drain job %s not found for cluster %s", trimmedID, expectedCluster)
+	}
+	if !isActiveStatus(job.Status) {
+		s.mu.Unlock()
+		return fmt.Errorf("drain job %s is not running", trimmedID)
+	}
+	job.Status = DrainStatusCanceling
+	job.Message = "Cancellation requested"
+	job.Events = append(job.Events, DrainEvent{
+		ID:        uuid.NewString(),
+		Timestamp: time.Now().UnixMilli(),
+		Kind:      EventKindInfo,
+		Phase:     "cancel-requested",
+		Message:   "Cancellation requested",
+	})
+	cancel = s.cancels[trimmedID]
+	s.version++
+	s.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	return nil
 }
 
 // AddInfo records a descriptive event.
@@ -299,6 +389,19 @@ func (s *Store) enforceHistoryLimitLocked(key drainHistoryKey) {
 	}
 }
 
+func (s *Store) activeJobForKeyLocked(key drainHistoryKey) *DrainJob {
+	for _, job := range s.byNode[key] {
+		if job != nil && isActiveStatus(job.Status) {
+			return job
+		}
+	}
+	return nil
+}
+
+func isActiveStatus(status DrainStatus) bool {
+	return status == DrainStatusRunning || status == DrainStatusCanceling
+}
+
 // ParseScope extracts the node name from a scope string.
 func ParseScope(scope string) string {
 	if scope == "" {
@@ -306,6 +409,9 @@ func ParseScope(scope string) string {
 	}
 	trimmed := strings.TrimSpace(strings.ToLower(scope))
 	if trimmed == "" {
+		return ""
+	}
+	if trimmed == AggregateScope {
 		return ""
 	}
 	if strings.HasPrefix(trimmed, "node:") {
@@ -344,4 +450,15 @@ func (s *Store) GetJobsForCluster(clusterID string) []*DrainJob {
 		}
 	}
 	return result
+}
+
+func (s *Store) JobForCluster(jobID, clusterID string) (DrainJob, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	job := s.jobs[strings.TrimSpace(jobID)]
+	if job == nil || job.ClusterID != strings.TrimSpace(clusterID) {
+		return DrainJob{}, false
+	}
+	return cloneJob(job), true
 }

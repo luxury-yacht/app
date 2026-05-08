@@ -129,6 +129,29 @@ describe('capabilities bootstrap helpers', () => {
     expect(mockInitializePermissionStore).toHaveBeenCalledWith('cluster-b');
   });
 
+  it('initializeUserPermissionsBootstrap records the cluster but does not query before readiness', async () => {
+    const bootstrap = await loadBootstrap();
+
+    mockResetPermissionStore.mockClear();
+    bootstrap.initializeUserPermissionsBootstrap('cluster-a', { ready: false });
+
+    expect(mockSetCurrentClusterId).toHaveBeenCalledWith('cluster-a');
+    expect(mockInitializePermissionStore).not.toHaveBeenCalled();
+    expect(mockResetPermissionStore).toHaveBeenCalledTimes(1);
+  });
+
+  it('initializeUserPermissionsBootstrap queries after a previously waiting cluster becomes ready', async () => {
+    const bootstrap = await loadBootstrap();
+
+    bootstrap.initializeUserPermissionsBootstrap('cluster-a', { ready: false });
+    expect(mockInitializePermissionStore).not.toHaveBeenCalled();
+
+    mockInitializePermissionStore.mockClear();
+    bootstrap.initializeUserPermissionsBootstrap('cluster-a', { ready: true });
+
+    expect(mockInitializePermissionStore).toHaveBeenCalledWith('cluster-a');
+  });
+
   it('__resetCapabilitiesStateForTests calls resetPermissionStore', async () => {
     const bootstrap = await loadBootstrap();
 

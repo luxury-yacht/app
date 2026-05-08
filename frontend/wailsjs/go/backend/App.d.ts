@@ -13,6 +13,8 @@ export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationReque
 
 export function ApplyTheme(arg1:string):Promise<void>;
 
+export function CancelDrainNodeJob(arg1:string,arg2:string):Promise<void>;
+
 export function ClearAllSSRRCaches():Promise<void>;
 
 export function ClearAppLogs():Promise<void>;
@@ -298,6 +300,8 @@ export function SetZoomLevel(arg1:number):Promise<void>;
 export function ShowAbout():Promise<void>;
 
 export function ShowSettings():Promise<void>;
+
+export function StartDrainNode(arg1:string,arg2:string,arg3:types.DrainNodeOptions):Promise<string>;
 
 export function StartPortForward(arg1:string,arg2:backend.PortForwardRequest):Promise<string>;
 

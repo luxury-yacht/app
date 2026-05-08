@@ -620,4 +620,29 @@ describe('AppLogsPanel', () => {
 
     cleanup();
   });
+
+  it('clears pending copy feedback timers on unmount', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+
+    const copyButton = container.querySelector<HTMLButtonElement>(
+      'button[title="Copy logs to clipboard"]'
+    );
+    expect(copyButton).toBeTruthy();
+
+    await act(async () => {
+      copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(vi.getTimerCount()).toBe(1);
+    cleanup();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

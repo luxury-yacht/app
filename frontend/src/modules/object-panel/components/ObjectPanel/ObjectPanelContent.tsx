@@ -16,7 +16,6 @@ import ManifestTab from '@modules/object-panel/components/ObjectPanel/Helm/Manif
 import ValuesTab from '@modules/object-panel/components/ObjectPanel/Helm/ValuesTab';
 import ShellTab from '@modules/object-panel/components/ObjectPanel/Shell/ShellTab';
 import NodeLogsTab from '@modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab';
-import { NodeMaintenanceTab } from '@modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab';
 import { PodsTab } from '@modules/object-panel/components/ObjectPanel/Pods/PodsTab';
 import { JobsTab } from '@modules/object-panel/components/ObjectPanel/Jobs/JobsTab';
 import type { ObjectPanelPodsState } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods';
@@ -101,7 +100,6 @@ export function ObjectPanelContent({
   resourceDeleted,
   deletedResourceName,
   onClosePanel,
-  onRefreshDetails,
   podsState,
   panelId,
 }: ObjectPanelContentProps) {
@@ -115,7 +113,6 @@ export function ObjectPanelContent({
   const showMap = activeTab === 'map';
   const showManifest = activeTab === 'manifest';
   const showValues = activeTab === 'values';
-  const showMaintenance = activeTab === 'maintenance' && objectKind === 'node';
 
   // eventsScope and containerLogsScope are produced upstream by getObjectPanelKind
   // and threaded in via props so the lifecycle effects below and the
@@ -437,22 +434,6 @@ export function ObjectPanelContent({
           fallback={(_, reset) => <TabErrorFallback tabName="Values" reset={reset} />}
         >
           <ValuesTab scope={helmScope} isActive={isPanelOpen && activeTab === 'values'} />
-        </ErrorBoundary>
-      )}
-
-      {showMaintenance && (
-        <ErrorBoundary
-          scope="panel-maintenance"
-          resetKeys={objectData?.name ? [objectData.name] : undefined}
-          fallback={(_, reset) => <TabErrorFallback tabName="Maintenance" reset={reset} />}
-        >
-          <NodeMaintenanceTab
-            nodeDetails={detailTabProps?.nodeDetails ?? null}
-            objectName={objectData?.name}
-            onRefresh={onRefreshDetails}
-            isActive={isPanelOpen && activeTab === 'maintenance'}
-            clusterId={objectData?.clusterId ?? null}
-          />
         </ErrorBoundary>
       )}
     </div>

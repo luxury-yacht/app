@@ -11,6 +11,7 @@ import { overviewRegistry } from './registry';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { SCALABLE_KINDS, normalizeKind } from '@shared/hooks/useObjectActions';
+import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
 import '../../shared.css';
 
 // Generic props for resources - simplified without external type dependencies
@@ -27,6 +28,8 @@ interface GenericOverviewProps {
   onDelete?: () => void;
   onTrigger?: () => void;
   onSuspendToggle?: () => void;
+  onCordon?: () => void;
+  onDrain?: () => void;
   portForwardAvailable?: boolean;
   [key: string]: any; // Allow any additional fields for generic resources
 }
@@ -78,12 +81,46 @@ const Overview: React.FC<OverviewProps> = (props) => {
     };
   }, [clusterId, props.namespace, props.kind, props.name, objectGroup, objectVersion, isScalable]);
 
+  const isNode = normalizeKind(props.kind) === 'Node';
+  const watchClusterIds = useMemo(
+    () => (isNode && clusterId ? [clusterId] : undefined),
+    [isNode, clusterId]
+  );
+  const nodeMaintenance = useNodeMaintenanceActions({ watchClusterIds });
+  const activeDrainJob = isNode ? nodeMaintenance.activeDrainFor(clusterId, props.name) : null;
+  const onOpenDrain =
+    isNode && clusterId && props.name
+      ? () =>
+          nodeMaintenance.openDrainFor({
+            clusterId,
+            clusterName,
+            name: props.name,
+            unschedulable: Boolean(props.unschedulable),
+          })
+      : undefined;
+
   // Use the factory pattern to render the appropriate component.
   // Thread `hpaManaged` through so workload overviews can surface that
-  // scaling is autonomous (e.g. in the Pods caption).
+  // scaling is autonomous (e.g. in the Pods caption). Node overviews also
+  // get the drain-in-progress signal so they can render the inline icon.
   const renderOverviewContent = () => {
-    return overviewRegistry.renderComponent({ ...props, hpaManaged });
+    return overviewRegistry.renderComponent({
+      ...props,
+      hpaManaged,
+      drainInProgress: Boolean(activeDrainJob),
+      onOpenDrain,
+    });
   };
+
+  const handleCordon = isNode
+    ? () =>
+        nodeMaintenance.openCordonFor({
+          clusterId,
+          clusterName,
+          name: props.name,
+          unschedulable: Boolean(props.unschedulable),
+        })
+    : undefined;
 
   // Build object data for ActionsMenu. Group/version come from the panel's
   // objectData (the source of truth) so CRD permission lookups in
@@ -99,6 +136,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
       group: objectGroup || undefined,
       version: objectVersion || undefined,
       status: props.suspend ? 'Suspended' : props.status,
+      unschedulable: props.unschedulable,
       portForwardAvailable: props.portForwardAvailable,
     }),
     [
@@ -108,6 +146,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
       props.portForwardAvailable,
       props.suspend,
       props.status,
+      props.unschedulable,
       clusterId,
       clusterName,
       objectGroup,
@@ -131,11 +170,14 @@ const Overview: React.FC<OverviewProps> = (props) => {
             onDelete={props.onDelete}
             onTrigger={props.onTrigger}
             onSuspendToggle={props.onSuspendToggle}
+            onCordon={handleCordon}
+            onDrain={onOpenDrain}
           />
         </div>
       </div>
 
       <div className="object-panel-section-grid">{renderOverviewContent()}</div>
+      {isNode && nodeMaintenance.modals}
     </div>
   );
 };

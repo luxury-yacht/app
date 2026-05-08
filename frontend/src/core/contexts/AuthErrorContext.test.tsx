@@ -158,4 +158,30 @@ describe('AuthErrorContext', () => {
     expect(state?.reason).toBe('token expired');
     expect(state?.clusterName).toBe('test-cluster');
   });
+
+  it('does not log auth event payloads', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await renderProvider();
+
+    act(() => {
+      listeners.get('cluster:auth:failed')![0]({
+        clusterId: 'cluster-1',
+        clusterName: 'test-cluster',
+        reason: 'token expired',
+      });
+      listeners.get('cluster:auth:failed')![0]({
+        reason: 'sensitive auth provider details',
+      });
+    });
+
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[AuthErrorContext] Received auth:failed without clusterId'
+    );
+
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
 });

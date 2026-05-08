@@ -10,6 +10,7 @@ package nodes
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -23,8 +24,19 @@ import (
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	metricsfake "k8s.io/metrics/pkg/client/clientset/versioned/fake"
 
+	restypes "github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
+
+func TestDrainHelperTimeoutMatchesKubectlDefault(t *testing.T) {
+	require.Zero(t, drainHelperTimeout(restypes.DrainNodeOptions{}))
+
+	zero := 0
+	require.Zero(t, drainHelperTimeout(restypes.DrainNodeOptions{TimeoutSeconds: &zero}))
+
+	custom := 300
+	require.Equal(t, 5*time.Minute, drainHelperTimeout(restypes.DrainNodeOptions{TimeoutSeconds: &custom}))
+}
 
 func TestEnsureMetricsClientInitializesClient(t *testing.T) {
 	setterCalled := false
@@ -116,32 +128,6 @@ func TestGetNodeMetricsReturnsUsage(t *testing.T) {
 	mem := usage[corev1.ResourceMemory]
 	require.Equal(t, "250m", cpu.String())
 	require.Equal(t, "512Mi", mem.String())
-}
-
-func TestIsDaemonSetPod(t *testing.T) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			OwnerReferences: []metav1.OwnerReference{{Kind: "DaemonSet"}},
-		},
-	}
-	require.True(t, isDaemonSetPod(pod))
-
-	pod.OwnerReferences = nil
-	require.False(t, isDaemonSetPod(pod))
-}
-
-func TestHasLocalStorage(t *testing.T) {
-	pod := &corev1.Pod{
-		Spec: corev1.PodSpec{
-			Volumes: []corev1.Volume{{
-				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-			}},
-		},
-	}
-	require.True(t, hasLocalStorage(pod))
-
-	pod.Spec.Volumes = []corev1.Volume{{Name: "config"}}
-	require.False(t, hasLocalStorage(pod))
 }
 
 type recordingLogger struct {

@@ -21,6 +21,15 @@
   white-space: pre-line;
 }
 
+.confirmation-modal-body p + p {
+  margin-top: 0.75rem;
+}
+
+.confirmation-modal-body p.confirmation-modal-warning {
+  color: var(--color-warning);
+  font-weight: var(--font-weight-medium);
+}
+
 /* Footer - Uses common .modal-footer from modals.css */
 .confirmation-modal-footer {
   padding: var(--spacing-lg) 1.5rem;

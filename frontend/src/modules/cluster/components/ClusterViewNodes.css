@@ -36,3 +36,36 @@
 .gridtable-row--placeholder-error .nodes-table-placeholder {
   color: var(--color-error-text, var(--color-error));
 }
+
+.cluster-nodes-status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.cluster-nodes-drain-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--color-accent);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--border-radius-sm);
+  animation: cluster-nodes-drain-pulse 1.6s ease-in-out infinite;
+}
+
+.cluster-nodes-drain-icon:hover {
+  background-color: var(--color-info-bg);
+}
+
+@keyframes cluster-nodes-drain-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

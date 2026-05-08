@@ -15,11 +15,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/kubernetes/fake"
 	cgotesting "k8s.io/client-go/testing"
 
@@ -122,14 +125,170 @@ func TestServiceDrainDeletesPods(t *testing.T) {
 	}
 }
 
+func TestServiceDrainDeleteUsesPodDefaultGraceWhenUnset(t *testing.T) {
+	service, client, node := newNodeService(t)
+	addNodePatchReactor(t, client)
+
+	recordedGrace := make([]*int64, 0)
+	client.Fake.PrependReactor("delete", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		deleteAction := action.(cgotesting.DeleteAction)
+		recordedGrace = append(recordedGrace, deleteAction.GetDeleteOptions().GracePeriodSeconds)
+		return false, nil, nil
+	})
+
+	options := types.DrainNodeOptions{
+		DisableEviction:            true,
+		DeleteEmptyDirData:         true,
+		IgnoreDaemonSets:           true,
+		SkipWaitForPodsToTerminate: true,
+	}
+
+	require.NoError(t, service.Drain(node.Name, options))
+	require.NotEmpty(t, recordedGrace)
+	for _, grace := range recordedGrace {
+		require.Nil(t, grace, "unset gracePeriodSeconds should omit pod delete grace period")
+	}
+}
+
+func TestServiceDrainEvictionUsesPodDefaultGraceWhenUnset(t *testing.T) {
+	service, client, node := newNodeService(t)
+	addNodePatchReactor(t, client)
+
+	recordedGrace := make([]*int64, 0)
+	client.Fake.PrependReactor("create", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		createAction := action.(cgotesting.CreateAction)
+		if createAction.GetSubresource() != "eviction" {
+			return false, nil, nil
+		}
+		eviction := createAction.GetObject().(*policyv1.Eviction)
+		if eviction.DeleteOptions == nil {
+			recordedGrace = append(recordedGrace, nil)
+		} else {
+			recordedGrace = append(recordedGrace, eviction.DeleteOptions.GracePeriodSeconds)
+		}
+		return true, eviction, nil
+	})
+
+	options := types.DrainNodeOptions{
+		DeleteEmptyDirData:         true,
+		IgnoreDaemonSets:           true,
+		SkipWaitForPodsToTerminate: true,
+	}
+
+	require.NoError(t, service.Drain(node.Name, options))
+	require.NotEmpty(t, recordedGrace)
+	for _, grace := range recordedGrace {
+		require.Nil(t, grace, "unset gracePeriodSeconds should omit pod eviction grace period")
+	}
+}
+
 func TestServiceDrainValidatesGracePeriod(t *testing.T) {
 	service, _, node := newNodeService(t)
 
-	err := service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: -1})
+	negativeGrace := -1
+	err := service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: &negativeGrace})
 	require.EqualError(t, err, "gracePeriodSeconds must be non-negative")
 
-	err = service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: 901})
+	tooLongGrace := 901
+	err = service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: &tooLongGrace})
 	require.EqualError(t, err, "gracePeriodSeconds must be less than or equal to 900")
+}
+
+func TestServiceDrainValidatesTimeout(t *testing.T) {
+	service, _, node := newNodeService(t)
+
+	negativeTimeout := -1
+	err := service.Drain(node.Name, types.DrainNodeOptions{TimeoutSeconds: &negativeTimeout})
+	require.EqualError(t, err, "timeoutSeconds must be non-negative")
+
+	zeroTimeout := 0
+	require.NoError(t, nodes.ValidateDrainOptions(types.DrainNodeOptions{TimeoutSeconds: &zeroTimeout}))
+}
+
+func TestServiceDrainLeavesNodeCordonedAfterFailure(t *testing.T) {
+	service, client, node := newNodeService(t)
+	addNodePatchReactor(t, client)
+
+	pod := testsupport.PodFixture("frontend", "local-data")
+	pod.Spec.NodeName = node.Name
+	pod.Spec.Volumes = []corev1.Volume{{
+		Name: "scratch",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}}
+	markControllerManaged(pod)
+	_, err := client.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	err = service.Drain(node.Name, types.DrainNodeOptions{
+		DeleteEmptyDirData: false,
+		IgnoreDaemonSets:   true,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "local storage")
+
+	updated, err := client.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.True(t, updated.Spec.Unschedulable, "failed drain should leave the node cordoned")
+}
+
+func TestServiceDrainUsesKubectlDaemonSetFiltering(t *testing.T) {
+	service, client, node := newNodeService(t)
+	addNodePatchReactor(t, client)
+
+	daemonSet := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-agent", Namespace: "frontend"},
+	}
+	_, err := client.AppsV1().DaemonSets("frontend").Create(context.Background(), daemonSet, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	pod := testsupport.PodFixture("frontend", "node-agent-pod")
+	pod.Spec.NodeName = node.Name
+	controller := true
+	pod.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: "apps/v1",
+		Kind:       "DaemonSet",
+		Name:       daemonSet.Name,
+		Controller: &controller,
+	}}
+	_, err = client.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	options := types.DrainNodeOptions{
+		DisableEviction:            true,
+		DeleteEmptyDirData:         true,
+		SkipWaitForPodsToTerminate: true,
+	}
+	err = service.Drain(node.Name, options)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "DaemonSet-managed Pods")
+
+	options.IgnoreDaemonSets = true
+	require.NoError(t, service.Drain(node.Name, options))
+}
+
+func TestServiceDrainUsesKubectlUnmanagedPodFiltering(t *testing.T) {
+	service, client, node := newNodeService(t)
+	addNodePatchReactor(t, client)
+
+	pod := testsupport.PodFixture("frontend", "unmanaged")
+	pod.Spec.NodeName = node.Name
+	_, err := client.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	options := types.DrainNodeOptions{
+		DisableEviction:            true,
+		DeleteEmptyDirData:         true,
+		IgnoreDaemonSets:           true,
+		SkipWaitForPodsToTerminate: true,
+	}
+	err = service.Drain(node.Name, options)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "declare no controller")
+
+	options.Force = true
+	require.NoError(t, service.Drain(node.Name, options))
 }
 
 func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node) {
@@ -178,12 +337,15 @@ func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node
 	podA := testsupport.PodFixture("frontend", "app-0")
 	podA.Spec.NodeName = node.Name
 	podA.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", RestartCount: 1, Ready: true}}
+	markControllerManaged(podA)
 
 	podB := testsupport.PodFixture("frontend", "app-1")
 	podB.Spec.NodeName = node.Name
 	podB.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", RestartCount: 0, Ready: true}}
+	markControllerManaged(podB)
 
 	client := fake.NewClientset(node.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
+	seedEvictionSupport(t, client)
 
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(ctx),
@@ -193,6 +355,32 @@ func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node
 
 	service := nodes.NewService(deps)
 	return service, client, node
+}
+
+func markControllerManaged(pod *corev1.Pod) {
+	controller := true
+	pod.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: "apps/v1",
+		Kind:       "ReplicaSet",
+		Name:       "frontend",
+		Controller: &controller,
+	}}
+}
+
+func seedEvictionSupport(t *testing.T, client *fake.Clientset) {
+	t.Helper()
+
+	discoveryClient, ok := client.Discovery().(*fakediscovery.FakeDiscovery)
+	require.True(t, ok, "expected fake discovery client")
+	discoveryClient.Resources = []*metav1.APIResourceList{{
+		GroupVersion: "v1",
+		APIResources: []metav1.APIResource{{
+			Name:    "pods/eviction",
+			Kind:    "Eviction",
+			Group:   "policy",
+			Version: "v1",
+		}},
+	}}
 }
 
 func addNodePatchReactor(t *testing.T, client *fake.Clientset) {

@@ -254,6 +254,52 @@ describe('ContainerLogsStreamManager', () => {
     expect(['loading', 'updating']).toContain(state.status);
   });
 
+  test('closes failed container log streams before scheduling one reconnect', async () => {
+    vi.useFakeTimers();
+    Object.assign(window, {
+      setTimeout: globalThis.setTimeout,
+      clearTimeout: globalThis.clearTimeout,
+    });
+
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: any) => void> = {};
+      closed = false;
+      constructor(_url: string) {
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: any) => void) {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(type: string): void {
+        delete this.listeners[type];
+      }
+      close(): void {
+        this.closed = true;
+      }
+      emit(type: string, evt?: any) {
+        this.listeners[type]?.(evt);
+      }
+    }
+    (globalThis as any).EventSource = MockEventSource as any;
+
+    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+    const manager = new ContainerLogsStreamManager();
+
+    await manager.startStream(SCOPE);
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    const firstStream = MockEventSource.instances[0]!;
+    firstStream.emit('error');
+    firstStream.emit('error');
+
+    expect(firstStream.closed).toBe(true);
+    expect(firstStream.listeners).toEqual({});
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(MockEventSource.instances).toHaveLength(2);
+  });
+
   test('refreshOnce streams once and resolves when reset payload arrives', async () => {
     class MockEventSource {
       static instances: MockEventSource[] = [];

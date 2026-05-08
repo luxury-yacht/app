@@ -22,6 +22,10 @@ import {
   CLUSTER_PERMISSIONS,
   type PermissionSpecList,
 } from './permissionSpecs';
+import {
+  getPermissionResultErrorMessage,
+  isTransientPermissionResultError,
+} from './transientPermissionErrors';
 
 /**
  * Resolve GVK for a permission lookup. When the caller supplied explicit
@@ -220,6 +224,8 @@ let refreshTimerId: ReturnType<typeof setInterval> | null = null;
 
 let unsubChanging: UnsubscribeFn | null = null;
 let unsubChanged: UnsubscribeFn | null = null;
+let unsubSelectionChanged: UnsubscribeFn | null = null;
+let unsubClusterLifecycle: UnsubscribeFn | null = null;
 
 // ---------------------------------------------------------------------------
 // PermissionStatus builder
@@ -731,8 +737,22 @@ export const queryClusterPermissions = (clusterId: string): void => {
     name: item.name,
   }));
 
+  let shouldRecordTimestamp = true;
+
   QueryPermissions(payload)
     .then((response) => {
+      const transientError = response.results.find(isTransientPermissionResultError);
+      if (transientError) {
+        shouldRecordTimestamp = false;
+        completeQueryDiagnostics(
+          queryKey,
+          false,
+          getPermissionResultErrorMessage(transientError),
+          startTime
+        );
+        return;
+      }
+
       applyResults(response.results, batch);
       const nsDiag = response.diagnostics?.find((d) => d.key === queryKey);
       completeQueryDiagnostics(
@@ -770,7 +790,9 @@ export const queryClusterPermissions = (clusterId: string): void => {
     .finally(() => {
       inFlightQueries.delete(queryKey);
       pendingSpecs.delete(queryKey);
-      recordQueryTimestamp(queryKey);
+      if (shouldRecordTimestamp) {
+        recordQueryTimestamp(queryKey);
+      }
       notify();
     });
 };
@@ -1139,6 +1161,20 @@ export const initializePermissionStore = (clusterId: string): void => {
       }
     });
   }
+  if (!unsubSelectionChanged) {
+    unsubSelectionChanged = eventBus.on('kubeconfig:selection-changed', () => {
+      if (currentClusterId) {
+        queryClusterPermissions(currentClusterId);
+      }
+    });
+  }
+  if (!unsubClusterLifecycle) {
+    unsubClusterLifecycle = eventBus.on('cluster:lifecycle', (payload) => {
+      if (payload.clusterId === currentClusterId && payload.state === 'ready') {
+        queryClusterPermissions(currentClusterId);
+      }
+    });
+  }
 };
 
 /**
@@ -1190,5 +1226,13 @@ export const __resetForTests = (): void => {
   if (unsubChanged) {
     unsubChanged();
     unsubChanged = null;
+  }
+  if (unsubSelectionChanged) {
+    unsubSelectionChanged();
+    unsubSelectionChanged = null;
+  }
+  if (unsubClusterLifecycle) {
+    unsubClusterLifecycle();
+    unsubClusterLifecycle = null;
   }
 };

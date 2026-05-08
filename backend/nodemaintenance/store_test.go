@@ -1,6 +1,7 @@
 package nodemaintenance
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -127,6 +128,48 @@ func TestSetJobClusterReindexesHistory(t *testing.T) {
 	}
 }
 
+func TestStartDrainForClusterIfIdleRejectsActiveJob(t *testing.T) {
+	store := NewStore(5)
+	first, err := store.StartDrainForClusterIfIdle("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	if err != nil {
+		t.Fatalf("expected first job to start: %v", err)
+	}
+
+	if _, err := store.StartDrainForClusterIfIdle("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A"); err == nil {
+		t.Fatalf("expected duplicate active drain to be rejected")
+	}
+
+	first.Complete(DrainStatusSucceeded, "done")
+	if _, err := store.StartDrainForClusterIfIdle("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A"); err != nil {
+		t.Fatalf("expected new job after completion: %v", err)
+	}
+}
+
+func TestCancelDrainForClusterMarksJobAndCallsCancel(t *testing.T) {
+	store := NewStore(5)
+	job, err := store.StartDrainForClusterIfIdle("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	if err != nil {
+		t.Fatalf("expected job: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	store.RegisterCancel(job.ID, cancel)
+
+	if err := store.CancelDrainForCluster(job.ID, "cluster-a"); err != nil {
+		t.Fatalf("expected cancel to succeed: %v", err)
+	}
+	if ctx.Err() == nil {
+		t.Fatalf("expected cancel function to be invoked")
+	}
+
+	snap, _ := store.Snapshot("worker-1")
+	if len(snap.Drains) != 1 {
+		t.Fatalf("expected one drain, got %d", len(snap.Drains))
+	}
+	if snap.Drains[0].Status != DrainStatusCanceling {
+		t.Fatalf("expected canceling status, got %s", snap.Drains[0].Status)
+	}
+}
+
 func TestParseScope(t *testing.T) {
 	tests := []struct {
 		scope string
@@ -136,11 +179,32 @@ func TestParseScope(t *testing.T) {
 		{"   ", ""},
 		{"node:Worker-1", "worker-1"},
 		{"worker-2", "worker-2"},
+		{AggregateScope, ""},
 	}
 	for _, tt := range tests {
 		if got := ParseScope(tt.scope); got != tt.want {
 			t.Fatalf("ParseScope(%q)=%q, want %q", tt.scope, got, tt.want)
 		}
+	}
+}
+
+func TestJobForClusterReturnsClusterScopedClone(t *testing.T) {
+	store := NewStore(5)
+	job := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-b", "Cluster B")
+
+	got, ok := store.JobForCluster(job.ID, "cluster-a")
+	if !ok {
+		t.Fatal("expected cluster-a job")
+	}
+	if got.ID != job.ID || got.ClusterID != "cluster-a" || got.NodeName != "worker-1" {
+		t.Fatalf("unexpected job clone: %+v", got)
+	}
+	if got.store != nil {
+		t.Fatal("expected returned job clone to omit store pointer")
+	}
+	if _, ok := store.JobForCluster(job.ID, "cluster-b"); ok {
+		t.Fatal("expected job lookup to enforce cluster identity")
 	}
 }
 

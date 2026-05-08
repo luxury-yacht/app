@@ -28,6 +28,8 @@ interface ActionsMenuProps {
   onDelete?: () => void;
   onTrigger?: () => void;
   onSuspendToggle?: () => void;
+  onCordon?: () => void;
+  onDrain?: () => void;
 }
 
 export const ActionsMenu = React.memo<ActionsMenuProps>(
@@ -42,6 +44,8 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     onDelete,
     onTrigger,
     onSuspendToggle,
+    onCordon,
+    onDrain,
   }) => {
     const { openWithObject } = useObjectPanel();
     const [isOpen, setIsOpen] = useState(false);
@@ -96,8 +100,30 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
           setIsOpen(false);
           setShowPortForwardModal(true);
         },
+        onCordon: onCordon
+          ? () => {
+              setIsOpen(false);
+              onCordon();
+            }
+          : undefined,
+        onDrain: onDrain
+          ? () => {
+              setIsOpen(false);
+              onDrain();
+            }
+          : undefined,
       }),
-      [onRestart, onRollback, onScale, onDelete, onTrigger, onSuspendToggle, currentReplicas]
+      [
+        onRestart,
+        onRollback,
+        onScale,
+        onDelete,
+        onTrigger,
+        onSuspendToggle,
+        onCordon,
+        onDrain,
+        currentReplicas,
+      ]
     );
 
     // Merge hpaManaged flag into the object data for the actions hook.

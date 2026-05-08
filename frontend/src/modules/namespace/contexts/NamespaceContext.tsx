@@ -237,8 +237,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
   const handleSetSelectedNamespace = useCallback(
     (namespace: string, clusterId?: string) => {
-      // Always scope namespace selection to the active tab to avoid cross-tab updates.
-      const targetKey = selectedClusterId || clusterId || '__default__';
+      // Explicit cluster targets come from cross-cluster navigation and must not
+      // be rewritten to the currently active tab.
+      const targetKey = clusterId || selectedClusterId || '__default__';
       applySelection(namespace, targetKey);
     },
     [applySelection, selectedClusterId]

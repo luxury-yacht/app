@@ -83,9 +83,21 @@ export const getUserPermission = (
 
 let initialized = false;
 
-export const initializeUserPermissionsBootstrap = (clusterId?: string | null): void => {
+export const initializeUserPermissionsBootstrap = (
+  clusterId?: string | null,
+  options: { ready?: boolean } = {}
+): void => {
   const cid = clusterId?.trim() || '';
+  const ready = options.ready ?? true;
   setCurrentClusterId(cid);
+
+  if (!cid || !ready) {
+    resetPermissionStore();
+    if (!cid) {
+      initialized = false;
+    }
+    return;
+  }
 
   if (initialized) {
     // Cluster changed — re-query cluster permissions.
