@@ -7,11 +7,13 @@ Applies to Go code under `backend/`.
 - `backend/` hosts Kubernetes integrations.
   - `backend/refresh/snapshot` is the canonical source for refresh-domain
     list/table payloads. Add table/list data there, not in `backend/resources`.
+    Follow `docs/architecture/refresh-system.md`.
   - `backend/resources` is the detail/action service layer for rich object
     details, logs/debug helpers, and imperative operations. Keep services
     request-shaped and pass cluster-scoped dependencies in from callers.
   - `backend/objectcatalog` is the discovery/catalog source of truth; use it for
-    resource identity and browse/catalog listings.
+    resource identity and browse/catalog listings. Follow
+    `docs/architecture/catalog.md`.
   - `backend/resourcemodel` owns shared Kubernetes semantics. Before adding or
     changing resource status, relationship links, object references, capability
     integration, or fact slots, follow `docs/architecture/shared-resource-model.md`.
@@ -22,6 +24,8 @@ Applies to Go code under `backend/`.
 
 - Service lives in `backend/objectcatalog` (`Service`, `Summary`), started in `backend/app_object_catalog.go`.
 - Browse snapshots are exposed through the `catalog` refresh domain in `backend/refresh/snapshot/catalog.go`.
+- Catalog identity and typed-view boundaries are documented in
+  `docs/architecture/catalog.md`.
 
 ## Refresh Subsystem Notes
 
@@ -32,6 +36,20 @@ Applies to Go code under `backend/`.
 - Diagnostics/telemetry sources: refresh domain telemetry in `backend/refresh/telemetry/recorder.go`; catalog diagnostics in `backend/app_object_catalog.go`.
 - Lifecycle: refresh subsystem setup in `backend/app_refresh_setup.go`, teardown/rebuild in `backend/app_refresh_recovery.go`, base URL in `backend/app_refresh.go`.
 - Client init: `backend/app_kubernetes_client.go` owns client setup and triggers refresh subsystem + object catalog start.
+- Multi-cluster refresh behavior is documented in
+  `docs/architecture/multi-cluster.md` and `docs/architecture/refresh-system.md`.
+- Refresh permission gates and UI action permission rules are documented in
+  `docs/architecture/permissions.md`.
+- Per-cluster auth failure and recovery behavior is documented in
+  `docs/architecture/auth.md`.
+
+## Workflow Notes
+
+- Container logs and node logs are documented under `docs/workflows/logs/`.
+- Shell exec and debug container behavior is documented in
+  `docs/workflows/shell-debug.md`.
+- Object-map backend graph behavior is documented in
+  `docs/workflows/object-map.md`.
 
 ## HTTP Server (Refresh API)
 
