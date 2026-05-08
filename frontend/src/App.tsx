@@ -21,6 +21,7 @@ import {
   hydrateAppPreferences,
   getPaletteTint,
   getAccentColor,
+  getLinkColor,
   matchThemeForCluster,
   applyTheme,
 } from '@/core/settings/appPreferences';
@@ -30,6 +31,7 @@ import {
   isPaletteActive,
 } from '@utils/paletteTint';
 import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '@utils/accentColor';
+import { applyLinkColor, saveLinkColorToLocalStorage } from '@utils/linkColor';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
@@ -79,6 +81,12 @@ const applyThemeOverrides = (theme: 'light' | 'dark') => {
   applyAccentBg(theme === 'light' ? lightAccent : darkAccent, theme);
   saveAccentColorToLocalStorage('light', lightAccent);
   saveAccentColorToLocalStorage('dark', darkAccent);
+
+  const lightLink = getLinkColor('light');
+  const darkLink = getLinkColor('dark');
+  applyLinkColor(theme === 'light' ? lightLink : darkLink, theme);
+  saveLinkColorToLocalStorage('light', lightLink);
+  saveLinkColorToLocalStorage('dark', darkLink);
 };
 
 /**
@@ -122,6 +130,17 @@ function AppContent() {
         }
         saveAccentColorToLocalStorage('light', lightAccent);
         saveAccentColorToLocalStorage('dark', darkAccent);
+
+        // Apply link color override for the current theme; persist both to localStorage
+        // so the FOUC script can apply the correct one on next launch.
+        const lightLink = getLinkColor('light');
+        const darkLink = getLinkColor('dark');
+        const linkForTheme = currentTheme === 'light' ? lightLink : darkLink;
+        if (linkForTheme) {
+          applyLinkColor(linkForTheme, currentTheme);
+        }
+        saveLinkColorToLocalStorage('light', lightLink);
+        saveLinkColorToLocalStorage('dark', darkLink);
       } finally {
         if (active) {
           initializeMetricsRefreshInterval();
