@@ -276,19 +276,19 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const snapshot = useRefreshScopedDomain('object-yaml', effectiveScope);
   const resolvedClusterId = clusterId?.trim() ?? '';
 
-  const [isDarkTheme, setIsDarkTheme] = useState(
-    () => document.documentElement.getAttribute('data-theme') === 'dark'
+  const [isDarkMode, setIsDarkMode] = useState(
+    () => document.documentElement.getAttribute('data-appearance-mode') === 'dark'
   );
 
   useEffect(() => {
-    const checkTheme = () => {
-      setIsDarkTheme(document.documentElement.getAttribute('data-theme') === 'dark');
+    const checkAppearanceMode = () => {
+      setIsDarkMode(document.documentElement.getAttribute('data-appearance-mode') === 'dark');
     };
 
-    const observer = new MutationObserver(checkTheme);
+    const observer = new MutationObserver(checkAppearanceMode);
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['data-theme', 'class'],
+      attributeFilter: ['data-appearance-mode', 'class'],
     });
 
     return () => observer.disconnect();
@@ -476,8 +476,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
   }, [backendDriftCurrentYaml, displayYaml, draftYaml, driftForced, hasRemoteDrift, isEditing]);
 
   const { theme: codeMirrorTheme, highlight: highlightExtension } = useMemo(
-    () => buildCodeTheme(isDarkTheme),
-    [isDarkTheme]
+    () => buildCodeTheme(isDarkMode),
+    [isDarkMode]
   );
 
   const searchExtensions = useMemo<Extension[]>(

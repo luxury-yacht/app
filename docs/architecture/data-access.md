@@ -86,7 +86,7 @@ Internal infrastructure reads such as `GetRefreshBaseURL` and
 `appStateAccess` reader wrappers currently cover:
 
 - kubeconfig inventory and selected kubeconfigs
-- settings, themes, theme info, zoom, and kubeconfig search paths
+- settings, saved themes, appearance mode info, zoom, and kubeconfig search paths
 - app info and application logs
 - auth and cluster lifecycle snapshots
 - port-forward and shell session inventories/backlogs

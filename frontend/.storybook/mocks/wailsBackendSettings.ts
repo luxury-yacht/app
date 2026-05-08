@@ -5,14 +5,14 @@
  */
 
 interface SettingsMockOptions {
-  /** Value returned by GetThemeInfo(). */
-  themeInfo?: { currentTheme: string; userTheme: string };
+  /** Light/dark/system mode returned by GetAppSettings(). */
+  appearanceMode?: 'light' | 'dark' | 'system';
   /** Value returned by GetKubeconfigSearchPaths(). */
   kubeconfigSearchPaths?: string[];
 }
 
 const defaultOptions: Required<SettingsMockOptions> = {
-  themeInfo: { currentTheme: 'dark', userTheme: 'system' },
+  appearanceMode: 'system',
   kubeconfigSearchPaths: ['~/.kube'],
 };
 
@@ -25,9 +25,17 @@ export function setMockSettingsBackend(options: SettingsMockOptions = {}): void 
   const overrides = ((window as any).__storybookGoOverrides =
     (window as any).__storybookGoOverrides || {});
 
-  overrides['GetThemeInfo'] = () => Promise.resolve(merged.themeInfo);
-  overrides['GetKubeconfigSearchPaths'] = () =>
-    Promise.resolve(merged.kubeconfigSearchPaths);
+  overrides['GetAppSettings'] = () =>
+    Promise.resolve({
+      appearanceMode: merged.appearanceMode,
+      useShortResourceNames: false,
+      autoRefreshEnabled: false,
+      refreshBackgroundClustersEnabled: false,
+      metricsRefreshIntervalMs: 30000,
+      gridTablePersistenceMode: 'shared',
+      defaultObjectPanelPosition: 'right',
+    });
+  overrides['GetKubeconfigSearchPaths'] = () => Promise.resolve(merged.kubeconfigSearchPaths);
   // Stub mutating calls so they resolve without errors.
   overrides['SetKubeconfigSearchPaths'] = () => Promise.resolve();
   overrides['OpenKubeconfigSearchPathDialog'] = () => Promise.resolve('');

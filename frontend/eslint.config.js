@@ -63,7 +63,7 @@ export default [
                 'GetSelectionDiagnostics',
                 'GetShellSessionBacklog',
                 'GetTargetPorts',
-                'GetThemeInfo',
+                'GetAppearanceModeInfo',
                 'GetThemes',
                 'GetZoomLevel',
                 'IsWorkloadHPAManaged',

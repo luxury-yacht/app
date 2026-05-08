@@ -1,6 +1,6 @@
 :root {
   /* ==========================================================================
-     Light Theme: Refined Nautical
+     Light Mode: Refined Nautical
      ==========================================================================
      Clean slate backgrounds with teal accents for a professional, refined feel.
      ========================================================================== */
@@ -240,7 +240,7 @@
 
   /* Log pod colors - Darker variants for light backgrounds */
   /* Hash-based color palette — slots map to the same hue families as the
-     dark theme. Tailwind-600 values for saturated contrast on white bgs.
+     dark mode. Tailwind-600 values for saturated contrast on white bgs.
 
      Layout: slots 1..17 walk the wheel, 18..20 are shoulder hues, 21..24
      are earthy neutrals. */

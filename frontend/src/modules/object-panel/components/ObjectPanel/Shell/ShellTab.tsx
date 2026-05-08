@@ -434,14 +434,14 @@ const ShellTab: React.FC<ShellTabProps> = ({
   }, [disposeTerminal]);
 
   useEffect(() => {
-    const checkTheme = () => {
+    const checkAppearanceMode = () => {
       applyTerminalTheme();
     };
 
-    const observer = new MutationObserver(checkTheme);
+    const observer = new MutationObserver(checkAppearanceMode);
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['data-theme', 'class'],
+      attributeFilter: ['data-appearance-mode', 'class'],
     });
 
     return () => observer.disconnect();

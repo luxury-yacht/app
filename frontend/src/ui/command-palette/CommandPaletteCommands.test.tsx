@@ -73,8 +73,11 @@ vi.mock('@ui/favorites/navigateToFavorite', () => ({
   navigateToFavorite: vi.fn(),
 }));
 
-vi.mock('@core/contexts/ThemeContext', () => ({
-  useTheme: () => ({ theme: 'light' }),
+vi.mock('@core/contexts/AppearanceModeContext', () => ({
+  useAppearanceMode: () => ({
+    mode: 'light',
+    resolvedMode: 'light',
+  }),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -86,8 +89,8 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   SetUseShortResourceNames: vi.fn(),
 }));
 
-vi.mock('@/utils/themes', () => ({
-  changeTheme: vi.fn(),
+vi.mock('@/utils/appearanceMode', () => ({
+  changeAppearanceMode: vi.fn(),
 }));
 
 vi.mock('@shared/components/tables/persistence/gridTablePersistenceReset', () => ({
@@ -236,6 +239,17 @@ describe('CommandPaletteCommands', () => {
     command?.action();
 
     expect(mocks.kubeconfig.setSelectedKubeconfigs).toHaveBeenCalledWith(['/kube/alpha:dev']);
+    unmount();
+  });
+
+  it('labels light, dark, and system choices as appearance modes', () => {
+    const { getCommands, unmount } = renderHook();
+    const commands = getCommands();
+
+    expect(commands.find((entry) => entry.id === 'mode-light')?.label).toBe('Mode - Light');
+    expect(commands.find((entry) => entry.id === 'mode-dark')?.label).toBe('Mode - Dark');
+    expect(commands.find((entry) => entry.id === 'mode-system')?.label).toBe('Mode - System');
+
     unmount();
   });
 });

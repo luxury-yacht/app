@@ -4,7 +4,7 @@
  * Mirrors the approach used for pod-log row colors (see Logs/podColors.ts):
  * a deterministic FNV-1a hash maps a kind name to one of N palette slots,
  * where slot colors are defined as CSS custom properties (--hash-color-1 ..
- * --hash-color-N) per theme. The badge consumer attaches a class
+ * --hash-color-N) per appearance mode. The badge consumer attaches a class
  * "hash-color-{N}" and badges.css applies the color via the corresponding
  * custom property.
  */
@@ -105,7 +105,7 @@ export const fallbackKindBadgeVisualStyle = (
 });
 
 /**
- * Resolves the actual themed kind-badge CSS into primitive values for
+ * Resolves the actual mode-specific kind-badge CSS into primitive values for
  * non-DOM renderers such as the object-map canvas. DOM callers should still
  * use `getKindBadgeClassName`; this helper exists so the badge style source of
  * truth remains the shared `.kind-badge` CSS rules.

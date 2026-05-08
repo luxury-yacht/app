@@ -28,7 +28,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { Tabs, type TabDescriptor } from './Tabs';
 import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
 import type { TabDragPayload } from './dragCoordinator';
-import { ThemeProviderDecorator } from '../../../../.storybook/decorators/ThemeProviderDecorator';
+import { AppearanceModeProviderDecorator } from '../../../../.storybook/decorators/AppearanceModeProviderDecorator';
 import './stories.css';
 
 // Lightweight action logger — mirrors Tabs.stories.tsx since the project
@@ -256,7 +256,7 @@ function ProviderWrapper({ children, onTearOff }: ProviderWrapperProps) {
 const meta: Meta<typeof ProviderWrapper> = {
   title: 'Shared/Tabs',
   component: ProviderWrapper,
-  decorators: [ThemeProviderDecorator],
+  decorators: [AppearanceModeProviderDecorator],
   parameters: {
     layout: 'padded',
   },

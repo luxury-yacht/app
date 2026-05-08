@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getAccentColor,
+  getAppearanceModePreference,
   getAutoRefreshEnabled,
   getBackgroundRefreshEnabled,
   getGridTablePersistenceMode,
@@ -18,7 +19,6 @@ import {
   getObjPanelLogsTargetPerScopeLimit,
   getMetricsRefreshIntervalMs,
   getPaletteTint,
-  getThemePreference,
   getUseShortResourceNames,
   hydrateAppPreferences,
   OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
@@ -33,6 +33,7 @@ import {
   OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX,
   resetAppPreferencesCacheForTesting,
   setAccentColor,
+  setAppearanceModePreference,
   setAutoRefreshEnabled,
   setBackgroundRefreshEnabled,
   setGridTablePersistenceMode,
@@ -43,13 +44,12 @@ import {
   setObjPanelLogsTargetGlobalLimit,
   setObjPanelLogsTargetPerScopeLimit,
   setPaletteTint,
-  setThemePreference,
   setUseShortResourceNames,
 } from './appPreferences';
 
 const appMocks = vi.hoisted(() => ({
   GetAppSettings: vi.fn(),
-  SetTheme: vi.fn(),
+  SetAppearanceMode: vi.fn(),
   SetUseShortResourceNames: vi.fn(),
   SetObjPanelLogsAPITimestampFormat: vi.fn(),
   SetObjPanelLogsAPITimestampUseLocalTimeZone: vi.fn(),
@@ -61,7 +61,7 @@ const appMocks = vi.hoisted(() => ({
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetAppSettings: (...args: unknown[]) => appMocks.GetAppSettings(...args),
-  SetTheme: (...args: unknown[]) => appMocks.SetTheme(...args),
+  SetAppearanceMode: (...args: unknown[]) => appMocks.SetAppearanceMode(...args),
   SetUseShortResourceNames: (...args: unknown[]) => appMocks.SetUseShortResourceNames(...args),
   SetObjPanelLogsAPITimestampFormat: (...args: unknown[]) =>
     appMocks.SetObjPanelLogsAPITimestampFormat(...args),
@@ -80,7 +80,7 @@ describe('appPreferences', () => {
   beforeEach(() => {
     resetAppPreferencesCacheForTesting();
     appMocks.GetAppSettings.mockReset();
-    appMocks.SetTheme.mockReset();
+    appMocks.SetAppearanceMode.mockReset();
     appMocks.SetUseShortResourceNames.mockReset();
     appMocks.SetObjPanelLogsAPITimestampFormat.mockReset();
     appMocks.SetObjPanelLogsAPITimestampUseLocalTimeZone.mockReset();
@@ -119,7 +119,7 @@ describe('appPreferences', () => {
 
   it('hydrates preferences from backend settings', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'light',
+      appearanceMode: 'light',
       useShortResourceNames: true,
       autoRefreshEnabled: false,
       refreshBackgroundClustersEnabled: false,
@@ -142,7 +142,7 @@ describe('appPreferences', () => {
 
     await hydrateAppPreferences({ force: true });
 
-    expect(getThemePreference()).toBe('light');
+    expect(getAppearanceModePreference()).toBe('light');
     expect(getUseShortResourceNames()).toBe(true);
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
@@ -161,7 +161,7 @@ describe('appPreferences', () => {
 
   it('defaults palette hue, saturation, and brightness to 0 when not present', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
+      appearanceMode: 'system',
     });
 
     await hydrateAppPreferences({ force: true });
@@ -174,7 +174,7 @@ describe('appPreferences', () => {
 
   it('normalizes an invalid persisted Object Panel Logs Tab API timestamp format back to the default', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
+      appearanceMode: 'system',
       objPanelLogsApiTimestampFormat: 'foo',
     });
 
@@ -185,7 +185,7 @@ describe('appPreferences', () => {
 
   it('persists preference updates and updates the cache', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
+      appearanceMode: 'system',
       useShortResourceNames: false,
       autoRefreshEnabled: true,
       refreshBackgroundClustersEnabled: true,
@@ -195,7 +195,7 @@ describe('appPreferences', () => {
 
     await hydrateAppPreferences({ force: true });
 
-    await setThemePreference('dark');
+    await setAppearanceModePreference('dark');
     await setUseShortResourceNames(true);
     setObjPanelLogsApiTimestampFormat('HH:mm:ss.SSS');
     setObjPanelLogsApiTimestampUseLocalTimeZone(true);
@@ -204,7 +204,7 @@ describe('appPreferences', () => {
     setBackgroundRefreshEnabled(false);
     setGridTablePersistenceMode('namespaced');
 
-    expect(appMocks.SetTheme).toHaveBeenCalledWith('dark');
+    expect(appMocks.SetAppearanceMode).toHaveBeenCalledWith('dark');
     expect(appMocks.SetUseShortResourceNames).toHaveBeenCalledWith(true);
     expect(appMocks.SetObjPanelLogsAPITimestampFormat).toHaveBeenCalledWith('HH:mm:ss.SSS');
     expect(appMocks.SetObjPanelLogsAPITimestampUseLocalTimeZone).toHaveBeenCalledWith(true);
@@ -215,7 +215,7 @@ describe('appPreferences', () => {
       'namespaced'
     );
 
-    expect(getThemePreference()).toBe('dark');
+    expect(getAppearanceModePreference()).toBe('dark');
     expect(getUseShortResourceNames()).toBe(true);
     expect(getObjPanelLogsApiTimestampFormat()).toBe('HH:mm:ss.SSS');
     expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(true);
@@ -227,16 +227,16 @@ describe('appPreferences', () => {
   });
 
   it('rejects invalid Object Panel Logs Tab API timestamp formats before persisting', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
 
     expect(() => setObjPanelLogsApiTimestampFormat('foo')).toThrow(/Unsupported token/);
     expect(appMocks.SetObjPanelLogsAPITimestampFormat).not.toHaveBeenCalled();
   });
 
-  it('setPaletteTint updates cache and calls backend for the specified theme', async () => {
+  it('setPaletteTint updates cache and calls backend for the specified mode', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
+      appearanceMode: 'system',
       paletteHueLight: 0,
       paletteSaturationLight: 0,
       paletteBrightnessLight: 0,
@@ -250,7 +250,7 @@ describe('appPreferences', () => {
     setPaletteTint('light', 180, 75, -25);
 
     expect(getPaletteTint('light')).toEqual({ hue: 180, saturation: 75, brightness: -25 });
-    // Dark theme should remain at defaults.
+    // Dark mode should remain at defaults.
     expect(getPaletteTint('dark')).toEqual({ hue: 0, saturation: 0, brightness: 0 });
     expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith(
       'light',
@@ -262,14 +262,14 @@ describe('appPreferences', () => {
     setPaletteTint('dark', 300, 60, 20);
 
     expect(getPaletteTint('dark')).toEqual({ hue: 300, saturation: 60, brightness: 20 });
-    // Light theme should be unchanged.
+    // Light mode should be unchanged.
     expect(getPaletteTint('light')).toEqual({ hue: 180, saturation: 75, brightness: -25 });
     expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith('dark', 300, 60, 20);
   });
 
-  it('setAccentColor updates cache and calls backend for the specified theme', async () => {
+  it('setAccentColor updates cache and calls backend for the specified mode', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
+      appearanceMode: 'system',
       accentColorLight: '',
       accentColorDark: '',
     });
@@ -279,21 +279,21 @@ describe('appPreferences', () => {
     setAccentColor('light', '#0d9488');
 
     expect(getAccentColor('light')).toBe('#0d9488');
-    // Dark theme should remain at default.
+    // Dark mode should remain at default.
     expect(getAccentColor('dark')).toBe('');
     expect((window as any).go.backend.App.SetAccentColor).toHaveBeenCalledWith('light', '#0d9488');
 
     setAccentColor('dark', '#f59e0b');
 
     expect(getAccentColor('dark')).toBe('#f59e0b');
-    // Light theme should be unchanged.
+    // Light mode should be unchanged.
     expect(getAccentColor('light')).toBe('#0d9488');
     expect((window as any).go.backend.App.SetAccentColor).toHaveBeenCalledWith('dark', '#f59e0b');
   });
 
   it('setAccentColor resets to empty string', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
+      appearanceMode: 'system',
       accentColorLight: '#0d9488',
       accentColorDark: '#f59e0b',
     });
@@ -313,7 +313,7 @@ describe('appPreferences', () => {
 
   it('hydrates Object Panel Logs Tab buffer size from backend settings', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
+      appearanceMode: 'system',
       objPanelLogsBufferMaxSize: 2500,
     });
     await hydrateAppPreferences({ force: true });
@@ -322,7 +322,7 @@ describe('appPreferences', () => {
 
   it('hydrates maxTableRows from backend settings', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
+      appearanceMode: 'system',
       maxTableRows: 2500,
     });
     await hydrateAppPreferences({ force: true });
@@ -330,14 +330,14 @@ describe('appPreferences', () => {
   });
 
   it('defaults maxTableRows when the backend payload is missing the field', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
     expect(getMaxTableRows()).toBe(MAX_TABLE_ROWS_DEFAULT);
   });
 
   it('setMaxTableRows round-trips an in-range value through the cache and backend', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
+      appearanceMode: 'system',
       maxTableRows: MAX_TABLE_ROWS_DEFAULT,
     });
     await hydrateAppPreferences({ force: true });
@@ -349,7 +349,7 @@ describe('appPreferences', () => {
   });
 
   it('setMaxTableRows clamps values outside the allowed range', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
 
     setMaxTableRows(1);
@@ -360,20 +360,23 @@ describe('appPreferences', () => {
   });
 
   it('defaults Object Panel Logs Tab buffer size when the backend payload is missing the field', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
     expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
   });
 
   it('defaults Object Panel Logs Tab buffer size when the backend payload reports zero (unset)', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system', objPanelLogsBufferMaxSize: 0 });
+    appMocks.GetAppSettings.mockResolvedValue({
+      appearanceMode: 'system',
+      objPanelLogsBufferMaxSize: 0,
+    });
     await hydrateAppPreferences({ force: true });
     expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
   });
 
   it('setObjPanelLogsBufferMaxSize round-trips an in-range value through the cache and backend', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
+      appearanceMode: 'system',
       objPanelLogsBufferMaxSize: OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
     });
     await hydrateAppPreferences({ force: true });
@@ -390,14 +393,14 @@ describe('appPreferences', () => {
   });
 
   it('setObjPanelLogsBufferMaxSize clamps values below the minimum', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
     setObjPanelLogsBufferMaxSize(1);
     expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_MIN_SIZE);
   });
 
   it('setObjPanelLogsBufferMaxSize clamps values above the maximum', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
     setObjPanelLogsBufferMaxSize(999_999);
     expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_MAX_SIZE);
@@ -405,7 +408,7 @@ describe('appPreferences', () => {
 
   it('hydrates Object Panel Logs Tab target limits from backend settings', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
+      appearanceMode: 'system',
       objPanelLogsTargetPerScopeLimit: 144,
       objPanelLogsTargetGlobalLimit: 180,
     });
@@ -415,14 +418,14 @@ describe('appPreferences', () => {
   });
 
   it('defaults Object Panel Logs Tab target limits when the backend payload is missing the fields', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
     expect(getObjPanelLogsTargetPerScopeLimit()).toBe(OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT);
     expect(getObjPanelLogsTargetGlobalLimit()).toBe(OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT);
   });
 
   it('setObjPanelLogsTargetPerScopeLimit round-trips an in-range value through the cache and backend', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
 
     setObjPanelLogsTargetPerScopeLimit(144);
@@ -432,7 +435,7 @@ describe('appPreferences', () => {
   });
 
   it('setObjPanelLogsTargetPerScopeLimit defaults zero and clamps large values', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
 
     setObjPanelLogsTargetPerScopeLimit(0);
@@ -443,7 +446,7 @@ describe('appPreferences', () => {
   });
 
   it('setObjPanelLogsTargetGlobalLimit round-trips an in-range value through the cache and backend', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
 
     setObjPanelLogsTargetGlobalLimit(180);
@@ -453,7 +456,7 @@ describe('appPreferences', () => {
   });
 
   it('setObjPanelLogsTargetGlobalLimit defaults zero and clamps large values', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
 
     setObjPanelLogsTargetGlobalLimit(0);

@@ -37,7 +37,7 @@ export const MAX_SATURATION = 20;
 /** @lintignore */
 export const MAX_BRIGHTNESS_OFFSET = 10;
 
-// Per-theme localStorage keys for FOUC prevention bridge.
+// Per-mode localStorage keys for FOUC prevention bridge.
 const LS_KEY_HUE_LIGHT = 'app-palette-hue-light';
 const LS_KEY_TONE_LIGHT = 'app-palette-saturation-light';
 const LS_KEY_BRIGHTNESS_LIGHT = 'app-palette-brightness-light';
@@ -112,17 +112,17 @@ export function clearTintedPalette(): void {
 }
 
 /**
- * Persists palette hue, saturation, and brightness to per-theme localStorage keys
+ * Persists palette hue, saturation, and brightness to per-mode localStorage keys
  * for the FOUC-prevention script in index.html.
  */
 export function savePaletteTintToLocalStorage(
-  theme: 'light' | 'dark',
+  mode: 'light' | 'dark',
   hue: number,
   saturation: number,
   brightness: number = 0
 ): void {
   try {
-    if (theme === 'light') {
+    if (mode === 'light') {
       localStorage.setItem(LS_KEY_HUE_LIGHT, String(hue));
       localStorage.setItem(LS_KEY_TONE_LIGHT, String(saturation));
       localStorage.setItem(LS_KEY_BRIGHTNESS_LIGHT, String(brightness));
@@ -142,7 +142,7 @@ export function savePaletteTintToLocalStorage(
  */
 export function clearPaletteTintFromLocalStorage(): void {
   try {
-    // Remove per-theme keys.
+    // Remove per-mode keys.
     localStorage.removeItem(LS_KEY_HUE_LIGHT);
     localStorage.removeItem(LS_KEY_TONE_LIGHT);
     localStorage.removeItem(LS_KEY_BRIGHTNESS_LIGHT);

@@ -18,7 +18,7 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Tabs, type TabDescriptor, type TabsProps } from './';
-import { ThemeProviderDecorator } from '../../../../.storybook/decorators/ThemeProviderDecorator';
+import { AppearanceModeProviderDecorator } from '../../../../.storybook/decorators/AppearanceModeProviderDecorator';
 import './stories.css';
 
 // Lightweight action logger. The project doesn't install @storybook/addon-actions,
@@ -65,7 +65,7 @@ const YAML_TAB: TabDescriptor = { id: 'yaml', label: 'YAML' };
 const meta: Meta<typeof TabsHarness> = {
   title: 'Shared/Tabs',
   component: TabsHarness,
-  decorators: [ThemeProviderDecorator],
+  decorators: [AppearanceModeProviderDecorator],
   parameters: {
     layout: 'padded',
   },

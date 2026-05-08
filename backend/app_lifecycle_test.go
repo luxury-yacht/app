@@ -291,7 +291,7 @@ func TestStartupAppliesWindowSettings(t *testing.T) {
 		SchemaVersion: settingsSchemaVersion,
 		UpdatedAt:     time.Now().UTC(),
 		Preferences: settingsPreferences{
-			Theme:                    "system",
+			AppearanceMode:           "system",
 			GridTablePersistenceMode: "shared",
 		},
 		UI: settingsUI{

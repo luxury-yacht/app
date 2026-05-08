@@ -6,7 +6,7 @@
  * simpler: a base color for --color-object-panel-link and a lightened variant
  * for --color-object-panel-link-hover.
  *
- * Persists the chosen hex per theme to localStorage so the FOUC-prevention
+ * Persists the chosen hex per resolved appearance mode to localStorage so the FOUC-prevention
  * script in index.html can apply overrides before React mounts.
  *
  * IMPORTANT: The hover lightness offset (±12) and direction logic are
@@ -36,15 +36,15 @@ function generateLinkHoverColor(hex: string, mode: 'light' | 'dark'): string {
 
 /**
  * Apply link color overrides on document.documentElement.style for the
- * current resolved theme. Pass empty string to remove overrides.
+ * current resolved appearance mode. Pass empty string to remove overrides.
  */
-export function applyLinkColor(hex: string, resolvedTheme: 'light' | 'dark'): void {
+export function applyLinkColor(hex: string, resolvedMode: 'light' | 'dark'): void {
   const root = document.documentElement;
   if (hex) {
     root.style.setProperty('--color-object-panel-link', hex);
     root.style.setProperty(
       '--color-object-panel-link-hover',
-      generateLinkHoverColor(hex, resolvedTheme)
+      generateLinkHoverColor(hex, resolvedMode)
     );
   } else {
     root.style.removeProperty('--color-object-panel-link');
@@ -64,9 +64,9 @@ export function clearLinkColor(): void {
 /**
  * Persist link color hex to localStorage for the FOUC-prevention script.
  */
-export function saveLinkColorToLocalStorage(theme: 'light' | 'dark', color: string): void {
+export function saveLinkColorToLocalStorage(mode: 'light' | 'dark', color: string): void {
   try {
-    const key = theme === 'light' ? LS_KEY_LINK_LIGHT : LS_KEY_LINK_DARK;
+    const key = mode === 'light' ? LS_KEY_LINK_LIGHT : LS_KEY_LINK_DARK;
     if (color) {
       localStorage.setItem(key, color);
     } else {

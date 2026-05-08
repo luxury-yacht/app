@@ -1,7 +1,7 @@
 /* Themes */
-/* Light theme must come first as that is the root theme. */
-@import "./themes/light.css";
-@import "./themes/dark.css";
+/* Light mode must come first because it defines the root defaults. */
+@import "./appearance-modes/light.css";
+@import "./appearance-modes/dark.css";
 
 /* Base styles */
 @import "./base/globals.css";

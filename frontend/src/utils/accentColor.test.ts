@@ -222,14 +222,14 @@ describe('applyAccentBg', () => {
     document.documentElement.style.removeProperty('--color-accent-bg');
   });
 
-  it('sets --color-accent-bg for light theme', () => {
+  it('sets --color-accent-bg for light mode', () => {
     applyAccentBg('#0d9488', 'light');
     expect(document.documentElement.style.getPropertyValue('--color-accent-bg')).toBe(
       'rgba(13, 148, 136, 0.1)'
     );
   });
 
-  it('sets --color-accent-bg for dark theme', () => {
+  it('sets --color-accent-bg for dark mode', () => {
     applyAccentBg('#f59e0b', 'dark');
     expect(document.documentElement.style.getPropertyValue('--color-accent-bg')).toBe(
       'rgba(245, 158, 11, 0.15)'
@@ -268,13 +268,13 @@ describe('localStorage bridge', () => {
     localStorage.clear();
   });
 
-  it('saves and retrieves accent color for light theme', () => {
+  it('saves and retrieves accent color for light mode', () => {
     saveAccentColorToLocalStorage('light', '#0d9488');
     expect(localStorage.getItem('app-accent-color-light')).toBe('#0d9488');
     expect(localStorage.getItem('app-accent-color-dark')).toBeNull();
   });
 
-  it('saves and retrieves accent color for dark theme', () => {
+  it('saves and retrieves accent color for dark mode', () => {
     saveAccentColorToLocalStorage('dark', '#f59e0b');
     expect(localStorage.getItem('app-accent-color-dark')).toBe('#f59e0b');
     expect(localStorage.getItem('app-accent-color-light')).toBeNull();

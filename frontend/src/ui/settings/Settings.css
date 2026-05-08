@@ -165,11 +165,11 @@
   margin: 0;
 }
 
-[data-theme="dark"] .setting-item-inline input[type="number"] {
+[data-appearance-mode="dark"] .setting-item-inline input[type="number"] {
   color-scheme: dark;
 }
 
-[data-theme="dark"] .setting-item-inline input[type="text"] {
+[data-appearance-mode="dark"] .setting-item-inline input[type="text"] {
   color-scheme: dark;
 }
 
@@ -189,7 +189,7 @@
   margin-top: var(--spacing-sm);
 }
 
-/* Theme selector row — extra spacing before the palette sliders */
+/* Appearance mode selector row — extra spacing before the palette sliders */
 .palette-tint-controls > label:has(+ .segmented-button),
 .palette-tint-controls > .segmented-button {
   margin-bottom: var(--spacing-md);

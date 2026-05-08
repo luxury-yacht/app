@@ -19,7 +19,7 @@ Generate a Storybook story for a given component.
 4. **Trace ALL hook dependencies before writing.** Read the component and every hook it uses. Identify which providers are needed. Don't discover them one crash at a time.
 5. **Use existing decorators.** Check `frontend/.storybook/decorators/` for providers:
    - `SidebarProvidersDecorator` — KubeconfigProvider + NamespaceProvider
-   - `ThemeProviderDecorator` — theme context
+   - `AppearanceModeProviderDecorator` — appearance mode context
    - `KeyboardProviderDecorator` — keyboard shortcuts
    - `KubeconfigProviderDecorator` — kubeconfig only
    - `ZoomProviderDecorator` — zoom context

@@ -252,7 +252,7 @@ const NodeLogsTab = ({
     const observer = new MutationObserver(updateTheme);
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['data-theme', 'class'],
+      attributeFilter: ['data-appearance-mode', 'class'],
     });
 
     return () => observer.disconnect();

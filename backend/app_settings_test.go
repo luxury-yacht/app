@@ -52,7 +52,7 @@ func TestAppLoadWindowSettingsReadsExistingFile(t *testing.T) {
 		SchemaVersion: settingsSchemaVersion,
 		UpdatedAt:     time.Now().UTC(),
 		Preferences: settingsPreferences{
-			Theme:                    "system",
+			AppearanceMode:           "system",
 			GridTablePersistenceMode: "shared",
 		},
 		UI: settingsUI{Window: *want},
@@ -82,7 +82,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	app.appSettings = &AppSettings{
-		Theme:                                    "dark",
+		AppearanceMode:                           "dark",
 		SelectedKubeconfigs:                      []string{"/tmp/config:ctx"},
 		UseShortResourceNames:                    true,
 		AutoRefreshEnabled:                       false,
@@ -107,10 +107,16 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	}
 
 	require.NoError(t, app.saveAppSettings())
+	configPath, err := app.getSettingsFilePath()
+	require.NoError(t, err)
+	savedBytes, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	require.Contains(t, string(savedBytes), `"appearanceMode":"dark"`)
+	require.NotContains(t, string(savedBytes), `"theme":"dark"`)
 
 	app.appSettings = nil
 	require.NoError(t, app.loadAppSettings())
-	require.Equal(t, "dark", app.appSettings.Theme)
+	require.Equal(t, "dark", app.appSettings.AppearanceMode)
 	require.True(t, app.appSettings.UseShortResourceNames)
 	require.Equal(t, []string{"/tmp/config:ctx"}, app.appSettings.SelectedKubeconfigs)
 	require.False(t, app.appSettings.AutoRefreshEnabled)
@@ -134,31 +140,31 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.Equal(t, "#f59e0b", app.appSettings.AccentColorDark)
 }
 
-func TestAppSetThemePersistsAndLogs(t *testing.T) {
+func TestAppSetAppearanceModePersistsAndLogs(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	require.NoError(t, app.SetTheme("dark"))
-	require.Equal(t, "dark", app.appSettings.Theme)
+	require.NoError(t, app.SetAppearanceMode("dark"))
+	require.Equal(t, "dark", app.appSettings.AppearanceMode)
 
 	app.appSettings = nil
 	require.NoError(t, app.loadAppSettings())
-	require.Equal(t, "dark", app.appSettings.Theme)
+	require.Equal(t, "dark", app.appSettings.AppearanceMode)
 
 	entries := app.logger.GetEntries()
 	require.NotEmpty(t, entries)
 	last := entries[len(entries)-1]
 	require.Equal(t, "INFO", last.Level)
-	require.Contains(t, last.Message, "Theme changed to: dark")
+	require.Contains(t, last.Message, "Appearance mode changed to: dark")
 }
 
-func TestAppSetThemeRejectsInvalidValues(t *testing.T) {
+func TestAppSetAppearanceModeRejectsInvalidValues(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	err := app.SetTheme("blue")
+	err := app.SetAppearanceMode("blue")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid theme")
+	require.Contains(t, err.Error(), "invalid appearance mode")
 }
 
 func TestAppSetUseShortResourceNamesPersists(t *testing.T) {
@@ -414,15 +420,15 @@ func TestAppSetDefaultObjectPanelPositionRejectsInvalidValues(t *testing.T) {
 	require.Contains(t, err.Error(), "invalid default object panel position")
 }
 
-func TestAppGetThemeInfoReflectsCurrentSettings(t *testing.T) {
+func TestAppGetAppearanceModeInfoReflectsCurrentSettings(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	require.NoError(t, app.SetTheme("light"))
-	info, err := app.GetThemeInfo()
+	require.NoError(t, app.SetAppearanceMode("light"))
+	info, err := app.GetAppearanceModeInfo()
 	require.NoError(t, err)
-	require.Equal(t, "light", info.CurrentTheme)
-	require.Equal(t, "light", info.UserTheme)
+	require.Equal(t, "light", info.CurrentMode)
+	require.Equal(t, "light", info.UserMode)
 }
 
 func TestAppShowSettingsWarnsWhenContextNil(t *testing.T) {
@@ -464,13 +470,32 @@ func TestLoadSettingsFileNormalizesDefaults(t *testing.T) {
 	settings, err := app.loadSettingsFile()
 	require.NoError(t, err)
 	require.Equal(t, settingsSchemaVersion, settings.SchemaVersion)
-	require.Equal(t, "system", settings.Preferences.Theme)
+	require.Equal(t, "system", settings.Preferences.AppearanceMode)
 	require.NotNil(t, settings.Preferences.Refresh)
 	require.True(t, settings.Preferences.Refresh.Auto)
 	require.True(t, settings.Preferences.Refresh.Background)
 	require.Equal(t, "shared", settings.Preferences.GridTablePersistenceMode)
 	require.Equal(t, "", settings.Preferences.DefaultObjectPanelPosition)
 	require.Equal(t, defaultKubeconfigSearchPaths(), settings.Kubeconfig.SearchPaths)
+}
+
+func TestLoadSettingsFileMigratesOldAppearanceModePreference(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	configPath, err := app.getSettingsFilePath()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(configPath, []byte(`{"schemaVersion":1,"preferences":{"theme":"dark"}}`), 0o644))
+
+	settings, err := app.loadSettingsFile()
+	require.NoError(t, err)
+	require.Equal(t, "dark", settings.Preferences.AppearanceMode)
+
+	require.NoError(t, app.saveSettingsFile(settings))
+	saved, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	require.Contains(t, string(saved), `"appearanceMode":"dark"`)
+	require.NotContains(t, string(saved), `"theme":"dark"`)
 }
 
 func TestSaveSettingsFileOverwritesExistingData(t *testing.T) {
@@ -481,27 +506,27 @@ func TestSaveSettingsFileOverwritesExistingData(t *testing.T) {
 	settings, err := app.loadSettingsFile()
 	require.NoError(t, err)
 
-	settings.Preferences.Theme = "dark"
+	settings.Preferences.AppearanceMode = "dark"
 	require.NoError(t, app.saveSettingsFile(settings))
 
-	settings.Preferences.Theme = "light"
+	settings.Preferences.AppearanceMode = "light"
 	require.NoError(t, app.saveSettingsFile(settings))
 
 	loaded, err := app.loadSettingsFile()
 	require.NoError(t, err)
-	require.Equal(t, "light", loaded.Preferences.Theme)
+	require.Equal(t, "light", loaded.Preferences.AppearanceMode)
 }
 
 func TestAppSetPaletteTintPersistsAndClamps(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	// Normal values persist correctly for light theme.
+	// Normal values persist correctly for light mode.
 	require.NoError(t, app.SetPaletteTint("light", 220, 50, -15))
 	require.Equal(t, 220, app.appSettings.PaletteHueLight)
 	require.Equal(t, 50, app.appSettings.PaletteSaturationLight)
 	require.Equal(t, -15, app.appSettings.PaletteBrightnessLight)
-	// Dark theme remains untouched.
+	// Dark mode remains untouched.
 	require.Equal(t, 0, app.appSettings.PaletteHueDark)
 	require.Equal(t, 0, app.appSettings.PaletteSaturationDark)
 	require.Equal(t, 0, app.appSettings.PaletteBrightnessDark)
@@ -525,13 +550,13 @@ func TestAppSetPaletteTintClampsOutOfRange(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	// Values above max are clamped (light theme).
+	// Values above max are clamped (light mode).
 	require.NoError(t, app.SetPaletteTint("light", 400, 150, 80))
 	require.Equal(t, 360, app.appSettings.PaletteHueLight)
 	require.Equal(t, 100, app.appSettings.PaletteSaturationLight)
 	require.Equal(t, 50, app.appSettings.PaletteBrightnessLight)
 
-	// Values below min are clamped (dark theme).
+	// Values below min are clamped (dark mode).
 	require.NoError(t, app.SetPaletteTint("dark", -10, -5, -100))
 	require.Equal(t, 0, app.appSettings.PaletteHueDark)
 	require.Equal(t, 0, app.appSettings.PaletteSaturationDark)
@@ -552,13 +577,13 @@ func TestAppSetPaletteTintDefaultsToZero(t *testing.T) {
 	require.Equal(t, 0, settings.PaletteBrightnessDark)
 }
 
-func TestAppSetPaletteTintRejectsInvalidTheme(t *testing.T) {
+func TestAppSetPaletteTintRejectsInvalidMode(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
 	err := app.SetPaletteTint("blue", 100, 50, 10)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid palette theme")
+	require.Contains(t, err.Error(), "invalid palette mode")
 }
 
 func TestAppPaletteTintMigration(t *testing.T) {
@@ -572,7 +597,7 @@ func TestAppPaletteTintMigration(t *testing.T) {
 	oldSettings := &settingsFile{
 		SchemaVersion: settingsSchemaVersion,
 		Preferences: settingsPreferences{
-			Theme:                    "system",
+			AppearanceMode:           "system",
 			GridTablePersistenceMode: "shared",
 			PaletteHue:               180,
 			PaletteSaturation:        65,
@@ -584,7 +609,7 @@ func TestAppPaletteTintMigration(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(configPath, bytes, 0o644))
 
-	// Load and verify migration copies old values to both themes.
+	// Load and verify migration copies old values to both mode palettes.
 	require.NoError(t, app.loadAppSettings())
 	require.Equal(t, 180, app.appSettings.PaletteHueLight)
 	require.Equal(t, 65, app.appSettings.PaletteSaturationLight)
@@ -601,7 +626,7 @@ func TestAppSetAccentColorPersists(t *testing.T) {
 	// Set light accent color.
 	require.NoError(t, app.SetAccentColor("light", "#ff5733"))
 	require.Equal(t, "#ff5733", app.appSettings.AccentColorLight)
-	// Dark theme remains untouched.
+	// Dark mode remains untouched.
 	require.Equal(t, "", app.appSettings.AccentColorDark)
 
 	// Round-trips through save/load.
@@ -622,10 +647,10 @@ func TestAppSetAccentColorValidation(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	// Invalid theme returns error.
+	// Invalid mode returns error.
 	err := app.SetAccentColor("blue", "#ff5733")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid accent color theme")
+	require.Contains(t, err.Error(), "invalid accent color mode")
 
 	// Invalid hex format returns error.
 	err = app.SetAccentColor("light", "ff5733")

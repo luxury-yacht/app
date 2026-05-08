@@ -171,7 +171,7 @@ describe('paletteTint', () => {
   });
 
   describe('localStorage helpers', () => {
-    it('saves light theme hue, saturation, and brightness to localStorage', () => {
+    it('saves light mode hue, saturation, and brightness to localStorage', () => {
       savePaletteTintToLocalStorage('light', 220, 75, -30);
       expect(localStorage.getItem('app-palette-hue-light')).toBe('220');
       expect(localStorage.getItem('app-palette-saturation-light')).toBe('75');
@@ -180,7 +180,7 @@ describe('paletteTint', () => {
       expect(localStorage.getItem('app-palette-hue-dark')).toBeNull();
     });
 
-    it('saves dark theme hue, saturation, and brightness to localStorage', () => {
+    it('saves dark mode hue, saturation, and brightness to localStorage', () => {
       savePaletteTintToLocalStorage('dark', 100, 40, 15);
       expect(localStorage.getItem('app-palette-hue-dark')).toBe('100');
       expect(localStorage.getItem('app-palette-saturation-dark')).toBe('40');
@@ -189,7 +189,7 @@ describe('paletteTint', () => {
       expect(localStorage.getItem('app-palette-hue-light')).toBeNull();
     });
 
-    it('clears all per-theme and old keys from localStorage', () => {
+    it('clears all per-mode and old keys from localStorage', () => {
       savePaletteTintToLocalStorage('light', 220, 75, 10);
       savePaletteTintToLocalStorage('dark', 100, 40, 5);
       // Set old keys to simulate migration scenario.
@@ -199,7 +199,7 @@ describe('paletteTint', () => {
 
       clearPaletteTintFromLocalStorage();
 
-      // Per-theme keys removed.
+      // Per-mode keys removed.
       expect(localStorage.getItem('app-palette-hue-light')).toBeNull();
       expect(localStorage.getItem('app-palette-saturation-light')).toBeNull();
       expect(localStorage.getItem('app-palette-brightness-light')).toBeNull();

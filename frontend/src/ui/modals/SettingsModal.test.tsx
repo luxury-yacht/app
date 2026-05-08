@@ -30,13 +30,13 @@ vi.mock('@ui/settings/Settings', () => ({
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetAppSettings: vi.fn().mockResolvedValue({ useShortResourceNames: false }),
-  GetThemeInfo: vi.fn().mockResolvedValue({ theme: 'dark' }),
+  GetAppearanceModeInfo: vi.fn().mockResolvedValue({ currentMode: 'dark', userMode: 'dark' }),
   SetUseShortResourceNames: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/utils/themes', () => ({
-  changeTheme: vi.fn().mockResolvedValue(undefined),
-  initSystemThemeListener: vi.fn().mockReturnValue(() => {}),
+vi.mock('@/utils/appearanceMode', () => ({
+  changeAppearanceMode: vi.fn().mockResolvedValue(undefined),
+  initSystemAppearanceModeListener: vi.fn().mockReturnValue(() => {}),
 }));
 
 vi.mock('@/core/refresh/RefreshManager', () => ({

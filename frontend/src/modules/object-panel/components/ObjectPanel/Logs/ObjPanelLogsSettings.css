@@ -54,7 +54,7 @@
   gap: 0.35rem;
 }
 
-[data-theme="dark"] .obj-panel-logs-settings-target-limits input[type="number"] {
+[data-appearance-mode="dark"] .obj-panel-logs-settings-target-limits input[type="number"] {
   color-scheme: dark;
 }
 
@@ -129,6 +129,6 @@
   padding-left: 0.5rem;
 }
 
-[data-theme="dark"] .obj-panel-logs-settings-timestamp-grid input[type="text"] {
+[data-appearance-mode="dark"] .obj-panel-logs-settings-timestamp-grid input[type="text"] {
   color-scheme: dark;
 }

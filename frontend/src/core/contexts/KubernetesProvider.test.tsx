@@ -16,7 +16,7 @@ const wailsMocks = vi.hoisted(() => ({
   SetSelectedKubeconfigs: vi.fn().mockResolvedValue(undefined),
   SetSidebarVisible: vi.fn(),
   GetCatalogDiagnostics: vi.fn().mockResolvedValue({ enabled: false }),
-  GetThemeInfo: vi.fn().mockResolvedValue({ userTheme: 'system' }),
+  GetAppearanceModeInfo: vi.fn().mockResolvedValue({ userMode: 'system' }),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
@@ -25,7 +25,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   SetSelectedKubeconfigs: (...args: unknown[]) => wailsMocks.SetSelectedKubeconfigs(...args),
   SetSidebarVisible: (...args: unknown[]) => wailsMocks.SetSidebarVisible(...args),
   GetCatalogDiagnostics: (...args: unknown[]) => wailsMocks.GetCatalogDiagnostics(...args),
-  GetThemeInfo: (...args: unknown[]) => wailsMocks.GetThemeInfo(...args),
+  GetAppearanceModeInfo: (...args: unknown[]) => wailsMocks.GetAppearanceModeInfo(...args),
 }));
 
 vi.mock('@wailsjs/go/models', () => ({

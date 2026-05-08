@@ -250,7 +250,7 @@ export interface CodeThemeSet {
   highlight: Extension;
 }
 
-export const buildCodeTheme = (isDarkTheme: boolean): CodeThemeSet =>
-  isDarkTheme
+export const buildCodeTheme = (isDarkMode: boolean): CodeThemeSet =>
+  isDarkMode
     ? { theme: codeViewThemeDark, highlight: codeHighlightDark }
     : { theme: codeViewThemeLight, highlight: codeHighlightLight };

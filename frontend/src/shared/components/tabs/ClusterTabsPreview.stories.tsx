@@ -27,7 +27,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 
 import { Tabs, type TabDescriptor } from './';
 import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
-import { ThemeProviderDecorator } from '../../../../.storybook/decorators/ThemeProviderDecorator';
+import { AppearanceModeProviderDecorator } from '../../../../.storybook/decorators/AppearanceModeProviderDecorator';
 import './stories.css';
 
 // Lightweight action logger. The project doesn't install @storybook/addon-actions,
@@ -129,7 +129,7 @@ function ClusterTabsPreviewStrip() {
 const meta: Meta<typeof ClusterTabsPreviewStrip> = {
   title: 'Shared/Tabs',
   component: ClusterTabsPreviewStrip,
-  decorators: [ThemeProviderDecorator],
+  decorators: [AppearanceModeProviderDecorator],
   parameters: {
     layout: 'padded',
   },

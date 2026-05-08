@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Tabs, type TabsProps } from './';
-import { ThemeProviderDecorator } from '../../../../.storybook/decorators/ThemeProviderDecorator';
+import { AppearanceModeProviderDecorator } from '../../../../.storybook/decorators/AppearanceModeProviderDecorator';
 
 // Lightweight action logger. The project doesn't install @storybook/addon-actions,
 // so we log to the browser console instead — Storybook's controls panel still
@@ -45,7 +45,7 @@ function TabsHarness({ initialActiveId, tabs, ...rest }: TabsHarnessProps) {
 const meta: Meta<typeof TabsHarness> = {
   title: 'Shared/Tabs',
   component: TabsHarness,
-  decorators: [ThemeProviderDecorator],
+  decorators: [AppearanceModeProviderDecorator],
   parameters: {
     layout: 'padded',
   },

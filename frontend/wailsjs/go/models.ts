@@ -777,7 +777,7 @@ export namespace types {
 	    }
 	}
 	export class AppSettings {
-	    theme: string;
+	    appearanceMode: string;
 	    selectedKubeconfigs: string[];
 	    useShortResourceNames: boolean;
 	    autoRefreshEnabled: boolean;
@@ -815,7 +815,7 @@ export namespace types {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.theme = source["theme"];
+	        this.appearanceMode = source["appearanceMode"];
 	        this.selectedKubeconfigs = source["selectedKubeconfigs"];
 	        this.useShortResourceNames = source["useShortResourceNames"];
 	        this.autoRefreshEnabled = source["autoRefreshEnabled"];
@@ -865,6 +865,20 @@ export namespace types {
 		    }
 		    return a;
 		}
+	}
+	export class AppearanceModeInfo {
+	    currentMode: string;
+	    userMode: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppearanceModeInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentMode = source["currentMode"];
+	        this.userMode = source["userMode"];
+	    }
 	}
 	export class ConditionsSummary {
 	    accepted?: ConditionState;
@@ -5002,20 +5016,6 @@ export namespace types {
 	}
 	
 	
-	export class ThemeInfo {
-	    currentTheme: string;
-	    userTheme: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ThemeInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.currentTheme = source["currentTheme"];
-	        this.userTheme = source["userTheme"];
-	    }
-	}
 	
 	
 	export class ValidatingWebhookConfigurationDetails {

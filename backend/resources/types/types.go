@@ -29,7 +29,7 @@ type WindowSettings struct {
 
 // AppSettings represents the application settings
 type AppSettings struct {
-	Theme                                    string   `json:"theme"`                                    // "light", "dark", or "system"
+	AppearanceMode                           string   `json:"appearanceMode"`                           // "light", "dark", or "system"
 	SelectedKubeconfigs                      []string `json:"selectedKubeconfigs"`                      // Multi-cluster selections in "path:context" form
 	UseShortResourceNames                    bool     `json:"useShortResourceNames"`                    // Use short names like "po" for pods in badges/headers
 	AutoRefreshEnabled                       bool     `json:"autoRefreshEnabled"`                       // Enable automatic refresh cycles
@@ -49,23 +49,23 @@ type AppSettings struct {
 	ObjectPanelFloatingHeight                int      `json:"objectPanelFloatingHeight"`                // Default floating height (px)
 	ObjectPanelFloatingX                     int      `json:"objectPanelFloatingX"`                     // Default floating X position (px)
 	ObjectPanelFloatingY                     int      `json:"objectPanelFloatingY"`                     // Default floating Y position (px)
-	PaletteHueLight                          int      `json:"paletteHueLight"`                          // Hue for gray palette tint in light theme (0-360)
-	PaletteSaturationLight                   int      `json:"paletteSaturationLight"`                   // Saturation intensity for gray palette tint in light theme (0-100)
-	PaletteBrightnessLight                   int      `json:"paletteBrightnessLight"`                   // Brightness offset for gray palette in light theme (-50 to +50)
-	PaletteHueDark                           int      `json:"paletteHueDark"`                           // Hue for gray palette tint in dark theme (0-360)
-	PaletteSaturationDark                    int      `json:"paletteSaturationDark"`                    // Saturation intensity for gray palette tint in dark theme (0-100)
-	PaletteBrightnessDark                    int      `json:"paletteBrightnessDark"`                    // Brightness offset for gray palette in dark theme (-50 to +50)
-	AccentColorLight                         string   `json:"accentColorLight"`                         // Custom accent hex for light theme (empty = default)
-	AccentColorDark                          string   `json:"accentColorDark"`                          // Custom accent hex for dark theme (empty = default)
-	LinkColorLight                           string   `json:"linkColorLight"`                           // Custom link hex for light theme (empty = default)
-	LinkColorDark                            string   `json:"linkColorDark"`                            // Custom link hex for dark theme (empty = default)
+	PaletteHueLight                          int      `json:"paletteHueLight"`                          // Hue for gray palette tint in light mode (0-360)
+	PaletteSaturationLight                   int      `json:"paletteSaturationLight"`                   // Saturation intensity for gray palette tint in light mode (0-100)
+	PaletteBrightnessLight                   int      `json:"paletteBrightnessLight"`                   // Brightness offset for gray palette in light mode (-50 to +50)
+	PaletteHueDark                           int      `json:"paletteHueDark"`                           // Hue for gray palette tint in dark mode (0-360)
+	PaletteSaturationDark                    int      `json:"paletteSaturationDark"`                    // Saturation intensity for gray palette tint in dark mode (0-100)
+	PaletteBrightnessDark                    int      `json:"paletteBrightnessDark"`                    // Brightness offset for gray palette in dark mode (-50 to +50)
+	AccentColorLight                         string   `json:"accentColorLight"`                         // Custom accent hex for light mode (empty = default)
+	AccentColorDark                          string   `json:"accentColorDark"`                          // Custom accent hex for dark mode (empty = default)
+	LinkColorLight                           string   `json:"linkColorLight"`                           // Custom link hex for light mode (empty = default)
+	LinkColorDark                            string   `json:"linkColorDark"`                            // Custom link hex for dark mode (empty = default)
 	Themes                                   []Theme  `json:"themes"`                                   // Saved theme library
 }
 
-// ThemeInfo represents theme information to send to frontend
-type ThemeInfo struct {
-	CurrentTheme string `json:"currentTheme"` // "light" or "dark"
-	UserTheme    string `json:"userTheme"`    // "light", "dark", or "system"
+// AppearanceModeInfo represents the appearance mode payload sent to the frontend.
+type AppearanceModeInfo struct {
+	CurrentMode string `json:"currentMode"` // Stored appearance mode: "light", "dark", or "system"
+	UserMode    string `json:"userMode"`    // Stored appearance mode: "light", "dark", or "system"
 }
 
 // Theme represents a saved color theme with optional cluster pattern matching.

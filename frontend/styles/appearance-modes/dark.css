@@ -1,6 +1,6 @@
-[data-theme="dark"] {
+[data-appearance-mode="dark"] {
   /* ==========================================================================
-     Dark Theme
+     Dark Mode
      ==========================================================================
      Neutral gray backgrounds with gold accents.
      ========================================================================== */
@@ -167,7 +167,7 @@
   --scrollbar-track-bg: #ffffff;
   --scrollbar-corner-bg: transparent;
 
-  /* Shadows - Deeper for dark theme */
+  /* Shadows - deeper for dark mode */
   --shadow-interactive-soft: 0 2px 8px rgba(0, 0, 0, 0.4);
 
   /* Toast/notification surface */

@@ -9,9 +9,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { OpenKubeconfigSearchPathDialog, SetKubeconfigSearchPaths } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
-import { readKubeconfigSearchPaths, readThemeInfo, requestAppState } from '@/core/app-state-access';
+import { readKubeconfigSearchPaths, requestAppState } from '@/core/app-state-access';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
-import { changeTheme, initSystemThemeListener } from '@/utils/themes';
+import { changeAppearanceMode, initSystemAppearanceModeListener } from '@/utils/appearanceMode';
 import Tooltip from '@shared/components/Tooltip';
 import './Settings.css';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
@@ -35,7 +35,7 @@ import {
   reorderThemes,
   applyTheme as applyThemeApi,
 } from '@/core/settings/appPreferences';
-import { useTheme } from '@/core/contexts/ThemeContext';
+import { useAppearanceMode } from '@/core/contexts/AppearanceModeContext';
 import {
   applyTintedPalette,
   clearTintedPalette,
@@ -81,11 +81,10 @@ const objectPanelPositionOptions: DropdownOption[] = [
 ];
 
 function Settings({ onClose }: SettingsProps) {
-  const [themeInfo, setThemeInfo] = useState<types.ThemeInfo | null>(null);
   const { enabled: refreshEnabled, setAutoRefresh } = useAutoRefresh();
   const { enabled: backgroundRefreshEnabled, setBackgroundRefresh } = useBackgroundRefresh();
   const { loadKubeconfigs } = useKubeconfig();
-  const { resolvedTheme } = useTheme();
+  const { mode, resolvedMode } = useAppearanceMode();
   const { applyLayoutDefaultsAcrossClusters } = useDockablePanelContext();
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
   const [maxTableRowsInput, setMaxTableRowsInput] = useState<string>(() =>
@@ -157,7 +156,6 @@ function Settings({ onClose }: SettingsProps) {
   const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
 
   useEffect(() => {
-    loadThemeInfo();
     loadAppSettings();
     loadKubeconfigPaths();
     setPersistenceMode(getGridTablePersistenceMode());
@@ -173,9 +171,8 @@ function Settings({ onClose }: SettingsProps) {
       floatingY: String(loadedLayout.floatingY),
     });
 
-    // Initialize system theme listener using shared utility
-    const themeCleanup = initSystemThemeListener();
-    return themeCleanup;
+    const cleanupSystemModeListener = initSystemAppearanceModeListener();
+    return cleanupSystemModeListener;
   }, []);
 
   // Load saved themes on mount.
@@ -194,15 +191,15 @@ function Settings({ onClose }: SettingsProps) {
     loadThemes();
   }, []);
 
-  // Reload slider values and accent color when the resolved theme changes.
+  // Reload slider values and accent color when the resolved appearance mode changes.
   useEffect(() => {
-    const tint = getPaletteTint(resolvedTheme);
+    const tint = getPaletteTint(resolvedMode);
     setPaletteHue(tint.hue);
     setPaletteSaturation(tint.saturation);
     setPaletteBrightness(tint.brightness);
-    setAccentColorState(getAccentColor(resolvedTheme));
-    setLinkColorState(getLinkColor(resolvedTheme));
-  }, [resolvedTheme]);
+    setAccentColorState(getAccentColor(resolvedMode));
+    setLinkColorState(getLinkColor(resolvedMode));
+  }, [resolvedMode]);
 
   // Auto-focus the palette inline edit input when it appears.
   useEffect(() => {
@@ -219,18 +216,6 @@ function Settings({ onClose }: SettingsProps) {
       themeFieldInputRef.current.select();
     }
   }, [editingThemeField]);
-
-  const loadThemeInfo = async () => {
-    try {
-      const info = await requestAppState({
-        resource: 'theme-info',
-        read: () => readThemeInfo(),
-      });
-      setThemeInfo(info);
-    } catch (error) {
-      errorHandler.handle(error, { action: 'loadThemeInfo' });
-    }
-  };
 
   const loadAppSettings = async () => {
     try {
@@ -249,7 +234,7 @@ function Settings({ onClose }: SettingsProps) {
         floatingX: String(freshLayout.floatingX),
         floatingY: String(freshLayout.floatingY),
       });
-      // Palette sliders are loaded by the resolvedTheme effect.
+      // Palette sliders are loaded by the resolved mode effect.
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
     }
@@ -286,12 +271,14 @@ function Settings({ onClose }: SettingsProps) {
     }
   };
 
-  const handleThemeChange = async (theme: string) => {
+  const handleAppearanceModeChange = async (nextMode: string) => {
     try {
-      await changeTheme(theme);
-      await loadThemeInfo(); // Refresh theme info to show updated backend state
+      if (nextMode !== 'light' && nextMode !== 'dark' && nextMode !== 'system') {
+        return;
+      }
+      await changeAppearanceMode(nextMode);
     } catch (error) {
-      errorHandler.handle(error, { action: 'setTheme', theme });
+      errorHandler.handle(error, { action: 'setAppearanceMode', mode: nextMode });
     }
   };
 
@@ -414,11 +401,11 @@ function Settings({ onClose }: SettingsProps) {
         clearTimeout(palettePersistTimer.current);
       }
       palettePersistTimer.current = setTimeout(() => {
-        persistPaletteTint(resolvedTheme, hue, saturation, brightness);
-        savePaletteTintToLocalStorage(resolvedTheme, hue, saturation, brightness);
+        persistPaletteTint(resolvedMode, hue, saturation, brightness);
+        savePaletteTintToLocalStorage(resolvedMode, hue, saturation, brightness);
       }, 300);
     },
-    [resolvedTheme]
+    [resolvedMode]
   );
 
   const handlePaletteHueChange = (value: number) => {
@@ -465,24 +452,24 @@ function Settings({ onClose }: SettingsProps) {
         clearTimeout(accentPersistTimer.current);
       }
       accentPersistTimer.current = setTimeout(() => {
-        persistAccentColor(resolvedTheme, color);
-        saveAccentColorToLocalStorage(resolvedTheme, color);
+        persistAccentColor(resolvedMode, color);
+        saveAccentColorToLocalStorage(resolvedMode, color);
       }, 300);
     },
-    [resolvedTheme]
+    [resolvedMode]
   );
 
   const handleAccentColorChange = (hex: string) => {
     setAccentColorState(hex);
     applyAccentColor(
-      resolvedTheme === 'light' ? hex : getAccentColor('light'),
-      resolvedTheme === 'dark' ? hex : getAccentColor('dark')
+      resolvedMode === 'light' ? hex : getAccentColor('light'),
+      resolvedMode === 'dark' ? hex : getAccentColor('dark')
     );
-    applyAccentBg(hex, resolvedTheme);
+    applyAccentBg(hex, resolvedMode);
     debounceAccentPersist(hex);
   };
 
-  // Reset accent color for the current resolved theme.
+  // Reset accent color for the current resolved mode.
   const handleAccentReset = () => {
     if (accentPersistTimer.current) {
       clearTimeout(accentPersistTimer.current);
@@ -490,17 +477,17 @@ function Settings({ onClose }: SettingsProps) {
     }
     setAccentColorState('');
     applyAccentColor(
-      resolvedTheme === 'light' ? '' : getAccentColor('light'),
-      resolvedTheme === 'dark' ? '' : getAccentColor('dark')
+      resolvedMode === 'light' ? '' : getAccentColor('light'),
+      resolvedMode === 'dark' ? '' : getAccentColor('dark')
     );
-    applyAccentBg('', resolvedTheme);
-    persistAccentColor(resolvedTheme, '');
-    saveAccentColorToLocalStorage(resolvedTheme, '');
+    applyAccentBg('', resolvedMode);
+    persistAccentColor(resolvedMode, '');
+    saveAccentColorToLocalStorage(resolvedMode, '');
   };
 
   // Inline hex editing handlers for accent color.
   const validHexRe = /^#[0-9a-fA-F]{6}$/;
-  const defaultAccent = resolvedTheme === 'light' ? '#0d9488' : '#f59e0b';
+  const defaultAccent = resolvedMode === 'light' ? '#0d9488' : '#f59e0b';
 
   const handleAccentHexClick = () => {
     setAccentHexDraft(accentColor || defaultAccent);
@@ -533,33 +520,33 @@ function Settings({ onClose }: SettingsProps) {
         clearTimeout(linkPersistTimer.current);
       }
       linkPersistTimer.current = setTimeout(() => {
-        persistLinkColor(resolvedTheme, color);
-        saveLinkColorToLocalStorage(resolvedTheme, color);
+        persistLinkColor(resolvedMode, color);
+        saveLinkColorToLocalStorage(resolvedMode, color);
       }, 300);
     },
-    [resolvedTheme]
+    [resolvedMode]
   );
 
   const handleLinkColorChange = (hex: string) => {
     setLinkColorState(hex);
-    applyLinkColor(hex, resolvedTheme);
+    applyLinkColor(hex, resolvedMode);
     debounceLinkPersist(hex);
   };
 
-  // Reset link color for the current resolved theme.
+  // Reset link color for the current resolved mode.
   const handleLinkReset = () => {
     if (linkPersistTimer.current) {
       clearTimeout(linkPersistTimer.current);
       linkPersistTimer.current = null;
     }
     setLinkColorState('');
-    applyLinkColor('', resolvedTheme);
-    persistLinkColor(resolvedTheme, '');
-    saveLinkColorToLocalStorage(resolvedTheme, '');
+    applyLinkColor('', resolvedMode);
+    persistLinkColor(resolvedMode, '');
+    saveLinkColorToLocalStorage(resolvedMode, '');
   };
 
   // Inline hex editing handlers for link color.
-  const defaultLink = resolvedTheme === 'light' ? '#525252' : '#aaaaaa';
+  const defaultLink = resolvedMode === 'light' ? '#525252' : '#aaaaaa';
 
   const handleLinkHexClick = () => {
     setLinkHexDraft(linkColor || defaultLink);
@@ -729,26 +716,26 @@ function Settings({ onClose }: SettingsProps) {
       setActiveThemeId(id);
       await hydrateAppPreferences({ force: true });
 
-      // Re-apply CSS overrides for the current resolved theme.
-      const currentTheme = resolvedTheme === 'dark' ? 'dark' : 'light';
-      const tint = getPaletteTint(currentTheme);
+      // Re-apply CSS overrides for the current resolved mode.
+      const currentMode = resolvedMode === 'dark' ? 'dark' : 'light';
+      const tint = getPaletteTint(currentMode);
       if (isPaletteActive(tint.saturation, tint.brightness)) {
         applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
       } else {
         applyTintedPalette(0, 0, 0);
       }
-      savePaletteTintToLocalStorage(currentTheme, tint.hue, tint.saturation, tint.brightness);
+      savePaletteTintToLocalStorage(currentMode, tint.hue, tint.saturation, tint.brightness);
 
       const lightAccent = getAccentColor('light');
       const darkAccent = getAccentColor('dark');
       applyAccentColor(lightAccent, darkAccent);
-      applyAccentBg(currentTheme === 'light' ? lightAccent : darkAccent, currentTheme);
+      applyAccentBg(currentMode === 'light' ? lightAccent : darkAccent, currentMode);
       saveAccentColorToLocalStorage('light', lightAccent);
       saveAccentColorToLocalStorage('dark', darkAccent);
 
       // Apply link color overrides from the theme.
-      const currentLinkColor = getLinkColor(currentTheme);
-      applyLinkColor(currentLinkColor, currentTheme);
+      const currentLinkColor = getLinkColor(currentMode);
+      applyLinkColor(currentLinkColor, currentMode);
       saveLinkColorToLocalStorage('light', getLinkColor('light'));
       saveLinkColorToLocalStorage('dark', getLinkColor('dark'));
 
@@ -756,8 +743,8 @@ function Settings({ onClose }: SettingsProps) {
       setPaletteHue(tint.hue);
       setPaletteSaturation(tint.saturation);
       setPaletteBrightness(tint.brightness);
-      setAccentColorState(getAccentColor(currentTheme));
-      setLinkColorState(getLinkColor(currentTheme));
+      setAccentColorState(getAccentColor(currentMode));
+      setLinkColorState(getLinkColor(currentMode));
     } catch (error) {
       errorHandler.handle(error, { action: 'applyTheme' });
     }
@@ -797,7 +784,7 @@ function Settings({ onClose }: SettingsProps) {
   // the persisted preference cache) and getPaletteTint for the inactive mode.
   const themeMatchesCurrent = useCallback(
     (theme: types.Theme): boolean => {
-      const isLight = resolvedTheme === 'light';
+      const isLight = resolvedMode === 'light';
 
       // Active mode: compare against live slider / accent state.
       const activeHueMatch = isLight
@@ -849,7 +836,7 @@ function Settings({ onClose }: SettingsProps) {
         otherLinkMatch
       );
     },
-    [resolvedTheme, paletteHue, paletteSaturation, paletteBrightness, accentColor, linkColor]
+    [resolvedMode, paletteHue, paletteSaturation, paletteBrightness, accentColor, linkColor]
   );
 
   // Drag-and-drop reorder handler.
@@ -1040,16 +1027,16 @@ function Settings({ onClose }: SettingsProps) {
       <div className="settings-section">
         <h3>Appearance</h3>
         <div className="palette-tint-controls">
-          {/* Theme selector — spans columns 2-4 */}
-          <label>Theme</label>
+          {/* Appearance mode selector — spans columns 2-4 */}
+          <label>Mode</label>
           <SegmentedButton
             options={[
               { value: 'system', label: 'System' },
               { value: 'light', label: 'Light' },
               { value: 'dark', label: 'Dark' },
             ]}
-            value={themeInfo?.userTheme || 'system'}
-            onChange={handleThemeChange}
+            value={mode}
+            onChange={handleAppearanceModeChange}
           />
           <label htmlFor="palette-hue">Hue</label>
           <input
@@ -1123,7 +1110,7 @@ function Settings({ onClose }: SettingsProps) {
           <input
             type="color"
             className="palette-accent-swatch"
-            value={accentColor || (resolvedTheme === 'light' ? '#0d9488' : '#f59e0b')}
+            value={accentColor || (resolvedMode === 'light' ? '#0d9488' : '#f59e0b')}
             onChange={(e) => handleAccentColorChange(e.target.value)}
           />
           {isEditingAccentHex ? (
@@ -1170,7 +1157,7 @@ function Settings({ onClose }: SettingsProps) {
           <input
             type="color"
             className="palette-accent-swatch"
-            value={linkColor || (resolvedTheme === 'light' ? '#525252' : '#aaaaaa')}
+            value={linkColor || (resolvedMode === 'light' ? '#525252' : '#aaaaaa')}
             onChange={(e) => handleLinkColorChange(e.target.value)}
           />
           {isEditingLinkHex ? (

@@ -23,7 +23,7 @@ Here are some of the things that Luxury Yacht offers that you might not find in 
 
 - **Object Diff.** Can't understand why a deployment is working correctly in one cluster, but not the other? Open both deployments in the Diff Objects panel to see exactly what the differences are.
 
-- **Command Palette.** Instant access to nearly everything in the app. Open clusters, toggle settings, select a namespace, go straight to a specific object's details, change themes, and much more.
+- **Command Palette.** Instant access to nearly everything in the app. Open clusters, toggle settings, select a namespace, go straight to a specific object's details, change appearance mode, and much more.
 
 - **Favorites.** Save a filtered view as a favorite for quick access. Favorites can be cluster-specific, or create a generic favorite that works in any cluster.
 

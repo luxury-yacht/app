@@ -57,18 +57,18 @@ export namespace backend {
 }
 
 export namespace types {
-  export class ThemeInfo {
-    currentTheme: string;
-    userTheme: string;
+  export class AppearanceModeInfo {
+    currentMode: string;
+    userMode: string;
 
     static createFrom(source: any = {}) {
-      return new ThemeInfo(source);
+      return new AppearanceModeInfo(source);
     }
 
     constructor(source: any = {}) {
       if ('string' === typeof source) source = JSON.parse(source);
-      this.currentTheme = source['currentTheme'];
-      this.userTheme = source['userTheme'];
+      this.currentMode = source['currentMode'];
+      this.userMode = source['userMode'];
     }
   }
 

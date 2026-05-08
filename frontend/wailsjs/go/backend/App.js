@@ -142,6 +142,10 @@ export function GetAppSettings() {
   return window['go']['backend']['App']['GetAppSettings']();
 }
 
+export function GetAppearanceModeInfo() {
+  return window['go']['backend']['App']['GetAppearanceModeInfo']();
+}
+
 export function GetBackendTLSPolicy(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetBackendTLSPolicy'](arg1, arg2, arg3);
 }
@@ -378,10 +382,6 @@ export function GetTargetPorts(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['backend']['App']['GetTargetPorts'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
-export function GetThemeInfo() {
-  return window['go']['backend']['App']['GetThemeInfo']();
-}
-
 export function GetThemes() {
   return window['go']['backend']['App']['GetThemes']();
 }
@@ -490,6 +490,10 @@ export function SetAppLogsPanelVisible(arg1) {
   return window['go']['backend']['App']['SetAppLogsPanelVisible'](arg1);
 }
 
+export function SetAppearanceMode(arg1) {
+  return window['go']['backend']['App']['SetAppearanceMode'](arg1);
+}
+
 export function SetAutoRefreshEnabled(arg1) {
   return window['go']['backend']['App']['SetAutoRefreshEnabled'](arg1);
 }
@@ -568,10 +572,6 @@ export function SetSelectedKubeconfigs(arg1) {
 
 export function SetSidebarVisible(arg1) {
   return window['go']['backend']['App']['SetSidebarVisible'](arg1);
-}
-
-export function SetTheme(arg1) {
-  return window['go']['backend']['App']['SetTheme'](arg1);
 }
 
 export function SetUseShortResourceNames(arg1) {

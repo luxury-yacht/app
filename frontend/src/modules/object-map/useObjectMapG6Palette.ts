@@ -1,8 +1,8 @@
 /**
  * frontend/src/modules/object-map/useObjectMapG6Palette.ts
  *
- * React hook that observes object-map theme/style changes and exposes the G6
- * palette read from CSS variables.
+ * React hook that observes object-map style changes and exposes the G6 palette
+ * read from CSS variables.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -45,7 +45,7 @@ export const useObjectMapG6Palette = (containerRef: RefObject<HTMLElement | null
     observed.forEach((element) => {
       observer.observe(element, {
         attributes: true,
-        attributeFilter: ['class', 'style', 'data-theme', 'data-color-scheme', 'data-theme-name'],
+        attributeFilter: ['class', 'style', 'data-appearance-mode', 'data-color-scheme'],
       });
     });
     const colorSchemeQuery =

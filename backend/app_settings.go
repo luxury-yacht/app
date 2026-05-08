@@ -33,7 +33,7 @@ type settingsFile struct {
 
 // settingsPreferences captures user-configurable preferences.
 type settingsPreferences struct {
-	Theme                         string                `json:"theme"`
+	AppearanceMode                string                `json:"appearanceMode"`
 	UseShortResourceNames         bool                  `json:"useShortResourceNames"`
 	Refresh                       *settingsRefresh      `json:"refresh"`
 	MaxTableRows                  int                   `json:"maxTableRows"`
@@ -52,7 +52,7 @@ type settingsPreferences struct {
 	PaletteSaturation int `json:"paletteSaturation,omitempty"`
 	PaletteBrightness int `json:"paletteBrightness,omitempty"`
 
-	// Per-theme palette fields.
+	// Per-mode palette fields.
 	PaletteHueLight        int    `json:"paletteHueLight"`
 	PaletteSaturationLight int    `json:"paletteSaturationLight"`
 	PaletteBrightnessLight int    `json:"paletteBrightnessLight"`
@@ -66,6 +66,30 @@ type settingsPreferences struct {
 
 	// Saved theme library. Order matters: first match wins for cluster pattern matching.
 	Themes []Theme `json:"themes,omitempty"`
+}
+
+func (p *settingsPreferences) UnmarshalJSON(data []byte) error {
+	type preferencesAlias settingsPreferences
+	var decoded preferencesAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+
+	if decoded.AppearanceMode == "" {
+		// Migration from settings files written before the appearance-mode rename.
+		// Old files used preferences.theme for the light/dark/system mode value.
+		// TODO: Remove after the old preferences.theme settings format is no longer supported.
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return err
+		}
+		if oldValue, ok := raw["theme"]; ok {
+			_ = json.Unmarshal(oldValue, &decoded.AppearanceMode)
+		}
+	}
+
+	*p = settingsPreferences(decoded)
+	return nil
 }
 
 // settingsRefresh captures user-configurable refresh settings.
@@ -163,9 +187,9 @@ func defaultSettingsFile() *settingsFile {
 		SchemaVersion: settingsSchemaVersion,
 		UpdatedAt:     time.Now().UTC(),
 		Preferences: settingsPreferences{
-			Theme:        "system",
-			Refresh:      &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
-			MaxTableRows: defaultMaxTableRows,
+			AppearanceMode: "system",
+			Refresh:        &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
+			MaxTableRows:   defaultMaxTableRows,
 			ObjPanelLogs: &settingsObjPanelLogs{
 				BufferMaxSize:       defaultObjPanelLogsBufferMaxSize,
 				TargetPerScopeLimit: defaultObjPanelLogsTargetPerScopeLimit,
@@ -193,8 +217,8 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	if settings.SchemaVersion == 0 {
 		settings.SchemaVersion = settingsSchemaVersion
 	}
-	if settings.Preferences.Theme == "" {
-		settings.Preferences.Theme = "system"
+	if settings.Preferences.AppearanceMode == "" {
+		settings.Preferences.AppearanceMode = "system"
 	}
 	if settings.Preferences.Refresh == nil {
 		settings.Preferences.Refresh = &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()}
@@ -241,7 +265,7 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 		settings.Kubeconfig.SearchPaths = defaultKubeconfigSearchPaths()
 	}
 
-	// Migrate old single-value palette fields to per-theme fields.
+	// Migrate old single-value palette fields to per-mode fields.
 	prefs := &settings.Preferences
 	if (prefs.PaletteHue != 0 || prefs.PaletteSaturation != 0 || prefs.PaletteBrightness != 0) &&
 		prefs.PaletteHueLight == 0 && prefs.PaletteSaturationLight == 0 && prefs.PaletteBrightnessLight == 0 &&
@@ -398,7 +422,7 @@ func (a *App) LoadWindowSettings() (*WindowSettings, error) {
 
 func getDefaultAppSettings() *AppSettings {
 	return &AppSettings{
-		Theme:                                    "system",
+		AppearanceMode:                           "system",
 		SelectedKubeconfigs:                      nil,
 		UseShortResourceNames:                    false,
 		AutoRefreshEnabled:                       true,
@@ -446,7 +470,7 @@ func (a *App) loadAppSettings() error {
 	}
 
 	a.appSettings = &AppSettings{
-		Theme:                                    settings.Preferences.Theme,
+		AppearanceMode:                           settings.Preferences.AppearanceMode,
 		SelectedKubeconfigs:                      append([]string(nil), settings.Kubeconfig.Selected...),
 		UseShortResourceNames:                    settings.Preferences.UseShortResourceNames,
 		AutoRefreshEnabled:                       settings.Preferences.Refresh.Auto,
@@ -495,7 +519,7 @@ func (a *App) saveAppSettings() error {
 		return err
 	}
 
-	settings.Preferences.Theme = a.appSettings.Theme
+	settings.Preferences.AppearanceMode = a.appSettings.AppearanceMode
 	settings.Preferences.UseShortResourceNames = a.appSettings.UseShortResourceNames
 	if settings.Preferences.Refresh == nil {
 		settings.Preferences.Refresh = &settingsRefresh{}
@@ -524,7 +548,7 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.ObjectPanelFloatingHeight = a.appSettings.ObjectPanelFloatingHeight
 	settings.Preferences.ObjectPanelFloatingX = a.appSettings.ObjectPanelFloatingX
 	settings.Preferences.ObjectPanelFloatingY = a.appSettings.ObjectPanelFloatingY
-	// Write per-theme palette fields; leave old fields zeroed so omitempty drops them.
+	// Write per-mode palette fields; leave old fields zeroed so omitempty drops them.
 	settings.Preferences.PaletteHueLight = a.appSettings.PaletteHueLight
 	settings.Preferences.PaletteSaturationLight = a.appSettings.PaletteSaturationLight
 	settings.Preferences.PaletteBrightnessLight = a.appSettings.PaletteBrightnessLight
@@ -606,9 +630,9 @@ func (a *App) GetAppSettings() (*AppSettings, error) {
 	return &cp, nil
 }
 
-func (a *App) SetTheme(theme string) error {
-	if theme != "light" && theme != "dark" && theme != "system" {
-		return fmt.Errorf("invalid theme: %s", theme)
+func (a *App) SetAppearanceMode(mode string) error {
+	if mode != "light" && mode != "dark" && mode != "system" {
+		return fmt.Errorf("invalid appearance mode: %s", mode)
 	}
 
 	a.settingsMu.Lock()
@@ -620,8 +644,8 @@ func (a *App) SetTheme(theme string) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Theme changed to: %s", theme), logsources.Settings)
-	a.appSettings.Theme = theme
+	a.logger.Info(fmt.Sprintf("Appearance mode changed to: %s", mode), logsources.Settings)
+	a.appSettings.AppearanceMode = mode
 	return a.saveAppSettings()
 }
 
@@ -841,15 +865,15 @@ func (a *App) SetObjectPanelLayout(dockedRightWidth, dockedBottomHeight, floatin
 	return a.saveAppSettings()
 }
 
-func (a *App) GetThemeInfo() (*ThemeInfo, error) {
+func (a *App) GetAppearanceModeInfo() (*AppearanceModeInfo, error) {
 	settings, err := a.GetAppSettings()
 	if err != nil {
 		return nil, err
 	}
 
-	return &ThemeInfo{
-		CurrentTheme: settings.Theme,
-		UserTheme:    settings.Theme,
+	return &AppearanceModeInfo{
+		CurrentMode: settings.AppearanceMode,
+		UserMode:    settings.AppearanceMode,
 	}, nil
 }
 
@@ -917,10 +941,10 @@ func (a *App) SetZoomLevel(level int) error {
 }
 
 // SetPaletteTint persists the palette hue (0-360), saturation (0-100), and brightness (-50 to +50) preferences
-// for the specified theme ("light" or "dark"). Values are clamped to their valid ranges.
-func (a *App) SetPaletteTint(theme string, hue, saturation, brightness int) error {
-	if theme != "light" && theme != "dark" {
-		return fmt.Errorf("invalid palette theme: %s", theme)
+// for the specified resolved appearance mode ("light" or "dark"). Values are clamped to their valid ranges.
+func (a *App) SetPaletteTint(mode string, hue, saturation, brightness int) error {
+	if mode != "light" && mode != "dark" {
+		return fmt.Errorf("invalid palette mode: %s", mode)
 	}
 
 	// Clamp hue to 0-360
@@ -954,9 +978,9 @@ func (a *App) SetPaletteTint(theme string, hue, saturation, brightness int) erro
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Palette tint (%s) changed to hue=%d saturation=%d brightness=%d", theme, hue, saturation, brightness), logsources.Settings)
+	a.logger.Info(fmt.Sprintf("Palette tint (%s) changed to hue=%d saturation=%d brightness=%d", mode, hue, saturation, brightness), logsources.Settings)
 
-	if theme == "light" {
+	if mode == "light" {
 		a.appSettings.PaletteHueLight = hue
 		a.appSettings.PaletteSaturationLight = saturation
 		a.appSettings.PaletteBrightnessLight = brightness
@@ -972,11 +996,11 @@ func (a *App) SetPaletteTint(theme string, hue, saturation, brightness int) erro
 // validHexColorRe matches a 7-character hex color string (#rrggbb).
 var validHexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
-// SetLinkColor persists a custom link color for the specified theme ("light" or "dark").
+// SetLinkColor persists a custom link color for the specified resolved appearance mode ("light" or "dark").
 // The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
-func (a *App) SetLinkColor(theme string, color string) error {
-	if theme != "light" && theme != "dark" {
-		return fmt.Errorf("invalid link color theme: %s", theme)
+func (a *App) SetLinkColor(mode string, color string) error {
+	if mode != "light" && mode != "dark" {
+		return fmt.Errorf("invalid link color mode: %s", mode)
 	}
 	if color != "" && !validHexColorRe.MatchString(color) {
 		return fmt.Errorf("invalid link color format: %s (expected #rrggbb)", color)
@@ -991,9 +1015,9 @@ func (a *App) SetLinkColor(theme string, color string) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Link color (%s) changed to: %s", theme, color), logsources.Settings)
+	a.logger.Info(fmt.Sprintf("Link color (%s) changed to: %s", mode, color), logsources.Settings)
 
-	if theme == "light" {
+	if mode == "light" {
 		a.appSettings.LinkColorLight = color
 	} else {
 		a.appSettings.LinkColorDark = color
@@ -1002,11 +1026,11 @@ func (a *App) SetLinkColor(theme string, color string) error {
 	return a.saveAppSettings()
 }
 
-// SetAccentColor persists a custom accent color for the specified theme ("light" or "dark").
+// SetAccentColor persists a custom accent color for the specified resolved appearance mode ("light" or "dark").
 // The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
-func (a *App) SetAccentColor(theme string, color string) error {
-	if theme != "light" && theme != "dark" {
-		return fmt.Errorf("invalid accent color theme: %s", theme)
+func (a *App) SetAccentColor(mode string, color string) error {
+	if mode != "light" && mode != "dark" {
+		return fmt.Errorf("invalid accent color mode: %s", mode)
 	}
 	if color != "" && !validHexColorRe.MatchString(color) {
 		return fmt.Errorf("invalid accent color format: %s (expected #rrggbb)", color)
@@ -1021,9 +1045,9 @@ func (a *App) SetAccentColor(theme string, color string) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", theme, color), logsources.Settings)
+	a.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", mode, color), logsources.Settings)
 
-	if theme == "light" {
+	if mode == "light" {
 		a.appSettings.AccentColorLight = color
 	} else {
 		a.appSettings.AccentColorDark = color

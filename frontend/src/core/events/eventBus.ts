@@ -82,7 +82,7 @@ export interface AppEvents {
   'settings:auto-refresh': boolean;
   'settings:refresh-background': boolean;
   'settings:short-names': boolean;
-  'settings:theme': string;
+  'settings:appearance-mode': 'light' | 'dark' | 'system';
   'settings:metrics-interval': number;
   'settings:max-table-rows': number;
   'settings:obj-panel-logs-buffer-size': number;
@@ -91,14 +91,14 @@ export interface AppEvents {
   'settings:obj-panel-logs-target-per-scope-limit': number;
   'settings:obj-panel-logs-target-global-limit': number;
   'settings:palette-tint': {
-    theme: 'light' | 'dark';
+    mode: 'light' | 'dark';
     hue: number;
     saturation: number;
     brightness: number;
   };
-  'settings:accent-color': { theme: 'light' | 'dark'; color: string };
-  'settings:link-color': { theme: 'light' | 'dark'; color: string };
-  'settings:theme-resolved': 'light' | 'dark';
+  'settings:accent-color': { mode: 'light' | 'dark'; color: string };
+  'settings:link-color': { mode: 'light' | 'dark'; color: string };
+  'settings:appearance-mode-resolved': 'light' | 'dark';
 
   // Feature events
   'pods:show-unhealthy': { clusterId: string; scope: string };

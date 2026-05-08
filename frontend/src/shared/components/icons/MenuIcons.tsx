@@ -588,7 +588,7 @@ export const FavoritePinIcon: React.FC<IconProps> = ({ width = 14, height = 14 }
   </svg>
 );
 
-export const ThemeIcon: React.FC<IconProps> = ({
+export const AppearanceModeIcon: React.FC<IconProps> = ({
   width = 16,
   height = 16,
   fill = 'currentColor',

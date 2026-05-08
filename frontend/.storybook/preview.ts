@@ -35,7 +35,7 @@ const runtimeProxy = new Proxy(
   SetSidebarVisible: () => Promise.resolve(),
   GetClusterTabOrder: () => Promise.resolve([]),
   SetClusterTabOrder: () => Promise.resolve(),
-  GetThemeInfo: () => Promise.resolve({ currentTheme: 'dark', userTheme: 'system' }),
+  GetAppearanceModeInfo: () => Promise.resolve({ currentMode: 'dark', userMode: 'system' }),
   GetCatalogDiagnostics: () => Promise.resolve({ enabled: false }),
   GetAllClusterAuthStates: () => Promise.resolve({}),
   GetAllClusterLifecycleStates: () => Promise.resolve({}),
@@ -44,7 +44,7 @@ const runtimeProxy = new Proxy(
   ListPortForwards: () => Promise.resolve([]),
   GetAppSettings: () =>
     Promise.resolve({
-      theme: 'dark',
+      appearanceMode: 'dark',
       useShortResourceNames: false,
       autoRefreshEnabled: false,
       refreshBackgroundClustersEnabled: false,

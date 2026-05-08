@@ -39,7 +39,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 
 import { Tabs, type TabDescriptor } from './';
 import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
-import { ThemeProviderDecorator } from '../../../../.storybook/decorators/ThemeProviderDecorator';
+import { AppearanceModeProviderDecorator } from '../../../../.storybook/decorators/AppearanceModeProviderDecorator';
 // Import the real dockable panel CSS so the preview renders each tab's
 // kind indicator via the production `.dockable-tab__kind-indicator.kind-badge`
 // rules AND the custom drag image via the real `.dockable-tab-drag-preview`
@@ -420,7 +420,7 @@ function ObjectTabsPreviewHarness() {
 const meta: Meta<typeof ObjectTabsPreviewHarness> = {
   title: 'Shared/Tabs',
   component: ObjectTabsPreviewHarness,
-  decorators: [ThemeProviderDecorator],
+  decorators: [AppearanceModeProviderDecorator],
   parameters: {
     layout: 'padded',
   },

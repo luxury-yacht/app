@@ -24,13 +24,13 @@ import {
   DiagnosticsIcon,
   DiffIcon,
   LogsIcon,
-  ThemeIcon,
+  AppearanceModeIcon,
 } from '@shared/components/icons/MenuIcons';
-import { useTheme } from '@core/contexts/ThemeContext';
+import { useAppearanceMode } from '@core/contexts/AppearanceModeContext';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { requestContextRefresh } from '@/core/data-access';
 import { useAutoRefresh } from '@/core/refresh';
-import { changeTheme } from '@/utils/themes';
+import { changeAppearanceMode } from '@/utils/appearanceMode';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
@@ -64,7 +64,7 @@ export function useCommandPaletteCommands() {
     getClusterMeta,
   } = useKubeconfig();
   const { favorites, setPendingFavorite } = useFavorites();
-  const { theme } = useTheme();
+  const { mode } = useAppearanceMode();
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
   const { toggle: toggleAutoRefresh } = useAutoRefresh();
 
@@ -258,49 +258,49 @@ export function useCommandPaletteCommands() {
         keywords: ['short', 'names', 'abbreviations', 'types', 'resources', 'toggle'],
       },
       {
-        id: 'theme-light',
-        label: 'Theme - Light',
-        icon: <ThemeIcon width={16} height={16} />,
-        description: `Switch to light theme${theme === 'light' ? ' (current)' : ''}`,
+        id: 'mode-light',
+        label: 'Mode - Light',
+        icon: <AppearanceModeIcon width={16} height={16} />,
+        description: `Switch to light mode${mode === 'light' ? ' (current)' : ''}`,
         category: 'Settings',
         action: async () => {
           try {
-            await changeTheme('light');
+            await changeAppearanceMode('light');
           } catch (error) {
-            console.error('Failed to set light theme:', error);
+            console.error('Failed to set light mode:', error);
           }
         },
-        keywords: ['theme', 'light', 'bright', 'white', 'appearance'],
+        keywords: ['mode', 'light', 'bright', 'white', 'appearance'],
       },
       {
-        id: 'theme-dark',
-        label: 'Theme - Dark',
-        icon: <ThemeIcon width={16} height={16} />,
-        description: `Switch to dark theme${theme === 'dark' ? ' (current)' : ''}`,
+        id: 'mode-dark',
+        label: 'Mode - Dark',
+        icon: <AppearanceModeIcon width={16} height={16} />,
+        description: `Switch to dark mode${mode === 'dark' ? ' (current)' : ''}`,
         category: 'Settings',
         action: async () => {
           try {
-            await changeTheme('dark');
+            await changeAppearanceMode('dark');
           } catch (error) {
-            console.error('Failed to set dark theme:', error);
+            console.error('Failed to set dark mode:', error);
           }
         },
-        keywords: ['theme', 'dark', 'night', 'black', 'appearance'],
+        keywords: ['mode', 'dark', 'night', 'black', 'appearance'],
       },
       {
-        id: 'theme-system',
-        label: 'Theme - System',
-        icon: <ThemeIcon width={16} height={16} />,
-        description: `Use system theme preference${theme === 'system' ? ' (current)' : ''}`,
+        id: 'mode-system',
+        label: 'Mode - System',
+        icon: <AppearanceModeIcon width={16} height={16} />,
+        description: `Use system appearance mode${mode === 'system' ? ' (current)' : ''}`,
         category: 'Settings',
         action: async () => {
           try {
-            await changeTheme('system');
+            await changeAppearanceMode('system');
           } catch (error) {
-            console.error('Failed to set system theme:', error);
+            console.error('Failed to set system mode:', error);
           }
         },
-        keywords: ['theme', 'system', 'auto', 'automatic', 'appearance', 'os'],
+        keywords: ['mode', 'system', 'auto', 'automatic', 'appearance', 'os'],
       },
 
       // Navigation Commands
@@ -413,7 +413,7 @@ export function useCommandPaletteCommands() {
     ],
     [
       viewState,
-      theme,
+      mode,
       openClusterTab,
       closeCurrentClusterTab,
       closeTabShortcut,

@@ -59,32 +59,32 @@ import { useWailsRuntimeEvents, useConnectionStatusListener } from '@/hooks/useW
 import { useSidebarResize } from '@/hooks/useSidebarResize';
 import { installTypingAssistPolicyObserver } from '@utils/inputAssistPolicy';
 
-// Resolve the current active theme from the document attribute.
-const resolveTheme = (): 'light' | 'dark' => {
-  const attr = document.documentElement.getAttribute('data-theme');
+// Resolve the current active appearance mode from the document attribute.
+const resolveAppearanceMode = (): 'light' | 'dark' => {
+  const attr = document.documentElement.getAttribute('data-appearance-mode');
   return attr === 'dark' ? 'dark' : 'light';
 };
 
-// Apply palette tint and accent color overrides for the given theme.
-const applyThemeOverrides = (theme: 'light' | 'dark') => {
-  const tint = getPaletteTint(theme);
+// Apply palette tint and accent color overrides for the given mode.
+const applyAppearanceOverrides = (mode: 'light' | 'dark') => {
+  const tint = getPaletteTint(mode);
   if (isPaletteActive(tint.saturation, tint.brightness)) {
     applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
   } else {
     applyTintedPalette(0, 0, 0);
   }
-  savePaletteTintToLocalStorage(theme, tint.hue, tint.saturation, tint.brightness);
+  savePaletteTintToLocalStorage(mode, tint.hue, tint.saturation, tint.brightness);
 
   const lightAccent = getAccentColor('light');
   const darkAccent = getAccentColor('dark');
   applyAccentColor(lightAccent, darkAccent);
-  applyAccentBg(theme === 'light' ? lightAccent : darkAccent, theme);
+  applyAccentBg(mode === 'light' ? lightAccent : darkAccent, mode);
   saveAccentColorToLocalStorage('light', lightAccent);
   saveAccentColorToLocalStorage('dark', darkAccent);
 
   const lightLink = getLinkColor('light');
   const darkLink = getLinkColor('dark');
-  applyLinkColor(theme === 'light' ? lightLink : darkLink, theme);
+  applyLinkColor(mode === 'light' ? lightLink : darkLink, mode);
   saveLinkColorToLocalStorage('light', lightLink);
   saveLinkColorToLocalStorage('dark', darkLink);
 };
@@ -113,31 +113,31 @@ function AppContent() {
         await hydrateAppPreferences();
         if (!active) return;
 
-        // Apply palette tint for the current resolved theme.
-        const currentTheme = resolveTheme();
-        const tint = getPaletteTint(currentTheme);
+        // Apply palette tint for the current resolved mode.
+        const currentMode = resolveAppearanceMode();
+        const tint = getPaletteTint(currentMode);
         if (isPaletteActive(tint.saturation, tint.brightness)) {
           applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
-          savePaletteTintToLocalStorage(currentTheme, tint.hue, tint.saturation, tint.brightness);
+          savePaletteTintToLocalStorage(currentMode, tint.hue, tint.saturation, tint.brightness);
         }
 
-        // Apply accent color overrides for both palettes and accent-bg for the current theme.
+        // Apply accent color overrides for both palettes and accent-bg for the current mode.
         const lightAccent = getAccentColor('light');
         const darkAccent = getAccentColor('dark');
         if (lightAccent || darkAccent) {
           applyAccentColor(lightAccent, darkAccent);
-          applyAccentBg(currentTheme === 'light' ? lightAccent : darkAccent, currentTheme);
+          applyAccentBg(currentMode === 'light' ? lightAccent : darkAccent, currentMode);
         }
         saveAccentColorToLocalStorage('light', lightAccent);
         saveAccentColorToLocalStorage('dark', darkAccent);
 
-        // Apply link color override for the current theme; persist both to localStorage
+        // Apply link color override for the current mode; persist both to localStorage
         // so the FOUC script can apply the correct one on next launch.
         const lightLink = getLinkColor('light');
         const darkLink = getLinkColor('dark');
-        const linkForTheme = currentTheme === 'light' ? lightLink : darkLink;
-        if (linkForTheme) {
-          applyLinkColor(linkForTheme, currentTheme);
+        const linkForMode = currentMode === 'light' ? lightLink : darkLink;
+        if (linkForMode) {
+          applyLinkColor(linkForMode, currentMode);
         }
         saveLinkColorToLocalStorage('light', lightLink);
         saveLinkColorToLocalStorage('dark', darkLink);
@@ -150,15 +150,15 @@ function AppContent() {
     };
     void initializePreferences();
 
-    // When the resolved theme changes, apply the palette for the new theme.
-    const unsubThemeResolved = eventBus.on('settings:theme-resolved', (newTheme) => {
+    // When the resolved mode changes, apply the palette for the new mode.
+    const unsubscribeModeResolved = eventBus.on('settings:appearance-mode-resolved', (newMode) => {
       if (!active) return;
-      applyThemeOverrides(newTheme);
+      applyAppearanceOverrides(newMode);
     });
 
     return () => {
       active = false;
-      unsubThemeResolved();
+      unsubscribeModeResolved();
     };
   }, []);
 
@@ -182,8 +182,8 @@ function AppContent() {
       // Re-hydrate the preference cache so getPaletteTint/getAccentColor reflect new values.
       await hydrateAppPreferences({ force: true });
 
-      // Re-apply CSS overrides for the current resolved theme.
-      applyThemeOverrides(resolveTheme());
+      // Re-apply CSS overrides for the current resolved mode.
+      applyAppearanceOverrides(resolveAppearanceMode());
     };
 
     void applyMatchingTheme();

@@ -40,19 +40,19 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
   const editorSurfaceRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isDarkTheme, setIsDarkTheme] = useState(() => {
-    return document.documentElement.getAttribute('data-theme') === 'dark';
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return document.documentElement.getAttribute('data-appearance-mode') === 'dark';
   });
 
   useEffect(() => {
-    const checkTheme = () => {
-      setIsDarkTheme(document.documentElement.getAttribute('data-theme') === 'dark');
+    const checkAppearanceMode = () => {
+      setIsDarkMode(document.documentElement.getAttribute('data-appearance-mode') === 'dark');
     };
 
-    const observer = new MutationObserver(checkTheme);
+    const observer = new MutationObserver(checkAppearanceMode);
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['data-theme', 'class'],
+      attributeFilter: ['data-appearance-mode', 'class'],
     });
 
     return () => observer.disconnect();
@@ -103,8 +103,8 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
   const manifestError = snapshot.error ?? null;
 
   const { theme: codeMirrorTheme, highlight: highlightExtension } = useMemo(
-    () => buildCodeTheme(isDarkTheme),
-    [isDarkTheme]
+    () => buildCodeTheme(isDarkMode),
+    [isDarkMode]
   );
 
   const searchExtensions = useMemo(() => createSearchExtensions({ enableKeymap: false }), []);

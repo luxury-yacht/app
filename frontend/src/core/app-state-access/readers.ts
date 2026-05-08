@@ -8,7 +8,6 @@ import {
   GetAppLogsSince,
   GetSelectedKubeconfigs,
   GetShellSessionBacklog,
-  GetThemeInfo,
   GetThemes,
   GetZoomLevel,
   GetClusterPortForwardCount,
@@ -22,7 +21,6 @@ export const readAppSettings = () => GetAppSettings();
 export const readThemes = () => GetThemes();
 export const readAllClusterAuthStates = () => GetAllClusterAuthStates();
 export const readZoomLevel = () => GetZoomLevel();
-export const readThemeInfo = () => GetThemeInfo();
 export const readKubeconfigSearchPaths = () => GetKubeconfigSearchPaths();
 export const readAppInfo = () => GetAppInfo();
 export const readAppLogs = () => GetAppLogs();

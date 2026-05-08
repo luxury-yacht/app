@@ -58,19 +58,19 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [showMode, setShowMode] = useState<'defaults' | 'overrides' | 'merged'>('defaults');
   const [searchTerm, setSearchTerm] = useState('');
-  const [isDarkTheme, setIsDarkTheme] = useState(
-    () => document.documentElement.getAttribute('data-theme') === 'dark'
+  const [isDarkMode, setIsDarkMode] = useState(
+    () => document.documentElement.getAttribute('data-appearance-mode') === 'dark'
   );
 
   useEffect(() => {
-    const checkTheme = () => {
-      setIsDarkTheme(document.documentElement.getAttribute('data-theme') === 'dark');
+    const checkAppearanceMode = () => {
+      setIsDarkMode(document.documentElement.getAttribute('data-appearance-mode') === 'dark');
     };
 
-    const observer = new MutationObserver(checkTheme);
+    const observer = new MutationObserver(checkAppearanceMode);
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['data-theme', 'class'],
+      attributeFilter: ['data-appearance-mode', 'class'],
     });
 
     return () => observer.disconnect();
@@ -285,8 +285,8 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   }, [valuesData, showMode, getDefaultValues, getActualOverrides, markOverriddenValues]);
 
   const { theme: codeMirrorTheme, highlight: highlightExtension } = useMemo(
-    () => buildCodeTheme(isDarkTheme),
-    [isDarkTheme]
+    () => buildCodeTheme(isDarkMode),
+    [isDarkMode]
   );
 
   const searchExtensions = useMemo(() => createSearchExtensions({ enableKeymap: false }), []);

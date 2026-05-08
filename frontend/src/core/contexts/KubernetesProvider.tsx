@@ -8,7 +8,7 @@ import React, { ReactNode } from 'react';
 import { KubeconfigProvider } from '@modules/kubernetes/config/KubeconfigContext';
 import { NamespaceProvider } from '@modules/namespace/contexts/NamespaceContext';
 import { ViewStateProvider, useViewState } from './ViewStateContext';
-import { ThemeProvider } from './ThemeContext';
+import { AppearanceModeProvider } from './AppearanceModeContext';
 import { RefreshManagerProvider } from '@/core/refresh/contexts/RefreshManagerContext';
 import { useBackgroundClusterRefresh } from '@/core/refresh/hooks/useBackgroundClusterRefresh';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -46,7 +46,7 @@ const BackgroundClusterRefreshBridge: React.FC<{ children: ReactNode }> = ({ chi
  */
 export const KubernetesProvider: React.FC<KubernetesProviderProps> = ({ children }) => {
   return (
-    <ThemeProvider>
+    <AppearanceModeProvider>
       <RefreshManagerProvider>
         <KubeconfigProvider>
           <ViewStateProvider>
@@ -56,6 +56,6 @@ export const KubernetesProvider: React.FC<KubernetesProviderProps> = ({ children
           </ViewStateProvider>
         </KubeconfigProvider>
       </RefreshManagerProvider>
-    </ThemeProvider>
+    </AppearanceModeProvider>
   );
 };

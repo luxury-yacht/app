@@ -7,7 +7,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import SettingsModal from './SettingsModal';
 import { KeyboardProviderDecorator } from '../../../.storybook/decorators/KeyboardProviderDecorator';
-import { ThemeProviderDecorator } from '../../../.storybook/decorators/ThemeProviderDecorator';
+import { AppearanceModeProviderDecorator } from '../../../.storybook/decorators/AppearanceModeProviderDecorator';
 import { KubeconfigProviderDecorator } from '../../../.storybook/decorators/KubeconfigProviderDecorator';
 import { ZoomProviderDecorator } from '../../../.storybook/decorators/ZoomProviderDecorator';
 import { setMockSettingsBackend } from '../../../.storybook/mocks/wailsBackendSettings';
@@ -16,11 +16,11 @@ const meta: Meta<typeof SettingsModal> = {
   title: 'Modals/SettingsModal',
   component: SettingsModal,
   // Decorators are applied inner-to-outer: Keyboard wraps the component,
-  // then Zoom, then Theme, then Kubeconfig (outermost).
+  // then Zoom, then appearance mode, then Kubeconfig (outermost).
   decorators: [
     KeyboardProviderDecorator,
     ZoomProviderDecorator,
-    ThemeProviderDecorator,
+    AppearanceModeProviderDecorator,
     KubeconfigProviderDecorator,
   ],
   args: {
@@ -32,12 +32,12 @@ const meta: Meta<typeof SettingsModal> = {
 export default meta;
 type Story = StoryObj<typeof SettingsModal>;
 
-/** Default open state with system theme selected. */
+/** Default open state with system mode selected. */
 export const Default: Story = {
   decorators: [
     (Story) => {
       setMockSettingsBackend({
-        themeInfo: { currentTheme: 'dark', userTheme: 'system' },
+        appearanceMode: 'system',
         kubeconfigSearchPaths: ['~/.kube'],
       });
       return <Story />;
@@ -45,12 +45,12 @@ export const Default: Story = {
   ],
 };
 
-/** Light theme selected. */
-export const LightTheme: Story = {
+/** Light mode selected. */
+export const LightMode: Story = {
   decorators: [
     (Story) => {
       setMockSettingsBackend({
-        themeInfo: { currentTheme: 'light', userTheme: 'light' },
+        appearanceMode: 'light',
         kubeconfigSearchPaths: ['~/.kube'],
       });
       return <Story />;
@@ -58,12 +58,12 @@ export const LightTheme: Story = {
   ],
 };
 
-/** Dark theme explicitly selected. */
-export const DarkTheme: Story = {
+/** Dark mode explicitly selected. */
+export const DarkMode: Story = {
   decorators: [
     (Story) => {
       setMockSettingsBackend({
-        themeInfo: { currentTheme: 'dark', userTheme: 'dark' },
+        appearanceMode: 'dark',
         kubeconfigSearchPaths: ['~/.kube'],
       });
       return <Story />;
@@ -76,7 +76,7 @@ export const MultipleKubeconfigPaths: Story = {
   decorators: [
     (Story) => {
       setMockSettingsBackend({
-        themeInfo: { currentTheme: 'dark', userTheme: 'system' },
+        appearanceMode: 'system',
         kubeconfigSearchPaths: ['~/.kube', '/etc/kubernetes', '/opt/clusters/staging'],
       });
       return <Story />;

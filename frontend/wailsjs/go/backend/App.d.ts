@@ -77,6 +77,8 @@ export function GetAppLogsSince(arg1:number):Promise<Array<backend.LogEntry>>;
 
 export function GetAppSettings():Promise<types.AppSettings>;
 
+export function GetAppearanceModeInfo():Promise<types.AppearanceModeInfo>;
+
 export function GetBackendTLSPolicy(arg1:string,arg2:string,arg3:string):Promise<types.BackendTLSPolicyDetails>;
 
 export function GetCatalogDiagnostics():Promise<backend.CatalogDiagnostics>;
@@ -195,8 +197,6 @@ export function GetTLSRoute(arg1:string,arg2:string,arg3:string):Promise<types.R
 
 export function GetTargetPorts(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<Array<backend.ContainerPortInfo>>;
 
-export function GetThemeInfo():Promise<types.ThemeInfo>;
-
 export function GetThemes():Promise<Array<types.Theme>>;
 
 export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.ValidatingWebhookConfigurationDetails>;
@@ -251,6 +251,8 @@ export function SetAccentColor(arg1:string,arg2:string):Promise<void>;
 
 export function SetAppLogsPanelVisible(arg1:boolean):Promise<void>;
 
+export function SetAppearanceMode(arg1:string):Promise<void>;
+
 export function SetAutoRefreshEnabled(arg1:boolean):Promise<void>;
 
 export function SetBackgroundRefreshEnabled(arg1:boolean):Promise<void>;
@@ -290,8 +292,6 @@ export function SetPaletteTint(arg1:string,arg2:number,arg3:number,arg4:number):
 export function SetSelectedKubeconfigs(arg1:Array<string>):Promise<void>;
 
 export function SetSidebarVisible(arg1:boolean):Promise<void>;
-
-export function SetTheme(arg1:string):Promise<void>;
 
 export function SetUseShortResourceNames(arg1:boolean):Promise<void>;
 

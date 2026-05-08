@@ -13,32 +13,41 @@
       }
     </style>
     <script>
-      // Set theme and apply palette tint immediately to prevent FOUC.
+      // Set the resolved appearance mode and apply palette tint immediately to prevent FOUC.
       // IMPORTANT: The lightness values, MAX_SATURATION, and MAX_BRIGHTNESS_OFFSET
       // constants are duplicated from frontend/src/utils/paletteTint.ts. Keep both in sync.
       (function () {
-        var preference = localStorage.getItem('app-theme-preference');
+        var preference = localStorage.getItem('app-appearance-mode-preference');
+        // Migration from localStorage written before the appearance-mode rename.
+        // The old key stored the light/dark/system mode preference.
+        // TODO: Remove after the old app-theme-preference localStorage key is no longer supported.
+        var oldPreference = localStorage.getItem('app-theme-preference');
+        if (!preference && oldPreference) {
+          preference = oldPreference;
+          localStorage.setItem('app-appearance-mode-preference', oldPreference);
+          localStorage.removeItem('app-theme-preference');
+        }
 
         // If no preference, default to 'system'
         if (!preference) {
           preference = 'system';
-          localStorage.setItem('app-theme-preference', 'system');
+          localStorage.setItem('app-appearance-mode-preference', 'system');
         }
 
-        var theme = preference;
+        var mode = preference;
 
-        // If system theme, detect the actual theme to use
+        // If system mode is selected, detect the actual mode to use.
         if (preference === 'system') {
-          theme =
+          mode =
             window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
               ? 'dark'
               : 'light';
         }
 
-        document.documentElement.setAttribute('data-theme', theme);
-        document.documentElement.className = theme;
+        document.documentElement.setAttribute('data-appearance-mode', mode);
+        document.documentElement.className = mode;
 
-        // Migrate old single-value palette keys to per-theme keys.
+        // Migrate old single-value palette keys to per-mode keys.
         var oldSaturation = localStorage.getItem('app-palette-saturation');
         if (oldSaturation !== null) {
           var oldHue = localStorage.getItem('app-palette-hue') || '0';
@@ -60,13 +69,13 @@
           localStorage.removeItem('app-palette-brightness');
         }
 
-        // Read per-theme palette values for the resolved theme.
-        var saturation = parseInt(localStorage.getItem('app-palette-saturation-' + theme), 10) || 0;
-        var brightness = parseInt(localStorage.getItem('app-palette-brightness-' + theme), 10) || 0;
+        // Read per-mode palette values for the resolved mode.
+        var saturation = parseInt(localStorage.getItem('app-palette-saturation-' + mode), 10) || 0;
+        var brightness = parseInt(localStorage.getItem('app-palette-brightness-' + mode), 10) || 0;
         // Only apply when palette customization is active.
         if (saturation <= 0 && brightness === 0) return;
 
-        var hue = parseInt(localStorage.getItem('app-palette-hue-' + theme), 10) || 0;
+        var hue = parseInt(localStorage.getItem('app-palette-hue-' + mode), 10) || 0;
         var maxSat = 20;
         var maxBrightnessOffset = 10;
         var saturation = (saturation / 100) * maxSat;
@@ -106,7 +115,7 @@
         var accentDark = localStorage.getItem('app-accent-color-dark') || '';
         if (!accentLight && !accentDark) return;
 
-        var theme = document.documentElement.getAttribute('data-theme') || 'light';
+        var mode = document.documentElement.getAttribute('data-appearance-mode') || 'light';
 
         function hexToRgb(hex) {
           return {
@@ -187,7 +196,7 @@
             '--color-accent-light-400': 20,
             '--color-accent-light-300': 32,
           });
-          if (theme === 'light') {
+          if (mode === 'light') {
             var rgb = hexToRgb(accentLight);
             document.documentElement.style.setProperty(
               '--color-accent-bg',
@@ -204,7 +213,7 @@
             '--color-accent-dark-300': 15,
             '--color-accent-dark-200': 27,
           });
-          if (theme === 'dark') {
+          if (mode === 'dark') {
             var rgb = hexToRgb(accentDark);
             document.documentElement.style.setProperty(
               '--color-accent-bg',
@@ -219,9 +228,9 @@
       // IMPORTANT: The hover lightness offset (+12) is duplicated from
       // frontend/src/utils/linkColor.ts. Keep both in sync.
       (function () {
-        var theme = document.documentElement.getAttribute('data-theme') || 'light';
+        var mode = document.documentElement.getAttribute('data-appearance-mode') || 'light';
         var linkColor =
-          theme === 'light'
+          mode === 'light'
             ? localStorage.getItem('app-link-color-light') || ''
             : localStorage.getItem('app-link-color-dark') || '';
         if (!linkColor) return;
@@ -282,7 +291,7 @@
         root.style.setProperty('--color-object-panel-link', linkColor);
         // Hover = ±12 lightness (lighter in dark, darker in light), clamped to 5%-95%.
         var hsl = hexToHsl(linkColor);
-        var direction = theme === 'dark' ? 1 : -1;
+        var direction = mode === 'dark' ? 1 : -1;
         var hoverL = Math.min(95, Math.max(5, hsl.l + 12 * direction));
         root.style.setProperty('--color-object-panel-link-hover', hslToHex(hsl.h, hsl.s, hoverL));
       })();

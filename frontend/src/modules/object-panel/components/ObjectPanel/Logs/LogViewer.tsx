@@ -505,7 +505,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     const observer = new MutationObserver(updateTheme);
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['data-theme', 'class'],
+      attributeFilter: ['data-appearance-mode', 'class'],
     });
 
     return () => observer.disconnect();
@@ -1030,7 +1030,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   // Generate consistent colors for pods (workload view).
   // Reads the shared --hash-color-N palette so pod-log colors and kind badges
-  // draw from the same set; values resolve per theme.
+  // draw from the same set; values resolve per appearance mode.
   const podColors = useMemo(() => {
     const styles = getComputedStyle(document.documentElement);
     const palette = Array.from({ length: 24 }, (_, i) =>
