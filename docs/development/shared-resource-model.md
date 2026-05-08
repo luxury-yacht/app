@@ -112,6 +112,13 @@ health vocabulary and is not a styling fallback. For example, Node uses
 Node uses `statusPresentation: "terminating"` to make all frontend surfaces
 render the deleting state consistently.
 
+Lifecycle states from `metadata.deletionTimestamp` take precedence over
+reason-derived labels. For example, a deleting Pod should render as
+`status: "Terminating"` and `statusPresentation: "terminating"` even if an
+init or regular container still reports `CrashLoopBackOff`, while
+`statusState` continues to preserve the source phase such as `Running` or
+`Pending`.
+
 When migrating a resource family, project status from the shared model into
 every DTO surface that renders that resource:
 
@@ -156,6 +163,24 @@ new relationship-bearing builder. Projection into rich detail DTOs should use
 - `types.DisplayRefFromResourceDisplay`
 
 The projection helpers intentionally do not infer `resource` from `kind`.
+
+## Events And Streams
+
+Event involved-object identity must stay intact across every event surface:
+snapshot payloads, live per-cluster SSE streams, aggregate SSE streams, and
+resume-buffered aggregate events.
+
+Event payloads that expose an involved object must preserve both:
+
+- `involvedObject` as a `ResourceLink`
+- the flat compatibility fields `objectUid` and `objectApiVersion`
+
+Per-cluster event stream managers must build involved-object links with the
+real `clusterId`. Aggregate stream handlers may fill missing cluster metadata
+from the selected cluster, but they must emit and buffer the decorated event so
+normal delivery and reconnect/resume delivery have the same object identity.
+Frontend stream transforms must pass `involvedObject` through instead of
+falling back to legacy flat fields for navigation.
 
 ## Catalog Resolution
 

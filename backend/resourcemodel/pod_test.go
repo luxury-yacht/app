@@ -87,10 +87,9 @@ func TestBuildPodResourceModelStatus(t *testing.T) {
 			wantReason:       "Completed",
 		},
 		{
-			name: "terminating preserves source phase",
+			name: "terminating overrides waiting container reason and preserves source phase",
 			pod: func() *corev1.Pod {
-				pod := podWithRegularContainer(corev1.PodRunning, true, corev1.ContainerState{Running: &corev1.ContainerStateRunning{}})
-				pod.Status.ContainerStatuses = nil
+				pod := podWithRegularContainer(corev1.PodRunning, false, corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}})
 				pod.DeletionTimestamp = &deletingAt
 				return pod
 			}(),

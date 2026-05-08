@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // eventStreamSubscriber provides the subscription surface needed for aggregation.
@@ -210,13 +211,14 @@ func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		case entry := <-entryCh:
 			lastDelivery = time.Now()
 			sequence := h.nextAggregateSequence(params.ScopeKey)
-			h.bufferAggregateEvent(params.ScopeKey, sequence, entry.entry)
+			decorated := h.decorateEntry(entry, clusterMeta)
+			h.bufferAggregateEvent(params.ScopeKey, sequence, decorated)
 			payload := eventstream.Payload{
 				Domain:      params.Domain,
 				Scope:       params.ScopeKey,
 				Sequence:    sequence,
 				GeneratedAt: time.Now().UnixMilli(),
-				Events:      []eventstream.Entry{h.decorateEntry(entry, clusterMeta)},
+				Events:      []eventstream.Entry{decorated},
 			}
 			if err := writeEventPayload(w, f, payload); err != nil {
 				if h.telemetry != nil {
@@ -384,7 +386,29 @@ func (h *aggregateEventStreamHandler) decorateEntry(
 	if event.ClusterID == "" {
 		event.ClusterID = entry.clusterID
 	}
+	event.InvolvedObject = decorateEventResourceLink(event.InvolvedObject, event.ClusterID)
 	return event
+}
+
+func decorateEventResourceLink(
+	link *resourcemodel.ResourceLink,
+	clusterID string,
+) *resourcemodel.ResourceLink {
+	if link == nil || clusterID == "" {
+		return link
+	}
+	decorated := *link
+	if link.Ref != nil && link.Ref.ClusterID == "" {
+		ref := *link.Ref
+		ref.ClusterID = clusterID
+		decorated.Ref = &ref
+	}
+	if link.Display != nil && link.Display.ClusterID == "" {
+		display := *link.Display
+		display.ClusterID = clusterID
+		decorated.Display = &display
+	}
+	return &decorated
 }
 
 func (h *aggregateEventStreamHandler) snapshotConfig() (
@@ -473,21 +497,24 @@ func convertAggregateSnapshot(snap *refresh.Snapshot) []eventstream.Entry {
 		entries := make([]eventstream.Entry, 0, len(payload.Events))
 		for _, evt := range payload.Events {
 			entries = append(entries, eventstream.Entry{
-				ClusterID:       evt.ClusterID,
-				ClusterName:     evt.ClusterName,
-				Kind:            evt.Kind,
-				Name:            evt.Name,
-				UID:             evt.UID,
-				ResourceVersion: evt.ResourceVersion,
-				Namespace:       evt.ObjectNamespace,
-				ObjectNamespace: evt.ObjectNamespace,
-				Type:            evt.Type,
-				Source:          evt.Source,
-				Reason:          evt.Reason,
-				Object:          evt.Object,
-				Message:         evt.Message,
-				Age:             evt.Age,
-				CreatedAt:       evt.AgeTimestamp,
+				ClusterID:        evt.ClusterID,
+				ClusterName:      evt.ClusterName,
+				Kind:             evt.Kind,
+				Name:             evt.Name,
+				UID:              evt.UID,
+				ResourceVersion:  evt.ResourceVersion,
+				Namespace:        evt.ObjectNamespace,
+				ObjectNamespace:  evt.ObjectNamespace,
+				ObjectUID:        evt.ObjectUID,
+				ObjectAPIVersion: evt.ObjectAPIVersion,
+				InvolvedObject:   decorateEventResourceLink(evt.InvolvedObject, evt.ClusterID),
+				Type:             evt.Type,
+				Source:           evt.Source,
+				Reason:           evt.Reason,
+				Object:           evt.Object,
+				Message:          evt.Message,
+				Age:              evt.Age,
+				CreatedAt:        evt.AgeTimestamp,
 			})
 		}
 		return entries
@@ -495,21 +522,24 @@ func convertAggregateSnapshot(snap *refresh.Snapshot) []eventstream.Entry {
 		entries := make([]eventstream.Entry, 0, len(payload.Events))
 		for _, evt := range payload.Events {
 			entries = append(entries, eventstream.Entry{
-				ClusterID:       evt.ClusterID,
-				ClusterName:     evt.ClusterName,
-				Kind:            evt.Kind,
-				Name:            evt.Name,
-				UID:             evt.UID,
-				ResourceVersion: evt.ResourceVersion,
-				Namespace:       evt.ObjectNamespace,
-				ObjectNamespace: evt.ObjectNamespace,
-				Type:            evt.Type,
-				Source:          evt.Source,
-				Reason:          evt.Reason,
-				Object:          evt.Object,
-				Message:         evt.Message,
-				Age:             evt.Age,
-				CreatedAt:       evt.AgeTimestamp,
+				ClusterID:        evt.ClusterID,
+				ClusterName:      evt.ClusterName,
+				Kind:             evt.Kind,
+				Name:             evt.Name,
+				UID:              evt.UID,
+				ResourceVersion:  evt.ResourceVersion,
+				Namespace:        evt.ObjectNamespace,
+				ObjectNamespace:  evt.ObjectNamespace,
+				ObjectUID:        evt.ObjectUID,
+				ObjectAPIVersion: evt.ObjectAPIVersion,
+				InvolvedObject:   decorateEventResourceLink(evt.InvolvedObject, evt.ClusterID),
+				Type:             evt.Type,
+				Source:           evt.Source,
+				Reason:           evt.Reason,
+				Object:           evt.Object,
+				Message:          evt.Message,
+				Age:              evt.Age,
+				CreatedAt:        evt.AgeTimestamp,
 			})
 		}
 		return entries

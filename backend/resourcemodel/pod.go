@@ -48,6 +48,22 @@ func BuildPodStatusPresentation(pod *corev1.Pod) ResourceStatusPresentation {
 
 	state := podPhaseState(pod)
 	signals := podStatusSignals(pod, facts)
+	if pod.DeletionTimestamp != nil {
+		deletionTimestamp := pod.DeletionTimestamp.Time.Format(time.RFC3339)
+		return ResourceStatusPresentation{
+			Label:        "Terminating",
+			State:        state,
+			Presentation: "terminating",
+			Reason:       "DeletionTimestamp",
+			Signals: append(signals, ResourceStatusSignal{
+				Type:   StatusSignalDeletion,
+				Name:   "metadata.deletionTimestamp",
+				Status: deletionTimestamp,
+			}),
+			Lifecycle: lifecycle,
+		}
+	}
+
 	if pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted" {
 		return ResourceStatusPresentation{
 			Label:        "Evicted",
@@ -78,22 +94,6 @@ func BuildPodStatusPresentation(pod *corev1.Pod) ResourceStatusPresentation {
 			Reason:       reason,
 			Signals:      signals,
 			Lifecycle:    lifecycle,
-		}
-	}
-
-	if pod.DeletionTimestamp != nil {
-		deletionTimestamp := pod.DeletionTimestamp.Time.Format(time.RFC3339)
-		return ResourceStatusPresentation{
-			Label:        "Terminating",
-			State:        state,
-			Presentation: "terminating",
-			Reason:       "DeletionTimestamp",
-			Signals: append(signals, ResourceStatusSignal{
-				Type:   StatusSignalDeletion,
-				Name:   "metadata.deletionTimestamp",
-				Status: deletionTimestamp,
-			}),
-			Lifecycle: lifecycle,
 		}
 	}
 

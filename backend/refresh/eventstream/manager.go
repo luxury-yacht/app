@@ -20,8 +20,9 @@ import (
 
 // Manager fan-outs informer updates to subscribed streaming clients.
 type Manager struct {
-	informer coreinformers.EventInformer
-	logger   Logger
+	informer  coreinformers.EventInformer
+	clusterID string
+	logger    Logger
 
 	mu          sync.RWMutex
 	subscribers map[string]map[uint64]*subscription
@@ -89,12 +90,18 @@ func (b *eventBuffer) since(sequence uint64) ([]bufferedEvent, bool) {
 }
 
 // NewManager wires the event informer into a streaming manager.
-func NewManager(informer coreinformers.EventInformer, logger Logger, recorder *telemetry.Recorder) *Manager {
+func NewManager(
+	informer coreinformers.EventInformer,
+	logger Logger,
+	recorder *telemetry.Recorder,
+	clusterID string,
+) *Manager {
 	if logger == nil {
 		logger = noopLogger{}
 	}
 	m := &Manager{
 		informer:    informer,
+		clusterID:   clusterID,
 		logger:      logger,
 		subscribers: make(map[string]map[uint64]*subscription),
 		buffers:     make(map[string]*eventBuffer),
@@ -245,8 +252,9 @@ func (m *Manager) handleEvent(obj interface{}) {
 		return
 	}
 
-	facts := resourcemodel.BuildEventFacts("", evt)
+	facts := resourcemodel.BuildEventFacts(m.clusterID, evt)
 	entry := Entry{
+		ClusterID:        m.clusterID,
 		Kind:             evt.InvolvedObject.Kind,
 		Name:             evt.Name,
 		UID:              string(evt.UID),
