@@ -115,20 +115,6 @@
   outline: 1px solid var(--color-accent);
 }
 
-.modal-container
-  :is(
-    button,
-    a[href],
-    input,
-    select,
-    textarea,
-    summary,
-    [role="button"],
-    [tabindex]:not([tabindex="-1"])
-  ):focus-visible {
-  outline: 1px solid var(--color-accent);
-}
-
 /* ==========================================================================
    Modal Content
    ========================================================================== */
