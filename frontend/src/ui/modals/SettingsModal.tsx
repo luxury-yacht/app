@@ -12,6 +12,7 @@ import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import {
   CloseIcon,
+  SettingsIcon,
   AppearanceModeIcon,
   KubeconfigsIcon,
   DisplayIcon,
@@ -128,8 +129,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
 
   if (!shouldRender) return null;
 
-  const HeaderIcon = activeTabDef.icon;
-
   return (
     <ModalSurface
       modalRef={modalRef}
@@ -141,7 +140,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
     >
       <div className="modal-header settings-modal-header">
         <div className="settings-modal-breadcrumb" id="settings-modal-title">
-          <HeaderIcon width={18} height={18} />
+          <SettingsIcon width={18} height={18} />
           <span className="settings-modal-breadcrumb-root">Settings</span>
           <span className="settings-modal-breadcrumb-sep">›</span>
           <span className="settings-modal-breadcrumb-leaf">{activeTabDef.label}</span>
