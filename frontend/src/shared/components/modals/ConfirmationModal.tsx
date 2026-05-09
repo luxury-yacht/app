@@ -50,7 +50,6 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
       onClose={onCancel}
       overlayClassName="confirmation-modal-backdrop"
       containerClassName="confirmation-modal"
-      closeOnBackdrop={true}
     >
       <div className="modal-header confirmation-modal-header">
         <h2 id="confirmation-modal-title">{title}</h2>

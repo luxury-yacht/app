@@ -268,6 +268,27 @@ describe('FavSaveModal', () => {
     expect(container.querySelector('.modal-header h2')?.textContent).toBe('Save Favorite');
   });
 
+  it('does not close when overlay is clicked', async () => {
+    const onClose = vi.fn();
+    const props = makeProps({ isOpen: true, onClose });
+    await renderComponent(props);
+
+    const modal = container.querySelector('.fav-save-modal') as HTMLDivElement | null;
+    const overlay = container.querySelector('.modal-overlay') as HTMLDivElement | null;
+    expect(modal).toBeTruthy();
+    expect(overlay).toBeTruthy();
+
+    act(() => {
+      modal?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onClose).not.toHaveBeenCalled();
+
+    act(() => {
+      overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   // -----------------------------------------------------------------------
   // 3. Name input is pre-populated with defaultName
   // -----------------------------------------------------------------------

@@ -110,7 +110,7 @@ describe('ConfirmationModal', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('supports escape key and backdrop cancellation', async () => {
+  it('supports escape key and ignores backdrop clicks', async () => {
     const onCancel = vi.fn();
     await renderModal({ onCancel });
 
@@ -130,7 +130,7 @@ describe('ConfirmationModal', () => {
     act(() => {
       overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(onCancel).toHaveBeenCalledTimes(2);
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('renders custom button labels and classes', async () => {

@@ -181,7 +181,7 @@ describe('PortForwardModal', () => {
     expect(mockOnClose).toHaveBeenCalled();
   });
 
-  it('calls onClose when overlay clicked', async () => {
+  it('does not close when overlay clicked', async () => {
     await renderModal();
 
     const overlay = document.querySelector('.modal-overlay') as HTMLDivElement;
@@ -192,7 +192,7 @@ describe('PortForwardModal', () => {
       await Promise.resolve();
     });
 
-    expect(mockOnClose).toHaveBeenCalled();
+    expect(mockOnClose).not.toHaveBeenCalled();
   });
 
   it('does not close when modal content is clicked', async () => {

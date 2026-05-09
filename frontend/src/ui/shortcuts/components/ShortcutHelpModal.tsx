@@ -73,6 +73,7 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
       overlayClassName="shortcut-help-modal-overlay"
       containerClassName="shortcut-help-modal"
       isClosing={isClosing}
+      closeOnBackdrop={true}
     >
       <div className="modal-header shortcut-help-modal-header">
         <h2 id="shortcut-help-modal-title">Keyboard Shortcuts</h2>

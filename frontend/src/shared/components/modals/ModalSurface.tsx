@@ -20,7 +20,7 @@ const ModalSurface: React.FC<ModalSurfaceProps> = ({
   overlayClassName,
   containerClassName,
   isClosing = false,
-  closeOnBackdrop = true,
+  closeOnBackdrop = false,
 }) => {
   if (typeof document === 'undefined') {
     return null;

@@ -124,6 +124,28 @@ describe('ShortcutHelpModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('closes on overlay click', async () => {
+    const onClose = vi.fn();
+    getAvailableShortcutsMock.mockReturnValue([]);
+
+    await renderModal({ isOpen: true, onClose });
+
+    const modal = document.querySelector('.shortcut-help-modal') as HTMLDivElement | null;
+    const overlay = document.querySelector('.shortcut-help-modal-overlay') as HTMLDivElement | null;
+    expect(modal).toBeTruthy();
+    expect(overlay).toBeTruthy();
+
+    act(() => {
+      modal?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onClose).not.toHaveBeenCalled();
+
+    act(() => {
+      overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('closes on slash through the modal surface handler', async () => {
     const onClose = vi.fn();
     getAvailableShortcutsMock.mockReturnValue([]);

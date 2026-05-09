@@ -267,7 +267,6 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
       labelledBy="port-forward-modal-title"
       onClose={onClose}
       containerClassName="port-forward-modal"
-      closeOnBackdrop={!isLoading}
     >
       {/* Header */}
       <div className="modal-header">

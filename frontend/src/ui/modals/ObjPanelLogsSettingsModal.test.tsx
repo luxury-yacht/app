@@ -69,7 +69,7 @@ describe('ObjPanelLogsSettingsModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('closes via overlay click but ignores clicks inside the modal', () => {
+  it('ignores overlay and modal-content clicks', () => {
     const onClose = vi.fn();
     act(() => {
       root.render(
@@ -92,7 +92,7 @@ describe('ObjPanelLogsSettingsModal', () => {
     act(() => {
       overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(onClose).toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('maintains closing animation before unmounting and restores scroll lock', () => {
