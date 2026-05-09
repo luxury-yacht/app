@@ -588,9 +588,7 @@ function AppearanceSection() {
       <div className="settings-row">
         <div className="settings-row-label">
           <div className="settings-row-label-title">Mode</div>
-          <div className="settings-row-label-help">
-            Match your operating system or pick a fixed mode.
-          </div>
+          <div className="settings-row-label-help">Match the system or pick a fixed mode.</div>
         </div>
         <div className="settings-row-control">
           <SegmentedButton
@@ -612,8 +610,8 @@ function AppearanceSection() {
         <div className="settings-row-label">
           <div className="settings-row-label-title">Tint</div>
           <div className="settings-row-label-help">
-            Shifts every surface in the UI. Hue rotates the chrome color, saturation increases the
-            tint strength, and brightness lifts or darkens the base.
+            Overall tint in the UI. Hue sets the color, saturation increases the strength, and
+            brightness lightens or darkens.
           </div>
         </div>
         <div className="settings-row-control">
@@ -691,7 +689,7 @@ function AppearanceSection() {
         <div className="settings-row-label">
           <div className="settings-row-label-title">Accent color</div>
           <div className="settings-row-label-help">
-            Used for active states, focus rings, and primary buttons.
+            Used for active states, focus, and other elements that require emphasis.
           </div>
         </div>
         <div className="settings-row-control">
@@ -745,7 +743,9 @@ function AppearanceSection() {
       <div className="settings-row">
         <div className="settings-row-label">
           <div className="settings-row-label-title">Link color</div>
-          <div className="settings-row-label-help">Color of inline links in resource details.</div>
+          <div className="settings-row-label-help">
+            Color of inline links in throughout the app.
+          </div>
         </div>
         <div className="settings-row-control">
           <div className="palette-color-field">
@@ -799,8 +799,8 @@ function AppearanceSection() {
         <div className="settings-row-label">
           <div className="settings-row-label-title">Saved themes</div>
           <div className="settings-row-label-help">
-            Themes apply automatically to clusters whose name matches the pattern. Use * as a
-            wildcard. First match wins. Use the drag handles to change the order.
+            Themes can be automatically applied to clusters whose name matches the pattern. Use * as
+            a wildcard. First match wins. Use the drag handles to change the order.
           </div>
         </div>
         <div className="settings-row-control">
