@@ -33,7 +33,7 @@ import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '
 import { applyLinkColor, saveLinkColorToLocalStorage } from '@utils/linkColor';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import SegmentedButton from '@shared/components/SegmentedButton';
-import { EditIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { EditIcon, DeleteIcon, CheckIcon, CloseIcon } from '@shared/components/icons/MenuIcons';
 
 function AppearanceSection() {
   const { mode, resolvedMode } = useAppearanceMode();
@@ -71,12 +71,6 @@ function AppearanceSection() {
   const [activeThemeId, setActiveThemeId] = useState<string | null>(null);
   const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
   const [themeDraft, setThemeDraft] = useState({ name: '', clusterPattern: '' });
-  const [editingThemeField, setEditingThemeField] = useState<{
-    themeId: string;
-    field: 'name' | 'clusterPattern';
-  } | null>(null);
-  const [themeFieldDraft, setThemeFieldDraft] = useState('');
-  const themeFieldInputRef = useRef<HTMLInputElement>(null);
   const [draggingThemeId, setDraggingThemeId] = useState<string | null>(null);
   const [dropTargetThemeId, setDropTargetThemeId] = useState<string | null>(null);
   const [deleteConfirmThemeId, setDeleteConfirmThemeId] = useState<string | null>(null);
@@ -114,14 +108,6 @@ function AppearanceSection() {
       paletteInputRef.current.select();
     }
   }, [editingPaletteField]);
-
-  // Auto-focus the theme field inline edit input when it appears.
-  useEffect(() => {
-    if (editingThemeField && themeFieldInputRef.current) {
-      themeFieldInputRef.current.focus();
-      themeFieldInputRef.current.select();
-    }
-  }, [editingThemeField]);
 
   // Clean up persist timers on unmount.
   useEffect(() => {
@@ -340,42 +326,54 @@ function AppearanceSection() {
     setThemeDraft({ name: '', clusterPattern: '' });
   };
 
-  const handleThemeFieldClick = (
-    themeId: string,
-    field: 'name' | 'clusterPattern',
-    currentValue: string
-  ) => {
-    setThemeFieldDraft(currentValue);
-    setEditingThemeField({ themeId, field });
+  // Enter edit mode for an existing theme: applies the theme to the live UI
+  // (so palette sliders/colors reflect it) and seeds the row inputs with the
+  // theme's current name and pattern. Save / Cancel icons drive commit/revert.
+  const handleEnterEditMode = (theme: types.Theme) => {
+    setThemeDraft({ name: theme.name, clusterPattern: theme.clusterPattern });
+    handleApplyTheme(theme.id);
   };
 
-  const handleThemeFieldCommit = async () => {
-    if (!editingThemeField) return;
-    const { themeId, field } = editingThemeField;
-    const trimmed = themeFieldDraft.trim();
+  // Commit the active theme's edits (palette + name/pattern from themeDraft).
+  const handleSaveActiveTheme = async () => {
+    if (!activeThemeId) return;
+    const existing = themes.find((t) => t.id === activeThemeId);
+    if (!existing) return;
+    const trimmedName = themeDraft.name.trim();
+    if (!trimmedName) return; // Name is required.
 
-    if (field === 'name' && !trimmed) {
-      setEditingThemeField(null);
-      return;
-    }
-
-    const existing = themes.find((t) => t.id === themeId);
-    if (existing) {
+    try {
+      const lightTint = getPaletteTint('light');
+      const darkTint = getPaletteTint('dark');
       const updated = new types.Theme({
         ...existing,
-        [field]: trimmed,
+        name: trimmedName,
+        clusterPattern: themeDraft.clusterPattern.trim(),
+        paletteHueLight: lightTint.hue,
+        paletteSaturationLight: lightTint.saturation,
+        paletteBrightnessLight: lightTint.brightness,
+        paletteHueDark: darkTint.hue,
+        paletteSaturationDark: darkTint.saturation,
+        paletteBrightnessDark: darkTint.brightness,
+        accentColorLight: getAccentColor('light'),
+        accentColorDark: getAccentColor('dark'),
+        linkColorLight: getLinkColor('light'),
+        linkColorDark: getLinkColor('dark'),
       });
-      try {
-        await saveTheme(updated);
-        await reloadThemes();
-      } catch (error) {
-        errorHandler.handle(error, { action: 'saveTheme' });
-      }
+      await saveTheme(updated);
+      await reloadThemes();
+      setActiveThemeId(null);
+    } catch (error) {
+      errorHandler.handle(error, { action: 'saveTheme' });
     }
-    setEditingThemeField(null);
   };
 
-  const handleThemeFieldCancel = () => setEditingThemeField(null);
+  // Cancel: re-apply the saved theme values and exit edit mode.
+  const handleCancelActiveTheme = async () => {
+    if (!activeThemeId) return;
+    await handleApplyTheme(activeThemeId);
+    setActiveThemeId(null);
+  };
 
   const handleThemeSave = async () => {
     if (!themeDraft.name.trim()) return;
@@ -454,34 +452,6 @@ function AppearanceSection() {
       setLinkColorState(getLinkColor(currentMode));
     } catch (error) {
       errorHandler.handle(error, { action: 'applyTheme' });
-    }
-  };
-
-  const handleSaveToTheme = async (id: string) => {
-    const existing = themes.find((t) => t.id === id);
-    if (!existing) return;
-
-    try {
-      const lightTint = getPaletteTint('light');
-      const darkTint = getPaletteTint('dark');
-      const updated = new types.Theme({
-        ...existing,
-        paletteHueLight: lightTint.hue,
-        paletteSaturationLight: lightTint.saturation,
-        paletteBrightnessLight: lightTint.brightness,
-        paletteHueDark: darkTint.hue,
-        paletteSaturationDark: darkTint.saturation,
-        paletteBrightnessDark: darkTint.brightness,
-        accentColorLight: getAccentColor('light'),
-        accentColorDark: getAccentColor('dark'),
-        linkColorLight: getLinkColor('light'),
-        linkColorDark: getLinkColor('dark'),
-      });
-      await saveTheme(updated);
-      await reloadThemes();
-      setActiveThemeId(null);
-    } catch (error) {
-      errorHandler.handle(error, { action: 'saveTheme' });
     }
   };
 
@@ -834,94 +804,21 @@ function AppearanceSection() {
           </div>
         </div>
         <div className="settings-row-control">
-          <div className="palette-bottom-actions">
-            {editingThemeId !== 'new' && (
+          <div className="themes-section">
+            {themesLoading ? (
+              <div className="themes-loading">Loading themes...</div>
+            ) : (
               <>
-                {activeThemeId && (
-                  <>
-                    <button
-                      type="button"
-                      className="button generic"
-                      onClick={() => handleSaveToTheme(activeThemeId)}
-                      disabled={themeMatchesCurrent(themes.find((t) => t.id === activeThemeId)!)}
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      className="button generic"
-                      onClick={async () => {
-                        await handleApplyTheme(activeThemeId);
-                        setActiveThemeId(null);
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-
-          {editingThemeId === 'new' && (
-            <div className="themes-new-form">
-              <input
-                className="theme-name-input"
-                value={themeDraft.name}
-                onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
-                placeholder="Theme name"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleThemeSave();
-                  else if (e.key === 'Escape') handleThemeEditCancel();
-                  else e.stopPropagation();
-                }}
-              />
-              <input
-                className="theme-pattern-input"
-                value={themeDraft.clusterPattern}
-                onChange={(e) =>
-                  setThemeDraft((d) => ({
-                    ...d,
-                    clusterPattern: e.target.value,
-                  }))
-                }
-                placeholder="Cluster pattern (optional)"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleThemeSave();
-                  else if (e.key === 'Escape') handleThemeEditCancel();
-                  else e.stopPropagation();
-                }}
-              />
-              <button type="button" className="button generic" onClick={handleThemeSave}>
-                Save
-              </button>
-              <button type="button" className="button generic" onClick={handleThemeEditCancel}>
-                Cancel
-              </button>
-            </div>
-          )}
-
-          {(themesLoading || themes.length > 0) && (
-            <div className="themes-section">
-              {themesLoading ? (
-                <div className="themes-loading">Loading themes...</div>
-              ) : (
+                <div className="themes-table-header">
+                  <span className="themes-header-drag"></span>
+                  <span>Theme Name</span>
+                  <span className="themes-header-pattern">Pattern</span>
+                </div>
                 <div className="themes-table">
-                  <div className="themes-table-header">
-                    <span className="themes-header-drag"></span>
-                    <span>Theme Name</span>
-                    <span className="themes-header-pattern">Pattern</span>
-                  </div>
                   {themes.map((theme) => {
                     const isDragging = theme.id === draggingThemeId;
                     const isDropTarget =
                       theme.id === dropTargetThemeId && theme.id !== draggingThemeId;
-                    const isEditingName =
-                      editingThemeField?.themeId === theme.id && editingThemeField.field === 'name';
-                    const isEditingPattern =
-                      editingThemeField?.themeId === theme.id &&
-                      editingThemeField.field === 'clusterPattern';
                     return (
                       <div
                         key={theme.id}
@@ -954,111 +851,157 @@ function AppearanceSection() {
                         >
                           &#x283F;
                         </span>
-                        {isEditingName ? (
-                          <input
-                            ref={themeFieldInputRef}
-                            className="theme-name-input"
-                            value={themeFieldDraft}
-                            onChange={(e) => setThemeFieldDraft(e.target.value)}
-                            placeholder="Theme name"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleThemeFieldCommit();
-                              } else if (e.key === 'Escape') {
-                                e.preventDefault();
-                                handleThemeFieldCancel();
-                              } else {
-                                e.stopPropagation();
+                        {activeThemeId === theme.id ? (
+                          <>
+                            <input
+                              className="theme-name-input"
+                              value={themeDraft.name}
+                              onChange={(e) =>
+                                setThemeDraft((d) => ({ ...d, name: e.target.value }))
                               }
-                            }}
-                            onBlur={handleThemeFieldCancel}
-                          />
-                        ) : (
-                          <span
-                            className="theme-name theme-field-clickable"
-                            onClick={() => handleThemeFieldClick(theme.id, 'name', theme.name)}
-                            title="Click to edit name"
-                          >
-                            {theme.name}
-                          </span>
-                        )}
-                        {isEditingPattern ? (
-                          <input
-                            ref={themeFieldInputRef}
-                            className="theme-pattern-input"
-                            value={themeFieldDraft}
-                            onChange={(e) => setThemeFieldDraft(e.target.value)}
-                            placeholder="e.g. prod*"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleThemeFieldCommit();
-                              } else if (e.key === 'Escape') {
-                                e.preventDefault();
-                                handleThemeFieldCancel();
-                              } else {
-                                e.stopPropagation();
+                              placeholder="Theme name"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveActiveTheme();
+                                else if (e.key === 'Escape') handleCancelActiveTheme();
+                                else e.stopPropagation();
+                              }}
+                            />
+                            <input
+                              className="theme-pattern-input"
+                              value={themeDraft.clusterPattern}
+                              onChange={(e) =>
+                                setThemeDraft((d) => ({ ...d, clusterPattern: e.target.value }))
                               }
-                            }}
-                            onBlur={handleThemeFieldCancel}
-                          />
+                              placeholder="e.g. prod*"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveActiveTheme();
+                                else if (e.key === 'Escape') handleCancelActiveTheme();
+                                else e.stopPropagation();
+                              }}
+                            />
+                          </>
                         ) : (
-                          <span
-                            className="theme-pattern theme-field-clickable"
-                            onClick={() =>
-                              handleThemeFieldClick(
-                                theme.id,
-                                'clusterPattern',
-                                theme.clusterPattern
-                              )
-                            }
-                            title="Click to edit pattern"
-                          >
-                            {theme.clusterPattern || '—'}
-                          </span>
+                          <>
+                            <span className="theme-name">{theme.name}</span>
+                            <span className="theme-pattern">{theme.clusterPattern || '—'}</span>
+                          </>
                         )}
-                        <button
-                          type="button"
-                          className="theme-action-button"
-                          onClick={() => handleApplyTheme(theme.id)}
-                          aria-label="Edit theme"
-                          title="Load this theme's settings"
-                        >
-                          <EditIcon width={16} height={16} />
-                        </button>
-                        <button
-                          type="button"
-                          className="theme-action-button theme-action-delete"
-                          onClick={() => setDeleteConfirmThemeId(theme.id)}
-                          aria-label="Delete theme"
-                          title="Delete theme"
-                        >
-                          <DeleteIcon width={16} height={16} />
-                        </button>
+                        {activeThemeId === theme.id ? (
+                          <>
+                            <button
+                              type="button"
+                              className="theme-action-button"
+                              onClick={handleSaveActiveTheme}
+                              disabled={
+                                themeMatchesCurrent(theme) &&
+                                themeDraft.name === theme.name &&
+                                themeDraft.clusterPattern === theme.clusterPattern
+                              }
+                              aria-label="Save changes to theme"
+                              title="Save changes to theme"
+                            >
+                              <CheckIcon width={16} height={16} />
+                            </button>
+                            <button
+                              type="button"
+                              className="theme-action-button"
+                              onClick={handleCancelActiveTheme}
+                              aria-label="Cancel"
+                              title="Cancel — revert to saved theme"
+                            >
+                              <CloseIcon width={14} height={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="theme-action-button"
+                              onClick={() => handleEnterEditMode(theme)}
+                              aria-label="Edit theme"
+                              title="Edit theme"
+                            >
+                              <EditIcon width={16} height={16} />
+                            </button>
+                            <button
+                              type="button"
+                              className="theme-action-button theme-action-delete"
+                              onClick={() => setDeleteConfirmThemeId(theme.id)}
+                              aria-label="Delete theme"
+                              title="Delete theme"
+                            >
+                              <DeleteIcon width={16} height={16} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     );
                   })}
-                  <button
-                    type="button"
-                    className="themes-save-new-row"
-                    onClick={handleSaveCurrentAsTheme}
-                  >
-                    + Save new theme
-                  </button>
+                  {editingThemeId === 'new' ? (
+                    <div className="themes-table-row themes-table-row--new">
+                      <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
+                      <input
+                        className="theme-name-input"
+                        value={themeDraft.name}
+                        onChange={(e) =>
+                          setThemeDraft((d) => ({ ...d, name: e.target.value }))
+                        }
+                        placeholder="Theme name"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleThemeSave();
+                          else if (e.key === 'Escape') handleThemeEditCancel();
+                          else e.stopPropagation();
+                        }}
+                      />
+                      <input
+                        className="theme-pattern-input"
+                        value={themeDraft.clusterPattern}
+                        onChange={(e) =>
+                          setThemeDraft((d) => ({
+                            ...d,
+                            clusterPattern: e.target.value,
+                          }))
+                        }
+                        placeholder="Cluster pattern (optional)"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleThemeSave();
+                          else if (e.key === 'Escape') handleThemeEditCancel();
+                          else e.stopPropagation();
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="theme-action-button"
+                        onClick={handleThemeSave}
+                        aria-label="Save new theme"
+                        title="Save new theme"
+                      >
+                        <CheckIcon width={16} height={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="theme-action-button"
+                        onClick={handleThemeEditCancel}
+                        aria-label="Cancel"
+                        title="Cancel"
+                      >
+                        <CloseIcon width={14} height={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="themes-save-new-row"
+                      onClick={handleSaveCurrentAsTheme}
+                    >
+                      + Save new theme
+                    </button>
+                  )}
                 </div>
-              )}
-            </div>
-          )}
-          {!themesLoading && themes.length === 0 && (
-            <button
-              type="button"
-              className="themes-save-new-row"
-              onClick={handleSaveCurrentAsTheme}
-            >
-              + Save new theme
-            </button>
-          )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 

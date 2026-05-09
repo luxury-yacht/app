@@ -588,6 +588,23 @@ export const FavoritePinIcon: React.FC<IconProps> = ({ width = 14, height = 14 }
   </svg>
 );
 
+// Checkmark icon for confirm/save actions on inline rows.
+export const CheckIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill={fill}
+    width={width}
+    height={height}
+  >
+    <path d="M9.99963 15.1709L19.1922 5.97852L20.6065 7.39273L9.99963 18.0007L3.63574 11.6368L5.04996 10.2225L9.99963 15.1709Z" />
+  </svg>
+);
+
 // Pencil icon for inline edit actions (e.g., load/edit a saved theme).
 export const EditIcon: React.FC<IconProps> = ({
   width = 16,

@@ -548,16 +548,6 @@
   font-family: var(--font-family-mono);
 }
 
-.theme-field-clickable {
-  cursor: pointer;
-  border-bottom: 1px dashed transparent;
-}
-
-.theme-field-clickable:hover {
-  color: var(--color-text);
-  border-bottom-color: var(--color-border);
-}
-
 .theme-name-input,
 .theme-pattern-input {
   width: 100%;
@@ -633,18 +623,21 @@
   color: var(--color-text);
 }
 
-/* New theme form — flex row layout */
-.themes-new-form {
-  display: flex;
-  gap: var(--spacing-sm);
-  align-items: center;
-  margin-top: var(--spacing-sm);
-  width: 100%;
+/* New-theme inline row: lives inside the themes table as the last row when
+   editingThemeId === 'new'. Inputs fill their cells; save/cancel icons sit
+   in the action columns. */
+.themes-table-row--new {
+  background: var(--color-bg-tertiary, var(--color-bg-secondary));
 }
 
-.themes-new-form .theme-name-input,
-.themes-new-form .theme-pattern-input {
-  flex: 1;
+.themes-table-row--new .theme-name-input,
+.themes-table-row--new .theme-pattern-input {
+  margin: 0;
+}
+
+.themes-drag-handle--placeholder {
+  /* Empty cell holding the drag-handle column slot for the new-theme row. */
+  pointer-events: none;
 }
 
 .themes-loading {
