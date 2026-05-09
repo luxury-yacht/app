@@ -3,12 +3,8 @@
  *
  * Generates tinted gray palettes using HSL and applies them as CSS custom
  * property overrides on document.documentElement. Persists hue/saturation/brightness
- * to localStorage so the FOUC-prevention script in index.html can apply
- * the palette before React mounts.
- *
- * IMPORTANT: The lightness values, MAX_SATURATION, and MAX_BRIGHTNESS_OFFSET
- * constants are duplicated in the inline <script> in frontend/index.html for
- * FOUC prevention. Keep both in sync when changing the formula.
+ * to localStorage for compatibility. Startup FOUC prevention uses the
+ * precomputed payload from appearanceBootstrap.ts.
  */
 
 // Gray scale token definitions with their original lightness values.
@@ -33,7 +29,6 @@ export const MAX_SATURATION = 20;
 
 // Maximum lightness offset in percentage points when brightness is at ±50.
 // brightness * (MAX_BRIGHTNESS_OFFSET / 50) gives the actual offset.
-// Also duplicated in index.html inline script for FOUC prevention.
 /** @lintignore */
 export const MAX_BRIGHTNESS_OFFSET = 10;
 
@@ -113,7 +108,7 @@ export function clearTintedPalette(): void {
 
 /**
  * Persists palette hue, saturation, and brightness to per-mode localStorage keys
- * for the FOUC-prevention script in index.html.
+ * for compatibility with older app versions.
  */
 export function savePaletteTintToLocalStorage(
   mode: 'light' | 'dark',

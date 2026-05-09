@@ -4,11 +4,8 @@
  * Generates accent color shade scales from a base hex color using HSL lightness
  * offsets and applies them as CSS custom property overrides on
  * document.documentElement. Persists the chosen hex per appearance mode to localStorage
- * so the FOUC-prevention script in index.html can apply shades before React mounts.
- *
- * IMPORTANT: The hex→HSL→hex conversion and lightness offset tables are
- * duplicated in the inline <script> in frontend/index.html for FOUC prevention.
- * Keep both in sync when changing the formula.
+ * so older app versions can apply shades before React mounts. Current startup
+ * FOUC prevention uses the precomputed payload from appearanceBootstrap.ts.
  */
 
 // Lightness offsets for the light accent palette (base maps to 600 shade).
@@ -215,7 +212,7 @@ export function clearAccentColor(): void {
 }
 
 /**
- * Persist accent color hex to localStorage for the FOUC-prevention script.
+ * Persist accent color hex to localStorage for compatibility with older app versions.
  */
 export function saveAccentColorToLocalStorage(mode: 'light' | 'dark', color: string): void {
   try {
