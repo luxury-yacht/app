@@ -134,6 +134,27 @@ func TestClusterOverviewBuilder(t *testing.T) {
 		Status: corev1.PodStatus{Phase: corev1.PodPending},
 	}
 
+	podCompleted := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "completed-c",
+			Namespace:       "default",
+			ResourceVersion: "23",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "done"}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodSucceeded,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:  "done",
+				Ready: false,
+				State: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"},
+				},
+			}},
+		},
+	}
+
 	nsA := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "default",
@@ -149,7 +170,7 @@ func TestClusterOverviewBuilder(t *testing.T) {
 	builder := &ClusterOverviewBuilder{
 		client:          nil,
 		nodeLister:      testsupport.NewNodeLister(t, nodeFargate, nodeEC2),
-		podLister:       testsupport.NewPodLister(t, podRunning, podPending),
+		podLister:       testsupport.NewPodLister(t, podRunning, podPending, podCompleted),
 		namespaceLister: testsupport.NewNamespaceLister(t, nsA, nsB),
 		metrics: fakeClusterMetrics{
 			pods: map[string]metrics.PodUsage{
@@ -186,11 +207,12 @@ func TestClusterOverviewBuilder(t *testing.T) {
 	require.Equal(t, 0, overview.RegularNodes)
 	require.Equal(t, 0, overview.VirtualNodes)
 	require.Equal(t, 0, overview.VMNodes)
-	require.Equal(t, 2, overview.TotalPods)
+	require.Equal(t, 3, overview.TotalPods)
 	require.Equal(t, 1, overview.RunningPods)
+	require.Equal(t, 1, overview.SucceededPods)
 	require.Equal(t, 1, overview.PendingPods)
 	require.Equal(t, 0, overview.FailedPods)
-	require.Equal(t, 1, overview.ReadyPods)
+	require.Equal(t, 2, overview.ReadyPods)
 	require.Equal(t, 1, overview.StartingPods)
 	require.Equal(t, 0, overview.FailingPods)
 	require.Equal(t, 0, overview.TerminatingPods)

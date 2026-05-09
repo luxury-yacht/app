@@ -26,25 +26,24 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--color-text-tertiary);
-  margin-top: 0.5rem;
+  margin-top: 1.5rem;
 }
 
 .settings-subgroup-label:first-of-type {
-  margin-top: 0;
+  margin-top: 0.5rem;
 }
 
 .settings-subgroup-divider {
   border: 0;
   border-top: 1px solid var(--color-border);
-  margin: 0.4rem 0 1rem 0;
+  margin: 0.4rem 0 0.75rem 0;
 }
 
-/* Row: label/description on left, control on right */
 .settings-row {
   display: grid;
   grid-template-columns: 280px 1fr;
   gap: 1.5rem;
-  padding: 1.1rem 0;
+  padding: 1rem 0;
   align-items: start;
 }
 

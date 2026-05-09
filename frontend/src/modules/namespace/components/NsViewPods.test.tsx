@@ -721,6 +721,14 @@ describe('NsViewPods', () => {
       createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
       createPod({ name: 'not-ready', status: 'Running', ready: '0/1', restarts: 0 }),
       createPod({
+        name: 'completed',
+        status: 'Completed',
+        statusState: 'Succeeded',
+        statusPresentation: 'ready',
+        ready: '0/1',
+        restarts: 0,
+      }),
+      createPod({
         name: 'pending',
         status: 'Pending',
         statusPresentation: 'warning',
@@ -739,7 +747,7 @@ describe('NsViewPods', () => {
       });
     });
 
-    expect(gridTablePropsRef.current.data).toEqual([pods[1], pods[2]]);
+    expect(gridTablePropsRef.current.data).toEqual([pods[1], pods[3]]);
   });
 
   it('ignores unhealthy filter events for other clusters', async () => {

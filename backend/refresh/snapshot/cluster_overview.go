@@ -573,7 +573,7 @@ func buildClusterOverviewSnapshot(
 
 		model := resourcemodel.BuildPodResourceModel("", pod)
 		countPodStatusPresentation(&overview, model.Status.Presentation)
-		if podFacts := model.Facts.Pod; podFacts != nil && podFacts.TotalContainers > 0 && podFacts.ReadyContainers < podFacts.TotalContainers {
+		if podCountsAsNotReadySignal(pod, model.Facts.Pod) {
 			overview.NotReadyPods++
 		}
 		hasRestarts := podHasRestarts(pod)
@@ -879,6 +879,13 @@ func countPodStatusPresentation(overview *ClusterOverviewPayload, presentation s
 	case "terminating":
 		overview.TerminatingPods++
 	}
+}
+
+func podCountsAsNotReadySignal(pod *corev1.Pod, facts *resourcemodel.PodFacts) bool {
+	if pod == nil || facts == nil || pod.Status.Phase == corev1.PodSucceeded {
+		return false
+	}
+	return facts.TotalContainers > 0 && facts.ReadyContainers < facts.TotalContainers
 }
 
 func podHasRestarts(pod *corev1.Pod) bool {

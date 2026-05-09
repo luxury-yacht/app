@@ -94,9 +94,15 @@ const isPodUnhealthy = (pod: PodSnapshotEntry): boolean => {
 
 const isPodRestarted = (pod: PodSnapshotEntry): boolean => (pod.restarts ?? 0) > 0;
 
+const isCompletedPod = (pod: PodSnapshotEntry): boolean => {
+  const status = (pod.status || '').trim().toLowerCase();
+  const statusState = (pod.statusState || '').trim().toLowerCase();
+  return status === 'completed' || statusState === 'succeeded';
+};
+
 const isPodNotReady = (pod: PodSnapshotEntry): boolean => {
   const counts = parseReadyCounts(pod.ready);
-  return counts !== null && counts.total > 0 && counts.ready < counts.total;
+  return !isCompletedPod(pod) && counts !== null && counts.total > 0 && counts.ready < counts.total;
 };
 
 const matchesPodsFilter = (filter: PodsFilterMode, pod: PodSnapshotEntry): boolean => {
