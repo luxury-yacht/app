@@ -389,8 +389,8 @@ func TestMatchThemeForCluster_EmptyPattern(t *testing.T) {
 	assert.Equal(t, "t-catchall", matched.ID)
 }
 
-// TestMatchThemeForCluster_Wildcards tests various glob patterns supported by
-// filepath.Match: star (*), question mark (?), and character classes.
+// TestMatchThemeForCluster_Wildcards tests the app glob patterns supported by
+// saved themes: star (*), question mark (?), and character classes.
 func TestMatchThemeForCluster_Wildcards(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
@@ -422,6 +422,7 @@ func TestMatchThemeForCluster_Wildcards(t *testing.T) {
 
 		// No explicit match, so default wins.
 		{"local-cluster", "default", false},
+		{"arn:aws:eks:us-east-1:123456789012:cluster/local", "default", false},
 	}
 
 	for _, tc := range tests {

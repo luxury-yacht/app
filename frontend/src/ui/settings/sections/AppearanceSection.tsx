@@ -884,11 +884,11 @@ function AppearanceSection() {
             Themes can be automatically applied to clusters whose name matches the pattern.
             <ul className="themes-help-list">
               <li>
-                Patterns support <code>*</code> <code>?</code> and simple regex like{' '}
+                Patterns support wildcards and ranges such as <code>*</code>, <code>?</code>, and{' '}
                 <code>[a-z]</code>
               </li>
-              <li>Themes applied based on first match.</li>
               <li>Empty patterns match any cluster name.</li>
+              <li>Themes are applied based on first match.</li>
               <li>Use the drag handles to change order.</li>
               <li>Default theme always resolves last.</li>
             </ul>

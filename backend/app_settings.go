@@ -1320,9 +1320,10 @@ func (a *App) ApplyTheme(id string) error {
 }
 
 // MatchThemeForCluster returns the first saved theme whose ClusterPattern
-// matches the given context name using filepath.Match glob rules (* and ?).
-// An empty ClusterPattern is treated as "*" and matches every context name.
-// Returns nil if no theme matches.
+// matches the given context name using app glob rules: * matches any sequence,
+// ? matches any single character, and character classes such as [a-z] are
+// supported. An empty ClusterPattern is treated as "*" and matches every
+// context name. Returns nil if no theme matches.
 func (a *App) MatchThemeForCluster(contextName string) (*Theme, error) {
 	settings, err := a.loadSettingsFile()
 	if err != nil {
@@ -1330,11 +1331,7 @@ func (a *App) MatchThemeForCluster(contextName string) (*Theme, error) {
 	}
 
 	for _, t := range normalizeThemes(settings.Preferences.Themes, defaultTheme()) {
-		pattern := t.ClusterPattern
-		if pattern == "" {
-			pattern = "*"
-		}
-		matched, err := filepath.Match(pattern, contextName)
+		matched, err := matchThemeClusterPattern(t.ClusterPattern, contextName)
 		if err != nil {
 			// Invalid pattern — skip rather than fail.
 			continue
