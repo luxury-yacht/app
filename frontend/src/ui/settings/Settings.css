@@ -321,7 +321,7 @@
   width: 32px;
   height: 32px;
   border: none;
-  border-radius: 50%;
+  border-radius: 10%;
   cursor: pointer;
   padding: 0;
   background: none;
@@ -335,11 +335,11 @@
 }
 .palette-accent-swatch::-webkit-color-swatch {
   border: none;
-  border-radius: 50%;
+  border-radius: 10%;
 }
 .palette-accent-swatch::-moz-color-swatch {
   border: none;
-  border-radius: 50%;
+  border-radius: 10%;
 }
 
 .palette-row-reset {
