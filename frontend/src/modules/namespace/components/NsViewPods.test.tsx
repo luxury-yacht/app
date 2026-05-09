@@ -690,6 +690,58 @@ describe('NsViewPods', () => {
     expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
   });
 
+  it('filters restarted pods when a restart signal targets the namespace and cluster', async () => {
+    const pods = [
+      createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
+      createPod({ name: 'restarted', status: 'Running', ready: '1/1', restarts: 2 }),
+      createPod({
+        name: 'pending',
+        status: 'Pending',
+        statusPresentation: 'warning',
+        ready: '0/1',
+        restarts: 0,
+      }),
+    ];
+
+    await renderPods({ data: pods });
+
+    act(() => {
+      eventBus.emit('pods:show-unhealthy', {
+        clusterId: 'alpha:ctx',
+        scope: 'team-a',
+        filter: 'restarts',
+      });
+    });
+
+    expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
+  });
+
+  it('filters not-ready pods when a not-ready signal targets the namespace and cluster', async () => {
+    const pods = [
+      createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
+      createPod({ name: 'not-ready', status: 'Running', ready: '0/1', restarts: 0 }),
+      createPod({
+        name: 'pending',
+        status: 'Pending',
+        statusPresentation: 'warning',
+        ready: '0/1',
+        restarts: 0,
+      }),
+    ];
+
+    await renderPods({ data: pods });
+
+    act(() => {
+      eventBus.emit('pods:show-unhealthy', {
+        clusterId: 'alpha:ctx',
+        scope: 'team-a',
+        filter: 'not-ready',
+      });
+    });
+
+    expect(gridTablePropsRef.current.data).toEqual([pods[1], pods[2]]);
+  });
+
   it('ignores unhealthy filter events for other clusters', async () => {
     const pods = [
       createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),

@@ -736,10 +736,14 @@ describe('ClusterOverview', () => {
       value: ALL_NAMESPACES_SCOPE,
     });
     expect(navigateToNamespaceMock).toHaveBeenCalled();
-    expect(emitPodsUnhealthySignalMock).toHaveBeenCalledWith('cluster-1', ALL_NAMESPACES_SCOPE);
+    expect(emitPodsUnhealthySignalMock).toHaveBeenCalledWith(
+      'cluster-1',
+      ALL_NAMESPACES_SCOPE,
+      'unhealthy'
+    );
   });
 
-  it('renders signal cards as non-clickable diagnostics', async () => {
+  it('navigates to the filtered pods view from signal cards', async () => {
     mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
@@ -755,8 +759,26 @@ describe('ClusterOverview', () => {
 
     const restartedCard = container.querySelector('[data-testid="cluster-pod-status-restarted"]');
     const notReadyCard = container.querySelector('[data-testid="cluster-pod-status-not-ready"]');
-    expect(restartedCard?.getAttribute('role')).toBeNull();
-    expect(notReadyCard?.getAttribute('role')).toBeNull();
+    expect(restartedCard?.getAttribute('role')).toBe('button');
+    expect(notReadyCard?.getAttribute('role')).toBe('button');
+
+    act(() => {
+      restartedCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(emitPodsUnhealthySignalMock).toHaveBeenLastCalledWith(
+      'cluster-1',
+      ALL_NAMESPACES_SCOPE,
+      'restarts'
+    );
+
+    act(() => {
+      notReadyCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(emitPodsUnhealthySignalMock).toHaveBeenLastCalledWith(
+      'cluster-1',
+      ALL_NAMESPACES_SCOPE,
+      'not-ready'
+    );
   });
 
   it('navigates to the pods view without unhealthy filter when clicking the ready item', async () => {

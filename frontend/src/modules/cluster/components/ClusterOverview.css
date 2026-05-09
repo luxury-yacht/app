@@ -420,7 +420,7 @@
 }
 
 .pod-status-card--terminating {
-  --pod-status-card-color: var(--pod-phase-pending);
+  --pod-status-card-color: var(--color-info, #60a5fa);
 }
 
 .pod-status-card--failing {

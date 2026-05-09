@@ -18,7 +18,12 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
+import {
+  getPodsUnhealthyStorageKey,
+  parsePodsFilterRequest,
+  type PodsFilterMode,
+  type PodsFilterRequest,
+} from '@modules/namespace/components/podsFilterSignals';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
@@ -87,6 +92,26 @@ const isPodUnhealthy = (pod: PodSnapshotEntry): boolean => {
   return UNHEALTHY_POD_PRESENTATIONS.has((pod.statusPresentation || '').trim().toLowerCase());
 };
 
+const isPodRestarted = (pod: PodSnapshotEntry): boolean => (pod.restarts ?? 0) > 0;
+
+const isPodNotReady = (pod: PodSnapshotEntry): boolean => {
+  const counts = parseReadyCounts(pod.ready);
+  return counts !== null && counts.total > 0 && counts.ready < counts.total;
+};
+
+const matchesPodsFilter = (filter: PodsFilterMode, pod: PodSnapshotEntry): boolean => {
+  switch (filter) {
+    case 'restarts':
+      return isPodRestarted(pod);
+    case 'not-ready':
+      return isPodNotReady(pod);
+    case 'unhealthy':
+      return isPodUnhealthy(pod);
+    default:
+      return false;
+  }
+};
+
 /**
  * GridTable component for namespace Pods
  */
@@ -107,7 +132,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const effectiveMetrics = metrics ?? clusterMetrics ?? null;
     const { selectedClusterId } = useKubeconfig();
 
-    const [showUnhealthyOnly, setShowUnhealthyOnly] = useState(false);
+    const [activePodFilter, setActivePodFilter] = useState<PodsFilterMode | null>(null);
 
     // Include cluster metadata so object details stay scoped to the active tab.
     const handlePodOpen = useCallback(
@@ -446,15 +471,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const unhealthyCount = useMemo(() => data.filter((pod) => isPodUnhealthy(pod)).length, [data]);
 
     const handleToggleUnhealthy = useCallback(() => {
-      setShowUnhealthyOnly((prev) => !prev);
+      setActivePodFilter((prev) => (prev ? null : 'unhealthy'));
     }, []);
 
     const unhealthyToggle = useMemo<IconBarItem | null>(() => {
-      if (unhealthyCount <= 0 && !showUnhealthyOnly) {
+      if (unhealthyCount <= 0 && !activePodFilter) {
         return null;
       }
 
-      const title = showUnhealthyOnly
+      const title = activePodFilter
         ? 'Show all pods'
         : `Show unhealthy pods (${unhealthyCount}/${data.length})`;
 
@@ -462,17 +487,19 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         type: 'toggle',
         id: 'pods-unhealthy-toggle',
         icon: <UnhealthyPodsIcon />,
-        active: showUnhealthyOnly,
+        active: activePodFilter !== null,
         onClick: handleToggleUnhealthy,
         title,
         ariaLabel: title,
       };
-    }, [data.length, handleToggleUnhealthy, showUnhealthyOnly, unhealthyCount]);
+    }, [activePodFilter, data.length, handleToggleUnhealthy, unhealthyCount]);
 
     const transformSortedPods = useCallback(
       (sortedPods: PodSnapshotEntry[]) =>
-        showUnhealthyOnly ? sortedPods.filter((pod) => isPodUnhealthy(pod)) : sortedPods,
-      [showUnhealthyOnly]
+        activePodFilter
+          ? sortedPods.filter((pod) => matchesPodsFilter(activePodFilter, pod))
+          : sortedPods,
+      [activePodFilter]
     );
 
     const getTrailingFilterActions = useCallback(
@@ -505,14 +532,18 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
       const storageKey = getPodsUnhealthyStorageKey(selectedClusterId);
 
-      const applyPendingFilter = (scope: string | null | undefined, shouldClearStorage = false) => {
-        if (!scope || scope !== namespace) {
+      const applyPendingFilter = (
+        request: PodsFilterRequest | null,
+        shouldClearStorage = false
+      ) => {
+        if (!request || request.scope !== namespace) {
           return;
         }
-        if (unhealthyCount === 0) {
+        const matchingCount = data.filter((pod) => matchesPodsFilter(request.filter, pod)).length;
+        if (matchingCount === 0) {
           return;
         }
-        setShowUnhealthyOnly(true);
+        setActivePodFilter(request.filter);
         if (shouldClearStorage) {
           try {
             window.sessionStorage.removeItem(storageKey);
@@ -524,7 +555,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
       const pendingScope = (() => {
         try {
-          return window.sessionStorage.getItem(storageKey);
+          return parsePodsFilterRequest(window.sessionStorage.getItem(storageKey));
         } catch {
           return null;
         }
@@ -533,14 +564,14 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         applyPendingFilter(pendingScope, true);
       }
 
-      return eventBus.on('pods:show-unhealthy', ({ clusterId, scope }) => {
+      return eventBus.on('pods:show-unhealthy', ({ clusterId, scope, filter = 'unhealthy' }) => {
         // Only apply the filter if the event is for the current cluster.
         if (clusterId !== selectedClusterId) {
           return;
         }
-        applyPendingFilter(scope, true);
+        applyPendingFilter({ scope, filter }, true);
       });
-    }, [namespace, selectedClusterId, unhealthyCount]);
+    }, [data, namespace, selectedClusterId]);
 
     const getContextMenuItems = useCallback(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {

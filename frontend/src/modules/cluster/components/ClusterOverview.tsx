@@ -30,7 +30,10 @@ import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useViewState } from '@/core/contexts/ViewStateContext';
-import { emitPodsUnhealthySignal } from '@modules/namespace/components/podsFilterSignals';
+import {
+  emitPodsUnhealthySignal,
+  type PodsFilterMode,
+} from '@modules/namespace/components/podsFilterSignals';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { backend } from '@wailsjs/go/models';
@@ -371,8 +374,10 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     };
   }, [canActivateOverviewRefresh, overviewScope]);
 
+  type PodStatusFilter = 'none' | PodsFilterMode;
+
   const handlePodStatusNavigate = useCallback(
-    (filter: 'none' | 'unhealthy', count: number) => {
+    (filter: PodStatusFilter, count: number) => {
       if (count <= 0) {
         return;
       }
@@ -380,8 +385,8 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       setActiveNamespaceTab('pods');
       setSidebarSelection({ type: 'namespace', value: ALL_NAMESPACES_SCOPE });
       navigateToNamespace();
-      if (filter === 'unhealthy' && selectedClusterId) {
-        emitPodsUnhealthySignal(selectedClusterId, ALL_NAMESPACES_SCOPE);
+      if (filter !== 'none' && selectedClusterId) {
+        emitPodsUnhealthySignal(selectedClusterId, ALL_NAMESPACES_SCOPE, filter);
       }
     },
     [
@@ -394,7 +399,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   );
 
   const handlePodStatusKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>, filter: 'none' | 'unhealthy', count: number) => {
+    (event: React.KeyboardEvent<HTMLDivElement>, filter: PodStatusFilter, count: number) => {
       if (count <= 0) {
         return;
       }
@@ -442,16 +447,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       label: 'restarts',
       value: displayOverview.restartedPods,
       variant: 'restarted',
-      filter: 'none' as const,
-      clickable: false,
+      filter: 'restarts' as const,
     },
     {
       key: 'not-ready',
       label: 'not ready',
       value: displayOverview.notReadyPods,
       variant: 'not-ready',
-      filter: 'none' as const,
-      clickable: false,
+      filter: 'not-ready' as const,
     },
   ];
   const renderPodStatusCard = (item: {
@@ -459,7 +462,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     label: string;
     value: number;
     variant: string;
-    filter: 'none' | 'unhealthy';
+    filter: PodStatusFilter;
     clickable?: boolean;
   }) => {
     const clickable = item.clickable !== false && item.value > 0;

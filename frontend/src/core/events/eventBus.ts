@@ -101,7 +101,11 @@ export interface AppEvents {
   'settings:appearance-mode-resolved': 'light' | 'dark';
 
   // Feature events
-  'pods:show-unhealthy': { clusterId: string; scope: string };
+  'pods:show-unhealthy': {
+    clusterId: string;
+    scope: string;
+    filter?: 'unhealthy' | 'restarts' | 'not-ready';
+  };
   'gridtable:persistence-mode': 'namespaced' | 'shared';
 
   // Grid table external focus — emitted to request that a visible GridTable
