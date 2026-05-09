@@ -27,9 +27,9 @@ func TestSaveTheme_Create(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	theme := Theme{
-		ID:             "t-1",
-		Name:           "Danger Red",
-		ClusterPattern: "prod*",
+		ID:              "t-1",
+		Name:            "Danger Red",
+		ClusterPattern:  "prod*",
 		PaletteHueLight: 0,
 	}
 
@@ -269,24 +269,25 @@ func TestMatchThemeForCluster_FirstMatchWins(t *testing.T) {
 }
 
 // TestMatchThemeForCluster_EmptyPattern verifies that themes with an empty
-// ClusterPattern are skipped during matching.
+// ClusterPattern are treated as a catch-all "*" pattern.
 func TestMatchThemeForCluster_EmptyPattern(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	// First theme has no pattern, second does.
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-nopat", Name: "No Pattern", ClusterPattern: ""}))
+	// First theme has no pattern, so it behaves like "*".
+	require.NoError(t, app.SaveTheme(Theme{ID: "t-catchall", Name: "Catch All", ClusterPattern: ""}))
 	require.NoError(t, app.SaveTheme(Theme{ID: "t-dev", Name: "Dev", ClusterPattern: "dev-*"}))
 
 	matched, err := app.MatchThemeForCluster("dev-cluster")
 	require.NoError(t, err)
 	require.NotNil(t, matched)
-	assert.Equal(t, "t-dev", matched.ID, "theme with empty pattern should be skipped")
+	assert.Equal(t, "t-catchall", matched.ID, "empty pattern should match and preserve first-match ordering")
 
-	// With a context name that only the empty-pattern theme could match, we get nil.
+	// Empty pattern also matches a context name no explicit pattern covers.
 	matched, err = app.MatchThemeForCluster("random-cluster")
 	require.NoError(t, err)
-	assert.Nil(t, matched)
+	require.NotNil(t, matched)
+	assert.Equal(t, "t-catchall", matched.ID)
 }
 
 // TestMatchThemeForCluster_Wildcards tests various glob patterns supported by

@@ -73,7 +73,7 @@ type AppearanceModeInfo struct {
 type Theme struct {
 	ID             string `json:"id"`             // UUID
 	Name           string `json:"name"`           // Display name, e.g. "Danger Red"
-	ClusterPattern string `json:"clusterPattern"` // Glob pattern matched against context name, e.g. "prod*"; empty = no auto-match
+	ClusterPattern string `json:"clusterPattern"` // Glob pattern matched against context name, e.g. "prod*"; empty = "*" catch-all
 
 	PaletteHueLight        int `json:"paletteHueLight"`        // 0-360
 	PaletteSaturationLight int `json:"paletteSaturationLight"` // 0-100

@@ -800,7 +800,8 @@ function AppearanceSection() {
           <div className="settings-row-label-title">Saved themes</div>
           <div className="settings-row-label-help">
             Themes can be automatically applied to clusters whose name matches the pattern. Use * as
-            a wildcard. First match wins. Use the drag handles to change the order.
+            a wildcard. Empty patterns match every cluster. First match wins. Use the drag handles
+            to change the order.
           </div>
         </div>
         <div className="settings-row-control">
@@ -878,9 +879,7 @@ function AppearanceSection() {
                       ) : (
                         <div className="theme-summary">
                           <span className="theme-name">{theme.name}</span>
-                          <span className="theme-pattern">
-                            {theme.clusterPattern || 'No auto-match'}
-                          </span>
+                          <span className="theme-pattern">{theme.clusterPattern || '*'}</span>
                         </div>
                       )}
                       {activeThemeId === theme.id ? (
