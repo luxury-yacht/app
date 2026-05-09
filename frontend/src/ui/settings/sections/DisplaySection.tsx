@@ -6,7 +6,6 @@
 
 import { useState, useEffect } from 'react';
 import { errorHandler } from '@utils/errorHandler';
-import Tooltip from '@shared/components/Tooltip';
 import {
   hydrateAppPreferences,
   setUseShortResourceNames as persistUseShortResourceNames,
@@ -66,7 +65,6 @@ function DisplaySection() {
               onChange={(e) => handleShortNamesToggle(e.target.checked)}
             />
             Enable
-            <Tooltip content='Display short resource names (e.g., "sts" instead of "StatefulSets").' />
           </label>
         </div>
       </div>

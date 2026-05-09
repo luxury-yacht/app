@@ -7,7 +7,6 @@
 import { useState, useEffect } from 'react';
 import { errorHandler } from '@utils/errorHandler';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
-import Tooltip from '@shared/components/Tooltip';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import {
   hydrateAppPreferences,
@@ -134,7 +133,7 @@ function AdvancedSection() {
               checked={refreshEnabled}
               onChange={(e) => handleRefreshToggle(e.target.checked)}
             />
-            Enable auto-refresh
+            Enable
           </label>
         </div>
       </div>
@@ -143,8 +142,8 @@ function AdvancedSection() {
         <div className="settings-row-label">
           <div className="settings-row-label-title">Background clusters</div>
           <div className="settings-row-label-help">
-            When enabled, clusters that are not actively selected will also be refreshed in the
-            background so their data stays current when you switch to them.
+            When enabled, clusters that are not actively selected will be refreshed in the
+            background so their data stays current.
           </div>
         </div>
         <div className="settings-row-control">
@@ -155,7 +154,7 @@ function AdvancedSection() {
               checked={backgroundRefreshEnabled}
               onChange={(e) => setBackgroundRefresh(e.target.checked)}
             />
-            Include in auto-refresh
+            Enable
           </label>
         </div>
       </div>
@@ -189,7 +188,6 @@ function AdvancedSection() {
                 }
               }}
             />
-            <Tooltip content="Max number of rows in a data table. Larger values will show more data, but app performance may be impacted." />
           </div>
         </div>
       </div>
@@ -213,7 +211,7 @@ function AdvancedSection() {
               checked={persistenceMode === 'namespaced'}
               onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
             />
-            Enable per-namespace view settings
+            Enable
           </label>
         </div>
       </div>
