@@ -140,9 +140,7 @@ function ObjectPanelSection() {
       <div className="settings-row">
         <div className="settings-row-label">
           <div className="settings-row-label-title">Docked size</div>
-          <div className="settings-row-label-help">
-            Default dimensions when the panel is docked to the right or bottom.
-          </div>
+          <div className="settings-row-label-help">Default dimensions of docked panels.</div>
         </div>
         <div className="settings-row-control">
           <div className="settings-items object-panel-defaults">
@@ -185,9 +183,7 @@ function ObjectPanelSection() {
       <div className="settings-row">
         <div className="settings-row-label">
           <div className="settings-row-label-title">Floating size</div>
-          <div className="settings-row-label-help">
-            Default dimensions and position when the panel is floating.
-          </div>
+          <div className="settings-row-label-help">Default dimensions of floating panels.</div>
         </div>
         <div className="settings-row-control">
           <div className="settings-items object-panel-defaults">
@@ -219,6 +215,17 @@ function ObjectPanelSection() {
               />
               <span>px</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Floating position</div>
+          <div className="settings-row-label-help">Initial position of floating panels.</div>
+        </div>
+        <div className="settings-row-control">
+          <div className="settings-items object-panel-defaults">
             <div className="setting-item setting-item-inline">
               <span className="opd-field-label">Top</span>
               <input
