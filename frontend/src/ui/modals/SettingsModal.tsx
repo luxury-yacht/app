@@ -51,7 +51,7 @@ const TABS: TabDefinition[] = [
   { id: 'appearance', label: 'Appearance', icon: AppearanceModeIcon },
   { id: 'kubeconfigs', label: 'Kubeconfigs', icon: KubeconfigsIcon },
   { id: 'display', label: 'Display', icon: DisplayIcon },
-  { id: 'object-panel', label: 'Object panel', icon: FloatPanelIcon },
+  { id: 'object-panel', label: 'Object Panel', icon: FloatPanelIcon },
   { id: 'advanced', label: 'Advanced', icon: AdvancedIcon },
 ];
 
@@ -177,7 +177,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
           </ul>
           {appInfo?.version && (
             <div className="settings-modal-version" aria-label="App version">
-              v {appInfo.version}
+              {appInfo.version}
             </div>
           )}
         </nav>

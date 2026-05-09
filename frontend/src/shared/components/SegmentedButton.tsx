@@ -17,6 +17,7 @@ interface SegmentedButtonProps<T = string> {
   options: SegmentedOption<T>[];
   value: T;
   onChange: (value: T) => void;
+  ariaLabel?: string;
   className?: string;
   size?: 'small' | 'medium' | 'large';
 }
@@ -25,11 +26,16 @@ function SegmentedButton<T = string>({
   options,
   value,
   onChange,
+  ariaLabel,
   className = '',
   size = 'medium',
 }: SegmentedButtonProps<T>) {
   return (
-    <div className={`segmented-button segmented-button--${size} ${className}`}>
+    <div
+      className={`segmented-button segmented-button--${size} ${className}`}
+      role="group"
+      aria-label={ariaLabel}
+    >
       {options.map((option, index) => (
         <button
           key={index}

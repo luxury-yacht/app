@@ -16,10 +16,9 @@ import {
 } from '@core/settings/appPreferences';
 import { useDockablePanelContext } from '@ui/dockable';
 import { getContentBounds, PANEL_DEFAULTS } from '@ui/dockable/dockablePanelLayout';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
-import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import SegmentedButton from '@shared/components/SegmentedButton';
 
-const objectPanelPositionOptions: DropdownOption[] = [
+const objectPanelPositionOptions: { value: ObjectPanelPosition; label: string }[] = [
   { value: 'right', label: 'Right' },
   { value: 'bottom', label: 'Bottom' },
   { value: 'floating', label: 'Floating' },
@@ -116,7 +115,7 @@ function ObjectPanelSection() {
 
   return (
     <div className="settings-panel">
-      <h2 className="settings-panel-title">Object panel</h2>
+      <h2 className="settings-panel-title">Object Panel</h2>
 
       <div className="settings-subgroup-label">Defaults</div>
       <hr className="settings-subgroup-divider" />
@@ -129,11 +128,10 @@ function ObjectPanelSection() {
           </div>
         </div>
         <div className="settings-row-control">
-          <Dropdown
+          <SegmentedButton
             options={objectPanelPositionOptions}
             value={objectPanelPosition}
-            onChange={(val) => handleObjectPanelPositionChange(val as ObjectPanelPosition)}
-            variant="outlined"
+            onChange={handleObjectPanelPositionChange}
             ariaLabel="Default Object Panel position"
           />
         </div>
