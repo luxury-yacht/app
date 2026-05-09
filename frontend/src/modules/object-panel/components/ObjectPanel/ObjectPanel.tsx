@@ -660,13 +660,17 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           const currentReplicas = (() => {
             if (objectKind === 'deployment') {
               const details = detailPayload as types.DeploymentDetails | null | undefined;
-              return details?.desiredReplicas ?? 1;
+              return details?.desiredReplicas ?? 0;
             }
             if (objectKind === 'statefulset') {
               const details = detailPayload as types.StatefulSetDetails | null | undefined;
-              return details?.desiredReplicas ?? 1;
+              return details?.desiredReplicas ?? 0;
             }
-            return 1;
+            if (objectKind === 'replicaset') {
+              const details = detailPayload as types.ReplicaSetDetails | null | undefined;
+              return details?.desiredReplicas ?? 0;
+            }
+            return 0;
           })();
           openScaleInput(currentReplicas);
         },

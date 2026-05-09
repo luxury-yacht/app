@@ -238,6 +238,26 @@ describe('ActionsMenu', () => {
     expect(onScale).toHaveBeenCalledWith(7);
   });
 
+  it('opens the scale modal with the row desired replica count when no explicit count is passed', async () => {
+    const onScale = vi.fn();
+
+    await renderMenu({
+      object: makeObject('Deployment', { ready: '2/6' }),
+      onScale,
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const scaleItem = items.find((item) => item.textContent?.includes('Scale'));
+
+    act(() => {
+      scaleItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const input = document.querySelector<HTMLInputElement>('#scale-replicas');
+    expect(input?.value).toBe('6');
+  });
+
   it('closes the menu when clicking outside', async () => {
     await renderMenu({
       object: makeObject('Deployment'),

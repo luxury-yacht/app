@@ -212,6 +212,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             { fallbackClusterId: selectedClusterId },
             {
               status: row.status,
+              ready: row.ready,
               portForwardAvailable: row.portForwardAvailable,
               hpaManaged: Boolean(row.hpaManaged),
             }

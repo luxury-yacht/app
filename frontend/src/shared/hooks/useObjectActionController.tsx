@@ -66,10 +66,10 @@ const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, valu
 
 const extractDesiredReplicas = (object: ObjectActionData): number => {
   const ready = object.ready?.trim();
-  if (!ready) return 1;
+  if (!ready) return 0;
   const segments = ready.split('/');
   const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
-  return Number.isFinite(candidate) ? clampReplicas(candidate) : 1;
+  return Number.isFinite(candidate) ? clampReplicas(candidate) : 0;
 };
 
 const apiVersionFor = (object: ObjectActionData): string => {

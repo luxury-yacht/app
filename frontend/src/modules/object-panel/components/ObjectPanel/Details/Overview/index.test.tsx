@@ -100,6 +100,29 @@ describe('Overview component', () => {
     });
   });
 
+  it('passes replica string desired count to ActionsMenu when desiredReplicas is missing', async () => {
+    await renderComponent({
+      kind: 'ReplicaSet',
+      objectKind: 'replicaset',
+      name: 'rs-demo',
+      replicas: '2/4',
+      ready: '2/4',
+      actionLoading: false,
+    });
+
+    const calls = actionsMenuMock.mock.calls as Array<[Record<string, unknown>]>;
+    const actionProps = calls[0]?.[0];
+
+    expect(actionProps).toMatchObject({
+      object: expect.objectContaining({
+        kind: 'ReplicaSet',
+        name: 'rs-demo',
+        ready: '2/4',
+      }),
+      currentReplicas: 4,
+    });
+  });
+
   it('passes callbacks to ActionsMenu for action handling', async () => {
     const onRestart = vi.fn();
     const onScale = vi.fn();

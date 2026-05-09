@@ -37,6 +37,24 @@ interface GenericOverviewProps {
 // Union type using generic props for all resources
 type OverviewProps = GenericOverviewProps;
 
+const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
+
+const parseDesiredReplicaCount = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return clampReplicas(value);
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const segments = trimmed.split('/');
+  const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
+  return Number.isFinite(candidate) ? clampReplicas(candidate) : null;
+};
+
 const Overview: React.FC<OverviewProps> = (props) => {
   const { objectData } = useObjectPanel();
 
@@ -136,6 +154,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
       group: objectGroup || undefined,
       version: objectVersion || undefined,
       status: props.suspend ? 'Suspended' : props.status,
+      ready: props.ready !== undefined && props.ready !== null ? String(props.ready) : undefined,
       unschedulable: props.unschedulable,
       portForwardAvailable: props.portForwardAvailable,
     }),
@@ -144,6 +163,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
       props.name,
       props.namespace,
       props.portForwardAvailable,
+      props.ready,
       props.suspend,
       props.status,
       props.unschedulable,
@@ -154,6 +174,12 @@ const Overview: React.FC<OverviewProps> = (props) => {
     ]
   );
 
+  const currentScaleReplicas =
+    parseDesiredReplicaCount(props.desiredReplicas) ??
+    parseDesiredReplicaCount(props.replicas) ??
+    parseDesiredReplicaCount(props.ready) ??
+    0;
+
   return (
     <div className="object-panel-section">
       <div className="object-panel-section-header">
@@ -161,7 +187,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
         <div className="object-panel-section-actions">
           <ActionsMenu
             object={actionObject}
-            currentReplicas={props.desiredReplicas !== undefined ? props.desiredReplicas : 1}
+            currentReplicas={currentScaleReplicas}
             actionLoading={props.actionLoading || props.deleteLoading}
             hpaManaged={hpaManaged}
             onRestart={props.onRestart}

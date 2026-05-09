@@ -564,6 +564,30 @@ describe('ObjectPanel tab availability', () => {
     expect(detailsTabPropsRef.current.showScaleInput).toBe(true);
   });
 
+  it('initialises the scale input from ReplicaSet desired replicas when shown', async () => {
+    await renderObjectPanel({
+      kind: 'ReplicaSet',
+      name: 'api-rs',
+      namespace: 'team-a',
+      scopedDomain: {
+        data: {
+          details: {
+            desiredReplicas: 4,
+          },
+        },
+        status: 'ready',
+        error: null,
+      },
+    });
+
+    act(() => {
+      detailsTabPropsRef.current.onShowScaleInput();
+    });
+
+    expect(detailsTabPropsRef.current.scaleReplicas).toBe(4);
+    expect(detailsTabPropsRef.current.showScaleInput).toBe(true);
+  });
+
   it('surfaces restart errors and reports them through the error handler', async () => {
     mockApp.RestartWorkload.mockRejectedValueOnce(new Error('restart failed'));
     const errorSpy = vi.spyOn(mockErrorHandler, 'handle');
