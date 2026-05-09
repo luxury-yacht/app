@@ -146,8 +146,9 @@
   gap: 0.5rem;
   color: var(--color-text);
   font-size: var(--font-size-normal);
-  padding: 0.2rem 0.5rem;
-  margin-bottom: 0.2rem;
+  line-height: 1.35rem;
+  padding: 0rem 0.5rem;
+  margin: 0.2rem 0;
   border-radius: var(--border-radius-round);
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
@@ -158,7 +159,6 @@
     border-color var(--duration-fast, 150ms) var(--ease-out, ease),
     transform var(--duration-fast, 150ms) var(--ease-out, ease);
   -webkit-app-region: no-drag;
-  overflow: hidden;
   cursor: pointer;
   outline: none;
 }

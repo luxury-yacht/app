@@ -13,6 +13,7 @@
   padding: 0.25rem 0.5rem;
   border-radius: var(--border-radius-round);
   font-size: var(--font-size-badge);
+  line-height: 1.2;
   font-weight: var(--font-weight-badge);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -291,31 +292,6 @@
   color: var(--status-text-info);
 }
 
-/* ==========================================================================
-   Scope Badges
-   ========================================================================== */
-.scope-badge {
-  display: inline-block;
-  padding: 0.2rem 0.5rem;
-  border-radius: var(--border-radius-round);
-  font-size: var(--font-size-badge);
-  font-weight: var(--font-weight-badge);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border: 1px solid transparent;
-}
-
-.scope-badge.namespace {
-  background-color: var(--badge-blue-bg);
-  color: var(--badge-blue-text);
-  border-color: rgba(59, 130, 246, 0.2);
-}
-
-.scope-badge.cluster {
-  background-color: var(--badge-purple-bg);
-  color: var(--badge-purple-text);
-  border-color: rgba(168, 85, 247, 0.2);
-}
 
 /* ==========================================================================
    Badge Focus States

@@ -66,7 +66,9 @@
   --grid-spacing-sm: var(--spacing-sm);
   --grid-spacing-md: var(--spacing-md);
   --grid-spacing-cell-x: 1rem;
-  --grid-spacing-cell-y: var(--spacing-sm);
+  --grid-spacing-cell-y: 0.3rem;
+  --grid-spacing-badge-cell-y: var(--spacing-sm);
+  --grid-cell-line-height: 1.35rem;
 
   /* Note: Table-specific column definitions moved to individual CSS files */
 }
@@ -199,6 +201,7 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
 .grid-cell-header {
   font-size: var(--grid-font-size-header);
   font-weight: var(--font-weight-bold);
+  line-height: var(--grid-cell-line-height);
   letter-spacing: 0.04em;
   padding: var(--grid-spacing-cell-y) var(--grid-spacing-cell-x);
   text-align: left;
@@ -220,11 +223,13 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   display: flex;
   align-items: center;
   flex: 1;
+  line-height: inherit;
   overflow: hidden;
 }
 
 .header-content > span {
   display: inline-block;
+  line-height: inherit;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -401,6 +406,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 
 .grid-cell {
   font-size: var(--grid-font-size-data);
+  line-height: var(--grid-cell-line-height);
   padding: var(--grid-spacing-cell-y) var(--grid-spacing-cell-x);
   text-align: left;
   display: flex;
@@ -420,6 +426,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 /* Content wrapper for proper truncation within flex container */
 .grid-cell-content {
   white-space: nowrap;
+  line-height: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
@@ -428,6 +435,12 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 }
 
 /* Type column - no ellipsis for badge display */
+.grid-cell[data-column="kind"],
+.grid-cell[data-column="type"] {
+  padding-top: var(--grid-spacing-badge-cell-y);
+  padding-bottom: var(--grid-spacing-badge-cell-y);
+}
+
 .grid-cell[data-column="type"] {
   overflow: visible;
   text-overflow: clip;
@@ -439,7 +452,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   overflow: visible;
   text-overflow: clip;
   white-space: normal; /* Allow event text to wrap */
-  line-height: 1.4;
+  line-height: var(--grid-cell-line-height);
 }
 
 /* --- Table Variants ------------------------------------------------------ */
@@ -613,6 +626,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 
 .event-message {
   display: block;
+  line-height: inherit;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;

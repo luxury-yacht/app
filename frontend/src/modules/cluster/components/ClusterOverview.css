@@ -35,6 +35,7 @@
 .overview-top__title {
   font-size: 1.1rem;
   font-weight: 600;
+  line-height: 1.3rem;
   color: var(--color-text);
   margin-bottom: 0.5rem;
   overflow: hidden;

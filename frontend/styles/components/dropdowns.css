@@ -35,7 +35,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   color: var(--color-text);
-  line-height: 1.2;
+  line-height: 1.5rem;
   width: auto;
   min-width: min-content;
   cursor: pointer;
@@ -75,6 +75,7 @@
 /* Trigger content elements */
 .dropdown-value {
   color: var(--color-text);
+  line-height: inherit;
   white-space: nowrap;
 }
 
@@ -178,7 +179,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 10px;
+  line-height: 1.35rem;
+  padding: 3px 10px;
   font-size: var(--font-size-normal);
   color: var(--color-text);
   user-select: none;
@@ -218,7 +220,7 @@
 /* Shared multi-select filter styling (Browse filters & Application Logs) */
 .dropdown-menu.dropdown-filter-menu .dropdown-option {
   gap: 0;
-  padding: 6px 12px;
+  padding: 3px 12px;
 }
 
 .dropdown-menu.dropdown-filter-menu .dropdown-option.selected {
@@ -245,6 +247,7 @@
   align-items: center;
   justify-content: center;
   font-size: 12px;
+  line-height: inherit;
   color: var(--color-text);
   font-weight: 600;
 }
@@ -252,6 +255,7 @@
 .dropdown-filter-label {
   flex: 1;
   min-width: 0;
+  line-height: inherit;
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -260,6 +264,7 @@
 /* Option content elements */
 .option-label {
   flex: 1;
+  line-height: inherit;
   font-weight: 400;
 }
 
@@ -406,7 +411,7 @@
    ============================================ */
 .dropdown .dropdown-trigger {
   /* Default/compact/small all use same styling for consistency */
-  padding: 0.3rem 2rem 0.3rem var(--spacing-md);
+  padding: 0 2rem 0 var(--spacing-md);
   min-height: 12px;
   font-size: var(--font-size-button);
   min-width: 150px;
