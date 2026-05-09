@@ -233,9 +233,14 @@ These modals currently use the shared modal surface:
 - Confirmation modal
 - Scale modal
 - Rollback modal
+- Drain Node modal
 - Object Diff modal
 - Favorites save/edit modal
 - Port Forward modal
+- Shortcut Help modal
 
 If a new blocking modal is added, it should follow the same pattern rather than introducing another
 overlay/trap implementation.
+
+The Auth Failure overlay and floating dockable panels use dialog-like ARIA semantics, but they are
+not blocking app modals built on `ModalSurface` and are intentionally outside this inventory.

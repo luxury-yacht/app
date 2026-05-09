@@ -2,10 +2,14 @@
    Settings Modal — two-pane layout (sidebar + content)
    ========================================================================== */
 
-.modal-container.settings-modal {
+.settings-modal {
+  /* Responsive: fill most of the viewport, but constrain to a sensible range
+     so the layout looks right on both narrow and ultrawide displays. */
   width: 90vw;
   min-width: 720px;
   max-width: 1100px;
+  /* Keep the modal a consistent height regardless of active tab, scaled to
+     the app window. The base .modal-container caps height at 85vh. */
   min-height: 80vh;
   /* Disable text selection across the modal chrome. User data values
      (theme hex/slider values, saved theme name/pattern, kubeconfig paths,
@@ -25,14 +29,14 @@
 
 /* Cap min-width on very narrow viewports so the modal still fits. */
 @media (max-width: 760px) {
-  .modal-container.settings-modal {
+  .settings-modal {
     min-width: 0;
     width: 95vw;
   }
 }
 
 /* Header with breadcrumb instead of plain title */
-.modal-header.settings-modal-header {
+.settings-modal-header {
   padding: 0.75rem 1.25rem;
   border: none;
 }
