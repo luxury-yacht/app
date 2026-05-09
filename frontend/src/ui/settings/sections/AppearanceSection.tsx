@@ -35,6 +35,10 @@ import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { EditIcon, DeleteIcon, CheckIcon, CloseIcon } from '@shared/components/icons/MenuIcons';
 
+const DEFAULT_THEME_ID = 'default';
+
+const isDefaultTheme = (theme: types.Theme) => theme.id === DEFAULT_THEME_ID;
+
 function AppearanceSection() {
   const { mode, resolvedMode } = useAppearanceMode();
 
@@ -345,10 +349,11 @@ function AppearanceSection() {
     try {
       const lightTint = getPaletteTint('light');
       const darkTint = getPaletteTint('dark');
+      const isDefault = existing.id === DEFAULT_THEME_ID;
       const updated = new types.Theme({
         ...existing,
-        name: trimmedName,
-        clusterPattern: themeDraft.clusterPattern.trim(),
+        name: isDefault ? existing.name : trimmedName,
+        clusterPattern: isDefault ? '' : themeDraft.clusterPattern.trim(),
         paletteHueLight: lightTint.hue,
         paletteSaturationLight: lightTint.saturation,
         paletteBrightnessLight: lightTint.brightness,
@@ -512,7 +517,12 @@ function AppearanceSection() {
   );
 
   const handleThemeDrop = async (targetId: string) => {
-    if (!draggingThemeId || draggingThemeId === targetId) {
+    if (
+      !draggingThemeId ||
+      draggingThemeId === targetId ||
+      draggingThemeId === DEFAULT_THEME_ID ||
+      targetId === DEFAULT_THEME_ID
+    ) {
       setDraggingThemeId(null);
       setDropTargetThemeId(null);
       return;
@@ -800,8 +810,8 @@ function AppearanceSection() {
           <div className="settings-row-label-title">Saved themes</div>
           <div className="settings-row-label-help">
             Themes can be automatically applied to clusters whose name matches the pattern. Use * as
-            a wildcard. Empty patterns match every cluster. First match wins. Use the drag handles
-            to change the order.
+            a wildcard. Empty patterns match every cluster. The default theme always resolves last.
+            Use the drag handles to change the order.
           </div>
         </div>
         <div className="settings-row-control">
@@ -811,15 +821,16 @@ function AppearanceSection() {
             ) : (
               <div className="themes-table">
                 {themes.map((theme) => {
+                  const isDefault = isDefaultTheme(theme);
                   const isDragging = theme.id === draggingThemeId;
                   const isDropTarget =
-                    theme.id === dropTargetThemeId && theme.id !== draggingThemeId;
+                    theme.id === dropTargetThemeId && theme.id !== draggingThemeId && !isDefault;
                   return (
                     <div
                       key={theme.id}
                       className={`themes-table-row${isDragging ? ' themes-table-row--dragging' : ''}${isDropTarget ? ' themes-table-row--drop-target' : ''}${activeThemeId && activeThemeId !== theme.id ? ' themes-table-row--dimmed' : ''}`}
                       onDragOver={(e) => {
-                        if (!draggingThemeId) return;
+                        if (!draggingThemeId || isDefault) return;
                         e.preventDefault();
                         setDropTargetThemeId(theme.id);
                       }}
@@ -831,22 +842,26 @@ function AppearanceSection() {
                         handleThemeDrop(theme.id);
                       }}
                     >
-                      <span
-                        className="themes-drag-handle"
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.effectAllowed = 'move';
-                          setDraggingThemeId(theme.id);
-                        }}
-                        onDragEnd={() => {
-                          setDraggingThemeId(null);
-                          setDropTargetThemeId(null);
-                        }}
-                        title="Drag to reorder"
-                      >
-                        &#x283F;
-                      </span>
-                      {activeThemeId === theme.id ? (
+                      {isDefault ? (
+                        <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
+                      ) : (
+                        <span
+                          className="themes-drag-handle"
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = 'move';
+                            setDraggingThemeId(theme.id);
+                          }}
+                          onDragEnd={() => {
+                            setDraggingThemeId(null);
+                            setDropTargetThemeId(null);
+                          }}
+                          title="Drag to reorder"
+                        >
+                          &#x283F;
+                        </span>
+                      )}
+                      {activeThemeId === theme.id && !isDefault ? (
                         <div className="theme-fields">
                           <input
                             className="theme-name-input"
@@ -890,8 +905,9 @@ function AppearanceSection() {
                             onClick={handleSaveActiveTheme}
                             disabled={
                               themeMatchesCurrent(theme) &&
-                              themeDraft.name === theme.name &&
-                              themeDraft.clusterPattern === theme.clusterPattern
+                              (isDefault ||
+                                (themeDraft.name === theme.name &&
+                                  themeDraft.clusterPattern === theme.clusterPattern))
                             }
                             aria-label="Save changes to theme"
                             title="Save changes to theme"
@@ -919,15 +935,19 @@ function AppearanceSection() {
                           >
                             <EditIcon width={16} height={16} />
                           </button>
-                          <button
-                            type="button"
-                            className="theme-action-button theme-action-delete"
-                            onClick={() => setDeleteConfirmThemeId(theme.id)}
-                            aria-label="Delete theme"
-                            title="Delete theme"
-                          >
-                            <DeleteIcon width={16} height={16} />
-                          </button>
+                          {isDefault ? (
+                            <span className="theme-action-spacer"></span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="theme-action-button theme-action-delete"
+                              onClick={() => setDeleteConfirmThemeId(theme.id)}
+                              aria-label="Delete theme"
+                              title="Delete theme"
+                            >
+                              <DeleteIcon width={16} height={16} />
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

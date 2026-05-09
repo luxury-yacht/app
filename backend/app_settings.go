@@ -22,6 +22,11 @@ var (
 
 const settingsSchemaVersion = 1
 
+const (
+	defaultThemeID   = "default"
+	defaultThemeName = "default"
+)
+
 // settingsFile captures the persisted application settings stored in settings.json.
 type settingsFile struct {
 	SchemaVersion int                 `json:"schemaVersion"`
@@ -202,6 +207,7 @@ func defaultSettingsFile() *settingsFile {
 			// intentionally omitted. The frontend's DEFAULT_PREFERENCES is the
 			// single source of truth; zero/empty values from the backend are
 			// filled in during hydration.
+			Themes: []Theme{defaultTheme()},
 		},
 		Kubeconfig: settingsKubeconfig{
 			SearchPaths: defaultKubeconfigSearchPaths(),
@@ -264,6 +270,7 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	if settings.Kubeconfig.SearchPaths == nil {
 		settings.Kubeconfig.SearchPaths = defaultKubeconfigSearchPaths()
 	}
+	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes)
 
 	// Migrate old single-value palette fields to per-mode fields.
 	prefs := &settings.Preferences
@@ -282,6 +289,41 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 
 	return settings
+}
+
+func defaultTheme() Theme {
+	return Theme{
+		ID:             defaultThemeID,
+		Name:           defaultThemeName,
+		ClusterPattern: "",
+	}
+}
+
+func normalizeDefaultTheme(theme Theme) Theme {
+	theme.ID = defaultThemeID
+	theme.Name = defaultThemeName
+	theme.ClusterPattern = ""
+	return theme
+}
+
+func normalizeThemes(themes []Theme) []Theme {
+	normalized := make([]Theme, 0, len(themes)+1)
+	defaultThemeValue := defaultTheme()
+	defaultThemeFound := false
+
+	for _, theme := range themes {
+		if theme.ID == defaultThemeID {
+			if !defaultThemeFound {
+				defaultThemeValue = normalizeDefaultTheme(theme)
+				defaultThemeFound = true
+			}
+			continue
+		}
+		normalized = append(normalized, theme)
+	}
+
+	normalized = append(normalized, defaultThemeValue)
+	return normalized
 }
 
 func defaultMetricsIntervalMs() int {
@@ -338,6 +380,7 @@ func (a *App) saveSettingsFile(settings *settingsFile) error {
 		return fmt.Errorf("no settings to save")
 	}
 
+	settings = normalizeSettingsFile(settings)
 	configFile, err := a.getSettingsFilePath()
 	if err != nil {
 		return err
@@ -435,6 +478,7 @@ func getDefaultAppSettings() *AppSettings {
 		ObjPanelLogsAPITimestampFormat:           defaultObjPanelLogsAPITimestampFormat,
 		ObjPanelLogsAPITimestampUseLocalTimeZone: false,
 		GridTablePersistenceMode:                 "shared",
+		Themes:                                   []Theme{defaultTheme()},
 	}
 }
 
@@ -1071,9 +1115,6 @@ func (a *App) GetThemes() ([]Theme, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading settings: %w", err)
 	}
-	if settings.Preferences.Themes == nil {
-		return []Theme{}, nil
-	}
 	return settings.Preferences.Themes, nil
 }
 
@@ -1082,6 +1123,10 @@ func (a *App) GetThemes() ([]Theme, error) {
 func (a *App) SaveTheme(theme Theme) error {
 	if theme.ID == "" {
 		return fmt.Errorf("theme ID is required")
+	}
+	themeIsDefault := theme.ID == defaultThemeID
+	if themeIsDefault {
+		theme = normalizeDefaultTheme(theme)
 	}
 	if theme.Name == "" {
 		return fmt.Errorf("theme name is required")
@@ -1104,8 +1149,17 @@ func (a *App) SaveTheme(theme Theme) error {
 		}
 	}
 	if !found {
-		settings.Preferences.Themes = append(settings.Preferences.Themes, theme)
+		if themeIsDefault {
+			settings.Preferences.Themes = append(settings.Preferences.Themes, theme)
+		} else {
+			defaultThemeValue := settings.Preferences.Themes[len(settings.Preferences.Themes)-1]
+			settings.Preferences.Themes = append(
+				append(settings.Preferences.Themes[:len(settings.Preferences.Themes)-1], theme),
+				defaultThemeValue,
+			)
+		}
 	}
+	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes)
 
 	if err := a.saveSettingsFile(settings); err != nil {
 		return err
@@ -1116,6 +1170,10 @@ func (a *App) SaveTheme(theme Theme) error {
 
 // DeleteTheme removes a theme from the library by ID.
 func (a *App) DeleteTheme(id string) error {
+	if id == defaultThemeID {
+		return fmt.Errorf("default theme cannot be deleted")
+	}
+
 	a.settingsMu.Lock()
 	defer a.settingsMu.Unlock()
 
@@ -1139,6 +1197,7 @@ func (a *App) DeleteTheme(id string) error {
 		settings.Preferences.Themes[:idx],
 		settings.Preferences.Themes[idx+1:]...,
 	)
+	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes)
 
 	if err := a.saveSettingsFile(settings); err != nil {
 		return err
@@ -1161,6 +1220,9 @@ func (a *App) ReorderThemes(ids []string) error {
 	if len(ids) != len(settings.Preferences.Themes) {
 		return fmt.Errorf("id count mismatch: got %d, have %d themes", len(ids), len(settings.Preferences.Themes))
 	}
+	if len(ids) == 0 || ids[len(ids)-1] != defaultThemeID {
+		return fmt.Errorf("default theme must remain last")
+	}
 
 	byID := make(map[string]Theme, len(settings.Preferences.Themes))
 	for _, t := range settings.Preferences.Themes {
@@ -1176,7 +1238,7 @@ func (a *App) ReorderThemes(ids []string) error {
 		reordered = append(reordered, t)
 	}
 
-	settings.Preferences.Themes = reordered
+	settings.Preferences.Themes = normalizeThemes(reordered)
 	if err := a.saveSettingsFile(settings); err != nil {
 		return err
 	}
@@ -1250,7 +1312,7 @@ func (a *App) MatchThemeForCluster(contextName string) (*Theme, error) {
 		return nil, fmt.Errorf("loading settings: %w", err)
 	}
 
-	for _, t := range settings.Preferences.Themes {
+	for _, t := range normalizeThemes(settings.Preferences.Themes) {
 		pattern := t.ClusterPattern
 		if pattern == "" {
 			pattern = "*"

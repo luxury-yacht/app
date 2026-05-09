@@ -564,6 +564,11 @@
   cursor: default;
 }
 
+.theme-action-spacer {
+  min-width: 2rem;
+  min-height: 2rem;
+}
+
 .theme-action-delete:hover {
   color: var(--color-danger, #f87171);
   background: rgba(248, 113, 113, 0.1);
