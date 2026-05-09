@@ -438,7 +438,6 @@
    header and rows use `display: grid` with `grid-template-columns: subgrid`
    so cell boundaries are guaranteed to line up across header and body. */
 .themes-section {
-  margin-top: var(--spacing-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   overflow: hidden;
@@ -487,6 +486,7 @@
 
 .themes-table-row > * {
   padding: 0.5rem 0.75rem;
+  margin: 0.2rem;
   min-width: 0;
 }
 
@@ -552,19 +552,18 @@
 .theme-pattern-input {
   width: 100%;
   min-width: 0;
-  padding: 0.15rem 0.35rem;
+  border: none;
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  background: var(--color-bg);
+  padding: 0.15rem 0.4rem;
+  background: transparent;
   color: var(--color-text);
   font-size: var(--font-size-normal);
-  outline: none;
+  font-family: inherit;
   box-sizing: border-box;
 }
 
-.theme-name-input:focus,
-.theme-pattern-input:focus {
-  border-color: var(--color-accent);
+.theme-pattern-input {
+  font-family: var(--font-family-mono);
 }
 
 .theme-action-button {
