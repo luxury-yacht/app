@@ -6,7 +6,6 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import './modals.css';
 import './AboutModal.css';
 import logo from '@assets/luxury-yacht-logo.png';
 import captainK8s from '@assets/captain-k8s-color.png';

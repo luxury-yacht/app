@@ -5,8 +5,6 @@
  * Split-panel layout: revision list on the left, diff viewer on the right.
  */
 
-@import "@ui/modals/modals.css";
-
 /* Modal sizing — fixed so toggling "diff only" doesn't resize the modal. */
 .rollback-modal {
   width: min(1100px, 90vw);

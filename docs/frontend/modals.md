@@ -8,9 +8,9 @@ be implemented.
 Blocking modals now use one shared foundation:
 
 - [`frontend/src/shared/components/modals/ModalSurface.tsx`](/Volumes/git/luxury-yacht/app/frontend/src/shared/components/modals/ModalSurface.tsx)
+- [`frontend/styles/components/modals.css`](/Volumes/git/luxury-yacht/app/frontend/styles/components/modals.css)
 - [`frontend/src/shared/components/modals/useModalFocusTrap.ts`](/Volumes/git/luxury-yacht/app/frontend/src/shared/components/modals/useModalFocusTrap.ts)
 - [`frontend/src/shared/components/modals/getTabbableElements.ts`](/Volumes/git/luxury-yacht/app/frontend/src/shared/components/modals/getTabbableElements.ts)
-- shared visuals in [`frontend/src/ui/modals/modals.css`](/Volumes/git/luxury-yacht/app/frontend/src/ui/modals/modals.css)
 
 All live blocking app modals should use this foundation. Do not render a custom `.modal-overlay`
 directly for a new blocking modal.
@@ -26,6 +26,7 @@ directly for a new blocking modal.
 - `aria-labelledby`
 - a focusable modal root with `tabIndex={-1}`
 - backdrop-close handling when enabled
+- shared visual styles for the base modal shell and shared modal form primitives
 
 `useModalFocusTrap` provides:
 
@@ -92,6 +93,27 @@ Required rules:
 - Give the title element an `id` and pass the same value through `labelledBy`.
 - Use `closeOnBackdrop={false}` when backdrop clicks must not dismiss.
 - Disable the trap when the modal is not rendered yet, or when a child modal should own focus.
+- Do not import feature-owned CSS such as Settings styles to get generic modal layout. Use shared
+  modal form classes instead, then add modal-specific overrides only where needed.
+
+## Shared Form Classes
+
+For form-like modal content, use the shared classes from `frontend/styles/components/modals.css`:
+
+- `.modal-form`
+- `.modal-form-section`
+- `.modal-form-items`
+- `.modal-form-field`
+- `.modal-form-field-inline`
+- `.modal-input`
+- `.modal-checkbox-label`
+- `.modal-radio-label`
+- `.modal-input-error`
+- `.modal-field-message`
+- `.modal-field-error`
+
+Modal-specific styles should only set sizing, alignment, or domain-specific layout on top of these
+classes.
 
 ## What The Shared Layer Does Not Do
 
@@ -170,7 +192,8 @@ example Port Forward.
 ## Animations
 
 `ModalSurface` does not manage mount/unmount timing. If a modal uses the shared fade/slide classes
-from `modals.css`, it should keep the modal mounted until the close animation finishes.
+from `frontend/styles/components/modals.css`, it should keep the modal mounted until the close
+animation finishes.
 
 Current pattern:
 

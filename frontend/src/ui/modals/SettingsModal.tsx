@@ -32,6 +32,7 @@ import {
   setLastSettingsTab,
   type SettingsTabId,
 } from '@ui/settings/settingsTabPreference';
+import '@ui/settings/Settings.css';
 import './SettingsModal.css';
 
 interface SettingsModalProps {

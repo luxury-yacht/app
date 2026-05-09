@@ -26,7 +26,6 @@ import {
   formatObjPanelLogsApiTimestamp,
   getObjPanelLogsApiTimestampFormatValidationError,
 } from '@/utils/objPanelLogsApiTimestampFormat';
-import '@ui/settings/Settings.css';
 import './ObjPanelLogsSettings.css';
 
 const LOG_API_TIMESTAMP_EXAMPLE = '2026-04-11T12:34:55.000Z';
@@ -117,11 +116,11 @@ function ObjPanelLogsSettings() {
   };
 
   return (
-    <div className="settings-view obj-panel-logs-settings-view">
-      <div className="settings-section">
+    <div className="modal-form obj-panel-logs-settings-view">
+      <div className="modal-form-section">
         <h3>Constraints</h3>
-        <div className="settings-items">
-          <div className="setting-item setting-item-inline">
+        <div className="modal-form-items">
+          <div className="modal-form-field modal-form-field-inline">
             <label htmlFor="obj-panel-logs-buffer-max-size">
               Object Panel Logs Tab buffer size{' '}
             </label>
@@ -157,7 +156,7 @@ function ObjPanelLogsSettings() {
               }
             />
           </div>
-          <div className="setting-item obj-panel-logs-settings-target-limits">
+          <div className="modal-form-field obj-panel-logs-settings-target-limits">
             <div className="obj-panel-logs-settings-target-limits-grid">
               <div className="obj-panel-logs-settings-target-limits-title">
                 <span>Max containers</span>
@@ -245,10 +244,10 @@ function ObjPanelLogsSettings() {
           </div>
         </div>
       </div>
-      <div className="settings-section">
+      <div className="modal-form-section">
         <h3>API Timestamps</h3>
-        <div className="settings-items">
-          <div className="setting-item obj-panel-logs-settings-timestamp">
+        <div className="modal-form-items">
+          <div className="modal-form-field obj-panel-logs-settings-timestamp">
             <div className="obj-panel-logs-settings-timestamp-grid">
               <div className="obj-panel-logs-settings-timestamp-checkbox-row">
                 <label
@@ -294,9 +293,7 @@ function ObjPanelLogsSettings() {
                       e.currentTarget.blur();
                     }
                   }}
-                  className={
-                    objPanelLogsApiTimestampFormatError ? 'setting-input-error' : undefined
-                  }
+                  className={objPanelLogsApiTimestampFormatError ? 'modal-input-error' : undefined}
                   aria-invalid={objPanelLogsApiTimestampFormatError ? 'true' : 'false'}
                   data-obj-panel-logs-settings-focusable="true"
                 />
@@ -325,7 +322,7 @@ function ObjPanelLogsSettings() {
               ) : null}
               {objPanelLogsApiTimestampFormatError ? (
                 <div
-                  className="setting-item-message setting-item-error obj-panel-logs-settings-timestamp-error"
+                  className="modal-field-message modal-field-error obj-panel-logs-settings-timestamp-error"
                   role="alert"
                 >
                   {objPanelLogsApiTimestampFormatError}

@@ -17,8 +17,6 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
-import '@ui/modals/modals.css';
-import '@ui/settings/Settings.css';
 import '@shared/components/KubeconfigSelector.css';
 import './FavSaveModal.css';
 
@@ -381,16 +379,16 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
           </button>
         </div>
 
-        <div className="modal-content">
+        <div className="modal-content modal-form">
           {/* Name */}
-          <div className="settings-section">
+          <div className="modal-form-section">
             <h3>Name</h3>
-            <div className="settings-items">
-              <div className="setting-item">
+            <div className="modal-form-items">
+              <div className="modal-form-field">
                 <input
                   id="fav-name"
                   type="text"
-                  className="fav-save-input"
+                  className="modal-input"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   onKeyDown={(e) => {
@@ -406,11 +404,11 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
           </div>
 
           {/* Type (cluster binding) */}
-          <div className="settings-section">
+          <div className="modal-form-section">
             <h3>Scope</h3>
-            <div className="settings-items">
-              <div className="setting-item fav-inline-row">
-                <label>
+            <div className="modal-form-items">
+              <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
+                <label className="modal-radio-label">
                   <input
                     type="radio"
                     name="cluster-type"
@@ -421,8 +419,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   <Tooltip content="Can be used in any cluster. Attempts to open this view in the current active cluster." />
                 </label>
               </div>
-              <div className="setting-item fav-inline-row">
-                <label>
+              <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
+                <label className="modal-radio-label">
                   <input
                     type="radio"
                     name="cluster-type"
@@ -461,10 +459,10 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
           </div>
 
           {/* View */}
-          <div className="settings-section">
+          <div className="modal-form-section">
             <h3>View</h3>
-            <div className="settings-items">
-              <div className="setting-item fav-inline-row">
+            <div className="modal-form-items">
+              <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
                 <label>View</label>
                 <Dropdown
                   options={ALL_VIEWS}
@@ -474,7 +472,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                 />
               </div>
               {isNamespaceScope && (
-                <div className="setting-item fav-inline-row">
+                <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
                   <label>Namespace</label>
                   <Dropdown
                     options={namespaceOptions}
@@ -487,11 +485,11 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
           </div>
 
           {/* Filters */}
-          <div className="settings-section">
+          <div className="modal-form-section">
             <h3>Filters</h3>
-            <div className="settings-items">
+            <div className="modal-form-items">
               {kindDropdownOptions.length > 0 && (
-                <div className="setting-item fav-inline-row">
+                <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
                   <label>Kinds</label>
                   <Dropdown
                     options={kindDropdownOptions}
@@ -509,7 +507,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                 </div>
               )}
               {nsFilterDropdownOptions.length > 0 && (
-                <div className="setting-item fav-inline-row">
+                <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
                   <label>Namespaces</label>
                   <Dropdown
                     options={nsFilterDropdownOptions}
@@ -528,12 +526,12 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   />
                 </div>
               )}
-              <div className="setting-item fav-inline-row">
+              <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
                 <label htmlFor="fav-filter-text">Filter Text</label>
                 <input
                   id="fav-filter-text"
                   type="text"
-                  className="fav-save-input"
+                  className="modal-input"
                   value={filterText}
                   onChange={(e) => setFilterText(e.target.value)}
                   onKeyDown={(e) => {
@@ -544,8 +542,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   }}
                 />
               </div>
-              <div className="setting-item">
-                <label>
+              <div className="modal-form-field">
+                <label className="modal-checkbox-label">
                   <input
                     type="checkbox"
                     checked={caseSensitive}
@@ -554,8 +552,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   Match case
                 </label>
               </div>
-              <div className="setting-item">
-                <label>
+              <div className="modal-form-field">
+                <label className="modal-checkbox-label">
                   <input
                     type="checkbox"
                     checked={includeMetadataState}

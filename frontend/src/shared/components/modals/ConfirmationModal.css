@@ -30,7 +30,6 @@
   font-weight: var(--font-weight-medium);
 }
 
-/* Footer - Uses common .modal-footer from modals.css */
 .confirmation-modal-footer {
   padding: var(--spacing-lg) 1.5rem;
   border-top: 1px solid var(--color-border);
