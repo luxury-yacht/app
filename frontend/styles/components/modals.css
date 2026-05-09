@@ -4,7 +4,7 @@
 
 .modal-overlay {
   position: fixed;
-  top: 0;
+  top: var(--app-header-height, 39px);
   left: 0;
   right: 0;
   bottom: 0;
@@ -17,6 +17,27 @@
   z-index: var(--z-index-modal, 1050);
   animation: modal-fade-in 200ms ease-out;
   padding: 2rem;
+}
+
+.modal-window-drag-region {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--app-header-height, 39px);
+  z-index: calc(var(--z-index-modal, 1050) + 1);
+  background-color: var(--modal-overlay-bg);
+  backdrop-filter: blur(var(--modal-bg-blur));
+  -webkit-backdrop-filter: blur(var(--modal-bg-blur));
+  animation: modal-fade-in 200ms ease-out;
+  --wails-draggable: true;
+  -webkit-app-region: drag;
+  user-select: none;
+  cursor: default;
+}
+
+.modal-window-drag-region.closing {
+  animation: modal-fade-out 200ms ease-out;
 }
 
 .modal-overlay.closing {

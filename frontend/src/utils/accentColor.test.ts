@@ -57,14 +57,14 @@ describe('hexToHsl', () => {
     expect(l).toBe(0);
   });
 
-  it('converts teal (#326ce5)', () => {
+  it('converts blue (#326ce5)', () => {
     const { h, s, l } = hexToHsl('#326ce5');
-    // Teal is roughly hue ~174, saturation ~83%, lightness ~31%
-    expect(h).toBeGreaterThanOrEqual(170);
-    expect(h).toBeLessThanOrEqual(180);
+    // Kubernetes blue is roughly hue ~221, saturation ~77%, lightness ~55%.
+    expect(h).toBeGreaterThanOrEqual(215);
+    expect(h).toBeLessThanOrEqual(225);
     expect(s).toBeGreaterThan(70);
-    expect(l).toBeGreaterThan(25);
-    expect(l).toBeLessThan(40);
+    expect(l).toBeGreaterThan(50);
+    expect(l).toBeLessThan(60);
   });
 });
 
@@ -113,7 +113,7 @@ describe('hexToRgb', () => {
   });
 
   it('parses #326ce5', () => {
-    expect(hexToRgb('#326ce5')).toEqual({ r: 13, g: 148, b: 136 });
+    expect(hexToRgb('#326ce5')).toEqual({ r: 50, g: 108, b: 229 });
   });
 });
 
@@ -156,7 +156,7 @@ describe('generateAccentBg', () => {
   it('generates rgba with 0.1 alpha for light mode', () => {
     const { token, value } = generateAccentBg('#326ce5', 'light');
     expect(token).toBe('--color-accent-bg');
-    expect(value).toBe('rgba(13, 148, 136, 0.1)');
+    expect(value).toBe('rgba(50, 108, 229, 0.1)');
   });
 
   it('generates rgba with 0.15 alpha for dark mode', () => {
@@ -225,7 +225,7 @@ describe('applyAccentBg', () => {
   it('sets --color-accent-bg for light mode', () => {
     applyAccentBg('#326ce5', 'light');
     expect(document.documentElement.style.getPropertyValue('--color-accent-bg')).toBe(
-      'rgba(13, 148, 136, 0.1)'
+      'rgba(50, 108, 229, 0.1)'
     );
   });
 

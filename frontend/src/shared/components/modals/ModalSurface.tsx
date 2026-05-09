@@ -32,25 +32,31 @@ const ModalSurface: React.FC<ModalSurfaceProps> = ({
   const containerClasses = ['modal-container', containerClassName, isClosing ? 'closing' : '']
     .filter(Boolean)
     .join(' ');
+  const dragRegionClasses = ['modal-window-drag-region', isClosing ? 'closing' : '']
+    .filter(Boolean)
+    .join(' ');
 
   return createPortal(
-    <div
-      className={overlayClasses}
-      onClick={closeOnBackdrop ? onClose : undefined}
-      data-modal-surface="true"
-    >
+    <>
+      <div className={dragRegionClasses} data-modal-drag-region="true" aria-hidden="true" />
       <div
-        ref={modalRef}
-        className={containerClasses}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelledBy}
-        tabIndex={-1}
-        onClick={(event) => event.stopPropagation()}
+        className={overlayClasses}
+        onClick={closeOnBackdrop ? onClose : undefined}
+        data-modal-surface="true"
       >
-        {children}
+        <div
+          ref={modalRef}
+          className={containerClasses}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={labelledBy}
+          tabIndex={-1}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {children}
+        </div>
       </div>
-    </div>,
+    </>,
     document.body
   );
 };

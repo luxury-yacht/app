@@ -213,7 +213,7 @@
 .palette-tint-controls {
   display: grid;
   grid-template-columns: auto 1fr auto auto;
-  gap: var(--spacing-xs) var(--spacing-sm);
+  gap: var(--spacing-sm) var(--spacing-md);
   align-items: center;
   width: 100%;
 }
@@ -270,7 +270,7 @@
 }
 
 .palette-slider-value {
-  width: 4rem;
+  width: 2.5rem;
   text-align: right;
   font-size: var(--font-size-small);
   color: var(--color-text);
