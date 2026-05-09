@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { errorHandler } from '@utils/errorHandler';
+import ToggleSwitch from '@/shared/components/ToggleSwitch';
 import {
   hydrateAppPreferences,
   setUseShortResourceNames as persistUseShortResourceNames,
@@ -57,15 +58,12 @@ function DisplaySection() {
           </div>
         </div>
         <div className="settings-row-control">
-          <label htmlFor="short-resource-names" className="settings-checkbox-label">
-            <input
-              type="checkbox"
-              id="short-resource-names"
-              checked={useShortResourceNames}
-              onChange={(e) => handleShortNamesToggle(e.target.checked)}
-            />
-            Enable
-          </label>
+          <ToggleSwitch
+            id="short-resource-names"
+            checked={useShortResourceNames}
+            onChange={handleShortNamesToggle}
+            ariaLabel="Short resource names"
+          />
         </div>
       </div>
     </div>

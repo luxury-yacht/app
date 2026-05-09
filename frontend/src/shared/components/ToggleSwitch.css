@@ -1,0 +1,82 @@
+.toggle-switch {
+  --toggle-track-w: 32px;
+  --toggle-track-h: 18px;
+  --toggle-thumb-size: 14px;
+  --toggle-thumb-inset: 2px;
+
+  position: relative;
+  display: inline-block;
+  box-sizing: border-box;
+  width: var(--toggle-track-w);
+  height: var(--toggle-track-h);
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background-color: var(--color-bg-secondary, var(--color-bg));
+  cursor: pointer;
+  vertical-align: middle;
+  flex-shrink: 0;
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    border-color var(--duration-fast, 150ms) var(--ease-out, ease);
+  -webkit-app-region: no-drag;
+}
+
+.toggle-switch--small {
+  --toggle-track-w: 26px;
+  --toggle-track-h: 15px;
+  --toggle-thumb-size: 11px;
+}
+
+.toggle-switch--large {
+  --toggle-track-w: 40px;
+  --toggle-track-h: 22px;
+  --toggle-thumb-size: 18px;
+}
+
+.toggle-switch__thumb {
+  position: absolute;
+  top: 50%;
+  left: var(--toggle-thumb-inset);
+  width: var(--toggle-thumb-size);
+  height: var(--toggle-thumb-size);
+  border-radius: 50%;
+  background-color: var(--color-text-tertiary, var(--color-text-secondary));
+  transform: translateY(-50%);
+  transition:
+    transform var(--duration-fast, 150ms) var(--ease-out, ease),
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease);
+}
+
+.toggle-switch--on {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.toggle-switch--on .toggle-switch__thumb {
+  background-color: var(--color-bg);
+  transform: translate(
+    calc(var(--toggle-track-w) - var(--toggle-thumb-size) - var(--toggle-thumb-inset) * 2),
+    -50%
+  );
+}
+
+.toggle-switch:hover:not(:disabled) {
+  border-color: var(--color-text-secondary);
+}
+
+.toggle-switch--on:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--color-accent) 85%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-accent) 85%, var(--color-text));
+}
+
+.toggle-switch:focus,
+.toggle-switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent);
+}
+
+.toggle-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

@@ -277,6 +277,14 @@
   font-family: var(--font-family-mono);
 }
 
+.color-swatch-value {
+  width: 4rem;
+  text-align: right;
+  font-size: var(--font-size-small);
+  color: var(--color-text);
+  font-family: var(--font-family-mono);
+}
+
 .palette-hex-clickable {
   cursor: pointer;
   border-bottom: 1px dashed var(--color-border);

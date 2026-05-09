@@ -25,6 +25,7 @@ import {
   type GridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import ToggleSwitch from '@shared/components/ToggleSwitch';
 
 function AdvancedSection() {
   const { enabled: refreshEnabled, setAutoRefresh } = useAutoRefresh();
@@ -126,15 +127,12 @@ function AdvancedSection() {
           </div>
         </div>
         <div className="settings-row-control">
-          <label htmlFor="refresh-enabled" className="settings-checkbox-label">
-            <input
-              type="checkbox"
-              id="refresh-enabled"
-              checked={refreshEnabled}
-              onChange={(e) => handleRefreshToggle(e.target.checked)}
-            />
-            Enable
-          </label>
+          <ToggleSwitch
+            id="refresh-enabled"
+            checked={refreshEnabled}
+            onChange={handleRefreshToggle}
+            ariaLabel="Auto-refresh"
+          />
         </div>
       </div>
 
@@ -147,15 +145,12 @@ function AdvancedSection() {
           </div>
         </div>
         <div className="settings-row-control">
-          <label htmlFor="refresh-background" className="settings-checkbox-label">
-            <input
-              type="checkbox"
-              id="refresh-background"
-              checked={backgroundRefreshEnabled}
-              onChange={(e) => setBackgroundRefresh(e.target.checked)}
-            />
-            Enable
-          </label>
+          <ToggleSwitch
+            id="refresh-background"
+            checked={backgroundRefreshEnabled}
+            onChange={setBackgroundRefresh}
+            ariaLabel="Background clusters refresh"
+          />
         </div>
       </div>
 
@@ -204,15 +199,12 @@ function AdvancedSection() {
           </div>
         </div>
         <div className="settings-row-control">
-          <label htmlFor="persist-namespaced" className="settings-checkbox-label">
-            <input
-              type="checkbox"
-              id="persist-namespaced"
-              checked={persistenceMode === 'namespaced'}
-              onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
-            />
-            Enable
-          </label>
+          <ToggleSwitch
+            id="persist-namespaced"
+            checked={persistenceMode === 'namespaced'}
+            onChange={handlePersistenceModeToggle}
+            ariaLabel="Per-namespace views"
+          />
         </div>
       </div>
 

@@ -795,7 +795,7 @@ function AppearanceSection() {
             {isEditingAccentHex ? (
               <input
                 ref={accentHexInputRef}
-                className="palette-slider-value palette-hex-input"
+                className="color-swatch-value palette-hex-input"
                 value={accentHexDraft}
                 onChange={(e) => setAccentHexDraft(e.target.value)}
                 onKeyDown={(e) => {
@@ -812,7 +812,7 @@ function AppearanceSection() {
               />
             ) : (
               <span
-                className="palette-slider-value palette-hex-clickable"
+                className="color-swatch-value palette-hex-clickable"
                 onClick={handleAccentHexClick}
                 title="Click to edit hex value"
               >
@@ -850,7 +850,7 @@ function AppearanceSection() {
             {isEditingLinkHex ? (
               <input
                 ref={linkHexInputRef}
-                className="palette-slider-value palette-hex-input"
+                className="color-swatch-value palette-hex-input"
                 value={linkHexDraft}
                 onChange={(e) => setLinkHexDraft(e.target.value)}
                 onKeyDown={(e) => {
@@ -867,7 +867,7 @@ function AppearanceSection() {
               />
             ) : (
               <span
-                className="palette-slider-value palette-hex-clickable"
+                className="color-swatch-value palette-hex-clickable"
                 onClick={handleLinkHexClick}
                 title="Click to edit hex value"
               >

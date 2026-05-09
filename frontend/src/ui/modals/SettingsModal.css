@@ -20,6 +20,7 @@
 
 .settings-modal :is(input, textarea),
 .settings-modal .palette-slider-value,
+.settings-modal .color-swatch-value,
 .settings-modal .theme-name,
 .settings-modal .theme-pattern,
 .settings-modal .kubeconfig-path-value {
