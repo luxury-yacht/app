@@ -2,10 +2,10 @@
   /* ==========================================================================
      Light Mode: Refined Nautical
      ==========================================================================
-     Clean slate backgrounds with teal accents for a professional, refined feel.
+     Clean slate backgrounds with blue accents for a professional, refined feel.
      ========================================================================== */
 
-  /* Core colors - Slate foundation with teal accent */
+  /* Core colors - Slate foundation with blue accent */
   --color-bg: var(--color-base-50);
   --color-bg-secondary: var(--color-base-100);
   --color-bg-tertiary: var(--color-base-200);
@@ -15,7 +15,7 @@
   --color-border: var(--color-base-200);
   --color-accent: var(--color-accent-light-600);
   --color-accent-hover: var(--color-accent-light-500);
-  --color-accent-bg: rgba(13, 148, 136, 0.1);
+  --color-accent-bg: rgba(50, 108, 229, 0.1);
   --color-primary: var(--color-accent-light-600);
   --color-primary-hover: var(--color-accent-light-500);
 
@@ -149,7 +149,7 @@
   --code-token-comment: var(--color-base-400);
   --code-token-punctuation: var(--color-base-400);
   --code-token-property: #2563eb;
-  --code-token-tag: #0d9488;
+  --code-token-tag: #326ce5.;
   --code-token-operator: var(--color-base-600);
   --code-token-invalid: rgba(220, 53, 69, 0.6);
 

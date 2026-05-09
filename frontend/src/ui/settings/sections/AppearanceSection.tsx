@@ -185,18 +185,21 @@ function AppearanceSection() {
   };
 
   const handleHueReset = () => {
+    flagUnsavedDefaultThemeChange();
     setPaletteHue(0);
     applyTintedPalette(0, paletteSaturation, paletteBrightness);
     debouncePalettePersist(0, paletteSaturation, paletteBrightness);
   };
 
   const handleSaturationReset = () => {
+    flagUnsavedDefaultThemeChange();
     setPaletteSaturation(0);
     applyTintedPalette(paletteHue, 0, paletteBrightness);
     debouncePalettePersist(paletteHue, 0, paletteBrightness);
   };
 
   const handleBrightnessReset = () => {
+    flagUnsavedDefaultThemeChange();
     setPaletteBrightness(0);
     applyTintedPalette(paletteHue, paletteSaturation, 0);
     debouncePalettePersist(paletteHue, paletteSaturation, 0);
@@ -241,7 +244,7 @@ function AppearanceSection() {
   };
 
   const validHexRe = /^#[0-9a-fA-F]{6}$/;
-  const defaultAccent = resolvedMode === 'light' ? '#0d9488' : '#f59e0b';
+  const defaultAccent = resolvedMode === 'light' ? '#326ce5' : '#f59e0b';
 
   const handleAccentHexClick = () => {
     setAccentHexDraft(accentColor || defaultAccent);

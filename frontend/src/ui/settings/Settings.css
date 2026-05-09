@@ -44,7 +44,7 @@
   display: grid;
   grid-template-columns: 280px 1fr;
   gap: 1.5rem;
-  padding: 0.6rem 0;
+  padding: 1.1rem 0;
   align-items: start;
 }
 

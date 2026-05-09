@@ -136,7 +136,7 @@ describe('appPreferences', () => {
       paletteHueDark: 120,
       paletteSaturationDark: 40,
       paletteBrightnessDark: 10,
-      accentColorLight: '#0d9488',
+      accentColorLight: '#326ce5',
       accentColorDark: '#f59e0b',
     });
 
@@ -155,7 +155,7 @@ describe('appPreferences', () => {
     expect(getGridTablePersistenceMode()).toBe('namespaced');
     expect(getPaletteTint('light')).toEqual({ hue: 220, saturation: 50, brightness: -15 });
     expect(getPaletteTint('dark')).toEqual({ hue: 120, saturation: 40, brightness: 10 });
-    expect(getAccentColor('light')).toBe('#0d9488');
+    expect(getAccentColor('light')).toBe('#326ce5');
     expect(getAccentColor('dark')).toBe('#f59e0b');
   });
 
@@ -276,25 +276,25 @@ describe('appPreferences', () => {
 
     await hydrateAppPreferences({ force: true });
 
-    setAccentColor('light', '#0d9488');
+    setAccentColor('light', '#326ce5');
 
-    expect(getAccentColor('light')).toBe('#0d9488');
+    expect(getAccentColor('light')).toBe('#326ce5');
     // Dark mode should remain at default.
     expect(getAccentColor('dark')).toBe('');
-    expect((window as any).go.backend.App.SetAccentColor).toHaveBeenCalledWith('light', '#0d9488');
+    expect((window as any).go.backend.App.SetAccentColor).toHaveBeenCalledWith('light', '#326ce5');
 
     setAccentColor('dark', '#f59e0b');
 
     expect(getAccentColor('dark')).toBe('#f59e0b');
     // Light mode should be unchanged.
-    expect(getAccentColor('light')).toBe('#0d9488');
+    expect(getAccentColor('light')).toBe('#326ce5');
     expect((window as any).go.backend.App.SetAccentColor).toHaveBeenCalledWith('dark', '#f59e0b');
   });
 
   it('setAccentColor resets to empty string', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       appearanceMode: 'system',
-      accentColorLight: '#0d9488',
+      accentColorLight: '#326ce5',
       accentColorDark: '#f59e0b',
     });
 

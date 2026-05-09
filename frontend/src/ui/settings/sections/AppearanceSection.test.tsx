@@ -87,7 +87,7 @@ describe('AppearanceSection', () => {
     appPreferenceMocks.saveTheme.mockResolvedValue(undefined);
     appPreferenceMocks.getPaletteTint.mockImplementation((mode: string) =>
       mode === 'light'
-        ? { hue: 0, saturation: 0, brightness: 0 }
+        ? { hue: 20, saturation: 0, brightness: 0 }
         : { hue: 210, saturation: 12, brightness: -3 }
     );
     appPreferenceMocks.getAccentColor.mockImplementation((mode: string) =>
@@ -152,5 +152,61 @@ describe('AppearanceSection', () => {
       linkColorLight: '#654321',
       linkColorDark: '#fedcba',
     });
+  });
+
+  it('prompts when tint values are reset', async () => {
+    const hueReset = container.querySelector(
+      'button[title="Reset Hue"]'
+    ) as HTMLButtonElement | null;
+    expect(hueReset).toBeTruthy();
+    expect(hueReset!.disabled).toBe(false);
+
+    await act(async () => {
+      hueReset!.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain(
+      'There are unsaved changes. Would you like to save them as the default theme?'
+    );
+  });
+
+  it('prompts when color swatches are reset', async () => {
+    const accentReset = container.querySelector(
+      'button[title="Reset Accent Color"]'
+    ) as HTMLButtonElement | null;
+    const linkReset = container.querySelector(
+      'button[title="Reset Link Color"]'
+    ) as HTMLButtonElement | null;
+    expect(accentReset).toBeTruthy();
+    expect(linkReset).toBeTruthy();
+
+    await act(async () => {
+      accentReset!.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain(
+      'There are unsaved changes. Would you like to save them as the default theme?'
+    );
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Save'
+    ) as HTMLButtonElement | undefined;
+    expect(saveButton).toBeTruthy();
+
+    await act(async () => {
+      saveButton!.click();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      linkReset!.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain(
+      'There are unsaved changes. Would you like to save them as the default theme?'
+    );
   });
 });

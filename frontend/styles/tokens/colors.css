@@ -24,10 +24,10 @@
   --color-accent-dark-300: #fcd34d;
   --color-accent-dark-200: #fde68a;
 
-  /* === Teal (light mode accents) === */
-  --color-accent-light-700: #0f766e;
-  --color-accent-light-600: #0d9488;
-  --color-accent-light-500: #14b8a6;
-  --color-accent-light-400: #2dd4bf;
-  --color-accent-light-300: #5eead4;
+  /* === Blue (light mode accents) === */
+  --color-accent-light-700: #1c56d4;
+  --color-accent-light-600: #326ce5;
+  --color-accent-light-500: #618dea;
+  --color-accent-light-400: #8eadf0;
+  --color-accent-light-300: #c4d4f7;
 }

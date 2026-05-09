@@ -102,7 +102,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		PaletteHueDark:                           120,
 		PaletteSaturationDark:                    40,
 		PaletteBrightnessDark:                    10,
-		AccentColorLight:                         "#0d9488",
+		AccentColorLight:                         "#326ce5.",
 		AccentColorDark:                          "#f59e0b",
 	}
 
@@ -136,7 +136,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.Equal(t, 120, app.appSettings.PaletteHueDark)
 	require.Equal(t, 40, app.appSettings.PaletteSaturationDark)
 	require.Equal(t, 10, app.appSettings.PaletteBrightnessDark)
-	require.Equal(t, "#0d9488", app.appSettings.AccentColorLight)
+	require.Equal(t, "#326ce5.", app.appSettings.AccentColorLight)
 	require.Equal(t, "#f59e0b", app.appSettings.AccentColorDark)
 }
 
