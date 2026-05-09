@@ -347,7 +347,12 @@ describe('ClusterOverview', () => {
         succeededPods: 0,
         pendingPods: 1,
         failedPods: 1,
+        readyPods: 40,
+        startingPods: 1,
+        failingPods: 1,
+        terminatingPods: 2,
         restartedPods: 7,
+        notReadyPods: 9,
         totalNamespaces: 6,
         totalDeployments: 8,
         totalStatefulSets: 2,
@@ -369,7 +374,8 @@ describe('ClusterOverview', () => {
     expect(container.textContent).toContain('EKS');
     expect(container.textContent).toContain('1.26.3');
     expect(container.textContent).not.toContain('Loading cluster overview...');
-    expect(container.textContent).toContain('Status');
+    expect(container.textContent).toContain('Pod Status');
+    expect(container.textContent).toContain('Pod Signals');
     expect(container.textContent).toContain('Ready');
     expect(container.textContent).toContain('400m of 2 cores');
     expect(container.textContent).toContain('20.0%');
@@ -385,11 +391,13 @@ describe('ClusterOverview', () => {
       Array.from(container.querySelectorAll('.pod-status-card')).map(
         (element) => element.textContent
       )
-    ).toEqual(['40healthy', '1pending', '1failing', '7restarted']);
-    expect(container.querySelector('.pod-status-card--healthy')).not.toBeNull();
-    expect(container.querySelector('.pod-status-card--pending')).not.toBeNull();
+    ).toEqual(['40ready', '1starting', '1failing', '2terminating', '7restarts', '9not ready']);
+    expect(container.querySelector('.pod-status-card--ready')).not.toBeNull();
+    expect(container.querySelector('.pod-status-card--starting')).not.toBeNull();
     expect(container.querySelector('.pod-status-card--failing')).not.toBeNull();
+    expect(container.querySelector('.pod-status-card--terminating')).not.toBeNull();
     expect(container.querySelector('.pod-status-card--restarted')).not.toBeNull();
+    expect(container.querySelector('.pod-status-card--not-ready')).not.toBeNull();
   });
 
   it('uses warning color classes for resource percentages over 100 percent', async () => {
@@ -701,12 +709,12 @@ describe('ClusterOverview', () => {
     expect(container.textContent).not.toContain('Loading cluster overview...');
   });
 
-  it('navigates to the pods view with unhealthy filter when clicking a pod status card', async () => {
+  it('navigates to the pods view with unhealthy filter when clicking a non-ready status card', async () => {
     mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
-        pendingPods: 3,
+        startingPods: 3,
       },
     });
 
@@ -714,11 +722,11 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    const pendingCard = container.querySelector('[data-testid="cluster-pod-status-pending"]');
-    expect(pendingCard).not.toBeNull();
+    const startingCard = container.querySelector('[data-testid="cluster-pod-status-starting"]');
+    expect(startingCard).not.toBeNull();
 
     act(() => {
-      pendingCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      startingCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(setSelectedNamespaceMock).toHaveBeenCalledWith(ALL_NAMESPACES_SCOPE);
@@ -731,13 +739,13 @@ describe('ClusterOverview', () => {
     expect(emitPodsUnhealthySignalMock).toHaveBeenCalledWith('cluster-1', ALL_NAMESPACES_SCOPE);
   });
 
-  it('navigates to the pods view without unhealthy filter when clicking the healthy item', async () => {
+  it('renders signal cards as non-clickable diagnostics', async () => {
     mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
-        runningPods: 4,
-        succeededPods: 1,
+        restartedPods: 4,
+        notReadyPods: 2,
       },
     });
 
@@ -745,12 +753,31 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    const healthyItem = container.querySelector('[data-testid="cluster-pod-status-healthy"]');
-    expect(healthyItem).not.toBeNull();
-    expect(healthyItem?.textContent).toContain('5');
+    const restartedCard = container.querySelector('[data-testid="cluster-pod-status-restarted"]');
+    const notReadyCard = container.querySelector('[data-testid="cluster-pod-status-not-ready"]');
+    expect(restartedCard?.getAttribute('role')).toBeNull();
+    expect(notReadyCard?.getAttribute('role')).toBeNull();
+  });
+
+  it('navigates to the pods view without unhealthy filter when clicking the ready item', async () => {
+    mockLifecycleState = 'loading';
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        readyPods: 5,
+      },
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    const readyItem = container.querySelector('[data-testid="cluster-pod-status-ready"]');
+    expect(readyItem).not.toBeNull();
+    expect(readyItem?.textContent).toContain('5');
 
     act(() => {
-      healthyItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      readyItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(setSelectedNamespaceMock).toHaveBeenCalledWith(ALL_NAMESPACES_SCOPE);
@@ -876,7 +903,12 @@ const EMPTY_OVERVIEW_DATA: ClusterOverviewPayload = {
   succeededPods: 0,
   pendingPods: 0,
   failedPods: 0,
+  readyPods: 0,
+  startingPods: 0,
+  failingPods: 0,
+  terminatingPods: 0,
   restartedPods: 0,
+  notReadyPods: 0,
   totalDeployments: 0,
   totalStatefulSets: 0,
   totalDaemonSets: 0,

@@ -17,7 +17,10 @@ func TestMergeClusterOverviewPreservesSnapshotWarningsAndTruncation(t *testing.T
 			Payload: ClusterOverviewSnapshot{
 				ClusterMeta: ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
 				Overview: ClusterOverviewPayload{
-					TotalNodes: 3,
+					TotalNodes:   3,
+					ReadyPods:    1,
+					StartingPods: 2,
+					NotReadyPods: 2,
 					WorkloadResourceUsage: WorkloadResourceUsage{
 						Deployments: WorkloadTypeResourceUsage{CPUUsage: "250m", MemoryUsage: "300.0 Mi"},
 						Jobs:        WorkloadTypeResourceUsage{CPUUsage: "1", MemoryUsage: "1.0 Gi"},
@@ -43,7 +46,11 @@ func TestMergeClusterOverviewPreservesSnapshotWarningsAndTruncation(t *testing.T
 			Payload: ClusterOverviewSnapshot{
 				ClusterMeta: ClusterMeta{ClusterID: "cluster-b", ClusterName: "beta"},
 				Overview: ClusterOverviewPayload{
-					TotalNodes: 4,
+					TotalNodes:      4,
+					ReadyPods:       3,
+					FailingPods:     1,
+					TerminatingPods: 1,
+					NotReadyPods:    5,
 					WorkloadResourceUsage: WorkloadResourceUsage{
 						Deployments: WorkloadTypeResourceUsage{CPUUsage: "750m", MemoryUsage: "724.0 Mi"},
 						Jobs:        WorkloadTypeResourceUsage{CPUUsage: "500m", MemoryUsage: "512.0 Mi"},
@@ -81,6 +88,12 @@ func TestMergeClusterOverviewPreservesSnapshotWarningsAndTruncation(t *testing.T
 	payload, ok := merged.Payload.(ClusterOverviewSnapshot)
 	if !ok {
 		t.Fatalf("expected cluster overview snapshot payload, got %T", merged.Payload)
+	}
+	if payload.Overview.ReadyPods != 4 || payload.Overview.StartingPods != 2 || payload.Overview.FailingPods != 1 || payload.Overview.TerminatingPods != 1 {
+		t.Fatalf("expected status pod counts to be merged, got %+v", payload.Overview)
+	}
+	if payload.Overview.NotReadyPods != 7 {
+		t.Fatalf("expected not-ready pod count to be merged, got %d", payload.Overview.NotReadyPods)
 	}
 	usage := payload.Overview.WorkloadResourceUsage
 	if usage.Deployments.CPUUsage != "1" || usage.Deployments.MemoryUsage != "1.0 Gi" {

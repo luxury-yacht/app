@@ -103,7 +103,14 @@ func TestClusterOverviewBuilder(t *testing.T) {
 				},
 			}},
 		},
-		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:         "c1",
+				Ready:        true,
+				RestartCount: 1,
+			}},
+		},
 	}
 
 	podPending := &corev1.Pod{
@@ -113,6 +120,7 @@ func TestClusterOverviewBuilder(t *testing.T) {
 			ResourceVersion: "22",
 		},
 		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
 			InitContainers: []corev1.Container{{
 				Name: "init",
 				Resources: corev1.ResourceRequirements{
@@ -182,6 +190,12 @@ func TestClusterOverviewBuilder(t *testing.T) {
 	require.Equal(t, 1, overview.RunningPods)
 	require.Equal(t, 1, overview.PendingPods)
 	require.Equal(t, 0, overview.FailedPods)
+	require.Equal(t, 1, overview.ReadyPods)
+	require.Equal(t, 1, overview.StartingPods)
+	require.Equal(t, 0, overview.FailingPods)
+	require.Equal(t, 0, overview.TerminatingPods)
+	require.Equal(t, 1, overview.RestartedPods)
+	require.Equal(t, 1, overview.NotReadyPods)
 	require.Equal(t, 2, overview.TotalNamespaces)
 	require.Equal(t, "150m", overview.CPUUsage)
 	require.Equal(t, "350m", overview.CPURequests)

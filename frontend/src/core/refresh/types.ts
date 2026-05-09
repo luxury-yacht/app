@@ -242,7 +242,12 @@ export interface ClusterOverviewPayload {
   succeededPods: number;
   pendingPods: number;
   failedPods: number;
+  readyPods: number;
+  startingPods: number;
+  failingPods: number;
+  terminatingPods: number;
   restartedPods: number;
+  notReadyPods: number;
   totalNamespaces: number;
   totalDeployments: number;
   totalStatefulSets: number;

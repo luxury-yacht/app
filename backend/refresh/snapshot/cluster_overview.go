@@ -116,7 +116,12 @@ type ClusterOverviewPayload struct {
 	SucceededPods       int `json:"succeededPods"`
 	PendingPods         int `json:"pendingPods"`
 	FailedPods          int `json:"failedPods"`
+	ReadyPods           int `json:"readyPods"`
+	StartingPods        int `json:"startingPods"`
+	FailingPods         int `json:"failingPods"`
+	TerminatingPods     int `json:"terminatingPods"`
 	RestartedPods       int `json:"restartedPods"`
+	NotReadyPods        int `json:"notReadyPods"`
 
 	TotalNamespaces int `json:"totalNamespaces"`
 
@@ -566,21 +571,12 @@ func buildClusterOverviewSnapshot(
 		overview.TotalContainers += len(pod.Spec.Containers)
 		overview.TotalInitContainers += len(pod.Spec.InitContainers)
 
-		hasRestarts := false
-		for _, status := range pod.Status.ContainerStatuses {
-			if status.RestartCount > 0 {
-				hasRestarts = true
-				break
-			}
+		model := resourcemodel.BuildPodResourceModel("", pod)
+		countPodStatusPresentation(&overview, model.Status.Presentation)
+		if podFacts := model.Facts.Pod; podFacts != nil && podFacts.TotalContainers > 0 && podFacts.ReadyContainers < podFacts.TotalContainers {
+			overview.NotReadyPods++
 		}
-		if !hasRestarts {
-			for _, status := range pod.Status.InitContainerStatuses {
-				if status.RestartCount > 0 {
-					hasRestarts = true
-					break
-				}
-			}
-		}
+		hasRestarts := podHasRestarts(pod)
 
 		for _, container := range pod.Spec.Containers {
 			if cpu := container.Resources.Requests.Cpu(); cpu != nil {
@@ -867,6 +863,41 @@ func buildClusterOverviewReplicaSetDeploymentMap(replicaSets []*appsv1.ReplicaSe
 		}
 	}
 	return out
+}
+
+func countPodStatusPresentation(overview *ClusterOverviewPayload, presentation string) {
+	if overview == nil {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(presentation)) {
+	case "ready":
+		overview.ReadyPods++
+	case "warning":
+		overview.StartingPods++
+	case "error", "not-ready":
+		overview.FailingPods++
+	case "terminating":
+		overview.TerminatingPods++
+	}
+}
+
+func podHasRestarts(pod *corev1.Pod) bool {
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.RestartCount > 0 {
+			return true
+		}
+	}
+	for _, status := range pod.Status.InitContainerStatuses {
+		if status.RestartCount > 0 {
+			return true
+		}
+	}
+	for _, status := range pod.Status.EphemeralContainerStatuses {
+		if status.RestartCount > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func clusterOverviewWorkloadKind(pod *corev1.Pod, replicaSetDeployments map[string]string) string {

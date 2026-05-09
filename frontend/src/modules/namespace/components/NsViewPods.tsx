@@ -450,7 +450,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     }, []);
 
     const unhealthyToggle = useMemo<IconBarItem | null>(() => {
-      if (unhealthyCount <= 0) {
+      if (unhealthyCount <= 0 && !showUnhealthyOnly) {
         return null;
       }
 
