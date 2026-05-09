@@ -5,7 +5,7 @@
  * Composes top-level providers, routes, and layout.
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import '@styles/index.css';
 import './App.css';
 import { errorHandler } from '@utils/errorHandler';
@@ -27,6 +27,7 @@ import {
 import { applyTintedPalette, isPaletteActive } from '@utils/paletteTint';
 import { applyAccentColor, applyAccentBg } from '@utils/accentColor';
 import { applyLinkColor } from '@utils/linkColor';
+import { autoApplyClusterTheme } from '@/core/settings/clusterThemeAutoApply';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
@@ -88,6 +89,7 @@ function AppContent() {
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const { isClusterReady } = useClusterLifecycle();
   const selectedClusterReady = selectedClusterId ? isClusterReady(selectedClusterId) : false;
+  const themeApplyRunRef = useRef(0);
 
   // Initialize permissions bootstrap
   useEffect(() => {
@@ -122,22 +124,18 @@ function AppContent() {
 
   // Auto-apply a matching theme when the active cluster changes.
   useEffect(() => {
+    const runId = ++themeApplyRunRef.current;
     if (!selectedClusterName) return;
 
-    const applyMatchingTheme = async () => {
-      const matched = await matchThemeForCluster(selectedClusterName);
-      if (!matched) return;
-
-      await applyTheme(matched.id);
-
-      // Re-hydrate the preference cache so getPaletteTint/getAccentColor reflect new values.
-      await hydrateAppPreferences({ force: true });
-
-      // Re-apply CSS overrides for the current resolved mode.
-      applyAppearanceOverrides(resolveAppearanceMode());
-    };
-
-    void applyMatchingTheme();
+    void autoApplyClusterTheme({
+      selectedClusterName,
+      isCurrent: () => themeApplyRunRef.current === runId,
+      matchThemeForCluster,
+      applyTheme,
+      hydrateAppPreferences,
+      applyAppearanceOverrides: () => applyAppearanceOverrides(resolveAppearanceMode()),
+      onError: (error) => errorHandler.handle(error, { action: 'autoApplyClusterTheme' }),
+    });
   }, [selectedClusterName]);
 
   // Handle backend errors from Wails runtime
