@@ -72,3 +72,13 @@ func matchThemeClusterPattern(pattern, contextName string) (bool, error) {
 	}
 	return re.MatchString(contextName), nil
 }
+
+func validateThemeClusterPattern(pattern string) error {
+	if pattern == "" {
+		return nil
+	}
+	if _, err := themeClusterPatternRegexp(pattern); err != nil {
+		return fmt.Errorf("invalid cluster pattern: %w", err)
+	}
+	return nil
+}

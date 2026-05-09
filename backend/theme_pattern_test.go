@@ -66,3 +66,13 @@ func TestMatchThemeClusterPatternInvalidPattern(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "missing closing bracket")
 }
+
+func TestValidateThemeClusterPattern(t *testing.T) {
+	require.NoError(t, validateThemeClusterPattern(""))
+	require.NoError(t, validateThemeClusterPattern("prod-[a-z]*"))
+
+	err := validateThemeClusterPattern("prod-[")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid cluster pattern")
+	assert.Contains(t, err.Error(), "missing closing bracket")
+}

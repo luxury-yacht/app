@@ -40,6 +40,26 @@ const DEFAULT_THEME_ID = 'default';
 
 const isDefaultTheme = (theme: types.Theme) => theme.id === DEFAULT_THEME_ID;
 
+const themePatternValidationMessage = (error: unknown): string | null => {
+  const message =
+    error instanceof Error
+      ? error.message
+      : error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : String(error);
+  const lowerMessage = message.toLowerCase();
+  if (!lowerMessage.includes('invalid cluster pattern')) {
+    return null;
+  }
+  if (lowerMessage.includes('missing closing bracket')) {
+    return 'Invalid cluster pattern: missing closing bracket.';
+  }
+  if (lowerMessage.includes('trailing escape')) {
+    return 'Invalid cluster pattern: trailing escape.';
+  }
+  return 'Invalid cluster pattern.';
+};
+
 type PaletteSliderStyle = CSSProperties & {
   '--palette-slider-thumb'?: string;
 };
@@ -89,6 +109,7 @@ function AppearanceSection() {
   const [dropTargetThemeId, setDropTargetThemeId] = useState<string | null>(null);
   const [deleteConfirmThemeId, setDeleteConfirmThemeId] = useState<string | null>(null);
   const [hasUnsavedDefaultThemeChanges, setHasUnsavedDefaultThemeChanges] = useState(false);
+  const [themePatternError, setThemePatternError] = useState<string | null>(null);
 
   // Load saved themes once on mount.
   useEffect(() => {
@@ -348,6 +369,7 @@ function AppearanceSection() {
   };
 
   const handleSaveCurrentAsTheme = () => {
+    setThemePatternError(null);
     setEditingThemeId('new');
     setThemeDraft({ name: '', clusterPattern: '' });
   };
@@ -356,6 +378,7 @@ function AppearanceSection() {
   // (so palette sliders/colors reflect it) and seeds the row inputs with the
   // theme's current name and pattern. Save / Cancel icons drive commit/revert.
   const handleEnterEditMode = (theme: types.Theme) => {
+    setThemePatternError(null);
     setThemeDraft({ name: theme.name, clusterPattern: theme.clusterPattern });
     if (isDefaultTheme(theme) && hasUnsavedDefaultThemeChanges) {
       setActiveThemeId(theme.id);
@@ -371,6 +394,7 @@ function AppearanceSection() {
     if (!existing) return;
     const trimmedName = themeDraft.name.trim();
     if (!trimmedName) return; // Name is required.
+    setThemePatternError(null);
 
     try {
       const isDefault = existing.id === DEFAULT_THEME_ID;
@@ -386,6 +410,11 @@ function AppearanceSection() {
         setHasUnsavedDefaultThemeChanges(false);
       }
     } catch (error) {
+      const validationMessage = themePatternValidationMessage(error);
+      if (validationMessage) {
+        setThemePatternError(validationMessage);
+        return;
+      }
       errorHandler.handle(error, { action: 'saveTheme' });
     }
   };
@@ -394,6 +423,7 @@ function AppearanceSection() {
   const handleCancelActiveTheme = async () => {
     if (!activeThemeId) return;
     await handleApplyTheme(activeThemeId);
+    setThemePatternError(null);
     setActiveThemeId(null);
     if (activeThemeId === DEFAULT_THEME_ID) {
       setHasUnsavedDefaultThemeChanges(false);
@@ -402,6 +432,7 @@ function AppearanceSection() {
 
   const handleThemeSave = async () => {
     if (!themeDraft.name.trim()) return;
+    setThemePatternError(null);
 
     try {
       const newTheme = buildThemeFromCurrentAppearance({
@@ -415,11 +446,19 @@ function AppearanceSection() {
       await reloadThemes();
       setEditingThemeId(null);
     } catch (error) {
+      const validationMessage = themePatternValidationMessage(error);
+      if (validationMessage) {
+        setThemePatternError(validationMessage);
+        return;
+      }
       errorHandler.handle(error, { action: 'saveTheme' });
     }
   };
 
-  const handleThemeEditCancel = () => setEditingThemeId(null);
+  const handleThemeEditCancel = () => {
+    setThemePatternError(null);
+    setEditingThemeId(null);
+  };
 
   const handleDeleteThemeConfirm = async () => {
     if (!deleteConfirmThemeId) return;
@@ -974,19 +1013,29 @@ function AppearanceSection() {
                           <input
                             className="theme-pattern-input"
                             value={themeDraft.clusterPattern}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              setThemePatternError(null);
                               setThemeDraft((d) => ({
                                 ...d,
                                 clusterPattern: e.target.value,
-                              }))
-                            }
+                              }));
+                            }}
                             placeholder="Cluster pattern (optional)"
+                            aria-invalid={themePatternError ? 'true' : undefined}
+                            aria-describedby={
+                              themePatternError ? 'theme-pattern-error-active' : undefined
+                            }
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') handleSaveActiveTheme();
                               else if (e.key === 'Escape') handleCancelActiveTheme();
                               else e.stopPropagation();
                             }}
                           />
+                          {themePatternError && (
+                            <div id="theme-pattern-error-active" className="theme-pattern-error">
+                              {themePatternError}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="theme-summary">
@@ -1069,19 +1118,27 @@ function AppearanceSection() {
                       <input
                         className="theme-pattern-input"
                         value={themeDraft.clusterPattern}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          setThemePatternError(null);
                           setThemeDraft((d) => ({
                             ...d,
                             clusterPattern: e.target.value,
-                          }))
-                        }
+                          }));
+                        }}
                         placeholder="Cluster pattern (optional)"
+                        aria-invalid={themePatternError ? 'true' : undefined}
+                        aria-describedby={themePatternError ? 'theme-pattern-error-new' : undefined}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleThemeSave();
                           else if (e.key === 'Escape') handleThemeEditCancel();
                           else e.stopPropagation();
                         }}
                       />
+                      {themePatternError && (
+                        <div id="theme-pattern-error-new" className="theme-pattern-error">
+                          {themePatternError}
+                        </div>
+                      )}
                     </div>
                     <button
                       type="button"

@@ -1148,6 +1148,11 @@ func (a *App) SaveTheme(theme Theme) error {
 	if theme.Name == "" {
 		return fmt.Errorf("theme name is required")
 	}
+	if !themeIsDefault {
+		if err := validateThemeClusterPattern(theme.ClusterPattern); err != nil {
+			return err
+		}
+	}
 
 	a.settingsMu.Lock()
 	defer a.settingsMu.Unlock()

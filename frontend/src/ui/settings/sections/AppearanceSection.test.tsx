@@ -21,6 +21,10 @@ const appPreferenceMocks = vi.hoisted(() => ({
   setLinkColor: vi.fn(),
 }));
 
+const errorHandlerMocks = vi.hoisted(() => ({
+  handle: vi.fn(),
+}));
+
 vi.mock('@/core/contexts/AppearanceModeContext', () => ({
   useAppearanceMode: () => ({ mode: 'light', resolvedMode: 'light' }),
 }));
@@ -61,7 +65,7 @@ vi.mock('@utils/linkColor', () => ({
 }));
 
 vi.mock('@utils/errorHandler', () => ({
-  errorHandler: { handle: vi.fn() },
+  errorHandler: errorHandlerMocks,
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
@@ -205,5 +209,54 @@ describe('AppearanceSection', () => {
     expect(container.textContent).toContain(
       'There are unsaved changes. Would you like to save them as the default theme?'
     );
+  });
+
+  it('shows invalid theme pattern errors inline instead of using the global error handler', async () => {
+    appPreferenceMocks.saveTheme.mockRejectedValueOnce(
+      new Error(
+        'invalid cluster pattern: invalid theme cluster pattern "prod-[": missing closing bracket'
+      )
+    );
+
+    const newThemeButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === '+ Save new theme'
+    ) as HTMLButtonElement | undefined;
+    expect(newThemeButton).toBeTruthy();
+
+    await act(async () => {
+      newThemeButton!.click();
+      await Promise.resolve();
+    });
+
+    const nameInput = container.querySelector('.theme-name-input') as HTMLInputElement | null;
+    const patternInput = container.querySelector('.theme-pattern-input') as HTMLInputElement | null;
+    expect(nameInput).toBeTruthy();
+    expect(patternInput).toBeTruthy();
+
+    await act(async () => {
+      setInputValue(nameInput!, 'Prod');
+      setInputValue(patternInput!, 'prod-[');
+    });
+
+    const saveButton = container.querySelector(
+      'button[aria-label="Save new theme"]'
+    ) as HTMLButtonElement | null;
+    expect(saveButton).toBeTruthy();
+
+    await act(async () => {
+      saveButton!.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Invalid cluster pattern: missing closing bracket.');
+    expect(patternInput!.getAttribute('aria-invalid')).toBe('true');
+    expect(errorHandlerMocks.handle).not.toHaveBeenCalled();
+
+    await act(async () => {
+      setInputValue(patternInput!, 'prod-*');
+    });
+
+    expect(container.textContent).not.toContain('Invalid cluster pattern');
+    expect(patternInput!.hasAttribute('aria-invalid')).toBe(false);
   });
 });

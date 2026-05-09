@@ -138,6 +138,12 @@ func TestSaveTheme_Validation(t *testing.T) {
 	err = app.SaveTheme(Theme{ID: "t-1"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "theme name is required")
+
+	// Invalid cluster pattern.
+	err = app.SaveTheme(Theme{ID: "t-1", Name: "Bad Pattern", ClusterPattern: "prod-["})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid cluster pattern")
+	assert.Contains(t, err.Error(), "missing closing bracket")
 }
 
 // TestSaveTheme_DefaultProtectedFields verifies that the default theme can

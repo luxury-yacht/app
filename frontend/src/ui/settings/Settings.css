@@ -136,20 +136,6 @@
   color: var(--color-text);
 }
 
-.setting-input-error {
-  border-color: var(--status-error-text) !important;
-  outline: 1px solid var(--status-error-text);
-}
-
-.setting-item-message {
-  font-size: var(--font-size-small);
-  margin-top: var(--spacing-xs);
-}
-
-.setting-item-error {
-  color: var(--status-error-text);
-}
-
 /* Object Panel Defaults */
 .object-panel-defaults .dropdown-trigger {
   min-width: auto;
@@ -576,6 +562,17 @@
   padding: 0.15rem 0.4rem;
   background: transparent;
   box-sizing: border-box;
+}
+
+.theme-pattern-input[aria-invalid="true"] {
+  border-color: var(--color-error-text);
+  outline: 1px solid var(--color-error-text);
+}
+
+.theme-pattern-error {
+  color: var(--color-error-text);
+  font-size: var(--font-size-small);
+  line-height: 1.25;
 }
 
 .theme-action-button {
