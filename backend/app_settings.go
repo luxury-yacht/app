@@ -267,11 +267,6 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	if settings.Preferences.GridTablePersistenceMode == "" {
 		settings.Preferences.GridTablePersistenceMode = "shared"
 	}
-	if settings.Kubeconfig.SearchPaths == nil {
-		settings.Kubeconfig.SearchPaths = defaultKubeconfigSearchPaths()
-	}
-	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes)
-
 	// Migrate old single-value palette fields to per-mode fields.
 	prefs := &settings.Preferences
 	if (prefs.PaletteHue != 0 || prefs.PaletteSaturation != 0 || prefs.PaletteBrightness != 0) &&
@@ -287,6 +282,13 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 		prefs.PaletteSaturation = 0
 		prefs.PaletteBrightness = 0
 	}
+	if settings.Kubeconfig.SearchPaths == nil {
+		settings.Kubeconfig.SearchPaths = defaultKubeconfigSearchPaths()
+	}
+	settings.Preferences.Themes = normalizeThemes(
+		settings.Preferences.Themes,
+		defaultThemeFromPreferences(settings.Preferences),
+	)
 
 	return settings
 }
@@ -299,6 +301,21 @@ func defaultTheme() Theme {
 	}
 }
 
+func defaultThemeFromPreferences(prefs settingsPreferences) Theme {
+	theme := defaultTheme()
+	theme.PaletteHueLight = prefs.PaletteHueLight
+	theme.PaletteSaturationLight = prefs.PaletteSaturationLight
+	theme.PaletteBrightnessLight = prefs.PaletteBrightnessLight
+	theme.PaletteHueDark = prefs.PaletteHueDark
+	theme.PaletteSaturationDark = prefs.PaletteSaturationDark
+	theme.PaletteBrightnessDark = prefs.PaletteBrightnessDark
+	theme.AccentColorLight = prefs.AccentColorLight
+	theme.AccentColorDark = prefs.AccentColorDark
+	theme.LinkColorLight = prefs.LinkColorLight
+	theme.LinkColorDark = prefs.LinkColorDark
+	return theme
+}
+
 func normalizeDefaultTheme(theme Theme) Theme {
 	theme.ID = defaultThemeID
 	theme.Name = defaultThemeName
@@ -306,9 +323,9 @@ func normalizeDefaultTheme(theme Theme) Theme {
 	return theme
 }
 
-func normalizeThemes(themes []Theme) []Theme {
+func normalizeThemes(themes []Theme, fallbackDefault Theme) []Theme {
 	normalized := make([]Theme, 0, len(themes)+1)
-	defaultThemeValue := defaultTheme()
+	defaultThemeValue := normalizeDefaultTheme(fallbackDefault)
 	defaultThemeFound := false
 
 	for _, theme := range themes {
@@ -1159,7 +1176,7 @@ func (a *App) SaveTheme(theme Theme) error {
 			)
 		}
 	}
-	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes)
+	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes, defaultTheme())
 
 	if err := a.saveSettingsFile(settings); err != nil {
 		return err
@@ -1197,7 +1214,7 @@ func (a *App) DeleteTheme(id string) error {
 		settings.Preferences.Themes[:idx],
 		settings.Preferences.Themes[idx+1:]...,
 	)
-	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes)
+	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes, defaultTheme())
 
 	if err := a.saveSettingsFile(settings); err != nil {
 		return err
@@ -1238,7 +1255,7 @@ func (a *App) ReorderThemes(ids []string) error {
 		reordered = append(reordered, t)
 	}
 
-	settings.Preferences.Themes = normalizeThemes(reordered)
+	settings.Preferences.Themes = normalizeThemes(reordered, defaultTheme())
 	if err := a.saveSettingsFile(settings); err != nil {
 		return err
 	}
@@ -1312,7 +1329,7 @@ func (a *App) MatchThemeForCluster(contextName string) (*Theme, error) {
 		return nil, fmt.Errorf("loading settings: %w", err)
 	}
 
-	for _, t := range normalizeThemes(settings.Preferences.Themes) {
+	for _, t := range normalizeThemes(settings.Preferences.Themes, defaultTheme()) {
 		pattern := t.ClusterPattern
 		if pattern == "" {
 			pattern = "*"

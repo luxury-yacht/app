@@ -89,6 +89,7 @@ function AppearanceSection() {
   const [draggingThemeId, setDraggingThemeId] = useState<string | null>(null);
   const [dropTargetThemeId, setDropTargetThemeId] = useState<string | null>(null);
   const [deleteConfirmThemeId, setDeleteConfirmThemeId] = useState<string | null>(null);
+  const [hasUnsavedDefaultThemeChanges, setHasUnsavedDefaultThemeChanges] = useState(false);
 
   // Load saved themes once on mount.
   useEffect(() => {
@@ -144,6 +145,12 @@ function AppearanceSection() {
     }
   };
 
+  const flagUnsavedDefaultThemeChange = () => {
+    if (activeThemeId === null) {
+      setHasUnsavedDefaultThemeChanges(true);
+    }
+  };
+
   // Debounced palette tint persistence — avoids backend hammering during fast drags.
   const debouncePalettePersist = useCallback(
     (hue: number, saturation: number, brightness: number) => {
@@ -157,18 +164,21 @@ function AppearanceSection() {
   );
 
   const handlePaletteHueChange = (value: number) => {
+    flagUnsavedDefaultThemeChange();
     setPaletteHue(value);
     applyTintedPalette(value, paletteSaturation, paletteBrightness);
     debouncePalettePersist(value, paletteSaturation, paletteBrightness);
   };
 
   const handlePaletteSaturationChange = (value: number) => {
+    flagUnsavedDefaultThemeChange();
     setPaletteSaturation(value);
     applyTintedPalette(paletteHue, value, paletteBrightness);
     debouncePalettePersist(paletteHue, value, paletteBrightness);
   };
 
   const handlePaletteBrightnessChange = (value: number) => {
+    flagUnsavedDefaultThemeChange();
     setPaletteBrightness(value);
     applyTintedPalette(paletteHue, paletteSaturation, value);
     debouncePalettePersist(paletteHue, paletteSaturation, value);
@@ -204,6 +214,7 @@ function AppearanceSection() {
   );
 
   const handleAccentColorChange = (hex: string) => {
+    flagUnsavedDefaultThemeChange();
     setAccentColorState(hex);
     applyAccentColor(
       resolvedMode === 'light' ? hex : getAccentColor('light'),
@@ -214,6 +225,7 @@ function AppearanceSection() {
   };
 
   const handleAccentReset = () => {
+    flagUnsavedDefaultThemeChange();
     if (accentPersistTimer.current) {
       clearTimeout(accentPersistTimer.current);
       accentPersistTimer.current = null;
@@ -263,12 +275,14 @@ function AppearanceSection() {
   );
 
   const handleLinkColorChange = (hex: string) => {
+    flagUnsavedDefaultThemeChange();
     setLinkColorState(hex);
     applyLinkColor(hex, resolvedMode);
     debounceLinkPersist(hex);
   };
 
   const handleLinkReset = () => {
+    flagUnsavedDefaultThemeChange();
     if (linkPersistTimer.current) {
       clearTimeout(linkPersistTimer.current);
       linkPersistTimer.current = null;
@@ -346,6 +360,10 @@ function AppearanceSection() {
   // theme's current name and pattern. Save / Cancel icons drive commit/revert.
   const handleEnterEditMode = (theme: types.Theme) => {
     setThemeDraft({ name: theme.name, clusterPattern: theme.clusterPattern });
+    if (isDefaultTheme(theme) && hasUnsavedDefaultThemeChanges) {
+      setActiveThemeId(theme.id);
+      return;
+    }
     handleApplyTheme(theme.id);
   };
 
@@ -358,27 +376,18 @@ function AppearanceSection() {
     if (!trimmedName) return; // Name is required.
 
     try {
-      const lightTint = getPaletteTint('light');
-      const darkTint = getPaletteTint('dark');
       const isDefault = existing.id === DEFAULT_THEME_ID;
-      const updated = new types.Theme({
-        ...existing,
+      const updated = buildThemeFromCurrentAppearance({
+        theme: existing,
         name: isDefault ? existing.name : trimmedName,
         clusterPattern: isDefault ? '' : themeDraft.clusterPattern.trim(),
-        paletteHueLight: lightTint.hue,
-        paletteSaturationLight: lightTint.saturation,
-        paletteBrightnessLight: lightTint.brightness,
-        paletteHueDark: darkTint.hue,
-        paletteSaturationDark: darkTint.saturation,
-        paletteBrightnessDark: darkTint.brightness,
-        accentColorLight: getAccentColor('light'),
-        accentColorDark: getAccentColor('dark'),
-        linkColorLight: getLinkColor('light'),
-        linkColorDark: getLinkColor('dark'),
       });
       await saveTheme(updated);
       await reloadThemes();
       setActiveThemeId(null);
+      if (isDefault) {
+        setHasUnsavedDefaultThemeChanges(false);
+      }
     } catch (error) {
       errorHandler.handle(error, { action: 'saveTheme' });
     }
@@ -389,28 +398,21 @@ function AppearanceSection() {
     if (!activeThemeId) return;
     await handleApplyTheme(activeThemeId);
     setActiveThemeId(null);
+    if (activeThemeId === DEFAULT_THEME_ID) {
+      setHasUnsavedDefaultThemeChanges(false);
+    }
   };
 
   const handleThemeSave = async () => {
     if (!themeDraft.name.trim()) return;
 
     try {
-      const lightTint = getPaletteTint('light');
-      const darkTint = getPaletteTint('dark');
-      const newTheme = new types.Theme({
-        id: crypto.randomUUID(),
-        name: themeDraft.name.trim(),
-        clusterPattern: themeDraft.clusterPattern.trim(),
-        paletteHueLight: lightTint.hue,
-        paletteSaturationLight: lightTint.saturation,
-        paletteBrightnessLight: lightTint.brightness,
-        paletteHueDark: darkTint.hue,
-        paletteSaturationDark: darkTint.saturation,
-        paletteBrightnessDark: darkTint.brightness,
-        accentColorLight: getAccentColor('light'),
-        accentColorDark: getAccentColor('dark'),
-        linkColorLight: getLinkColor('light'),
-        linkColorDark: getLinkColor('dark'),
+      const newTheme = buildThemeFromCurrentAppearance({
+        theme: new types.Theme({
+          id: crypto.randomUUID(),
+          name: themeDraft.name.trim(),
+          clusterPattern: themeDraft.clusterPattern.trim(),
+        }),
       });
       await saveTheme(newTheme);
       await reloadThemes();
@@ -438,6 +440,7 @@ function AppearanceSection() {
     try {
       await applyThemeApi(id);
       setActiveThemeId(id);
+      setHasUnsavedDefaultThemeChanges(false);
       await hydrateAppPreferences({ force: true });
 
       const currentMode = resolvedMode === 'dark' ? 'dark' : 'light';
@@ -526,6 +529,57 @@ function AppearanceSection() {
     },
     [resolvedMode, paletteHue, paletteSaturation, paletteBrightness, accentColor, linkColor]
   );
+
+  const defaultTheme = themes.find(isDefaultTheme) ?? null;
+
+  function buildThemeFromCurrentAppearance({
+    theme,
+    name = theme.name,
+    clusterPattern = theme.clusterPattern,
+  }: {
+    theme: types.Theme;
+    name?: string;
+    clusterPattern?: string;
+  }): types.Theme {
+    const isLight = resolvedMode === 'light';
+    const otherMode = isLight ? 'dark' : 'light';
+    const otherTint = getPaletteTint(otherMode);
+    const otherAccent = getAccentColor(otherMode);
+    const otherLink = getLinkColor(otherMode);
+
+    return new types.Theme({
+      ...theme,
+      name,
+      clusterPattern,
+      paletteHueLight: isLight ? paletteHue : otherTint.hue,
+      paletteSaturationLight: isLight ? paletteSaturation : otherTint.saturation,
+      paletteBrightnessLight: isLight ? paletteBrightness : otherTint.brightness,
+      paletteHueDark: isLight ? otherTint.hue : paletteHue,
+      paletteSaturationDark: isLight ? otherTint.saturation : paletteSaturation,
+      paletteBrightnessDark: isLight ? otherTint.brightness : paletteBrightness,
+      accentColorLight: isLight ? accentColor : otherAccent,
+      accentColorDark: isLight ? otherAccent : accentColor,
+      linkColorLight: isLight ? linkColor : otherLink,
+      linkColorDark: isLight ? otherLink : linkColor,
+    });
+  }
+
+  const handleSaveDefaultThemeFromPrompt = async () => {
+    if (!defaultTheme) return;
+    try {
+      await saveTheme(
+        buildThemeFromCurrentAppearance({
+          theme: defaultTheme,
+          name: defaultTheme.name,
+          clusterPattern: '',
+        })
+      );
+      await reloadThemes();
+      setHasUnsavedDefaultThemeChanges(false);
+    } catch (error) {
+      errorHandler.handle(error, { action: 'saveDefaultTheme' });
+    }
+  };
 
   const handleThemeDrop = async (targetId: string) => {
     if (
@@ -836,7 +890,7 @@ function AppearanceSection() {
           <div className="settings-row-label-help">
             {}
             Themes can be automatically applied to clusters whose name matches the pattern.
-            <ul style={{ padding: '1rem', margin: 0 }}>
+            <ul className="themes-help-list">
               <li>
                 Patterns support <code>*</code> <code>?</code> and simple regex like{' '}
                 <code>[a-z]</code>
@@ -855,6 +909,22 @@ function AppearanceSection() {
               <div className="themes-loading">Loading themes...</div>
             ) : (
               <div className="themes-table">
+                {hasUnsavedDefaultThemeChanges &&
+                  activeThemeId !== DEFAULT_THEME_ID &&
+                  defaultTheme && (
+                    <div className="themes-unsaved-default" role="status">
+                      <span>
+                        There are unsaved changes. Would you like to save them as the default theme?
+                      </span>
+                      <button
+                        type="button"
+                        className="themes-unsaved-default-action"
+                        onClick={handleSaveDefaultThemeFromPrompt}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  )}
                 {themes.map((theme) => {
                   const isDefault = isDefaultTheme(theme);
                   const isDragging = theme.id === draggingThemeId;

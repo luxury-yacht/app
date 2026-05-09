@@ -424,10 +424,44 @@
   width: 100%;
 }
 
+.themes-help-list {
+  padding: 1rem;
+  margin: 0;
+}
+
 .themes-table {
   display: flex;
   flex-direction: column;
   width: 100%;
+}
+
+.themes-unsaved-default {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-warning-border, var(--color-warning, #e6a700));
+  border-radius: var(--border-radius-sm);
+  background: var(--status-warning-bg, var(--color-warning-bg, rgba(245, 158, 11, 0.1)));
+  color: var(--status-warning-text);
+  font-size: var(--font-size-small);
+  line-height: 1.35;
+}
+
+.themes-unsaved-default-action {
+  flex: 0 0 auto;
+  border: 1px solid currentColor;
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--font-size-small);
+  padding: 0.25rem 0.45rem;
+}
+
+.themes-unsaved-default-action:hover {
+  color: var(--color-text);
 }
 
 .themes-table-row {

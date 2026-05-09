@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,6 +20,57 @@ func TestGetThemes_Default(t *testing.T) {
 	assert.Equal(t, "default", themes[0].ID)
 	assert.Equal(t, "default", themes[0].Name)
 	assert.Empty(t, themes[0].ClusterPattern)
+}
+
+// TestLoadSettingsFileSeedsDefaultThemeFromActivePreferences verifies that
+// upgrades from settings files without a saved default theme preserve the
+// user's active appearance values as the new fallback theme.
+func TestLoadSettingsFileSeedsDefaultThemeFromActivePreferences(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	configPath, err := app.getSettingsFilePath()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(configPath, []byte(`{
+		"schemaVersion": 1,
+		"preferences": {
+			"appearanceMode": "dark",
+			"paletteHueLight": 18,
+			"paletteSaturationLight": 22,
+			"paletteBrightnessLight": 4,
+			"paletteHueDark": 210,
+			"paletteSaturationDark": 35,
+			"paletteBrightnessDark": -7,
+			"accentColorLight": "#123456",
+			"accentColorDark": "#abcdef",
+			"linkColorLight": "#654321",
+			"linkColorDark": "#fedcba"
+		}
+	}`), 0o644))
+
+	themes, err := app.GetThemes()
+	require.NoError(t, err)
+	require.Len(t, themes, 1)
+	defaultTheme := themes[0]
+	assert.Equal(t, "default", defaultTheme.ID)
+	assert.Equal(t, 18, defaultTheme.PaletteHueLight)
+	assert.Equal(t, 22, defaultTheme.PaletteSaturationLight)
+	assert.Equal(t, 4, defaultTheme.PaletteBrightnessLight)
+	assert.Equal(t, 210, defaultTheme.PaletteHueDark)
+	assert.Equal(t, 35, defaultTheme.PaletteSaturationDark)
+	assert.Equal(t, -7, defaultTheme.PaletteBrightnessDark)
+	assert.Equal(t, "#123456", defaultTheme.AccentColorLight)
+	assert.Equal(t, "#abcdef", defaultTheme.AccentColorDark)
+	assert.Equal(t, "#654321", defaultTheme.LinkColorLight)
+	assert.Equal(t, "#fedcba", defaultTheme.LinkColorDark)
+
+	require.NoError(t, app.ApplyTheme("default"))
+	settings, err := app.loadSettingsFile()
+	require.NoError(t, err)
+	assert.Equal(t, 18, settings.Preferences.PaletteHueLight)
+	assert.Equal(t, 210, settings.Preferences.PaletteHueDark)
+	assert.Equal(t, "#123456", settings.Preferences.AccentColorLight)
+	assert.Equal(t, "#abcdef", settings.Preferences.AccentColorDark)
 }
 
 // TestSaveTheme_Create verifies that saving a theme with a new ID appends it
