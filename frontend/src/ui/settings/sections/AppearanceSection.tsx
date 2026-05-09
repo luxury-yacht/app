@@ -5,7 +5,7 @@
  * accent, link, saved themes).
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type CSSProperties } from 'react';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
@@ -28,6 +28,8 @@ import {
   applyTintedPalette,
   savePaletteTintToLocalStorage,
   isPaletteActive,
+  MAX_SATURATION,
+  MAX_BRIGHTNESS_OFFSET,
 } from '@utils/paletteTint';
 import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '@utils/accentColor';
 import { applyLinkColor, saveLinkColorToLocalStorage } from '@utils/linkColor';
@@ -38,6 +40,15 @@ import { EditIcon, DeleteIcon, CheckIcon, CloseIcon } from '@shared/components/i
 const DEFAULT_THEME_ID = 'default';
 
 const isDefaultTheme = (theme: types.Theme) => theme.id === DEFAULT_THEME_ID;
+
+type PaletteSliderStyle = CSSProperties & {
+  '--palette-slider-thumb'?: string;
+};
+
+const buildPaletteSliderStyle = (thumbColor: string, background?: string): PaletteSliderStyle => ({
+  '--palette-slider-thumb': thumbColor,
+  ...(background ? { background } : {}),
+});
 
 function AppearanceSection() {
   const { mode, resolvedMode } = useAppearanceMode();
@@ -547,6 +558,20 @@ function AppearanceSection() {
     }
   };
 
+  const saturationOffset = (paletteSaturation / 100) * MAX_SATURATION;
+  const brightnessLightness = Math.min(
+    99,
+    Math.max(1, 50 + (paletteBrightness / 50) * MAX_BRIGHTNESS_OFFSET)
+  );
+  const hueSliderStyle = buildPaletteSliderStyle(`hsl(${paletteHue}, 100%, 50%)`);
+  const saturationSliderStyle = buildPaletteSliderStyle(
+    `hsl(${paletteHue}, ${saturationOffset}%, 50%)`,
+    `linear-gradient(to right, hsl(0, 0%, 50%), hsl(${paletteHue}, ${MAX_SATURATION}%, 50%))`
+  );
+  const brightnessSliderStyle = buildPaletteSliderStyle(
+    `hsl(${paletteHue}, ${saturationOffset}%, ${brightnessLightness}%)`
+  );
+
   const renderEditableValue = (
     field: 'hue' | 'saturation' | 'brightness',
     value: number,
@@ -635,6 +660,7 @@ function AppearanceSection() {
               max={360}
               value={paletteHue}
               onChange={(e) => handlePaletteHueChange(Number(e.target.value))}
+              style={hueSliderStyle}
             />
             {renderEditableValue('hue', paletteHue, '°')}
             <button
@@ -656,9 +682,7 @@ function AppearanceSection() {
               max={100}
               value={paletteSaturation}
               onChange={(e) => handlePaletteSaturationChange(Number(e.target.value))}
-              style={{
-                background: `linear-gradient(to right, hsl(0, 0%, 50%), hsl(${paletteHue}, 20%, 50%))`,
-              }}
+              style={saturationSliderStyle}
             />
             {renderEditableValue('saturation', paletteSaturation, '%')}
             <button
@@ -680,6 +704,7 @@ function AppearanceSection() {
               max={50}
               value={paletteBrightness}
               onChange={(e) => handlePaletteBrightnessChange(Number(e.target.value))}
+              style={brightnessSliderStyle}
             />
             {renderEditableValue('brightness', paletteBrightness, '')}
             <button
@@ -809,9 +834,19 @@ function AppearanceSection() {
         <div className="settings-row-label">
           <div className="settings-row-label-title">Saved themes</div>
           <div className="settings-row-label-help">
-            Themes can be automatically applied to clusters whose name matches the pattern. Use * as
-            a wildcard. Empty patterns match every cluster. The default theme always resolves last.
-            Use the drag handles to change the order.
+            {}
+            Themes can be automatically applied to clusters whose name matches the pattern.
+            <ul style={{ padding: '1rem', margin: 0 }}>
+              <li>
+                Patterns support <code>*</code> <code>?</code> and simple regex like{' '}
+                <code>[a-z]</code>
+              </li>
+              <li>Themes applied based on first match.</li>
+              <li>Empty patterns match any cluster name.</li>
+              <li>Use the drag handles to change order.</li>
+              <li>Default theme always resolves last.</li>
+            </ul>
+            {}
           </div>
         </div>
         <div className="settings-row-control">
