@@ -481,7 +481,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         data-testid={`cluster-pod-status-${item.key}`}
       >
         <span className="pod-status-card__count">{showSkeleton ? DASH : item.value}</span>
-        <span className="pod-status-card__label">{item.label}</span>
+        <span className="pod-status-card__label" title={item.label}>
+          {item.label}
+        </span>
       </div>
     );
   };

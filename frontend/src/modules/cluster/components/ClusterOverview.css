@@ -454,9 +454,14 @@
 }
 
 .pod-status-card__label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
   margin-top: 0.25rem;
   font-size: 0.75rem;
   color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .stacked-bar__segment--deployment {
