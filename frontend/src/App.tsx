@@ -11,7 +11,6 @@ import './App.css';
 import { errorHandler } from '@utils/errorHandler';
 import { KeyboardProvider, GlobalShortcuts } from '@ui/shortcuts';
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
-import { initializeAutoRefresh, initializeMetricsRefreshInterval } from '@/core/refresh';
 import { eventBus } from '@/core/events';
 import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
@@ -104,51 +103,12 @@ function AppContent() {
     initializeUserPermissionsBootstrap(selectedClusterId, { ready: selectedClusterReady });
   }, [selectedClusterId, selectedClusterReady]);
 
-  // Hydrate persisted preferences before applying refresh settings and palette tint.
+  // main.ts hydrates preferences before first render. This effect only replays
+  // the hydrated appearance values into CSS and keeps them synced on mode changes.
   useEffect(() => {
     let active = true;
 
-    const initializePreferences = async () => {
-      try {
-        await hydrateAppPreferences();
-        if (!active) return;
-
-        // Apply palette tint for the current resolved mode.
-        const currentMode = resolveAppearanceMode();
-        const tint = getPaletteTint(currentMode);
-        if (isPaletteActive(tint.saturation, tint.brightness)) {
-          applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
-          savePaletteTintToLocalStorage(currentMode, tint.hue, tint.saturation, tint.brightness);
-        }
-
-        // Apply accent color overrides for both palettes and accent-bg for the current mode.
-        const lightAccent = getAccentColor('light');
-        const darkAccent = getAccentColor('dark');
-        if (lightAccent || darkAccent) {
-          applyAccentColor(lightAccent, darkAccent);
-          applyAccentBg(currentMode === 'light' ? lightAccent : darkAccent, currentMode);
-        }
-        saveAccentColorToLocalStorage('light', lightAccent);
-        saveAccentColorToLocalStorage('dark', darkAccent);
-
-        // Apply link color override for the current mode; persist both to localStorage
-        // so the FOUC script can apply the correct one on next launch.
-        const lightLink = getLinkColor('light');
-        const darkLink = getLinkColor('dark');
-        const linkForMode = currentMode === 'light' ? lightLink : darkLink;
-        if (linkForMode) {
-          applyLinkColor(linkForMode, currentMode);
-        }
-        saveLinkColorToLocalStorage('light', lightLink);
-        saveLinkColorToLocalStorage('dark', darkLink);
-      } finally {
-        if (active) {
-          initializeMetricsRefreshInterval();
-          initializeAutoRefresh();
-        }
-      }
-    };
-    void initializePreferences();
+    applyAppearanceOverrides(resolveAppearanceMode());
 
     // When the resolved mode changes, apply the palette for the new mode.
     const unsubscribeModeResolved = eventBus.on('settings:appearance-mode-resolved', (newMode) => {
