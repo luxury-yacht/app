@@ -2,9 +2,8 @@
  * frontend/src/utils/paletteTint.ts
  *
  * Generates tinted gray palettes using HSL and applies them as CSS custom
- * property overrides on document.documentElement. Persists hue/saturation/brightness
- * to localStorage for compatibility. Startup FOUC prevention uses the
- * precomputed payload from appearanceBootstrap.ts.
+ * property overrides on document.documentElement. Startup FOUC prevention uses
+ * the precomputed payload from appearanceBootstrap.ts.
  */
 
 // Gray scale token definitions with their original lightness values.
@@ -29,21 +28,7 @@ export const MAX_SATURATION = 20;
 
 // Maximum lightness offset in percentage points when brightness is at ±50.
 // brightness * (MAX_BRIGHTNESS_OFFSET / 50) gives the actual offset.
-/** @lintignore */
 export const MAX_BRIGHTNESS_OFFSET = 10;
-
-// Per-mode localStorage keys for FOUC prevention bridge.
-const LS_KEY_HUE_LIGHT = 'app-palette-hue-light';
-const LS_KEY_TONE_LIGHT = 'app-palette-saturation-light';
-const LS_KEY_BRIGHTNESS_LIGHT = 'app-palette-brightness-light';
-const LS_KEY_HUE_DARK = 'app-palette-hue-dark';
-const LS_KEY_TONE_DARK = 'app-palette-saturation-dark';
-const LS_KEY_BRIGHTNESS_DARK = 'app-palette-brightness-dark';
-
-// Old localStorage keys for migration cleanup.
-const LS_KEY_HUE_OLD = 'app-palette-hue';
-const LS_KEY_TONE_OLD = 'app-palette-saturation';
-const LS_KEY_BRIGHTNESS_OLD = 'app-palette-brightness';
 
 /**
  * Returns true when any palette customization is active and overrides
@@ -103,52 +88,5 @@ export function clearTintedPalette(): void {
   const root = document.documentElement;
   for (const { token } of GRAY_STEPS) {
     root.style.removeProperty(token);
-  }
-}
-
-/**
- * Persists palette hue, saturation, and brightness to per-mode localStorage keys
- * for compatibility with older app versions.
- */
-export function savePaletteTintToLocalStorage(
-  mode: 'light' | 'dark',
-  hue: number,
-  saturation: number,
-  brightness: number = 0
-): void {
-  try {
-    if (mode === 'light') {
-      localStorage.setItem(LS_KEY_HUE_LIGHT, String(hue));
-      localStorage.setItem(LS_KEY_TONE_LIGHT, String(saturation));
-      localStorage.setItem(LS_KEY_BRIGHTNESS_LIGHT, String(brightness));
-    } else {
-      localStorage.setItem(LS_KEY_HUE_DARK, String(hue));
-      localStorage.setItem(LS_KEY_TONE_DARK, String(saturation));
-      localStorage.setItem(LS_KEY_BRIGHTNESS_DARK, String(brightness));
-    }
-  } catch {
-    // Silently ignore storage errors (private browsing, quota exceeded, etc.)
-  }
-}
-
-/**
- * Removes all palette hue, saturation, and brightness keys from localStorage,
- * including old single-value keys for migration cleanup.
- */
-export function clearPaletteTintFromLocalStorage(): void {
-  try {
-    // Remove per-mode keys.
-    localStorage.removeItem(LS_KEY_HUE_LIGHT);
-    localStorage.removeItem(LS_KEY_TONE_LIGHT);
-    localStorage.removeItem(LS_KEY_BRIGHTNESS_LIGHT);
-    localStorage.removeItem(LS_KEY_HUE_DARK);
-    localStorage.removeItem(LS_KEY_TONE_DARK);
-    localStorage.removeItem(LS_KEY_BRIGHTNESS_DARK);
-    // Remove old single-value keys.
-    localStorage.removeItem(LS_KEY_HUE_OLD);
-    localStorage.removeItem(LS_KEY_TONE_OLD);
-    localStorage.removeItem(LS_KEY_BRIGHTNESS_OLD);
-  } catch {
-    // Silently ignore storage errors
   }
 }

@@ -26,13 +26,12 @@ import {
 import { useAppearanceMode } from '@/core/contexts/AppearanceModeContext';
 import {
   applyTintedPalette,
-  savePaletteTintToLocalStorage,
   isPaletteActive,
   MAX_SATURATION,
   MAX_BRIGHTNESS_OFFSET,
 } from '@utils/paletteTint';
-import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '@utils/accentColor';
-import { applyLinkColor, saveLinkColorToLocalStorage } from '@utils/linkColor';
+import { applyAccentColor, applyAccentBg } from '@utils/accentColor';
+import { applyLinkColor } from '@utils/linkColor';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { EditIcon, DeleteIcon, CheckIcon, CloseIcon } from '@shared/components/icons/MenuIcons';
@@ -157,7 +156,6 @@ function AppearanceSection() {
       if (palettePersistTimer.current) clearTimeout(palettePersistTimer.current);
       palettePersistTimer.current = setTimeout(() => {
         persistPaletteTint(resolvedMode, hue, saturation, brightness);
-        savePaletteTintToLocalStorage(resolvedMode, hue, saturation, brightness);
       }, 300);
     },
     [resolvedMode]
@@ -210,7 +208,6 @@ function AppearanceSection() {
       if (accentPersistTimer.current) clearTimeout(accentPersistTimer.current);
       accentPersistTimer.current = setTimeout(() => {
         persistAccentColor(resolvedMode, color);
-        saveAccentColorToLocalStorage(resolvedMode, color);
       }, 300);
     },
     [resolvedMode]
@@ -240,7 +237,6 @@ function AppearanceSection() {
     );
     applyAccentBg('', resolvedMode);
     persistAccentColor(resolvedMode, '');
-    saveAccentColorToLocalStorage(resolvedMode, '');
   };
 
   const validHexRe = /^#[0-9a-fA-F]{6}$/;
@@ -271,7 +267,6 @@ function AppearanceSection() {
       if (linkPersistTimer.current) clearTimeout(linkPersistTimer.current);
       linkPersistTimer.current = setTimeout(() => {
         persistLinkColor(resolvedMode, color);
-        saveLinkColorToLocalStorage(resolvedMode, color);
       }, 300);
     },
     [resolvedMode]
@@ -293,7 +288,6 @@ function AppearanceSection() {
     setLinkColorState('');
     applyLinkColor('', resolvedMode);
     persistLinkColor(resolvedMode, '');
-    saveLinkColorToLocalStorage(resolvedMode, '');
   };
 
   const defaultLink = resolvedMode === 'light' ? '#525252' : '#aaaaaa';
@@ -453,19 +447,14 @@ function AppearanceSection() {
       } else {
         applyTintedPalette(0, 0, 0);
       }
-      savePaletteTintToLocalStorage(currentMode, tint.hue, tint.saturation, tint.brightness);
 
       const lightAccent = getAccentColor('light');
       const darkAccent = getAccentColor('dark');
       applyAccentColor(lightAccent, darkAccent);
       applyAccentBg(currentMode === 'light' ? lightAccent : darkAccent, currentMode);
-      saveAccentColorToLocalStorage('light', lightAccent);
-      saveAccentColorToLocalStorage('dark', darkAccent);
 
       const currentLinkColor = getLinkColor(currentMode);
       applyLinkColor(currentLinkColor, currentMode);
-      saveLinkColorToLocalStorage('light', getLinkColor('light'));
-      saveLinkColorToLocalStorage('dark', getLinkColor('dark'));
 
       setPaletteHue(tint.hue);
       setPaletteSaturation(tint.saturation);

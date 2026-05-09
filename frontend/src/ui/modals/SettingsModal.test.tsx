@@ -60,7 +60,6 @@ vi.mock('@/core/app-state-access', () => ({
 
 vi.mock('@/utils/appearanceMode', () => ({
   changeAppearanceMode: vi.fn().mockResolvedValue(undefined),
-  initSystemAppearanceModeListener: vi.fn().mockReturnValue(() => {}),
 }));
 
 vi.mock('@/core/refresh/RefreshManager', () => ({

@@ -1,7 +1,7 @@
 /**
  * frontend/src/utils/paletteTint.test.ts
  *
- * Tests for palette tint generation, DOM application, and localStorage helpers.
+ * Tests for palette tint generation and DOM application.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,8 +11,6 @@ import {
   generateTintedPalette,
   applyTintedPalette,
   clearTintedPalette,
-  savePaletteTintToLocalStorage,
-  clearPaletteTintFromLocalStorage,
   isPaletteActive,
 } from './paletteTint';
 
@@ -167,54 +165,6 @@ describe('paletteTint', () => {
       for (const { token } of GRAY_STEPS) {
         expect(removePropertySpy).toHaveBeenCalledWith(token);
       }
-    });
-  });
-
-  describe('localStorage helpers', () => {
-    it('saves light mode hue, saturation, and brightness to localStorage', () => {
-      savePaletteTintToLocalStorage('light', 220, 75, -30);
-      expect(localStorage.getItem('app-palette-hue-light')).toBe('220');
-      expect(localStorage.getItem('app-palette-saturation-light')).toBe('75');
-      expect(localStorage.getItem('app-palette-brightness-light')).toBe('-30');
-      // Dark keys should not be set.
-      expect(localStorage.getItem('app-palette-hue-dark')).toBeNull();
-    });
-
-    it('saves dark mode hue, saturation, and brightness to localStorage', () => {
-      savePaletteTintToLocalStorage('dark', 100, 40, 15);
-      expect(localStorage.getItem('app-palette-hue-dark')).toBe('100');
-      expect(localStorage.getItem('app-palette-saturation-dark')).toBe('40');
-      expect(localStorage.getItem('app-palette-brightness-dark')).toBe('15');
-      // Light keys should not be set.
-      expect(localStorage.getItem('app-palette-hue-light')).toBeNull();
-    });
-
-    it('clears all per-mode and old keys from localStorage', () => {
-      savePaletteTintToLocalStorage('light', 220, 75, 10);
-      savePaletteTintToLocalStorage('dark', 100, 40, 5);
-      // Set old keys to simulate migration scenario.
-      localStorage.setItem('app-palette-hue', '99');
-      localStorage.setItem('app-palette-saturation', '88');
-      localStorage.setItem('app-palette-brightness', '77');
-
-      clearPaletteTintFromLocalStorage();
-
-      // Per-mode keys removed.
-      expect(localStorage.getItem('app-palette-hue-light')).toBeNull();
-      expect(localStorage.getItem('app-palette-saturation-light')).toBeNull();
-      expect(localStorage.getItem('app-palette-brightness-light')).toBeNull();
-      expect(localStorage.getItem('app-palette-hue-dark')).toBeNull();
-      expect(localStorage.getItem('app-palette-saturation-dark')).toBeNull();
-      expect(localStorage.getItem('app-palette-brightness-dark')).toBeNull();
-      // Old keys removed.
-      expect(localStorage.getItem('app-palette-hue')).toBeNull();
-      expect(localStorage.getItem('app-palette-saturation')).toBeNull();
-      expect(localStorage.getItem('app-palette-brightness')).toBeNull();
-    });
-
-    it('defaults brightness to 0 when not provided', () => {
-      savePaletteTintToLocalStorage('light', 220, 75);
-      expect(localStorage.getItem('app-palette-brightness-light')).toBe('0');
     });
   });
 });

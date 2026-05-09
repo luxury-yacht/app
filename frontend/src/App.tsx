@@ -24,13 +24,9 @@ import {
   matchThemeForCluster,
   applyTheme,
 } from '@/core/settings/appPreferences';
-import {
-  applyTintedPalette,
-  savePaletteTintToLocalStorage,
-  isPaletteActive,
-} from '@utils/paletteTint';
-import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '@utils/accentColor';
-import { applyLinkColor, saveLinkColorToLocalStorage } from '@utils/linkColor';
+import { applyTintedPalette, isPaletteActive } from '@utils/paletteTint';
+import { applyAccentColor, applyAccentBg } from '@utils/accentColor';
+import { applyLinkColor } from '@utils/linkColor';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
@@ -72,20 +68,15 @@ const applyAppearanceOverrides = (mode: 'light' | 'dark') => {
   } else {
     applyTintedPalette(0, 0, 0);
   }
-  savePaletteTintToLocalStorage(mode, tint.hue, tint.saturation, tint.brightness);
 
   const lightAccent = getAccentColor('light');
   const darkAccent = getAccentColor('dark');
   applyAccentColor(lightAccent, darkAccent);
   applyAccentBg(mode === 'light' ? lightAccent : darkAccent, mode);
-  saveAccentColorToLocalStorage('light', lightAccent);
-  saveAccentColorToLocalStorage('dark', darkAccent);
 
   const lightLink = getLinkColor('light');
   const darkLink = getLinkColor('dark');
   applyLinkColor(mode === 'light' ? lightLink : darkLink, mode);
-  saveLinkColorToLocalStorage('light', lightLink);
-  saveLinkColorToLocalStorage('dark', darkLink);
 };
 
 /**

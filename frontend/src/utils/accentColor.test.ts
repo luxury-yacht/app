@@ -1,8 +1,7 @@
 /**
  * frontend/src/utils/accentColor.test.ts
  *
- * Tests for accent color shade generation, CSS override application,
- * and localStorage bridge.
+ * Tests for accent color shade generation and CSS override application.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -15,8 +14,6 @@ import {
   applyAccentColor,
   applyAccentBg,
   clearAccentColor,
-  saveAccentColorToLocalStorage,
-  clearAccentColorFromLocalStorage,
   LIGHT_OFFSETS,
   DARK_OFFSETS,
 } from './accentColor';
@@ -256,41 +253,5 @@ describe('clearAccentColor', () => {
       expect(root.style.getPropertyValue(token)).toBe('');
     }
     expect(root.style.getPropertyValue('--color-accent-bg')).toBe('');
-  });
-});
-
-describe('localStorage bridge', () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
-  afterEach(() => {
-    localStorage.clear();
-  });
-
-  it('saves and retrieves accent color for light mode', () => {
-    saveAccentColorToLocalStorage('light', '#326ce5');
-    expect(localStorage.getItem('app-accent-color-light')).toBe('#326ce5');
-    expect(localStorage.getItem('app-accent-color-dark')).toBeNull();
-  });
-
-  it('saves and retrieves accent color for dark mode', () => {
-    saveAccentColorToLocalStorage('dark', '#f59e0b');
-    expect(localStorage.getItem('app-accent-color-dark')).toBe('#f59e0b');
-    expect(localStorage.getItem('app-accent-color-light')).toBeNull();
-  });
-
-  it('removes key when color is empty', () => {
-    saveAccentColorToLocalStorage('light', '#326ce5');
-    saveAccentColorToLocalStorage('light', '');
-    expect(localStorage.getItem('app-accent-color-light')).toBeNull();
-  });
-
-  it('clearAccentColorFromLocalStorage removes all keys', () => {
-    saveAccentColorToLocalStorage('light', '#326ce5');
-    saveAccentColorToLocalStorage('dark', '#f59e0b');
-    clearAccentColorFromLocalStorage();
-    expect(localStorage.getItem('app-accent-color-light')).toBeNull();
-    expect(localStorage.getItem('app-accent-color-dark')).toBeNull();
   });
 });

@@ -20,7 +20,6 @@ import {
   AdvancedIcon,
 } from '@shared/components/icons/MenuIcons';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
-import { initSystemAppearanceModeListener } from '@/utils/appearanceMode';
 import AppearanceSection from '@ui/settings/sections/AppearanceSection';
 import KubeconfigsSection from '@ui/settings/sections/KubeconfigsSection';
 import DisplaySection from '@ui/settings/sections/DisplaySection';
@@ -102,13 +101,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
       .catch(() => {
         // Silent fallback — version footer just won't render.
       });
-  }, [isOpen]);
-
-  // Track system color-scheme changes while the modal is open so the
-  // Mode=System resolved value updates live.
-  useEffect(() => {
-    if (!isOpen) return;
-    return initSystemAppearanceModeListener();
   }, [isOpen]);
 
   useModalFocusTrap({

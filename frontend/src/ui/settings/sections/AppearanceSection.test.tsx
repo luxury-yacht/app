@@ -46,7 +46,6 @@ vi.mock('@/utils/appearanceMode', () => ({
 
 vi.mock('@utils/paletteTint', () => ({
   applyTintedPalette: vi.fn(),
-  savePaletteTintToLocalStorage: vi.fn(),
   isPaletteActive: vi.fn(() => false),
   MAX_SATURATION: 20,
   MAX_BRIGHTNESS_OFFSET: 10,
@@ -55,12 +54,10 @@ vi.mock('@utils/paletteTint', () => ({
 vi.mock('@utils/accentColor', () => ({
   applyAccentColor: vi.fn(),
   applyAccentBg: vi.fn(),
-  saveAccentColorToLocalStorage: vi.fn(),
 }));
 
 vi.mock('@utils/linkColor', () => ({
   applyLinkColor: vi.fn(),
-  saveLinkColorToLocalStorage: vi.fn(),
 }));
 
 vi.mock('@utils/errorHandler', () => ({

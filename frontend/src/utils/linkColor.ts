@@ -6,16 +6,10 @@
  * simpler: a base color for --color-object-panel-link and a lightened variant
  * for --color-object-panel-link-hover.
  *
- * Persists the chosen hex per resolved appearance mode to localStorage for
- * compatibility. Startup FOUC prevention uses the precomputed payload from
- * appearanceBootstrap.ts.
+ * Startup FOUC prevention uses the precomputed payload from appearanceBootstrap.ts.
  */
 
 import { hexToHsl, hslToHex } from './accentColor';
-
-// localStorage keys for FOUC prevention bridge.
-const LS_KEY_LINK_LIGHT = 'app-link-color-light';
-const LS_KEY_LINK_DARK = 'app-link-color-dark';
 
 // Hover shifts lightness by this amount: lighter in dark mode, darker in light mode.
 const HOVER_LIGHTNESS_OFFSET = 12;
@@ -56,20 +50,4 @@ export function clearLinkColor(): void {
   const root = document.documentElement;
   root.style.removeProperty('--color-object-panel-link');
   root.style.removeProperty('--color-object-panel-link-hover');
-}
-
-/**
- * Persist link color hex to localStorage for compatibility with older app versions.
- */
-export function saveLinkColorToLocalStorage(mode: 'light' | 'dark', color: string): void {
-  try {
-    const key = mode === 'light' ? LS_KEY_LINK_LIGHT : LS_KEY_LINK_DARK;
-    if (color) {
-      localStorage.setItem(key, color);
-    } else {
-      localStorage.removeItem(key);
-    }
-  } catch {
-    // Silently ignore storage errors (private browsing, quota exceeded, etc.)
-  }
 }

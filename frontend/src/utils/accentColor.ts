@@ -3,9 +3,8 @@
  *
  * Generates accent color shade scales from a base hex color using HSL lightness
  * offsets and applies them as CSS custom property overrides on
- * document.documentElement. Persists the chosen hex per appearance mode to localStorage
- * so older app versions can apply shades before React mounts. Current startup
- * FOUC prevention uses the precomputed payload from appearanceBootstrap.ts.
+ * document.documentElement. Startup FOUC prevention uses the precomputed
+ * payload from appearanceBootstrap.ts.
  */
 
 // Lightness offsets for the light accent palette (base maps to 600 shade).
@@ -26,10 +25,6 @@ export const DARK_OFFSETS: Record<string, number> = {
   '--color-accent-dark-300': 15,
   '--color-accent-dark-200': 27,
 };
-
-// localStorage keys for FOUC prevention bridge.
-const LS_KEY_ACCENT_LIGHT = 'app-accent-color-light';
-const LS_KEY_ACCENT_DARK = 'app-accent-color-dark';
 
 /**
  * Parse a #rrggbb hex string to HSL values.
@@ -209,32 +204,4 @@ export function clearAccentColor(): void {
     root.style.removeProperty(token);
   }
   root.style.removeProperty('--color-accent-bg');
-}
-
-/**
- * Persist accent color hex to localStorage for compatibility with older app versions.
- */
-export function saveAccentColorToLocalStorage(mode: 'light' | 'dark', color: string): void {
-  try {
-    const key = mode === 'light' ? LS_KEY_ACCENT_LIGHT : LS_KEY_ACCENT_DARK;
-    if (color) {
-      localStorage.setItem(key, color);
-    } else {
-      localStorage.removeItem(key);
-    }
-  } catch {
-    // Silently ignore storage errors (private browsing, quota exceeded, etc.)
-  }
-}
-
-/**
- * Remove all accent color keys from localStorage.
- */
-export function clearAccentColorFromLocalStorage(): void {
-  try {
-    localStorage.removeItem(LS_KEY_ACCENT_LIGHT);
-    localStorage.removeItem(LS_KEY_ACCENT_DARK);
-  } catch {
-    // Silently ignore storage errors
-  }
 }
