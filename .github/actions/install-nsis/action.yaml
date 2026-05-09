@@ -9,65 +9,9 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Download and install NSIS
+    - name: Install NSIS
       shell: pwsh
       run: |
-        $Ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-        $Url = "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10-setup.exe?ts=$Ts&use_mirror=autoselect"
-        $Installer = "$env:RUNNER_TEMP\nsis-3.10-setup.exe"
-
-        Invoke-WebRequest `
-          -Uri $Url `
-          -OutFile $Installer `
-          -MaximumRedirection 10 `
-          -UserAgent "Wget/1.21.4"
-
-        if ((Get-Item $Installer).Length -lt 1MB) {
-          Get-Content $Installer -TotalCount 20
-          throw "Downloaded file is too small; likely got HTML instead of installer"
-        }
-
-        Start-Process -FilePath $Installer -ArgumentList "/S" -Wait
-
-        $NsisPath = "${env:ProgramFiles(x86)}\NSIS"
-        if (-not (Test-Path "$NsisPath\makensis.exe")) {
-          throw "NSIS installation failed"
-        }
-
-        echo "$NsisPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-    # - name: Install NSIS
-    #   shell: pwsh
-    #   run: |
-    #     $installer = Join-Path $env:RUNNER_TEMP "nsis-${{ inputs.nsis-version }}-setup.exe"
-    #     Invoke-WebRequest "https://downloads.sourceforge.net/project/nsis/NSIS%203/${{ inputs.nsis-version }}/nsis-${{ inputs.nsis-version }}-setup.exe" -OutFile $installer -MaximumRedirection 10
-    #     $header = [System.IO.File]::ReadAllBytes($installer)[0..1]
-    #     if ($header[0] -ne 0x4d -or $header[1] -ne 0x5a) {
-    #         Write-Host "Downloaded NSIS installer is not a valid Windows executable."
-    #         exit 1
-    #     }
-    #     $process = Start-Process $installer -ArgumentList "/S" -Wait -PassThru
-    #     $exitCode = $process.ExitCode
-    #       if ($exitCode -eq 0) {
-    #           Write-Host "Installer ran successfully."
-    #       } else {
-    #           Write-Host "Installer failed with exit code $exitCode."
-    #           exit $exitCode
-    #       }
-    #     echo "C:\Program Files (x86)\NSIS\Bin" | Out-File -FilePath "$env:GITHUB_PATH" -Append
-    #     echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath "$env:GITHUB_PATH" -Append
-
-    - name: Apply NSIS long string patch
-      shell: pwsh
-      run: |
-        $Ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-        $patchArchive = Join-Path $env:RUNNER_TEMP "nsis-${{ inputs.nsis-version }}-strlen_8192.zip"
-        Invoke-WebRequest "https://downloads.sourceforge.net/project/nsis/NSIS%203/${{ inputs.nsis-version }}/nsis-${{ inputs.nsis-version }}-strlen_8192.zip?ts=$Ts&use_mirror=autoselect" -OutFile $patchArchive -MaximumRedirection 10
-        Expand-Archive $patchArchive -DestinationPath "C:\Program Files (x86)\NSIS" -Force
-
-    - name: Install NSIS EnvVar plugin
-      shell: pwsh
-      run: |
-        $pluginArchive = Join-Path $env:RUNNER_TEMP "EnVar_plugin.zip"
-        Invoke-WebRequest https://nsis.sourceforge.io/mediawiki/images/7/7f/EnVar_plugin.zip -OutFile $pluginArchive
-        Expand-Archive $pluginArchive -DestinationPath "C:\Program Files (x86)\NSIS" -Force
+        & "$env:GITHUB_ACTION_PATH\install-nsis.ps1" `
+          -NsisVersion "${{ inputs.nsis-version }}" `
+          -AddToGitHubPath
