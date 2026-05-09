@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
 interface ModalSurfaceProps {
@@ -12,6 +12,8 @@ interface ModalSurfaceProps {
   closeOnBackdrop?: boolean;
 }
 
+let openModalSurfaceCount = 0;
+
 const ModalSurface: React.FC<ModalSurfaceProps> = ({
   children,
   modalRef,
@@ -22,6 +24,21 @@ const ModalSurface: React.FC<ModalSurfaceProps> = ({
   isClosing = false,
   closeOnBackdrop = false,
 }) => {
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    openModalSurfaceCount += 1;
+    document.body.classList.add('modal-surface-open');
+
+    return () => {
+      openModalSurfaceCount = Math.max(0, openModalSurfaceCount - 1);
+      if (openModalSurfaceCount === 0) {
+        document.body.classList.remove('modal-surface-open');
+      }
+    };
+  }, []);
+
   if (typeof document === 'undefined') {
     return null;
   }
@@ -32,18 +49,19 @@ const ModalSurface: React.FC<ModalSurfaceProps> = ({
   const containerClasses = ['modal-container', containerClassName, isClosing ? 'closing' : '']
     .filter(Boolean)
     .join(' ');
-  const dragRegionClasses = ['modal-window-drag-region', isClosing ? 'closing' : '']
-    .filter(Boolean)
-    .join(' ');
 
   return createPortal(
-    <>
-      <div className={dragRegionClasses} data-modal-drag-region="true" aria-hidden="true" />
+    <div
+      className={overlayClasses}
+      onClick={closeOnBackdrop ? onClose : undefined}
+      data-modal-surface="true"
+    >
       <div
-        className={overlayClasses}
-        onClick={closeOnBackdrop ? onClose : undefined}
-        data-modal-surface="true"
-      >
+        className="modal-window-drag-region"
+        aria-hidden="true"
+        onClick={(event) => event.stopPropagation()}
+      />
+      <div className="modal-backdrop">
         <div
           ref={modalRef}
           className={containerClasses}
@@ -56,7 +74,7 @@ const ModalSurface: React.FC<ModalSurfaceProps> = ({
           {children}
         </div>
       </div>
-    </>,
+    </div>,
     document.body
   );
 };

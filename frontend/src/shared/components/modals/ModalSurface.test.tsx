@@ -45,13 +45,31 @@ describe('ModalSurface', () => {
     return onClose;
   };
 
-  it('renders a draggable window strip above the modal overlay', async () => {
+  it('marks the body while a modal surface is open', async () => {
     await renderSurface();
 
-    const dragRegion = document.querySelector('.modal-window-drag-region') as HTMLDivElement | null;
+    expect(document.body.classList.contains('modal-surface-open')).toBe(true);
+
+    await act(async () => {
+      root.render(null);
+      await Promise.resolve();
+    });
+
+    expect(document.body.classList.contains('modal-surface-open')).toBe(false);
+  });
+
+  it('renders a Wails drag region inside the active modal surface', async () => {
+    await renderSurface();
+
+    const overlay = document.querySelector('.modal-overlay') as HTMLDivElement | null;
+    const backdrop = document.querySelector('.modal-backdrop') as HTMLDivElement | null;
+    const dragRegion = document.querySelector('.modal-window-drag-region');
+
+    expect(overlay).toBeTruthy();
+    expect(backdrop).toBeTruthy();
     expect(dragRegion).toBeTruthy();
-    expect(dragRegion?.getAttribute('data-modal-drag-region')).toBe('true');
-    expect(dragRegion?.getAttribute('aria-hidden')).toBe('true');
+    expect(dragRegion?.parentElement).toBe(overlay);
+    expect(backdrop?.parentElement).toBe(overlay);
   });
 
   it('does not close on backdrop clicks by default', async () => {
@@ -62,6 +80,19 @@ describe('ModalSurface', () => {
 
     act(() => {
       overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('does not close backdrop-close modals from the drag region', async () => {
+    const onClose = await renderSurface(vi.fn(), true);
+
+    const dragRegion = document.querySelector('.modal-window-drag-region') as HTMLDivElement | null;
+    expect(dragRegion).toBeTruthy();
+
+    act(() => {
+      dragRegion?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(onClose).not.toHaveBeenCalled();

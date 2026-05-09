@@ -35,11 +35,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle }) => {
     event.preventDefault();
     onActivate();
   };
+  const isModalOpen = () =>
+    typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
+
+  const handleHeaderDoubleClick = () => {
+    if (!isModalOpen()) {
+      WindowToggleMaximise();
+    }
+  };
 
   return (
     <div
       className={`app-header${isMac ? ' app-header--mac' : ''}`}
-      onDoubleClick={() => WindowToggleMaximise()}
+      onDoubleClick={handleHeaderDoubleClick}
       data-app-region="header"
     >
       <div className="app-header-center">

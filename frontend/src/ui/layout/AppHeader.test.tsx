@@ -6,6 +6,9 @@ import AppHeader from './AppHeader';
 const viewStateMock = vi.hoisted(() => ({
   setIsSettingsOpen: vi.fn(),
 }));
+const runtimeMock = vi.hoisted(() => ({
+  WindowToggleMaximise: vi.fn(),
+}));
 
 vi.mock('@core/contexts/ViewStateContext', () => ({
   useViewState: () => viewStateMock,
@@ -35,7 +38,7 @@ vi.mock('@wailsjs/runtime/runtime', async () => {
   const actual = await vi.importActual<object>('@wailsjs/runtime/runtime');
   return {
     ...actual,
-    WindowToggleMaximise: vi.fn(),
+    WindowToggleMaximise: runtimeMock.WindowToggleMaximise,
   };
 });
 
@@ -48,6 +51,7 @@ describe('AppHeader', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     viewStateMock.setIsSettingsOpen.mockReset();
+    runtimeMock.WindowToggleMaximise.mockReset();
   });
 
   afterEach(() => {
@@ -55,6 +59,7 @@ describe('AppHeader', () => {
       root.unmount();
     });
     container.remove();
+    document.body.classList.remove('modal-surface-open');
   });
 
   it('renders header controls in the expected tab order', () => {
@@ -71,5 +76,19 @@ describe('AppHeader', () => {
     expect(
       focusables.map((element) => element.getAttribute('aria-label') || element.textContent)
     ).toEqual(['Kubeconfig', 'Favorites', 'Settings']);
+  });
+
+  it('does not toggle maximise from the header while a modal is open', () => {
+    document.body.classList.add('modal-surface-open');
+    act(() => {
+      root.render(<AppHeader contentTitle="cluster: dev" />);
+    });
+
+    const header = container.querySelector('.app-header') as HTMLDivElement;
+    act(() => {
+      header.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
+
+    expect(runtimeMock.WindowToggleMaximise).not.toHaveBeenCalled();
   });
 });
