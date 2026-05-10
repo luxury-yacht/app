@@ -1,6 +1,42 @@
 # TODO
 
 - Restarting deployment does not show 2/3 in the table
+- Fix the warning badge color in Events
+- Remove the spinner arrows from numeric text inputs
+  - Or, make them more useful, better looking
+- All modals should have the same header look as new settings
+  - Find appropriate icons
+    - Confirmation
+    - Diff
+    - Log settings
+    - Rollback
+    - Drain Node
+    - Favorites
+    - Port Forward
+    - Shortcut Keys
+- Window control icons are a bit blocky
+- Icon audit, make sure all fit a common style
+  - Make sure all icons are in the same file
+  - Panel (ctrl-alt-i) that shows all icons for quick comparison
+- Debug panels are too easy to forget about, need a ref somewhere
+  - Debug menu only available in dev mode?
+  - Move app logs & deb ug to this menu?
+  - Browser console?
+- Settings
+  - Style the mode buttons
+    - Explain that every theme can have light/dark modes
+  - Style the panel position buttons
+  - Split the Reset Views and Factory Reset buttons
+    - Style Factory Reset with warn colors
+  - Short names customization list?
+  - Directory list and Theme list should have similar styles
+  - Collapse Panel settings and short names into Display?
+  - Display options
+    - Allow namespaces to open at the same time in the sidebar
+    - Dim namespaces without workloads
+  - Favorites management in Settings?
+  - Setting to show Debug menu? Requires restart?
+- Map view -- max default zoom when object count is low
 
 ## Feature Ideas
 
