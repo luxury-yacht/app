@@ -11,7 +11,7 @@ import './BrowseView.css';
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import GridTableLayout from '@shared/components/tables/GridTableLayout';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { FavoriteOutlineIcon, FavoriteFilledIcon } from '@shared/components/icons/MenuIcons';
+import { FavoriteOutlineIcon, FavoriteFilledIcon } from '@shared/components/icons/FavoriteIcons';
 import { KeyboardProviderDecorator } from '../../../../.storybook/decorators/KeyboardProviderDecorator';
 
 // Column widths matching the real BrowseView (from useBrowseColumns.tsx)

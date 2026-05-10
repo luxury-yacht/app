@@ -13,7 +13,7 @@ import SessionsStatus from '@ui/status/SessionsStatus';
 import FavMenuDropdown from '@ui/favorites/FavMenuDropdown';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { WindowToggleMaximise } from '@wailsjs/runtime/runtime';
-import { SettingsIcon } from '@shared/components/icons/MenuIcons';
+import { SettingsIcon } from '@shared/components/icons/SharedIcons';
 import { isMacPlatform } from '@/utils/platform';
 import './AppHeader.css';
 

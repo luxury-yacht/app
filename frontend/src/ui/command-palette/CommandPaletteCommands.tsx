@@ -12,8 +12,6 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useFavorites } from '@core/contexts/FavoritesContext';
 import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
 import {
-  FavoriteGenericIcon,
-  FavoritePinIcon,
   SettingsIcon,
   CollapseSidebarIcon,
   ExpandSidebarIcon,
@@ -24,8 +22,9 @@ import {
   DiagnosticsIcon,
   DiffIcon,
   LogsIcon,
-  AppearanceModeIcon,
-} from '@shared/components/icons/MenuIcons';
+} from '@shared/components/icons/SharedIcons';
+import { FavoriteGenericIcon, FavoritePinIcon } from '@shared/components/icons/FavoriteIcons';
+import { AppearanceModeIcon } from '@shared/components/icons/SettingsIcons';
 import { useAppearanceMode } from '@core/contexts/AppearanceModeContext';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { requestContextRefresh } from '@/core/data-access';

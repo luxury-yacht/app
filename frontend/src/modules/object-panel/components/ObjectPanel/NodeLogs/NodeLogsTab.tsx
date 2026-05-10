@@ -24,7 +24,7 @@ import {
   RegexSearchIcon,
   WrapTextIcon,
 } from '@shared/components/icons/LogIcons';
-import { CaseSensitiveIcon } from '@shared/components/icons/MenuIcons';
+import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
 import type { LogDisplayMode, CapabilityState } from '../types';
 import { containsAnsi, parseAnsiTextSegments, stripAnsi } from '../Logs/ansi';
 import {

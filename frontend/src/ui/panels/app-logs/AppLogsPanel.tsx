@@ -15,7 +15,7 @@ import { DockablePanel } from '@ui/dockable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
-import { DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import { readAppLogs, readAppLogsSince } from '@/core/app-state-access';
 import { subscribeAppLogsAdded, type AppLogsAddedEvent } from '@/core/logging/appLogsClient';
 import './AppLogsPanel.css';

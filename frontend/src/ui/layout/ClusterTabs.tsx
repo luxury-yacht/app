@@ -20,7 +20,7 @@ import {
 } from '@core/persistence/clusterTabOrder';
 import { StopClusterPortForwards, StopClusterShellSessions } from '@wailsjs/go/backend/App';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import { CloseIcon } from '@shared/components/icons/MenuIcons';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import { Tabs, type TabDescriptor } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
 import { readClusterPortForwardCount, requestAppState } from '@/core/app-state-access';

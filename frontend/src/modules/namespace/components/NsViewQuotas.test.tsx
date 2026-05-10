@@ -139,7 +139,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   default: ({ children }: any) => children,
 }));
 
-vi.mock('@shared/components/icons/MenuIcons', () => ({
+vi.mock('@shared/components/icons/SharedIcons', () => ({
   DiffIcon: () => <span>diff</span>,
   OpenIcon: () => <span>open</span>,
   DeleteIcon: () => <span>delete</span>,

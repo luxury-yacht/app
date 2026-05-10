@@ -35,7 +35,7 @@ import { applyAccentColor, applyAccentBg } from '@utils/accentColor';
 import { applyLinkColor } from '@utils/linkColor';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import SegmentedButton from '@shared/components/SegmentedButton';
-import { EditIcon, DeleteIcon, CheckIcon, CloseIcon } from '@shared/components/icons/MenuIcons';
+import { EditIcon, DeleteIcon, CheckIcon, CloseIcon } from '@shared/components/icons/SharedIcons';
 
 const DEFAULT_THEME_ID = 'default';
 

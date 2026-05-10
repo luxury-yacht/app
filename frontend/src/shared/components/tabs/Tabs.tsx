@@ -18,6 +18,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react';
+import { TabOverflowIcon } from '@shared/components/icons/SharedIcons';
 
 export interface TabDescriptor {
   id: string;
@@ -433,14 +434,7 @@ export function Tabs({
           disabled={atStart}
           onClick={() => scrollToNextTab(-1)}
         >
-          <svg
-            className="tab-strip__overflow-icon"
-            viewBox="0 0 12 12"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path d="M7.5 2.5L4.5 6L7.5 9.5" stroke="currentColor" strokeWidth="1.6" />
-          </svg>
+          <TabOverflowIcon direction="left" />
         </button>
       )}
       {tabs.map((tab, index) => {
@@ -511,14 +505,7 @@ export function Tabs({
           disabled={atEnd}
           onClick={() => scrollToNextTab(1)}
         >
-          <svg
-            className="tab-strip__overflow-icon"
-            viewBox="0 0 12 12"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path d="M4.5 2.5L7.5 6L4.5 9.5" stroke="currentColor" strokeWidth="1.6" />
-          </svg>
+          <TabOverflowIcon direction="right" />
         </button>
       )}
     </div>

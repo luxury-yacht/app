@@ -25,7 +25,7 @@ import {
   CategoryIcon,
   NamespaceIcon,
   NamespaceOpenIcon,
-} from '@shared/components/icons/MenuIcons';
+} from '@shared/components/icons/SharedIcons';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
 import { isMacPlatform } from '@/utils/platform';
 import type { CatalogNamespaceGroup } from '@/core/refresh/types';

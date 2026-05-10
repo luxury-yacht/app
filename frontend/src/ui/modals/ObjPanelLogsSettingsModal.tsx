@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
-import { CloseIcon } from '@shared/components/icons/MenuIcons';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import ObjPanelLogsSettings from '@modules/object-panel/components/ObjectPanel/Logs/ObjPanelLogsSettings';
 import './ObjPanelLogsSettingsModal.css';
 

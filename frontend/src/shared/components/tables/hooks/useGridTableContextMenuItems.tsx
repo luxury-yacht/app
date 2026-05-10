@@ -7,7 +7,7 @@
 
 import { useCallback } from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { SortAscIcon, SortDescIcon } from '@shared/components/icons/MenuIcons';
+import { SortAscIcon, SortDescIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
 

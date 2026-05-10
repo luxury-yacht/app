@@ -59,7 +59,7 @@ import {
 } from '@shared/components/tables/GridTable.utils';
 import ContextMenu from '@shared/components/ContextMenu';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { SortAscIcon, SortDescIcon } from '@shared/components/icons/MenuIcons';
+import { SortAscIcon, SortDescIcon } from '@shared/components/icons/SharedIcons';
 
 // ---------------------------------------------------------------------------
 // Selectors / constants consumed only by the controller

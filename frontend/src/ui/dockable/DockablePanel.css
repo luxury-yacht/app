@@ -198,7 +198,7 @@
   bottom: 0;
   width: 10px;
   cursor:
-    url("../../assets/cursors/ew-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
     col-resize;
 }
 
@@ -224,7 +224,7 @@
   top: -5px;
   height: 10px;
   cursor:
-    url("../../assets/cursors/ns-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/ns-resize.svg") 12 12,
     row-resize;
 }
 
@@ -258,7 +258,7 @@
   right: 0;
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
-    url("../../assets/cursors/ns-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/ns-resize.svg") 12 12,
     row-resize;
 }
 
@@ -268,7 +268,7 @@
   right: 0;
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
-    url("../../assets/cursors/ns-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/ns-resize.svg") 12 12,
     row-resize;
 }
 
@@ -278,7 +278,7 @@
   bottom: 0;
   width: var(--dockable-panel-floating-resize-zone);
   cursor:
-    url("../../assets/cursors/ew-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
     col-resize;
 }
 
@@ -288,7 +288,7 @@
   bottom: 0;
   width: var(--dockable-panel-floating-resize-zone);
   cursor:
-    url("../../assets/cursors/ew-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
     col-resize;
 }
 
@@ -298,7 +298,7 @@
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
-    url("../../assets/cursors/nwse-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/nwse-resize.svg") 12 12,
     nwse-resize;
 }
 
@@ -308,7 +308,7 @@
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
-    url("../../assets/cursors/nesw-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/nesw-resize.svg") 12 12,
     nesw-resize;
 }
 
@@ -318,7 +318,7 @@
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
-    url("../../assets/cursors/nesw-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/nesw-resize.svg") 12 12,
     nesw-resize;
 }
 
@@ -328,7 +328,7 @@
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
-    url("../../assets/cursors/nwse-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/nwse-resize.svg") 12 12,
     nwse-resize;
 }
 
@@ -372,7 +372,7 @@ body.dockable-panel-resizing-n *,
 body.dockable-panel-resizing-s,
 body.dockable-panel-resizing-s * {
   cursor:
-    url("../../assets/cursors/ns-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/ns-resize.svg") 12 12,
     row-resize !important;
 }
 
@@ -381,7 +381,7 @@ body.dockable-panel-resizing-e *,
 body.dockable-panel-resizing-w,
 body.dockable-panel-resizing-w * {
   cursor:
-    url("../../assets/cursors/ew-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
     col-resize !important;
 }
 
@@ -390,7 +390,7 @@ body.dockable-panel-resizing-nw *,
 body.dockable-panel-resizing-se,
 body.dockable-panel-resizing-se * {
   cursor:
-    url("../../assets/cursors/nwse-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/nwse-resize.svg") 12 12,
     nwse-resize !important;
 }
 
@@ -399,7 +399,7 @@ body.dockable-panel-resizing-ne *,
 body.dockable-panel-resizing-sw,
 body.dockable-panel-resizing-sw * {
   cursor:
-    url("../../assets/cursors/nesw-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/nesw-resize.svg") 12 12,
     nesw-resize !important;
 }
 

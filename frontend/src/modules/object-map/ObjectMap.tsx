@@ -32,18 +32,17 @@ import {
   pruneObjectMapSelectedKinds,
 } from './objectMapVisibleState';
 import { useObjectMapLegendDrag } from './useObjectMapLegendDrag';
+import { CloseIcon, RefreshIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import {
   AutoFitIcon,
-  CloseIcon,
   FitToViewIcon,
   FocusModeIcon,
   LegendIcon,
-  RefreshIcon,
-  ResetFiltersIcon,
+  ObjectMapLegendSwatchIcon,
   ResetZoomIcon,
   ZoomInIcon,
   ZoomOutIcon,
-} from '@shared/components/icons/MenuIcons';
+} from '@shared/components/icons/ObjectMapIcons';
 
 const ObjectMapG6Renderer = React.lazy(() => import('./ObjectMapG6Renderer'));
 
@@ -661,20 +660,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
                     onClick={() => toggleEdgeType(entry.type)}
                     aria-pressed={isEdgeTypeEnabled(entry.type)}
                   >
-                    <svg
-                      className="object-map__legend-swatch"
-                      width={26}
-                      height={6}
-                      aria-hidden="true"
-                    >
-                      <line
-                        x1={0}
-                        y1={3}
-                        x2={26}
-                        y2={3}
-                        className={objectMapEdgeClass(entry.type)}
-                      />
-                    </svg>
+                    <ObjectMapLegendSwatchIcon edgeClassName={objectMapEdgeClass(entry.type)} />
                     <span className="object-map__legend-label">{entry.label}</span>
                   </button>
                 ))}

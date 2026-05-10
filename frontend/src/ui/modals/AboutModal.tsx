@@ -14,7 +14,7 @@ import { backend } from '@wailsjs/go/models';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
-import { CloseIcon } from '@shared/components/icons/MenuIcons';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
 
 interface AboutModalProps {
   isOpen: boolean;

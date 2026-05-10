@@ -8,6 +8,7 @@
  */
 
 import React from 'react';
+import { IconBarSeparatorIcon } from '@shared/components/icons/SharedIcons';
 
 /** A toggle button that switches between on and off states. */
 export interface IconBarToggle {
@@ -60,19 +61,6 @@ interface IconBarProps {
   className?: string;
 }
 
-/** Invisible separator SVG — preserves spacing between button groups. */
-const Separator: React.FC = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 2 16"
-    width={2}
-    height={16}
-    className="icon-bar-separator"
-  >
-    <line x1="1" y1="1" x2="1" y2="15" stroke="currentColor" strokeWidth={1} />
-  </svg>
-);
-
 const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
   const wrapperClass = ['icon-bar', className].filter(Boolean).join(' ');
 
@@ -80,7 +68,7 @@ const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
     <div className={wrapperClass}>
       {items.map((item, index) => {
         if (item.type === 'separator') {
-          return <Separator key={`sep-${index}`} />;
+          return <IconBarSeparatorIcon key={`sep-${index}`} />;
         }
 
         if (item.type === 'toggle') {

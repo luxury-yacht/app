@@ -7,12 +7,14 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import {
-  DeleteIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   FavoriteFilledIcon,
   FavoriteGenericIcon,
   FavoritePinIcon,
-} from '@shared/components/icons/MenuIcons';
+} from '@shared/components/icons/FavoriteIcons';
 import { useFavorites } from '@core/contexts/FavoritesContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -21,46 +23,12 @@ import type { Favorite } from '@/core/persistence/favorites';
 import { navigateToFavorite } from './navigateToFavorite';
 import './FavMenuDropdown.css';
 
-// ---------------------------------------------------------------------------
-// Inline SVG icons — hover-action icons.
-// ---------------------------------------------------------------------------
-
 /** Returns a dashed-circle for generic favorites or a pin for cluster-specific ones. */
 function TypeIcon({ clusterSelection }: { clusterSelection: string }) {
   return (
     <span className="fav-dropdown-type-icon">
       {clusterSelection ? <FavoritePinIcon /> : <FavoriteGenericIcon />}
     </span>
-  );
-}
-
-// Hover action icons (chevron up/down for reordering).
-
-function ChevronUpIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      width={13}
-      height={13}
-    >
-      <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      width={13}
-      height={13}
-    >
-      <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
-    </svg>
   );
 }
 

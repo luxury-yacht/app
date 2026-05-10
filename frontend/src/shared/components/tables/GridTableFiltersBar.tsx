@@ -16,7 +16,7 @@ import type {
 } from '@shared/components/tables/GridTable.types';
 import { useSearchShortcutTarget } from '@ui/shortcuts';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/MenuIcons';
+import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 
 interface GridTableFiltersBarProps {
   activeFilters: GridTableFilterState;

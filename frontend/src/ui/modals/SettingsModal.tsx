@@ -10,15 +10,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { backend } from '@wailsjs/go/models';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
+import { CloseIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
+import { FloatPanelIcon } from '@shared/components/icons/DockableIcons';
 import {
-  CloseIcon,
-  SettingsIcon,
   AppearanceModeIcon,
   KubeconfigsIcon,
   DisplayIcon,
-  FloatPanelIcon,
   AdvancedIcon,
-} from '@shared/components/icons/MenuIcons';
+} from '@shared/components/icons/SettingsIcons';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import AppearanceSection from '@ui/settings/sections/AppearanceSection';
 import KubeconfigsSection from '@ui/settings/sections/KubeconfigsSection';

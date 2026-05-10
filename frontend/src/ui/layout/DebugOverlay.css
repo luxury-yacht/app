@@ -159,7 +159,7 @@
   width: 18px;
   height: 18px;
   cursor:
-    url("../../assets/cursors/nwse-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/nwse-resize.svg") 12 12,
     nwse-resize;
 }
 

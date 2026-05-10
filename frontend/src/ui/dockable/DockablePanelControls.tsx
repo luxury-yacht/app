@@ -14,14 +14,14 @@
 
 import React from 'react';
 import type { DockPosition } from './useDockablePanelState';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import {
   DockRightIcon,
   DockBottomIcon,
   FloatPanelIcon,
   MaximizePanelIcon,
   RestorePanelIcon,
-  CloseIcon,
-} from '@shared/components/icons/MenuIcons';
+} from '@shared/components/icons/DockableIcons';
 
 interface DockablePanelControlsProps {
   position: DockPosition;

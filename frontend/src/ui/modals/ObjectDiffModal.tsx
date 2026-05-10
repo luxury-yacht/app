@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ObjectDiffModal.css';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
-import { CloseIcon } from '@shared/components/icons/MenuIcons';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';

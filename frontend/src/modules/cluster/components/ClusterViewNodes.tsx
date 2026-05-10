@@ -34,7 +34,7 @@ import {
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import { DrainIcon } from '@shared/components/icons/MenuIcons';
+import { DrainIcon } from '@shared/components/icons/SharedIcons';
 
 // Define props for NodesViewGrid component
 interface NodesViewProps {

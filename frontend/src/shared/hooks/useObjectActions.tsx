@@ -12,13 +12,13 @@ import {
   DeleteIcon,
   DiffIcon,
   DrainIcon,
-  ObjectMapIcon,
   OpenIcon,
   PortForwardIcon,
   RestartIcon,
   RollbackIcon,
   ScaleIcon,
-} from '@shared/components/icons/MenuIcons';
+} from '@shared/components/icons/SharedIcons';
+import { ObjectMapIcon } from '@shared/components/icons/ObjectMapIcons';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectDiffSelection } from '@shared/components/diff/objectDiffSelection';
 import {

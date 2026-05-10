@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { CloseIcon } from '@shared/components/icons/MenuIcons';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import Tooltip from '@shared/components/Tooltip';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';

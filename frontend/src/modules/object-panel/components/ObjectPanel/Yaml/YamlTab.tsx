@@ -11,7 +11,7 @@ import * as YAML from 'yaml';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
-import { CaseSensitiveIcon, CloseIcon } from '@shared/components/icons/MenuIcons';
+import { CaseSensitiveIcon, CloseIcon } from '@shared/components/icons/SharedIcons';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
 import { deriveCopyText } from '@ui/shortcuts/context';
@@ -67,7 +67,7 @@ import {
   YamlNextIcon,
   YamlPreviousIcon,
   YamlSaveIcon,
-} from './YamlTabIcons';
+} from '@shared/components/icons/YamlIcons';
 
 export type { YamlTabProps } from './yamlTabTypes';
 

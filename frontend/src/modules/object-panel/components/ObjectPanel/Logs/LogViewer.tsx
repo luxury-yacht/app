@@ -37,7 +37,7 @@ import {
   RegexSearchIcon,
 } from '@shared/components/icons/LogIcons';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/MenuIcons';
+import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { eventBus } from '@/core/events';

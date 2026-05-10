@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { FavoriteOutlineIcon, FavoriteFilledIcon } from '@shared/components/icons/MenuIcons';
+import { FavoriteOutlineIcon, FavoriteFilledIcon } from '@shared/components/icons/FavoriteIcons';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { useFavorites } from '@core/contexts/FavoritesContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';

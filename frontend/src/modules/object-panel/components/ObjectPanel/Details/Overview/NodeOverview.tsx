@@ -9,7 +9,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
-import { DrainIcon } from '@shared/components/icons/MenuIcons';
+import { DrainIcon } from '@shared/components/icons/SharedIcons';
 import './shared/OverviewBlocks.css';
 import './NodeOverview.css';
 

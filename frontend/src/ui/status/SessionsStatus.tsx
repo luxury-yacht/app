@@ -9,7 +9,13 @@ import { StopPortForward } from '@wailsjs/go/backend/App';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { errorHandler } from '@utils/errorHandler';
 import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
-import { CloseIcon, OpenIcon, RestartIcon } from '@shared/components/icons/MenuIcons';
+import {
+  CloseIcon,
+  OpenIcon,
+  RestartIcon,
+  StatusDotIcon,
+  StopSquareIcon,
+} from '@shared/components/icons/SharedIcons';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
@@ -89,9 +95,7 @@ function renderPortForwardStatusIcon(status: string) {
     case 'active':
       return (
         <span className="pf-status-icon pf-status-active" aria-hidden="true">
-          <svg viewBox="0 0 12 12" fill="currentColor" width="12" height="12">
-            <circle cx="6" cy="6" r="4" />
-          </svg>
+          <StatusDotIcon />
         </span>
       );
     case 'reconnecting':
@@ -109,20 +113,10 @@ function renderPortForwardStatusIcon(status: string) {
     default:
       return (
         <span className="pf-status-icon pf-status-unknown" aria-hidden="true">
-          <svg viewBox="0 0 12 12" fill="none" width="12" height="12">
-            <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.5" />
-          </svg>
+          <StatusDotIcon outlined />
         </span>
       );
   }
-}
-
-function StopSquareIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16" aria-hidden="true">
-      <rect x="4" y="4" width="8" height="8" rx="1.2" />
-    </svg>
-  );
 }
 
 const SessionsStatus: React.FC = () => {

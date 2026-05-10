@@ -305,7 +305,7 @@
   width: 4px;
   background-color: var(--color-bg-secondary);
   cursor:
-    url("../../assets/cursors/ew-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
     col-resize;
   position: relative;
   transition: background var(--transition-fast);
@@ -320,7 +320,7 @@
 body.sidebar-resizing,
 body.sidebar-resizing * {
   cursor:
-    url("../../assets/cursors/ew-resize.svg") 12 12,
+    url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
     col-resize !important;
   user-select: none !important;
 }

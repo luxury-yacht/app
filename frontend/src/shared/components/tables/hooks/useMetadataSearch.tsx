@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useMemo } from 'react';
-import { MetadataIcon } from '@shared/components/icons/MenuIcons';
+import { MetadataIcon } from '@shared/components/icons/SharedIcons';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
 

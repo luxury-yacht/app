@@ -1,16 +1,17 @@
 /**
- * frontend/src/shared/components/icons/MenuIcons.tsx
+ * frontend/src/shared/components/icons/SharedIcons.tsx
  *
- * UI component for MenuIcons.
- * Handles rendering and interactions for the shared components.
+ * Shared SVG icon components used across multiple UI areas.
  */
 
 import React from 'react';
 
-interface IconProps {
-  width?: number;
-  height?: number;
+export interface IconProps {
+  width?: number | string;
+  height?: number | string;
   fill?: string;
+  className?: string;
+  ariaHidden?: boolean;
 }
 
 export const CordonIcon: React.FC<IconProps> = ({
@@ -320,86 +321,6 @@ export const ExpandSidebarIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const DockRightIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
-  fill = 'currentColor',
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M21 3C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H21ZM20 5H4V19H20V5ZM18 7V17H16V7H18Z" />
-  </svg>
-);
-
-export const DockBottomIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
-  fill = 'currentColor',
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M21 3C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H21ZM20 5H4V19H20V5ZM18 15V17H6V15H18Z" />
-  </svg>
-);
-
-export const FloatPanelIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
-  fill = 'currentColor',
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M3 3H21C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3ZM20 10H4V19H20V10ZM5 6V8H7V6H5ZM9 6V8H11V6H9Z" />
-  </svg>
-);
-
-export const MaximizePanelIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
-  fill = 'currentColor',
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M8 3V5H4V9H2V3H8ZM2 21V15H4V19H8V21H2ZM22 21H16V19H20V15H22V21ZM22 9H20V5H16V3H22V9Z" />
-  </svg>
-);
-
-export const RestorePanelIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
-  fill = 'currentColor',
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M18 7H22V9H16V3H18V7ZM8 9H2V7H6V3H8V9ZM18 17V21H16V15H22V17H18ZM8 15V21H6V17H2V15H8Z" />
-  </svg>
-);
-
 export const ClusterOverviewIcon: React.FC<IconProps> = ({
   width = 16,
   height = 16,
@@ -524,70 +445,6 @@ export const ResetFiltersIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const FavoriteOutlineIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
-  fill = 'currentColor',
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="m12 21l-1.45-1.3q-2.525-2.275-4.175-3.925T3.75 12.812T2.388 10.4T2 8.15Q2 5.8 3.575 4.225T7.5 2.65q1.3 0 2.475.55T12 4.75q.85-1 2.025-1.55t2.475-.55q2.35 0 3.925 1.575T22 8.15q0 1.15-.387 2.25t-1.363 2.412t-2.625 2.963T13.45 19.7zm0-2.7q2.4-2.15 3.95-3.687t2.45-2.675t1.25-2.026T20 8.15q0-1.5-1-2.5t-2.5-1q-1.175 0-2.175.662T12.95 7h-1.9q-.375-1.025-1.375-1.687T7.5 4.65q-1.5 0-2.5 1t-1 2.5q0 .875.35 1.763t1.25 2.025t2.45 2.675T12 18.3m0-6.825" />
-  </svg>
-);
-
-export const FavoriteFilledIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
-  fill = 'currentColor',
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 32 32"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M22.5 4c-2 0-3.9.8-5.3 2.2L16 7.4l-1.1-1.1c-2.9-3-7.7-3-10.6-.1l-.1.1c-3 3-3 7.8 0 10.8L16 29l11.8-11.9c3-3 3-7.8 0-10.8C26.4 4.8 24.5 4 22.5 4" />
-  </svg>
-);
-
-export const FavoriteGenericIcon: React.FC<IconProps> = ({ width = 14, height = 14 }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    width={width}
-    height={height}
-  >
-    <circle
-      cx="12"
-      cy="12"
-      r="10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeDasharray="4 3"
-    />
-  </svg>
-);
-
-export const FavoritePinIcon: React.FC<IconProps> = ({ width = 14, height = 14 }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    width={width}
-    height={height}
-  >
-    <path d="M17 4a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2.5L5.5 8 4 9.5V12h7v8l1 1 1-1v-8h7V9.5L18.5 8 17 6.5V4z" />
-  </svg>
-);
-
 // Checkmark icon for confirm/save actions on inline rows.
 export const CheckIcon: React.FC<IconProps> = ({
   width = 16,
@@ -619,73 +476,6 @@ export const EditIcon: React.FC<IconProps> = ({
     height={height}
   >
     <path d="M6.41421 15.89L16.5563 5.74785L15.1421 4.33363L5 14.4758V15.89H6.41421ZM7.24264 17.89H3V13.6473L14.435 2.21231C14.8256 1.82179 15.4587 1.82179 15.8492 2.21231L18.6777 5.04074C19.0682 5.43126 19.0682 6.06443 18.6777 6.45495L7.24264 17.89ZM3 19.89H21V21.89H3V19.89Z" />
-  </svg>
-);
-
-// Funnel/filter icon for the Kubeconfigs settings tab.
-export const KubeconfigsIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
-  fill = 'currentColor',
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M21 4V6L14 14V21H10V14L3 6V4H21ZM5.4254 6L12 13.5114L18.5746 6H5.4254Z" />
-  </svg>
-);
-
-// Monitor icon for the Display settings tab.
-export const DisplayIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
-  fill = 'currentColor',
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M13 18V20H17V22H7V20H11V18H3.00094C2.4485 18 2 17.5551 2 17.0066V3.9934C2 3.44476 2.45531 3 2.9918 3H21.0082C21.556 3 22 3.44495 22 3.9934V17.0066C22 17.5552 21.5447 18 21.0091 18H13ZM4 5V16H20V5H4Z" />
-  </svg>
-);
-
-// Sliders icon for the Advanced settings tab.
-export const AdvancedIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
-  fill = 'currentColor',
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M17 16V18H22V20H17V22H15V20H2V18H15V16H17ZM7 10V12H2V14H7V16H9V10H7ZM22 12V14H11V12H22ZM17 4V6H22V8H17V10H15V4H17ZM2 6H13V8H2V6Z" />
-  </svg>
-);
-
-export const AppearanceModeIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
-  fill = 'currentColor',
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2S2 6.477 2 12s4.477 10 10 10m0-2V4a8 8 0 1 1 0 16" />
   </svg>
 );
 
@@ -774,145 +564,180 @@ export const RefreshIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) =>
   </svg>
 );
 
-export const ObjectMapIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const ModalCloseIcon: React.FC<IconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+  ariaHidden,
+}) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
+    strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
-    strokeWidth={2}
     width={width}
     height={height}
+    className={className}
+    aria-hidden={ariaHidden}
   >
-    <circle cx="5" cy="12" r="2" />
-    <circle cx="19" cy="6" r="2" />
-    <circle cx="19" cy="18" r="2" />
-    <path d="M7 12h4m0 0 6-6m-6 6 6 6" />
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
   </svg>
 );
 
-// Placeholder zoom/legend/fit icons for the object-map toolbar.
-// Replace with project-standard SVGs when available.
+export const IconBarSeparatorIcon: React.FC<IconProps> = ({
+  width = 2,
+  height = 16,
+  className = 'icon-bar-separator',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 2 16"
+    width={width}
+    height={height}
+    className={className}
+  >
+    <line x1="1" y1="1" x2="1" y2="15" stroke="currentColor" strokeWidth={1} />
+  </svg>
+);
 
-export const ZoomInIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const WarningTriangleIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  fill = 'currentColor',
+  className,
+  ariaHidden,
+}) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth={2}
+    fill={fill}
     width={width}
     height={height}
+    className={className}
+    aria-hidden={ariaHidden}
   >
-    <circle cx="10.1" cy="10.1" r="8" />
-    <line x1="21.9" y1="21.9" x2="16.3" y2="16.3" />
-    <line x1="13.1" y1="10.1" x2="7.1" y2="10.1" />
-    <line x1="10" y1="13" x2="10" y2="7" />
+    <path d="M12 2L1 21H23L12 2ZM13 18H11V16H13V18ZM13 14H11V9H13V14Z" />
   </svg>
 );
 
-export const ZoomOutIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const WarningOutlineIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  className,
+  ariaHidden,
+}) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
+    width={width}
+    height={height}
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth={2}
-    width={width}
-    height={height}
+    strokeWidth="2"
+    className={className}
+    aria-hidden={ariaHidden}
   >
-    <circle cx="10.1" cy="10.1" r="8" />
-    <line x1="21.9" y1="21.9" x2="16.3" y2="16.3" />
-    <line x1="13.1" y1="10.1" x2="7.1" y2="10.1" />
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
   </svg>
 );
 
-export const ResetZoomIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
+export const ShortcutArrowIcon: React.FC<
+  IconProps & { direction: 'left' | 'right' | 'up' | 'down' }
+> = ({ width = 14, height = 14, direction }) => {
+  const path = {
+    left: 'M9.5 2.5L5 7l4.5 4.5',
+    right: 'M4.5 2.5L9 7l-4.5 4.5',
+    up: 'M2.5 9.5L7 5l4.5 4.5',
+    down: 'M2.5 4.5L7 9l4.5-4.5',
+  }[direction];
+
+  return (
+    <svg width={width} height={height} viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+      <path
+        d={path}
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  );
+};
+
+export const TabOverflowIcon: React.FC<IconProps & { direction: 'left' | 'right' }> = ({
+  direction,
+  className = 'tab-strip__overflow-icon',
+}) => (
+  <svg className={className} viewBox="0 0 12 12" fill="none" aria-hidden="true">
+    <path
+      d={direction === 'left' ? 'M7.5 2.5L4.5 6L7.5 9.5' : 'M4.5 2.5L7.5 6L4.5 9.5'}
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+  </svg>
+);
+
+export const TooltipInfoIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  className = 'tooltip-info-icon',
+}) => (
   <svg
+    className={className}
     xmlns="http://www.w3.org/2000/svg"
+    width={width}
+    height={height}
     viewBox="0 0 20 20"
-    fill="currentColor"
-    width={width}
-    height={height}
   >
-    <path d="M6.76287 7.07467C6.91027 7.16578 7 7.32671 7 7.5V12.5C7 12.7761 6.77614 13 6.5 13C6.22386 13 6 12.7761 6 12.5V8.30902L5.72361 8.44721C5.47662 8.57071 5.17628 8.4706 5.05279 8.22361C4.92929 7.97662 5.0294 7.67628 5.27639 7.55279L6.27639 7.05279C6.43139 6.97529 6.61546 6.98357 6.76287 7.07467ZM14 7.5C14 7.32671 13.9103 7.16578 13.7629 7.07467C13.6155 6.98357 13.4314 6.97529 13.2764 7.05279L12.2764 7.55279C12.0294 7.67628 11.9293 7.97662 12.0528 8.22361C12.1763 8.4706 12.4766 8.57071 12.7236 8.44721L13 8.30902V12.5C13 12.7761 13.2239 13 13.5 13C13.7761 13 14 12.7761 14 12.5V7.5ZM10 8.5C10 8.77614 9.77614 9 9.5 9C9.22386 9 9 8.77614 9 8.5C9 8.22386 9.22386 8 9.5 8C9.77614 8 10 8.22386 10 8.5ZM9.5 12C9.77614 12 10 11.7761 10 11.5C10 11.2239 9.77614 11 9.5 11C9.22386 11 9 11.2239 9 11.5C9 11.7761 9.22386 12 9.5 12ZM2 6.75C2 5.23122 3.23122 4 4.75 4H15.25C16.7688 4 18 5.23122 18 6.75V13.25C18 14.7688 16.7688 16 15.25 16H4.75C3.23122 16 2 14.7688 2 13.25V6.75ZM4.75 5C3.7835 5 3 5.7835 3 6.75V13.25C3 14.2165 3.7835 15 4.75 15H15.25C16.2165 15 17 14.2165 17 13.25V6.75C17 5.7835 16.2165 5 15.25 5H4.75Z" />
+    <path
+      fill="currentColor"
+      d="M10 .4C4.697.4.399 4.698.399 10A9.6 9.6 0 0 0 10 19.601c5.301 0 9.6-4.298 9.6-9.601c0-5.302-4.299-9.6-9.6-9.6m.896 3.466c.936 0 1.211.543 1.211 1.164c0 .775-.62 1.492-1.679 1.492c-.886 0-1.308-.445-1.282-1.182c0-.621.519-1.474 1.75-1.474M8.498 15.75c-.64 0-1.107-.389-.66-2.094l.733-3.025c.127-.484.148-.678 0-.678c-.191 0-1.022.334-1.512.664l-.319-.523c1.555-1.299 3.343-2.061 4.108-2.061c.64 0 .746.756.427 1.92l-.84 3.18c-.149.562-.085.756.064.756c.192 0 .82-.232 1.438-.719l.362.486c-1.513 1.512-3.162 2.094-3.801 2.094"
+    />
   </svg>
 );
 
-export const FitToViewIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth={2}
-    width={width}
-    height={height}
-  >
-    <path d="M9 4H4v5" />
-    <path d="M15 4h5v5" />
-    <path d="M20 15v5h-5" />
-    <path d="M4 15v5h5" />
+export const StatusDotIcon: React.FC<IconProps & { outlined?: boolean }> = ({
+  width = 12,
+  height = 12,
+  outlined = false,
+}) => (
+  <svg viewBox="0 0 12 12" fill={outlined ? 'none' : 'currentColor'} width={width} height={height}>
+    <circle
+      cx="6"
+      cy="6"
+      r="4"
+      stroke={outlined ? 'currentColor' : undefined}
+      strokeWidth={outlined ? '1.5' : undefined}
+    />
   </svg>
 );
 
-export const AutoFitIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth={2}
-    width={width}
-    height={height}
-  >
-    <path d="M9 4H4v5" />
-    <path d="M15 4h5v5" />
-    <path d="M20 15v5h-5" />
-    <path d="M4 15v5h5" />
-    <circle cx="12" cy="12" r="2.5" />
+export const StopSquareIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+  <svg viewBox="0 0 16 16" fill="currentColor" width={width} height={height} aria-hidden="true">
+    <rect x="4" y="4" width="8" height="8" rx="1.2" />
   </svg>
 );
 
-export const FocusModeIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const PlusIcon: React.FC<IconProps> = ({
+  width = 12,
+  height = 12,
+  className,
+  ariaHidden,
+}) => (
   <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="4 4 26 26"
-    fill="currentColor"
+    viewBox="0 0 16 16"
     width={width}
     height={height}
+    className={className}
+    aria-hidden={ariaHidden}
   >
-    <path d="M16 18a2 2 0 1 0 0-4a2 2 0 0 0 0 4m-7-2a7 7 0 1 1 14 0a7 7 0 0 1-14 0m7-5a5 5 0 1 0 0 10a5 5 0 0 0 0-10M4 16.001C4 9.373 9.373 4 16.001 4s12.002 5.373 12.002 12.001S22.63 28.003 16 28.003C9.373 28.003 4 22.63 4 16M16.001 6C10.478 6 6 10.478 6 16.001c0 5.524 4.478 10.002 10.001 10.002c5.524 0 10.002-4.478 10.002-10.002C26.003 10.478 21.525 6 16 6" />
-  </svg>
-);
-
-export const LegendIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth={2}
-    width={width}
-    height={height}
-  >
-    <line x1="4" y1="6" x2="9" y2="6" />
-    <line x1="4" y1="12" x2="9" y2="12" />
-    <line x1="4" y1="18" x2="9" y2="18" />
-    <line x1="13" y1="6" x2="20" y2="6" />
-    <line x1="13" y1="12" x2="20" y2="12" />
-    <line x1="13" y1="18" x2="20" y2="18" />
+    <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
 );

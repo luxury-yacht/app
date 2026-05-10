@@ -36,6 +36,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
+import { WarningTriangleIcon } from '@shared/components/icons/SharedIcons';
 
 interface PodsViewProps {
   namespace: string;
@@ -48,22 +49,6 @@ interface PodsViewProps {
 }
 
 const UNHEALTHY_POD_PRESENTATIONS = new Set(['warning', 'error', 'not-ready', 'terminating']);
-
-const UnhealthyPodsIcon: React.FC<{ width?: number; height?: number }> = ({
-  width = 16,
-  height = 16,
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    width={width}
-    height={height}
-    aria-hidden="true"
-  >
-    <path d="M12 2L1 21H23L12 2ZM13 18H11V16H13V18ZM13 14H11V9H13V14Z" />
-  </svg>
-);
 
 const parseReadyCounts = (value?: string | null): { ready: number; total: number } | null => {
   if (!value) {
@@ -492,7 +477,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       return {
         type: 'toggle',
         id: 'pods-unhealthy-toggle',
-        icon: <UnhealthyPodsIcon />,
+        icon: <WarningTriangleIcon ariaHidden />,
         active: activePodFilter !== null,
         onClick: handleToggleUnhealthy,
         title,
