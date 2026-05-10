@@ -5016,6 +5016,20 @@ export namespace types {
 	}
 	
 	
+	export class ThemeClusterPatternValidationResult {
+	    valid: boolean;
+	    message?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ThemeClusterPatternValidationResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.valid = source["valid"];
+	        this.message = source["message"];
+	    }
+	}
 	
 	
 	export class ValidatingWebhookConfigurationDetails {

@@ -45,6 +45,7 @@ import {
   setObjPanelLogsTargetPerScopeLimit,
   setPaletteTint,
   setUseShortResourceNames,
+  validateThemeClusterPattern,
 } from './appPreferences';
 
 const appMocks = vi.hoisted(() => ({
@@ -57,6 +58,7 @@ const appMocks = vi.hoisted(() => ({
   SetObjPanelLogsBufferMaxSize: vi.fn(),
   SetObjPanelLogsTargetPerScopeLimit: vi.fn(),
   SetObjPanelLogsTargetGlobalLimit: vi.fn(),
+  ValidateThemeClusterPattern: vi.fn(),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
@@ -74,6 +76,8 @@ vi.mock('@wailsjs/go/backend/App', () => ({
     appMocks.SetObjPanelLogsTargetPerScopeLimit(...args),
   SetObjPanelLogsTargetGlobalLimit: (...args: unknown[]) =>
     appMocks.SetObjPanelLogsTargetGlobalLimit(...args),
+  ValidateThemeClusterPattern: (...args: unknown[]) =>
+    appMocks.ValidateThemeClusterPattern(...args),
 }));
 
 describe('appPreferences', () => {
@@ -88,6 +92,7 @@ describe('appPreferences', () => {
     appMocks.SetObjPanelLogsBufferMaxSize.mockReset();
     appMocks.SetObjPanelLogsTargetPerScopeLimit.mockReset();
     appMocks.SetObjPanelLogsTargetGlobalLimit.mockReset();
+    appMocks.ValidateThemeClusterPattern.mockReset();
     appMocks.SetObjPanelLogsAPITimestampFormat.mockResolvedValue(undefined);
     appMocks.SetObjPanelLogsAPITimestampUseLocalTimeZone.mockResolvedValue(undefined);
     appMocks.SetMaxTableRows.mockResolvedValue(undefined);
@@ -111,6 +116,19 @@ describe('appPreferences', () => {
         },
       },
     };
+  });
+
+  it('validates theme cluster patterns through the backend', async () => {
+    appMocks.ValidateThemeClusterPattern.mockResolvedValue({
+      valid: false,
+      message: 'Invalid cluster pattern: missing closing bracket.',
+    });
+
+    await expect(validateThemeClusterPattern('prod-[')).resolves.toEqual({
+      valid: false,
+      message: 'Invalid cluster pattern: missing closing bracket.',
+    });
+    expect(appMocks.ValidateThemeClusterPattern).toHaveBeenCalledWith('prod-[');
   });
 
   afterEach(() => {

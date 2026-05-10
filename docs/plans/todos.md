@@ -1,5 +1,7 @@
 # TODO
 
+- Restarting deployment does not show 2/3 in the table
+
 ## Feature Ideas
 
 - In daemonset details, show a "NOT RUNNING ON" label that lists the nodes where the ds is missing

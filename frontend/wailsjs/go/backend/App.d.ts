@@ -336,3 +336,5 @@ export function UpdateMenu():Promise<void>;
 export function ValidateObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
 export function ValidatePortForwardURL(arg1:string):Promise<boolean|string>;
+
+export function ValidateThemeClusterPattern(arg1:string):Promise<types.ThemeClusterPatternValidationResult>;

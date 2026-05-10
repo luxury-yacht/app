@@ -8,6 +8,7 @@ type (
 	AppSettings                           = types.AppSettings
 	AppearanceModeInfo                    = types.AppearanceModeInfo
 	Theme                                 = types.Theme
+	ThemeClusterPatternValidationResult   = types.ThemeClusterPatternValidationResult
 	ContainerLogsEntry                    = types.ContainerLogsEntry
 	ContainerLogsFetchRequest             = types.ContainerLogsFetchRequest
 	ContainerLogsFetchResponse            = types.ContainerLogsFetchResponse

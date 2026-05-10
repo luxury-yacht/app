@@ -146,6 +146,23 @@ func TestSaveTheme_Validation(t *testing.T) {
 	assert.Contains(t, err.Error(), "missing closing bracket")
 }
 
+func TestAppValidateThemeClusterPattern(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	result := app.ValidateThemeClusterPattern("prod-[a-z]*")
+	require.True(t, result.Valid)
+	assert.Empty(t, result.Message)
+
+	result = app.ValidateThemeClusterPattern("prod-[")
+	require.False(t, result.Valid)
+	assert.Equal(t, "Invalid cluster pattern: missing closing bracket.", result.Message)
+
+	result = app.ValidateThemeClusterPattern(`prod-\`)
+	require.False(t, result.Valid)
+	assert.Equal(t, "Invalid cluster pattern: trailing escape.", result.Message)
+}
+
 // TestSaveTheme_DefaultProtectedFields verifies that the default theme can
 // store palette values but cannot be renamed or assigned a pattern.
 func TestSaveTheme_DefaultProtectedFields(t *testing.T) {

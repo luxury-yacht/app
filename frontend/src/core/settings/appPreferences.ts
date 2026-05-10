@@ -12,6 +12,7 @@ import {
   ReorderThemes,
   ApplyTheme,
   MatchThemeForCluster,
+  ValidateThemeClusterPattern,
   SetObjPanelLogsBufferMaxSize as SetObjPanelLogsBufferMaxSizeBackend,
   SetMaxTableRows as SetMaxTableRowsBackend,
   SetObjPanelLogsAPITimestampFormat as SetObjPanelLogsAPITimestampFormatBackend,
@@ -871,6 +872,12 @@ export const getThemes = async (): Promise<types.Theme[]> => {
 // Persists a new or updated theme to the backend.
 export const saveTheme = async (theme: types.Theme): Promise<void> => {
   await SaveTheme(theme);
+};
+
+export const validateThemeClusterPattern = async (
+  pattern: string
+): Promise<types.ThemeClusterPatternValidationResult> => {
+  return ValidateThemeClusterPattern(pattern);
 };
 
 // Deletes a theme by its ID from the backend.

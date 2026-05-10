@@ -89,6 +89,13 @@ type Theme struct {
 	LinkColorDark  string `json:"linkColorDark,omitempty"`  // Hex "#rrggbb" or empty for default
 }
 
+// ThemeClusterPatternValidationResult reports whether a saved theme cluster
+// pattern can be parsed by the app glob matcher.
+type ThemeClusterPatternValidationResult struct {
+	Valid   bool   `json:"valid"`
+	Message string `json:"message,omitempty"`
+}
+
 // ContainerLogsEntry represents a single log line with metadata
 type ContainerLogsEntry struct {
 	Timestamp   string `json:"timestamp"` // RFC3339Nano format

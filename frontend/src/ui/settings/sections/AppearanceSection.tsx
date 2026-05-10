@@ -19,6 +19,7 @@ import {
   setLinkColor as persistLinkColor,
   getThemes,
   saveTheme,
+  validateThemeClusterPattern,
   deleteTheme as deleteThemeApi,
   reorderThemes,
   applyTheme as applyThemeApi,
@@ -39,26 +40,6 @@ import { EditIcon, DeleteIcon, CheckIcon, CloseIcon } from '@shared/components/i
 const DEFAULT_THEME_ID = 'default';
 
 const isDefaultTheme = (theme: types.Theme) => theme.id === DEFAULT_THEME_ID;
-
-const themePatternValidationMessage = (error: unknown): string | null => {
-  const message =
-    error instanceof Error
-      ? error.message
-      : error && typeof error === 'object' && 'message' in error
-        ? String(error.message)
-        : String(error);
-  const lowerMessage = message.toLowerCase();
-  if (!lowerMessage.includes('invalid cluster pattern')) {
-    return null;
-  }
-  if (lowerMessage.includes('missing closing bracket')) {
-    return 'Invalid cluster pattern: missing closing bracket.';
-  }
-  if (lowerMessage.includes('trailing escape')) {
-    return 'Invalid cluster pattern: trailing escape.';
-  }
-  return 'Invalid cluster pattern.';
-};
 
 type PaletteSliderStyle = CSSProperties & {
   '--palette-slider-thumb'?: string;
@@ -368,6 +349,21 @@ function AppearanceSection() {
     }
   };
 
+  const validateThemePatternDraft = async (pattern: string): Promise<boolean> => {
+    setThemePatternError(null);
+    try {
+      const result = await validateThemeClusterPattern(pattern);
+      if (!result.valid) {
+        setThemePatternError(result.message || 'Invalid cluster pattern.');
+        return false;
+      }
+      return true;
+    } catch (error) {
+      errorHandler.handle(error, { action: 'validateThemeClusterPattern' });
+      return false;
+    }
+  };
+
   const handleSaveCurrentAsTheme = () => {
     setThemePatternError(null);
     setEditingThemeId('new');
@@ -394,14 +390,18 @@ function AppearanceSection() {
     if (!existing) return;
     const trimmedName = themeDraft.name.trim();
     if (!trimmedName) return; // Name is required.
-    setThemePatternError(null);
+    const isDefault = existing.id === DEFAULT_THEME_ID;
+    const clusterPattern = isDefault ? '' : themeDraft.clusterPattern.trim();
+
+    if (!isDefault && !(await validateThemePatternDraft(clusterPattern))) {
+      return;
+    }
 
     try {
-      const isDefault = existing.id === DEFAULT_THEME_ID;
       const updated = buildThemeFromCurrentAppearance({
         theme: existing,
         name: isDefault ? existing.name : trimmedName,
-        clusterPattern: isDefault ? '' : themeDraft.clusterPattern.trim(),
+        clusterPattern,
       });
       await saveTheme(updated);
       await reloadThemes();
@@ -410,11 +410,6 @@ function AppearanceSection() {
         setHasUnsavedDefaultThemeChanges(false);
       }
     } catch (error) {
-      const validationMessage = themePatternValidationMessage(error);
-      if (validationMessage) {
-        setThemePatternError(validationMessage);
-        return;
-      }
       errorHandler.handle(error, { action: 'saveTheme' });
     }
   };
@@ -432,25 +427,24 @@ function AppearanceSection() {
 
   const handleThemeSave = async () => {
     if (!themeDraft.name.trim()) return;
-    setThemePatternError(null);
+    const clusterPattern = themeDraft.clusterPattern.trim();
+
+    if (!(await validateThemePatternDraft(clusterPattern))) {
+      return;
+    }
 
     try {
       const newTheme = buildThemeFromCurrentAppearance({
         theme: new types.Theme({
           id: crypto.randomUUID(),
           name: themeDraft.name.trim(),
-          clusterPattern: themeDraft.clusterPattern.trim(),
+          clusterPattern,
         }),
       });
       await saveTheme(newTheme);
       await reloadThemes();
       setEditingThemeId(null);
     } catch (error) {
-      const validationMessage = themePatternValidationMessage(error);
-      if (validationMessage) {
-        setThemePatternError(validationMessage);
-        return;
-      }
       errorHandler.handle(error, { action: 'saveTheme' });
     }
   };

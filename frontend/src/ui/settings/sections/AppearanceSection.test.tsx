@@ -13,6 +13,7 @@ const setInputValue = (input: HTMLInputElement, value: string): void => {
 const appPreferenceMocks = vi.hoisted(() => ({
   getThemes: vi.fn(),
   saveTheme: vi.fn(),
+  validateThemeClusterPattern: vi.fn(),
   getPaletteTint: vi.fn(),
   setPaletteTint: vi.fn(),
   getAccentColor: vi.fn(),
@@ -39,6 +40,8 @@ vi.mock('@/core/settings/appPreferences', () => ({
   setLinkColor: (...args: unknown[]) => appPreferenceMocks.setLinkColor(...args),
   getThemes: (...args: unknown[]) => appPreferenceMocks.getThemes(...args),
   saveTheme: (...args: unknown[]) => appPreferenceMocks.saveTheme(...args),
+  validateThemeClusterPattern: (...args: unknown[]) =>
+    appPreferenceMocks.validateThemeClusterPattern(...args),
   deleteTheme: vi.fn(),
   reorderThemes: vi.fn(),
   applyTheme: vi.fn(),
@@ -86,6 +89,7 @@ describe('AppearanceSection', () => {
       new types.Theme({ id: 'default', name: 'default', clusterPattern: '' }),
     ]);
     appPreferenceMocks.saveTheme.mockResolvedValue(undefined);
+    appPreferenceMocks.validateThemeClusterPattern.mockResolvedValue({ valid: true });
     appPreferenceMocks.getPaletteTint.mockImplementation((mode: string) =>
       mode === 'light'
         ? { hue: 20, saturation: 0, brightness: 0 }
@@ -212,11 +216,10 @@ describe('AppearanceSection', () => {
   });
 
   it('shows invalid theme pattern errors inline instead of using the global error handler', async () => {
-    appPreferenceMocks.saveTheme.mockRejectedValueOnce(
-      new Error(
-        'invalid cluster pattern: invalid theme cluster pattern "prod-[": missing closing bracket'
-      )
-    );
+    appPreferenceMocks.validateThemeClusterPattern.mockResolvedValueOnce({
+      valid: false,
+      message: 'Invalid cluster pattern: missing closing bracket.',
+    });
 
     const newThemeButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === '+ Save new theme'
@@ -250,6 +253,8 @@ describe('AppearanceSection', () => {
 
     expect(container.textContent).toContain('Invalid cluster pattern: missing closing bracket.');
     expect(patternInput!.getAttribute('aria-invalid')).toBe('true');
+    expect(appPreferenceMocks.validateThemeClusterPattern).toHaveBeenCalledWith('prod-[');
+    expect(appPreferenceMocks.saveTheme).not.toHaveBeenCalled();
     expect(errorHandlerMocks.handle).not.toHaveBeenCalled();
 
     await act(async () => {

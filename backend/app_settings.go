@@ -1135,6 +1135,18 @@ func (a *App) GetThemes() ([]Theme, error) {
 	return settings.Preferences.Themes, nil
 }
 
+// ValidateThemeClusterPattern checks whether a theme cluster pattern can be
+// parsed by the app glob matcher without mutating saved settings.
+func (a *App) ValidateThemeClusterPattern(pattern string) ThemeClusterPatternValidationResult {
+	if err := validateThemeClusterPattern(pattern); err != nil {
+		return ThemeClusterPatternValidationResult{
+			Valid:   false,
+			Message: themeClusterPatternValidationMessage(err),
+		}
+	}
+	return ThemeClusterPatternValidationResult{Valid: true}
+}
+
 // SaveTheme creates or updates a theme in the library. If a theme with the
 // same ID exists it is updated in place; otherwise the theme is appended.
 func (a *App) SaveTheme(theme Theme) error {

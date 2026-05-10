@@ -661,3 +661,7 @@ export function ValidateObjectYaml(arg1, arg2) {
 export function ValidatePortForwardURL(arg1) {
   return window['go']['backend']['App']['ValidatePortForwardURL'](arg1);
 }
+
+export function ValidateThemeClusterPattern(arg1) {
+  return window['go']['backend']['App']['ValidateThemeClusterPattern'](arg1);
+}
