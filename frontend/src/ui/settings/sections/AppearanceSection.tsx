@@ -715,7 +715,7 @@ function AppearanceSection() {
           <div className="settings-row-label-help">Match the system or pick a fixed mode.</div>
         </div>
         <div className="settings-row-control">
-          <div className="appearance-mode-buttons" role="group" aria-label="Appearance mode">
+          <div className="settings-choice-buttons" role="group" aria-label="Appearance mode">
             {appearanceModeOptions.map((option) => {
               const Icon = option.icon;
               const isSelected = mode === option.value;
@@ -723,7 +723,7 @@ function AppearanceSection() {
                 <button
                   key={option.value}
                   type="button"
-                  className={`appearance-mode-button${isSelected ? ' appearance-mode-button--active' : ''}`}
+                  className={`settings-choice-button${isSelected ? ' settings-choice-button--active' : ''}`}
                   aria-pressed={isSelected}
                   onClick={() => handleAppearanceModeChange(option.value)}
                 >

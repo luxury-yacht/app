@@ -5,7 +5,7 @@
  * detail panel.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type FC } from 'react';
 import {
   getDefaultObjectPanelPosition,
   setDefaultObjectPanelPosition,
@@ -16,13 +16,21 @@ import {
 } from '@core/settings/appPreferences';
 import { useDockablePanelContext } from '@ui/dockable';
 import { getContentBounds, PANEL_DEFAULTS } from '@ui/dockable/dockablePanelLayout';
-import SegmentedButton from '@shared/components/SegmentedButton';
+import {
+  DockBottomIcon,
+  DockRightIcon,
+  FloatPanelIcon,
+} from '@shared/components/icons/DockableIcons';
 
-const objectPanelPositionOptions: { value: ObjectPanelPosition; label: string }[] = [
-  { value: 'right', label: 'Right' },
-  { value: 'bottom', label: 'Bottom' },
-  { value: 'floating', label: 'Floating' },
-];
+const objectPanelPositionOptions = [
+  { value: 'right', label: 'Right', icon: DockRightIcon },
+  { value: 'bottom', label: 'Bottom', icon: DockBottomIcon },
+  { value: 'floating', label: 'Floating', icon: FloatPanelIcon },
+] satisfies Array<{
+  value: ObjectPanelPosition;
+  label: string;
+  icon: FC<{ width?: number; height?: number; fill?: string }>;
+}>;
 
 function ObjectPanelSection() {
   const { applyLayoutDefaultsAcrossClusters } = useDockablePanelContext();
@@ -128,12 +136,28 @@ function ObjectPanelSection() {
           </div>
         </div>
         <div className="settings-row-control">
-          <SegmentedButton
-            options={objectPanelPositionOptions}
-            value={objectPanelPosition}
-            onChange={handleObjectPanelPositionChange}
-            ariaLabel="Default Object Panel position"
-          />
+          <div
+            className="settings-choice-buttons"
+            role="group"
+            aria-label="Default Object Panel position"
+          >
+            {objectPanelPositionOptions.map((option) => {
+              const Icon = option.icon;
+              const isSelected = objectPanelPosition === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`settings-choice-button${isSelected ? ' settings-choice-button--active' : ''}`}
+                  aria-pressed={isSelected}
+                  onClick={() => handleObjectPanelPositionChange(option.value)}
+                >
+                  <Icon width={18} height={18} />
+                  <span>{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

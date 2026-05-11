@@ -8,7 +8,6 @@
 - Settings
   - Style the mode buttons
     - Explain that every theme can have light/dark modes
-  - Style the panel position buttons
   - Split the Reset Views and Factory Reset buttons
     - Style Factory Reset with warn colors
   - Short names customization list?

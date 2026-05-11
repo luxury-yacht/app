@@ -125,7 +125,7 @@ describe('AppearanceSection', () => {
 
   it('renders styled appearance mode buttons and changes modes', async () => {
     const buttons = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('.appearance-mode-button')
+      container.querySelectorAll<HTMLButtonElement>('.settings-choice-button')
     );
     expect(buttons.map((button) => button.textContent)).toEqual(['System', 'Light', 'Dark']);
 
