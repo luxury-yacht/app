@@ -387,16 +387,14 @@
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-align: center;
+  text-align: left;
   text-transform: uppercase;
 }
 
 .icon-debug-table__sort-button {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 0.25rem;
-  width: 100%;
   padding: 0;
   border: 0;
   background: transparent;

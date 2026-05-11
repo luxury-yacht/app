@@ -27,7 +27,11 @@ import './FavMenuDropdown.css';
 function TypeIcon({ clusterSelection }: { clusterSelection: string }) {
   return (
     <span className="fav-dropdown-type-icon">
-      {clusterSelection ? <FavoritePinIcon /> : <FavoriteGenericIcon />}
+      {clusterSelection ? (
+        <FavoritePinIcon width={16} height={16} />
+      ) : (
+        <FavoriteGenericIcon width={16} height={16} />
+      )}
     </span>
   );
 }
@@ -183,7 +187,7 @@ const FavMenuDropdown: React.FC = () => {
                           if (idx > 0) void moveUp(idx);
                         }}
                       >
-                        <ChevronUpIcon />
+                        <ChevronUpIcon width={14} height={14} />
                       </button>
                       <button
                         className={`fav-dropdown-action-btn${idx === favorites.length - 1 ? ' disabled' : ''}`}
@@ -193,7 +197,7 @@ const FavMenuDropdown: React.FC = () => {
                           if (idx < favorites.length - 1) void moveDown(idx);
                         }}
                       >
-                        <ChevronDownIcon />
+                        <ChevronDownIcon width={14} height={14} />
                       </button>
                       <button
                         className="fav-dropdown-action-btn danger"
@@ -203,7 +207,7 @@ const FavMenuDropdown: React.FC = () => {
                           void handleDelete(fav.id);
                         }}
                       >
-                        <DeleteIcon width={13} height={13} />
+                        <DeleteIcon width={14} height={14} />
                       </button>
                     </span>
                   </div>
