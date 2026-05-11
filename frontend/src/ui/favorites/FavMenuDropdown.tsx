@@ -147,7 +147,7 @@ const FavMenuDropdown: React.FC = () => {
         role="button"
         tabIndex={0}
       >
-        <FavoriteFilledIcon width={18} height={18} />
+        <FavoriteFilledIcon width={16} height={16} />
       </div>
 
       {isOpen && (

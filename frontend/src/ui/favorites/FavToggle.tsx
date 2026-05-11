@@ -271,9 +271,9 @@ export function useFavToggle(state: FavToggleState): {
       type: 'toggle' as const,
       id: 'favorite',
       icon: isFavorited ? (
-        <FavoriteFilledIcon width={20} height={20} />
+        <FavoriteFilledIcon width={18} height={18} />
       ) : (
-        <FavoriteOutlineIcon width={20} height={20} />
+        <FavoriteOutlineIcon width={18} height={18} />
       ),
       active: isFavorited,
       onClick: () => setModalOpen(true),
