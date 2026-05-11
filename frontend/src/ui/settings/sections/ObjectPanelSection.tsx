@@ -145,7 +145,7 @@ function ObjectPanelSection() {
         <div className="settings-row-control">
           <div className="settings-items object-panel-defaults">
             <div className="setting-item setting-item-inline">
-              <span className="opd-field-label">Width</span>
+              <span className="opd-field-label">Right</span>
               <input
                 id="panel-docked-right-width"
                 type="number"
@@ -160,7 +160,7 @@ function ObjectPanelSection() {
                 aria-label="Docked right width"
               />
               <span className="opd-unit-gap">px</span>
-              <span className="opd-field-label">Height</span>
+              <span className="opd-field-label">Bottom</span>
               <input
                 id="panel-docked-bottom-height"
                 type="number"

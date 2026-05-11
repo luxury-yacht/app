@@ -39,7 +39,7 @@
 }
 
 .obj-panel-logs-settings-target-limits input[type="number"] {
-  width: 8ch;
+  width: 6ch;
   padding: var(--spacing-xs) var(--spacing-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);

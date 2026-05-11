@@ -213,7 +213,7 @@
 }
 
 .modal-form-field-inline input[type="number"] {
-  width: 9ch;
+  width: 7ch;
 }
 
 .modal-form-field-inline input[type="text"] {
@@ -239,13 +239,6 @@
 [data-appearance-mode="dark"] .modal-form-field-inline input[type="number"],
 [data-appearance-mode="dark"] .modal-form-field-inline input[type="text"] {
   color-scheme: dark;
-}
-
-.modal-form-field-inline input[type="number"]::-webkit-inner-spin-button,
-.modal-form-field-inline input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: auto;
-  appearance: auto;
-  opacity: 1;
 }
 
 /* ==========================================================================

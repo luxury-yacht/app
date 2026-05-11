@@ -201,12 +201,6 @@
   -moz-appearance: textfield;
 }
 
-.port-forward-input::-webkit-inner-spin-button,
-.port-forward-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
 .port-forward-input:focus {
   outline: none;
   background: var(--color-bg-tertiary);

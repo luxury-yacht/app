@@ -93,7 +93,7 @@
 }
 
 .drain-node-modal-grace input[type="number"] {
-  width: 5rem;
+  width: 3rem;
   padding: var(--spacing-xs) var(--spacing-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);

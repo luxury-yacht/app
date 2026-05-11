@@ -210,11 +210,6 @@ describe('ActionsMenu', () => {
     const input = modal?.querySelector<HTMLInputElement>('#scale-replicas');
     expect(input?.value).toBe('3');
 
-    const plusButton = modal?.querySelectorAll<HTMLButtonElement>('.scale-spinner-btn')[1];
-    act(() => {
-      plusButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
     const onChange = (() => {
       if (!input) {
         return undefined;

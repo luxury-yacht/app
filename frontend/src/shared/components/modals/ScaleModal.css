@@ -49,53 +49,16 @@
   border-color: var(--color-text-secondary);
 }
 
-.scale-spinner-btn {
-  background: transparent;
-  border: none;
-  color: var(--color-text-secondary);
-  font-size: 16px;
-  font-weight: 700;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background-color 0.2s,
-    color 0.2s;
-}
-
-.scale-spinner-btn:hover:not(:disabled) {
-  background: var(--color-bg-tertiary);
-  color: var(--color-text);
-}
-
-.scale-spinner-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
 .scale-modal-body .scale-input {
-  width: 40px;
-  padding: 6px 4px;
+  width: 64px;
+  padding: 6px 8px;
   background: transparent;
   border: none;
-  border-left: 1px solid var(--color-border);
-  border-right: 1px solid var(--color-border);
   color: var(--color-text);
   font-size: 12px;
   text-align: center;
   -moz-appearance: textfield;
   appearance: textfield;
-}
-
-.scale-modal-body .scale-input::-webkit-inner-spin-button,
-.scale-modal-body .scale-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  appearance: none;
-  margin: 0;
 }
 
 .scale-modal-body .scale-input:focus {

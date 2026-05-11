@@ -38,7 +38,7 @@ const ScaleModal = ({
   // Local string state so the user can clear the field while typing.
   const [inputText, setInputText] = useState(String(value));
 
-  // Sync from parent when the external value changes (e.g. spinner buttons).
+  // Sync from parent when the external value changes.
   useEffect(() => {
     setInputText(String(value));
   }, [value]);
@@ -68,11 +68,6 @@ const ScaleModal = ({
   if (!isOpen) {
     return null;
   }
-
-  const handleIncrement = (delta: number) => {
-    const newValue = Math.max(0, Math.min(9999, value + delta));
-    onValueChange(newValue);
-  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Strip non-digit characters so letters are silently ignored.
@@ -122,15 +117,6 @@ const ScaleModal = ({
             Replicas:
           </label>
           <div className="scale-input-group">
-            <button
-              className="scale-spinner-btn"
-              type="button"
-              tabIndex={-1}
-              onClick={() => handleIncrement(-1)}
-              disabled={value === 0 || loading}
-            >
-              −
-            </button>
             <input
               id="scale-replicas"
               type="text"
@@ -144,15 +130,6 @@ const ScaleModal = ({
               className="scale-input"
               disabled={loading}
             />
-            <button
-              className="scale-spinner-btn"
-              type="button"
-              tabIndex={-1}
-              onClick={() => handleIncrement(1)}
-              disabled={value >= 9999 || loading}
-            >
-              +
-            </button>
           </div>
         </div>
       </div>
