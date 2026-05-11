@@ -34,6 +34,8 @@ interface MapTabProps {
 }
 
 const isLoadingState = (status: string): boolean =>
+  status === 'idle' || status === 'loading' || status === 'initialising' || status === 'updating';
+const isRefreshingState = (status: string): boolean =>
   status === 'loading' || status === 'initialising' || status === 'updating';
 
 const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
@@ -83,8 +85,9 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
   }, [fetchMap, isActive, objectData, mapScope]);
 
   const payload = snapshot.data as ObjectMapSnapshotPayload | null;
-  const loading = isLoadingState(snapshot.status) && !payload;
-  const refreshing = isLoadingState(snapshot.status) && snapshot.isManual === true;
+  const loading =
+    Boolean(isActive && objectData && mapScope && isLoadingState(snapshot.status)) && !payload;
+  const refreshing = isRefreshingState(snapshot.status) && snapshot.isManual === true;
   const handleRefresh = useCallback(() => fetchMap('user'), [fetchMap]);
   // ObjectMap renders the Refresh button; only expose it when we
   // have a scope to fetch against.

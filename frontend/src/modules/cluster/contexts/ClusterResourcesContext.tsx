@@ -145,7 +145,8 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
   return useMemo(() => {
     const hasData = stableData !== null && stableData !== undefined;
     const hasLoaded = hasData || state.status === 'error';
-    const loadingStatus = state.status === 'loading' || state.status === 'initialising';
+    const loadingStatus =
+      state.status === 'idle' || state.status === 'loading' || state.status === 'initialising';
     const passiveLoading = applyPassiveLoadingPolicy({
       loading: loadingStatus && !hasLoaded,
       hasLoaded,

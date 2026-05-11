@@ -195,8 +195,17 @@ describe('MapTab', () => {
     await unmount();
   });
 
-  it('renders the empty waiting state when there is no payload, error, or active load', async () => {
+  it('renders the loading state while the object-map snapshot is idle and a fetch is pending', async () => {
     const { container, unmount } = await renderMapTab();
+
+    expect(container.textContent).toContain('Loading object map');
+    expect(container.textContent).not.toContain('No data yet');
+
+    await unmount();
+  });
+
+  it('renders the empty waiting state when there is no map scope to fetch', async () => {
+    const { container, unmount } = await renderMapTab({ mapScope: null });
 
     expect(container.textContent).toContain('No data yet.');
 

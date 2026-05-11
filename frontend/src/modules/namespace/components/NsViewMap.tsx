@@ -27,6 +27,8 @@ interface NsViewMapProps {
 }
 
 const isLoadingState = (status: string): boolean =>
+  status === 'idle' || status === 'loading' || status === 'initialising' || status === 'updating';
+const isRefreshingState = (status: string): boolean =>
   status === 'loading' || status === 'initialising' || status === 'updating';
 
 const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
@@ -104,7 +106,7 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
 
   const payload = snapshot.data as ObjectMapSnapshotPayload | null;
   const loading = isLoadingState(snapshot.status) && !payload;
-  const refreshing = isLoadingState(snapshot.status) && snapshot.isManual === true;
+  const refreshing = isRefreshingState(snapshot.status) && snapshot.isManual === true;
 
   if (namespace === ALL_NAMESPACES_SCOPE) {
     return (
