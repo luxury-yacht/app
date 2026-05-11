@@ -53,8 +53,8 @@
 
 .command-palette-input {
   width: 100%;
-  padding: 0.875rem 1rem;
-  font-size: 0.9rem;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
   background: transparent;
   border: none;
   outline: none;

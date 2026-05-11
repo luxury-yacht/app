@@ -201,7 +201,7 @@ export function useCommandPaletteCommands() {
       // Zoom Commands
       {
         id: 'zoom-in',
-        label: 'Zoom In',
+        label: 'Zoom in',
         description: `Increase zoom level (currently ${zoomLevel}%)`,
         category: 'View',
         action: zoomIn,
@@ -210,7 +210,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'zoom-out',
-        label: 'Zoom Out',
+        label: 'Zoom out',
         description: `Decrease zoom level (currently ${zoomLevel}%)`,
         category: 'View',
         action: zoomOut,
@@ -219,7 +219,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'zoom-reset',
-        label: 'Reset Zoom',
+        label: 'Reset zoom',
         description: `Reset zoom to 100% (currently ${zoomLevel}%)`,
         category: 'View',
         action: resetZoom,
@@ -229,17 +229,58 @@ export function useCommandPaletteCommands() {
 
       // Settings Commands
       {
-        id: 'toggle-auto-refresh',
-        label: autoRefreshEnabled ? 'Disable auto-refresh' : 'Enable auto-refresh',
-        icon: <RefreshIcon width={16} height={16} />,
-        description: 'Enable or disable automatic refresh',
+        id: 'mode-system',
+        label: 'Follow the system for light/dark mode',
+        icon: <AppearanceModeIcon width={16} height={16} />,
+        description: `Use system appearance mode${mode === 'system' ? ' (current)' : ''}`,
         category: 'Settings',
-        action: toggleAutoRefresh,
-        keywords: ['auto', 'refresh', 'toggle', 'pause', 'resume', 'automatic'],
+        action: async () => {
+          try {
+            await changeAppearanceMode('system');
+          } catch (error) {
+            console.error('Failed to set system mode:', error);
+          }
+        },
+        keywords: ['mode', 'system', 'auto', 'automatic', 'appearance', 'os'],
+      },
+      {
+        id: 'mode-light',
+        label: 'Light mode',
+        icon: <AppearanceModeIcon width={16} height={16} />,
+        description: `Switch to light mode${mode === 'light' ? ' (current)' : ''}`,
+        category: 'Settings',
+        action: async () => {
+          try {
+            await changeAppearanceMode('light');
+          } catch (error) {
+            console.error('Failed to set light mode:', error);
+          }
+        },
+        keywords: ['mode', 'light', 'bright', 'white', 'appearance'],
+      },
+      {
+        id: 'mode-dark',
+        label: 'Dark mode',
+        icon: <AppearanceModeIcon width={16} height={16} />,
+        description: `Switch to dark mode${mode === 'dark' ? ' (current)' : ''}`,
+        category: 'Settings',
+        action: async () => {
+          try {
+            await changeAppearanceMode('dark');
+          } catch (error) {
+            console.error('Failed to set dark mode:', error);
+          }
+        },
+        keywords: ['mode', 'dark', 'night', 'black', 'appearance'],
       },
       {
         id: 'toggle-exclusive-namespaces',
         label: exclusiveNamespaces ? 'Disable exclusive namespaces' : 'Enable exclusive namespaces',
+        icon: viewState.isSidebarVisible ? (
+          <CollapseSidebarIcon width={16} height={16} />
+        ) : (
+          <ExpandSidebarIcon width={16} height={16} />
+        ),
         description: 'When enabled, only one namespace at a time can be expanded in the Sidebar.',
         category: 'Settings',
         action: async () => {
@@ -258,6 +299,11 @@ export function useCommandPaletteCommands() {
         label: dimInactiveNamespaces
           ? 'Disable inactive namespace dimming'
           : 'Enable inactive namespace dimming',
+        icon: viewState.isSidebarVisible ? (
+          <CollapseSidebarIcon width={16} height={16} />
+        ) : (
+          <ExpandSidebarIcon width={16} height={16} />
+        ),
         description: 'Dim namespaces in the Sidebar that have no Workloads.',
         category: 'Settings',
         action: async () => {
@@ -272,49 +318,25 @@ export function useCommandPaletteCommands() {
         keywords: ['dim', 'inactive', 'namespaces', 'sidebar', 'workloads', 'toggle'],
       },
       {
-        id: 'mode-dark',
-        label: 'Dark mode',
-        icon: <AppearanceModeIcon width={16} height={16} />,
-        description: `Switch to dark mode${mode === 'dark' ? ' (current)' : ''}`,
+        id: 'toggle-auto-refresh',
+        label: autoRefreshEnabled ? 'Disable auto-refresh' : 'Enable auto-refresh',
+        icon: <RefreshIcon width={16} height={16} />,
+        description: 'Enable or disable automatic refresh',
         category: 'Settings',
-        action: async () => {
-          try {
-            await changeAppearanceMode('dark');
-          } catch (error) {
-            console.error('Failed to set dark mode:', error);
-          }
-        },
-        keywords: ['mode', 'dark', 'night', 'black', 'appearance'],
+        action: toggleAutoRefresh,
+        keywords: ['auto', 'refresh', 'toggle', 'pause', 'resume', 'automatic'],
       },
       {
-        id: 'mode-light',
-        label: 'Light mode',
-        icon: <AppearanceModeIcon width={16} height={16} />,
-        description: `Switch to light mode${mode === 'light' ? ' (current)' : ''}`,
+        id: 'refresh-view',
+        label: 'Refresh current view',
+        icon: <RefreshIcon width={16} height={16} />,
+        description: 'Manually refresh the current view',
         category: 'Settings',
-        action: async () => {
-          try {
-            await changeAppearanceMode('light');
-          } catch (error) {
-            console.error('Failed to set light mode:', error);
-          }
+        action: () => {
+          void requestContextRefresh({ reason: 'user' });
         },
-        keywords: ['mode', 'light', 'bright', 'white', 'appearance'],
-      },
-      {
-        id: 'mode-system',
-        label: 'Follow the system for light/dark mode',
-        icon: <AppearanceModeIcon width={16} height={16} />,
-        description: `Use system appearance mode${mode === 'system' ? ' (current)' : ''}`,
-        category: 'Settings',
-        action: async () => {
-          try {
-            await changeAppearanceMode('system');
-          } catch (error) {
-            console.error('Failed to set system mode:', error);
-          }
-        },
-        keywords: ['mode', 'system', 'auto', 'automatic', 'appearance', 'os'],
+        keywords: ['refresh', 'reload', 'update'],
+        shortcut: ['⌘', 'R'],
       },
       {
         id: 'reset-all-gridtable-state',
@@ -329,7 +351,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'toggle-short-names',
-        label: useShortResourceNames ? 'Disable Short Names' : 'Enable Short Names',
+        label: useShortResourceNames ? 'Disable short names' : 'Enable short names',
         description: 'Toggle between short and full resource type names',
         category: 'Settings',
         action: async () => {
@@ -346,20 +368,8 @@ export function useCommandPaletteCommands() {
 
       // Navigation Commands
       {
-        id: 'refresh-view',
-        label: 'Refresh Current View',
-        icon: <RefreshIcon width={16} height={16} />,
-        description: 'Manually refresh the current view',
-        category: 'Navigation',
-        action: () => {
-          void requestContextRefresh({ reason: 'user' });
-        },
-        keywords: ['refresh', 'reload', 'update'],
-        shortcut: ['⌘', 'R'],
-      },
-      {
         id: 'close-cluster-tab',
-        label: 'Close Current Cluster Tab',
+        label: 'Close active cluster tab',
         icon: <CloseIcon width={16} height={16} />,
         description: 'Close the active cluster tab',
         category: 'Navigation',

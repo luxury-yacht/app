@@ -269,9 +269,11 @@ describe('CommandPaletteCommands', () => {
     const { getCommands, unmount } = renderHook();
     const commands = getCommands();
 
-    expect(commands.find((entry) => entry.id === 'mode-light')?.label).toBe('Mode - Light');
-    expect(commands.find((entry) => entry.id === 'mode-dark')?.label).toBe('Mode - Dark');
-    expect(commands.find((entry) => entry.id === 'mode-system')?.label).toBe('Mode - System');
+    expect(commands.find((entry) => entry.id === 'mode-light')?.label).toBe('Light mode');
+    expect(commands.find((entry) => entry.id === 'mode-dark')?.label).toBe('Dark mode');
+    expect(commands.find((entry) => entry.id === 'mode-system')?.label).toBe(
+      'Follow the system for light/dark mode'
+    );
 
     unmount();
   });
@@ -287,9 +289,9 @@ describe('CommandPaletteCommands', () => {
     const dimCommand = commands.find((entry) => entry.id === 'toggle-dim-inactive-namespaces');
     const exclusiveCommand = commands.find((entry) => entry.id === 'toggle-exclusive-namespaces');
 
-    expect(dimCommand?.label).toBe('Disable Inactive Namespace Dimming');
+    expect(dimCommand?.label).toBe('Disable inactive namespace dimming');
     expect(dimCommand?.description).toBe('Dim namespaces in the Sidebar that have no Workloads.');
-    expect(exclusiveCommand?.label).toBe('Disable Exclusive Namespaces');
+    expect(exclusiveCommand?.label).toBe('Disable exclusive namespaces');
     expect(exclusiveCommand?.description).toBe(
       'When enabled, only one namespace at a time can be expanded in the Sidebar.'
     );
@@ -306,22 +308,33 @@ describe('CommandPaletteCommands', () => {
     unmount();
   });
 
-  it('orders Settings commands alphabetically by stable setting name', () => {
+  it('orders Settings commands with appearance modes first', () => {
     const { getCommands, unmount } = renderHook();
     const settingsCommandIds = getCommands()
       .filter((entry) => entry.category === 'Settings')
       .map((entry) => entry.id);
 
     expect(settingsCommandIds).toEqual([
-      'toggle-auto-refresh',
+      'mode-system',
+      'mode-light',
+      'mode-dark',
       'toggle-exclusive-namespaces',
       'toggle-dim-inactive-namespaces',
-      'mode-dark',
-      'mode-light',
-      'mode-system',
+      'toggle-auto-refresh',
+      'refresh-view',
       'reset-all-gridtable-state',
       'toggle-short-names',
     ]);
+
+    unmount();
+  });
+
+  it('places refresh current view in Settings', () => {
+    const { getCommands, unmount } = renderHook();
+    const command = getCommands().find((entry) => entry.id === 'refresh-view');
+
+    expect(command?.label).toBe('Refresh current view');
+    expect(command?.category).toBe('Settings');
 
     unmount();
   });
@@ -334,8 +347,8 @@ describe('CommandPaletteCommands', () => {
     const autoRefreshCommand = commands.find((entry) => entry.id === 'toggle-auto-refresh');
     const shortNamesCommand = commands.find((entry) => entry.id === 'toggle-short-names');
 
-    expect(autoRefreshCommand?.label).toBe('Disable Auto-Refresh');
-    expect(shortNamesCommand?.label).toBe('Disable Short Names');
+    expect(autoRefreshCommand?.label).toBe('Disable auto-refresh');
+    expect(shortNamesCommand?.label).toBe('Disable short names');
 
     await act(async () => {
       autoRefreshCommand?.action();
@@ -357,10 +370,10 @@ describe('CommandPaletteCommands', () => {
     const commands = getCommands();
 
     expect(commands.find((entry) => entry.id === 'toggle-auto-refresh')?.label).toBe(
-      'Enable Auto-Refresh'
+      'Enable auto-refresh'
     );
     expect(commands.find((entry) => entry.id === 'toggle-short-names')?.label).toBe(
-      'Enable Short Names'
+      'Enable short names'
     );
 
     unmount();
@@ -376,10 +389,10 @@ describe('CommandPaletteCommands', () => {
     const commands = getCommands();
 
     expect(commands.find((entry) => entry.id === 'toggle-dim-inactive-namespaces')?.label).toBe(
-      'Enable Inactive Namespace Dimming'
+      'Enable inactive namespace dimming'
     );
     expect(commands.find((entry) => entry.id === 'toggle-exclusive-namespaces')?.label).toBe(
-      'Enable Exclusive Namespaces'
+      'Enable exclusive namespaces'
     );
 
     unmount();
