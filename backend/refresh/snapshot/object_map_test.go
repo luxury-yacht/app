@@ -61,10 +61,14 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	if status := nodeByKindName(t, payload, "PodDisruptionBudget", "web").Status; status == nil || status.State != "1" || status.Label != "MinAvailable: 1, Disruptions Allowed: 1" || status.Presentation != "ready" {
 		t.Fatalf("unexpected poddisruptionbudget status: %#v", status)
 	}
+	if status := nodeByKindName(t, payload, "NetworkPolicy", "web").Status; status == nil || status.State != "1/0" || status.Label != "Ingress, 1 ingress, 0 egress" || status.Presentation != "ready" {
+		t.Fatalf("unexpected networkpolicy status: %#v", status)
+	}
 
 	assertEdge(t, payload, "Deployment", "web", "ReplicaSet", "web-rs", "owner")
 	assertEdge(t, payload, "ReplicaSet", "web-rs", "Pod", "web-pod", "owner")
 	assertEdge(t, payload, "PodDisruptionBudget", "web", "Pod", "web-pod", "selector")
+	assertEdge(t, payload, "NetworkPolicy", "web", "Pod", "web-pod", "selector")
 	assertEdge(t, payload, "Service", "web", "Pod", "web-pod", "selector")
 	assertEdge(t, payload, "Service", "web", "EndpointSlice", "web-slice", "endpoint")
 	assertEdge(t, payload, "EndpointSlice", "web-slice", "Pod", "web-pod", "endpoint")
@@ -100,6 +104,47 @@ func TestObjectMapBuildsFromPodDisruptionBudget(t *testing.T) {
 	assertNode(t, payload, "Pod", "web-pod")
 	assertMissingNode(t, payload, "Pod", "api-pod")
 	assertEdge(t, payload, "PodDisruptionBudget", "web", "Pod", "web-pod", "selector")
+}
+
+func TestObjectMapBuildsFromNetworkPolicyPodSelector(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapNetworkPolicyFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "default:networking.k8s.io/v1:NetworkPolicy:web?maxDepth=5&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	if payload.Seed.ClusterID != "cluster-a" || payload.Seed.Group != "networking.k8s.io" || payload.Seed.Version != "v1" || payload.Seed.Kind != "NetworkPolicy" {
+		t.Fatalf("seed identity is incomplete: %#v", payload.Seed)
+	}
+	assertNode(t, payload, "NetworkPolicy", "web")
+	assertNode(t, payload, "Pod", "web-pod")
+	assertMissingNode(t, payload, "Pod", "api-pod")
+	assertEdge(t, payload, "NetworkPolicy", "web", "Pod", "web-pod", "selector")
+}
+
+func TestObjectMapNetworkPolicyEmptyPodSelectorSelectsNamespacePods(t *testing.T) {
+	client := fake.NewSimpleClientset(
+		podFixture("default", "web-pod", "pod-web-uid", "", map[string]string{"app": "web"}),
+		podFixture("other", "other-pod", "pod-other-uid", "", map[string]string{"app": "web"}),
+		networkPolicyFixture("default", "all-pods", "netpol-all-uid", metav1.LabelSelector{}),
+	)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "default:networking.k8s.io/v1:NetworkPolicy:all-pods?maxDepth=5&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	assertNode(t, payload, "NetworkPolicy", "all-pods")
+	assertNode(t, payload, "Pod", "web-pod")
+	assertMissingNode(t, payload, "Pod", "other-pod")
+	assertEdge(t, payload, "NetworkPolicy", "all-pods", "Pod", "web-pod", "selector")
 }
 
 func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
@@ -794,6 +839,7 @@ func objectMapFixtureObjects() []runtime.Object {
 	pod := podFixture("default", "web-pod", "pod-uid", "rs-uid", map[string]string{"app": "web"})
 	service := serviceFixture("default", "web", "svc-uid", map[string]string{"app": "web"})
 	pdb := podDisruptionBudgetFixture("default", "web", "pdb-uid")
+	networkPolicy := networkPolicyFixture("default", "web", "netpol-uid", labelSelectorForApp("web"))
 	slice := &discoveryv1.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "web-slice",
@@ -854,6 +900,7 @@ func objectMapFixtureObjects() []runtime.Object {
 		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: types.UID("node-uid")}},
 		hpa,
 		pdb,
+		networkPolicy,
 		ingress,
 		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "unused-job", Namespace: "default", UID: types.UID("job-uid")}},
 	}
@@ -864,6 +911,14 @@ func objectMapPDBFixtureObjects() []runtime.Object {
 		podFixture("default", "web-pod", "pod-web-uid", "", map[string]string{"app": "web", "tier": "frontend"}),
 		podFixture("default", "api-pod", "pod-api-uid", "", map[string]string{"app": "api", "tier": "frontend"}),
 		podDisruptionBudgetFixture("default", "web", "pdb-web-uid"),
+	}
+}
+
+func objectMapNetworkPolicyFixtureObjects() []runtime.Object {
+	return []runtime.Object{
+		podFixture("default", "web-pod", "pod-web-uid", "", map[string]string{"app": "web", "tier": "frontend"}),
+		podFixture("default", "api-pod", "pod-api-uid", "", map[string]string{"app": "api", "tier": "frontend"}),
+		networkPolicyFixture("default", "web", "netpol-web-uid", labelSelectorForApp("web")),
 	}
 }
 
@@ -1015,6 +1070,28 @@ func podDisruptionBudgetFixture(namespace, name, uid string) *policyv1.PodDisrup
 			DesiredHealthy:     1,
 			ExpectedPods:       1,
 		},
+	}
+}
+
+func networkPolicyFixture(namespace, name, uid string, selector metav1.LabelSelector) *networkingv1.NetworkPolicy {
+	return &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, UID: types.UID(uid)},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: selector,
+			Ingress: []networkingv1.NetworkPolicyIngressRule{{
+				Ports: []networkingv1.NetworkPolicyPort{{}},
+			}},
+		},
+	}
+}
+
+func labelSelectorForApp(app string) metav1.LabelSelector {
+	return metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{{
+			Key:      "app",
+			Operator: metav1.LabelSelectorOpIn,
+			Values:   []string{app},
+		}},
 	}
 }
 

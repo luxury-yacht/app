@@ -21,6 +21,7 @@ const MAP_SUPPORTED_KINDS = new Set([
   'cronjob',
   'horizontalpodautoscaler',
   'poddisruptionbudget',
+  'networkpolicy',
   'ingress',
   'ingressclass',
 ]);

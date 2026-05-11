@@ -15,4 +15,18 @@ describe('objectMapSupport', () => {
       })
     ).toBe(true);
   });
+
+  it('supports network policies as object-map seeds', () => {
+    expect(isObjectMapSupportedKind('NetworkPolicy')).toBe(true);
+    expect(
+      hasCompleteObjectMapReference({
+        clusterId: 'cluster-a',
+        group: 'networking.k8s.io',
+        version: 'v1',
+        kind: 'NetworkPolicy',
+        namespace: 'default',
+        name: 'web',
+      })
+    ).toBe(true);
+  });
 });
