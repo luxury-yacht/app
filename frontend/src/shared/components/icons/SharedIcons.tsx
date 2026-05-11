@@ -685,8 +685,8 @@ export const TabOverflowIcon: React.FC<IconProps & { direction: 'left' | 'right'
 );
 
 export const TooltipInfoIcon: React.FC<IconProps> = ({
-  width = 24,
-  height = 24,
+  width = 14,
+  height = 14,
   className = 'tooltip-info-icon',
 }) => (
   <svg

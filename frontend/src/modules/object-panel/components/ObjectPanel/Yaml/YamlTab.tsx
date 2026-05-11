@@ -1418,7 +1418,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       {
         type: 'action',
         id: 'search-previous',
-        icon: <YamlPreviousIcon />,
+        icon: <YamlPreviousIcon width={16} height={16} />,
         onClick: handleFindPrevious,
         title: 'Previous match',
         ariaLabel: 'Previous match',
@@ -1427,7 +1427,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       {
         type: 'action',
         id: 'search-next',
-        icon: <YamlNextIcon />,
+        icon: <YamlNextIcon width={16} height={16} />,
         onClick: handleFindNext,
         title: 'Next match',
         ariaLabel: 'Next match',
@@ -1436,7 +1436,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       {
         type: 'toggle',
         id: 'case-sensitive-search',
-        icon: <CaseSensitiveIcon width={16} height={16} />,
+        icon: <CaseSensitiveIcon width={18} height={18} />,
         active: searchState.caseSensitiveMatches,
         onClick: () =>
           setSearchState((current) =>
@@ -1454,7 +1454,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       {
         type: 'toggle',
         id: 'regex-search',
-        icon: <RegexSearchIcon />,
+        icon: <RegexSearchIcon width={16} height={16} />,
         active: searchState.regexMatches,
         onClick: () =>
           setSearchState((current) => ({
@@ -1469,7 +1469,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       {
         type: 'toggle',
         id: 'managed-fields',
-        icon: <YamlManagedFieldsIcon />,
+        icon: <YamlManagedFieldsIcon width={16} height={16} />,
         active: showManagedFields,
         onClick: handleToggleManagedFields,
         title: showManagedFields ? 'Hide managedFields' : 'Show managedFields',
@@ -1480,7 +1480,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
             {
               type: 'action' as const,
               id: 'cancel-edit',
-              icon: <YamlCancelIcon />,
+              icon: <YamlCancelIcon width={16} height={16} />,
               onClick: handleCancelClick,
               title: 'Cancel edit',
               ariaLabel: 'Cancel edit',
@@ -1489,7 +1489,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
             {
               type: 'action' as const,
               id: 'save-yaml',
-              icon: <YamlSaveIcon />,
+              icon: <YamlSaveIcon width={16} height={16} />,
               onClick: handleSaveClick,
               title: isSaving ? 'Saving YAML' : 'Save YAML',
               ariaLabel: 'Save YAML',
@@ -1501,7 +1501,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
               {
                 type: 'action' as const,
                 id: 'edit-yaml',
-                icon: <YamlEditIcon />,
+                icon: <YamlEditIcon width={16} height={16} />,
                 onClick: handleEnterEdit,
                 title: 'Edit YAML',
                 ariaLabel: 'Edit YAML',
