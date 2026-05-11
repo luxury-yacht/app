@@ -155,6 +155,25 @@ describe('WorkloadOverview', () => {
     expect(status?.getAttribute('data-presentation')).toBe('warning');
   });
 
+  it('uses owned pod summary counts for the pod-state bar', async () => {
+    await renderComponent({
+      kind: 'Deployment',
+      name: 'frontend',
+      namespace: 'default',
+      age: '5m',
+      ready: '3/3',
+      replicas: '3/3',
+      desiredReplicas: 3,
+      available: 3,
+      podCount: 4,
+      readyPodCount: 3,
+    });
+
+    expect(container.textContent).toContain('Pods');
+    expect(container.textContent).toContain('3 of 4 ready');
+    expect(container.textContent).toContain('1 not ready');
+  });
+
   it('omits rollout details when the deployment is effectively complete', async () => {
     await renderComponent({
       kind: 'Deployment',

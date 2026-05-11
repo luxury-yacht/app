@@ -95,7 +95,16 @@ func TestBuildWorkloadSummaryDeployment(t *testing.T) {
 				Controller: ptrBool(true),
 			}},
 		},
-		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:  "app",
+				Ready: true,
+			}},
+		},
 	}
 
 	summary, err := BuildWorkloadSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, deployment, []*corev1.Pod{pod}, nil)
@@ -104,10 +113,75 @@ func TestBuildWorkloadSummaryDeployment(t *testing.T) {
 	require.Equal(t, "web", summary.Name)
 	require.Equal(t, "default", summary.Namespace)
 	require.Equal(t, "c1", summary.ClusterID)
+	require.Equal(t, "1/1", summary.Ready)
 	require.Equal(t, "Updating", summary.Status)
 	require.Equal(t, "2/3", summary.StatusState)
 	require.Equal(t, "warning", summary.StatusPresentation)
 	require.True(t, summary.PortForwardAvailable)
+}
+
+func TestBuildWorkloadSummaryDeploymentReadyUsesOwnedPods(t *testing.T) {
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: ptrInt32(3),
+		},
+		Status: appsv1.DeploymentStatus{
+			ReadyReplicas: 3,
+			Replicas:      3,
+		},
+	}
+
+	oldPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web-old-1",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind:       "ReplicaSet",
+				Name:       "web-old",
+				Controller: ptrBool(true),
+			}},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:  "app",
+				Ready: true,
+			}},
+		},
+	}
+	newPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web-new-1",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind:       "ReplicaSet",
+				Name:       "web-new",
+				Controller: ptrBool(true),
+			}},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodPending,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:  "app",
+				Ready: false,
+			}},
+		},
+	}
+
+	summary, err := BuildWorkloadSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, deployment, []*corev1.Pod{oldPod, newPod}, nil)
+	require.NoError(t, err)
+	require.Equal(t, "1/2", summary.Ready)
+	require.Equal(t, "3/3", summary.StatusState)
 }
 
 func TestBuildPodSummaryMarksNoForwardablePorts(t *testing.T) {

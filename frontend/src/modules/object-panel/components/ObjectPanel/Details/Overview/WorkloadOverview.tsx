@@ -36,9 +36,10 @@ const composePodStateCaption = (
   desired: number,
   created: number,
   ready: number,
-  available: number
+  available: number,
+  statusLabel: 'available' | 'ready' = 'available'
 ): { headline: string; drift?: string } => {
-  const headline = `${available} of ${desired} available`;
+  const headline = `${available} of ${desired} ${statusLabel}`;
   if (available >= desired) return { headline };
   if (created < desired) {
     const n = desired - created;
@@ -61,6 +62,7 @@ interface PodStateBarProps {
   ready: number;
   available: number;
   hpaManaged?: boolean;
+  statusLabel?: 'available' | 'ready';
 }
 
 const PodStateBar: React.FC<PodStateBarProps> = ({
@@ -69,6 +71,7 @@ const PodStateBar: React.FC<PodStateBarProps> = ({
   ready,
   available,
   hpaManaged,
+  statusLabel = 'available',
 }) => {
   // Scaled to 0 — render plain text rather than an empty bar with
   // "0 of 0 available", which is hard to spot.
@@ -95,7 +98,13 @@ const PodStateBar: React.FC<PodStateBarProps> = ({
   const createdNotReadySeg = Math.max(0, cappedCreated - cappedReady);
   const unscheduledSeg = Math.max(0, desired - cappedCreated);
 
-  const { headline, drift } = composePodStateCaption(desired, created, ready, available);
+  const { headline, drift } = composePodStateCaption(
+    desired,
+    created,
+    ready,
+    available,
+    statusLabel
+  );
 
   return (
     <div className="podstate-summary">
@@ -262,6 +271,8 @@ interface WorkloadOverviewProps {
   desiredReplicas?: number;
   upToDate?: number;
   available?: number;
+  podCount?: number;
+  readyPodCount?: number;
 
   // Deployment-specific
   strategy?: string;
@@ -339,6 +350,8 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
   desiredReplicas,
   upToDate,
   available,
+  podCount,
+  readyPodCount,
   strategy,
   maxSurge,
   maxUnavailable,
@@ -390,10 +403,9 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
       />
 
       {/* Pod-state bar — single visualization replacing the previous
-          Replicas / Ready / Up-to-date / Available rows. The four numeric
-          fields collapse to a segmented bar with an "X of Y available"
-          caption, so the steady-state case reads as one tidy row and any
-          drift is immediately visible as colored segments or empty space. */}
+          Replicas / Ready / Up-to-date / Available rows. When live pod
+          summary counts are present, use those so rollouts show the current
+          pod population instead of only controller status. */}
       {(() => {
         // Resolve the four pipeline counts per kind.
         let desiredCount: number | null = null;
@@ -405,8 +417,24 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
           desiredCount = typeof desiredReplicas === 'number' ? desiredReplicas : null;
           createdCount = parseLeadingCount(replicas);
         }
-        const readyCount = parseLeadingCount(ready);
-        const availableCount = typeof available === 'number' ? available : null;
+        const hasPodSummary =
+          typeof podCount === 'number' &&
+          Number.isFinite(podCount) &&
+          typeof readyPodCount === 'number' &&
+          Number.isFinite(readyPodCount);
+        const usePodSummary = hasPodSummary && (podCount > 0 || desiredCount === 0);
+        const readyCount = usePodSummary ? readyPodCount : parseLeadingCount(ready);
+        if (usePodSummary) {
+          createdCount = podCount;
+          if (desiredCount !== null) {
+            desiredCount = Math.max(desiredCount, podCount);
+          }
+        }
+        const availableCount = usePodSummary
+          ? readyPodCount
+          : typeof available === 'number'
+            ? available
+            : null;
 
         if (
           desiredCount === null ||
@@ -428,6 +456,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
                   ready={readyCount}
                   available={availableCount}
                   hpaManaged={hpaManaged}
+                  statusLabel={usePodSummary ? 'ready' : 'available'}
                 />
               }
             />

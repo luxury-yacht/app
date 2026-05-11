@@ -384,13 +384,14 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 	if deployment != nil {
 		ready = deployment.Status.ReadyReplicas
 	}
+	readyStatus := workloadPodReadyStatus(pods, ready, desired)
 	model := resourcemodel.BuildDeploymentResourceModel(clusterID, deployment)
 
 	return WorkloadSummary{
 		Kind:                 "Deployment",
 		Name:                 deployment.Name,
 		Namespace:            deployment.Namespace,
-		Ready:                fmt.Sprintf("%d/%d", ready, desired),
+		Ready:                readyStatus,
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
 		StatusPresentation:   model.Status.Presentation,
@@ -427,13 +428,14 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 	if stateful != nil {
 		ready = stateful.Status.ReadyReplicas
 	}
+	readyStatus := workloadPodReadyStatus(pods, ready, desired)
 	model := resourcemodel.BuildStatefulSetResourceModel(clusterID, stateful)
 
 	return WorkloadSummary{
 		Kind:                 "StatefulSet",
 		Name:                 stateful.Name,
 		Namespace:            stateful.Namespace,
-		Ready:                fmt.Sprintf("%d/%d", ready, desired),
+		Ready:                readyStatus,
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
 		StatusPresentation:   model.Status.Presentation,
@@ -468,13 +470,14 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 		ready = daemon.Status.NumberReady
 		desired = daemon.Status.DesiredNumberScheduled
 	}
+	readyStatus := workloadPodReadyStatus(pods, ready, desired)
 	model := resourcemodel.BuildDaemonSetResourceModel(clusterID, daemon)
 
 	return WorkloadSummary{
 		Kind:                 "DaemonSet",
 		Name:                 daemon.Name,
 		Namespace:            daemon.Namespace,
-		Ready:                fmt.Sprintf("%d/%d", ready, desired),
+		Ready:                readyStatus,
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
 		StatusPresentation:   model.Status.Presentation,
@@ -690,6 +693,28 @@ func podReadyStatus(pod *corev1.Pod) string {
 	}
 	facts := resourcemodel.BuildPodFacts(pod)
 	return fmt.Sprintf("%d/%d", facts.ReadyContainers, facts.TotalContainers)
+}
+
+func workloadPodReadyStatus(pods []*corev1.Pod, fallbackReady, fallbackTotal int32) string {
+	readyPods := int32(0)
+	totalPods := int32(0)
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+			continue
+		}
+		totalPods++
+		facts := resourcemodel.BuildPodFacts(pod)
+		if facts.TotalContainers > 0 && facts.ReadyContainers >= facts.TotalContainers {
+			readyPods++
+		}
+	}
+	if totalPods == 0 && fallbackTotal > 0 {
+		return fmt.Sprintf("%d/%d", fallbackReady, fallbackTotal)
+	}
+	return fmt.Sprintf("%d/%d", readyPods, totalPods)
 }
 
 func (b *NamespaceWorkloadsBuilder) listPods(namespace string) ([]*corev1.Pod, error) {
