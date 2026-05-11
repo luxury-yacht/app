@@ -32,6 +32,8 @@ type OverlayLayout = {
 
 const DEBUG_OVERLAY_MIN_WIDTH = 320;
 const DEBUG_OVERLAY_MIN_HEIGHT = 180;
+const DEBUG_OVERLAY_DEFAULT_WIDTH = 600;
+const DEBUG_OVERLAY_DEFAULT_HEIGHT = 600;
 const DEBUG_OVERLAY_BASE_Z_INDEX = 20000;
 
 let topDebugOverlayZIndex = DEBUG_OVERLAY_BASE_Z_INDEX;
@@ -50,8 +52,14 @@ const getViewportSize = () => ({
 
 const getDefaultLayout = (testId?: string): OverlayLayout => {
   const viewport = getViewportSize();
-  const width = clamp(Math.round(viewport.width * 0.28), 360, 520);
-  const height = clamp(Math.round(viewport.height * 0.42), 280, 520);
+  const width = Math.min(
+    DEBUG_OVERLAY_DEFAULT_WIDTH,
+    Math.max(DEBUG_OVERLAY_MIN_WIDTH, viewport.width - 12)
+  );
+  const height = Math.min(
+    DEBUG_OVERLAY_DEFAULT_HEIGHT,
+    Math.max(DEBUG_OVERLAY_MIN_HEIGHT, viewport.height - 12)
+  );
 
   const defaults: Record<string, { x: number; y: number }> = {
     'panel-debug-overlay': { x: 40, y: 90 },

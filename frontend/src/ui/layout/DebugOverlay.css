@@ -346,8 +346,7 @@
 .icon-debug-table {
   width: 100%;
   table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 0 0.35rem;
+  border-collapse: collapse;
 }
 
 .icon-debug-overlay__body {
@@ -374,7 +373,7 @@
 }
 
 .icon-debug-table__preview-col {
-  width: 60px;
+  width: 50px;
 }
 
 .icon-debug-table__metric-col {
@@ -382,7 +381,8 @@
 }
 
 .icon-debug-table th {
-  padding: 0 0.4rem 0.1rem;
+  padding: 0 0.4rem 0.35rem;
+  border-bottom: 1px solid var(--color-border);
   color: var(--color-text-tertiary);
   font-size: 0.68rem;
   font-weight: 600;
@@ -424,19 +424,7 @@
   min-width: 0;
   padding: 0.4rem;
   vertical-align: middle;
-  border-top: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-bg) 75%, transparent);
-}
-
-.icon-debug-table td:first-child {
-  border-left: 1px solid var(--color-border);
-  border-radius: 6px 0 0 6px;
-}
-
-.icon-debug-table td:last-child {
-  border-right: 1px solid var(--color-border);
-  border-radius: 0 6px 6px 0;
 }
 
 .icon-debug-row {

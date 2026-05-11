@@ -40,6 +40,17 @@ describe('DebugOverlay', () => {
     expect(document.body.querySelector('[data-testid="debug-overlay-under-test"]')).not.toBeNull();
   });
 
+  it('uses fixed default dimensions', () => {
+    renderOverlay();
+
+    const overlay = document.body.querySelector<HTMLElement>(
+      '[data-testid="debug-overlay-under-test"]'
+    );
+
+    expect(overlay?.style.width).toBe('600px');
+    expect(overlay?.style.height).toBe('600px');
+  });
+
   it('calls onClose from the close button', () => {
     const onClose = vi.fn();
     renderOverlay({ onClose });
