@@ -477,7 +477,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       return {
         type: 'toggle',
         id: 'pods-unhealthy-toggle',
-        icon: <WarningTriangleIcon ariaHidden />,
+        icon: <WarningTriangleIcon width={18} height={18} ariaHidden />,
         active: activePodFilter !== null,
         onClick: handleToggleUnhealthy,
         title,
