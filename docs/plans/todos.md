@@ -6,10 +6,6 @@
   - Move app logs & deb ug to this menu?
   - Browser console?
 - Settings
-  - Collapse Panel settings and short names into Display?
-  - Display options
-    - Allow namespaces to open at the same time in the sidebar
-  - Favorites management in Settings?
   - Setting to show Debug menu? Requires restart?
 - Map view -- max default zoom when object count is low
 

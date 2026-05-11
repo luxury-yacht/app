@@ -42,6 +42,7 @@ const { mocks } = vi.hoisted(() => ({
       setSelectedNamespace: vi.fn(),
     },
     autoRefresh: {
+      enabled: true,
       toggle: vi.fn(),
     },
     appSettings: {
@@ -167,6 +168,8 @@ describe('CommandPaletteCommands', () => {
     mocks.kubeconfig.selectedKubeconfig = '';
     mocks.kubeconfig.setActiveKubeconfig.mockReset();
     mocks.kubeconfig.setSelectedKubeconfigs.mockReset();
+    mocks.autoRefresh.enabled = true;
+    mocks.autoRefresh.toggle.mockReset();
     mocks.appSettings.SetUseShortResourceNames.mockReset();
     mocks.appSettings.SetDimInactiveNamespaces.mockReset();
     mocks.appSettings.SetExclusiveNamespaces.mockReset();
@@ -299,6 +302,66 @@ describe('CommandPaletteCommands', () => {
 
     expect(mocks.appSettings.SetDimInactiveNamespaces).toHaveBeenCalledWith(false);
     expect(mocks.appSettings.SetExclusiveNamespaces).toHaveBeenCalledWith(false);
+
+    unmount();
+  });
+
+  it('orders Settings commands alphabetically by stable setting name', () => {
+    const { getCommands, unmount } = renderHook();
+    const settingsCommandIds = getCommands()
+      .filter((entry) => entry.category === 'Settings')
+      .map((entry) => entry.id);
+
+    expect(settingsCommandIds).toEqual([
+      'toggle-auto-refresh',
+      'toggle-exclusive-namespaces',
+      'toggle-dim-inactive-namespaces',
+      'mode-dark',
+      'mode-light',
+      'mode-system',
+      'reset-all-gridtable-state',
+      'toggle-short-names',
+    ]);
+
+    unmount();
+  });
+
+  it('labels auto-refresh and short names using their disable actions when enabled', async () => {
+    setAppPreferencesForTesting({ useShortResourceNames: true });
+
+    const { getCommands, unmount } = renderHook();
+    const commands = getCommands();
+    const autoRefreshCommand = commands.find((entry) => entry.id === 'toggle-auto-refresh');
+    const shortNamesCommand = commands.find((entry) => entry.id === 'toggle-short-names');
+
+    expect(autoRefreshCommand?.label).toBe('Disable Auto-Refresh');
+    expect(shortNamesCommand?.label).toBe('Disable Short Names');
+
+    await act(async () => {
+      autoRefreshCommand?.action();
+      shortNamesCommand?.action();
+      await Promise.resolve();
+    });
+
+    expect(mocks.autoRefresh.toggle).toHaveBeenCalledTimes(1);
+    expect(mocks.appSettings.SetUseShortResourceNames).toHaveBeenCalledWith(false);
+
+    unmount();
+  });
+
+  it('labels auto-refresh and short names using their enable actions when disabled', () => {
+    mocks.autoRefresh.enabled = false;
+    setAppPreferencesForTesting({ useShortResourceNames: false });
+
+    const { getCommands, unmount } = renderHook();
+    const commands = getCommands();
+
+    expect(commands.find((entry) => entry.id === 'toggle-auto-refresh')?.label).toBe(
+      'Enable Auto-Refresh'
+    );
+    expect(commands.find((entry) => entry.id === 'toggle-short-names')?.label).toBe(
+      'Enable Short Names'
+    );
 
     unmount();
   });

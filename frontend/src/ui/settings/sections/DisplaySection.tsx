@@ -98,23 +98,6 @@ function DisplaySection() {
 
       <div className="settings-row">
         <div className="settings-row-label">
-          <div className="settings-row-label-title">Exclusive namespaces</div>
-          <div className="settings-row-label-help">
-            When enabled, only one namespace at a time can be expanded in the Sidebar.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <ToggleSwitch
-            id="exclusive-namespaces"
-            checked={exclusiveNamespaces}
-            onChange={handleExclusiveNamespacesToggle}
-            ariaLabel="Exclusive namespaces"
-          />
-        </div>
-      </div>
-
-      <div className="settings-row">
-        <div className="settings-row-label">
           <div className="settings-row-label-title">Dim inactive namespaces</div>
           <div className="settings-row-label-help">
             Dim namespaces in the Sidebar that have no Workloads.
@@ -126,6 +109,23 @@ function DisplaySection() {
             checked={dimInactiveNamespaces}
             onChange={handleDimInactiveNamespacesToggle}
             ariaLabel="Dim inactive namespaces"
+          />
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Exclusive namespaces</div>
+          <div className="settings-row-label-help">
+            When enabled, only one namespace at a time can be expanded in the Sidebar.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <ToggleSwitch
+            id="exclusive-namespaces"
+            checked={exclusiveNamespaces}
+            onChange={handleExclusiveNamespacesToggle}
+            ariaLabel="Exclusive namespaces"
           />
         </div>
       </div>

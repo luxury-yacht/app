@@ -85,6 +85,10 @@ describe('DisplaySection', () => {
       'Dim namespaces in the Sidebar that have no Workloads.'
     );
 
+    expect(container.textContent.indexOf('Dim inactive namespaces')).toBeLessThan(
+      container.textContent.indexOf('Exclusive namespaces')
+    );
+
     const toggle = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Dim inactive namespaces"]'
     );

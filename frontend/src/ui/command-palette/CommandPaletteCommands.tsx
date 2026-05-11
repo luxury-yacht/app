@@ -36,13 +36,13 @@ import { clearAllGridTableState } from '@shared/components/tables/persistence/gr
 import { eventBus } from '@/core/events';
 import { isMacPlatform } from '@/utils/platform';
 import {
-  getUseShortResourceNames,
   setDimInactiveNamespaces,
   setExclusiveNamespaces,
   setUseShortResourceNames,
 } from '@/core/settings/appPreferences';
 import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
 import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
+import { useShortNames } from '@/hooks/useShortNames';
 
 export interface Command {
   id: string;
@@ -72,7 +72,8 @@ export function useCommandPaletteCommands() {
   const { favorites, setPendingFavorite } = useFavorites();
   const { mode } = useAppearanceMode();
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
-  const { toggle: toggleAutoRefresh } = useAutoRefresh();
+  const { enabled: autoRefreshEnabled, toggle: toggleAutoRefresh } = useAutoRefresh();
+  const useShortResourceNames = useShortNames();
   const dimInactiveNamespaces = useDimInactiveNamespaces();
   const exclusiveNamespaces = useExclusiveNamespaces();
 
@@ -162,7 +163,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'open-object-diff',
-        label: 'Diff Objects',
+        label: 'Diff objects',
         icon: <DiffIcon width={16} height={16} />,
         description: 'Compare Kubernetes objects in a side-by-side YAML diff',
         category: 'Application',
@@ -174,7 +175,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'toggle-application-logs',
-        label: 'Application Logs Panel',
+        label: 'Application Logs panel',
         icon: <LogsIcon width={16} height={16} />,
         description: 'Toggle application logs',
         category: 'Application',
@@ -186,7 +187,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'toggle-diagnostics',
-        label: 'Diagnostics Panel',
+        label: 'Diagnostics panel',
         icon: <DiagnosticsIcon width={16} height={16} />,
         description: 'Show diagnostics (refresh, permissions)',
         category: 'Application',
@@ -228,19 +229,8 @@ export function useCommandPaletteCommands() {
 
       // Settings Commands
       {
-        id: 'reset-all-gridtable-state',
-        label: 'Reset All Views',
-        icon: <ResetFiltersIcon width={16} height={16} />,
-        description: 'Clear all persisted GridTable state (columns, sort, filters)',
-        category: 'Settings',
-        action: () => {
-          void clearAllGridTableState();
-        },
-        keywords: ['reset', 'grid', 'views', 'table', 'columns', 'sort'],
-      },
-      {
         id: 'toggle-auto-refresh',
-        label: 'Toggle Auto-Refresh',
+        label: autoRefreshEnabled ? 'Disable auto-refresh' : 'Enable auto-refresh',
         icon: <RefreshIcon width={16} height={16} />,
         description: 'Enable or disable automatic refresh',
         category: 'Settings',
@@ -248,44 +238,8 @@ export function useCommandPaletteCommands() {
         keywords: ['auto', 'refresh', 'toggle', 'pause', 'resume', 'automatic'],
       },
       {
-        id: 'toggle-short-names',
-        label: 'Toggle Short Names',
-        description: 'Toggle between short and full resource type names',
-        category: 'Settings',
-        action: async () => {
-          // Get current state
-          const currentState = getUseShortResourceNames();
-          const newState = !currentState;
-
-          try {
-            await setUseShortResourceNames(newState);
-          } catch (error) {
-            console.error('Failed to toggle short names:', error);
-          }
-        },
-        keywords: ['short', 'names', 'abbreviations', 'types', 'resources', 'toggle'],
-      },
-      {
-        id: 'toggle-dim-inactive-namespaces',
-        label: dimInactiveNamespaces
-          ? 'Disable Inactive Namespace Dimming'
-          : 'Enable Inactive Namespace Dimming',
-        description: 'Dim namespaces in the Sidebar that have no Workloads.',
-        category: 'Settings',
-        action: async () => {
-          const newState = !dimInactiveNamespaces;
-
-          try {
-            await setDimInactiveNamespaces(newState);
-          } catch (error) {
-            console.error('Failed to toggle dim inactive namespaces:', error);
-          }
-        },
-        keywords: ['dim', 'inactive', 'namespaces', 'sidebar', 'workloads', 'toggle'],
-      },
-      {
         id: 'toggle-exclusive-namespaces',
-        label: exclusiveNamespaces ? 'Disable Exclusive Namespaces' : 'Enable Exclusive Namespaces',
+        label: exclusiveNamespaces ? 'Disable exclusive namespaces' : 'Enable exclusive namespaces',
         description: 'When enabled, only one namespace at a time can be expanded in the Sidebar.',
         category: 'Settings',
         action: async () => {
@@ -300,23 +254,26 @@ export function useCommandPaletteCommands() {
         keywords: ['exclusive', 'namespaces', 'sidebar', 'expand', 'collapse', 'toggle'],
       },
       {
-        id: 'mode-light',
-        label: 'Mode - Light',
-        icon: <AppearanceModeIcon width={16} height={16} />,
-        description: `Switch to light mode${mode === 'light' ? ' (current)' : ''}`,
+        id: 'toggle-dim-inactive-namespaces',
+        label: dimInactiveNamespaces
+          ? 'Disable inactive namespace dimming'
+          : 'Enable inactive namespace dimming',
+        description: 'Dim namespaces in the Sidebar that have no Workloads.',
         category: 'Settings',
         action: async () => {
+          const newState = !dimInactiveNamespaces;
+
           try {
-            await changeAppearanceMode('light');
+            await setDimInactiveNamespaces(newState);
           } catch (error) {
-            console.error('Failed to set light mode:', error);
+            console.error('Failed to toggle dim inactive namespaces:', error);
           }
         },
-        keywords: ['mode', 'light', 'bright', 'white', 'appearance'],
+        keywords: ['dim', 'inactive', 'namespaces', 'sidebar', 'workloads', 'toggle'],
       },
       {
         id: 'mode-dark',
-        label: 'Mode - Dark',
+        label: 'Dark mode',
         icon: <AppearanceModeIcon width={16} height={16} />,
         description: `Switch to dark mode${mode === 'dark' ? ' (current)' : ''}`,
         category: 'Settings',
@@ -330,8 +287,23 @@ export function useCommandPaletteCommands() {
         keywords: ['mode', 'dark', 'night', 'black', 'appearance'],
       },
       {
+        id: 'mode-light',
+        label: 'Light mode',
+        icon: <AppearanceModeIcon width={16} height={16} />,
+        description: `Switch to light mode${mode === 'light' ? ' (current)' : ''}`,
+        category: 'Settings',
+        action: async () => {
+          try {
+            await changeAppearanceMode('light');
+          } catch (error) {
+            console.error('Failed to set light mode:', error);
+          }
+        },
+        keywords: ['mode', 'light', 'bright', 'white', 'appearance'],
+      },
+      {
         id: 'mode-system',
-        label: 'Mode - System',
+        label: 'Follow the system for light/dark mode',
         icon: <AppearanceModeIcon width={16} height={16} />,
         description: `Use system appearance mode${mode === 'system' ? ' (current)' : ''}`,
         category: 'Settings',
@@ -343,6 +315,33 @@ export function useCommandPaletteCommands() {
           }
         },
         keywords: ['mode', 'system', 'auto', 'automatic', 'appearance', 'os'],
+      },
+      {
+        id: 'reset-all-gridtable-state',
+        label: 'Reset all views',
+        icon: <ResetFiltersIcon width={16} height={16} />,
+        description: 'Clear all persisted GridTable state (columns, sort, filters)',
+        category: 'Settings',
+        action: () => {
+          void clearAllGridTableState();
+        },
+        keywords: ['reset', 'grid', 'views', 'table', 'columns', 'sort'],
+      },
+      {
+        id: 'toggle-short-names',
+        label: useShortResourceNames ? 'Disable Short Names' : 'Enable Short Names',
+        description: 'Toggle between short and full resource type names',
+        category: 'Settings',
+        action: async () => {
+          const newState = !useShortResourceNames;
+
+          try {
+            await setUseShortResourceNames(newState);
+          } catch (error) {
+            console.error('Failed to toggle short names:', error);
+          }
+        },
+        keywords: ['short', 'names', 'abbreviations', 'types', 'resources', 'toggle'],
       },
 
       // Navigation Commands
@@ -370,7 +369,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'select-kubeconfig',
-        label: 'Select Kubeconfig',
+        label: 'Select kubeconfig...',
         description: 'Switch to a different kubeconfig',
         category: 'Navigation',
         action: () => {
@@ -380,7 +379,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'select-namespace',
-        label: 'Select Namespace',
+        label: 'Select namespace... ',
         description: 'Change to a different namespace',
         category: 'Navigation',
         action: () => {
@@ -461,6 +460,8 @@ export function useCommandPaletteCommands() {
       closeTabShortcut,
       toggleAutoRefresh,
       diffObjectsShortcut,
+      autoRefreshEnabled,
+      useShortResourceNames,
       dimInactiveNamespaces,
       exclusiveNamespaces,
       zoomIn,
