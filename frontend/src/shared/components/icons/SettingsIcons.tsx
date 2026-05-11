@@ -95,6 +95,62 @@ export const AppearanceModeIcon: React.FC<IconProps> = ({
   </svg>
 );
 
+export const SystemModeIcon: React.FC<IconProps> = ({
+  width = 24,
+  height = 24,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    width={width}
+    height={height}
+  >
+    <rect x="4" y="5" width="16" height="11" rx="1.5" stroke={fill} strokeWidth="2" />
+    <path d="M9 20H15M12 16V20" stroke={fill} strokeWidth="2" strokeLinecap="round" />
+    <path d="M8 9H16M8 12H13" stroke={fill} strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+export const LightModeIcon: React.FC<IconProps> = ({
+  width = 24,
+  height = 24,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    width={width}
+    height={height}
+  >
+    <circle cx="12" cy="12" r="4" fill={fill} />
+    <path
+      d="M12 2V5M12 19V22M4.93 4.93L7.05 7.05M16.95 16.95L19.07 19.07M2 12H5M19 12H22M4.93 19.07L7.05 16.95M16.95 7.05L19.07 4.93"
+      stroke={fill}
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+export const DarkModeIcon: React.FC<IconProps> = ({
+  width = 24,
+  height = 24,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill={fill}
+    width={width}
+    height={height}
+  >
+    <path d="M20.35 15.36A8.5 8.5 0 0 1 8.64 3.65A8.5 8.5 0 1 0 20.35 15.36Z" />
+  </svg>
+);
+
 export const KubeconfigFolderIcon: React.FC<IconProps> = ({
   width = 24,
   height = 24,

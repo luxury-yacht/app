@@ -184,6 +184,48 @@
   color-scheme: dark;
 }
 
+/* Appearance mode buttons */
+.appearance-mode-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.appearance-mode-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 7rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.appearance-mode-button svg {
+  flex-shrink: 0;
+}
+
+.appearance-mode-button:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.appearance-mode-button--active,
+.appearance-mode-button--active:hover {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-text, var(--color-bg));
+}
+
 /* ==========================================================================
    Palette Tint Controls (Appearance > Theme > Tint)
    4-column grid: label | slider | value | reset

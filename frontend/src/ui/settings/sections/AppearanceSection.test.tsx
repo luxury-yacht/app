@@ -26,6 +26,10 @@ const errorHandlerMocks = vi.hoisted(() => ({
   handle: vi.fn(),
 }));
 
+const appearanceModeMocks = vi.hoisted(() => ({
+  changeAppearanceMode: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@/core/contexts/AppearanceModeContext', () => ({
   useAppearanceMode: () => ({ mode: 'light', resolvedMode: 'light' }),
 }));
@@ -48,7 +52,7 @@ vi.mock('@/core/settings/appPreferences', () => ({
 }));
 
 vi.mock('@/utils/appearanceMode', () => ({
-  changeAppearanceMode: vi.fn().mockResolvedValue(undefined),
+  changeAppearanceMode: (...args: unknown[]) => appearanceModeMocks.changeAppearanceMode(...args),
 }));
 
 vi.mock('@utils/paletteTint', () => ({
@@ -117,6 +121,25 @@ describe('AppearanceSection', () => {
     });
     container.remove();
     vi.clearAllMocks();
+  });
+
+  it('renders styled appearance mode buttons and changes modes', async () => {
+    const buttons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('.appearance-mode-button')
+    );
+    expect(buttons.map((button) => button.textContent)).toEqual(['System', 'Light', 'Dark']);
+
+    const lightButton = buttons.find((button) => button.textContent === 'Light');
+    const darkButton = buttons.find((button) => button.textContent === 'Dark');
+    expect(lightButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(darkButton?.getAttribute('aria-pressed')).toBe('false');
+
+    await act(async () => {
+      darkButton!.click();
+      await Promise.resolve();
+    });
+
+    expect(appearanceModeMocks.changeAppearanceMode).toHaveBeenCalledWith('dark');
   });
 
   it('prompts to save live appearance changes as the default theme', async () => {

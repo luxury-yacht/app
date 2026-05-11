@@ -1,16 +1,6 @@
 # TODO
 
 - Restarting deployment does not show 2/3 in the table
-- All modals should have the same header look as new settings
-  - Find appropriate icons
-    - Confirmation
-    - Diff
-    - Log settings
-    - Rollback
-    - Drain Node
-    - Favorites
-    - Port Forward
-    - Shortcut Keys
 - Debug panels are too easy to forget about, need a ref somewhere
   - Debug menu only available in dev mode?
   - Move app logs & deb ug to this menu?

@@ -34,8 +34,12 @@ import {
 import { applyAccentColor, applyAccentBg } from '@utils/accentColor';
 import { applyLinkColor } from '@utils/linkColor';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import SegmentedButton from '@shared/components/SegmentedButton';
 import { EditIcon, DeleteIcon, CheckIcon, CloseIcon } from '@shared/components/icons/SharedIcons';
+import {
+  DarkModeIcon,
+  LightModeIcon,
+  SystemModeIcon,
+} from '@shared/components/icons/SettingsIcons';
 
 const DEFAULT_THEME_ID = 'default';
 
@@ -44,6 +48,12 @@ const isDefaultTheme = (theme: types.Theme) => theme.id === DEFAULT_THEME_ID;
 type PaletteSliderStyle = CSSProperties & {
   '--palette-slider-thumb'?: string;
 };
+
+const appearanceModeOptions = [
+  { value: 'system', label: 'System', icon: SystemModeIcon },
+  { value: 'light', label: 'Light', icon: LightModeIcon },
+  { value: 'dark', label: 'Dark', icon: DarkModeIcon },
+] as const;
 
 const buildPaletteSliderStyle = (thumbColor: string, background?: string): PaletteSliderStyle => ({
   '--palette-slider-thumb': thumbColor,
@@ -705,15 +715,24 @@ function AppearanceSection() {
           <div className="settings-row-label-help">Match the system or pick a fixed mode.</div>
         </div>
         <div className="settings-row-control">
-          <SegmentedButton
-            options={[
-              { value: 'system', label: 'System' },
-              { value: 'light', label: 'Light' },
-              { value: 'dark', label: 'Dark' },
-            ]}
-            value={mode}
-            onChange={handleAppearanceModeChange}
-          />
+          <div className="appearance-mode-buttons" role="group" aria-label="Appearance mode">
+            {appearanceModeOptions.map((option) => {
+              const Icon = option.icon;
+              const isSelected = mode === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`appearance-mode-button${isSelected ? ' appearance-mode-button--active' : ''}`}
+                  aria-pressed={isSelected}
+                  onClick={() => handleAppearanceModeChange(option.value)}
+                >
+                  <Icon width={18} height={18} />
+                  <span>{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
