@@ -1,6 +1,5 @@
 # TODO
 
-- Restarting deployment does not show 2/3 in the table
 - Debug panels are too easy to forget about, need a ref somewhere
   - Debug menu only available in dev mode?
   - Move app logs & deb ug to this menu?

@@ -7,10 +7,12 @@
 
 const OBJECT_MAP_WHEEL_ZOOM_DELTA_LIMIT = 50;
 const OBJECT_MAP_WHEEL_ZOOM_SENSITIVITY = 1;
+export const OBJECT_MAP_FIT_VIEW_MAX_ZOOM = 1.25;
 
 export interface ObjectMapG6ViewportGraph {
   destroyed: boolean;
   fitView: (options: { when: 'always'; direction: 'both' }, animation: boolean) => Promise<void>;
+  getZoom: () => number;
   getSize: () => [number, number];
   zoomBy: (ratio: number, animation: boolean, origin?: [number, number]) => Promise<void>;
   zoomTo: (zoom: number, animation: boolean, origin?: [number, number]) => Promise<void>;
@@ -47,14 +49,21 @@ export const fitObjectMapG6GraphToView = async (
 ): Promise<void> => {
   if (graph.destroyed) return;
   await graph.fitView({ when: 'always', direction: 'both' }, false);
-  if (graph.destroyed || padding <= 0) return;
+  if (graph.destroyed) return;
   const [width, height] = graph.getSize();
   if (width <= 0 || height <= 0) return;
-  const widthRatio = Math.max(0.01, (width - padding * 2) / width);
-  const heightRatio = Math.max(0.01, (height - padding * 2) / height);
-  const zoomRatio = Math.min(widthRatio, heightRatio);
-  if (zoomRatio < 1) {
-    await graph.zoomBy(zoomRatio, false);
+  if (padding > 0) {
+    const widthRatio = Math.max(0.01, (width - padding * 2) / width);
+    const heightRatio = Math.max(0.01, (height - padding * 2) / height);
+    const zoomRatio = Math.min(widthRatio, heightRatio);
+    if (zoomRatio < 1) {
+      await graph.zoomBy(zoomRatio, false);
+    }
+  }
+  if (graph.destroyed) return;
+  const zoom = graph.getZoom();
+  if (Number.isFinite(zoom) && zoom > OBJECT_MAP_FIT_VIEW_MAX_ZOOM) {
+    await graph.zoomTo(OBJECT_MAP_FIT_VIEW_MAX_ZOOM, false, [width / 2, height / 2]);
   }
 };
 
