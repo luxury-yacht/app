@@ -1,6 +1,11 @@
 input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
+  text-align: right;
+}
+
+input[inputmode="numeric"] {
+  text-align: right;
 }
 
 input[type="number"]::-webkit-inner-spin-button,
