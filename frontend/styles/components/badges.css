@@ -57,13 +57,14 @@
   cursor: pointer;
   transition:
     transform var(--duration-fast, 150ms) var(--ease-out, ease),
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
     box-shadow var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
 .kind-badge.clickable:hover {
-  /* transform: translateY(-1px); */
-  box-shadow: var(--shadow-interactive-soft);
-  filter: brightness(1.25);
+  box-shadow:
+    inset 0 0 0 999px rgb(255 255 255 / 10%),
+    inset 0 0 0 1px color-mix(in srgb, currentColor 25%, transparent);
 }
 
 .kind-badge.clickable:active {
@@ -291,7 +292,6 @@
 .status-text.running {
   color: var(--status-text-info);
 }
-
 
 /* ==========================================================================
    Badge Focus States
