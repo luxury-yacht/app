@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import ModalHeader from '@shared/components/modals/ModalHeader';
+import { LogsIcon } from '@shared/components/icons/SharedIcons';
 import ObjPanelLogsSettings from '@modules/object-panel/components/ObjectPanel/Logs/ObjPanelLogsSettings';
 import './ObjPanelLogsSettingsModal.css';
 
@@ -60,16 +61,14 @@ const ObjPanelLogsSettingsModal: React.FC<ObjPanelLogsSettingsModalProps> = ({
       containerClassName="obj-panel-logs-settings-modal"
       isClosing={isClosing}
     >
-      <div className="modal-header obj-panel-logs-settings-modal-header">
-        <h2 id="obj-panel-logs-settings-modal-title">Object Panel Logs Tab Settings</h2>
-        <button
-          className="modal-close obj-panel-logs-settings-modal-close"
-          onClick={onClose}
-          aria-label="Close Object Panel Logs Tab Settings"
-        >
-          <CloseIcon />
-        </button>
-      </div>
+      <ModalHeader
+        title="Object Panel Logs Tab Settings"
+        titleId="obj-panel-logs-settings-modal-title"
+        icon={LogsIcon}
+        onClose={onClose}
+        closeLabel="Close Object Panel Logs Tab Settings"
+        closeClassName="obj-panel-logs-settings-modal-close"
+      />
       <div className="modal-content obj-panel-logs-settings-modal-content">
         <ObjPanelLogsSettings />
       </div>

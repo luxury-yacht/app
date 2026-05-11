@@ -987,7 +987,7 @@ const NodeLogsTab = ({
                   {
                     type: 'toggle',
                     id: 'highlightSearch',
-                    icon: <HighlightSearchIcon />,
+                    icon: <HighlightSearchIcon width={16} height={16} />,
                     active: highlightMatches,
                     onClick: () =>
                       setHighlightMatches((value) => (inverseMatches ? false : !value)),
@@ -998,7 +998,7 @@ const NodeLogsTab = ({
                   {
                     type: 'toggle',
                     id: 'inverseSearch',
-                    icon: <InverseSearchIcon />,
+                    icon: <InverseSearchIcon width={16} height={16} />,
                     active: inverseMatches,
                     onClick: () => setInverseMatches((value) => !value),
                     title: 'Invert the text filter to show only non-matching logs',
@@ -1018,7 +1018,7 @@ const NodeLogsTab = ({
                   {
                     type: 'toggle',
                     id: 'regexSearch',
-                    icon: <RegexSearchIcon />,
+                    icon: <RegexSearchIcon width={16} height={16} />,
                     active: regexMatches,
                     onClick: () => setRegexMatches((value) => !value),
                     title: 'Enable regular expression support for the text filter',
@@ -1028,7 +1028,7 @@ const NodeLogsTab = ({
                   {
                     type: 'toggle',
                     id: 'autoRefresh',
-                    icon: <AutoRefreshIcon />,
+                    icon: <AutoRefreshIcon width={16} height={16} />,
                     active: autoRefresh,
                     onClick: () => setAutoRefresh((value) => !value),
                     title: 'Toggle auto-refresh',
@@ -1049,7 +1049,7 @@ const NodeLogsTab = ({
                         {
                           type: 'toggle' as const,
                           id: 'ansiColors',
-                          icon: <AnsiColorIcon />,
+                          icon: <AnsiColorIcon width={16} height={16} />,
                           active: showAnsiColors,
                           onClick: () => setShowAnsiColors((value) => !value),
                           title: 'Show ANSI colors if present',
@@ -1063,7 +1063,7 @@ const NodeLogsTab = ({
                         {
                           type: 'toggle' as const,
                           id: 'prettyJson',
-                          icon: <PrettyJsonIcon />,
+                          icon: <PrettyJsonIcon width={16} height={16} />,
                           active: displayMode === 'pretty',
                           onClick: () =>
                             updateDisplayMode(displayMode === 'pretty' ? 'raw' : 'pretty'),
@@ -1073,7 +1073,7 @@ const NodeLogsTab = ({
                         {
                           type: 'toggle' as const,
                           id: 'parsedJson',
-                          icon: <ParseJsonIcon />,
+                          icon: <ParseJsonIcon width={16} height={16} />,
                           active: isParsedView,
                           onClick: () =>
                             updateDisplayMode(displayMode === 'parsed' ? 'raw' : 'parsed'),
@@ -1086,7 +1086,7 @@ const NodeLogsTab = ({
                   {
                     type: 'action',
                     id: 'copy',
-                    icon: <CopyIcon />,
+                    icon: <CopyIcon width={20} height={20} />,
                     onClick: handleCopyLogs,
                     title: 'Copy to clipboard',
                     ariaLabel: 'Copy to clipboard',

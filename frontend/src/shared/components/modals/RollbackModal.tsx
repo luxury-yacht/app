@@ -21,8 +21,9 @@ import {
 import DiffViewer from '@shared/components/diff/DiffViewer';
 import ConfirmationModal from './ConfirmationModal';
 import ModalSurface from './ModalSurface';
+import ModalHeader from './ModalHeader';
 import { useModalFocusTrap } from './useModalFocusTrap';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import { RollbackIcon } from '@shared/components/icons/SharedIcons';
 import './RollbackModal.css';
 
 interface RollbackModalProps {
@@ -244,15 +245,12 @@ const RollbackModal = ({
       containerClassName="rollback-modal"
       closeOnBackdrop={false}
     >
-      {/* Header */}
-      <div className="modal-header">
-        <h2 id="rollback-modal-title">
-          Rollback {kind} &mdash; {name}
-        </h2>
-        <button className="modal-close" onClick={onClose} aria-label="Close">
-          <CloseIcon />
-        </button>
-      </div>
+      <ModalHeader
+        title={`Rollback ${kind} - ${name}`}
+        titleId="rollback-modal-title"
+        icon={RollbackIcon}
+        onClose={onClose}
+      />
 
       {/* Body */}
       {loading && (

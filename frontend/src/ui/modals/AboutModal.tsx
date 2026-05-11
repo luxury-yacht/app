@@ -14,7 +14,8 @@ import { backend } from '@wailsjs/go/models';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import ModalHeader from '@shared/components/modals/ModalHeader';
+import { InfoIcon } from '@shared/components/icons/SharedIcons';
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -81,12 +82,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
       isClosing={isClosing}
       closeOnBackdrop={true}
     >
-      <div className="modal-header">
-        <h2 id="about-modal-title">About</h2>
-        <button className="modal-close" onClick={onClose} aria-label="Close">
-          <CloseIcon />
-        </button>
-      </div>
+      <ModalHeader title="About" titleId="about-modal-title" icon={InfoIcon} onClose={onClose} />
 
       <div className="modal-content">
         <div className="about-logo-section">

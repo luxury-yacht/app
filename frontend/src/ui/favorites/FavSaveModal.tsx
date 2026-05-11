@@ -8,11 +8,12 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import Tooltip from '@shared/components/Tooltip';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ModalSurface from '@shared/components/modals/ModalSurface';
+import ModalHeader from '@shared/components/modals/ModalHeader';
+import { FavoriteGenericIcon } from '@shared/components/icons/FavoriteIcons';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
@@ -372,12 +373,12 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
         onClose={onClose}
         containerClassName="fav-save-modal"
       >
-        <div className="modal-header">
-          <h2 id="fav-save-modal-title">{isEditing ? 'Edit Favorite' : 'Save Favorite'}</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Close">
-            <CloseIcon />
-          </button>
-        </div>
+        <ModalHeader
+          title={isEditing ? 'Edit Favorite' : 'Save Favorite'}
+          titleId="fav-save-modal-title"
+          icon={FavoriteGenericIcon}
+          onClose={onClose}
+        />
 
         <div className="modal-content modal-form">
           {/* Name */}

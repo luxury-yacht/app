@@ -9,8 +9,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ModalSurface from './ModalSurface';
+import ModalHeader from './ModalHeader';
 import { useModalFocusTrap } from './useModalFocusTrap';
 import Tooltip from '@shared/components/Tooltip';
+import { DrainIcon } from '@shared/components/icons/SharedIcons';
 import { CancelDrainNodeJob, StartDrainNode } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@/utils/errorHandler';
@@ -319,9 +321,12 @@ const DrainNodeModal = ({
       containerClassName="drain-node-modal"
       closeOnBackdrop={false}
     >
-      <div className="modal-header">
-        <h2 id="drain-node-modal-title">Drain Node</h2>
-      </div>
+      <ModalHeader
+        title="Drain Node"
+        titleId="drain-node-modal-title"
+        icon={DrainIcon}
+        onClose={onClose}
+      />
       <div className="drain-node-modal-body">
         <div className="drain-node-modal-target">
           <span className="drain-node-modal-label">Node:</span>

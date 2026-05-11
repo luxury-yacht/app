@@ -8,6 +8,8 @@
 import React, { useRef } from 'react';
 import { useModalFocusTrap } from './useModalFocusTrap';
 import ModalSurface from './ModalSurface';
+import ModalHeader from './ModalHeader';
+import { WarningTriangleIcon } from '@shared/components/icons/SharedIcons';
 import './ConfirmationModal.css';
 
 interface ConfirmationModalProps {
@@ -51,9 +53,12 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
       overlayClassName="confirmation-modal-backdrop"
       containerClassName="confirmation-modal"
     >
-      <div className="modal-header confirmation-modal-header">
-        <h2 id="confirmation-modal-title">{title}</h2>
-      </div>
+      <ModalHeader
+        title={title}
+        titleId="confirmation-modal-title"
+        icon={WarningTriangleIcon}
+        onClose={onCancel}
+      />
       <div className="confirmation-modal-body">
         <p>{message}</p>
         {warning && <p className="confirmation-modal-warning">{warning}</p>}

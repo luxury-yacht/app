@@ -7,8 +7,9 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { useKeyboardContext } from '../context';
-import { CloseIcon, ShortcutArrowIcon } from '@shared/components/icons/SharedIcons';
+import { CategoryIcon, ShortcutArrowIcon } from '@shared/components/icons/SharedIcons';
 import ModalSurface from '@shared/components/modals/ModalSurface';
+import ModalHeader from '@shared/components/modals/ModalHeader';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import './ShortcutHelpModal.css';
 
@@ -75,16 +76,13 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
       isClosing={isClosing}
       closeOnBackdrop={true}
     >
-      <div className="modal-header shortcut-help-modal-header">
-        <h2 id="shortcut-help-modal-title">Keyboard Shortcuts</h2>
-        <button
-          className="modal-close shortcut-help-modal-close"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          <CloseIcon />
-        </button>
-      </div>
+      <ModalHeader
+        title="Keyboard Shortcuts"
+        titleId="shortcut-help-modal-title"
+        icon={CategoryIcon}
+        onClose={onClose}
+        closeClassName="shortcut-help-modal-close"
+      />
 
       <div className="modal-content shortcut-help-modal-content">
         {shortcuts.length === 0 ? (

@@ -582,7 +582,7 @@ const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
           aria-label="Copy keyboard focus details"
           title="Copy keyboard focus details"
         >
-          <CopyIcon width={14} height={14} />
+          <CopyIcon width={18} height={18} />
         </button>
       }
       onClose={onClose}

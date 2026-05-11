@@ -9,8 +9,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { StartPortForward } from '@wailsjs/go/backend/App';
 import { readTargetPorts, requestData } from '@/core/data-access';
 import ModalSurface from '@shared/components/modals/ModalSurface';
+import ModalHeader from '@shared/components/modals/ModalHeader';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import { PortForwardIcon } from '@shared/components/icons/SharedIcons';
 import './PortForwardModal.css';
 
 /**
@@ -269,18 +270,14 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
       onClose={onClose}
       containerClassName="port-forward-modal"
     >
-      {/* Header */}
-      <div className="modal-header">
-        <h2 id="port-forward-modal-title">Port Forward</h2>
-        <button
-          className="modal-close"
-          onClick={onClose}
-          disabled={isLoading}
-          aria-label="Close modal"
-        >
-          <CloseIcon />
-        </button>
-      </div>
+      <ModalHeader
+        title="Port Forward"
+        titleId="port-forward-modal-title"
+        icon={PortForwardIcon}
+        onClose={onClose}
+        closeLabel="Close modal"
+        closeDisabled={isLoading}
+      />
 
       {/* Body */}
       <div className="port-forward-modal-body">

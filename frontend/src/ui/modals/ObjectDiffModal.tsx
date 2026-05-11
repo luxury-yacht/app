@@ -8,10 +8,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ObjectDiffModal.css';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import { DiffIcon } from '@shared/components/icons/SharedIcons';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
+import ModalHeader from '@shared/components/modals/ModalHeader';
 import { readCatalogObjectMatch, requestData, requestRefreshDomain } from '@/core/data-access';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
@@ -1173,16 +1174,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
       containerClassName="object-diff-modal"
       isClosing={isClosing}
     >
-      <div className="modal-header object-diff-modal-header">
-        <h2 id="object-diff-modal-title">Diff Objects</h2>
-        <button
-          className="modal-close object-diff-modal-close"
-          onClick={onClose}
-          aria-label="Close object diff"
-        >
-          <CloseIcon />
-        </button>
-      </div>
+      <ModalHeader
+        title="Diff Objects"
+        titleId="object-diff-modal-title"
+        icon={DiffIcon}
+        onClose={onClose}
+        closeLabel="Close object diff"
+        closeClassName="object-diff-modal-close"
+      />
       <div className="modal-content object-diff-modal-content">
         <div className="object-diff-selector-grid">
           <div className="object-diff-selector">

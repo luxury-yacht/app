@@ -7,7 +7,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import ModalSurface from './ModalSurface';
+import ModalHeader from './ModalHeader';
 import { useModalFocusTrap } from './useModalFocusTrap';
+import { ScaleIcon } from '@shared/components/icons/SharedIcons';
 import './ScaleModal.css';
 
 interface ScaleModalProps {
@@ -96,9 +98,13 @@ const ScaleModal = ({
       containerClassName="scale-modal"
       closeOnBackdrop={false}
     >
-      <div className="modal-header">
-        <h2 id="scale-modal-title">Scale {kind}</h2>
-      </div>
+      <ModalHeader
+        title={`Scale ${kind}`}
+        titleId="scale-modal-title"
+        icon={ScaleIcon}
+        onClose={onCancel}
+        closeDisabled={loading}
+      />
       <div className="scale-modal-body">
         <div className="scale-modal-fields">
           {namespace && (

@@ -1,8 +1,6 @@
 # TODO
 
 - Restarting deployment does not show 2/3 in the table
-- Remove the spinner arrows from numeric text inputs
-  - Or, make them more useful, better looking
 - All modals should have the same header look as new settings
   - Find appropriate icons
     - Confirmation
