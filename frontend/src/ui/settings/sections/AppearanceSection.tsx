@@ -42,9 +42,9 @@ import {
   PlusIcon,
 } from '@shared/components/icons/SharedIcons';
 import {
+  AppearanceModeIcon,
   DarkModeIcon,
   LightModeIcon,
-  SystemModeIcon,
 } from '@shared/components/icons/SettingsIcons';
 
 const DEFAULT_THEME_ID = 'default';
@@ -56,7 +56,7 @@ type PaletteSliderStyle = CSSProperties & {
 };
 
 const appearanceModeOptions = [
-  { value: 'system', label: 'System', icon: SystemModeIcon },
+  { value: 'system', label: 'System', icon: AppearanceModeIcon },
   { value: 'light', label: 'Light', icon: LightModeIcon },
   { value: 'dark', label: 'Dark', icon: DarkModeIcon },
 ] as const;
