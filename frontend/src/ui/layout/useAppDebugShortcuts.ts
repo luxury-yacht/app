@@ -5,6 +5,7 @@ interface AppDebugShortcutHandlers {
   onToggleFocusDebug: () => void;
   onToggleErrorDebug: () => void;
   onToggleMapDebug: () => void;
+  onToggleIconDebug: () => void;
 }
 
 /**
@@ -17,6 +18,7 @@ export const useAppDebugShortcuts = ({
   onToggleFocusDebug,
   onToggleErrorDebug,
   onToggleMapDebug,
+  onToggleIconDebug,
 }: AppDebugShortcutHandlers) => {
   useEffect(() => {
     const handleDebugShortcut = (event: KeyboardEvent) => {
@@ -38,10 +40,19 @@ export const useAppDebugShortcuts = ({
       } else if (key === 'm') {
         event.preventDefault();
         onToggleMapDebug();
+      } else if (key === 'i') {
+        event.preventDefault();
+        onToggleIconDebug();
       }
     };
 
     window.addEventListener('keydown', handleDebugShortcut);
     return () => window.removeEventListener('keydown', handleDebugShortcut);
-  }, [onToggleErrorDebug, onToggleFocusDebug, onToggleMapDebug, onTogglePanelDebug]);
+  }, [
+    onToggleErrorDebug,
+    onToggleFocusDebug,
+    onToggleIconDebug,
+    onToggleMapDebug,
+    onTogglePanelDebug,
+  ]);
 };

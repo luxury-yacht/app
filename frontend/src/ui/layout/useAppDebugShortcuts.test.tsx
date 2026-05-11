@@ -13,6 +13,7 @@ const renderHookHost = (handlers?: Partial<Parameters<typeof useAppDebugShortcut
     onToggleFocusDebug: vi.fn(),
     onToggleErrorDebug: vi.fn(),
     onToggleMapDebug: vi.fn(),
+    onToggleIconDebug: vi.fn(),
     ...handlers,
   };
 
@@ -76,22 +77,32 @@ describe('useAppDebugShortcuts', () => {
       cancelable: true,
       bubbles: true,
     });
+    const iconEvent = new KeyboardEvent('keydown', {
+      key: 'i',
+      ctrlKey: true,
+      altKey: true,
+      cancelable: true,
+      bubbles: true,
+    });
 
     act(() => {
       window.dispatchEvent(panelEvent);
       window.dispatchEvent(focusEvent);
       window.dispatchEvent(errorEvent);
       window.dispatchEvent(mapEvent);
+      window.dispatchEvent(iconEvent);
     });
 
     expect(hook.onTogglePanelDebug).toHaveBeenCalledTimes(1);
     expect(hook.onToggleFocusDebug).toHaveBeenCalledTimes(1);
     expect(hook.onToggleErrorDebug).toHaveBeenCalledTimes(1);
     expect(hook.onToggleMapDebug).toHaveBeenCalledTimes(1);
+    expect(hook.onToggleIconDebug).toHaveBeenCalledTimes(1);
     expect(panelEvent.defaultPrevented).toBe(true);
     expect(focusEvent.defaultPrevented).toBe(true);
     expect(errorEvent.defaultPrevented).toBe(true);
     expect(mapEvent.defaultPrevented).toBe(true);
+    expect(iconEvent.defaultPrevented).toBe(true);
 
     hook.unmount();
   });
@@ -123,6 +134,7 @@ describe('useAppDebugShortcuts', () => {
     expect(hook.onToggleFocusDebug).not.toHaveBeenCalled();
     expect(hook.onToggleErrorDebug).not.toHaveBeenCalled();
     expect(hook.onToggleMapDebug).not.toHaveBeenCalled();
+    expect(hook.onToggleIconDebug).not.toHaveBeenCalled();
 
     hook.unmount();
   });
