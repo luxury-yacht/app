@@ -101,7 +101,7 @@ function KubeconfigsSection() {
                   const canRemove = kubeconfigPaths.length > 1;
                   return (
                     <div
-                      className="setting-item kubeconfig-path-row"
+                      className="setting-item setting-item-surface kubeconfig-path-row"
                       key={`kubeconfig-path-${index}`}
                     >
                       <span className="kubeconfig-path-icon" aria-hidden="true">

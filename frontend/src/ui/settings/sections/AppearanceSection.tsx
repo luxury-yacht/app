@@ -977,7 +977,7 @@ function AppearanceSection() {
                   return (
                     <div
                       key={theme.id}
-                      className={`themes-table-row${isDragging ? ' themes-table-row--dragging' : ''}${isDropTarget ? ' themes-table-row--drop-target' : ''}${activeThemeId && activeThemeId !== theme.id ? ' themes-table-row--dimmed' : ''}`}
+                      className={`setting-item setting-item-surface themes-table-row${isDragging ? ' themes-table-row--dragging' : ''}${isDropTarget ? ' themes-table-row--drop-target' : ''}${activeThemeId && activeThemeId !== theme.id ? ' themes-table-row--dimmed' : ''}`}
                       onDragOver={(e) => {
                         if (!draggingThemeId || isDefault) return;
                         e.preventDefault();
@@ -1113,7 +1113,7 @@ function AppearanceSection() {
                   );
                 })}
                 {editingThemeId === 'new' ? (
-                  <div className="themes-table-row themes-table-row--new">
+                  <div className="setting-item setting-item-surface themes-table-row themes-table-row--new">
                     <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
                     <div className="theme-fields">
                       <input
