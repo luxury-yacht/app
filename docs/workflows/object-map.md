@@ -107,6 +107,7 @@ that provide richer relationship data:
 - Jobs
 - CronJobs
 - HorizontalPodAutoscalers
+- PodDisruptionBudgets
 - Ingresses
 - IngressClasses
 - ClusterRoles
@@ -189,6 +190,7 @@ Supported kinds:
 - Job
 - CronJob
 - HorizontalPodAutoscaler
+- PodDisruptionBudget
 - Ingress
 - IngressClass
 

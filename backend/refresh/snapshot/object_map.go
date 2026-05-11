@@ -19,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -234,6 +235,7 @@ type objectMapRecord struct {
 	ingress            *networkingv1.Ingress
 	ingClass           *networkingv1.IngressClass
 	hpa                *autoscalingv2.HorizontalPodAutoscaler
+	pdb                *policyv1.PodDisruptionBudget
 	clusterRole        *rbacv1.ClusterRole
 	clusterRoleBinding *rbacv1.ClusterRoleBinding
 	template           *corev1.PodTemplateSpec
@@ -499,6 +501,7 @@ func (idx *objectMapIndex) collectTyped(ctx context.Context, client kubernetes.I
 		idx.collectJobs,
 		idx.collectCronJobs,
 		idx.collectHPAs,
+		idx.collectPodDisruptionBudgets,
 		idx.collectIngresses,
 		idx.collectIngressClasses,
 		idx.collectClusterRoles,
@@ -814,6 +817,24 @@ func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.In
 	}
 }
 
+func (idx *objectMapIndex) collectPodDisruptionBudgets(ctx context.Context, client kubernetes.Interface) {
+	list, err := client.PolicyV1().PodDisruptionBudgets(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if idx.skipListError("poddisruptionbudgets", err) {
+		return
+	}
+	for i := range list.Items {
+		pdb := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:               refFromObject(&pdb.ObjectMeta, "policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets", pdb.Namespace),
+			creationTimestamp: objectCreationTimestamp(&pdb.ObjectMeta),
+			status:            objectMapPodDisruptionBudgetStatus(idx.meta.ClusterID, pdb),
+			owners:            pdb.OwnerReferences,
+			labels:            cloneStringMap(pdb.Labels),
+			pdb:               &pdb,
+		})
+	}
+}
+
 func (idx *objectMapIndex) collectIngresses(ctx context.Context, client kubernetes.Interface) {
 	list, err := client.NetworkingV1().Ingresses(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if idx.skipListError("ingresses", err) {
@@ -979,6 +1000,9 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	if src.hpa != nil {
 		dst.hpa = src.hpa
 	}
+	if src.pdb != nil {
+		dst.pdb = src.pdb
+	}
 	if src.clusterRole != nil {
 		dst.clusterRole = src.clusterRole
 	}
@@ -1117,6 +1141,11 @@ func objectMapStatusFromResourceModel(model resourcemodel.ResourceModel) *Object
 
 func objectMapHPAStatus(clusterID string, hpa autoscalingv2.HorizontalPodAutoscaler) *ObjectMapStatus {
 	model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(clusterID, &hpa)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapPodDisruptionBudgetStatus(clusterID string, pdb policyv1.PodDisruptionBudget) *ObjectMapStatus {
+	model := resourcemodel.BuildPodDisruptionBudgetResourceModel(clusterID, &pdb)
 	return objectMapStatusFromResourceModel(model)
 }
 
@@ -1442,6 +1471,7 @@ func usesDirectionalObjectMapTraversal(ref ObjectMapReference) bool {
 		"Secret",
 		"ServiceAccount",
 		"Node",
+		"PodDisruptionBudget",
 		"IngressClass":
 		return true
 	default:
@@ -1462,6 +1492,7 @@ func isNamespaceMapSupportedRecord(record *objectMapRecord) bool {
 		record.ingress != nil ||
 		record.ingClass != nil ||
 		record.hpa != nil ||
+		record.pdb != nil ||
 		record.clusterRole != nil ||
 		record.clusterRoleBinding != nil ||
 		record.template != nil ||
@@ -1580,6 +1611,12 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 			target := idx.recordForResourceLink(model.Facts.HorizontalPodAutoscaler.ScaleTarget)
 			relationship := objectMapRelationships[objectMapEdgeScales]
 			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
+		}
+		if record.pdb != nil {
+			for _, pod := range idx.matchingPodsByLabelSelector(record.ref.Namespace, record.pdb.Spec.Selector) {
+				relationship := objectMapRelationships[objectMapEdgeSelector]
+				add(record, pod, relationship.typ, relationship.label, relationship.defaultTracedBy)
+			}
 		}
 		if record.clusterRole != nil && record.clusterRole.AggregationRule != nil {
 			for _, selector := range record.clusterRole.AggregationRule.ClusterRoleSelectors {
@@ -1784,6 +1821,26 @@ func (idx *objectMapIndex) matchingPods(namespace string, selector map[string]st
 			continue
 		}
 		if labelsMatch(selector, record.labels) {
+			result = append(result, record)
+		}
+	}
+	return result
+}
+
+func (idx *objectMapIndex) matchingPodsByLabelSelector(namespace string, selector *metav1.LabelSelector) []*objectMapRecord {
+	if selector == nil {
+		return nil
+	}
+	parsed, err := metav1.LabelSelectorAsSelector(selector)
+	if err != nil {
+		return nil
+	}
+	result := []*objectMapRecord{}
+	for _, record := range idx.records {
+		if record.pod == nil || record.ref.Namespace != namespace {
+			continue
+		}
+		if parsed.Matches(labels.Set(record.labels)) {
 			result = append(result, record)
 		}
 	}

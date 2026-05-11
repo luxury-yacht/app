@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -21,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -56,9 +58,13 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	if status := nodeByKindName(t, payload, "Secret", "app-secret").Status; status == nil || status.State != "Opaque" || status.Label != "Opaque, 1 key" || status.Presentation != "ready" {
 		t.Fatalf("unexpected secret status: %#v", status)
 	}
+	if status := nodeByKindName(t, payload, "PodDisruptionBudget", "web").Status; status == nil || status.State != "1" || status.Label != "MinAvailable: 1, Disruptions Allowed: 1" || status.Presentation != "ready" {
+		t.Fatalf("unexpected poddisruptionbudget status: %#v", status)
+	}
 
 	assertEdge(t, payload, "Deployment", "web", "ReplicaSet", "web-rs", "owner")
 	assertEdge(t, payload, "ReplicaSet", "web-rs", "Pod", "web-pod", "owner")
+	assertEdge(t, payload, "PodDisruptionBudget", "web", "Pod", "web-pod", "selector")
 	assertEdge(t, payload, "Service", "web", "Pod", "web-pod", "selector")
 	assertEdge(t, payload, "Service", "web", "EndpointSlice", "web-slice", "endpoint")
 	assertEdge(t, payload, "EndpointSlice", "web-slice", "Pod", "web-pod", "endpoint")
@@ -74,6 +80,26 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	if snap.Domain != objectMapDomain || snap.Stats.ItemCount != len(payload.Nodes) || snap.Stats.Truncated {
 		t.Fatalf("unexpected snapshot stats: %#v", snap.Stats)
 	}
+}
+
+func TestObjectMapBuildsFromPodDisruptionBudget(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapPDBFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "default:policy/v1:PodDisruptionBudget:web?maxDepth=5&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	if payload.Seed.ClusterID != "cluster-a" || payload.Seed.Group != "policy" || payload.Seed.Version != "v1" || payload.Seed.Kind != "PodDisruptionBudget" {
+		t.Fatalf("seed identity is incomplete: %#v", payload.Seed)
+	}
+	assertNode(t, payload, "PodDisruptionBudget", "web")
+	assertNode(t, payload, "Pod", "web-pod")
+	assertMissingNode(t, payload, "Pod", "api-pod")
+	assertEdge(t, payload, "PodDisruptionBudget", "web", "Pod", "web-pod", "selector")
 }
 
 func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
@@ -767,6 +793,7 @@ func objectMapFixtureObjects() []runtime.Object {
 	}
 	pod := podFixture("default", "web-pod", "pod-uid", "rs-uid", map[string]string{"app": "web"})
 	service := serviceFixture("default", "web", "svc-uid", map[string]string{"app": "web"})
+	pdb := podDisruptionBudgetFixture("default", "web", "pdb-uid")
 	slice := &discoveryv1.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "web-slice",
@@ -826,8 +853,17 @@ func objectMapFixtureObjects() []runtime.Object {
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "builder", Namespace: "default", UID: types.UID("sa-uid")}},
 		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: types.UID("node-uid")}},
 		hpa,
+		pdb,
 		ingress,
 		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "unused-job", Namespace: "default", UID: types.UID("job-uid")}},
+	}
+}
+
+func objectMapPDBFixtureObjects() []runtime.Object {
+	return []runtime.Object{
+		podFixture("default", "web-pod", "pod-web-uid", "", map[string]string{"app": "web", "tier": "frontend"}),
+		podFixture("default", "api-pod", "pod-api-uid", "", map[string]string{"app": "api", "tier": "frontend"}),
+		podDisruptionBudgetFixture("default", "web", "pdb-web-uid"),
 	}
 }
 
@@ -956,6 +992,29 @@ func objectMapClusterRBACFixtureObjects() []runtime.Object {
 			}},
 		},
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "builder", Namespace: "default", UID: types.UID("sa-builder-uid")}},
+	}
+}
+
+func podDisruptionBudgetFixture(namespace, name, uid string) *policyv1.PodDisruptionBudget {
+	minAvailable := intstr.FromInt32(1)
+	return &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, UID: types.UID(uid)},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MinAvailable: &minAvailable,
+			Selector: &metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{{
+					Key:      "app",
+					Operator: metav1.LabelSelectorOpIn,
+					Values:   []string{"web"},
+				}},
+			},
+		},
+		Status: policyv1.PodDisruptionBudgetStatus{
+			DisruptionsAllowed: 1,
+			CurrentHealthy:     1,
+			DesiredHealthy:     1,
+			ExpectedPods:       1,
+		},
 	}
 }
 

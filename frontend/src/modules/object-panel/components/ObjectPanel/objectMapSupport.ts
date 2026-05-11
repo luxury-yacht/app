@@ -20,6 +20,7 @@ const MAP_SUPPORTED_KINDS = new Set([
   'job',
   'cronjob',
   'horizontalpodautoscaler',
+  'poddisruptionbudget',
   'ingress',
   'ingressclass',
 ]);
