@@ -85,7 +85,8 @@ function KubeconfigsSection() {
         <div className="settings-row-label">
           <div className="settings-row-label-title">Directories</div>
           <div className="settings-row-label-help">
-            Add directories to scan for kubeconfig files.
+            The list of directories that the app will scan for kubeconfig files. If you store
+            kubeconfigs in a custom location, add it here.
           </div>
         </div>
         <div className="settings-row-control">

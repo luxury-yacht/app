@@ -291,7 +291,8 @@ export function useCommandPaletteCommands() {
         ) : (
           <ExpandSidebarIcon width={16} height={16} />
         ),
-        description: 'When enabled, only one namespace at a time can be expanded in the Sidebar.',
+        description:
+          'When enabled, only one namespace at a time can be expanded in the Sidebar. Expanding a different namespace will collapse the currently expanded one.',
         category: 'Settings',
         action: async () => {
           const newState = !exclusiveNamespaces;

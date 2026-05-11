@@ -246,7 +246,7 @@ function ObjectPanelSection() {
       <div className="settings-row">
         <div className="settings-row-label">
           <div className="settings-row-label-title">Floating position</div>
-          <div className="settings-row-label-help">Initial position of floating panels.</div>
+          <div className="settings-row-label-help">Default position of floating panels.</div>
         </div>
         <div className="settings-row-control">
           <div className="settings-items object-panel-defaults">

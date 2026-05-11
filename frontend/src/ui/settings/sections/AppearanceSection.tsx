@@ -718,7 +718,9 @@ function AppearanceSection() {
       <div className="settings-row">
         <div className="settings-row-label">
           <div className="settings-row-label-title">Mode</div>
-          <div className="settings-row-label-help">Match the system or pick a fixed mode.</div>
+          <div className="settings-row-label-help">
+            Follow the system mode or choose light/dark mode.
+          </div>
         </div>
         <div className="settings-row-control">
           <div className="settings-choice-buttons" role="group" aria-label="Appearance mode">
@@ -744,6 +746,12 @@ function AppearanceSection() {
 
       <div className="settings-subgroup-label">Theme</div>
       <hr className="settings-subgroup-divider" />
+
+      <div className="settings-subgroup-description">
+        Each theme stores data for both light and dark modes. The default theme can be modified but
+        cannot be deleted. Use pattern matching to automatically apply themes based on the cluster
+        name -- for example, a red theme for prod clusters, blue for dev, etc.
+      </div>
 
       <div className="settings-row">
         <div className="settings-row-label">
@@ -945,10 +953,9 @@ function AppearanceSection() {
                 Patterns support wildcards and ranges such as <code>*</code>, <code>?</code>, and{' '}
                 <code>[a-z]</code>
               </li>
-              <li>Empty patterns match any cluster name.</li>
               <li>Themes are applied based on first match.</li>
               <li>Use the drag handles to change order.</li>
-              <li>Default theme always resolves last.</li>
+              <li>Default theme always resolves last, and matches any cluster name.</li>
             </ul>
             {}
           </div>
@@ -963,9 +970,7 @@ function AppearanceSection() {
                   activeThemeId !== DEFAULT_THEME_ID &&
                   defaultTheme && (
                     <div className="themes-unsaved-default" role="status">
-                      <span>
-                        There are unsaved changes. Would you like to save them as the default theme?
-                      </span>
+                      <span>There are unsaved changes. Save as default?</span>
                       <button
                         type="button"
                         className="themes-unsaved-default-action"
@@ -1022,7 +1027,7 @@ function AppearanceSection() {
                             className="theme-name-input"
                             value={themeDraft.name}
                             onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
-                            placeholder="Theme name"
+                            placeholder="Name"
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') handleSaveActiveTheme();
                               else if (e.key === 'Escape') handleCancelActiveTheme();
@@ -1039,7 +1044,7 @@ function AppearanceSection() {
                                 clusterPattern: e.target.value,
                               }));
                             }}
-                            placeholder="Cluster pattern (optional)"
+                            placeholder="Pattern (optional)"
                             aria-invalid={themePatternError ? 'true' : undefined}
                             aria-describedby={
                               themePatternError ? 'theme-pattern-error-active' : undefined
@@ -1126,7 +1131,7 @@ function AppearanceSection() {
                         className="theme-name-input"
                         value={themeDraft.name}
                         onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
-                        placeholder="Theme name"
+                        placeholder="Name"
                         autoFocus
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleThemeSave();
@@ -1144,7 +1149,7 @@ function AppearanceSection() {
                             clusterPattern: e.target.value,
                           }));
                         }}
-                        placeholder="Cluster pattern (optional)"
+                        placeholder="Pattern (optional)"
                         aria-invalid={themePatternError ? 'true' : undefined}
                         aria-describedby={themePatternError ? 'theme-pattern-error-new' : undefined}
                         onKeyDown={(e) => {

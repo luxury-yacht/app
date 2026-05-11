@@ -120,9 +120,9 @@ vi.mock('@shared/components/Tooltip', () => ({
   ),
 }));
 
-vi.mock('@assets/luxury-yacht-logo.png', () => ({
+vi.mock('@assets/luxury-yacht-color-vert.png', () => ({
   __esModule: true,
-  default: 'luxury-yacht-logo.png',
+  default: 'luxury-yacht-color-vert.png',
 }));
 vi.mock('@assets/captain-k8s-color.png', () => ({
   __esModule: true,

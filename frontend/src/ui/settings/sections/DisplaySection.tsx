@@ -117,7 +117,8 @@ function DisplaySection() {
         <div className="settings-row-label">
           <div className="settings-row-label-title">Exclusive namespaces</div>
           <div className="settings-row-label-help">
-            When enabled, only one namespace at a time can be expanded in the Sidebar.
+            When enabled, only one namespace at a time can be expanded in the Sidebar. Expanding a
+            different namespace will collapse the currently expanded one.
           </div>
         </div>
         <div className="settings-row-control">

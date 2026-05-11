@@ -23,7 +23,7 @@ import {
 } from '@/core/refresh/clusterOverviewLifecycle';
 import { eventBus } from '@/core/events';
 import type { ClusterOverviewPayload } from '@/core/refresh/types';
-import logo from '@assets/luxury-yacht-logo.png';
+import logo from '@assets/luxury-yacht-color-vert.png';
 import captainK8s from '@assets/captain-k8s-color.png';
 import './ClusterOverview.css';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';

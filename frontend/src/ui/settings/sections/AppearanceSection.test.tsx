@@ -150,9 +150,7 @@ describe('AppearanceSection', () => {
       setInputValue(hueInput!, '30');
     });
 
-    expect(container.textContent).toContain(
-      'There are unsaved changes. Would you like to save them as the default theme?'
-    );
+    expect(container.textContent).toContain('There are unsaved changes. Save as default?');
 
     const saveButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Save'
@@ -194,9 +192,7 @@ describe('AppearanceSection', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain(
-      'There are unsaved changes. Would you like to save them as the default theme?'
-    );
+    expect(container.textContent).toContain('There are unsaved changes. Save as default?');
   });
 
   it('prompts when color swatches are reset', async () => {
@@ -214,9 +210,7 @@ describe('AppearanceSection', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain(
-      'There are unsaved changes. Would you like to save them as the default theme?'
-    );
+    expect(container.textContent).toContain('There are unsaved changes. Save as default?');
 
     const saveButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Save'
@@ -233,9 +227,7 @@ describe('AppearanceSection', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain(
-      'There are unsaved changes. Would you like to save them as the default theme?'
-    );
+    expect(container.textContent).toContain('There are unsaved changes. Save as default?');
   });
 
   it('shows invalid theme pattern errors inline instead of using the global error handler', async () => {

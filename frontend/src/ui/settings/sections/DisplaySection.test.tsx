@@ -78,7 +78,7 @@ describe('DisplaySection', () => {
     expect(container.textContent).toContain('Sidebar');
     expect(container.textContent).toContain('Exclusive namespaces');
     expect(container.textContent).toContain(
-      'When enabled, only one namespace at a time can be expanded in the Sidebar.'
+      'When enabled, only one namespace at a time can be expanded in the Sidebar. Expanding a different namespace will collapse the currently expanded one.'
     );
     expect(container.textContent).toContain('Dim inactive namespaces');
     expect(container.textContent).toContain(

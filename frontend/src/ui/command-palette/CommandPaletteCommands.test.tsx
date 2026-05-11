@@ -293,7 +293,7 @@ describe('CommandPaletteCommands', () => {
     expect(dimCommand?.description).toBe('Dim namespaces in the Sidebar that have no Workloads.');
     expect(exclusiveCommand?.label).toBe('Disable exclusive namespaces');
     expect(exclusiveCommand?.description).toBe(
-      'When enabled, only one namespace at a time can be expanded in the Sidebar.'
+      'When enabled, only one namespace at a time can be expanded in the Sidebar. Expanding a different namespace will collapse the currently expanded one.'
     );
 
     await act(async () => {

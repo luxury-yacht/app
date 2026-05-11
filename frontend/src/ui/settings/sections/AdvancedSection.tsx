@@ -123,7 +123,8 @@ function AdvancedSection() {
         <div className="settings-row-label">
           <div className="settings-row-label-title">Auto-refresh</div>
           <div className="settings-row-label-help">
-            Automatically refresh resource data at regular intervals to keep views up to date.
+            Automatically refresh at regular intervals to keep views up to date. Disabling this
+            means that you will have to manually refresh for updated data.
           </div>
         </div>
         <div className="settings-row-control">
@@ -138,10 +139,9 @@ function AdvancedSection() {
 
       <div className="settings-row">
         <div className="settings-row-label">
-          <div className="settings-row-label-title">Background clusters</div>
+          <div className="settings-row-label-title">Refresh background clusters</div>
           <div className="settings-row-label-help">
-            When enabled, clusters that are not actively selected will be refreshed in the
-            background so their data stays current.
+            When enabled, open cluster tabs that are not active will be refreshed in the background.
           </div>
         </div>
         <div className="settings-row-control">
@@ -210,10 +210,9 @@ function AdvancedSection() {
 
       <div className="settings-row">
         <div className="settings-row-label">
-          <div className="settings-row-label-title">Reset</div>
+          <div className="settings-row-label-title">Reset Views</div>
           <div className="settings-row-label-help">
-            Reset Views clears column/sort/filter settings. Factory Reset wipes all preferences and
-            restarts the app.
+            Clears column/sort/filter settings in all views.
           </div>
         </div>
         <div className="settings-row-control">
@@ -225,6 +224,19 @@ function AdvancedSection() {
             >
               Reset Views
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Factory Reset</div>
+          <div className="settings-row-label-help">
+            Deletes all preferences and saved state, then restarts the app.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <div className="setting-item setting-actions">
             <button
               type="button"
               className="button generic"

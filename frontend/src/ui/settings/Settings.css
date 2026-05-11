@@ -39,6 +39,11 @@
   margin: 0.4rem 0 0.75rem 0;
 }
 
+.settings-subgroup-description {
+  color: var(--color-text-secondary);
+  margin-bottom: 1rem;
+}
+
 .settings-row {
   display: grid;
   grid-template-columns: 280px 1fr;
