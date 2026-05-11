@@ -85,7 +85,7 @@ function DisplaySection() {
 
       <div className="settings-row">
         <div className="settings-row-label">
-          <div className="settings-row-label-title">Dim Inactive Namespaces</div>
+          <div className="settings-row-label-title">Dim inactive namespaces</div>
           <div className="settings-row-label-help">
             Dim namespaces in the Sidebar that have no Workloads.
           </div>
@@ -95,7 +95,7 @@ function DisplaySection() {
             id="dim-inactive-namespaces"
             checked={dimInactiveNamespaces}
             onChange={handleDimInactiveNamespacesToggle}
-            ariaLabel="Dim Inactive Namespaces"
+            ariaLabel="Dim inactive namespaces"
           />
         </div>
       </div>

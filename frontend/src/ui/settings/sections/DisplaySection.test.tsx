@@ -70,13 +70,13 @@ describe('DisplaySection', () => {
   it('shows the dim inactive namespaces setting on by default', () => {
     expect(container.textContent).toContain('Resources');
     expect(container.textContent).toContain('Sidebar');
-    expect(container.textContent).toContain('Dim Inactive Namespaces');
+    expect(container.textContent).toContain('Dim inactive namespaces');
     expect(container.textContent).toContain(
       'Dim namespaces in the Sidebar that have no Workloads.'
     );
 
     const toggle = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Dim Inactive Namespaces"]'
+      'button[aria-label="Dim inactive namespaces"]'
     );
     expect(toggle).not.toBeNull();
     expect(toggle?.getAttribute('aria-checked')).toBe('true');
@@ -84,7 +84,7 @@ describe('DisplaySection', () => {
 
   it('persists dim inactive namespaces changes', async () => {
     const toggle = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Dim Inactive Namespaces"]'
+      'button[aria-label="Dim inactive namespaces"]'
     );
     expect(toggle).not.toBeNull();
 
