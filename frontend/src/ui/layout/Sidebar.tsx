@@ -33,6 +33,7 @@ import { useRefreshScopedDomainStates } from '@/core/refresh';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
 import { useSidebarKeyboardControls, SidebarCursorTarget } from './SidebarKeys';
 
 // Static cluster view list to avoid re-creating the array each render.
@@ -88,6 +89,7 @@ function Sidebar() {
   } = useNamespace();
   const { suppressPassiveLoading } = useAutoRefreshLoadingState();
   const { selectedClusterId } = useKubeconfig();
+  const dimInactiveNamespaces = useDimInactiveNamespaces();
   // Catalog is scoped — aggregate namespace metadata across active scopes, then
   // select the active cluster's groups explicitly instead of trusting whichever
   // scope happened to populate first.
@@ -534,7 +536,9 @@ function Sidebar() {
                                 className={buildSidebarItemClassName(
                                   [
                                     'sidebar-item',
-                                    !namespace.hasWorkloads && !namespace.workloadsUnknown
+                                    dimInactiveNamespaces &&
+                                    !namespace.hasWorkloads &&
+                                    !namespace.workloadsUnknown
                                       ? 'dimmed'
                                       : '',
                                     namespace.workloadsUnknown ? 'workloads-unknown' : '',

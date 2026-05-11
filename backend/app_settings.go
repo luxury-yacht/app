@@ -40,6 +40,7 @@ type settingsFile struct {
 type settingsPreferences struct {
 	AppearanceMode                string                `json:"appearanceMode"`
 	UseShortResourceNames         bool                  `json:"useShortResourceNames"`
+	DimInactiveNamespaces         *bool                 `json:"dimInactiveNamespaces,omitempty"`
 	Refresh                       *settingsRefresh      `json:"refresh"`
 	MaxTableRows                  int                   `json:"maxTableRows"`
 	ObjPanelLogs                  *settingsObjPanelLogs `json:"objPanelLogs,omitempty"`
@@ -192,9 +193,10 @@ func defaultSettingsFile() *settingsFile {
 		SchemaVersion: settingsSchemaVersion,
 		UpdatedAt:     time.Now().UTC(),
 		Preferences: settingsPreferences{
-			AppearanceMode: "system",
-			Refresh:        &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
-			MaxTableRows:   defaultMaxTableRows,
+			AppearanceMode:        "system",
+			DimInactiveNamespaces: boolPtr(true),
+			Refresh:               &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
+			MaxTableRows:          defaultMaxTableRows,
 			ObjPanelLogs: &settingsObjPanelLogs{
 				BufferMaxSize:       defaultObjPanelLogsBufferMaxSize,
 				TargetPerScopeLimit: defaultObjPanelLogsTargetPerScopeLimit,
@@ -225,6 +227,9 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.AppearanceMode == "" {
 		settings.Preferences.AppearanceMode = "system"
+	}
+	if settings.Preferences.DimInactiveNamespaces == nil {
+		settings.Preferences.DimInactiveNamespaces = boolPtr(true)
 	}
 	if settings.Preferences.Refresh == nil {
 		settings.Preferences.Refresh = &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()}
@@ -485,6 +490,7 @@ func getDefaultAppSettings() *AppSettings {
 		AppearanceMode:                           "system",
 		SelectedKubeconfigs:                      nil,
 		UseShortResourceNames:                    false,
+		DimInactiveNamespaces:                    true,
 		AutoRefreshEnabled:                       true,
 		RefreshBackgroundClustersEnabled:         true,
 		MetricsRefreshIntervalMs:                 defaultMetricsIntervalMs(),
@@ -511,6 +517,10 @@ func (a *App) loadAppSettings() error {
 	logAPITimestampFormat := defaultObjPanelLogsAPITimestampFormat
 	logAPITimestampUseLocalTimeZone := false
 	maxTableRows := defaultMaxTableRows
+	dimInactiveNamespaces := true
+	if settings.Preferences.DimInactiveNamespaces != nil {
+		dimInactiveNamespaces = *settings.Preferences.DimInactiveNamespaces
+	}
 	if settings.Preferences.MaxTableRows > 0 {
 		maxTableRows = clampMaxTableRows(settings.Preferences.MaxTableRows)
 	}
@@ -534,6 +544,7 @@ func (a *App) loadAppSettings() error {
 		AppearanceMode:                           settings.Preferences.AppearanceMode,
 		SelectedKubeconfigs:                      append([]string(nil), settings.Kubeconfig.Selected...),
 		UseShortResourceNames:                    settings.Preferences.UseShortResourceNames,
+		DimInactiveNamespaces:                    dimInactiveNamespaces,
 		AutoRefreshEnabled:                       settings.Preferences.Refresh.Auto,
 		RefreshBackgroundClustersEnabled:         settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:                 settings.Preferences.Refresh.MetricsIntervalMs,
@@ -582,6 +593,7 @@ func (a *App) saveAppSettings() error {
 
 	settings.Preferences.AppearanceMode = a.appSettings.AppearanceMode
 	settings.Preferences.UseShortResourceNames = a.appSettings.UseShortResourceNames
+	settings.Preferences.DimInactiveNamespaces = boolPtr(a.appSettings.DimInactiveNamespaces)
 	if settings.Preferences.Refresh == nil {
 		settings.Preferences.Refresh = &settingsRefresh{}
 	}
@@ -722,6 +734,21 @@ func (a *App) SetUseShortResourceNames(useShort bool) error {
 
 	a.logger.Info(fmt.Sprintf("Use short resource names changed to: %v", useShort), logsources.Settings)
 	a.appSettings.UseShortResourceNames = useShort
+	return a.saveAppSettings()
+}
+
+func (a *App) SetDimInactiveNamespaces(enabled bool) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(fmt.Sprintf("Dim inactive namespaces changed to: %v", enabled), logsources.Settings)
+	a.appSettings.DimInactiveNamespaces = enabled
 	return a.saveAppSettings()
 }
 

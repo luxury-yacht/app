@@ -510,6 +510,10 @@ export function SetDefaultObjectPanelPosition(arg1) {
   return window['go']['backend']['App']['SetDefaultObjectPanelPosition'](arg1);
 }
 
+export function SetDimInactiveNamespaces(arg1) {
+  return window['go']['backend']['App']['SetDimInactiveNamespaces'](arg1);
+}
+
 export function SetFavoriteOrder(arg1) {
   return window['go']['backend']['App']['SetFavoriteOrder'](arg1);
 }

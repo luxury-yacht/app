@@ -10,6 +10,7 @@ import {
   getAppearanceModePreference,
   getAutoRefreshEnabled,
   getBackgroundRefreshEnabled,
+  getDimInactiveNamespaces,
   getGridTablePersistenceMode,
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
@@ -36,6 +37,7 @@ import {
   setAppearanceModePreference,
   setAutoRefreshEnabled,
   setBackgroundRefreshEnabled,
+  setDimInactiveNamespaces,
   setGridTablePersistenceMode,
   setObjPanelLogsApiTimestampFormat,
   setObjPanelLogsApiTimestampUseLocalTimeZone,
@@ -51,6 +53,7 @@ import {
 const appMocks = vi.hoisted(() => ({
   GetAppSettings: vi.fn(),
   SetAppearanceMode: vi.fn(),
+  SetDimInactiveNamespaces: vi.fn(),
   SetUseShortResourceNames: vi.fn(),
   SetObjPanelLogsAPITimestampFormat: vi.fn(),
   SetObjPanelLogsAPITimestampUseLocalTimeZone: vi.fn(),
@@ -64,6 +67,7 @@ const appMocks = vi.hoisted(() => ({
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetAppSettings: (...args: unknown[]) => appMocks.GetAppSettings(...args),
   SetAppearanceMode: (...args: unknown[]) => appMocks.SetAppearanceMode(...args),
+  SetDimInactiveNamespaces: (...args: unknown[]) => appMocks.SetDimInactiveNamespaces(...args),
   SetUseShortResourceNames: (...args: unknown[]) => appMocks.SetUseShortResourceNames(...args),
   SetObjPanelLogsAPITimestampFormat: (...args: unknown[]) =>
     appMocks.SetObjPanelLogsAPITimestampFormat(...args),
@@ -85,6 +89,7 @@ describe('appPreferences', () => {
     resetAppPreferencesCacheForTesting();
     appMocks.GetAppSettings.mockReset();
     appMocks.SetAppearanceMode.mockReset();
+    appMocks.SetDimInactiveNamespaces.mockReset();
     appMocks.SetUseShortResourceNames.mockReset();
     appMocks.SetObjPanelLogsAPITimestampFormat.mockReset();
     appMocks.SetObjPanelLogsAPITimestampUseLocalTimeZone.mockReset();
@@ -139,6 +144,7 @@ describe('appPreferences', () => {
     appMocks.GetAppSettings.mockResolvedValue({
       appearanceMode: 'light',
       useShortResourceNames: true,
+      dimInactiveNamespaces: false,
       autoRefreshEnabled: false,
       refreshBackgroundClustersEnabled: false,
       metricsRefreshIntervalMs: 7000,
@@ -162,6 +168,7 @@ describe('appPreferences', () => {
 
     expect(getAppearanceModePreference()).toBe('light');
     expect(getUseShortResourceNames()).toBe(true);
+    expect(getDimInactiveNamespaces()).toBe(false);
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(7000);
@@ -188,6 +195,7 @@ describe('appPreferences', () => {
     expect(getPaletteTint('dark')).toEqual({ hue: 0, saturation: 0, brightness: 0 });
     expect(getAccentColor('light')).toBe('');
     expect(getAccentColor('dark')).toBe('');
+    expect(getDimInactiveNamespaces()).toBe(true);
   });
 
   it('normalizes an invalid persisted Object Panel Logs Tab API timestamp format back to the default', async () => {
@@ -205,6 +213,7 @@ describe('appPreferences', () => {
     appMocks.GetAppSettings.mockResolvedValue({
       appearanceMode: 'system',
       useShortResourceNames: false,
+      dimInactiveNamespaces: true,
       autoRefreshEnabled: true,
       refreshBackgroundClustersEnabled: true,
       metricsRefreshIntervalMs: 6000,
@@ -215,6 +224,7 @@ describe('appPreferences', () => {
 
     await setAppearanceModePreference('dark');
     await setUseShortResourceNames(true);
+    await setDimInactiveNamespaces(false);
     setObjPanelLogsApiTimestampFormat('HH:mm:ss.SSS');
     setObjPanelLogsApiTimestampUseLocalTimeZone(true);
     setMaxTableRows(2500);
@@ -224,6 +234,7 @@ describe('appPreferences', () => {
 
     expect(appMocks.SetAppearanceMode).toHaveBeenCalledWith('dark');
     expect(appMocks.SetUseShortResourceNames).toHaveBeenCalledWith(true);
+    expect(appMocks.SetDimInactiveNamespaces).toHaveBeenCalledWith(false);
     expect(appMocks.SetObjPanelLogsAPITimestampFormat).toHaveBeenCalledWith('HH:mm:ss.SSS');
     expect(appMocks.SetObjPanelLogsAPITimestampUseLocalTimeZone).toHaveBeenCalledWith(true);
     expect(appMocks.SetMaxTableRows).toHaveBeenCalledWith(2500);
@@ -235,6 +246,7 @@ describe('appPreferences', () => {
 
     expect(getAppearanceModePreference()).toBe('dark');
     expect(getUseShortResourceNames()).toBe(true);
+    expect(getDimInactiveNamespaces()).toBe(false);
     expect(getObjPanelLogsApiTimestampFormat()).toBe('HH:mm:ss.SSS');
     expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(true);
     expect(getMaxTableRows()).toBe(2500);

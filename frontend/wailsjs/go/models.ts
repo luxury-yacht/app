@@ -780,6 +780,7 @@ export namespace types {
 	    appearanceMode: string;
 	    selectedKubeconfigs: string[];
 	    useShortResourceNames: boolean;
+	    dimInactiveNamespaces: boolean;
 	    autoRefreshEnabled: boolean;
 	    refreshBackgroundClustersEnabled: boolean;
 	    metricsRefreshIntervalMs: number;
@@ -818,6 +819,7 @@ export namespace types {
 	        this.appearanceMode = source["appearanceMode"];
 	        this.selectedKubeconfigs = source["selectedKubeconfigs"];
 	        this.useShortResourceNames = source["useShortResourceNames"];
+	        this.dimInactiveNamespaces = source["dimInactiveNamespaces"];
 	        this.autoRefreshEnabled = source["autoRefreshEnabled"];
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];

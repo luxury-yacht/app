@@ -1,0 +1,99 @@
+/**
+ * frontend/src/ui/settings/sections/DisplaySection.test.tsx
+ *
+ * Test suite for DisplaySection.
+ */
+
+import ReactDOM from 'react-dom/client';
+import { act } from 'react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import DisplaySection from './DisplaySection';
+
+const appPreferenceMocks = vi.hoisted(() => ({
+  hydrateAppPreferences: vi.fn(),
+  setUseShortResourceNames: vi.fn(),
+  setDimInactiveNamespaces: vi.fn(),
+}));
+
+vi.mock('@/core/settings/appPreferences', () => ({
+  hydrateAppPreferences: (...args: unknown[]) => appPreferenceMocks.hydrateAppPreferences(...args),
+  setUseShortResourceNames: (...args: unknown[]) =>
+    appPreferenceMocks.setUseShortResourceNames(...args),
+  setDimInactiveNamespaces: (...args: unknown[]) =>
+    appPreferenceMocks.setDimInactiveNamespaces(...args),
+}));
+
+vi.mock('@utils/errorHandler', () => ({
+  errorHandler: {
+    handle: vi.fn(),
+  },
+}));
+
+describe('DisplaySection', () => {
+  beforeAll(() => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  let container: HTMLDivElement;
+  let root: ReactDOM.Root;
+
+  beforeEach(async () => {
+    appPreferenceMocks.hydrateAppPreferences.mockReset();
+    appPreferenceMocks.setUseShortResourceNames.mockReset();
+    appPreferenceMocks.setDimInactiveNamespaces.mockReset();
+    appPreferenceMocks.hydrateAppPreferences.mockResolvedValue({
+      useShortResourceNames: false,
+      dimInactiveNamespaces: true,
+    });
+    appPreferenceMocks.setUseShortResourceNames.mockResolvedValue(undefined);
+    appPreferenceMocks.setDimInactiveNamespaces.mockResolvedValue(undefined);
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+
+    await act(async () => {
+      root.render(<DisplaySection />);
+      await Promise.resolve();
+    });
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    document.body.innerHTML = '';
+  });
+
+  it('shows the dim inactive namespaces setting on by default', () => {
+    expect(container.textContent).toContain('Resources');
+    expect(container.textContent).toContain('Sidebar');
+    expect(container.textContent).toContain('Dim Inactive Namespaces');
+    expect(container.textContent).toContain(
+      'Dim namespaces in the Sidebar that have no Workloads.'
+    );
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Dim Inactive Namespaces"]'
+    );
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('persists dim inactive namespaces changes', async () => {
+    const toggle = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Dim Inactive Namespaces"]'
+    );
+    expect(toggle).not.toBeNull();
+
+    await act(async () => {
+      toggle!.click();
+      await Promise.resolve();
+    });
+
+    expect(appPreferenceMocks.setDimInactiveNamespaces).toHaveBeenCalledWith(false);
+    expect(toggle?.getAttribute('aria-checked')).toBe('false');
+  });
+});

@@ -261,6 +261,8 @@ export function SetClusterTabOrder(arg1:Array<string>):Promise<void>;
 
 export function SetDefaultObjectPanelPosition(arg1:string):Promise<void>;
 
+export function SetDimInactiveNamespaces(arg1:boolean):Promise<void>;
+
 export function SetFavoriteOrder(arg1:Array<string>):Promise<void>;
 
 export function SetGridTablePersistence(arg1:string,arg2:json.RawMessage):Promise<void>;

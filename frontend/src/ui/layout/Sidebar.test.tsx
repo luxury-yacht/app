@@ -12,6 +12,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import Sidebar from './Sidebar';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -178,6 +182,7 @@ describe('Sidebar', () => {
     viewStateMock = createViewState();
     refreshMocks.catalogScopedStates = {};
     autoRefreshLoadingState.suppressPassiveLoading = false;
+    resetAppPreferencesCacheForTesting();
   });
 
   afterEach(() => {
@@ -793,6 +798,28 @@ describe('Sidebar', () => {
       `[data-sidebar-target-namespace="${namespaceKey('unknown')}"] .status-text.warning`
     );
     expect(unknownBadge?.textContent).toBe('Unknown');
+  });
+
+  it('does not dim inactive namespaces when the display setting is disabled', () => {
+    setAppPreferencesForTesting({ dimInactiveNamespaces: false });
+    namespaceState.namespaces = [
+      {
+        name: 'inactive',
+        scope: 'inactive',
+        resourceVersion: '1',
+        hasWorkloads: false,
+        workloadsUnknown: false,
+        details: '',
+      },
+    ];
+
+    renderSidebar();
+
+    const inactiveItem = container!.querySelector(
+      `[data-sidebar-target-namespace="${namespaceKey('inactive')}"]`
+    );
+    expect(inactiveItem).not.toBeNull();
+    expect(inactiveItem!.className).not.toContain('dimmed');
   });
 
   it('renders in collapsed state when the sidebar is hidden', () => {
