@@ -472,7 +472,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         aria-label="Zoom out"
         disabled={!viewportControlsReady}
       >
-        <ZoomOutIcon />
+        <ZoomOutIcon width={18} height={18} />
       </button>
       <button
         type="button"
@@ -482,7 +482,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         aria-label="Zoom in"
         disabled={!viewportControlsReady}
       >
-        <ZoomInIcon />
+        <ZoomInIcon width={18} height={18} />
       </button>
       <button
         type="button"
@@ -503,7 +503,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         aria-label="Fit"
         disabled={!viewportControlsReady}
       >
-        <FitToViewIcon />
+        <FitToViewIcon width={18} height={18} />
       </button>
       <button
         type="button"
@@ -519,7 +519,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         aria-label="Toggle auto-fit"
         aria-pressed={model.autoFit}
       >
-        <AutoFitIcon />
+        <AutoFitIcon width={18} height={18} />
       </button>
       <span className="object-map__toolbar-separator" aria-hidden="true" />
       <button
@@ -532,7 +532,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         aria-label="Toggle focus mode"
         aria-pressed={focusMode}
       >
-        <FocusModeIcon />
+        <FocusModeIcon width={18} height={18} />
       </button>
       <button
         type="button"
@@ -542,7 +542,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         aria-label="Reset layout"
         disabled={!model.hasNodePositionOverrides && !focusMode}
       >
-        <ResetFiltersIcon />
+        <ResetFiltersIcon width={18} height={18} />
       </button>
       <span className="object-map__toolbar-separator" aria-hidden="true" />
       {onRefresh && (
@@ -557,7 +557,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           aria-busy={isRefreshing}
           disabled={isRefreshing}
         >
-          <RefreshIcon />
+          <RefreshIcon width={18} height={18} />
         </button>
       )}
       <button
@@ -570,7 +570,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         aria-label="Toggle legend"
         aria-pressed={showLegend}
       >
-        <LegendIcon />
+        <LegendIcon width={18} height={18} />
       </button>
     </div>
   );
