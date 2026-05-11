@@ -595,7 +595,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       {
         type: 'toggle',
         id: 'appLogsAutoScroll',
-        icon: <AutoScrollIcon />,
+        icon: <AutoScrollIcon width={18} height={18} />,
         active: isAutoScroll,
         onClick: handleToggleAutoScroll,
         title: 'Toggle auto-scroll (S)',
@@ -605,7 +605,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       {
         type: 'action',
         id: 'copyAppLogs',
-        icon: <CopyIcon />,
+        icon: <CopyIcon width={18} height={18} />,
         onClick: handleCopyToClipboard,
         title: 'Copy logs to clipboard',
         ariaLabel: 'Copy logs to clipboard',
@@ -615,7 +615,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       {
         type: 'action',
         id: 'clearAppLogs',
-        icon: <DeleteIcon />,
+        icon: <DeleteIcon width={18} height={18} />,
         onClick: handleClearAppLogs,
         title: 'Clear logs',
         ariaLabel: 'Clear logs',

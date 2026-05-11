@@ -10,7 +10,7 @@ import { StartPortForward } from '@wailsjs/go/backend/App';
 import { readTargetPorts, requestData } from '@/core/data-access';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { ModalCloseIcon } from '@shared/components/icons/SharedIcons';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import './PortForwardModal.css';
 
 /**
@@ -278,7 +278,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
           disabled={isLoading}
           aria-label="Close modal"
         >
-          <ModalCloseIcon />
+          <CloseIcon />
         </button>
       </div>
 

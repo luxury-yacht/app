@@ -105,7 +105,7 @@ function KubeconfigsSection() {
                       key={`kubeconfig-path-${index}`}
                     >
                       <span className="kubeconfig-path-icon" aria-hidden="true">
-                        <KubeconfigFolderIcon />
+                        <KubeconfigFolderIcon width={16} height={16} />
                       </span>
                       <span className="kubeconfig-path-value">{path}</span>
                       {canRemove && (
@@ -131,7 +131,7 @@ function KubeconfigsSection() {
               onClick={handleAddKubeconfigPath}
               disabled={kubeconfigPathsSaving || kubeconfigPathsLoading || kubeconfigPathsSelecting}
             >
-              <PlusIcon ariaHidden />
+              <PlusIcon width={12} height={12} ariaHidden />
               Add path
             </button>
           </div>

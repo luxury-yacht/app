@@ -173,11 +173,6 @@
   color: var(--color-error);
 }
 
-.dockable-panel__control-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
 /* Content */
 .dockable-panel__content {
   flex: 1;

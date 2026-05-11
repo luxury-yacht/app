@@ -22,7 +22,7 @@ import DiffViewer from '@shared/components/diff/DiffViewer';
 import ConfirmationModal from './ConfirmationModal';
 import ModalSurface from './ModalSurface';
 import { useModalFocusTrap } from './useModalFocusTrap';
-import { ModalCloseIcon } from '@shared/components/icons/SharedIcons';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import './RollbackModal.css';
 
 interface RollbackModalProps {
@@ -250,7 +250,7 @@ const RollbackModal = ({
           Rollback {kind} &mdash; {name}
         </h2>
         <button className="modal-close" onClick={onClose} aria-label="Close">
-          <ModalCloseIcon />
+          <CloseIcon />
         </button>
       </div>
 

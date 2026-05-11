@@ -45,13 +45,13 @@ const dockActionsByPosition: Record<DockPosition, DockAction[]> = {
       target: 'bottom',
       title: 'Dock to bottom',
       ariaLabel: 'Dock panel to bottom',
-      renderIcon: () => <DockBottomIcon width={20} height={20} />,
+      renderIcon: () => <DockBottomIcon width={16} height={16} />,
     },
     {
       target: 'right',
       title: 'Dock to right',
       ariaLabel: 'Dock panel to right side',
-      renderIcon: () => <DockRightIcon width={20} height={20} />,
+      renderIcon: () => <DockRightIcon width={16} height={16} />,
     },
   ],
   right: [
@@ -59,13 +59,13 @@ const dockActionsByPosition: Record<DockPosition, DockAction[]> = {
       target: 'bottom',
       title: 'Dock to bottom',
       ariaLabel: 'Dock panel to bottom',
-      renderIcon: () => <DockBottomIcon width={20} height={20} />,
+      renderIcon: () => <DockBottomIcon width={16} height={16} />,
     },
     {
       target: 'floating',
       title: 'Float panel',
       ariaLabel: 'Undock panel to floating window',
-      renderIcon: () => <FloatPanelIcon width={20} height={20} />,
+      renderIcon: () => <FloatPanelIcon width={16} height={16} />,
     },
   ],
   bottom: [
@@ -73,13 +73,13 @@ const dockActionsByPosition: Record<DockPosition, DockAction[]> = {
       target: 'right',
       title: 'Dock to right',
       ariaLabel: 'Dock panel to right side',
-      renderIcon: () => <DockRightIcon width={20} height={20} />,
+      renderIcon: () => <DockRightIcon width={16} height={16} />,
     },
     {
       target: 'floating',
       title: 'Float panel',
       ariaLabel: 'Undock panel to floating window',
-      renderIcon: () => <FloatPanelIcon width={20} height={20} />,
+      renderIcon: () => <FloatPanelIcon width={16} height={16} />,
     },
   ],
 };
@@ -118,9 +118,9 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
           aria-label={isMaximized ? 'Restore panel size' : 'Maximize panel'}
         >
           {isMaximized ? (
-            <RestorePanelIcon width={20} height={20} />
+            <RestorePanelIcon width={16} height={16} />
           ) : (
-            <MaximizePanelIcon width={20} height={20} />
+            <MaximizePanelIcon width={16} height={16} />
           )}
         </button>
       )}
@@ -130,7 +130,7 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
         title="Close all tabs in this panel"
         aria-label="Close all tabs in this panel"
       >
-        <CloseIcon />
+        <CloseIcon width={16} height={16} />
       </button>
     </div>
   );

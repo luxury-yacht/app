@@ -564,30 +564,6 @@ export const RefreshIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) =>
   </svg>
 );
 
-export const ModalCloseIcon: React.FC<IconProps> = ({
-  width = 24,
-  height = 24,
-  className,
-  ariaHidden,
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    width={width}
-    height={height}
-    className={className}
-    aria-hidden={ariaHidden}
-  >
-    <line x1="18" y1="6" x2="6" y2="18" />
-    <line x1="6" y1="6" x2="18" y2="18" />
-  </svg>
-);
-
 export const IconBarSeparatorIcon: React.FC<IconProps> = ({
   width = 2,
   height = 16,
