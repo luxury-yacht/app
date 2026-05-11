@@ -9,6 +9,7 @@
 import { GraphEvent } from '@antv/g6';
 import type { Graph, GraphData } from '@antv/g6';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useZoom } from '@core/contexts/ZoomContext';
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import type { ObjectMapLayout } from './objectMapLayout';
 import { createObjectMapG6ApplyQueue, type ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
@@ -288,6 +289,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   onUserViewportChange,
   onViewportControlsChange,
 }) => {
+  const { zoomLevel } = useZoom();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const graphRef = useRef<Graph | null>(null);
   const hoverEdgeRef = useRef(hoverEdge);
@@ -625,6 +627,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   }, [layout, scheduleSelectionState, selectionState]);
 
   useObjectMapG6Viewport({
+    appZoomLevel: zoomLevel,
     autoFit,
     containerRef,
     data,

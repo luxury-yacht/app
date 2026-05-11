@@ -6,6 +6,7 @@
  */
 
 import type { Meta, StoryObj } from '@storybook/react';
+import { ZoomProviderDecorator } from '../../../.storybook/decorators/ZoomProviderDecorator';
 import ObjectMap from './ObjectMap';
 import { createObjectMapPerformanceFixture } from './objectMapPerformanceFixtures';
 
@@ -29,6 +30,7 @@ const meta: Meta<typeof ObjectMap> = {
   parameters: {
     layout: 'fullscreen',
   },
+  decorators: [ZoomProviderDecorator],
 };
 
 export default meta;

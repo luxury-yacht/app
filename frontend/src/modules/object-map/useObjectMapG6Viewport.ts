@@ -6,7 +6,7 @@
  */
 
 import type { Graph, GraphData } from '@antv/g6';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { MutableRefObject, RefObject } from 'react';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { fitObjectMapG6GraphToView, resetObjectMapG6GraphZoom } from './objectMapG6Viewport';
@@ -16,6 +16,7 @@ import type {
 } from './objectMapRendererTypes';
 
 export interface UseObjectMapG6ViewportOptions {
+  appZoomLevel: number;
   autoFit: boolean;
   containerRef: RefObject<HTMLElement | null>;
   data: GraphData;
@@ -28,7 +29,49 @@ export interface UseObjectMapG6ViewportOptions {
   updateTooltipPosition: () => void;
 }
 
+interface AppZoomResizeSuppression {
+  timeoutId: ReturnType<typeof setTimeout>;
+  windowHeight: number;
+  windowWidth: number;
+}
+
+const OBJECT_MAP_APP_ZOOM_RESIZE_SUPPRESSION_MS = 300;
+
+const objectMapG6DevicePixelRatioForAppZoom = (appZoomLevel: number): number => {
+  const baseDevicePixelRatio =
+    typeof window === 'undefined' || !Number.isFinite(window.devicePixelRatio)
+      ? 1
+      : window.devicePixelRatio;
+  const appZoomFactor = Number.isFinite(appZoomLevel) && appZoomLevel > 0 ? appZoomLevel / 100 : 1;
+  return Math.max(1, Math.ceil(baseDevicePixelRatio * appZoomFactor));
+};
+
+const updateObjectMapG6CanvasDevicePixelRatio = (
+  graph: Graph,
+  appZoomLevel: number,
+  width: number,
+  height: number
+): boolean => {
+  if (graph.destroyed || width <= 0 || height <= 0) return false;
+  const canvas = graph.getCanvas();
+  const nextDevicePixelRatio = objectMapG6DevicePixelRatioForAppZoom(appZoomLevel);
+  const config = canvas.getConfig();
+  const layers = Object.values(canvas.getLayers());
+  const changed =
+    config.devicePixelRatio !== nextDevicePixelRatio ||
+    layers.some((layer) => layer.context.config.devicePixelRatio !== nextDevicePixelRatio);
+  if (!changed) return false;
+  config.devicePixelRatio = nextDevicePixelRatio;
+  layers.forEach((layer) => {
+    layer.context.config.devicePixelRatio = nextDevicePixelRatio;
+    layer.devicePixelRatio = nextDevicePixelRatio;
+  });
+  canvas.resize(width, height);
+  return true;
+};
+
 export const useObjectMapG6Viewport = ({
+  appZoomLevel,
   autoFit,
   containerRef,
   data,
@@ -40,6 +83,55 @@ export const useObjectMapG6Viewport = ({
   paletteRef,
   updateTooltipPosition,
 }: UseObjectMapG6ViewportOptions) => {
+  const previousAppZoomLevelRef = useRef(appZoomLevel);
+  const appZoomResizeSuppressionRef = useRef<AppZoomResizeSuppression | null>(null);
+
+  const clearAppZoomResizeSuppression = useCallback(() => {
+    const suppression = appZoomResizeSuppressionRef.current;
+    if (suppression) {
+      clearTimeout(suppression.timeoutId);
+      appZoomResizeSuppressionRef.current = null;
+    }
+  }, []);
+
+  const shouldSuppressAutoFitForAppZoomResize = useCallback(() => {
+    const suppression = appZoomResizeSuppressionRef.current;
+    if (!suppression) return false;
+    const isSameWindowSize =
+      window.innerWidth === suppression.windowWidth &&
+      window.innerHeight === suppression.windowHeight;
+    if (!isSameWindowSize) {
+      clearAppZoomResizeSuppression();
+      return false;
+    }
+    return true;
+  }, [clearAppZoomResizeSuppression]);
+
+  useLayoutEffect(() => {
+    if (previousAppZoomLevelRef.current === appZoomLevel) return undefined;
+    previousAppZoomLevelRef.current = appZoomLevel;
+    clearAppZoomResizeSuppression();
+    const timeoutId = setTimeout(() => {
+      if (appZoomResizeSuppressionRef.current?.timeoutId === timeoutId) {
+        appZoomResizeSuppressionRef.current = null;
+      }
+    }, OBJECT_MAP_APP_ZOOM_RESIZE_SUPPRESSION_MS);
+    appZoomResizeSuppressionRef.current = {
+      timeoutId,
+      windowHeight: window.innerHeight,
+      windowWidth: window.innerWidth,
+    };
+    const graph = graphRef.current;
+    if (graph && !graph.destroyed) {
+      const [width, height] = graph.getSize();
+      updateObjectMapG6CanvasDevicePixelRatio(graph, appZoomLevel, width, height);
+    }
+    updateTooltipPosition();
+    return undefined;
+  }, [appZoomLevel, clearAppZoomResizeSuppression, graphRef, updateTooltipPosition]);
+
+  useEffect(() => clearAppZoomResizeSuppression, [clearAppZoomResizeSuppression]);
+
   const scheduleFitGraphToView = useCallback(() => {
     if (!graphReady) return;
     const graph = graphRef.current;
@@ -62,14 +154,31 @@ export const useObjectMapG6Viewport = ({
     const height = container.clientHeight;
     if (width <= 0 || height <= 0) return;
     const [currentWidth, currentHeight] = graph.getSize();
+    const devicePixelRatioChanged = updateObjectMapG6CanvasDevicePixelRatio(
+      graph,
+      appZoomLevel,
+      currentWidth,
+      currentHeight
+    );
     if (currentWidth !== width || currentHeight !== height) {
       graph.setSize(width, height);
+    } else if (devicePixelRatioChanged) {
+      updateTooltipPosition();
     }
-    if (autoFit && graphReady) {
+    if (autoFit && graphReady && !shouldSuppressAutoFitForAppZoomResize()) {
       scheduleFitGraphToView();
     }
     updateTooltipPosition();
-  }, [autoFit, containerRef, graphReady, graphRef, scheduleFitGraphToView, updateTooltipPosition]);
+  }, [
+    autoFit,
+    appZoomLevel,
+    containerRef,
+    graphReady,
+    graphRef,
+    scheduleFitGraphToView,
+    shouldSuppressAutoFitForAppZoomResize,
+    updateTooltipPosition,
+  ]);
 
   useEffect(() => {
     const container = containerRef.current;

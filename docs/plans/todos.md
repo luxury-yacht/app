@@ -6,7 +6,6 @@
   - Browser console?
 - Settings
   - Setting to show Debug menu? Requires restart?
-- Map view -- max default zoom when object count is low
 
 ## Feature Ideas
 
