@@ -560,14 +560,15 @@
 }
 
 .theme-summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.8fr) minmax(0, 1.2fr);
   align-items: baseline;
-  gap: var(--spacing-sm);
+  gap: 0.35rem;
 }
 
 .theme-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(10rem, 0.8fr) minmax(0, 1.2fr);
   gap: 0.35rem;
 }
 
@@ -583,12 +584,6 @@
 
 .theme-name {
   color: var(--color-text);
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-.theme-pattern {
-  flex: 1 1 auto;
   min-width: 0;
 }
 
