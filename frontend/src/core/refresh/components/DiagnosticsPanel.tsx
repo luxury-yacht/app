@@ -149,23 +149,19 @@ const DIAGNOSTICS_FOCUSABLE_PROPS = {
 } as HTMLAttributes<HTMLElement>;
 
 const DIAGNOSTICS_TAB_DESCRIPTORS: TabDescriptor[] = [
+  { id: 'k8s-api', label: 'K8s API', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   { id: 'refresh-domains', label: 'Refresh Domains', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   { id: 'streams', label: 'Streams', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
-  { id: 'k8s-api', label: 'K8S API', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
-  { id: 'table-performance', label: 'Table Performance', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
+  { id: 'broker-reads', label: 'Broker Reads', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
+  { id: 'table-performance', label: 'Tables', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   {
     id: 'capability-checks',
-    label: 'Capabilities Checks',
+    label: 'Cap Checks',
     extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
   },
   {
     id: 'effective-permissions',
-    label: 'Effective Permissions',
-    extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
-  },
-  {
-    id: 'broker-reads',
-    label: 'Broker Reads',
+    label: 'Permissions',
     extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
   },
 ];
@@ -309,7 +305,7 @@ const resolveBrokerReadScope = (
 };
 
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isOpen }) => {
-  const [activeTab, setActiveTab] = useState<DiagnosticsTabId>('refresh-domains');
+  const [activeTab, setActiveTab] = useState<DiagnosticsTabId>('k8s-api');
   const gridTablePerformanceRows = useGridTablePerformanceDiagnostics();
   const brokerReadDiagnostics = useBrokerReadDiagnostics();
   const refreshState = useRefreshState();
@@ -2229,7 +2225,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     return { currentCapabilityRows: current, previousCapabilityRows: previous };
   }, [capabilityBatchRows, selectedNamespace, selectedClusterId]);
 
-  // Capabilities Checks tab content.
+  // Cap Checks tab content.
   const capabilityChecksContent = (
     <CapabilityChecksTable
       currentRows={currentCapabilityRows}
@@ -2240,7 +2236,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     />
   );
 
-  // Effective Permissions tab content.
+  // Permissions tab content.
   const effectivePermissionsContent = <EffectivePermissionsTable rows={permissionRows} />;
 
   const brokerReadRows = useMemo<BrokerReadRow[]>(() => {

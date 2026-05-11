@@ -183,6 +183,10 @@ function AdvancedSection() {
     <div className="settings-panel">
       <h2 className="settings-panel-title">Advanced</h2>
 
+      <div className="settings-advanced-warning">
+        ⚠️ Modifying these settings could negatively impact app behavior or performance.
+      </div>
+
       <div className="settings-subgroup-label">Refresh</div>
       <hr className="settings-subgroup-divider" />
 
@@ -190,8 +194,8 @@ function AdvancedSection() {
         <div className="settings-row-label">
           <div className="settings-row-label-title">Auto-refresh</div>
           <div className="settings-row-label-help">
-            Automatically refresh at regular intervals to keep views up to date. Disabling this
-            means that you will have to manually refresh for updated data.
+            Automatically refresh data at regular intervals. If disabled, you will have to manually
+            refresh for updated data.
           </div>
         </div>
         <div className="settings-row-control">
@@ -221,96 +225,6 @@ function AdvancedSection() {
         </div>
       </div>
 
-      <div className="settings-subgroup-label">Kubernetes API</div>
-      <hr className="settings-subgroup-divider" />
-
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Client QPS</div>
-          <div className="settings-row-label-help">
-            Per-cluster Kubernetes REST client request rate for newly built cluster connections.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <div className="setting-item setting-item-inline">
-            <input
-              type="number"
-              id="settings-kubernetes-client-qps"
-              min={KUBERNETES_CLIENT_QPS_MIN}
-              max={KUBERNETES_CLIENT_QPS_MAX}
-              step={10}
-              value={kubernetesClientQPSInput}
-              onChange={(e) => setKubernetesClientQPSInput(e.target.value)}
-              onBlur={(e) => commitKubernetesClientQPS(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Client burst</div>
-          <div className="settings-row-label-help">
-            Per-cluster Kubernetes REST client burst allowance for newly built cluster connections.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <div className="setting-item setting-item-inline">
-            <input
-              type="number"
-              id="settings-kubernetes-client-burst"
-              min={KUBERNETES_CLIENT_BURST_MIN}
-              max={KUBERNETES_CLIENT_BURST_MAX}
-              step={10}
-              value={kubernetesClientBurstInput}
-              onChange={(e) => setKubernetesClientBurstInput(e.target.value)}
-              onBlur={(e) => commitKubernetesClientBurst(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">SSRR concurrency</div>
-          <div className="settings-row-label-help">
-            Concurrent namespace SelfSubjectRulesReview requests during permission checks.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <div className="setting-item setting-item-inline">
-            <input
-              type="number"
-              id="settings-permission-ssrr-concurrency"
-              min={PERMISSION_SSRR_FETCH_CONCURRENCY_MIN}
-              max={PERMISSION_SSRR_FETCH_CONCURRENCY_MAX}
-              step={1}
-              value={permissionSSRRFetchConcurrencyInput}
-              onChange={(e) => setPermissionSSRRFetchConcurrencyInput(e.target.value)}
-              onBlur={(e) => commitPermissionSSRRFetchConcurrency(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
       <div className="settings-subgroup-label">Tables</div>
       <hr className="settings-subgroup-divider" />
 
@@ -318,8 +232,8 @@ function AdvancedSection() {
         <div className="settings-row-label">
           <div className="settings-row-label-title">Max rows</div>
           <div className="settings-row-label-help">
-            Max number of rows in a data table. Larger values will show more data, but app
-            performance may be impacted.
+            Max number of rows in a data table. Larger values will show more data, but could impact
+            app rendering performance.
           </div>
         </div>
         <div className="settings-row-control">
@@ -339,7 +253,101 @@ function AdvancedSection() {
                   e.currentTarget.blur();
                 }
               }}
-            />
+            />{' '}
+            rows
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-subgroup-label">Kubernetes API</div>
+      <hr className="settings-subgroup-divider" />
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Client QPS</div>
+          <div className="settings-row-label-help">
+            Sustained per-second rate for K8s API requests. This value is per-cluster.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <div className="setting-item setting-item-inline">
+            <input
+              type="number"
+              id="settings-kubernetes-client-qps"
+              min={KUBERNETES_CLIENT_QPS_MIN}
+              max={KUBERNETES_CLIENT_QPS_MAX}
+              step={10}
+              value={kubernetesClientQPSInput}
+              onChange={(e) => setKubernetesClientQPSInput(e.target.value)}
+              onBlur={(e) => commitKubernetesClientQPS(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+            />{' '}
+            queries per second
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Client burst allowance</div>
+          <div className="settings-row-label-help">
+            Short-term burst allowance for K8s API requests. This value is per-cluster.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <div className="setting-item setting-item-inline">
+            <input
+              type="number"
+              id="settings-kubernetes-client-burst"
+              min={KUBERNETES_CLIENT_BURST_MIN}
+              max={KUBERNETES_CLIENT_BURST_MAX}
+              step={10}
+              value={kubernetesClientBurstInput}
+              onChange={(e) => setKubernetesClientBurstInput(e.target.value)}
+              onBlur={(e) => commitKubernetesClientBurst(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+            />{' '}
+            queries per second
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">SSRR concurrency</div>
+          <div className="settings-row-label-help">
+            Concurrent <code>SelfSubjectRulesReview</code> requests during permission checks.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <div className="setting-item setting-item-inline">
+            <input
+              type="number"
+              id="settings-permission-ssrr-concurrency"
+              min={PERMISSION_SSRR_FETCH_CONCURRENCY_MIN}
+              max={PERMISSION_SSRR_FETCH_CONCURRENCY_MAX}
+              step={1}
+              value={permissionSSRRFetchConcurrencyInput}
+              onChange={(e) => setPermissionSSRRFetchConcurrencyInput(e.target.value)}
+              onBlur={(e) => commitPermissionSSRRFetchConcurrency(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+            />{' '}
+            concurrent requests
           </div>
         </div>
       </div>

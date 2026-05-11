@@ -10,7 +10,7 @@
   max-width: 1100px;
   /* Keep the modal a consistent height regardless of active tab, scaled to
      the app window. The base .modal-container caps height at 85vh. */
-  min-height: 80vh;
+  height: 80vh;
   /* Disable text selection across the modal chrome. User data values
      (theme hex/slider values, saved theme name/pattern, kubeconfig paths,
      and form inputs) explicitly re-enable selection below. */

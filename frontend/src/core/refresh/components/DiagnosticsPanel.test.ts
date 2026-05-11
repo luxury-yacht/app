@@ -9,7 +9,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, expect, test, vi, beforeEach, afterEach, beforeAll } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { KeyboardProvider } from '@ui/shortcuts';
 import type { ViewType } from '@/types/navigation/views';
 import type { KubernetesAPIClientDiagnostics } from '../client';
@@ -238,6 +237,18 @@ const flushAsync = async () => {
   });
 };
 
+const selectDiagnosticsTab = async (container: HTMLElement, index: number) => {
+  const tabButtons = container.querySelectorAll<HTMLElement>('[role="tab"]');
+  await act(async () => {
+    tabButtons[index].click();
+    await Promise.resolve();
+  });
+  await flushAsync();
+};
+
+const selectRefreshDomainsTab = async (container: HTMLElement) =>
+  selectDiagnosticsTab(container, 1);
+
 const renderDiagnosticsPanel = async (
   DiagnosticsPanelComponent: React.ComponentType<any>,
   props: Partial<{ isOpen: boolean; onClose: () => void }> = {},
@@ -399,7 +410,7 @@ describe('broker read diagnostics', () => {
 
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
-      tabButtons[6].click();
+      tabButtons[3].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -556,16 +567,10 @@ describe('DiagnosticsPanel component', () => {
     ];
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
 
-    const markup = renderToStaticMarkup(
-      React.createElement(KeyboardProvider, {
-        disabled: true,
-        children: React.createElement(DiagnosticsPanel, {
-          isOpen: true,
-          onClose: () => undefined,
-        }),
-      })
-    );
+    const markup = rendered.container.innerHTML;
 
     expect(markup).toContain('Cluster Overview');
     expect(markup).toContain('OK (5 polls)');
@@ -574,6 +579,8 @@ describe('DiagnosticsPanel component', () => {
     const podsIndex = markup.indexOf('Pods');
     expect(clusterIndex).toBeGreaterThan(-1);
     expect(podsIndex).toBeGreaterThan(clusterIndex);
+
+    await rendered.unmount();
   });
 
   test('renders namespace scoped pod row with namespace label', async () => {
@@ -602,18 +609,15 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
-    const markup = renderToStaticMarkup(
-      React.createElement(KeyboardProvider, {
-        disabled: true,
-        children: React.createElement(DiagnosticsPanel, {
-          isOpen: true,
-          onClose: () => undefined,
-        }),
-      })
-    );
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
+
+    const markup = rendered.container.innerHTML;
 
     expect(markup).toContain('ObjPanel - Pods - team-a');
     expect(markup).toContain('team-a');
+
+    await rendered.unmount();
   });
 
   test('strips cluster prefixes from pod scopes when rendering labels', async () => {
@@ -642,18 +646,15 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
-    const markup = renderToStaticMarkup(
-      React.createElement(KeyboardProvider, {
-        disabled: true,
-        children: React.createElement(DiagnosticsPanel, {
-          isOpen: true,
-          onClose: () => undefined,
-        }),
-      })
-    );
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
+
+    const markup = rendered.container.innerHTML;
 
     // Only the namespace portion should be shown in the label.
     expect(markup).toContain('ObjPanel - Pods - team-a');
+
+    await rendered.unmount();
   });
 
   test('renders all active cluster scopes and marks the selected cluster as active', async () => {
@@ -707,6 +708,7 @@ describe('DiagnosticsPanel component', () => {
     mockKubeconfigState.selectedClusterId = 'cluster-a';
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
 
     await flushAsync();
     const clusterAScopeRow = findClusterConfigRow(rendered.container, 'cluster-a');
@@ -743,18 +745,15 @@ describe('DiagnosticsPanel component', () => {
     mockKubeconfigState.selectedClusterId = 'cluster-b';
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
-    const markup = renderToStaticMarkup(
-      React.createElement(KeyboardProvider, {
-        disabled: true,
-        children: React.createElement(DiagnosticsPanel, {
-          isOpen: true,
-          onClose: () => undefined,
-        }),
-      })
-    );
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
+
+    const markup = rendered.container.innerHTML;
 
     expect(markup).toContain('Cluster Config');
     expect(markup).toContain('cluster-a');
+
+    await rendered.unmount();
   });
 
   test('keeps multi-cluster namespaces and overview rows cluster-inclusive', async () => {
@@ -811,6 +810,7 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
 
     await flushAsync();
 
@@ -976,6 +976,7 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
 
     await flushAsync();
     await flushAsync();
@@ -1021,7 +1022,7 @@ describe('DiagnosticsPanel component', () => {
 
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
-      tabButtons[1].click();
+      tabButtons[2].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1042,7 +1043,7 @@ describe('DiagnosticsPanel component', () => {
     resourceStreamSpy.mockRestore();
   });
 
-  test('renders Kubernetes API client diagnostics on the K8S API tab', async () => {
+  test('renders Kubernetes API client diagnostics on the K8s API tab', async () => {
     fetchTelemetrySummaryMock.mockResolvedValue({
       domains: [],
       streams: [],
@@ -1072,11 +1073,7 @@ describe('DiagnosticsPanel component', () => {
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
-
-    await act(async () => {
-      tabButtons[2].click();
-      await Promise.resolve();
-    });
+    expect(tabButtons[0].getAttribute('aria-selected')).toBe('true');
     await flushAsync();
 
     expect(rendered.container.textContent).toContain('Clusters: 1');
@@ -1157,6 +1154,7 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
 
     await flushAsync();
     await flushAsync();
@@ -1219,13 +1217,14 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
 
     await flushAsync();
     await flushAsync();
 
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
-      tabButtons[1].click();
+      tabButtons[2].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1262,6 +1261,7 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
 
     await flushAsync();
     await flushAsync();
@@ -1281,6 +1281,7 @@ describe('DiagnosticsPanel component', () => {
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
 
     await flushAsync();
     await flushAsync();
@@ -1447,7 +1448,7 @@ describe('DiagnosticsPanel component', () => {
 
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
-      tabButtons[4].click();
+      tabButtons[5].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1479,7 +1480,7 @@ describe('DiagnosticsPanel component', () => {
     expect(expandedCells[13].textContent).toContain('deployments');
 
     await act(async () => {
-      tabButtons[5].click();
+      tabButtons[6].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1512,6 +1513,15 @@ describe('DiagnosticsPanel component', () => {
     const focusableEls = rendered.container.querySelectorAll('[data-diagnostics-focusable="true"]');
     // Expect exactly seven focusable tab elements (one per tab descriptor).
     expect(focusableEls.length).toBe(7);
+    expect(Array.from(focusableEls).map((el) => el.textContent)).toEqual([
+      'K8s API',
+      'Refresh Domains',
+      'Streams',
+      'Broker Reads',
+      'Tables',
+      'Cap Checks',
+      'Permissions',
+    ]);
     // Each should also carry role="tab" — confirming they are the tab divs.
     for (const el of Array.from(focusableEls)) {
       expect(el.getAttribute('role')).toBe('tab');

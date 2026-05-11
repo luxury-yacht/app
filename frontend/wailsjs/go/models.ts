@@ -599,7 +599,6 @@ export namespace backend {
 	}
 
 }
-
 export namespace capabilities {
 	
 	export class NamespaceDiagnostics {
