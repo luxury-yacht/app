@@ -245,7 +245,7 @@ describe('AppearanceSection', () => {
     });
 
     const newThemeButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === '+ Save new theme'
+      (button) => button.textContent === 'Save new theme'
     ) as HTMLButtonElement | undefined;
     expect(newThemeButton).toBeTruthy();
 

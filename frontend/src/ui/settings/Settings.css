@@ -656,26 +656,12 @@
   background: rgba(248, 113, 113, 0.1);
 }
 
-/* "+ Save new theme" button rendered as the last row of the themes table */
+/* Inline + icon next to the button label */
 .themes-save-new-row {
-  display: block;
-  width: 100%;
-  padding: 0.25rem 0.75rem;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-normal);
-  cursor: pointer;
-  text-align: center;
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast);
-}
-
-.themes-save-new-row:hover {
-  background: var(--color-bg-tertiary, var(--color-bg-secondary));
-  color: var(--color-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
 }
 
 .themes-drag-handle--placeholder {

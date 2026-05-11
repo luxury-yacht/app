@@ -34,7 +34,13 @@ import {
 import { applyAccentColor, applyAccentBg } from '@utils/accentColor';
 import { applyLinkColor } from '@utils/linkColor';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import { EditIcon, DeleteIcon, CheckIcon, CloseIcon } from '@shared/components/icons/SharedIcons';
+import {
+  EditIcon,
+  DeleteIcon,
+  CheckIcon,
+  CloseIcon,
+  PlusIcon,
+} from '@shared/components/icons/SharedIcons';
 import {
   DarkModeIcon,
   LightModeIcon,
@@ -1175,10 +1181,11 @@ function AppearanceSection() {
                 ) : (
                   <button
                     type="button"
-                    className="themes-save-new-row"
+                    className="button generic themes-save-new-row"
                     onClick={handleSaveCurrentAsTheme}
                   >
-                    + Save new theme
+                    <PlusIcon width={12} height={12} ariaHidden />
+                    Save new theme
                   </button>
                 )}
               </div>
