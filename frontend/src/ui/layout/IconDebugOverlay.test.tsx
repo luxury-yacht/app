@@ -20,13 +20,13 @@ describe('IconDebugOverlay', () => {
     document.body.innerHTML = '';
   });
 
-  const renderOverlay = () => {
+  const renderOverlay = (onClose = vi.fn()) => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
 
     act(() => {
-      root.render(<IconDebugOverlay onClose={vi.fn()} />);
+      root.render(<IconDebugOverlay onClose={onClose} />);
     });
   };
 
@@ -35,15 +35,18 @@ describe('IconDebugOverlay', () => {
 
     const overlay = document.body.querySelector('[data-testid="icon-debug-overlay"]');
     expect(overlay).not.toBeNull();
-    expect(overlay?.querySelector('table.icon-debug-table')).not.toBeNull();
+    expect(overlay?.querySelector('table.icon-debug-table--header')).not.toBeNull();
+    expect(overlay?.querySelector('.icon-debug-table__body-scroll table')).not.toBeNull();
     expect(
       Array.from(overlay?.querySelectorAll('th') ?? []).map((cell) => cell.textContent)
-    ).toEqual(['Preview', 'Default', 'Grid', 'Name', 'Source']);
+    ).toEqual(['View', 'Size', 'Grid', 'Name', 'Source']);
     expect(
       Array.from(overlay?.querySelectorAll('thead button') ?? []).map((cell) => cell.textContent)
-    ).toEqual(['Default', 'Grid', 'Name', 'Source']);
+    ).toEqual(['Size', 'Grid', 'Name', 'Source']);
     expect(
-      Array.from(overlay?.querySelectorAll('col') ?? []).map((column) => column.className)
+      Array.from(overlay?.querySelectorAll('table.icon-debug-table--header col') ?? []).map(
+        (column) => column.className
+      )
     ).toEqual([
       'icon-debug-table__preview-col',
       'icon-debug-table__metric-col',
@@ -71,6 +74,24 @@ describe('IconDebugOverlay', () => {
     expect(previewSvg?.getAttribute('height')).toBe('24');
   });
 
+  it('closes from the debug overlay close button', () => {
+    const onClose = vi.fn();
+    renderOverlay(onClose);
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>(
+      '[aria-label="Close debug overlay"]'
+    );
+
+    expect(closeButton).not.toBeNull();
+
+    act(() => {
+      closeButton?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      closeButton?.click();
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('sorts by sortable icon table columns', () => {
     renderOverlay();
 
@@ -86,7 +107,7 @@ describe('IconDebugOverlay', () => {
     expect(getFirstName()).toBe('DockBottomIcon');
 
     act(() => {
-      getHeaderButton('Default')?.click();
+      getHeaderButton('Size')?.click();
     });
     expect(getFirstName()).toBe('IconBarSeparatorIcon');
 

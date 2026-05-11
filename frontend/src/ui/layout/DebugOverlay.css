@@ -38,6 +38,8 @@
 }
 
 .debug-overlay__header {
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -348,6 +350,29 @@
   border-spacing: 0 0.35rem;
 }
 
+.icon-debug-overlay__body {
+  overflow: hidden;
+}
+
+.icon-debug-table-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.icon-debug-table--header {
+  flex: 0 0 auto;
+}
+
+.icon-debug-table__body-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .icon-debug-table__preview-col {
   width: 60px;
 }
@@ -362,14 +387,16 @@
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-align: left;
+  text-align: center;
   text-transform: uppercase;
 }
 
 .icon-debug-table__sort-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.25rem;
+  width: 100%;
   padding: 0;
   border: 0;
   background: transparent;
@@ -396,7 +423,7 @@
 .icon-debug-table td {
   min-width: 0;
   padding: 0.4rem;
-  vertical-align: top;
+  vertical-align: middle;
   border-top: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-bg) 75%, transparent);
@@ -451,6 +478,7 @@
 }
 
 .icon-debug-row__file {
+  display: block;
   min-width: 0;
   color: var(--color-text-secondary);
   font-size: 0.68rem;

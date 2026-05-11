@@ -204,6 +204,17 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
     };
   };
 
+  const stopHeaderControlInteraction = (
+    event: React.PointerEvent<HTMLButtonElement> | React.MouseEvent<HTMLButtonElement>
+  ) => {
+    event.stopPropagation();
+  };
+
+  const handleCloseClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onClose?.();
+  };
+
   const overlayClassName = useMemo(
     () => (className ? `debug-overlay-window ${className}` : 'debug-overlay-window'),
     [className]
@@ -248,8 +259,9 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
               <button
                 type="button"
                 className="debug-overlay__close"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={onClose}
+                onPointerDown={stopHeaderControlInteraction}
+                onMouseDown={stopHeaderControlInteraction}
+                onClick={handleCloseClick}
                 aria-label="Close debug overlay"
                 title="Close"
               >

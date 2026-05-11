@@ -130,6 +130,16 @@ const getAriaSort = (
 ): 'none' | 'ascending' | 'descending' =>
   sort?.column !== column ? 'none' : sort.direction === 'asc' ? 'ascending' : 'descending';
 
+const IconDebugColGroup: React.FC = () => (
+  <colgroup>
+    <col className="icon-debug-table__preview-col" />
+    <col className="icon-debug-table__metric-col" />
+    <col className="icon-debug-table__metric-col" />
+    <col />
+    <col />
+  </colgroup>
+);
+
 export const IconDebugOverlay: React.FC<IconDebugOverlayProps> = ({ onClose }) => {
   const [sort, setSort] = React.useState<IconDebugSortState | null>(null);
   const [metrics, setMetrics] = React.useState<IconDebugMetricsMap>({});
@@ -185,65 +195,68 @@ export const IconDebugOverlay: React.FC<IconDebugOverlayProps> = ({ onClose }) =
   };
 
   return (
-    <DebugOverlay title="Icon Debug (Ctrl+Alt+I)" testId="icon-debug-overlay" onClose={onClose}>
-      <div className="debug-overlay__meta">
-        {iconDebugEntries.length} SVG icons and cursor assets
-      </div>
-      <table className="icon-debug-table">
-        <colgroup>
-          <col className="icon-debug-table__preview-col" />
-          <col className="icon-debug-table__metric-col" />
-          <col className="icon-debug-table__metric-col" />
-          <col />
-          <col />
-        </colgroup>
-        <thead>
-          <tr>
-            <th scope="col">View</th>
-            <th scope="col" aria-sort={getAriaSort(sort, 'default')}>
-              {renderSortHeader('default', 'Size')}
-            </th>
-            <th scope="col" aria-sort={getAriaSort(sort, 'grid')}>
-              {renderSortHeader('grid', 'Grid')}
-            </th>
-            <th scope="col" aria-sort={getAriaSort(sort, 'name')}>
-              {renderSortHeader('name', 'Name')}
-            </th>
-            <th scope="col" aria-sort={getAriaSort(sort, 'source')}>
-              {renderSortHeader('source', 'Source')}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {sortedEntries.map((entry) => {
-            const entryMetrics = getEntryMetrics(entry, metrics);
+    <DebugOverlay
+      title="Icon Debug (Ctrl+Alt+I)"
+      testId="icon-debug-overlay"
+      bodyClassName="icon-debug-overlay__body"
+      onClose={onClose}
+    >
+      <div className="icon-debug-table-shell">
+        <table className="icon-debug-table icon-debug-table--header">
+          <IconDebugColGroup />
+          <thead>
+            <tr>
+              <th scope="col">View</th>
+              <th scope="col" aria-sort={getAriaSort(sort, 'default')}>
+                {renderSortHeader('default', 'Size')}
+              </th>
+              <th scope="col" aria-sort={getAriaSort(sort, 'grid')}>
+                {renderSortHeader('grid', 'Grid')}
+              </th>
+              <th scope="col" aria-sort={getAriaSort(sort, 'name')}>
+                {renderSortHeader('name', 'Name')}
+              </th>
+              <th scope="col" aria-sort={getAriaSort(sort, 'source')}>
+                {renderSortHeader('source', 'Source')}
+              </th>
+            </tr>
+          </thead>
+        </table>
+        <div className="icon-debug-table__body-scroll">
+          <table className="icon-debug-table icon-debug-table--body">
+            <IconDebugColGroup />
+            <tbody>
+              {sortedEntries.map((entry) => {
+                const entryMetrics = getEntryMetrics(entry, metrics);
 
-            return (
-              <tr key={`${entry.file}:${entry.name}`} className="icon-debug-row">
-                <td className="icon-debug-row__preview-cell">
-                  <IconDebugPreview entry={entry} onMeasure={handleMeasure} />
-                </td>
-                <td>
-                  <div className="icon-debug-row__metrics">
-                    <span className="icon-debug-row__metric">{entryMetrics.defaultSize}</span>
-                  </div>
-                </td>
-                <td>
-                  <div className="icon-debug-row__metrics">
-                    <span className="icon-debug-row__metric">{entryMetrics.gridSize}</span>
-                  </div>
-                </td>
-                <td>
-                  <span className="icon-debug-row__name">{entry.name}</span>
-                </td>
-                <td>
-                  <span className="icon-debug-row__file">{entry.file}</span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                return (
+                  <tr key={`${entry.file}:${entry.name}`} className="icon-debug-row">
+                    <td className="icon-debug-row__preview-cell">
+                      <IconDebugPreview entry={entry} onMeasure={handleMeasure} />
+                    </td>
+                    <td>
+                      <div className="icon-debug-row__metrics">
+                        <span className="icon-debug-row__metric">{entryMetrics.defaultSize}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="icon-debug-row__metrics">
+                        <span className="icon-debug-row__metric">{entryMetrics.gridSize}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span className="icon-debug-row__name">{entry.name}</span>
+                    </td>
+                    <td>
+                      <span className="icon-debug-row__file">{entry.file}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </DebugOverlay>
   );
 };
