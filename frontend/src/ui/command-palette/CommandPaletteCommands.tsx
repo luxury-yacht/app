@@ -22,11 +22,15 @@ import {
   DiagnosticsIcon,
   DiffIcon,
   LogsIcon,
+  CategoryIcon,
+  NamespaceIcon,
 } from '@shared/components/icons/SharedIcons';
 import { FavoriteGenericIcon, FavoritePinIcon } from '@shared/components/icons/FavoriteIcons';
+import { ZoomInIcon, ZoomOutIcon } from '@shared/components/icons/ObjectMapIcons';
 import {
   AppearanceModeIcon,
   DarkModeIcon,
+  KubeconfigsIcon,
   LightModeIcon,
 } from '@shared/components/icons/SettingsIcons';
 import { useAppearanceMode } from '@core/contexts/AppearanceModeContext';
@@ -206,6 +210,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'zoom-in',
         label: 'Zoom in',
+        icon: <ZoomInIcon width={16} height={16} />,
         description: `Increase zoom level (currently ${zoomLevel}%)`,
         category: 'View',
         action: zoomIn,
@@ -215,6 +220,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'zoom-out',
         label: 'Zoom out',
+        icon: <ZoomOutIcon width={16} height={16} />,
         description: `Decrease zoom level (currently ${zoomLevel}%)`,
         category: 'View',
         action: zoomOut,
@@ -356,6 +362,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'toggle-short-names',
         label: useShortResourceNames ? 'Disable short names' : 'Enable short names',
+        icon: <SettingsIcon width={16} height={16} />,
         description: 'Toggle between short and full resource type names',
         category: 'Settings',
         action: async () => {
@@ -384,6 +391,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'select-kubeconfig',
         label: 'Select kubeconfig...',
+        icon: <KubeconfigsIcon width={16} height={16} />,
         description: 'Switch to a different kubeconfig',
         category: 'Navigation',
         action: () => {
@@ -394,6 +402,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'select-namespace',
         label: 'Select namespace... ',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'Change to a different namespace',
         category: 'Navigation',
         action: () => {
@@ -404,6 +413,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'cluster-browse',
         label: 'Cluster - Browse',
+        icon: <CategoryIcon width={16} height={16} />,
         description: 'Browse all catalogued Kubernetes objects',
         category: 'Navigation',
         action: () => openClusterTab('browse'),
@@ -412,6 +422,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'cluster-nodes',
         label: 'Cluster - Nodes',
+        icon: <CategoryIcon width={16} height={16} />,
         description: 'View nodes',
         category: 'Navigation',
         action: () => openClusterTab('nodes'),
@@ -420,6 +431,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'cluster-config',
         label: 'Cluster - Config',
+        icon: <CategoryIcon width={16} height={16} />,
         description: 'View cluster configuration resources',
         category: 'Navigation',
         action: () => openClusterTab('config'),
@@ -428,6 +440,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'cluster-storage',
         label: 'Cluster - Storage',
+        icon: <CategoryIcon width={16} height={16} />,
         description: 'View persistent volumes and storage classes',
         category: 'Navigation',
         action: () => openClusterTab('storage'),
@@ -436,6 +449,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'cluster-rbac',
         label: 'Cluster - RBAC',
+        icon: <CategoryIcon width={16} height={16} />,
         description: 'View cluster RBAC resources',
         category: 'Navigation',
         action: () => openClusterTab('rbac'),
@@ -444,6 +458,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'cluster-crds',
         label: 'Cluster - CRDs',
+        icon: <CategoryIcon width={16} height={16} />,
         description: 'View custom resource definitions',
         category: 'Navigation',
         action: () => openClusterTab('crds'),
@@ -452,6 +467,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'cluster-custom',
         label: 'Cluster - Custom Resources',
+        icon: <CategoryIcon width={16} height={16} />,
         description: 'View cluster-scoped custom resources',
         category: 'Navigation',
         action: () => openClusterTab('custom'),
@@ -460,6 +476,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'cluster-events',
         label: 'Cluster - Events',
+        icon: <CategoryIcon width={16} height={16} />,
         description: 'View cluster events',
         category: 'Navigation',
         action: () => openClusterTab('events'),
@@ -502,6 +519,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'namespace-workloads',
         label: 'Namespace - Workloads',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'View deployments, statefulsets, daemonsets',
         category: 'Navigation',
         action: () => openNamespaceTab('workloads'),
@@ -518,6 +536,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'namespace-pods',
         label: 'Namespace - Pods',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'View pods and their current status',
         category: 'Navigation',
         action: () => openNamespaceTab('pods'),
@@ -526,6 +545,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'namespace-config',
         label: 'Namespace - Config',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'View configmaps and secrets',
         category: 'Navigation',
         action: () => openNamespaceTab('config'),
@@ -534,6 +554,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'namespace-storage',
         label: 'Namespace - Storage',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'View persistent volume claims',
         category: 'Navigation',
         action: () => openNamespaceTab('storage'),
@@ -542,6 +563,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'namespace-network',
         label: 'Namespace - Network',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'View services and ingresses',
         category: 'Navigation',
         action: () => openNamespaceTab('network'),
@@ -550,6 +572,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'namespace-rbac',
         label: 'Namespace - RBAC',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'View roles and bindings',
         category: 'Navigation',
         action: () => openNamespaceTab('rbac'),
@@ -558,6 +581,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'namespace-autoscaling',
         label: 'Namespace - Autoscaling',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'View horizontal pod autoscalers',
         category: 'Navigation',
         action: () => openNamespaceTab('autoscaling'),
@@ -566,6 +590,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'namespace-quotas',
         label: 'Namespace - Quotas',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'View resource quotas and limits',
         category: 'Navigation',
         action: () => openNamespaceTab('quotas'),
@@ -574,6 +599,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'namespace-custom',
         label: 'Namespace - Custom',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'View custom resources',
         category: 'Navigation',
         action: () => openNamespaceTab('custom'),
@@ -582,6 +608,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'namespace-helm',
         label: 'Namespace - Helm',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'View Helm releases',
         category: 'Navigation',
         action: () => openNamespaceTab('helm'),
@@ -590,6 +617,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'namespace-events',
         label: 'Namespace - Events',
+        icon: <NamespaceIcon width={16} height={16} />,
         description: 'View namespace events',
         category: 'Navigation',
         action: () => openNamespaceTab('events'),
@@ -607,6 +635,7 @@ export function useCommandPaletteCommands() {
     return namespace.namespaces.map((ns) => ({
       id: `namespace-${ns.scope}`,
       label: ns.name,
+      icon: <NamespaceIcon width={16} height={16} />,
       description: 'Switch to this namespace',
       category: 'Namespaces',
       action: () => selectNamespace(ns.scope),

@@ -31,6 +31,7 @@ interface CommandPaletteProps {
 const CATEGORY_ORDER = [
   'Application',
   'Settings',
+  'View',
   'Navigation',
   'Favorites',
   'Namespaces',
