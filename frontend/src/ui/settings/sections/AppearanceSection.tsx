@@ -1181,7 +1181,7 @@ function AppearanceSection() {
                 ) : (
                   <button
                     type="button"
-                    className="button generic themes-save-new-row"
+                    className="button generic settings-add-button themes-save-new-row"
                     onClick={handleSaveCurrentAsTheme}
                   >
                     <PlusIcon width={12} height={12} ariaHidden />

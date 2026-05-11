@@ -6,7 +6,6 @@
   - Move app logs & deb ug to this menu?
   - Browser console?
 - Settings
-  - Directory list and Theme list should have similar styles
   - Collapse Panel settings and short names into Display?
   - Display options
     - Allow namespaces to open at the same time in the sidebar

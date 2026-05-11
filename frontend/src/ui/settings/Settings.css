@@ -460,10 +460,11 @@
   opacity: 0.4;
 }
 
-/* Inline + icon next to the button label */
-.kubeconfig-path-add {
+.settings-add-button {
   display: inline-flex;
   align-items: center;
+  padding-top: 6px;
+  margin-top: 6px;
   gap: 0.35rem;
   align-self: flex-start;
 }
@@ -652,13 +653,6 @@
 }
 
 /* Inline + icon next to the button label */
-.themes-save-new-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  align-self: flex-start;
-}
-
 .themes-drag-handle--placeholder {
   pointer-events: none;
 }

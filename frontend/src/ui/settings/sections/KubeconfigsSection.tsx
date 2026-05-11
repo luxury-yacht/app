@@ -127,7 +127,7 @@ function KubeconfigsSection() {
             )}
             <button
               type="button"
-              className="button generic kubeconfig-path-add"
+              className="button generic settings-add-button kubeconfig-path-add"
               onClick={handleAddKubeconfigPath}
               disabled={kubeconfigPathsSaving || kubeconfigPathsLoading || kubeconfigPathsSelecting}
             >
