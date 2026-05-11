@@ -26,6 +26,11 @@ func CreateMenu(app *App) *menu.Menu {
 	// Window menu
 	createWindowMenu(appMenu, app)
 
+	// Debug menu is only compiled into Wails dev builds.
+	if appDebugMenuEnabled {
+		createDebugMenu(appMenu, app)
+	}
+
 	// Help menu (rightmost, Windows/Linux only)
 	createHelpMenu(appMenu, app)
 
@@ -256,6 +261,25 @@ func createViewMenu(appMenu *menu.Menu, app *App) {
 	if runtime.GOOS == "darwin" {
 		viewMenu.AddSeparator()
 	}
+}
+
+// createDebugMenu exposes development-only debug overlays.
+func createDebugMenu(appMenu *menu.Menu, app *App) {
+	debugMenu := appMenu.AddSubmenu("Debug")
+
+	addDebugOverlayMenuItem(debugMenu, app, "Toggle Keyboard Focus Overlay", "k", "debug:toggle-focus-overlay")
+	addDebugOverlayMenuItem(debugMenu, app, "Toggle Panel Debug Overlay", "p", "debug:toggle-panel-overlay")
+	addDebugOverlayMenuItem(debugMenu, app, "Toggle Map Debug Overlay", "m", "debug:toggle-map-overlay")
+	addDebugOverlayMenuItem(debugMenu, app, "Toggle Icon Debug Overlay", "i", "debug:toggle-icon-overlay")
+	addDebugOverlayMenuItem(debugMenu, app, "Toggle Error Boundary Tests", "e", "debug:toggle-error-overlay")
+}
+
+func addDebugOverlayMenuItem(debugMenu *menu.Menu, app *App, label string, key string, event string) {
+	debugMenu.AddText(label, keys.Combo(key, keys.ControlKey, keys.OptionOrAltKey), func(_ *menu.CallbackData) {
+		if app.Ctx != nil {
+			app.emitEvent(event)
+		}
+	})
 }
 
 // createWindowMenu creates the Window menu with OS-specific items

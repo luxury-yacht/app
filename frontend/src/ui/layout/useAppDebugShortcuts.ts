@@ -21,6 +21,38 @@ export const useAppDebugShortcuts = ({
   onToggleIconDebug,
 }: AppDebugShortcutHandlers) => {
   useEffect(() => {
+    const runtime = window.runtime;
+    if (!runtime?.EventsOn) {
+      return;
+    }
+
+    const eventHandlers: Array<[string, () => void]> = [
+      ['debug:toggle-panel-overlay', onTogglePanelDebug],
+      ['debug:toggle-focus-overlay', onToggleFocusDebug],
+      ['debug:toggle-error-overlay', onToggleErrorDebug],
+      ['debug:toggle-map-overlay', onToggleMapDebug],
+      ['debug:toggle-icon-overlay', onToggleIconDebug],
+    ];
+    const disposers = eventHandlers.map(([event, handler]) => {
+      const dispose = runtime.EventsOn?.(event, handler);
+      if (typeof dispose === 'function') {
+        return dispose;
+      }
+      return () => runtime.EventsOff?.(event, handler);
+    });
+
+    return () => {
+      disposers.forEach((dispose) => dispose());
+    };
+  }, [
+    onToggleErrorDebug,
+    onToggleFocusDebug,
+    onToggleIconDebug,
+    onToggleMapDebug,
+    onTogglePanelDebug,
+  ]);
+
+  useEffect(() => {
     const handleDebugShortcut = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       const isCtrlAlt = event.ctrlKey && event.altKey;

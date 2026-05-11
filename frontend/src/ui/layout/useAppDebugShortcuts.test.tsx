@@ -1,7 +1,16 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppDebugShortcuts } from './useAppDebugShortcuts';
+
+const runtimeHandlers = new Map<string, (...args: unknown[]) => void>();
+const runtimeEventsOn = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+  runtimeHandlers.set(event, handler);
+  return () => runtimeHandlers.delete(event);
+});
+const runtimeEventsOff = vi.fn((event: string) => {
+  runtimeHandlers.delete(event);
+});
 
 const renderHookHost = (handlers?: Partial<Parameters<typeof useAppDebugShortcuts>[0]>) => {
   const container = document.createElement('div');
@@ -42,8 +51,19 @@ describe('useAppDebugShortcuts', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
+  beforeEach(() => {
+    runtimeHandlers.clear();
+    runtimeEventsOn.mockClear();
+    runtimeEventsOff.mockClear();
+    window.runtime = {
+      EventsOn: runtimeEventsOn,
+      EventsOff: runtimeEventsOff,
+    } as unknown as WailsRuntime;
+  });
+
   afterEach(() => {
     document.body.innerHTML = '';
+    delete window.runtime;
   });
 
   it('toggles each debug overlay on its Ctrl+Alt shortcut', () => {
@@ -137,5 +157,40 @@ describe('useAppDebugShortcuts', () => {
     expect(hook.onToggleIconDebug).not.toHaveBeenCalled();
 
     hook.unmount();
+  });
+
+  it('toggles each debug overlay from Wails debug menu events', () => {
+    const hook = renderHookHost();
+
+    act(() => {
+      runtimeHandlers.get('debug:toggle-panel-overlay')?.();
+      runtimeHandlers.get('debug:toggle-focus-overlay')?.();
+      runtimeHandlers.get('debug:toggle-error-overlay')?.();
+      runtimeHandlers.get('debug:toggle-map-overlay')?.();
+      runtimeHandlers.get('debug:toggle-icon-overlay')?.();
+    });
+
+    expect(runtimeEventsOn).toHaveBeenCalledWith(
+      'debug:toggle-panel-overlay',
+      expect.any(Function)
+    );
+    expect(runtimeEventsOn).toHaveBeenCalledWith(
+      'debug:toggle-focus-overlay',
+      expect.any(Function)
+    );
+    expect(runtimeEventsOn).toHaveBeenCalledWith(
+      'debug:toggle-error-overlay',
+      expect.any(Function)
+    );
+    expect(runtimeEventsOn).toHaveBeenCalledWith('debug:toggle-map-overlay', expect.any(Function));
+    expect(runtimeEventsOn).toHaveBeenCalledWith('debug:toggle-icon-overlay', expect.any(Function));
+    expect(hook.onTogglePanelDebug).toHaveBeenCalledTimes(1);
+    expect(hook.onToggleFocusDebug).toHaveBeenCalledTimes(1);
+    expect(hook.onToggleErrorDebug).toHaveBeenCalledTimes(1);
+    expect(hook.onToggleMapDebug).toHaveBeenCalledTimes(1);
+    expect(hook.onToggleIconDebug).toHaveBeenCalledTimes(1);
+
+    hook.unmount();
+    expect(runtimeHandlers.size).toBe(0);
   });
 });
