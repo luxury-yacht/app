@@ -116,7 +116,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       {
         type: 'action',
         id: 'reset',
-        icon: <ResetFiltersIcon />,
+        icon: <ResetFiltersIcon width={20} height={20} />,
         onClick: onReset,
         title: 'Reset filters',
         disabled: !hasActiveFilters,
@@ -125,7 +125,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       {
         type: 'toggle',
         id: 'case-sensitive',
-        icon: <CaseSensitiveIcon width={16} height={16} />,
+        icon: <CaseSensitiveIcon width={18} height={18} />,
         active: activeFilters.caseSensitive,
         onClick: onToggleCaseSensitive,
         title: 'Match case',

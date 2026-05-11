@@ -343,8 +343,17 @@
 
 .icon-debug-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0 0.35rem;
+}
+
+.icon-debug-table__preview-col {
+  width: 60px;
+}
+
+.icon-debug-table__metric-col {
+  width: 60px;
 }
 
 .icon-debug-table th {
@@ -432,8 +441,7 @@
 
 .icon-debug-row__name,
 .icon-debug-row__file,
-.icon-debug-row__metric,
-.icon-debug-row__usage {
+.icon-debug-row__metric {
   font-family: var(--font-family-mono, monospace);
 }
 
@@ -465,42 +473,4 @@
   color: var(--color-text);
   font-size: 0.66rem;
   background: var(--color-bg-secondary);
-}
-
-.icon-debug-row__usages {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem;
-  min-width: 0;
-}
-
-.icon-debug-row__usage {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.25rem;
-  max-width: 100%;
-  padding: 0.08rem 0.25rem;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  color: var(--color-text-secondary);
-  font-size: 0.66rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.icon-debug-row__usage-size {
-  color: var(--color-text);
-  flex-shrink: 0;
-}
-
-.icon-debug-row__usage-source {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.icon-debug-row__usage--empty {
-  color: var(--color-text-tertiary);
-  font-style: italic;
 }

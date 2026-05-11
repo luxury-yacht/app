@@ -30,7 +30,7 @@ describe('IconDebugOverlay', () => {
     });
   };
 
-  it('renders icon previews with source file and production consumers', () => {
+  it('renders icon previews with source file and measured sizes', () => {
     renderOverlay();
 
     const overlay = document.body.querySelector('[data-testid="icon-debug-overlay"]');
@@ -38,12 +38,22 @@ describe('IconDebugOverlay', () => {
     expect(overlay?.querySelector('table.icon-debug-table')).not.toBeNull();
     expect(
       Array.from(overlay?.querySelectorAll('th') ?? []).map((cell) => cell.textContent)
-    ).toEqual(['Preview', 'Name', 'Source', 'Grid', 'Default', 'Usage']);
+    ).toEqual(['Preview', 'Default', 'Grid', 'Name', 'Source']);
+    expect(
+      Array.from(overlay?.querySelectorAll('thead button') ?? []).map((cell) => cell.textContent)
+    ).toEqual(['Default', 'Grid', 'Name', 'Source']);
+    expect(
+      Array.from(overlay?.querySelectorAll('col') ?? []).map((column) => column.className)
+    ).toEqual([
+      'icon-debug-table__preview-col',
+      'icon-debug-table__metric-col',
+      'icon-debug-table__metric-col',
+      '',
+      '',
+    ]);
     expect(overlay?.textContent).toContain('CordonIcon');
     expect(overlay?.textContent).toContain('SharedIcons.tsx');
-    expect(overlay?.textContent).toContain('shared/hooks/useObjectActions.tsx');
     expect(overlay?.textContent).toContain('24x24');
-    expect(overlay?.textContent).toContain('rendered 16x16');
     expect(overlay?.textContent).toContain('ew-resize');
     expect(overlay?.querySelectorAll('.icon-debug-row__preview svg').length).toBeGreaterThan(0);
     expect(overlay?.querySelectorAll('.icon-debug__asset-preview').length).toBeGreaterThan(0);
@@ -66,14 +76,24 @@ describe('IconDebugOverlay', () => {
 
     const overlay = document.body.querySelector('[data-testid="icon-debug-overlay"]');
     const getFirstName = () =>
-      overlay?.querySelector<HTMLTableRowElement>('tbody tr')?.querySelector('td:nth-child(2)')
+      overlay?.querySelector<HTMLTableRowElement>('tbody tr')?.querySelector('td:nth-child(4)')
         ?.textContent;
     const getHeaderButton = (name: string) =>
       Array.from(overlay?.querySelectorAll<HTMLButtonElement>('thead button') ?? []).find(
         (button) => button.textContent === name
       );
 
-    expect(getFirstName()).toBe('CordonIcon');
+    expect(getFirstName()).toBe('DockBottomIcon');
+
+    act(() => {
+      getHeaderButton('Default')?.click();
+    });
+    expect(getFirstName()).toBe('IconBarSeparatorIcon');
+
+    act(() => {
+      getHeaderButton('Grid')?.click();
+    });
+    expect(getFirstName()).toBe('IconBarSeparatorIcon');
 
     act(() => {
       getHeaderButton('Name')?.click();
@@ -84,10 +104,5 @@ describe('IconDebugOverlay', () => {
       getHeaderButton('Source')?.click();
     });
     expect(getFirstName()).toBe('ew-resize');
-
-    act(() => {
-      getHeaderButton('Grid')?.click();
-    });
-    expect(getFirstName()).toBe('IconBarSeparatorIcon');
   });
 });

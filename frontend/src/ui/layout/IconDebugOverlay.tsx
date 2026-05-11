@@ -1,18 +1,13 @@
 import React from 'react';
 
-import { iconDebugEntries, type IconDebugEntry } from '@shared/components/icons/iconDebugRegistry';
-import {
-  iconDebugDefaultSizes,
-  iconDebugGridSizes,
-  iconDebugUsages,
-} from '@shared/components/icons/iconDebugUsageSizes';
+import { iconDebugEntries, type IconDebugEntry } from '@shared/components/icons/iconDebugDiscovery';
 import { DebugOverlay } from '@ui/layout/DebugOverlay';
 
 interface IconDebugOverlayProps {
   onClose: () => void;
 }
 
-type IconDebugSortColumn = 'name' | 'source' | 'grid';
+type IconDebugSortColumn = 'default' | 'grid' | 'name' | 'source';
 type IconDebugSortDirection = 'asc' | 'desc';
 
 interface IconDebugSortState {
@@ -20,14 +15,14 @@ interface IconDebugSortState {
   direction: IconDebugSortDirection;
 }
 
-const renderIconPreview = (entry: IconDebugEntry) => {
-  if (entry.kind === 'asset') {
-    return <img src={entry.src} alt="" className="icon-debug__asset-preview" />;
-  }
+interface IconDebugMetrics {
+  gridSize: string;
+  defaultSize: string;
+}
 
-  const Icon = entry.Component;
-  return <Icon {...entry.previewProps} />;
-};
+type IconDebugMetricsMap = Record<string, IconDebugMetrics>;
+
+const SVG_DEFAULT_SIZE = '300x150';
 
 const parseGridSize = (value: string): [number, number] | null => {
   const match = value.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/);
@@ -49,7 +44,8 @@ const compareGridSize = (left: string, right: string): number => {
 const compareIconDebugEntries = (
   left: IconDebugEntry,
   right: IconDebugEntry,
-  column: IconDebugSortColumn
+  column: IconDebugSortColumn,
+  metrics: IconDebugMetricsMap
 ): number => {
   if (column === 'name') {
     return left.name.localeCompare(right.name);
@@ -57,11 +53,74 @@ const compareIconDebugEntries = (
   if (column === 'source') {
     return left.file.localeCompare(right.file) || left.name.localeCompare(right.name);
   }
+  if (column === 'default') {
+    return (
+      compareGridSize(
+        getEntryMetrics(left, metrics).defaultSize,
+        getEntryMetrics(right, metrics).defaultSize
+      ) || left.name.localeCompare(right.name)
+    );
+  }
   return (
     compareGridSize(
-      iconDebugGridSizes[left.name] ?? 'unknown',
-      iconDebugGridSizes[right.name] ?? 'unknown'
+      getEntryMetrics(left, metrics).gridSize,
+      getEntryMetrics(right, metrics).gridSize
     ) || left.name.localeCompare(right.name)
+  );
+};
+
+const getEntryMetrics = (entry: IconDebugEntry, metrics: IconDebugMetricsMap): IconDebugMetrics => {
+  if (entry.kind === 'asset') {
+    return { gridSize: entry.gridSize, defaultSize: entry.defaultSize };
+  }
+  return metrics[entry.name] ?? { gridSize: 'unknown', defaultSize: 'unknown' };
+};
+
+const formatSvgSize = (svg: SVGSVGElement): IconDebugMetrics => {
+  const viewBox = svg.viewBox.baseVal;
+  const gridSize =
+    viewBox.width > 0 && viewBox.height > 0 ? `${viewBox.width}x${viewBox.height}` : 'unknown';
+  const width = svg.getAttribute('width');
+  const height = svg.getAttribute('height');
+
+  return {
+    gridSize,
+    defaultSize: width && height ? `${width}x${height}` : SVG_DEFAULT_SIZE,
+  };
+};
+
+const IconDebugPreview: React.FC<{
+  entry: IconDebugEntry;
+  onMeasure: (name: string, metrics: IconDebugMetrics) => void;
+}> = ({ entry, onMeasure }) => {
+  const previewRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useLayoutEffect(() => {
+    if (entry.kind === 'asset') {
+      onMeasure(entry.name, { gridSize: entry.gridSize, defaultSize: entry.defaultSize });
+      return;
+    }
+
+    const svg = previewRef.current?.querySelector('svg');
+    if (svg) {
+      onMeasure(entry.name, formatSvgSize(svg));
+    }
+  }, [entry, onMeasure]);
+
+  return (
+    <div ref={previewRef} className="icon-debug-row__preview" aria-hidden="true">
+      {entry.kind === 'asset' ? (
+        <img
+          src={entry.src}
+          alt=""
+          width={entry.defaultSize.split('x')[0]}
+          height={entry.defaultSize.split('x')[1]}
+          className="icon-debug__asset-preview"
+        />
+      ) : (
+        <entry.Component {...entry.previewProps} />
+      )}
+    </div>
   );
 };
 
@@ -73,6 +132,20 @@ const getAriaSort = (
 
 export const IconDebugOverlay: React.FC<IconDebugOverlayProps> = ({ onClose }) => {
   const [sort, setSort] = React.useState<IconDebugSortState | null>(null);
+  const [metrics, setMetrics] = React.useState<IconDebugMetricsMap>({});
+
+  const handleMeasure = React.useCallback((name: string, nextMetrics: IconDebugMetrics) => {
+    setMetrics((current) => {
+      const previous = current[name];
+      if (
+        previous?.gridSize === nextMetrics.gridSize &&
+        previous.defaultSize === nextMetrics.defaultSize
+      ) {
+        return current;
+      }
+      return { ...current, [name]: nextMetrics };
+    });
+  }, []);
 
   const sortedEntries = React.useMemo(() => {
     if (!sort) {
@@ -80,10 +153,10 @@ export const IconDebugOverlay: React.FC<IconDebugOverlayProps> = ({ onClose }) =
     }
 
     return [...iconDebugEntries].sort((left, right) => {
-      const result = compareIconDebugEntries(left, right, sort.column);
+      const result = compareIconDebugEntries(left, right, sort.column, metrics);
       return sort.direction === 'asc' ? result : -result;
     });
-  }, [sort]);
+  }, [metrics, sort]);
 
   const toggleSort = (column: IconDebugSortColumn) => {
     setSort((current) => {
@@ -117,74 +190,58 @@ export const IconDebugOverlay: React.FC<IconDebugOverlayProps> = ({ onClose }) =
         {iconDebugEntries.length} SVG icons and cursor assets
       </div>
       <table className="icon-debug-table">
+        <colgroup>
+          <col className="icon-debug-table__preview-col" />
+          <col className="icon-debug-table__metric-col" />
+          <col className="icon-debug-table__metric-col" />
+          <col />
+          <col />
+        </colgroup>
         <thead>
           <tr>
-            <th scope="col">Preview</th>
+            <th scope="col">View</th>
+            <th scope="col" aria-sort={getAriaSort(sort, 'default')}>
+              {renderSortHeader('default', 'Size')}
+            </th>
+            <th scope="col" aria-sort={getAriaSort(sort, 'grid')}>
+              {renderSortHeader('grid', 'Grid')}
+            </th>
             <th scope="col" aria-sort={getAriaSort(sort, 'name')}>
               {renderSortHeader('name', 'Name')}
             </th>
             <th scope="col" aria-sort={getAriaSort(sort, 'source')}>
               {renderSortHeader('source', 'Source')}
             </th>
-            <th scope="col" aria-sort={getAriaSort(sort, 'grid')}>
-              {renderSortHeader('grid', 'Grid')}
-            </th>
-            <th scope="col">Default</th>
-            <th scope="col">Usage</th>
           </tr>
         </thead>
         <tbody>
-          {sortedEntries.map((entry) => (
-            <tr key={`${entry.file}:${entry.name}`} className="icon-debug-row">
-              <td className="icon-debug-row__preview-cell">
-                <div className="icon-debug-row__preview" aria-hidden="true">
-                  {renderIconPreview(entry)}
-                </div>
-              </td>
-              <td>
-                <span className="icon-debug-row__name">{entry.name}</span>
-              </td>
-              <td>
-                <span className="icon-debug-row__file">{entry.file}</span>
-              </td>
-              <td>
-                <div className="icon-debug-row__metrics">
-                  <span className="icon-debug-row__metric">
-                    {iconDebugGridSizes[entry.name] ?? 'unknown'}
-                  </span>
-                </div>
-              </td>
-              <td>
-                <div className="icon-debug-row__metrics">
-                  <span className="icon-debug-row__metric">
-                    {iconDebugDefaultSizes[entry.name] ?? 'unknown'}
-                  </span>
-                </div>
-              </td>
-              <td>
-                <div className="icon-debug-row__usages">
-                  {(iconDebugUsages[entry.name] ?? []).length > 0 ? (
-                    iconDebugUsages[entry.name].map((usage, index) => (
-                      <span
-                        key={`${usage.source}-${index}`}
-                        className="icon-debug-row__usage"
-                        title={`${usage.source} (${usage.basis})`}
-                      >
-                        <span className="icon-debug-row__usage-size">
-                          rendered {usage.renderedSize}
-                        </span>
-                        <span className="icon-debug-row__usage-source">{usage.source}</span>
-                      </span>
-                    ))
-                  ) : (
-                    <span className="icon-debug-row__usage icon-debug-row__usage--empty">
-                      No production usage found
-                    </span>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
+          {sortedEntries.map((entry) => {
+            const entryMetrics = getEntryMetrics(entry, metrics);
+
+            return (
+              <tr key={`${entry.file}:${entry.name}`} className="icon-debug-row">
+                <td className="icon-debug-row__preview-cell">
+                  <IconDebugPreview entry={entry} onMeasure={handleMeasure} />
+                </td>
+                <td>
+                  <div className="icon-debug-row__metrics">
+                    <span className="icon-debug-row__metric">{entryMetrics.defaultSize}</span>
+                  </div>
+                </td>
+                <td>
+                  <div className="icon-debug-row__metrics">
+                    <span className="icon-debug-row__metric">{entryMetrics.gridSize}</span>
+                  </div>
+                </td>
+                <td>
+                  <span className="icon-debug-row__name">{entry.name}</span>
+                </td>
+                <td>
+                  <span className="icon-debug-row__file">{entry.file}</span>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </DebugOverlay>
