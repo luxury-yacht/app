@@ -63,7 +63,7 @@
 
 .kind-badge.clickable:hover {
   box-shadow:
-    inset 0 0 0 999px rgb(255 255 255 / 10%),
+    inset 0 0 0 999px var(--badge-hover-overlay, rgb(255 255 255 / 10%)),
     inset 0 0 0 1px color-mix(in srgb, currentColor 25%, transparent);
 }
 

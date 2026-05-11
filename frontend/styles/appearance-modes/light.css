@@ -89,6 +89,7 @@
   --badge-warning-text: #d97706;
   --badge-green-soft-bg: rgba(34, 197, 94, 0.15);
   --badge-green-soft-text: #16a34a;
+  --badge-hover-overlay: rgb(0 0 0 / 5%);
 
   /* Status colors */
   --status-available-bg: rgba(34, 197, 94, 0.15);
