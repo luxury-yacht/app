@@ -33,7 +33,7 @@
     "dayjs": "^1.11.20",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "yaml": "^2.8.4"
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@storybook/react": "^10.3.6",
