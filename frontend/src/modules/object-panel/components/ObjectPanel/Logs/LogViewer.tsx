@@ -2332,7 +2332,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     {
                       type: 'toggle',
                       id: 'highlightSearch',
-                      icon: <HighlightSearchIcon />,
+                      icon: <HighlightSearchIcon width={16} height={16} />,
                       active: highlightMatches,
                       onClick: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
                       title: 'Highlight matching text - disabled when Invert is enabled (H)',
@@ -2342,7 +2342,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     {
                       type: 'toggle',
                       id: 'inverseSearch',
-                      icon: <InverseSearchIcon />,
+                      icon: <InverseSearchIcon width={18} height={18} />,
                       active: inverseMatches,
                       onClick: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
                       title: 'Invert the text filter to show only non-matching logs (I)',
@@ -2351,7 +2351,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     {
                       type: 'toggle',
                       id: 'caseSensitiveSearch',
-                      icon: <CaseSensitiveIcon width={16} height={16} />,
+                      icon: <CaseSensitiveIcon width={18} height={18} />,
                       active: caseSensitiveMatches,
                       onClick: () => dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
                       title: 'Case-sensitive search - disabled when regex is enabled (C)',
@@ -2361,7 +2361,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     {
                       type: 'toggle',
                       id: 'regexSearch',
-                      icon: <RegexSearchIcon />,
+                      icon: <RegexSearchIcon width={16} height={16} />,
                       active: regexMatches,
                       onClick: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
                       title: 'Enable regular expression support for the text filter (X)',
@@ -2371,7 +2371,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     {
                       type: 'toggle',
                       id: 'autoRefresh',
-                      icon: <AutoRefreshIcon />,
+                      icon: <AutoRefreshIcon width={18} height={18} />,
                       active: autoRefresh,
                       onClick: () => dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
                       title: 'Toggle auto-refresh (R)',
@@ -2382,7 +2382,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                           {
                             type: 'toggle' as const,
                             id: 'previousLogs',
-                            icon: <PreviousLogsIcon />,
+                            icon: <PreviousLogsIcon width={18} height={18} />,
                             active: showPreviousContainerLogs,
                             onClick: handleTogglePreviousContainerLogs,
                             title: 'Show previous logs (V)',
@@ -2393,7 +2393,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     {
                       type: 'toggle',
                       id: 'apiTimestamps',
-                      icon: <TimestampIcon />,
+                      icon: <TimestampIcon width={18} height={18} />,
                       active: showTimestamps,
                       onClick: () =>
                         dispatch({
@@ -2406,7 +2406,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     {
                       type: 'toggle',
                       id: 'wrapText',
-                      icon: <WrapTextIcon />,
+                      icon: <WrapTextIcon width={20} height={20} />,
                       active: wrapText,
                       onClick: () => dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
                       title: 'Wrap text (W)',
@@ -2418,7 +2418,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                           {
                             type: 'toggle' as const,
                             id: 'ansiColors',
-                            icon: <AnsiColorIcon />,
+                            icon: <AnsiColorIcon width={20} height={20} />,
                             active: showAnsiColors,
                             onClick: () => dispatch({ type: 'TOGGLE_SHOW_ANSI_COLORS' }),
                             title: 'Show ANSI colors if present (O)',
@@ -2432,7 +2432,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                           {
                             type: 'toggle' as const,
                             id: 'prettyJson',
-                            icon: <PrettyJsonIcon />,
+                            icon: <PrettyJsonIcon width={18} height={18} />,
                             active: displayMode === 'pretty',
                             onClick: () =>
                               dispatch({
@@ -2445,7 +2445,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                           {
                             type: 'toggle' as const,
                             id: 'parsedJson',
-                            icon: <ParseJsonIcon />,
+                            icon: <ParseJsonIcon width={16} height={16} />,
                             active: displayMode === 'parsed',
                             onClick: () =>
                               dispatch({
@@ -2461,7 +2461,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     {
                       type: 'action',
                       id: 'logSettings',
-                      icon: <SettingsIcon width={16} height={16} />,
+                      icon: <SettingsIcon width={18} height={18} />,
                       onClick: () => setIsObjPanelLogsSettingsOpen(true),
                       title: 'Open log settings',
                       ariaLabel: 'Open log settings',
@@ -2469,7 +2469,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     {
                       type: 'action',
                       id: 'copy',
-                      icon: <CopyIcon />,
+                      icon: <CopyIcon width={18} height={18} />,
                       onClick: handleCopyContainerLogs,
                       title: 'Copy to clipboard (Shift+C)',
                       ariaLabel: 'Copy to clipboard',
