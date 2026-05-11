@@ -141,7 +141,7 @@ const IconDebugColGroup: React.FC = () => (
 );
 
 export const IconDebugOverlay: React.FC<IconDebugOverlayProps> = ({ onClose }) => {
-  const [sort, setSort] = React.useState<IconDebugSortState | null>(null);
+  const [sort, setSort] = React.useState<IconDebugSortState>({ column: 'name', direction: 'asc' });
   const [metrics, setMetrics] = React.useState<IconDebugMetricsMap>({});
 
   const handleMeasure = React.useCallback((name: string, nextMetrics: IconDebugMetrics) => {

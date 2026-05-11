@@ -37,11 +37,12 @@ describe('IconDebugOverlay', () => {
     expect(overlay).not.toBeNull();
     expect(overlay?.querySelector('table.icon-debug-table--header')).not.toBeNull();
     expect(overlay?.querySelector('.icon-debug-table__body-scroll table')).not.toBeNull();
+    const getHeaderText = (cell: Element) => cell.textContent?.replace(/[▲▼]/g, '');
     expect(
-      Array.from(overlay?.querySelectorAll('th') ?? []).map((cell) => cell.textContent)
+      Array.from(overlay?.querySelectorAll('th') ?? []).map((cell) => getHeaderText(cell))
     ).toEqual(['View', 'Size', 'Grid', 'Name', 'Source']);
     expect(
-      Array.from(overlay?.querySelectorAll('thead button') ?? []).map((cell) => cell.textContent)
+      Array.from(overlay?.querySelectorAll('thead button') ?? []).map((cell) => getHeaderText(cell))
     ).toEqual(['Size', 'Grid', 'Name', 'Source']);
     expect(
       Array.from(overlay?.querySelectorAll('table.icon-debug-table--header col') ?? []).map(
@@ -101,10 +102,10 @@ describe('IconDebugOverlay', () => {
         ?.textContent;
     const getHeaderButton = (name: string) =>
       Array.from(overlay?.querySelectorAll<HTMLButtonElement>('thead button') ?? []).find(
-        (button) => button.textContent === name
+        (button) => button.textContent?.replace(/[▲▼]/g, '') === name
       );
 
-    expect(getFirstName()).toBe('DockBottomIcon');
+    expect(getFirstName()).toBe('AdvancedIcon');
 
     act(() => {
       getHeaderButton('Size')?.click();
@@ -120,6 +121,11 @@ describe('IconDebugOverlay', () => {
       getHeaderButton('Name')?.click();
     });
     expect(getFirstName()).toBe('AdvancedIcon');
+
+    act(() => {
+      getHeaderButton('Name')?.click();
+    });
+    expect(getFirstName()).toBe('ZoomOutIcon');
 
     act(() => {
       getHeaderButton('Source')?.click();
