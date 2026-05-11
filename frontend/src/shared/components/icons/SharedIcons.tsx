@@ -15,8 +15,8 @@ export interface IconProps {
 }
 
 export const CordonIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -31,8 +31,8 @@ export const CordonIcon: React.FC<IconProps> = ({
 );
 
 export const DrainIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -47,8 +47,8 @@ export const DrainIcon: React.FC<IconProps> = ({
 );
 
 export const DeleteIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -63,8 +63,8 @@ export const DeleteIcon: React.FC<IconProps> = ({
 );
 
 export const ScaleIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -82,8 +82,8 @@ export const ScaleIcon: React.FC<IconProps> = ({
 );
 
 export const ForceDeleteIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -98,8 +98,8 @@ export const ForceDeleteIcon: React.FC<IconProps> = ({
 );
 
 export const ExpandIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -114,8 +114,8 @@ export const ExpandIcon: React.FC<IconProps> = ({
 );
 
 export const CollapseIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -130,8 +130,8 @@ export const CollapseIcon: React.FC<IconProps> = ({
 );
 
 export const ExpandAllIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -146,8 +146,8 @@ export const ExpandAllIcon: React.FC<IconProps> = ({
 );
 
 export const CollapseAllIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -162,8 +162,8 @@ export const CollapseAllIcon: React.FC<IconProps> = ({
 );
 
 export const SortAscIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -178,8 +178,8 @@ export const SortAscIcon: React.FC<IconProps> = ({
 );
 
 export const SortDescIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -194,8 +194,8 @@ export const SortDescIcon: React.FC<IconProps> = ({
 );
 
 export const OpenIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -210,8 +210,8 @@ export const OpenIcon: React.FC<IconProps> = ({
 );
 
 export const RestartIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -226,8 +226,8 @@ export const RestartIcon: React.FC<IconProps> = ({
 );
 
 export const RollbackIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -242,8 +242,8 @@ export const RollbackIcon: React.FC<IconProps> = ({
 );
 
 export const NamespaceIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -258,8 +258,8 @@ export const NamespaceIcon: React.FC<IconProps> = ({
 );
 
 export const NamespaceOpenIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -274,8 +274,8 @@ export const NamespaceOpenIcon: React.FC<IconProps> = ({
 );
 
 export const SettingsIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -290,8 +290,8 @@ export const SettingsIcon: React.FC<IconProps> = ({
 );
 
 export const CollapseSidebarIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -306,8 +306,8 @@ export const CollapseSidebarIcon: React.FC<IconProps> = ({
 );
 
 export const ExpandSidebarIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -322,8 +322,8 @@ export const ExpandSidebarIcon: React.FC<IconProps> = ({
 );
 
 export const ClusterOverviewIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -338,8 +338,8 @@ export const ClusterOverviewIcon: React.FC<IconProps> = ({
 );
 
 export const ClusterResourcesIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -354,8 +354,8 @@ export const ClusterResourcesIcon: React.FC<IconProps> = ({
 );
 
 export const CategoryIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -369,7 +369,7 @@ export const CategoryIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const CloseIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const CloseIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg width={width} height={height} viewBox="0 0 16 16" fill="none">
     <path d="M2 2L14 14M2 14L14 2" stroke="currentColor" strokeWidth="2" />
   </svg>
@@ -377,8 +377,8 @@ export const CloseIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
 
 // "Aa" icon for case-sensitive search toggle.
 export const CaseSensitiveIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -395,8 +395,8 @@ export const CaseSensitiveIcon: React.FC<IconProps> = ({
 
 // Tag icon representing metadata (labels, annotations).
 export const MetadataIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -411,8 +411,8 @@ export const MetadataIcon: React.FC<IconProps> = ({
 );
 
 export const PortForwardIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -430,8 +430,8 @@ export const PortForwardIcon: React.FC<IconProps> = ({
 );
 
 export const ResetFiltersIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -447,8 +447,8 @@ export const ResetFiltersIcon: React.FC<IconProps> = ({
 
 // Checkmark icon for confirm/save actions on inline rows.
 export const CheckIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -464,8 +464,8 @@ export const CheckIcon: React.FC<IconProps> = ({
 
 // Pencil icon for inline edit actions (e.g., load/edit a saved theme).
 export const EditIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -480,8 +480,8 @@ export const EditIcon: React.FC<IconProps> = ({
 );
 
 export const InfoIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -496,8 +496,8 @@ export const InfoIcon: React.FC<IconProps> = ({
 );
 
 export const DiagnosticsIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -516,7 +516,7 @@ export const DiagnosticsIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const DiffIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const DiffIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 16 16"
@@ -532,7 +532,7 @@ export const DiffIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
   </svg>
 );
 
-export const LogsIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const LogsIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -548,7 +548,7 @@ export const LogsIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
   </svg>
 );
 
-export const RefreshIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const RefreshIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -605,8 +605,8 @@ export const IconBarSeparatorIcon: React.FC<IconProps> = ({
 );
 
 export const WarningTriangleIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
   className,
   ariaHidden,
@@ -625,8 +625,8 @@ export const WarningTriangleIcon: React.FC<IconProps> = ({
 );
 
 export const WarningOutlineIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   className,
   ariaHidden,
 }) => (
@@ -649,7 +649,7 @@ export const WarningOutlineIcon: React.FC<IconProps> = ({
 
 export const ShortcutArrowIcon: React.FC<
   IconProps & { direction: 'left' | 'right' | 'up' | 'down' }
-> = ({ width = 14, height = 14, direction }) => {
+> = ({ width = 24, height = 24, direction }) => {
   const path = {
     left: 'M9.5 2.5L5 7l4.5 4.5',
     right: 'M4.5 2.5L9 7l-4.5 4.5',
@@ -685,8 +685,8 @@ export const TabOverflowIcon: React.FC<IconProps & { direction: 'left' | 'right'
 );
 
 export const TooltipInfoIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   className = 'tooltip-info-icon',
 }) => (
   <svg
@@ -719,15 +719,15 @@ export const StatusDotIcon: React.FC<IconProps & { outlined?: boolean }> = ({
   </svg>
 );
 
-export const StopSquareIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const StopSquareIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg viewBox="0 0 16 16" fill="currentColor" width={width} height={height} aria-hidden="true">
     <rect x="4" y="4" width="8" height="8" rx="1.2" />
   </svg>
 );
 
 export const PlusIcon: React.FC<IconProps> = ({
-  width = 12,
-  height = 12,
+  width = 24,
+  height = 24,
   className,
   ariaHidden,
 }) => (

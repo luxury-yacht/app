@@ -5,7 +5,7 @@ type IconProps = {
   height?: number;
 };
 
-export const YamlManagedFieldsIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const YamlManagedFieldsIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox="0 0 16 16">
     <path
       fill="currentColor"
@@ -16,7 +16,7 @@ export const YamlManagedFieldsIcon: React.FC<IconProps> = ({ width = 16, height 
   </svg>
 );
 
-export const YamlEditIcon: React.FC<IconProps> = ({ width = 18, height = 18 }) => (
+export const YamlEditIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox="0 0 24 24">
     <path
       fill="none"
@@ -29,7 +29,7 @@ export const YamlEditIcon: React.FC<IconProps> = ({ width = 18, height = 18 }) =
   </svg>
 );
 
-export const YamlCancelIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const YamlCancelIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 16 16"
@@ -45,7 +45,7 @@ export const YamlCancelIcon: React.FC<IconProps> = ({ width = 16, height = 16 })
   </svg>
 );
 
-export const YamlSaveIcon: React.FC<IconProps> = ({ width = 20, height = 20 }) => (
+export const YamlSaveIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox="0 0 24 24">
     <path
       fill="currentColor"
@@ -54,13 +54,13 @@ export const YamlSaveIcon: React.FC<IconProps> = ({ width = 20, height = 20 }) =
   </svg>
 );
 
-export const YamlPreviousIcon: React.FC<IconProps> = ({ width = 14, height = 14 }) => (
+export const YamlPreviousIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width={width} height={height}>
     <path fill="currentColor" d="m4 10l9 9l1.4-1.5L7 10l7.4-7.5L13 1z" />
   </svg>
 );
 
-export const YamlNextIcon: React.FC<IconProps> = ({ width = 14, height = 14 }) => (
+export const YamlNextIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width={width} height={height}>
     <path fill="currentColor" d="M7 1L5.6 2.5L13 10l-7.4 7.5L7 19l9-9z" />
   </svg>

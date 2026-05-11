@@ -1,7 +1,7 @@
 import React from 'react';
 import type { IconProps } from './SharedIcons';
 
-export const ObjectMapIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const ObjectMapIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -20,7 +20,7 @@ export const ObjectMapIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) 
   </svg>
 );
 
-export const ZoomInIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const ZoomInIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -39,7 +39,7 @@ export const ZoomInIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => 
   </svg>
 );
 
-export const ZoomOutIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const ZoomOutIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -69,7 +69,7 @@ export const ResetZoomIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) 
   </svg>
 );
 
-export const FitToViewIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const FitToViewIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -88,7 +88,7 @@ export const FitToViewIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) 
   </svg>
 );
 
-export const AutoFitIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const AutoFitIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -108,10 +108,10 @@ export const AutoFitIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) =>
   </svg>
 );
 
-export const FocusModeIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const FocusModeIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    viewBox="4 4 26 26"
+    viewBox="3 3 26 26"
     fill="currentColor"
     width={width}
     height={height}
@@ -120,7 +120,7 @@ export const FocusModeIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) 
   </svg>
 );
 
-export const LegendIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+export const LegendIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"

@@ -2,8 +2,8 @@ import React from 'react';
 import type { IconProps } from './SharedIcons';
 
 export const KubeconfigsIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -18,8 +18,8 @@ export const KubeconfigsIcon: React.FC<IconProps> = ({
 );
 
 export const DisplayIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -34,8 +34,8 @@ export const DisplayIcon: React.FC<IconProps> = ({
 );
 
 export const AdvancedIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -50,8 +50,8 @@ export const AdvancedIcon: React.FC<IconProps> = ({
 );
 
 export const AppearanceModeIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -66,8 +66,8 @@ export const AppearanceModeIcon: React.FC<IconProps> = ({
 );
 
 export const KubeconfigFolderIcon: React.FC<IconProps> = ({
-  width = 14,
-  height = 14,
+  width = 24,
+  height = 24,
   className,
 }) => (
   <svg viewBox="0 0 16 16" width={width} height={height} fill="none" className={className}>

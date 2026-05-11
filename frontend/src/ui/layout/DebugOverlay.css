@@ -341,64 +341,93 @@
   overflow-wrap: anywhere;
 }
 
-.icon-debug-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+.icon-debug-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 0.35rem;
 }
 
-.icon-debug-row {
-  display: grid;
-  grid-template-columns: 2.4rem minmax(0, 1fr);
-  gap: 0.55rem;
+.icon-debug-table th {
+  padding: 0 0.4rem 0.1rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.icon-debug-table__sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.icon-debug-table__sort-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.icon-debug-table__sort-indicator {
+  display: inline-flex;
+  justify-content: center;
+  width: 0.7rem;
+  color: var(--color-text-secondary);
+  font-size: 0.58rem;
+}
+
+.icon-debug-table td {
   min-width: 0;
   padding: 0.4rem;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
+  vertical-align: top;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-bg) 75%, transparent);
 }
 
+.icon-debug-table td:first-child {
+  border-left: 1px solid var(--color-border);
+  border-radius: 6px 0 0 6px;
+}
+
+.icon-debug-table td:last-child {
+  border-right: 1px solid var(--color-border);
+  border-radius: 0 6px 6px 0;
+}
+
+.icon-debug-row {
+  min-width: 0;
+}
+
+.icon-debug-row__preview-cell {
+  width: 1%;
+}
+
 .icon-debug-row__preview {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.2rem;
-  height: 2.2rem;
-  border: 1px solid var(--color-border);
+  outline: 1px solid var(--color-border);
   border-radius: 4px;
   color: var(--color-text);
   background: var(--color-bg-secondary);
 }
 
-.icon-debug-row__preview svg,
 .icon-debug__asset-preview {
-  max-width: 1.5rem;
-  max-height: 1.5rem;
-}
-
-.icon-debug__asset-preview {
-  width: 1.5rem;
-  height: 1.5rem;
   object-fit: contain;
 }
 
 .icon-debug__legend-edge {
   stroke: currentColor;
   stroke-width: 2px;
-}
-
-.icon-debug-row__details {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.icon-debug-row__header {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  min-width: 0;
 }
 
 .icon-debug-row__name,

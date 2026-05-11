@@ -15,9 +15,6 @@
     - Port Forward
     - Shortcut Keys
 - Window control icons are a bit blocky
-- Icon audit, make sure all fit a common style
-  - Make sure all icons are in the same file
-  - Panel (ctrl-alt-i) that shows all icons for quick comparison
 - Debug panels are too easy to forget about, need a ref somewhere
   - Debug menu only available in dev mode?
   - Move app logs & deb ug to this menu?

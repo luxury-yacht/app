@@ -14,8 +14,8 @@ interface IconProps {
 
 /** Scroll document — auto-scroll */
 export const AutoScrollIcon: React.FC<IconProps> = ({
-  width = 20,
-  height = 20,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -35,8 +35,8 @@ export const AutoScrollIcon: React.FC<IconProps> = ({
 
 /** Circular arrows — auto-refresh */
 export const AutoRefreshIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -58,8 +58,8 @@ export const AutoRefreshIcon: React.FC<IconProps> = ({
 
 /** Skip-back / rewind — previous logs */
 export const PreviousLogsIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -75,8 +75,8 @@ export const PreviousLogsIcon: React.FC<IconProps> = ({
 
 /** Clock face — API timestamp display */
 export const TimestampIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -97,8 +97,8 @@ export const TimestampIcon: React.FC<IconProps> = ({
 
 /** Text wrapping between margins — word wrap */
 export const WrapTextIcon: React.FC<IconProps> = ({
-  width = 22,
-  height = 22,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -114,8 +114,8 @@ export const WrapTextIcon: React.FC<IconProps> = ({
 
 /** Palette / ANSI — render terminal color codes */
 export const AnsiColorIcon: React.FC<IconProps> = ({
-  width = 18,
-  height = 18,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -135,8 +135,8 @@ export const AnsiColorIcon: React.FC<IconProps> = ({
 
 /** Curly braces with document — JSON / structured data parsing */
 export const ParseJsonIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -152,8 +152,8 @@ export const ParseJsonIcon: React.FC<IconProps> = ({
 
 /** Indented document — pretty-printed JSON */
 export const PrettyJsonIcon: React.FC<IconProps> = ({
-  width = 18,
-  height = 18,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -169,8 +169,8 @@ export const PrettyJsonIcon: React.FC<IconProps> = ({
 
 /** Clipboard — copy to clipboard */
 export const CopyIcon: React.FC<IconProps> = ({
-  width = 20,
-  height = 20,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -186,8 +186,8 @@ export const CopyIcon: React.FC<IconProps> = ({
 
 /** Magnifier with star — highlight matching search terms */
 export const HighlightSearchIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -209,8 +209,8 @@ export const HighlightSearchIcon: React.FC<IconProps> = ({
 
 /** Magnifier with slash — invert the text filter */
 export const InverseSearchIcon: React.FC<IconProps> = ({
-  width = 20,
-  height = 20,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -227,8 +227,8 @@ export const InverseSearchIcon: React.FC<IconProps> = ({
 
 /** Regex-style glyph — treat the filter text as a regular expression */
 export const RegexSearchIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg

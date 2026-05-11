@@ -101,6 +101,103 @@ export const iconDebugGridSizes: Record<string, string> = {
   'nwse-resize': '24x24',
 };
 
+export const iconDebugDefaultSizes: Record<string, string> = {
+  AdvancedIcon: '24x24',
+  AnsiColorIcon: '24x24',
+  AppearanceModeIcon: '24x24',
+  AutoFitIcon: '24x24',
+  AutoRefreshIcon: '24x24',
+  AutoScrollIcon: '24x24',
+  CaseSensitiveIcon: '24x24',
+  CategoryIcon: '24x24',
+  CheckIcon: '24x24',
+  ChevronDownIcon: '24x24',
+  ChevronUpIcon: '24x24',
+  CloseIcon: '24x24',
+  ClusterOverviewIcon: '24x24',
+  ClusterResourcesIcon: '24x24',
+  CollapseAllIcon: '24x24',
+  CollapseIcon: '24x24',
+  CollapseSidebarIcon: '24x24',
+  CopyIcon: '24x24',
+  CordonIcon: '24x24',
+  DeleteIcon: '24x24',
+  DiagnosticsIcon: '24x24',
+  DiffIcon: '24x24',
+  DisplayIcon: '24x24',
+  DockBottomIcon: '24x24',
+  DockRightIcon: '24x24',
+  DrainIcon: '24x24',
+  DropdownArrowIcon: '24x24',
+  DropdownSelectAllIcon: '24x24',
+  DropdownSelectNoneIcon: '24x24',
+  EditIcon: '24x24',
+  ExpandAllIcon: '24x24',
+  ExpandIcon: '24x24',
+  ExpandSidebarIcon: '24x24',
+  FavoriteFilledIcon: '24x24',
+  FavoriteGenericIcon: '24x24',
+  FavoriteOutlineIcon: '24x24',
+  FavoritePinIcon: '24x24',
+  FitToViewIcon: '24x24',
+  FloatPanelIcon: '24x24',
+  FocusModeIcon: '24x24',
+  ForceDeleteIcon: '24x24',
+  HighlightSearchIcon: '24x24',
+  IconBarSeparatorIcon: '2x16',
+  InfoIcon: '24x24',
+  InverseSearchIcon: '24x24',
+  KubeconfigFolderIcon: '24x24',
+  KubeconfigsIcon: '24x24',
+  LegendIcon: '24x24',
+  LogsIcon: '24x24',
+  MaximizePanelIcon: '24x24',
+  MetadataIcon: '24x24',
+  ModalCloseIcon: '24x24',
+  NamespaceIcon: '24x24',
+  NamespaceOpenIcon: '24x24',
+  ObjectMapIcon: '24x24',
+  ObjectMapLegendSwatchIcon: '26x6',
+  OpenIcon: '24x24',
+  ParseJsonIcon: '24x24',
+  PlusIcon: '24x24',
+  PortForwardIcon: '24x24',
+  PrettyJsonIcon: '24x24',
+  PreviousLogsIcon: '24x24',
+  RefreshIcon: '24x24',
+  RegexSearchIcon: '24x24',
+  ResetFiltersIcon: '24x24',
+  ResetZoomIcon: '24x24',
+  RestartIcon: '24x24',
+  RestorePanelIcon: '24x24',
+  RollbackIcon: '24x24',
+  ScaleIcon: '24x24',
+  SettingsIcon: '24x24',
+  ShortcutArrowIcon: '24x24',
+  SortAscIcon: '24x24',
+  SortDescIcon: '24x24',
+  StatusDotIcon: '12x12',
+  StopSquareIcon: '24x24',
+  TabOverflowIcon: '300x150',
+  TimestampIcon: '24x24',
+  TooltipInfoIcon: '24x24',
+  WarningOutlineIcon: '24x24',
+  WarningTriangleIcon: '24x24',
+  WrapTextIcon: '24x24',
+  YamlCancelIcon: '24x24',
+  YamlEditIcon: '24x24',
+  YamlManagedFieldsIcon: '24x24',
+  YamlNextIcon: '24x24',
+  YamlPreviousIcon: '24x24',
+  YamlSaveIcon: '24x24',
+  ZoomInIcon: '24x24',
+  ZoomOutIcon: '24x24',
+  'ew-resize': '24x24',
+  'nesw-resize': '24x24',
+  'ns-resize': '24x24',
+  'nwse-resize': '24x24',
+};
+
 export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   AdvancedIcon: [
     { source: 'ui/modals/SettingsModal.tsx:153', renderedSize: '16x16', basis: 'tab render props' },
@@ -108,12 +205,12 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   AnsiColorIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:2421',
-      renderedSize: '18x18',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:1052',
-      renderedSize: '18x18',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -138,31 +235,31 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   AutoFitIcon: [
     {
       source: 'modules/object-map/ObjectMap.tsx:352',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-map/ObjectMap.tsx:522',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   AutoRefreshIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:2374',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:1031',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   AutoScrollIcon: [
     {
       source: 'ui/panels/app-logs/AppLogsPanel.tsx:598',
-      renderedSize: '20x20',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -207,14 +304,14 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   ChevronDownIcon: [
     {
       source: 'ui/favorites/FavMenuDropdown.tsx:196',
-      renderedSize: '13x13',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   ChevronUpIcon: [
     {
       source: 'ui/favorites/FavMenuDropdown.tsx:186',
-      renderedSize: '13x13',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -232,31 +329,31 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
     },
     {
       source: 'ui/dockable/DockablePanelControls.tsx:133',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     { source: 'ui/dockable/DockableTabBar.tsx:106', renderedSize: '10x10', basis: 'props' },
     {
       source: 'ui/favorites/FavSaveModal.tsx:378',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     { source: 'ui/layout/ClusterTabs.tsx:283', renderedSize: '10x10', basis: 'props' },
     { source: 'ui/layout/DebugOverlay.tsx:256', renderedSize: '14x14', basis: 'props' },
-    { source: 'ui/modals/AboutModal.tsx:87', renderedSize: '16x16', basis: 'component default' },
+    { source: 'ui/modals/AboutModal.tsx:87', renderedSize: '24x24', basis: 'component default' },
     {
       source: 'ui/modals/ObjPanelLogsSettingsModal.tsx:70',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'ui/modals/ObjectDiffModal.tsx:1183',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'ui/modals/SettingsModal.tsx:145',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
@@ -276,7 +373,7 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
     },
     {
       source: 'ui/shortcuts/components/ShortcutHelpModal.tsx:85',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     { source: 'ui/status/SessionsStatus.tsx:110', renderedSize: '10x10', basis: 'props' },
@@ -299,43 +396,43 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   CopyIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:2472',
-      renderedSize: '20x20',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:1089',
-      renderedSize: '20x20',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'shared/components/tables/hooks/useGridTableFiltersWiring.tsx:229',
-      renderedSize: '20x20',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     { source: 'ui/layout/AppLayout.tsx:585', renderedSize: '14x14', basis: 'props' },
     {
       source: 'ui/panels/app-logs/AppLogsPanel.tsx:608',
-      renderedSize: '20x20',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   CordonIcon: [
     {
       source: 'shared/hooks/useObjectActions.tsx:405',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   DeleteIcon: [
     {
       source: 'shared/hooks/useObjectActions.tsx:462',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     { source: 'ui/favorites/FavMenuDropdown.tsx:206', renderedSize: '13x13', basis: 'props' },
     {
       source: 'ui/panels/app-logs/AppLogsPanel.tsx:618',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
@@ -354,7 +451,7 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   DiffIcon: [
     {
       source: 'shared/hooks/useObjectActions.tsx:264',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
@@ -377,38 +474,38 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   DrainIcon: [
     {
       source: 'modules/cluster/components/ClusterViewNodes.tsx:196',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-panel/components/ObjectPanel/Details/Overview/NodeOverview.tsx:108',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'shared/hooks/useObjectActions.tsx:421',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   DropdownArrowIcon: [
     {
       source: 'shared/components/dropdowns/Dropdown/Dropdown.tsx:389',
-      renderedSize: '12x12',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   DropdownSelectAllIcon: [
     {
       source: 'shared/components/dropdowns/Dropdown/Dropdown.tsx:439',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   DropdownSelectNoneIcon: [
     {
       source: 'shared/components/dropdowns/Dropdown/Dropdown.tsx:457',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -429,7 +526,7 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   ],
   FavoriteFilledIcon: [
     { source: 'ui/favorites/FavMenuDropdown.tsx:150', renderedSize: '18x18', basis: 'props' },
-    { source: 'ui/favorites/FavToggle.tsx:273', renderedSize: '16x16', basis: 'component default' },
+    { source: 'ui/favorites/FavToggle.tsx:273', renderedSize: '24x24', basis: 'component default' },
   ],
   FavoriteGenericIcon: [
     {
@@ -439,13 +536,13 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
     },
     {
       source: 'ui/favorites/FavMenuDropdown.tsx:30',
-      renderedSize: '14x14',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     { source: 'ui/favorites/FavMenuDropdown.tsx:218', renderedSize: '10x10', basis: 'props' },
   ],
   FavoriteOutlineIcon: [
-    { source: 'ui/favorites/FavToggle.tsx:273', renderedSize: '16x16', basis: 'component default' },
+    { source: 'ui/favorites/FavToggle.tsx:273', renderedSize: '24x24', basis: 'component default' },
   ],
   FavoritePinIcon: [
     {
@@ -455,7 +552,7 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
     },
     {
       source: 'ui/favorites/FavMenuDropdown.tsx:30',
-      renderedSize: '14x14',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     { source: 'ui/favorites/FavMenuDropdown.tsx:221', renderedSize: '10x10', basis: 'props' },
@@ -463,12 +560,12 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   FitToViewIcon: [
     {
       source: 'modules/object-map/ObjectMap.tsx:346',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-map/ObjectMap.tsx:506',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -480,24 +577,24 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   FocusModeIcon: [
     {
       source: 'modules/object-map/ObjectMap.tsx:358',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-map/ObjectMap.tsx:535',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   HighlightSearchIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:2335',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:990',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -518,19 +615,19 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   InverseSearchIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:2345',
-      renderedSize: '20x20',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:1001',
-      renderedSize: '20x20',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   KubeconfigFolderIcon: [
     {
       source: 'ui/settings/sections/KubeconfigsSection.tsx:108',
-      renderedSize: '14x14',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -540,12 +637,12 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   LegendIcon: [
     {
       source: 'modules/object-map/ObjectMap.tsx:380',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-map/ObjectMap.tsx:573',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -585,7 +682,7 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   ObjectMapIcon: [
     {
       source: 'shared/hooks/useObjectActions.tsx:246',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -599,17 +696,17 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   OpenIcon: [
     {
       source: 'shared/hooks/useObjectActions.tsx:234',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'shared/hooks/useObjectActions.tsx:255',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'shared/hooks/useObjectActions.tsx:282',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     { source: 'ui/status/SessionsStatus.tsx:417', renderedSize: '14x14', basis: 'props' },
@@ -617,62 +714,62 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   ParseJsonIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:2448',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:1076',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   PlusIcon: [
     {
       source: 'ui/settings/sections/KubeconfigsSection.tsx:134',
-      renderedSize: '12x12',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   PortForwardIcon: [
     {
       source: 'shared/hooks/useObjectActions.tsx:432',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'shared/hooks/useObjectActions.tsx:444',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   PrettyJsonIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:2435',
-      renderedSize: '18x18',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:1066',
-      renderedSize: '18x18',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   PreviousLogsIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:2385',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   RefreshIcon: [
     {
       source: 'modules/object-map/ObjectMap.tsx:372',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-map/ObjectMap.tsx:560',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
@@ -689,34 +786,34 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   RegexSearchIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:2364',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:1021',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx:1457',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   ResetFiltersIcon: [
     {
       source: 'modules/object-map/ObjectMap.tsx:363',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-map/ObjectMap.tsx:545',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'shared/components/tables/GridTableFiltersBar.tsx:119',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
@@ -740,7 +837,7 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   RestartIcon: [
     {
       source: 'shared/hooks/useObjectActions.tsx:351',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     { source: 'ui/status/SessionsStatus.tsx:104', renderedSize: '12x12', basis: 'props' },
@@ -751,19 +848,19 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   RollbackIcon: [
     {
       source: 'shared/hooks/useObjectActions.tsx:367',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   ScaleIcon: [
     {
       source: 'shared/hooks/useObjectActions.tsx:379',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'shared/hooks/useObjectActions.tsx:386',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -784,46 +881,46 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   ShortcutArrowIcon: [
     {
       source: 'ui/shortcuts/components/ShortcutHelpModal.tsx:117',
-      renderedSize: '14x14',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'ui/shortcuts/components/ShortcutHelpModal.tsx:119',
-      renderedSize: '14x14',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'ui/shortcuts/components/ShortcutHelpModal.tsx:121',
-      renderedSize: '14x14',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'ui/shortcuts/components/ShortcutHelpModal.tsx:123',
-      renderedSize: '14x14',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   SortAscIcon: [
     {
       source: 'shared/components/tables/hooks/useGridTableContextMenuItems.tsx:87',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'shared/components/tables/hooks/useGridTableController.tsx:930',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   SortDescIcon: [
     {
       source: 'shared/components/tables/hooks/useGridTableContextMenuItems.tsx:93',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'shared/components/tables/hooks/useGridTableController.tsx:936',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -842,7 +939,7 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
   StopSquareIcon: [
     {
       source: 'ui/status/SessionsStatus.tsx:507',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
@@ -850,117 +947,117 @@ export const iconDebugUsages: Record<string, IconDebugUsage[]> = {
     {
       source: 'shared/components/tabs/Tabs.tsx:437',
       renderedSize: '300x150',
-      basis: 'browser SVG default',
+      basis: 'component default',
     },
     {
       source: 'shared/components/tabs/Tabs.tsx:508',
       renderedSize: '300x150',
-      basis: 'browser SVG default',
+      basis: 'component default',
     },
   ],
   TimestampIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:2396',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   TooltipInfoIcon: [
     {
       source: 'shared/components/Tooltip.tsx:363',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   WarningOutlineIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Details/DetailsTab.tsx:237',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   WarningTriangleIcon: [
     {
       source: 'modules/namespace/components/NsViewPods.tsx:480',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   WrapTextIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:2409',
-      renderedSize: '22x22',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:1040',
-      renderedSize: '22x22',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   YamlCancelIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx:1483',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   YamlEditIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx:1504',
-      renderedSize: '18x18',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   YamlManagedFieldsIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx:1472',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   YamlNextIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx:1430',
-      renderedSize: '14x14',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   YamlPreviousIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx:1421',
-      renderedSize: '14x14',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   YamlSaveIcon: [
     {
       source: 'modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx:1492',
-      renderedSize: '20x20',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   ZoomInIcon: [
     {
       source: 'modules/object-map/ObjectMap.tsx:333',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-map/ObjectMap.tsx:485',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],
   ZoomOutIcon: [
     {
       source: 'modules/object-map/ObjectMap.tsx:327',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
     {
       source: 'modules/object-map/ObjectMap.tsx:475',
-      renderedSize: '16x16',
+      renderedSize: '24x24',
       basis: 'component default',
     },
   ],

@@ -2,8 +2,8 @@ import React from 'react';
 import type { IconProps } from './SharedIcons';
 
 export const DockRightIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -18,8 +18,8 @@ export const DockRightIcon: React.FC<IconProps> = ({
 );
 
 export const DockBottomIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -34,8 +34,8 @@ export const DockBottomIcon: React.FC<IconProps> = ({
 );
 
 export const FloatPanelIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -50,8 +50,8 @@ export const FloatPanelIcon: React.FC<IconProps> = ({
 );
 
 export const MaximizePanelIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -66,8 +66,8 @@ export const MaximizePanelIcon: React.FC<IconProps> = ({
 );
 
 export const RestorePanelIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg

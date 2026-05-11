@@ -2,8 +2,8 @@ import React from 'react';
 import type { IconProps } from './SharedIcons';
 
 export const FavoriteOutlineIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -18,8 +18,8 @@ export const FavoriteOutlineIcon: React.FC<IconProps> = ({
 );
 
 export const FavoriteFilledIcon: React.FC<IconProps> = ({
-  width = 16,
-  height = 16,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -33,7 +33,7 @@ export const FavoriteFilledIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const FavoriteGenericIcon: React.FC<IconProps> = ({ width = 14, height = 14 }) => (
+export const FavoriteGenericIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -53,7 +53,7 @@ export const FavoriteGenericIcon: React.FC<IconProps> = ({ width = 14, height = 
   </svg>
 );
 
-export const FavoritePinIcon: React.FC<IconProps> = ({ width = 14, height = 14 }) => (
+export const FavoritePinIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -66,8 +66,8 @@ export const FavoritePinIcon: React.FC<IconProps> = ({ width = 14, height = 14 }
 );
 
 export const ChevronUpIcon: React.FC<IconProps> = ({
-  width = 13,
-  height = 13,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
@@ -82,8 +82,8 @@ export const ChevronUpIcon: React.FC<IconProps> = ({
 );
 
 export const ChevronDownIcon: React.FC<IconProps> = ({
-  width = 13,
-  height = 13,
+  width = 24,
+  height = 24,
   fill = 'currentColor',
 }) => (
   <svg
