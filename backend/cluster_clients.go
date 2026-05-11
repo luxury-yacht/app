@@ -439,8 +439,9 @@ func (a *App) buildRestConfigForSelection(selection kubeconfigSelection, cluster
 		wrapExecProviderForWindows(config)
 	}
 
-	config.QPS = appconfig.KubernetesClientQPS
-	config.Burst = appconfig.KubernetesClientBurst
+	qps, burst := a.kubernetesClientRateLimits()
+	config.QPS = float32(qps)
+	config.Burst = burst
 
 	// Wrap transport with auth-aware layer for per-cluster auth state management.
 	// This intercepts 401 responses and reports them to the cluster's auth manager,

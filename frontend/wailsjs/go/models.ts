@@ -786,6 +786,9 @@ export namespace types {
 	    refreshBackgroundClustersEnabled: boolean;
 	    metricsRefreshIntervalMs: number;
 	    maxTableRows: number;
+	    kubernetesClientQPS: number;
+	    kubernetesClientBurst: number;
+	    permissionSSRRFetchConcurrency: number;
 	    objPanelLogsBufferMaxSize: number;
 	    objPanelLogsTargetPerScopeLimit: number;
 	    objPanelLogsTargetGlobalLimit: number;
@@ -826,6 +829,9 @@ export namespace types {
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];
 	        this.maxTableRows = source["maxTableRows"];
+	        this.kubernetesClientQPS = source["kubernetesClientQPS"];
+	        this.kubernetesClientBurst = source["kubernetesClientBurst"];
+	        this.permissionSSRRFetchConcurrency = source["permissionSSRRFetchConcurrency"];
 	        this.objPanelLogsBufferMaxSize = source["objPanelLogsBufferMaxSize"];
 	        this.objPanelLogsTargetPerScopeLimit = source["objPanelLogsTargetPerScopeLimit"];
 	        this.objPanelLogsTargetGlobalLimit = source["objPanelLogsTargetGlobalLimit"];

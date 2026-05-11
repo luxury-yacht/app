@@ -538,6 +538,14 @@ export function SetKubeconfigSearchPaths(arg1) {
   return window['go']['backend']['App']['SetKubeconfigSearchPaths'](arg1);
 }
 
+export function SetKubernetesClientBurst(arg1) {
+  return window['go']['backend']['App']['SetKubernetesClientBurst'](arg1);
+}
+
+export function SetKubernetesClientQPS(arg1) {
+  return window['go']['backend']['App']['SetKubernetesClientQPS'](arg1);
+}
+
 export function SetLinkColor(arg1, arg2) {
   return window['go']['backend']['App']['SetLinkColor'](arg1, arg2);
 }
@@ -572,6 +580,10 @@ export function SetObjectPanelLayout(arg1, arg2, arg3, arg4, arg5, arg6) {
 
 export function SetPaletteTint(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['SetPaletteTint'](arg1, arg2, arg3, arg4);
+}
+
+export function SetPermissionSSRRFetchConcurrency(arg1) {
+  return window['go']['backend']['App']['SetPermissionSSRRFetchConcurrency'](arg1);
 }
 
 export function SetSelectedKubeconfigs(arg1) {

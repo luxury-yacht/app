@@ -10,11 +10,26 @@ import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import {
   hydrateAppPreferences,
+  getKubernetesClientBurst,
+  getKubernetesClientQPS,
   getMaxTableRows,
+  getPermissionSSRRFetchConcurrency,
+  KUBERNETES_CLIENT_BURST_DEFAULT,
+  KUBERNETES_CLIENT_BURST_MAX,
+  KUBERNETES_CLIENT_BURST_MIN,
+  KUBERNETES_CLIENT_QPS_DEFAULT,
+  KUBERNETES_CLIENT_QPS_MAX,
+  KUBERNETES_CLIENT_QPS_MIN,
   MAX_TABLE_ROWS_DEFAULT,
   MAX_TABLE_ROWS_MAX,
   MAX_TABLE_ROWS_MIN,
+  PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT,
+  PERMISSION_SSRR_FETCH_CONCURRENCY_MAX,
+  PERMISSION_SSRR_FETCH_CONCURRENCY_MIN,
+  setKubernetesClientBurst,
+  setKubernetesClientQPS,
   setMaxTableRows,
+  setPermissionSSRRFetchConcurrency,
 } from '@/core/settings/appPreferences';
 import { clearTintedPalette } from '@utils/paletteTint';
 import { clearAccentColor } from '@utils/accentColor';
@@ -33,6 +48,14 @@ function AdvancedSection() {
   const [maxTableRowsInput, setMaxTableRowsInput] = useState<string>(() =>
     String(getMaxTableRows())
   );
+  const [kubernetesClientQPSInput, setKubernetesClientQPSInput] = useState<string>(() =>
+    String(getKubernetesClientQPS())
+  );
+  const [kubernetesClientBurstInput, setKubernetesClientBurstInput] = useState<string>(() =>
+    String(getKubernetesClientBurst())
+  );
+  const [permissionSSRRFetchConcurrencyInput, setPermissionSSRRFetchConcurrencyInput] =
+    useState<string>(() => String(getPermissionSSRRFetchConcurrency()));
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
   );
@@ -46,6 +69,17 @@ function AdvancedSection() {
         const prefs = await hydrateAppPreferences({ force: true });
         if (!cancelled) {
           setMaxTableRowsInput(String(prefs.maxTableRows ?? MAX_TABLE_ROWS_DEFAULT));
+          setKubernetesClientQPSInput(
+            String(prefs.kubernetesClientQPS ?? KUBERNETES_CLIENT_QPS_DEFAULT)
+          );
+          setKubernetesClientBurstInput(
+            String(prefs.kubernetesClientBurst ?? KUBERNETES_CLIENT_BURST_DEFAULT)
+          );
+          setPermissionSSRRFetchConcurrencyInput(
+            String(
+              prefs.permissionSSRRFetchConcurrency ?? PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT
+            )
+          );
           setPersistenceMode(getGridTablePersistenceMode());
         }
       } catch (error) {
@@ -73,6 +107,39 @@ function AdvancedSection() {
         : Math.max(MAX_TABLE_ROWS_MIN, Math.min(MAX_TABLE_ROWS_MAX, parsed));
     setMaxTableRowsInput(String(normalized));
     setMaxTableRows(normalized);
+  };
+
+  const commitKubernetesClientQPS = (raw: string) => {
+    const parsed = parseInt(raw, 10);
+    const normalized =
+      Number.isNaN(parsed) || parsed <= 0
+        ? KUBERNETES_CLIENT_QPS_DEFAULT
+        : Math.max(KUBERNETES_CLIENT_QPS_MIN, Math.min(KUBERNETES_CLIENT_QPS_MAX, parsed));
+    setKubernetesClientQPSInput(String(normalized));
+    setKubernetesClientQPS(normalized);
+  };
+
+  const commitKubernetesClientBurst = (raw: string) => {
+    const parsed = parseInt(raw, 10);
+    const normalized =
+      Number.isNaN(parsed) || parsed <= 0
+        ? KUBERNETES_CLIENT_BURST_DEFAULT
+        : Math.max(KUBERNETES_CLIENT_BURST_MIN, Math.min(KUBERNETES_CLIENT_BURST_MAX, parsed));
+    setKubernetesClientBurstInput(String(normalized));
+    setKubernetesClientBurst(normalized);
+  };
+
+  const commitPermissionSSRRFetchConcurrency = (raw: string) => {
+    const parsed = parseInt(raw, 10);
+    const normalized =
+      Number.isNaN(parsed) || parsed <= 0
+        ? PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT
+        : Math.max(
+            PERMISSION_SSRR_FETCH_CONCURRENCY_MIN,
+            Math.min(PERMISSION_SSRR_FETCH_CONCURRENCY_MAX, parsed)
+          );
+    setPermissionSSRRFetchConcurrencyInput(String(normalized));
+    setPermissionSSRRFetchConcurrency(normalized);
   };
 
   const handleResetViews = async () => {
@@ -151,6 +218,96 @@ function AdvancedSection() {
             onChange={setBackgroundRefresh}
             ariaLabel="Background clusters refresh"
           />
+        </div>
+      </div>
+
+      <div className="settings-subgroup-label">Kubernetes API</div>
+      <hr className="settings-subgroup-divider" />
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Client QPS</div>
+          <div className="settings-row-label-help">
+            Per-cluster Kubernetes REST client request rate for newly built cluster connections.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <div className="setting-item setting-item-inline">
+            <input
+              type="number"
+              id="settings-kubernetes-client-qps"
+              min={KUBERNETES_CLIENT_QPS_MIN}
+              max={KUBERNETES_CLIENT_QPS_MAX}
+              step={10}
+              value={kubernetesClientQPSInput}
+              onChange={(e) => setKubernetesClientQPSInput(e.target.value)}
+              onBlur={(e) => commitKubernetesClientQPS(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Client burst</div>
+          <div className="settings-row-label-help">
+            Per-cluster Kubernetes REST client burst allowance for newly built cluster connections.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <div className="setting-item setting-item-inline">
+            <input
+              type="number"
+              id="settings-kubernetes-client-burst"
+              min={KUBERNETES_CLIENT_BURST_MIN}
+              max={KUBERNETES_CLIENT_BURST_MAX}
+              step={10}
+              value={kubernetesClientBurstInput}
+              onChange={(e) => setKubernetesClientBurstInput(e.target.value)}
+              onBlur={(e) => commitKubernetesClientBurst(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">SSRR concurrency</div>
+          <div className="settings-row-label-help">
+            Concurrent namespace SelfSubjectRulesReview requests during permission checks.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <div className="setting-item setting-item-inline">
+            <input
+              type="number"
+              id="settings-permission-ssrr-concurrency"
+              min={PERMISSION_SSRR_FETCH_CONCURRENCY_MIN}
+              max={PERMISSION_SSRR_FETCH_CONCURRENCY_MAX}
+              step={1}
+              value={permissionSSRRFetchConcurrencyInput}
+              onChange={(e) => setPermissionSSRRFetchConcurrencyInput(e.target.value)}
+              onBlur={(e) => commitPermissionSSRRFetchConcurrency(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+            />
+          </div>
         </div>
       </div>
 

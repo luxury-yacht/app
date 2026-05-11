@@ -320,7 +320,7 @@ func (a *App) fetchSSRRRulesForNamespaces(
 	}
 
 	results := make([]ssrrNamespaceResult, len(fetches))
-	_ = parallel.ForEach(ctx, fetches, config.PermissionSSRRFetchConcurrency, func(ctx context.Context, fetch ssrrNamespaceFetch) error {
+	_ = parallel.ForEach(ctx, fetches, a.permissionSSRRFetchConcurrency(), func(ctx context.Context, fetch ssrrNamespaceFetch) error {
 		cache := a.getOrCreateSSRRCache(fetch.key.clusterID)
 		if cache == nil {
 			results[fetch.index] = ssrrNamespaceResult{

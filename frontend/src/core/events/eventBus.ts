@@ -87,6 +87,9 @@ export interface AppEvents {
   'settings:appearance-mode': 'light' | 'dark' | 'system';
   'settings:metrics-interval': number;
   'settings:max-table-rows': number;
+  'settings:kubernetes-client-qps': number;
+  'settings:kubernetes-client-burst': number;
+  'settings:permission-ssrr-fetch-concurrency': number;
   'settings:obj-panel-logs-buffer-size': number;
   'settings:obj-panel-logs-api-timestamp-format': string;
   'settings:obj-panel-logs-api-timestamp-use-local-time-zone': boolean;

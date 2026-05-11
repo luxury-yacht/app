@@ -38,6 +38,9 @@ type AppSettings struct {
 	RefreshBackgroundClustersEnabled         bool     `json:"refreshBackgroundClustersEnabled"`         // Refresh inactive clusters in the background
 	MetricsRefreshIntervalMs                 int      `json:"metricsRefreshIntervalMs"`                 // Metrics refresh interval (ms)
 	MaxTableRows                             int      `json:"maxTableRows"`                             // Max rows shown in a data table (100-10000)
+	KubernetesClientQPS                      int      `json:"kubernetesClientQPS"`                      // Per-cluster Kubernetes REST client QPS
+	KubernetesClientBurst                    int      `json:"kubernetesClientBurst"`                    // Per-cluster Kubernetes REST client burst allowance
+	PermissionSSRRFetchConcurrency           int      `json:"permissionSSRRFetchConcurrency"`           // Concurrent namespace SelfSubjectRulesReview fetches
 	ObjPanelLogsBufferMaxSize                int      `json:"objPanelLogsBufferMaxSize"`                // Max container log entries kept in memory per Object Panel Logs Tab (100-10000)
 	ObjPanelLogsTargetPerScopeLimit          int      `json:"objPanelLogsTargetPerScopeLimit"`          // Max pod/container Object Panel Logs Tab targets per Logs tab (1-1000)
 	ObjPanelLogsTargetGlobalLimit            int      `json:"objPanelLogsTargetGlobalLimit"`            // Max pod/container Object Panel Logs Tab targets across all log tabs (1-1000)

@@ -42,6 +42,18 @@ users:
 	require.NoError(t, err)
 	require.Equal(t, float32(appconfig.KubernetesClientQPS), cfg.QPS)
 	require.Equal(t, appconfig.KubernetesClientBurst, cfg.Burst)
+
+	app.appSettings = &AppSettings{
+		KubernetesClientQPS:   250,
+		KubernetesClientBurst: 500,
+	}
+	cfg, err = app.buildRestConfigForSelection(kubeconfigSelection{
+		Path:    configPath,
+		Context: "test-context",
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, float32(250), cfg.QPS)
+	require.Equal(t, 500, cfg.Burst)
 }
 
 // TestSyncClusterClientPool_CreatesClientsForNewSelections verifies that calling

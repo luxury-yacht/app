@@ -98,6 +98,75 @@ func TestQueryPermissions_FetchesNamespaceSSRRsConcurrently(t *testing.T) {
 	}
 }
 
+func TestQueryPermissions_UsesConfiguredSSRRFetchConcurrency(t *testing.T) {
+	const clusterID = "cluster-serial-ssrr"
+	const namespaceCount = 4
+	client := cgofake.NewClientset()
+	var active atomic.Int32
+	var maxActive atomic.Int32
+
+	fetchRules := func(context.Context, string) (*authorizationv1.SubjectRulesReviewStatus, error) {
+		current := active.Add(1)
+		defer active.Add(-1)
+		for {
+			max := maxActive.Load()
+			if current <= max || maxActive.CompareAndSwap(max, current) {
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+
+		return &authorizationv1.SubjectRulesReviewStatus{
+			ResourceRules: []authorizationv1.ResourceRule{
+				{
+					Verbs:     []string{"list"},
+					APIGroups: []string{""},
+					Resources: []string{"pods"},
+				},
+			},
+		}, nil
+	}
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	app.appSettings = &AppSettings{PermissionSSRRFetchConcurrency: 1}
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "Serial"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
+	app.ssrrCaches = map[string]*capabilities.SSRRCache{
+		clusterID: capabilities.NewSSRRCache(clusterID, time.Minute, 0, fetchRules, nil),
+	}
+
+	queries := make([]capabilities.PermissionQuery, 0, namespaceCount)
+	for i := range namespaceCount {
+		queries = append(queries, capabilities.PermissionQuery{
+			ID:           fmt.Sprintf("pod-list-%d", i),
+			ClusterId:    clusterID,
+			Group:        "",
+			Version:      "v1",
+			ResourceKind: "Pod",
+			Verb:         "list",
+			Namespace:    fmt.Sprintf("ns-%d", i),
+		})
+	}
+
+	resp, err := app.QueryPermissions(queries)
+	if err != nil {
+		t.Fatalf("QueryPermissions returned error: %v", err)
+	}
+	if len(resp.Results) != namespaceCount {
+		t.Fatalf("expected %d results, got %d", namespaceCount, len(resp.Results))
+	}
+	if maxActive.Load() != 1 {
+		t.Fatalf("expected SSRR fetch concurrency cap of 1, max active fetches was %d", maxActive.Load())
+	}
+}
+
 func TestQueryPermissions_ValidationErrors(t *testing.T) {
 	app := &App{}
 
