@@ -76,11 +76,13 @@ func TestCreateDebugMenuBuildsDebugOverlayEntries(t *testing.T) {
 
 	debugMenu := findSubmenu(t, m, "Debug")
 	expected := []string{
-		"Toggle Keyboard Focus Overlay",
-		"Toggle Panel Debug Overlay",
-		"Toggle Map Debug Overlay",
-		"Toggle Icon Debug Overlay",
-		"Toggle Error Boundary Tests",
+		"Open Inspector",
+		"",
+		"Keyboard Focus Overlay",
+		"Panel Debug Overlay",
+		"Map Debug Overlay",
+		"Icon Debug Overlay",
+		"Error Boundary Tests",
 	}
 	if got := menuLabels(debugMenu); len(got) != len(expected) {
 		t.Fatalf("expected %d debug menu items, got %d: %#v", len(expected), len(got), got)
@@ -115,7 +117,7 @@ func assertMenuContainsLabel(t *testing.T, labels []string, want string) {
 	t.Fatalf("expected menu labels to contain %q, got %#v", want, labels)
 }
 
-func TestDebugOverlayMenuItemsEmitFrontendEvents(t *testing.T) {
+func TestDebugMenuItemsEmitFrontendEvents(t *testing.T) {
 	app := &App{Ctx: context.Background()}
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
@@ -133,6 +135,7 @@ func TestDebugOverlayMenuItemsEmitFrontendEvents(t *testing.T) {
 	}
 
 	expected := []string{
+		"debug:open-inspector",
 		"debug:toggle-focus-overlay",
 		"debug:toggle-panel-overlay",
 		"debug:toggle-map-overlay",

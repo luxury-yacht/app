@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { isMacPlatform, isWindowsPlatform } from '@/utils/platform';
 
 interface AppDebugShortcutHandlers {
   onTogglePanelDebug: () => void;
@@ -7,6 +8,15 @@ interface AppDebugShortcutHandlers {
   onToggleMapDebug: () => void;
   onToggleIconDebug: () => void;
 }
+
+const openWailsInspector = () => {
+  const wailsInvoke = (window as Window & { WailsInvoke?: (message: string) => void }).WailsInvoke;
+  if (!wailsInvoke || isWindowsPlatform()) {
+    return;
+  }
+
+  wailsInvoke(isMacPlatform() ? 'wails:openInspector' : 'wails:showInspector');
+};
 
 /**
  * Debug overlays stay outside the shared shortcut surface model on purpose.
@@ -27,6 +37,7 @@ export const useAppDebugShortcuts = ({
     }
 
     const eventHandlers: Array<[string, () => void]> = [
+      ['debug:open-inspector', openWailsInspector],
       ['debug:toggle-panel-overlay', onTogglePanelDebug],
       ['debug:toggle-focus-overlay', onToggleFocusDebug],
       ['debug:toggle-error-overlay', onToggleErrorDebug],

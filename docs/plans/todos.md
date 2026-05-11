@@ -1,12 +1,5 @@
 # TODO
 
-- Debug panels are too easy to forget about, need a ref somewhere
-  - Debug menu only available in dev mode?
-  - Move app logs & deb ug to this menu?
-  - Browser console?
-- Settings
-  - Setting to show Debug menu? Requires restart?
-
 ## Feature Ideas
 
 - In daemonset details, show a "NOT RUNNING ON" label that lists the nodes where the ds is missing

@@ -267,11 +267,19 @@ func createViewMenu(appMenu *menu.Menu, app *App) {
 func createDebugMenu(appMenu *menu.Menu, app *App) {
 	debugMenu := appMenu.AddSubmenu("Debug")
 
-	addDebugOverlayMenuItem(debugMenu, app, "Toggle Keyboard Focus Overlay", "k", "debug:toggle-focus-overlay")
-	addDebugOverlayMenuItem(debugMenu, app, "Toggle Panel Debug Overlay", "p", "debug:toggle-panel-overlay")
-	addDebugOverlayMenuItem(debugMenu, app, "Toggle Map Debug Overlay", "m", "debug:toggle-map-overlay")
-	addDebugOverlayMenuItem(debugMenu, app, "Toggle Icon Debug Overlay", "i", "debug:toggle-icon-overlay")
-	addDebugOverlayMenuItem(debugMenu, app, "Toggle Error Boundary Tests", "e", "debug:toggle-error-overlay")
+	debugMenu.AddText("Open Inspector", keys.Combo("f12", keys.ShiftKey, keys.CmdOrCtrlKey), func(_ *menu.CallbackData) {
+		if app.Ctx != nil {
+			app.emitEvent("debug:open-inspector")
+		}
+	})
+
+	debugMenu.AddSeparator()
+
+	addDebugOverlayMenuItem(debugMenu, app, "Keyboard Focus Overlay", "k", "debug:toggle-focus-overlay")
+	addDebugOverlayMenuItem(debugMenu, app, "Panel Debug Overlay", "p", "debug:toggle-panel-overlay")
+	addDebugOverlayMenuItem(debugMenu, app, "Map Debug Overlay", "m", "debug:toggle-map-overlay")
+	addDebugOverlayMenuItem(debugMenu, app, "Icon Debug Overlay", "i", "debug:toggle-icon-overlay")
+	addDebugOverlayMenuItem(debugMenu, app, "Error Boundary Tests", "e", "debug:toggle-error-overlay")
 }
 
 func addDebugOverlayMenuItem(debugMenu *menu.Menu, app *App, label string, key string, event string) {

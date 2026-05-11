@@ -3,6 +3,16 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppDebugShortcuts } from './useAppDebugShortcuts';
 
+const platformMocks = vi.hoisted(() => ({
+  isMacPlatform: vi.fn(() => true),
+  isWindowsPlatform: vi.fn(() => false),
+}));
+
+vi.mock('@/utils/platform', () => ({
+  isMacPlatform: platformMocks.isMacPlatform,
+  isWindowsPlatform: platformMocks.isWindowsPlatform,
+}));
+
 const runtimeHandlers = new Map<string, (...args: unknown[]) => void>();
 const runtimeEventsOn = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
   runtimeHandlers.set(event, handler);
@@ -55,6 +65,8 @@ describe('useAppDebugShortcuts', () => {
     runtimeHandlers.clear();
     runtimeEventsOn.mockClear();
     runtimeEventsOff.mockClear();
+    platformMocks.isMacPlatform.mockReturnValue(true);
+    platformMocks.isWindowsPlatform.mockReturnValue(false);
     window.runtime = {
       EventsOn: runtimeEventsOn,
       EventsOff: runtimeEventsOff,
@@ -64,6 +76,7 @@ describe('useAppDebugShortcuts', () => {
   afterEach(() => {
     document.body.innerHTML = '';
     delete window.runtime;
+    delete (window as Window & { WailsInvoke?: (message: string) => void }).WailsInvoke;
   });
 
   it('toggles each debug overlay on its Ctrl+Alt shortcut', () => {
@@ -170,6 +183,7 @@ describe('useAppDebugShortcuts', () => {
       runtimeHandlers.get('debug:toggle-icon-overlay')?.();
     });
 
+    expect(runtimeEventsOn).toHaveBeenCalledWith('debug:open-inspector', expect.any(Function));
     expect(runtimeEventsOn).toHaveBeenCalledWith(
       'debug:toggle-panel-overlay',
       expect.any(Function)
@@ -192,5 +206,34 @@ describe('useAppDebugShortcuts', () => {
 
     hook.unmount();
     expect(runtimeHandlers.size).toBe(0);
+  });
+
+  it('opens the Wails inspector from the debug menu event on WebKit platforms', () => {
+    const wailsInvoke = vi.fn();
+    (window as Window & { WailsInvoke?: (message: string) => void }).WailsInvoke = wailsInvoke;
+
+    const hook = renderHookHost();
+
+    act(() => {
+      runtimeHandlers.get('debug:open-inspector')?.();
+    });
+
+    expect(wailsInvoke).toHaveBeenCalledWith('wails:openInspector');
+
+    platformMocks.isMacPlatform.mockReturnValue(false);
+    act(() => {
+      runtimeHandlers.get('debug:open-inspector')?.();
+    });
+
+    expect(wailsInvoke).toHaveBeenLastCalledWith('wails:showInspector');
+
+    platformMocks.isWindowsPlatform.mockReturnValue(true);
+    act(() => {
+      runtimeHandlers.get('debug:open-inspector')?.();
+    });
+
+    expect(wailsInvoke).toHaveBeenCalledTimes(2);
+
+    hook.unmount();
   });
 });
