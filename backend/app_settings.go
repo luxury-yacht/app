@@ -41,6 +41,7 @@ type settingsPreferences struct {
 	AppearanceMode                string                `json:"appearanceMode"`
 	UseShortResourceNames         bool                  `json:"useShortResourceNames"`
 	DimInactiveNamespaces         *bool                 `json:"dimInactiveNamespaces,omitempty"`
+	ExclusiveNamespaces           *bool                 `json:"exclusiveNamespaces,omitempty"`
 	Refresh                       *settingsRefresh      `json:"refresh"`
 	MaxTableRows                  int                   `json:"maxTableRows"`
 	ObjPanelLogs                  *settingsObjPanelLogs `json:"objPanelLogs,omitempty"`
@@ -195,6 +196,7 @@ func defaultSettingsFile() *settingsFile {
 		Preferences: settingsPreferences{
 			AppearanceMode:        "system",
 			DimInactiveNamespaces: boolPtr(true),
+			ExclusiveNamespaces:   boolPtr(true),
 			Refresh:               &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
 			MaxTableRows:          defaultMaxTableRows,
 			ObjPanelLogs: &settingsObjPanelLogs{
@@ -230,6 +232,9 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.DimInactiveNamespaces == nil {
 		settings.Preferences.DimInactiveNamespaces = boolPtr(true)
+	}
+	if settings.Preferences.ExclusiveNamespaces == nil {
+		settings.Preferences.ExclusiveNamespaces = boolPtr(true)
 	}
 	if settings.Preferences.Refresh == nil {
 		settings.Preferences.Refresh = &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()}
@@ -491,6 +496,7 @@ func getDefaultAppSettings() *AppSettings {
 		SelectedKubeconfigs:                      nil,
 		UseShortResourceNames:                    false,
 		DimInactiveNamespaces:                    true,
+		ExclusiveNamespaces:                      true,
 		AutoRefreshEnabled:                       true,
 		RefreshBackgroundClustersEnabled:         true,
 		MetricsRefreshIntervalMs:                 defaultMetricsIntervalMs(),
@@ -521,6 +527,10 @@ func (a *App) loadAppSettings() error {
 	if settings.Preferences.DimInactiveNamespaces != nil {
 		dimInactiveNamespaces = *settings.Preferences.DimInactiveNamespaces
 	}
+	exclusiveNamespaces := true
+	if settings.Preferences.ExclusiveNamespaces != nil {
+		exclusiveNamespaces = *settings.Preferences.ExclusiveNamespaces
+	}
 	if settings.Preferences.MaxTableRows > 0 {
 		maxTableRows = clampMaxTableRows(settings.Preferences.MaxTableRows)
 	}
@@ -545,6 +555,7 @@ func (a *App) loadAppSettings() error {
 		SelectedKubeconfigs:                      append([]string(nil), settings.Kubeconfig.Selected...),
 		UseShortResourceNames:                    settings.Preferences.UseShortResourceNames,
 		DimInactiveNamespaces:                    dimInactiveNamespaces,
+		ExclusiveNamespaces:                      exclusiveNamespaces,
 		AutoRefreshEnabled:                       settings.Preferences.Refresh.Auto,
 		RefreshBackgroundClustersEnabled:         settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:                 settings.Preferences.Refresh.MetricsIntervalMs,
@@ -594,6 +605,7 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.AppearanceMode = a.appSettings.AppearanceMode
 	settings.Preferences.UseShortResourceNames = a.appSettings.UseShortResourceNames
 	settings.Preferences.DimInactiveNamespaces = boolPtr(a.appSettings.DimInactiveNamespaces)
+	settings.Preferences.ExclusiveNamespaces = boolPtr(a.appSettings.ExclusiveNamespaces)
 	if settings.Preferences.Refresh == nil {
 		settings.Preferences.Refresh = &settingsRefresh{}
 	}
@@ -749,6 +761,21 @@ func (a *App) SetDimInactiveNamespaces(enabled bool) error {
 
 	a.logger.Info(fmt.Sprintf("Dim inactive namespaces changed to: %v", enabled), logsources.Settings)
 	a.appSettings.DimInactiveNamespaces = enabled
+	return a.saveAppSettings()
+}
+
+func (a *App) SetExclusiveNamespaces(enabled bool) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(fmt.Sprintf("Exclusive namespaces changed to: %v", enabled), logsources.Settings)
+	a.appSettings.ExclusiveNamespaces = enabled
 	return a.saveAppSettings()
 }
 

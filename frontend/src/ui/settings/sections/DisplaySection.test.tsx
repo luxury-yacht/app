@@ -14,6 +14,7 @@ const appPreferenceMocks = vi.hoisted(() => ({
   hydrateAppPreferences: vi.fn(),
   setUseShortResourceNames: vi.fn(),
   setDimInactiveNamespaces: vi.fn(),
+  setExclusiveNamespaces: vi.fn(),
 }));
 
 vi.mock('@/core/settings/appPreferences', () => ({
@@ -22,6 +23,8 @@ vi.mock('@/core/settings/appPreferences', () => ({
     appPreferenceMocks.setUseShortResourceNames(...args),
   setDimInactiveNamespaces: (...args: unknown[]) =>
     appPreferenceMocks.setDimInactiveNamespaces(...args),
+  setExclusiveNamespaces: (...args: unknown[]) =>
+    appPreferenceMocks.setExclusiveNamespaces(...args),
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -42,12 +45,15 @@ describe('DisplaySection', () => {
     appPreferenceMocks.hydrateAppPreferences.mockReset();
     appPreferenceMocks.setUseShortResourceNames.mockReset();
     appPreferenceMocks.setDimInactiveNamespaces.mockReset();
+    appPreferenceMocks.setExclusiveNamespaces.mockReset();
     appPreferenceMocks.hydrateAppPreferences.mockResolvedValue({
       useShortResourceNames: false,
       dimInactiveNamespaces: true,
+      exclusiveNamespaces: true,
     });
     appPreferenceMocks.setUseShortResourceNames.mockResolvedValue(undefined);
     appPreferenceMocks.setDimInactiveNamespaces.mockResolvedValue(undefined);
+    appPreferenceMocks.setExclusiveNamespaces.mockResolvedValue(undefined);
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -70,6 +76,10 @@ describe('DisplaySection', () => {
   it('shows the dim inactive namespaces setting on by default', () => {
     expect(container.textContent).toContain('Resources');
     expect(container.textContent).toContain('Sidebar');
+    expect(container.textContent).toContain('Exclusive namespaces');
+    expect(container.textContent).toContain(
+      'When enabled, only one namespace at a time can be expanded in the Sidebar.'
+    );
     expect(container.textContent).toContain('Dim inactive namespaces');
     expect(container.textContent).toContain(
       'Dim namespaces in the Sidebar that have no Workloads.'
@@ -80,6 +90,29 @@ describe('DisplaySection', () => {
     );
     expect(toggle).not.toBeNull();
     expect(toggle?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('shows the exclusive namespaces setting on by default', () => {
+    const toggle = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Exclusive namespaces"]'
+    );
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('persists exclusive namespaces changes', async () => {
+    const toggle = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Exclusive namespaces"]'
+    );
+    expect(toggle).not.toBeNull();
+
+    await act(async () => {
+      toggle!.click();
+      await Promise.resolve();
+    });
+
+    expect(appPreferenceMocks.setExclusiveNamespaces).toHaveBeenCalledWith(false);
+    expect(toggle?.getAttribute('aria-checked')).toBe('false');
   });
 
   it('persists dim inactive namespaces changes', async () => {

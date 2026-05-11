@@ -33,6 +33,7 @@ type AppSettings struct {
 	SelectedKubeconfigs                      []string `json:"selectedKubeconfigs"`                      // Multi-cluster selections in "path:context" form
 	UseShortResourceNames                    bool     `json:"useShortResourceNames"`                    // Use short names like "po" for pods in badges/headers
 	DimInactiveNamespaces                    bool     `json:"dimInactiveNamespaces"`                    // Dim namespaces with no workloads in the sidebar
+	ExclusiveNamespaces                      bool     `json:"exclusiveNamespaces"`                      // Allow only one expanded namespace in the sidebar
 	AutoRefreshEnabled                       bool     `json:"autoRefreshEnabled"`                       // Enable automatic refresh cycles
 	RefreshBackgroundClustersEnabled         bool     `json:"refreshBackgroundClustersEnabled"`         // Refresh inactive clusters in the background
 	MetricsRefreshIntervalMs                 int      `json:"metricsRefreshIntervalMs"`                 // Metrics refresh interval (ms)

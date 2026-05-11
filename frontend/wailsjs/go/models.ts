@@ -781,6 +781,7 @@ export namespace types {
 	    selectedKubeconfigs: string[];
 	    useShortResourceNames: boolean;
 	    dimInactiveNamespaces: boolean;
+	    exclusiveNamespaces: boolean;
 	    autoRefreshEnabled: boolean;
 	    refreshBackgroundClustersEnabled: boolean;
 	    metricsRefreshIntervalMs: number;
@@ -820,6 +821,7 @@ export namespace types {
 	        this.selectedKubeconfigs = source["selectedKubeconfigs"];
 	        this.useShortResourceNames = source["useShortResourceNames"];
 	        this.dimInactiveNamespaces = source["dimInactiveNamespaces"];
+	        this.exclusiveNamespaces = source["exclusiveNamespaces"];
 	        this.autoRefreshEnabled = source["autoRefreshEnabled"];
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];

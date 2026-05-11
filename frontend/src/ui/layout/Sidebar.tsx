@@ -34,6 +34,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
+import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
 import { useSidebarKeyboardControls, SidebarCursorTarget } from './SidebarKeys';
 
 // Static cluster view list to avoid re-creating the array each render.
@@ -90,6 +91,7 @@ function Sidebar() {
   const { suppressPassiveLoading } = useAutoRefreshLoadingState();
   const { selectedClusterId } = useKubeconfig();
   const dimInactiveNamespaces = useDimInactiveNamespaces();
+  const exclusiveNamespaces = useExclusiveNamespaces();
   // Catalog is scoped — aggregate namespace metadata across active scopes, then
   // select the active cluster's groups explicitly instead of trusting whichever
   // scope happened to populate first.
@@ -105,7 +107,8 @@ function Sidebar() {
     return groups;
   }, [catalogScopedStates]);
   const viewState = useViewState();
-  const [expandedNamespaceKey, setExpandedNamespaceKey] = useState<string | null>(null);
+  const [expandedNamespaceKeys, setExpandedNamespaceKeys] = useState<Set<string>>(() => new Set());
+  const [lastExpandedNamespaceKey, setLastExpandedNamespaceKey] = useState<string | null>(null);
   const [clusterResourcesExpanded, setClusterResourcesExpanded] = useState<boolean>(true);
 
   const width = viewState.isSidebarVisible ? viewState.sidebarWidth : 50;
@@ -311,16 +314,48 @@ function Sidebar() {
   // Keep expanded namespace in sync with the current selection key.
   useEffect(() => {
     if (selectedNamespaceKey) {
-      setExpandedNamespaceKey(selectedNamespaceKey);
+      setLastExpandedNamespaceKey(selectedNamespaceKey);
+      setExpandedNamespaceKeys((previous) => {
+        if (exclusiveNamespaces) {
+          if (previous.size === 1 && previous.has(selectedNamespaceKey)) {
+            return previous;
+          }
+          return new Set([selectedNamespaceKey]);
+        }
+        if (previous.has(selectedNamespaceKey)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.add(selectedNamespaceKey);
+        return next;
+      });
     }
-  }, [selectedNamespaceKey]);
+  }, [exclusiveNamespaces, selectedNamespaceKey]);
+
+  // When switching back to exclusive expansion, keep the active namespace open
+  // when possible and collapse any other expanded namespace groups.
+  useEffect(() => {
+    if (!exclusiveNamespaces) {
+      return;
+    }
+    if (expandedNamespaceKeys.size <= 1) {
+      return;
+    }
+    const selectedExpanded =
+      selectedNamespaceKey && expandedNamespaceKeys.has(selectedNamespaceKey);
+    const namespaceToKeep = selectedExpanded
+      ? selectedNamespaceKey
+      : Array.from(expandedNamespaceKeys)[0];
+    setLastExpandedNamespaceKey(namespaceToKeep);
+    setExpandedNamespaceKeys(new Set([namespaceToKeep]));
+  }, [exclusiveNamespaces, expandedNamespaceKeys, selectedNamespaceKey]);
 
   // Scroll to show expanded namespace whenever it changes
   useEffect(() => {
-    if (expandedNamespaceKey) {
+    if (lastExpandedNamespaceKey) {
       // Delay to allow expansion animation to complete
       const scrollTimer = setTimeout(() => {
-        const escapedNamespaceKey = escapeAttributeSelectorValue(expandedNamespaceKey);
+        const escapedNamespaceKey = escapeAttributeSelectorValue(lastExpandedNamespaceKey);
         const namespaceElement = document.querySelector(
           `.sidebar-item[data-namespace="${escapedNamespaceKey}"]`
         );
@@ -350,7 +385,7 @@ function Sidebar() {
 
       return () => clearTimeout(scrollTimer);
     }
-  }, [expandedNamespaceKey]);
+  }, [lastExpandedNamespaceKey]);
 
   const handleClusterViewSelect = (view: ClusterViewType) => {
     setPendingSelection({ kind: 'cluster-view', view });
@@ -364,7 +399,30 @@ function Sidebar() {
   const handleNamespaceSelect = (namespaceScope: string, clusterId?: string) => {
     const namespaceKey = toNamespaceKey(clusterId, namespaceScope);
     // Toggle expansion only; namespace selection happens when a view is chosen.
-    setExpandedNamespaceKey((previous) => (previous === namespaceKey ? null : namespaceKey));
+    const isExpanded = expandedNamespaceKeys.has(namespaceKey);
+    if (isExpanded) {
+      if (lastExpandedNamespaceKey === namespaceKey) {
+        setLastExpandedNamespaceKey(null);
+      }
+    } else {
+      setLastExpandedNamespaceKey(namespaceKey);
+    }
+
+    setExpandedNamespaceKeys((previous) => {
+      if (previous.has(namespaceKey)) {
+        const next = new Set(previous);
+        next.delete(namespaceKey);
+        return next;
+      }
+
+      if (exclusiveNamespaces) {
+        return new Set([namespaceKey]);
+      }
+
+      const next = new Set(previous);
+      next.add(namespaceKey);
+      return next;
+    });
   };
 
   const handleNamespaceViewSelect = (
@@ -519,7 +577,7 @@ function Sidebar() {
                         {group.namespaces.map((namespace) => {
                           const scope = namespace.scope ?? namespace.name;
                           const namespaceKey = toNamespaceKey(group.clusterId, scope);
-                          const isExpanded = expandedNamespaceKey === namespaceKey;
+                          const isExpanded = expandedNamespaceKeys.has(namespaceKey);
                           const namespaceViews =
                             scope === ALL_NAMESPACES_SCOPE
                               ? NAMESPACE_VIEWS.filter((view) => view.id !== 'map')

@@ -7,6 +7,7 @@
 import {
   SetAppearanceMode,
   SetDimInactiveNamespaces,
+  SetExclusiveNamespaces,
   SetUseShortResourceNames,
   SaveTheme,
   DeleteTheme,
@@ -39,6 +40,7 @@ interface AppPreferences {
   appearanceMode: AppearanceMode;
   useShortResourceNames: boolean;
   dimInactiveNamespaces: boolean;
+  exclusiveNamespaces: boolean;
   autoRefreshEnabled: boolean;
   refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
@@ -72,6 +74,7 @@ interface AppSettingsPayload {
   appearanceMode?: string;
   useShortResourceNames?: boolean;
   dimInactiveNamespaces?: boolean;
+  exclusiveNamespaces?: boolean;
   autoRefreshEnabled?: boolean;
   refreshBackgroundClustersEnabled?: boolean;
   metricsRefreshIntervalMs?: number;
@@ -127,6 +130,7 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   appearanceMode: 'system',
   useShortResourceNames: false,
   dimInactiveNamespaces: true,
+  exclusiveNamespaces: true,
   autoRefreshEnabled: true,
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
@@ -273,6 +277,9 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   }
   if (previous.dimInactiveNamespaces !== next.dimInactiveNamespaces) {
     eventBus.emit('settings:dim-inactive-namespaces', next.dimInactiveNamespaces);
+  }
+  if (previous.exclusiveNamespaces !== next.exclusiveNamespaces) {
+    eventBus.emit('settings:exclusive-namespaces', next.exclusiveNamespaces);
   }
   if (previous.autoRefreshEnabled !== next.autoRefreshEnabled) {
     eventBus.emit('settings:auto-refresh', next.autoRefreshEnabled);
@@ -429,6 +436,8 @@ export const hydrateAppPreferences = async (options?: {
       backendSettings?.useShortResourceNames ?? DEFAULT_PREFERENCES.useShortResourceNames,
     dimInactiveNamespaces:
       backendSettings?.dimInactiveNamespaces ?? DEFAULT_PREFERENCES.dimInactiveNamespaces,
+    exclusiveNamespaces:
+      backendSettings?.exclusiveNamespaces ?? DEFAULT_PREFERENCES.exclusiveNamespaces,
     autoRefreshEnabled:
       backendSettings?.autoRefreshEnabled ?? DEFAULT_PREFERENCES.autoRefreshEnabled,
     refreshBackgroundClustersEnabled:
@@ -507,6 +516,10 @@ export const getUseShortResourceNames = (): boolean => {
 
 export const getDimInactiveNamespaces = (): boolean => {
   return preferenceCache.dimInactiveNamespaces;
+};
+
+export const getExclusiveNamespaces = (): boolean => {
+  return preferenceCache.exclusiveNamespaces;
 };
 
 export const getAutoRefreshEnabled = (): boolean => {
@@ -661,6 +674,12 @@ export const setDimInactiveNamespaces = async (enabled: boolean): Promise<void> 
   await SetDimInactiveNamespaces(enabled);
   hydrated = true;
   updatePreferenceCache({ dimInactiveNamespaces: enabled });
+};
+
+export const setExclusiveNamespaces = async (enabled: boolean): Promise<void> => {
+  await SetExclusiveNamespaces(enabled);
+  hydrated = true;
+  updatePreferenceCache({ exclusiveNamespaces: enabled });
 };
 
 export const setAutoRefreshEnabled = (enabled: boolean): void => {

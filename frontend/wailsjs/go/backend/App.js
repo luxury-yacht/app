@@ -514,6 +514,10 @@ export function SetDimInactiveNamespaces(arg1) {
   return window['go']['backend']['App']['SetDimInactiveNamespaces'](arg1);
 }
 
+export function SetExclusiveNamespaces(arg1) {
+  return window['go']['backend']['App']['SetExclusiveNamespaces'](arg1);
+}
+
 export function SetFavoriteOrder(arg1) {
   return window['go']['backend']['App']['SetFavoriteOrder'](arg1);
 }

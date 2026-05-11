@@ -83,6 +83,7 @@ export interface AppEvents {
   'settings:refresh-background': boolean;
   'settings:short-names': boolean;
   'settings:dim-inactive-namespaces': boolean;
+  'settings:exclusive-namespaces': boolean;
   'settings:appearance-mode': 'light' | 'dark' | 'system';
   'settings:metrics-interval': number;
   'settings:max-table-rows': number;
