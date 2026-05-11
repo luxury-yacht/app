@@ -35,7 +35,14 @@ import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/view
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import { eventBus } from '@/core/events';
 import { isMacPlatform } from '@/utils/platform';
-import { getUseShortResourceNames, setUseShortResourceNames } from '@/core/settings/appPreferences';
+import {
+  getUseShortResourceNames,
+  setDimInactiveNamespaces,
+  setExclusiveNamespaces,
+  setUseShortResourceNames,
+} from '@/core/settings/appPreferences';
+import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
+import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
 
 export interface Command {
   id: string;
@@ -66,6 +73,8 @@ export function useCommandPaletteCommands() {
   const { mode } = useAppearanceMode();
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
   const { toggle: toggleAutoRefresh } = useAutoRefresh();
+  const dimInactiveNamespaces = useDimInactiveNamespaces();
+  const exclusiveNamespaces = useExclusiveNamespaces();
 
   const openClusterTab = useCallback(
     (tab: ClusterViewType) => {
@@ -257,6 +266,40 @@ export function useCommandPaletteCommands() {
         keywords: ['short', 'names', 'abbreviations', 'types', 'resources', 'toggle'],
       },
       {
+        id: 'toggle-dim-inactive-namespaces',
+        label: dimInactiveNamespaces
+          ? 'Disable Inactive Namespace Dimming'
+          : 'Enable Inactive Namespace Dimming',
+        description: 'Dim namespaces in the Sidebar that have no Workloads.',
+        category: 'Settings',
+        action: async () => {
+          const newState = !dimInactiveNamespaces;
+
+          try {
+            await setDimInactiveNamespaces(newState);
+          } catch (error) {
+            console.error('Failed to toggle dim inactive namespaces:', error);
+          }
+        },
+        keywords: ['dim', 'inactive', 'namespaces', 'sidebar', 'workloads', 'toggle'],
+      },
+      {
+        id: 'toggle-exclusive-namespaces',
+        label: exclusiveNamespaces ? 'Disable Exclusive Namespaces' : 'Enable Exclusive Namespaces',
+        description: 'When enabled, only one namespace at a time can be expanded in the Sidebar.',
+        category: 'Settings',
+        action: async () => {
+          const newState = !exclusiveNamespaces;
+
+          try {
+            await setExclusiveNamespaces(newState);
+          } catch (error) {
+            console.error('Failed to toggle exclusive namespaces:', error);
+          }
+        },
+        keywords: ['exclusive', 'namespaces', 'sidebar', 'expand', 'collapse', 'toggle'],
+      },
+      {
         id: 'mode-light',
         label: 'Mode - Light',
         icon: <AppearanceModeIcon width={16} height={16} />,
@@ -418,6 +461,8 @@ export function useCommandPaletteCommands() {
       closeTabShortcut,
       toggleAutoRefresh,
       diffObjectsShortcut,
+      dimInactiveNamespaces,
+      exclusiveNamespaces,
       zoomIn,
       zoomOut,
       resetZoom,

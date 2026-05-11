@@ -11,6 +11,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { useCommandPaletteCommands, type Command } from './CommandPaletteCommands';
 import type { types } from '@wailsjs/go/models';
 import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 
 const { mocks } = vi.hoisted(() => ({
   mocks: {
@@ -39,6 +43,11 @@ const { mocks } = vi.hoisted(() => ({
     },
     autoRefresh: {
       toggle: vi.fn(),
+    },
+    appSettings: {
+      SetUseShortResourceNames: vi.fn(),
+      SetDimInactiveNamespaces: vi.fn(),
+      SetExclusiveNamespaces: vi.fn(),
     },
     refreshOrchestrator: {
       triggerManualRefreshForContext: vi.fn(),
@@ -86,7 +95,11 @@ vi.mock('@/core/refresh', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  SetUseShortResourceNames: vi.fn(),
+  SetUseShortResourceNames: (...args: unknown[]) =>
+    mocks.appSettings.SetUseShortResourceNames(...args),
+  SetDimInactiveNamespaces: (...args: unknown[]) =>
+    mocks.appSettings.SetDimInactiveNamespaces(...args),
+  SetExclusiveNamespaces: (...args: unknown[]) => mocks.appSettings.SetExclusiveNamespaces(...args),
 }));
 
 vi.mock('@/utils/appearanceMode', () => ({
@@ -154,6 +167,13 @@ describe('CommandPaletteCommands', () => {
     mocks.kubeconfig.selectedKubeconfig = '';
     mocks.kubeconfig.setActiveKubeconfig.mockReset();
     mocks.kubeconfig.setSelectedKubeconfigs.mockReset();
+    mocks.appSettings.SetUseShortResourceNames.mockReset();
+    mocks.appSettings.SetDimInactiveNamespaces.mockReset();
+    mocks.appSettings.SetExclusiveNamespaces.mockReset();
+    mocks.appSettings.SetUseShortResourceNames.mockResolvedValue(undefined);
+    mocks.appSettings.SetDimInactiveNamespaces.mockResolvedValue(undefined);
+    mocks.appSettings.SetExclusiveNamespaces.mockResolvedValue(undefined);
+    resetAppPreferencesCacheForTesting();
   });
 
   afterEach(() => {
@@ -249,6 +269,55 @@ describe('CommandPaletteCommands', () => {
     expect(commands.find((entry) => entry.id === 'mode-light')?.label).toBe('Mode - Light');
     expect(commands.find((entry) => entry.id === 'mode-dark')?.label).toBe('Mode - Dark');
     expect(commands.find((entry) => entry.id === 'mode-system')?.label).toBe('Mode - System');
+
+    unmount();
+  });
+
+  it('includes Sidebar setting toggles and persists their inverse states', async () => {
+    setAppPreferencesForTesting({
+      dimInactiveNamespaces: true,
+      exclusiveNamespaces: true,
+    });
+
+    const { getCommands, unmount } = renderHook();
+    const commands = getCommands();
+    const dimCommand = commands.find((entry) => entry.id === 'toggle-dim-inactive-namespaces');
+    const exclusiveCommand = commands.find((entry) => entry.id === 'toggle-exclusive-namespaces');
+
+    expect(dimCommand?.label).toBe('Disable Inactive Namespace Dimming');
+    expect(dimCommand?.description).toBe('Dim namespaces in the Sidebar that have no Workloads.');
+    expect(exclusiveCommand?.label).toBe('Disable Exclusive Namespaces');
+    expect(exclusiveCommand?.description).toBe(
+      'When enabled, only one namespace at a time can be expanded in the Sidebar.'
+    );
+
+    await act(async () => {
+      dimCommand?.action();
+      exclusiveCommand?.action();
+      await Promise.resolve();
+    });
+
+    expect(mocks.appSettings.SetDimInactiveNamespaces).toHaveBeenCalledWith(false);
+    expect(mocks.appSettings.SetExclusiveNamespaces).toHaveBeenCalledWith(false);
+
+    unmount();
+  });
+
+  it('labels disabled Sidebar settings as enable actions', () => {
+    setAppPreferencesForTesting({
+      dimInactiveNamespaces: false,
+      exclusiveNamespaces: false,
+    });
+
+    const { getCommands, unmount } = renderHook();
+    const commands = getCommands();
+
+    expect(commands.find((entry) => entry.id === 'toggle-dim-inactive-namespaces')?.label).toBe(
+      'Enable Inactive Namespace Dimming'
+    );
+    expect(commands.find((entry) => entry.id === 'toggle-exclusive-namespaces')?.label).toBe(
+      'Enable Exclusive Namespaces'
+    );
 
     unmount();
   });
