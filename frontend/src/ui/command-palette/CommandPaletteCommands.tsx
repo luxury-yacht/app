@@ -24,7 +24,11 @@ import {
   LogsIcon,
 } from '@shared/components/icons/SharedIcons';
 import { FavoriteGenericIcon, FavoritePinIcon } from '@shared/components/icons/FavoriteIcons';
-import { AppearanceModeIcon } from '@shared/components/icons/SettingsIcons';
+import {
+  AppearanceModeIcon,
+  DarkModeIcon,
+  LightModeIcon,
+} from '@shared/components/icons/SettingsIcons';
 import { useAppearanceMode } from '@core/contexts/AppearanceModeContext';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { requestContextRefresh } from '@/core/data-access';
@@ -246,7 +250,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'mode-light',
         label: 'Light mode',
-        icon: <AppearanceModeIcon width={16} height={16} />,
+        icon: <LightModeIcon width={16} height={16} />,
         description: `Switch to light mode${mode === 'light' ? ' (current)' : ''}`,
         category: 'Settings',
         action: async () => {
@@ -261,7 +265,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'mode-dark',
         label: 'Dark mode',
-        icon: <AppearanceModeIcon width={16} height={16} />,
+        icon: <DarkModeIcon width={16} height={16} />,
         description: `Switch to dark mode${mode === 'dark' ? ' (current)' : ''}`,
         category: 'Settings',
         action: async () => {
