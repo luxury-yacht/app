@@ -39,7 +39,8 @@ describe('GridTable utils', () => {
 
   it('detects fixed column keys', () => {
     expect(isKindColumnKey('kind')).toBe(true);
-    expect(isKindColumnKey('type')).toBe(true);
+    expect(isKindColumnKey('type')).toBe(false);
+    expect(isFixedColumnKey('type')).toBe(false);
     expect(isFixedColumnKey('age')).toBe(false);
     expect(isFixedColumnKey('name')).toBe(false);
   });

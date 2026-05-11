@@ -369,5 +369,8 @@ describe('NsViewEvents', () => {
     const cell = typeColumn.render(baseEvent({ type: 'Warning' }));
     expect(cell.props.children).toBe('Warning');
     expect(cell.props.className).toContain('event-badge');
+    expect(cell.props.className).toContain('warning');
+    expect(cell.props.className).not.toContain('kind-badge');
+    expect(cell.props.className).not.toMatch(/hash-color-\d+/);
   });
 });

@@ -14,7 +14,6 @@
     - Favorites
     - Port Forward
     - Shortcut Keys
-- Window control icons are a bit blocky
 - Debug panels are too easy to forget about, need a ref somewhere
   - Debug menu only available in dev mode?
   - Move app logs & deb ug to this menu?

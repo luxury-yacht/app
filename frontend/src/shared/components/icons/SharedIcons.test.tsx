@@ -73,8 +73,8 @@ describe('SharedIcons', () => {
       container.innerHTML = markup;
       const svg = container.querySelector('svg');
       expect(svg).toBeTruthy();
-      expect(svg?.getAttribute('width')).toBe('16');
-      expect(svg?.getAttribute('height')).toBe('16');
+      expect(svg?.getAttribute('width')).toBe('24');
+      expect(svg?.getAttribute('height')).toBe('24');
       expect(svg?.getAttribute('fill')).toBe('currentColor');
     });
   });

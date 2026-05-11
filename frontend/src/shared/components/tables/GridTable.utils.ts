@@ -13,7 +13,7 @@ export const DEFAULT_COLUMN_WIDTH = 150;
 export const DEFAULT_COLUMN_MIN_WIDTH = 72;
 export const DEFAULT_FONT_SIZE = 16;
 
-const FIXED_KIND_KEYS = new Set(['kind', 'type']);
+const FIXED_KIND_KEYS = new Set(['kind']);
 
 export const isKindColumnKey = (key: string) => FIXED_KIND_KEYS.has(key);
 export const isFixedColumnKey = (key: string) => isKindColumnKey(key);
