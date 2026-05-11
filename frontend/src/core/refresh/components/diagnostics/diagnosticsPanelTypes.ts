@@ -79,6 +79,23 @@ export interface DiagnosticsStreamRow {
   lastError: string;
 }
 
+export interface KubernetesAPIClientRow {
+  key: string;
+  cluster: string;
+  clusterTooltip: string;
+  configured: string;
+  qps1s: string;
+  qps10s: string;
+  qps60s: string;
+  peakQPS1s: number;
+  totalRequests: number;
+  status429: number;
+  status5xx: number;
+  errors: number;
+  lastRequest: string;
+  lastRequestTooltip: string;
+}
+
 export interface CapabilityDescriptorActivityDetails {
   scope: string;
   descriptorLabel: string;

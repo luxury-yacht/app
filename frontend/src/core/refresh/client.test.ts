@@ -9,9 +9,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mockGetBaseURL = vi.fn();
 const mockGetSelectionDiagnostics = vi.fn(async () => ({}));
+const mockGetKubernetesAPIClientDiagnostics = vi.fn(async () => []);
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetRefreshBaseURL: mockGetBaseURL,
   GetSelectionDiagnostics: mockGetSelectionDiagnostics,
+  GetKubernetesAPIClientDiagnostics: mockGetKubernetesAPIClientDiagnostics,
 }));
 
 const originalFetch = globalThis.fetch;
@@ -21,6 +23,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mockGetBaseURL.mockReset();
   mockGetSelectionDiagnostics.mockReset();
+  mockGetKubernetesAPIClientDiagnostics.mockReset();
 });
 
 afterEach(async () => {

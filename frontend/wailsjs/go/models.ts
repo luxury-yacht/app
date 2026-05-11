@@ -290,6 +290,48 @@ export namespace backend {
 	}
 	
 	
+	export class KubernetesAPIClientDiagnostics {
+	    clusterId: string;
+	    clusterName: string;
+	    configuredQPS: number;
+	    configuredBurst: number;
+	    qps1s: number;
+	    qps10s: number;
+	    qps60s: number;
+	    peakQPS1s: number;
+	    totalRequests: number;
+	    status2xx: number;
+	    status3xx: number;
+	    status4xx: number;
+	    status5xx: number;
+	    status429: number;
+	    errors: number;
+	    lastRequestMs?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new KubernetesAPIClientDiagnostics(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.clusterId = source["clusterId"];
+	        this.clusterName = source["clusterName"];
+	        this.configuredQPS = source["configuredQPS"];
+	        this.configuredBurst = source["configuredBurst"];
+	        this.qps1s = source["qps1s"];
+	        this.qps10s = source["qps10s"];
+	        this.qps60s = source["qps60s"];
+	        this.peakQPS1s = source["peakQPS1s"];
+	        this.totalRequests = source["totalRequests"];
+	        this.status2xx = source["status2xx"];
+	        this.status3xx = source["status3xx"];
+	        this.status4xx = source["status4xx"];
+	        this.status5xx = source["status5xx"];
+	        this.status429 = source["status429"];
+	        this.errors = source["errors"];
+	        this.lastRequestMs = source["lastRequestMs"];
+	    }
+	}
 	export class LogEntry {
 	    sequence: number;
 	    timestamp: string;
@@ -5131,4 +5173,3 @@ export namespace v1 {
 	}
 
 }
-

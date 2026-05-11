@@ -38,10 +38,15 @@ users:
 	cfg, err := app.buildRestConfigForSelection(kubeconfigSelection{
 		Path:    configPath,
 		Context: "test-context",
-	}, nil)
+	}, ClusterMeta{ID: "test-cluster", Name: "Test Cluster"}, nil)
 	require.NoError(t, err)
 	require.Equal(t, float32(appconfig.KubernetesClientQPS), cfg.QPS)
 	require.Equal(t, appconfig.KubernetesClientBurst, cfg.Burst)
+	limiter, ok := cfg.RateLimiter.(*mutableKubernetesRateLimiter)
+	require.True(t, ok)
+	limiterQPS, limiterBurst := limiter.Limits()
+	require.Equal(t, appconfig.KubernetesClientQPS, limiterQPS)
+	require.Equal(t, appconfig.KubernetesClientBurst, limiterBurst)
 
 	app.appSettings = &AppSettings{
 		KubernetesClientQPS:   250,
@@ -50,10 +55,15 @@ users:
 	cfg, err = app.buildRestConfigForSelection(kubeconfigSelection{
 		Path:    configPath,
 		Context: "test-context",
-	}, nil)
+	}, ClusterMeta{ID: "test-cluster", Name: "Test Cluster"}, nil)
 	require.NoError(t, err)
 	require.Equal(t, float32(250), cfg.QPS)
 	require.Equal(t, 500, cfg.Burst)
+	limiter, ok = cfg.RateLimiter.(*mutableKubernetesRateLimiter)
+	require.True(t, ok)
+	limiterQPS, limiterBurst = limiter.Limits()
+	require.Equal(t, 250, limiterQPS)
+	require.Equal(t, 500, limiterBurst)
 }
 
 // TestSyncClusterClientPool_CreatesClientsForNewSelections verifies that calling

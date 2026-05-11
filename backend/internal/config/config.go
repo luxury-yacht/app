@@ -11,10 +11,10 @@ import "time"
 // Kubernetes REST client settings.
 const (
 	// KubernetesClientQPS controls the per-cluster client-go REST request rate.
-	KubernetesClientQPS = 500
+	KubernetesClientQPS = 200
 
 	// KubernetesClientBurst controls the per-cluster client-go REST burst allowance.
-	KubernetesClientBurst = 1000
+	KubernetesClientBurst = 500
 
 	// KubernetesClientPreflightTimeout bounds the credential preflight check during client construction.
 	KubernetesClientPreflightTimeout = 8 * time.Second

@@ -39,6 +39,7 @@ type clusterClients struct {
 	dynamicClient          dynamic.Interface
 	metricsClient          *metricsclient.Clientset
 	restConfig             *rest.Config
+	rateLimiter            *mutableKubernetesRateLimiter
 	// authManager provides per-cluster auth state tracking and recovery.
 	// Each cluster has its own auth manager so that auth failures in one
 	// cluster don't affect other clusters.
@@ -221,6 +222,7 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 	}
 
 	for _, id := range removedClusterIDs {
+		a.ensureKubernetesAPIMetricsRegistry().remove(id)
 		if a.clusterLifecycle != nil {
 			a.clusterLifecycle.Remove(id)
 		}
@@ -245,6 +247,35 @@ func clusterClientBuildConcurrencyLimit(taskCount int) int {
 	return limit
 }
 
+func (a *App) applyKubernetesClientRateLimits(qps int, burst int) {
+	if a == nil {
+		return
+	}
+	qps = clampKubernetesClientQPS(qps)
+	burst = clampKubernetesClientBurst(burst)
+
+	a.clusterClientsMu.Lock()
+	clients := make([]*clusterClients, 0, len(a.clusterClients))
+	for _, item := range a.clusterClients {
+		if item != nil {
+			clients = append(clients, item)
+		}
+	}
+	a.clusterClientsMu.Unlock()
+
+	registry := a.ensureKubernetesAPIMetricsRegistry()
+	for _, item := range clients {
+		if item.rateLimiter != nil {
+			item.rateLimiter.Set(qps, burst)
+		}
+		registry.getOrCreate(item.meta, qps, burst)
+		if item.restConfig != nil {
+			item.restConfig.QPS = float32(qps)
+			item.restConfig.Burst = burst
+		}
+	}
+}
+
 // buildClusterClients initializes client-go dependencies for a specific kubeconfig selection.
 func (a *App) buildClusterClients(selection kubeconfigSelection, meta ClusterMeta) (*clusterClients, error) {
 	return a.buildClusterClientsWithContext(context.Background(), selection, meta)
@@ -261,7 +292,7 @@ func (a *App) buildClusterClientsWithContext(
 	// don't affect other clusters.
 	clusterAuthMgr := a.createClusterAuthManager(meta)
 
-	config, err := a.buildRestConfigForSelection(selection, clusterAuthMgr)
+	config, err := a.buildRestConfigForSelection(selection, meta, clusterAuthMgr)
 	if err != nil {
 		clusterAuthMgr.Shutdown()
 		return nil, err
@@ -376,6 +407,7 @@ func (a *App) buildClusterClientsWithContext(
 		dynamicClient:          dynamicClient,
 		metricsClient:          metrics,
 		restConfig:             config,
+		rateLimiter:            config.RateLimiter.(*mutableKubernetesRateLimiter),
 		authManager:            clusterAuthMgr,
 		authFailedOnInit:       authFailedOnInit,
 	}, nil
@@ -421,7 +453,7 @@ func (a *App) createClusterAuthManager(meta ClusterMeta) *authstate.Manager {
 // buildRestConfigForSelection loads a REST config for the provided kubeconfig path/context.
 // The clusterAuthMgr parameter is the per-cluster auth manager that will be used to wrap
 // the transport for auth state tracking.
-func (a *App) buildRestConfigForSelection(selection kubeconfigSelection, clusterAuthMgr *authstate.Manager) (*rest.Config, error) {
+func (a *App) buildRestConfigForSelection(selection kubeconfigSelection, meta ClusterMeta, clusterAuthMgr *authstate.Manager) (*rest.Config, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	loadingRules.ExplicitPath = selection.Path
 	overrides := &clientcmd.ConfigOverrides{}
@@ -442,18 +474,21 @@ func (a *App) buildRestConfigForSelection(selection kubeconfigSelection, cluster
 	qps, burst := a.kubernetesClientRateLimits()
 	config.QPS = float32(qps)
 	config.Burst = burst
+	config.RateLimiter = newMutableKubernetesRateLimiter(qps, burst)
 
-	// Wrap transport with auth-aware layer for per-cluster auth state management.
-	// This intercepts 401 responses and reports them to the cluster's auth manager,
-	// ensuring auth failures in one cluster don't affect other clusters.
-	if clusterAuthMgr != nil {
-		existingWrap := config.WrapTransport
-		config.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
-			if existingWrap != nil {
-				rt = existingWrap(rt)
-			}
-			return clusterAuthMgr.WrapTransport(rt)
+	// Wrap transport once so diagnostics see real outbound Kubernetes requests,
+	// then preserve the auth-aware layer for per-cluster auth state management.
+	apiMetrics := a.ensureKubernetesAPIMetricsRegistry().getOrCreate(meta, qps, burst)
+	existingWrap := config.WrapTransport
+	config.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
+		if existingWrap != nil {
+			rt = existingWrap(rt)
 		}
+		rt = &kubernetesAPIMetricsTransport{base: rt, metrics: apiMetrics}
+		if clusterAuthMgr != nil {
+			rt = clusterAuthMgr.WrapTransport(rt)
+		}
+		return rt
 	}
 
 	return config, nil

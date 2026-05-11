@@ -5,7 +5,11 @@
  * Handles API calls and response shaping for the core layer.
  */
 
-import { GetRefreshBaseURL, GetSelectionDiagnostics } from '@wailsjs/go/backend/App';
+import {
+  GetKubernetesAPIClientDiagnostics,
+  GetRefreshBaseURL,
+  GetSelectionDiagnostics,
+} from '@wailsjs/go/backend/App';
 
 import type { TelemetrySummary } from './types';
 import { formatPermissionDeniedStatus, isPermissionDeniedStatus } from './permissionErrors';
@@ -64,6 +68,25 @@ export interface SelectionDiagnostics {
   refreshP95Ms?: number;
   catalogP50Ms?: number;
   catalogP95Ms?: number;
+}
+
+export interface KubernetesAPIClientDiagnostics {
+  clusterId: string;
+  clusterName: string;
+  configuredQPS: number;
+  configuredBurst: number;
+  qps1s: number;
+  qps10s: number;
+  qps60s: number;
+  peakQPS1s: number;
+  totalRequests: number;
+  status2xx: number;
+  status3xx: number;
+  status4xx: number;
+  status5xx: number;
+  status429: number;
+  errors: number;
+  lastRequestMs?: number;
 }
 
 interface FetchSnapshotOptions {
@@ -270,4 +293,10 @@ export async function setMetricsActive(active: boolean): Promise<void> {
 
 export async function fetchSelectionDiagnostics(): Promise<SelectionDiagnostics> {
   return (await GetSelectionDiagnostics()) as SelectionDiagnostics;
+}
+
+export async function fetchKubernetesAPIClientDiagnostics(): Promise<
+  KubernetesAPIClientDiagnostics[]
+> {
+  return (await GetKubernetesAPIClientDiagnostics()) as KubernetesAPIClientDiagnostics[];
 }

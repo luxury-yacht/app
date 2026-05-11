@@ -139,6 +139,8 @@ export function GetKubeconfigSearchPaths():Promise<Array<string>>;
 
 export function GetKubeconfigs():Promise<Array<types.KubeconfigInfo>>;
 
+export function GetKubernetesAPIClientDiagnostics():Promise<Array<backend.KubernetesAPIClientDiagnostics>>;
+
 export function GetLimitRange(arg1:string,arg2:string,arg3:string):Promise<types.LimitRangeDetails>;
 
 export function GetListenerSet(arg1:string,arg2:string,arg3:string):Promise<types.ListenerSetDetails>;

@@ -266,6 +266,10 @@ export function GetKubeconfigs() {
   return window['go']['backend']['App']['GetKubeconfigs']();
 }
 
+export function GetKubernetesAPIClientDiagnostics() {
+  return window['go']['backend']['App']['GetKubernetesAPIClientDiagnostics']();
+}
+
 export function GetLimitRange(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetLimitRange'](arg1, arg2, arg3);
 }

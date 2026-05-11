@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/rest"
 )
 
 func newTestAppWithDefaults(t *testing.T) *App {
@@ -377,6 +378,41 @@ func TestAppSetKubernetesAPISettingsPersistAndClamp(t *testing.T) {
 	require.Equal(t, defaultKubernetesClientQPS, settings.KubernetesClientQPS)
 	require.Equal(t, defaultKubernetesClientBurst, settings.KubernetesClientBurst)
 	require.Equal(t, defaultPermissionSSRRFetchConcurrency, settings.PermissionSSRRFetchConcurrency)
+}
+
+func TestAppSetKubernetesClientRateLimitsUpdatesExistingClients(t *testing.T) {
+	setTestConfigEnv(t)
+
+	app := newTestAppWithDefaults(t)
+	app.kubeAPIMetrics = newKubernetesAPIMetricsRegistry()
+	limiter := newMutableKubernetesRateLimiter(defaultKubernetesClientQPS, defaultKubernetesClientBurst)
+	app.clusterClients = map[string]*clusterClients{
+		"cluster-a": {
+			meta:        ClusterMeta{ID: "cluster-a", Name: "Cluster A"},
+			rateLimiter: limiter,
+			restConfig:  &rest.Config{QPS: float32(defaultKubernetesClientQPS), Burst: defaultKubernetesClientBurst},
+		},
+	}
+	app.kubeAPIMetrics.getOrCreate(ClusterMeta{ID: "cluster-a", Name: "Cluster A"}, defaultKubernetesClientQPS, defaultKubernetesClientBurst)
+
+	require.NoError(t, app.SetKubernetesClientQPS(150))
+	qps, burst := limiter.Limits()
+	require.Equal(t, 150, qps)
+	require.Equal(t, defaultKubernetesClientBurst, burst)
+	require.Equal(t, float32(150), app.clusterClients["cluster-a"].restConfig.QPS)
+	require.Equal(t, defaultKubernetesClientBurst, app.clusterClients["cluster-a"].restConfig.Burst)
+
+	require.NoError(t, app.SetKubernetesClientBurst(450))
+	qps, burst = limiter.Limits()
+	require.Equal(t, 150, qps)
+	require.Equal(t, 450, burst)
+	require.Equal(t, float32(150), app.clusterClients["cluster-a"].restConfig.QPS)
+	require.Equal(t, 450, app.clusterClients["cluster-a"].restConfig.Burst)
+
+	rows := app.kubeAPIMetrics.snapshot(time.Now())
+	require.Len(t, rows, 1)
+	require.Equal(t, 150, rows[0].ConfiguredQPS)
+	require.Equal(t, 450, rows[0].ConfiguredBurst)
 }
 
 func TestAppSetObjPanelLogsTargetPerScopeLimitPersistsAndClamps(t *testing.T) {

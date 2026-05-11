@@ -12,6 +12,7 @@ import { describe, expect, test, vi, beforeEach, afterEach, beforeAll } from 'vi
 import { renderToStaticMarkup } from 'react-dom/server';
 import { KeyboardProvider } from '@ui/shortcuts';
 import type { ViewType } from '@/types/navigation/views';
+import type { KubernetesAPIClientDiagnostics } from '../client';
 import type { TelemetrySummary } from '../types';
 import type {
   PermissionQueryDiagnostics,
@@ -51,10 +52,14 @@ const fetchSelectionDiagnosticsMock = vi.hoisted(() =>
     queueP95Ms: 0,
   }))
 );
+const fetchKubernetesAPIClientDiagnosticsMock = vi.hoisted(() =>
+  vi.fn<() => Promise<KubernetesAPIClientDiagnostics[]>>(async () => [])
+);
 
 vi.mock('../client', () => ({
   fetchTelemetrySummary: fetchTelemetrySummaryMock,
   fetchSelectionDiagnostics: fetchSelectionDiagnosticsMock,
+  fetchKubernetesAPIClientDiagnostics: fetchKubernetesAPIClientDiagnosticsMock,
 }));
 
 let capabilityDiagnosticsData: PermissionQueryDiagnostics[] = [];
@@ -307,6 +312,8 @@ beforeEach(() => {
     supersededMutations: 0,
     queueP95Ms: 0,
   });
+  fetchKubernetesAPIClientDiagnosticsMock.mockReset();
+  fetchKubernetesAPIClientDiagnosticsMock.mockResolvedValue([]);
   Object.values(mockRefreshManager).forEach((value) => {
     if (typeof value === 'function') {
       value.mockClear?.();
@@ -392,7 +399,7 @@ describe('broker read diagnostics', () => {
 
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
-      tabButtons[5].click();
+      tabButtons[6].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1035,6 +1042,52 @@ describe('DiagnosticsPanel component', () => {
     resourceStreamSpy.mockRestore();
   });
 
+  test('renders Kubernetes API client diagnostics on the K8S API tab', async () => {
+    fetchTelemetrySummaryMock.mockResolvedValue({
+      domains: [],
+      streams: [],
+      generatedAt: Date.now(),
+    } as unknown as TelemetrySummary);
+    fetchKubernetesAPIClientDiagnosticsMock.mockResolvedValue([
+      {
+        clusterId: 'cluster-a',
+        clusterName: 'prod',
+        configuredQPS: 500,
+        configuredBurst: 1000,
+        qps1s: 12,
+        qps10s: 7,
+        qps60s: 3,
+        peakQPS1s: 44,
+        totalRequests: 1200,
+        status2xx: 1150,
+        status3xx: 10,
+        status4xx: 4,
+        status5xx: 2,
+        status429: 1,
+        errors: 3,
+        lastRequestMs: Date.now(),
+      },
+    ]);
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
+
+    await act(async () => {
+      tabButtons[2].click();
+      await Promise.resolve();
+    });
+    await flushAsync();
+
+    expect(rendered.container.textContent).toContain('Clusters: 1');
+    expect(rendered.container.textContent).toContain('prod');
+    expect(rendered.container.textContent).toContain('500 / 1000');
+    expect(rendered.container.textContent).toContain('1200');
+    expect(rendered.container.textContent).toContain('44');
+
+    await rendered.unmount();
+  });
+
   test('shows resource stream health and fallback details in telemetry tooltips', async () => {
     vi.useFakeTimers();
     const baseTime = new Date('2024-01-01T12:00:00Z');
@@ -1394,8 +1447,7 @@ describe('DiagnosticsPanel component', () => {
 
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
-      // Skip Streams and Table Performance to reach Capability Checks.
-      tabButtons[3].click();
+      tabButtons[4].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1427,7 +1479,7 @@ describe('DiagnosticsPanel component', () => {
     expect(expandedCells[13].textContent).toContain('deployments');
 
     await act(async () => {
-      tabButtons[4].click();
+      tabButtons[5].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1458,8 +1510,8 @@ describe('DiagnosticsPanel component', () => {
     await flushAsync();
 
     const focusableEls = rendered.container.querySelectorAll('[data-diagnostics-focusable="true"]');
-    // Expect exactly six focusable tab elements (one per tab descriptor).
-    expect(focusableEls.length).toBe(6);
+    // Expect exactly seven focusable tab elements (one per tab descriptor).
+    expect(focusableEls.length).toBe(7);
     // Each should also carry role="tab" — confirming they are the tab divs.
     for (const el of Array.from(focusableEls)) {
       expect(el.getAttribute('role')).toBe('tab');

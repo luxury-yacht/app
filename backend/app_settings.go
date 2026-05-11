@@ -142,10 +142,10 @@ const (
 	maxObjPanelLogsTargetGlobalLimit       = 1000
 	defaultKubernetesClientQPS             = config.KubernetesClientQPS
 	minKubernetesClientQPS                 = 1
-	maxKubernetesClientQPS                 = config.KubernetesClientQPS * 10
+	maxKubernetesClientQPS                 = 5000
 	defaultKubernetesClientBurst           = config.KubernetesClientBurst
 	minKubernetesClientBurst               = 1
-	maxKubernetesClientBurst               = config.KubernetesClientBurst * 10
+	maxKubernetesClientBurst               = 10000
 	defaultPermissionSSRRFetchConcurrency  = config.PermissionSSRRFetchConcurrency
 	minPermissionSSRRFetchConcurrency      = 1
 	maxPermissionSSRRFetchConcurrency      = config.PermissionSSRRFetchConcurrency * 8
@@ -963,10 +963,10 @@ func (a *App) SetMaxTableRows(size int) error {
 
 func (a *App) SetKubernetesClientQPS(qps int) error {
 	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
 
 	if a.appSettings == nil {
 		if err := a.loadAppSettings(); err != nil {
+			a.settingsMu.Unlock()
 			return err
 		}
 	}
@@ -974,15 +974,26 @@ func (a *App) SetKubernetesClientQPS(qps int) error {
 	clamped := clampKubernetesClientQPS(qps)
 	a.logger.Info(fmt.Sprintf("Kubernetes client QPS changed to: %d", clamped), logsources.Settings)
 	a.appSettings.KubernetesClientQPS = clamped
-	return a.saveAppSettings()
+	effectiveQPS := a.appSettings.KubernetesClientQPS
+	effectiveBurst := a.appSettings.KubernetesClientBurst
+	if effectiveBurst <= 0 {
+		effectiveBurst = defaultKubernetesClientBurst
+	}
+	err := a.saveAppSettings()
+	a.settingsMu.Unlock()
+	if err != nil {
+		return err
+	}
+	a.applyKubernetesClientRateLimits(effectiveQPS, effectiveBurst)
+	return nil
 }
 
 func (a *App) SetKubernetesClientBurst(burst int) error {
 	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
 
 	if a.appSettings == nil {
 		if err := a.loadAppSettings(); err != nil {
+			a.settingsMu.Unlock()
 			return err
 		}
 	}
@@ -990,7 +1001,18 @@ func (a *App) SetKubernetesClientBurst(burst int) error {
 	clamped := clampKubernetesClientBurst(burst)
 	a.logger.Info(fmt.Sprintf("Kubernetes client burst changed to: %d", clamped), logsources.Settings)
 	a.appSettings.KubernetesClientBurst = clamped
-	return a.saveAppSettings()
+	effectiveQPS := a.appSettings.KubernetesClientQPS
+	if effectiveQPS <= 0 {
+		effectiveQPS = defaultKubernetesClientQPS
+	}
+	effectiveBurst := a.appSettings.KubernetesClientBurst
+	err := a.saveAppSettings()
+	a.settingsMu.Unlock()
+	if err != nil {
+		return err
+	}
+	a.applyKubernetesClientRateLimits(effectiveQPS, effectiveBurst)
+	return nil
 }
 
 func (a *App) SetPermissionSSRRFetchConcurrency(limit int) error {

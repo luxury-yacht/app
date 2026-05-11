@@ -30,8 +30,10 @@ import { resourceStreamManager } from '../streaming/resourceStreamManager';
 import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import {
+  fetchKubernetesAPIClientDiagnostics,
   fetchSelectionDiagnostics,
   fetchTelemetrySummary,
+  type KubernetesAPIClientDiagnostics,
   type SelectionDiagnostics,
 } from '../client';
 import { stripClusterScope, parseClusterScopeList } from '@/core/refresh/clusterScope';
@@ -51,6 +53,7 @@ import {
   type DiagnosticsRow,
   type DiagnosticsPanelProps,
   type DiagnosticsStreamRow,
+  type KubernetesAPIClientRow,
   type BrokerReadRow,
   type CapabilityDescriptorActivityDetails,
   formatInterval,
@@ -66,6 +69,7 @@ import {
 } from './diagnostics';
 import { DiagnosticsTable, DiagnosticsSummaryCards } from './diagnostics/TableRefreshDomains';
 import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
+import { KubernetesAPIClientsTable } from './diagnostics/TableKubernetesAPIClients';
 import { BrokerReadsTable } from './diagnostics/TableBrokerReads';
 import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
 import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
@@ -129,6 +133,7 @@ const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'acce
 type DiagnosticsTabId =
   | 'refresh-domains'
   | 'streams'
+  | 'k8s-api'
   | 'table-performance'
   | 'capability-checks'
   | 'effective-permissions'
@@ -146,6 +151,7 @@ const DIAGNOSTICS_FOCUSABLE_PROPS = {
 const DIAGNOSTICS_TAB_DESCRIPTORS: TabDescriptor[] = [
   { id: 'refresh-domains', label: 'Refresh Domains', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   { id: 'streams', label: 'Streams', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
+  { id: 'k8s-api', label: 'K8S API', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   { id: 'table-performance', label: 'Table Performance', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   {
     id: 'capability-checks',
@@ -244,6 +250,13 @@ const resolveStreamTelemetryHealth = (
 
 const formatHealthLabel = (status: HealthStatus, reason: string): string =>
   reason ? `${status} (${reason})` : status;
+
+const formatQPS = (value: number): string => {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0';
+  }
+  return value >= 10 ? value.toFixed(0) : value.toFixed(1);
+};
 
 const BROKER_READ_TOKEN_LABELS: Record<string, string> = {
   api: 'API',
@@ -392,6 +405,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     null
   );
   const [selectionDiagnosticsError, setSelectionDiagnosticsError] = useState<string | null>(null);
+  const [kubernetesAPIDiagnostics, setKubernetesAPIDiagnostics] = useState<
+    KubernetesAPIClientDiagnostics[]
+  >([]);
+  const [kubernetesAPIDiagnosticsError, setKubernetesAPIDiagnosticsError] = useState<string | null>(
+    null
+  );
   const permissionMap = useUserPermissions();
   const capabilityDiagnostics = useCapabilityDiagnostics();
   const { viewType, activeClusterTab, activeNamespaceTab } = useViewState();
@@ -405,15 +424,18 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       setTelemetryError(null);
       setSelectionDiagnostics(null);
       setSelectionDiagnosticsError(null);
+      setKubernetesAPIDiagnostics([]);
+      setKubernetesAPIDiagnosticsError(null);
       return;
     }
 
     let cancelled = false;
 
     const loadDiagnostics = async () => {
-      const [telemetryResult, selectionResult] = await Promise.allSettled([
+      const [telemetryResult, selectionResult, kubernetesAPIResult] = await Promise.allSettled([
         fetchTelemetrySummary(),
         fetchSelectionDiagnostics(),
+        fetchKubernetesAPIClientDiagnostics(),
       ]);
 
       if (cancelled) {
@@ -440,6 +462,17 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             ? selectionResult.reason.message
             : 'Failed to load selection diagnostics';
         setSelectionDiagnosticsError(message);
+      }
+
+      if (kubernetesAPIResult.status === 'fulfilled') {
+        setKubernetesAPIDiagnostics(kubernetesAPIResult.value);
+        setKubernetesAPIDiagnosticsError(null);
+      } else {
+        const message =
+          kubernetesAPIResult.reason instanceof Error
+            ? kubernetesAPIResult.reason.message
+            : 'Failed to load Kubernetes API client diagnostics';
+        setKubernetesAPIDiagnosticsError(message);
       }
     };
 
@@ -1554,6 +1587,43 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     const domainTotal = streamRows.reduce((acc, row) => acc + row.activeDomainCount, 0);
     return `Sessions: ${sessionTotal} • Streams: ${streamRows.length} • Active Domains: ${domainTotal}`;
   }, [streamRows]);
+
+  const kubernetesAPIClientRows = useMemo<KubernetesAPIClientRow[]>(() => {
+    return kubernetesAPIDiagnostics.map((entry) => {
+      const clusterName = entry.clusterName || entry.clusterId || 'Unknown cluster';
+      const lastRequestInfo = formatLastUpdated(entry.lastRequestMs);
+      return {
+        key: entry.clusterId || clusterName,
+        cluster: clusterName,
+        clusterTooltip: entry.clusterId || clusterName,
+        configured: `${entry.configuredQPS} / ${entry.configuredBurst}`,
+        qps1s: formatQPS(entry.qps1s),
+        qps10s: formatQPS(entry.qps10s),
+        qps60s: formatQPS(entry.qps60s),
+        peakQPS1s: entry.peakQPS1s,
+        totalRequests: entry.totalRequests,
+        status429: entry.status429,
+        status5xx: entry.status5xx,
+        errors: entry.errors,
+        lastRequest: lastRequestInfo.display,
+        lastRequestTooltip: lastRequestInfo.tooltip,
+      };
+    });
+  }, [kubernetesAPIDiagnostics]);
+
+  const kubernetesAPISummary = useMemo(() => {
+    if (kubernetesAPIDiagnosticsError && kubernetesAPIClientRows.length === 0) {
+      return kubernetesAPIDiagnosticsError;
+    }
+    const totalRequests = kubernetesAPIClientRows.reduce(
+      (total, row) => total + row.totalRequests,
+      0
+    );
+    const total429s = kubernetesAPIClientRows.reduce((total, row) => total + row.status429, 0);
+    const total5xx = kubernetesAPIClientRows.reduce((total, row) => total + row.status5xx, 0);
+    return `Clusters: ${kubernetesAPIClientRows.length} • Requests: ${totalRequests} • 429s: ${total429s} • 5xx: ${total5xx}`;
+  }, [kubernetesAPIClientRows, kubernetesAPIDiagnosticsError]);
+
   const { capabilityBatchRows, capabilityDescriptorIndex } = useMemo(() => {
     const descriptorIndex = new Map<string, CapabilityDescriptorActivityDetails>();
 
@@ -2121,6 +2191,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     />
   );
 
+  const kubernetesAPIContent = (
+    <KubernetesAPIClientsTable rows={kubernetesAPIClientRows} summary={kubernetesAPISummary} />
+  );
+
   const tablePerformanceContent = (
     <GridTablePerformance
       onReset={resetGridTablePerformanceDiagnostics}
@@ -2320,13 +2394,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           ? refreshDomainsContent
           : activeTab === 'streams'
             ? streamsContent
-            : activeTab === 'table-performance'
-              ? tablePerformanceContent
-              : activeTab === 'capability-checks'
-                ? capabilityChecksContent
-                : activeTab === 'effective-permissions'
-                  ? effectivePermissionsContent
-                  : brokerReadsContent}
+            : activeTab === 'k8s-api'
+              ? kubernetesAPIContent
+              : activeTab === 'table-performance'
+                ? tablePerformanceContent
+                : activeTab === 'capability-checks'
+                  ? capabilityChecksContent
+                  : activeTab === 'effective-permissions'
+                    ? effectivePermissionsContent
+                    : brokerReadsContent}
       </div>
     </DockablePanel>
   );

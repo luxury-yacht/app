@@ -85,6 +85,7 @@ type App struct {
 	clusterClients   map[string]*clusterClients
 	clusterOps       *clusterOperationCoordinator
 	clusterLifecycle *clusterLifecycle
+	kubeAPIMetrics   *kubernetesAPIMetricsRegistry
 
 	shellSessions   map[string]*shellSession
 	shellSessionsMu sync.Mutex
@@ -132,6 +133,7 @@ func NewApp() *App {
 		refreshPermissionCancels: make(map[string]context.CancelFunc),
 		clusterClients:           make(map[string]*clusterClients),
 		clusterOps:               newClusterOperationCoordinator(),
+		kubeAPIMetrics:           newKubernetesAPIMetricsRegistry(),
 		objectCatalogEntries:     make(map[string]*objectCatalogEntry),
 		shellSessions:            make(map[string]*shellSession),
 		portForwardSessions:      make(map[string]*portForwardSessionInternal),
