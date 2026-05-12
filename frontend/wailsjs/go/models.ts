@@ -307,11 +307,11 @@ export namespace backend {
 	    status429: number;
 	    errors: number;
 	    lastRequestMs?: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new KubernetesAPIClientDiagnostics(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.clusterId = source["clusterId"];
@@ -599,6 +599,7 @@ export namespace backend {
 	}
 
 }
+
 export namespace capabilities {
 	
 	export class NamespaceDiagnostics {
@@ -5172,3 +5173,4 @@ export namespace v1 {
 	}
 
 }
+
