@@ -27,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 )
 
 const (
@@ -201,8 +203,14 @@ type ObjectMapSnapshotPayload struct {
 }
 
 type objectMapBuilder struct {
-	client         kubernetes.Interface
-	catalogService func() *objectcatalog.Service
+	client          kubernetes.Interface
+	gatewayClient   gatewayversioned.Interface
+	gatewayPresence objectMapGatewayPresence
+	catalogService  func() *objectcatalog.Service
+}
+
+type objectMapGatewayPresence interface {
+	Has(kind string) bool
 }
 
 type objectMapScopeKind int
@@ -239,6 +247,14 @@ type objectMapRecord struct {
 	networkPolicy      *networkingv1.NetworkPolicy
 	clusterRole        *rbacv1.ClusterRole
 	clusterRoleBinding *rbacv1.ClusterRoleBinding
+	gatewayClass       *gatewayv1.GatewayClass
+	gateway            *gatewayv1.Gateway
+	httpRoute          *gatewayv1.HTTPRoute
+	grpcRoute          *gatewayv1.GRPCRoute
+	tlsRoute           *gatewayv1.TLSRoute
+	listenerSet        *gatewayv1.ListenerSet
+	referenceGrant     *gatewayv1.ReferenceGrant
+	backendTLSPolicy   *gatewayv1.BackendTLSPolicy
 	template           *corev1.PodTemplateSpec
 	cronJobTpl         *corev1.PodTemplateSpec
 }
@@ -275,12 +291,19 @@ const (
 func RegisterObjectMapDomain(
 	reg *domain.Registry,
 	client kubernetes.Interface,
+	gatewayClient gatewayversioned.Interface,
+	gatewayPresence objectMapGatewayPresence,
 	catalogService func() *objectcatalog.Service,
 ) error {
 	if client == nil {
 		return fmt.Errorf("kubernetes client is required for object map domain")
 	}
-	builder := &objectMapBuilder{client: client, catalogService: catalogService}
+	builder := &objectMapBuilder{
+		client:          client,
+		gatewayClient:   gatewayClient,
+		gatewayPresence: gatewayPresence,
+		catalogService:  catalogService,
+	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          objectMapDomain,
 		BuildSnapshot: builder.Build,
@@ -303,6 +326,7 @@ func (b *objectMapBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	index := newObjectMapIndex(meta)
 	index.addCatalog(b.catalog())
 	index.collectTyped(ctx, b.client)
+	index.collectGatewayTyped(ctx, b.gatewayClient, b.gatewayPresence)
 	if err := index.listError(); err != nil {
 		return nil, err
 	}
@@ -348,6 +372,7 @@ func (b *objectMapBuilder) buildNamespace(ctx context.Context, scope string, opt
 	index := newObjectMapIndex(meta)
 	index.addCatalog(b.catalog())
 	index.collectTyped(ctx, b.client)
+	index.collectGatewayTyped(ctx, b.gatewayClient, b.gatewayPresence)
 	if err := index.listError(); err != nil {
 		return nil, err
 	}
@@ -515,6 +540,61 @@ func (idx *objectMapIndex) collectTyped(ctx context.Context, client kubernetes.I
 			return
 		}
 	}
+}
+
+func (idx *objectMapIndex) collectGatewayTyped(ctx context.Context, client gatewayversioned.Interface, presence objectMapGatewayPresence) {
+	if idx == nil || client == nil {
+		return
+	}
+	if gatewayKindPresent(presence, "GatewayClass") {
+		idx.collectGatewayClasses(ctx, client)
+	}
+	if idx.hasListError() {
+		return
+	}
+	if gatewayKindPresent(presence, "Gateway") {
+		idx.collectGateways(ctx, client)
+	}
+	if idx.hasListError() {
+		return
+	}
+	if gatewayKindPresent(presence, "HTTPRoute") {
+		idx.collectHTTPRoutes(ctx, client)
+	}
+	if idx.hasListError() {
+		return
+	}
+	if gatewayKindPresent(presence, "GRPCRoute") {
+		idx.collectGRPCRoutes(ctx, client)
+	}
+	if idx.hasListError() {
+		return
+	}
+	if gatewayKindPresent(presence, "TLSRoute") {
+		idx.collectTLSRoutes(ctx, client)
+	}
+	if idx.hasListError() {
+		return
+	}
+	if gatewayKindPresent(presence, "ListenerSet") {
+		idx.collectListenerSets(ctx, client)
+	}
+	if idx.hasListError() {
+		return
+	}
+	if gatewayKindPresent(presence, "ReferenceGrant") {
+		idx.collectReferenceGrants(ctx, client)
+	}
+	if idx.hasListError() {
+		return
+	}
+	if gatewayKindPresent(presence, "BackendTLSPolicy") {
+		idx.collectBackendTLSPolicies(ctx, client)
+	}
+}
+
+func gatewayKindPresent(presence objectMapGatewayPresence, kind string) bool {
+	return presence == nil || presence.Has(kind)
 }
 
 func (idx *objectMapIndex) collectPods(ctx context.Context, client kubernetes.Interface) {
@@ -927,6 +1007,150 @@ func (idx *objectMapIndex) collectClusterRoleBindings(ctx context.Context, clien
 	}
 }
 
+func (idx *objectMapIndex) collectGatewayClasses(ctx context.Context, client gatewayversioned.Interface) {
+	list, err := client.GatewayV1().GatewayClasses().List(ctx, metav1.ListOptions{})
+	if idx.skipListError("gatewayclasses", err) {
+		return
+	}
+	for i := range list.Items {
+		gatewayClass := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:               refFromObject(&gatewayClass.ObjectMeta, "gateway.networking.k8s.io", "v1", "GatewayClass", "gatewayclasses", ""),
+			creationTimestamp: objectCreationTimestamp(&gatewayClass.ObjectMeta),
+			status:            objectMapGatewayClassStatus(idx.meta.ClusterID, gatewayClass),
+			owners:            gatewayClass.OwnerReferences,
+			labels:            cloneStringMap(gatewayClass.Labels),
+			gatewayClass:      &gatewayClass,
+		})
+	}
+}
+
+func (idx *objectMapIndex) collectGateways(ctx context.Context, client gatewayversioned.Interface) {
+	list, err := client.GatewayV1().Gateways(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if idx.skipListError("gateways", err) {
+		return
+	}
+	for i := range list.Items {
+		gateway := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:               refFromObject(&gateway.ObjectMeta, "gateway.networking.k8s.io", "v1", "Gateway", "gateways", gateway.Namespace),
+			creationTimestamp: objectCreationTimestamp(&gateway.ObjectMeta),
+			status:            objectMapGatewayStatus(idx.meta.ClusterID, gateway),
+			owners:            gateway.OwnerReferences,
+			labels:            cloneStringMap(gateway.Labels),
+			gateway:           &gateway,
+		})
+	}
+}
+
+func (idx *objectMapIndex) collectHTTPRoutes(ctx context.Context, client gatewayversioned.Interface) {
+	list, err := client.GatewayV1().HTTPRoutes(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if idx.skipListError("httproutes", err) {
+		return
+	}
+	for i := range list.Items {
+		route := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:               refFromObject(&route.ObjectMeta, "gateway.networking.k8s.io", "v1", "HTTPRoute", "httproutes", route.Namespace),
+			creationTimestamp: objectCreationTimestamp(&route.ObjectMeta),
+			status:            objectMapHTTPRouteStatus(idx.meta.ClusterID, route),
+			owners:            route.OwnerReferences,
+			labels:            cloneStringMap(route.Labels),
+			httpRoute:         &route,
+		})
+	}
+}
+
+func (idx *objectMapIndex) collectGRPCRoutes(ctx context.Context, client gatewayversioned.Interface) {
+	list, err := client.GatewayV1().GRPCRoutes(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if idx.skipListError("grpcroutes", err) {
+		return
+	}
+	for i := range list.Items {
+		route := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:               refFromObject(&route.ObjectMeta, "gateway.networking.k8s.io", "v1", "GRPCRoute", "grpcroutes", route.Namespace),
+			creationTimestamp: objectCreationTimestamp(&route.ObjectMeta),
+			status:            objectMapGRPCRouteStatus(idx.meta.ClusterID, route),
+			owners:            route.OwnerReferences,
+			labels:            cloneStringMap(route.Labels),
+			grpcRoute:         &route,
+		})
+	}
+}
+
+func (idx *objectMapIndex) collectTLSRoutes(ctx context.Context, client gatewayversioned.Interface) {
+	list, err := client.GatewayV1().TLSRoutes(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if idx.skipListError("tlsroutes", err) {
+		return
+	}
+	for i := range list.Items {
+		route := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:               refFromObject(&route.ObjectMeta, "gateway.networking.k8s.io", "v1", "TLSRoute", "tlsroutes", route.Namespace),
+			creationTimestamp: objectCreationTimestamp(&route.ObjectMeta),
+			status:            objectMapTLSRouteStatus(idx.meta.ClusterID, route),
+			owners:            route.OwnerReferences,
+			labels:            cloneStringMap(route.Labels),
+			tlsRoute:          &route,
+		})
+	}
+}
+
+func (idx *objectMapIndex) collectListenerSets(ctx context.Context, client gatewayversioned.Interface) {
+	list, err := client.GatewayV1().ListenerSets(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if idx.skipListError("listenersets", err) {
+		return
+	}
+	for i := range list.Items {
+		listenerSet := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:               refFromObject(&listenerSet.ObjectMeta, "gateway.networking.k8s.io", "v1", "ListenerSet", "listenersets", listenerSet.Namespace),
+			creationTimestamp: objectCreationTimestamp(&listenerSet.ObjectMeta),
+			status:            objectMapListenerSetStatus(idx.meta.ClusterID, listenerSet),
+			owners:            listenerSet.OwnerReferences,
+			labels:            cloneStringMap(listenerSet.Labels),
+			listenerSet:       &listenerSet,
+		})
+	}
+}
+
+func (idx *objectMapIndex) collectReferenceGrants(ctx context.Context, client gatewayversioned.Interface) {
+	list, err := client.GatewayV1().ReferenceGrants(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if idx.skipListError("referencegrants", err) {
+		return
+	}
+	for i := range list.Items {
+		grant := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:               refFromObject(&grant.ObjectMeta, "gateway.networking.k8s.io", "v1", "ReferenceGrant", "referencegrants", grant.Namespace),
+			creationTimestamp: objectCreationTimestamp(&grant.ObjectMeta),
+			status:            objectMapReferenceGrantStatus(idx.meta.ClusterID, grant),
+			owners:            grant.OwnerReferences,
+			labels:            cloneStringMap(grant.Labels),
+			referenceGrant:    &grant,
+		})
+	}
+}
+
+func (idx *objectMapIndex) collectBackendTLSPolicies(ctx context.Context, client gatewayversioned.Interface) {
+	list, err := client.GatewayV1().BackendTLSPolicies(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if idx.skipListError("backendtlspolicies", err) {
+		return
+	}
+	for i := range list.Items {
+		policy := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:               refFromObject(&policy.ObjectMeta, "gateway.networking.k8s.io", "v1", "BackendTLSPolicy", "backendtlspolicies", policy.Namespace),
+			creationTimestamp: objectCreationTimestamp(&policy.ObjectMeta),
+			status:            objectMapBackendTLSPolicyStatus(idx.meta.ClusterID, policy),
+			owners:            policy.OwnerReferences,
+			labels:            cloneStringMap(policy.Labels),
+			backendTLSPolicy:  &policy,
+		})
+	}
+}
+
 func (idx *objectMapIndex) skipListError(resource string, err error) bool {
 	if err == nil {
 		return false
@@ -1031,6 +1255,30 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	}
 	if src.clusterRoleBinding != nil {
 		dst.clusterRoleBinding = src.clusterRoleBinding
+	}
+	if src.gatewayClass != nil {
+		dst.gatewayClass = src.gatewayClass
+	}
+	if src.gateway != nil {
+		dst.gateway = src.gateway
+	}
+	if src.httpRoute != nil {
+		dst.httpRoute = src.httpRoute
+	}
+	if src.grpcRoute != nil {
+		dst.grpcRoute = src.grpcRoute
+	}
+	if src.tlsRoute != nil {
+		dst.tlsRoute = src.tlsRoute
+	}
+	if src.listenerSet != nil {
+		dst.listenerSet = src.listenerSet
+	}
+	if src.referenceGrant != nil {
+		dst.referenceGrant = src.referenceGrant
+	}
+	if src.backendTLSPolicy != nil {
+		dst.backendTLSPolicy = src.backendTLSPolicy
 	}
 	if src.template != nil {
 		dst.template = src.template
@@ -1194,6 +1442,46 @@ func objectMapClusterRoleStatus(clusterID string, role rbacv1.ClusterRole) *Obje
 
 func objectMapClusterRoleBindingStatus(clusterID string, binding rbacv1.ClusterRoleBinding) *ObjectMapStatus {
 	model := resourcemodel.BuildClusterRoleBindingResourceModel(clusterID, &binding)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapGatewayClassStatus(clusterID string, gatewayClass gatewayv1.GatewayClass) *ObjectMapStatus {
+	model := resourcemodel.BuildGatewayClassResourceModel(clusterID, &gatewayClass)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapGatewayStatus(clusterID string, gateway gatewayv1.Gateway) *ObjectMapStatus {
+	model := resourcemodel.BuildGatewayResourceModel(clusterID, &gateway)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapHTTPRouteStatus(clusterID string, route gatewayv1.HTTPRoute) *ObjectMapStatus {
+	model := resourcemodel.BuildHTTPRouteResourceModel(clusterID, &route)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapGRPCRouteStatus(clusterID string, route gatewayv1.GRPCRoute) *ObjectMapStatus {
+	model := resourcemodel.BuildGRPCRouteResourceModel(clusterID, &route)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapTLSRouteStatus(clusterID string, route gatewayv1.TLSRoute) *ObjectMapStatus {
+	model := resourcemodel.BuildTLSRouteResourceModel(clusterID, &route)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapListenerSetStatus(clusterID string, listenerSet gatewayv1.ListenerSet) *ObjectMapStatus {
+	model := resourcemodel.BuildListenerSetResourceModel(clusterID, &listenerSet)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapReferenceGrantStatus(clusterID string, grant gatewayv1.ReferenceGrant) *ObjectMapStatus {
+	model := resourcemodel.BuildReferenceGrantResourceModel(clusterID, &grant)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapBackendTLSPolicyStatus(clusterID string, policy gatewayv1.BackendTLSPolicy) *ObjectMapStatus {
+	model := resourcemodel.BuildBackendTLSPolicyResourceModel(clusterID, &policy)
 	return objectMapStatusFromResourceModel(model)
 }
 
@@ -1525,6 +1813,14 @@ func isNamespaceMapSupportedRecord(record *objectMapRecord) bool {
 		record.networkPolicy != nil ||
 		record.clusterRole != nil ||
 		record.clusterRoleBinding != nil ||
+		record.gatewayClass != nil ||
+		record.gateway != nil ||
+		record.httpRoute != nil ||
+		record.grpcRoute != nil ||
+		record.tlsRoute != nil ||
+		record.listenerSet != nil ||
+		record.referenceGrant != nil ||
+		record.backendTLSPolicy != nil ||
 		record.template != nil ||
 		record.cronJobTpl != nil ||
 		record.ref.Kind == "ConfigMap" ||
@@ -1535,7 +1831,7 @@ func isNamespaceMapSupportedRecord(record *objectMapRecord) bool {
 
 func stopsNamespaceMapReverseExpansion(ref ObjectMapReference) bool {
 	switch ref.Kind {
-	case "StorageClass", "IngressClass":
+	case "StorageClass", "IngressClass", "GatewayClass":
 		return true
 	default:
 		return false
@@ -1676,6 +1972,51 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 				add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 			}
 		}
+		if record.gatewayClass != nil {
+			model := resourcemodel.BuildGatewayClassResourceModel(idx.meta.ClusterID, record.gatewayClass)
+			if model.Facts.GatewayClass.Parameters != nil {
+				relationship := objectMapRelationships[objectMapEdgeUses]
+				add(record, idx.recordForResourceLink(*model.Facts.GatewayClass.Parameters), relationship.typ, relationship.label, "spec.parametersRef")
+			}
+		}
+		if record.gateway != nil {
+			model := resourcemodel.BuildGatewayResourceModel(idx.meta.ClusterID, record.gateway)
+			if model.Facts.Gateway.Class != nil {
+				relationship := objectMapRelationships[objectMapEdgeUses]
+				add(record, idx.recordForResourceLink(*model.Facts.Gateway.Class), relationship.typ, "uses class", "spec.gatewayClassName")
+			}
+		}
+		if record.httpRoute != nil {
+			model := resourcemodel.BuildHTTPRouteResourceModel(idx.meta.ClusterID, record.httpRoute)
+			idx.addGatewayRouteEdges(record, model.Facts.HTTPRoute.RouteCommonFacts, add)
+		}
+		if record.grpcRoute != nil {
+			model := resourcemodel.BuildGRPCRouteResourceModel(idx.meta.ClusterID, record.grpcRoute)
+			idx.addGatewayRouteEdges(record, model.Facts.GRPCRoute.RouteCommonFacts, add)
+		}
+		if record.tlsRoute != nil {
+			model := resourcemodel.BuildTLSRouteResourceModel(idx.meta.ClusterID, record.tlsRoute)
+			idx.addGatewayRouteEdges(record, model.Facts.TLSRoute.RouteCommonFacts, add)
+		}
+		if record.listenerSet != nil {
+			model := resourcemodel.BuildListenerSetResourceModel(idx.meta.ClusterID, record.listenerSet)
+			relationship := objectMapRelationships[objectMapEdgeUses]
+			add(record, idx.recordForResourceLink(model.Facts.ListenerSet.ParentRef), relationship.typ, relationship.label, "spec.parentRef")
+		}
+		if record.referenceGrant != nil {
+			model := resourcemodel.BuildReferenceGrantResourceModel(idx.meta.ClusterID, record.referenceGrant)
+			relationship := objectMapRelationships[objectMapEdgeGrants]
+			for _, targetRef := range model.Facts.ReferenceGrant.To {
+				add(record, idx.recordForResourceLink(targetRef), relationship.typ, relationship.label, "spec.to")
+			}
+		}
+		if record.backendTLSPolicy != nil {
+			model := resourcemodel.BuildBackendTLSPolicyResourceModel(idx.meta.ClusterID, record.backendTLSPolicy)
+			relationship := objectMapRelationships[objectMapEdgeUses]
+			for _, targetRef := range model.Facts.BackendTLSPolicy.TargetRefs {
+				add(record, idx.recordForResourceLink(targetRef), relationship.typ, relationship.label, "spec.targetRefs")
+			}
+		}
 		if record.template != nil {
 			idx.addPodTemplateEdges(record, record.template, add)
 		}
@@ -1725,6 +2066,17 @@ func (idx *objectMapIndex) addPodTemplateEdges(record *objectMapRecord, tpl *cor
 	}
 	for _, container := range append(append([]corev1.Container{}, tpl.Spec.InitContainers...), tpl.Spec.Containers...) {
 		idx.addContainerEdges(record, record.ref.Namespace, container, add)
+	}
+}
+
+func (idx *objectMapIndex) addGatewayRouteEdges(record *objectMapRecord, facts resourcemodel.RouteCommonFacts, add func(*objectMapRecord, *objectMapRecord, string, string, string)) {
+	parentRelationship := objectMapRelationships[objectMapEdgeUses]
+	for _, parentRef := range facts.ParentRefs {
+		add(record, idx.recordForResourceLink(parentRef), parentRelationship.typ, parentRelationship.label, "spec.parentRefs")
+	}
+	backendRelationship := objectMapRelationships[objectMapEdgeRoutes]
+	for _, backendRef := range facts.Backends {
+		add(record, idx.recordForResourceLink(backendRef), backendRelationship.typ, backendRelationship.label, "spec.rules.backendRefs")
 	}
 }
 

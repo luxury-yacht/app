@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 )
 
 func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
@@ -794,6 +796,85 @@ func TestObjectMapBuildsFromClusterRoleBinding(t *testing.T) {
 	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ServiceAccount", "builder", "binds")
 }
 
+func TestObjectMapBuildsGatewayAPIRelationships(t *testing.T) {
+	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
+	gatewayClient := newObjectMapGatewayClient(t)
+	if list, err := gatewayClient.GatewayV1().Gateways("default").List(context.Background(), metav1.ListOptions{}); err != nil || len(list.Items) != 1 {
+		t.Fatalf("gateway fixture did not seed fake client: count=%d err=%v", len(list.Items), err)
+	}
+	builder := &objectMapBuilder{client: client, gatewayClient: gatewayClient}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxDepth=5&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	if payload.Seed.ClusterID != "cluster-a" || payload.Seed.Group != "gateway.networking.k8s.io" || payload.Seed.Version != "v1" || payload.Seed.Kind != "Gateway" {
+		t.Fatalf("seed identity is incomplete: %#v", payload.Seed)
+	}
+	assertNode(t, payload, "Gateway", "edge")
+	assertNode(t, payload, "GatewayClass", "public")
+	assertNode(t, payload, "HTTPRoute", "web")
+	assertNode(t, payload, "GRPCRoute", "grpc")
+	assertNode(t, payload, "TLSRoute", "tls")
+	assertNode(t, payload, "ListenerSet", "edge-extra")
+	assertNode(t, payload, "Service", "web")
+	assertEdge(t, payload, "Gateway", "edge", "GatewayClass", "public", "uses")
+	assertEdge(t, payload, "HTTPRoute", "web", "Gateway", "edge", "uses")
+	assertEdge(t, payload, "HTTPRoute", "web", "Service", "web", "routes")
+	assertEdge(t, payload, "GRPCRoute", "grpc", "Gateway", "edge", "uses")
+	assertEdge(t, payload, "GRPCRoute", "grpc", "Service", "web", "routes")
+	assertEdge(t, payload, "TLSRoute", "tls", "Gateway", "edge", "uses")
+	assertEdge(t, payload, "TLSRoute", "tls", "Service", "web", "routes")
+	assertEdge(t, payload, "ListenerSet", "edge-extra", "Gateway", "edge", "uses")
+	if status := nodeByKindName(t, payload, "Gateway", "edge").Status; status == nil || status.State != "0" || status.Label != "1 listener" {
+		t.Fatalf("unexpected gateway status: %#v", status)
+	}
+}
+
+func TestObjectMapBuildsGatewayAPIPolicyAndGrantRelationships(t *testing.T) {
+	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
+	gatewayClient := newObjectMapGatewayClient(t)
+	builder := &objectMapBuilder{client: client, gatewayClient: gatewayClient}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "default:/v1:Service:web?maxDepth=3&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	assertNode(t, payload, "BackendTLSPolicy", "web-tls")
+	assertNode(t, payload, "ReferenceGrant", "allow-web")
+	assertEdge(t, payload, "BackendTLSPolicy", "web-tls", "Service", "web", "uses")
+	assertEdge(t, payload, "ReferenceGrant", "allow-web", "Service", "web", "grants")
+}
+
+func TestObjectMapNamespaceGraphIncludesGatewayAPIResources(t *testing.T) {
+	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
+	gatewayClient := newObjectMapGatewayClient(t)
+	builder := &objectMapBuilder{client: client, gatewayClient: gatewayClient}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "namespace:default?maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	assertNode(t, payload, "Gateway", "edge")
+	assertNode(t, payload, "GatewayClass", "public")
+	assertNode(t, payload, "HTTPRoute", "web")
+	assertNode(t, payload, "GRPCRoute", "grpc")
+	assertNode(t, payload, "TLSRoute", "tls")
+	assertNode(t, payload, "ListenerSet", "edge-extra")
+	assertNode(t, payload, "ReferenceGrant", "allow-web")
+	assertNode(t, payload, "BackendTLSPolicy", "web-tls")
+	assertEdge(t, payload, "Gateway", "edge", "GatewayClass", "public", "uses")
+}
+
 func objectMapFixtureObjects() []runtime.Object {
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1050,6 +1131,167 @@ func objectMapClusterRBACFixtureObjects() []runtime.Object {
 	}
 }
 
+func objectMapGatewayAPIFixtureObjects() []runtime.Object {
+	backend := gatewayv1.BackendObjectReference{Name: gatewayv1.ObjectName("web")}
+	return []runtime.Object{
+		&gatewayv1.GatewayClass{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "gateway.networking.k8s.io/v1", Kind: "GatewayClass"},
+			ObjectMeta: metav1.ObjectMeta{Name: "public", UID: types.UID("gatewayclass-public-uid")},
+			Spec: gatewayv1.GatewayClassSpec{
+				ControllerName: gatewayv1.GatewayController("example.com/gateway-controller"),
+			},
+		},
+		&gatewayv1.Gateway{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "gateway.networking.k8s.io/v1", Kind: "Gateway"},
+			ObjectMeta: metav1.ObjectMeta{Name: "edge", Namespace: "default", UID: types.UID("gateway-edge-uid")},
+			Spec: gatewayv1.GatewaySpec{
+				GatewayClassName: gatewayv1.ObjectName("public"),
+				Listeners: []gatewayv1.Listener{{
+					Name:     gatewayv1.SectionName("http"),
+					Port:     gatewayv1.PortNumber(80),
+					Protocol: gatewayv1.HTTPProtocolType,
+				}},
+			},
+		},
+		&gatewayv1.HTTPRoute{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "gateway.networking.k8s.io/v1", Kind: "HTTPRoute"},
+			ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", UID: types.UID("httproute-web-uid")},
+			Spec: gatewayv1.HTTPRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{
+					ParentRefs: []gatewayv1.ParentReference{{Name: gatewayv1.ObjectName("edge")}},
+				},
+				Rules: []gatewayv1.HTTPRouteRule{{
+					BackendRefs: []gatewayv1.HTTPBackendRef{{
+						BackendRef: gatewayv1.BackendRef{BackendObjectReference: backend},
+					}},
+				}},
+			},
+		},
+		&gatewayv1.GRPCRoute{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "gateway.networking.k8s.io/v1", Kind: "GRPCRoute"},
+			ObjectMeta: metav1.ObjectMeta{Name: "grpc", Namespace: "default", UID: types.UID("grpcroute-grpc-uid")},
+			Spec: gatewayv1.GRPCRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{
+					ParentRefs: []gatewayv1.ParentReference{{Name: gatewayv1.ObjectName("edge")}},
+				},
+				Rules: []gatewayv1.GRPCRouteRule{{
+					BackendRefs: []gatewayv1.GRPCBackendRef{{
+						BackendRef: gatewayv1.BackendRef{BackendObjectReference: backend},
+					}},
+				}},
+			},
+		},
+		&gatewayv1.TLSRoute{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "gateway.networking.k8s.io/v1", Kind: "TLSRoute"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tls", Namespace: "default", UID: types.UID("tlsroute-tls-uid")},
+			Spec: gatewayv1.TLSRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{
+					ParentRefs: []gatewayv1.ParentReference{{Name: gatewayv1.ObjectName("edge")}},
+				},
+				Rules: []gatewayv1.TLSRouteRule{{
+					BackendRefs: []gatewayv1.BackendRef{{BackendObjectReference: backend}},
+				}},
+			},
+		},
+		&gatewayv1.ListenerSet{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "gateway.networking.k8s.io/v1", Kind: "ListenerSet"},
+			ObjectMeta: metav1.ObjectMeta{Name: "edge-extra", Namespace: "default", UID: types.UID("listenerset-edge-extra-uid")},
+			Spec: gatewayv1.ListenerSetSpec{
+				ParentRef: gatewayv1.ParentGatewayReference{Name: gatewayv1.ObjectName("edge")},
+			},
+		},
+		&gatewayv1.ReferenceGrant{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "gateway.networking.k8s.io/v1", Kind: "ReferenceGrant"},
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-web", Namespace: "default", UID: types.UID("referencegrant-allow-web-uid")},
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{{
+					Group:     gatewayv1.Group("gateway.networking.k8s.io"),
+					Kind:      gatewayv1.Kind("HTTPRoute"),
+					Namespace: gatewayv1.Namespace("default"),
+				}},
+				To: []gatewayv1.ReferenceGrantTo{{
+					Group: gatewayv1.Group(""),
+					Kind:  gatewayv1.Kind("Service"),
+					Name:  objectNamePtr("web"),
+				}},
+			},
+		},
+		&gatewayv1.BackendTLSPolicy{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "gateway.networking.k8s.io/v1", Kind: "BackendTLSPolicy"},
+			ObjectMeta: metav1.ObjectMeta{Name: "web-tls", Namespace: "default", UID: types.UID("backendtlspolicy-web-tls-uid")},
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Group: gatewayv1.Group(""),
+						Kind:  gatewayv1.Kind("Service"),
+						Name:  gatewayv1.ObjectName("web"),
+					},
+				}},
+			},
+		},
+	}
+}
+
+func newObjectMapGatewayClient(t *testing.T) *gatewayfake.Clientset {
+	t.Helper()
+	client := gatewayfake.NewClientset()
+	var gatewayClasses []gatewayv1.GatewayClass
+	var gateways []gatewayv1.Gateway
+	var httpRoutes []gatewayv1.HTTPRoute
+	var grpcRoutes []gatewayv1.GRPCRoute
+	var tlsRoutes []gatewayv1.TLSRoute
+	var listenerSets []gatewayv1.ListenerSet
+	var referenceGrants []gatewayv1.ReferenceGrant
+	var backendTLSPolicies []gatewayv1.BackendTLSPolicy
+	for _, obj := range objectMapGatewayAPIFixtureObjects() {
+		switch item := obj.(type) {
+		case *gatewayv1.GatewayClass:
+			gatewayClasses = append(gatewayClasses, *item)
+		case *gatewayv1.Gateway:
+			gateways = append(gateways, *item)
+		case *gatewayv1.HTTPRoute:
+			httpRoutes = append(httpRoutes, *item)
+		case *gatewayv1.GRPCRoute:
+			grpcRoutes = append(grpcRoutes, *item)
+		case *gatewayv1.TLSRoute:
+			tlsRoutes = append(tlsRoutes, *item)
+		case *gatewayv1.ListenerSet:
+			listenerSets = append(listenerSets, *item)
+		case *gatewayv1.ReferenceGrant:
+			referenceGrants = append(referenceGrants, *item)
+		case *gatewayv1.BackendTLSPolicy:
+			backendTLSPolicies = append(backendTLSPolicies, *item)
+		default:
+			t.Fatalf("unsupported gateway api fixture type %T", obj)
+		}
+	}
+	client.Fake.PrependReactor("list", "gatewayclasses", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &gatewayv1.GatewayClassList{Items: gatewayClasses}, nil
+	})
+	client.Fake.PrependReactor("list", "gateways", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &gatewayv1.GatewayList{Items: gateways}, nil
+	})
+	client.Fake.PrependReactor("list", "httproutes", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &gatewayv1.HTTPRouteList{Items: httpRoutes}, nil
+	})
+	client.Fake.PrependReactor("list", "grpcroutes", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &gatewayv1.GRPCRouteList{Items: grpcRoutes}, nil
+	})
+	client.Fake.PrependReactor("list", "tlsroutes", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &gatewayv1.TLSRouteList{Items: tlsRoutes}, nil
+	})
+	client.Fake.PrependReactor("list", "listenersets", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &gatewayv1.ListenerSetList{Items: listenerSets}, nil
+	})
+	client.Fake.PrependReactor("list", "referencegrants", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &gatewayv1.ReferenceGrantList{Items: referenceGrants}, nil
+	})
+	client.Fake.PrependReactor("list", "backendtlspolicies", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &gatewayv1.BackendTLSPolicyList{Items: backendTLSPolicies}, nil
+	})
+	return client
+}
+
 func podDisruptionBudgetFixture(namespace, name, uid string) *policyv1.PodDisruptionBudget {
 	minAvailable := intstr.FromInt32(1)
 	return &policyv1.PodDisruptionBudget{
@@ -1248,4 +1490,9 @@ func int32Ptr(value int32) *int32 {
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func objectNamePtr(value string) *gatewayv1.ObjectName {
+	name := gatewayv1.ObjectName(value)
+	return &name
 }

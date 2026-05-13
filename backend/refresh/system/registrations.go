@@ -583,6 +583,8 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			return snapshot.RegisterObjectMapDomain(
 				deps.registry,
 				deps.cfg.KubernetesClient,
+				deps.cfg.GatewayClient,
+				deps.cfg.GatewayAPIPresence,
 				deps.cfg.ObjectCatalogService,
 			)
 		}),

@@ -33,7 +33,7 @@ export const OBJECT_MAP_EDGE_KINDS: readonly EdgeKindMeta[] = [
   { type: 'owner', label: 'Ownership', family: 'structural' },
   { type: 'selector', label: 'Selector', family: 'network' },
   { type: 'endpoint', label: 'Endpoint', family: 'network' },
-  { type: 'routes', label: 'Ingress Route', family: 'network' },
+  { type: 'routes', label: 'Traffic Route', family: 'network' },
   { type: 'scales', label: 'Scaling', family: 'workload' },
   { type: 'schedules', label: 'Scheduled On', family: 'workload' },
   { type: 'grants', label: 'Grants', family: 'rbac' },

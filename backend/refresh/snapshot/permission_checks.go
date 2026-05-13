@@ -277,6 +277,14 @@ func defaultPermissionChecks() map[string]permissionCheck {
 			listPermission("autoscaling", "horizontalpodautoscalers"),
 			listPermission("networking.k8s.io", "ingresses"),
 			listPermission("networking.k8s.io", "ingressclasses"),
+			listPermission("gateway.networking.k8s.io", "gatewayclasses"),
+			listPermission("gateway.networking.k8s.io", "gateways"),
+			listPermission("gateway.networking.k8s.io", "httproutes"),
+			listPermission("gateway.networking.k8s.io", "grpcroutes"),
+			listPermission("gateway.networking.k8s.io", "tlsroutes"),
+			listPermission("gateway.networking.k8s.io", "listenersets"),
+			listPermission("gateway.networking.k8s.io", "referencegrants"),
+			listPermission("gateway.networking.k8s.io", "backendtlspolicies"),
 		),
 	}
 }
