@@ -23,6 +23,7 @@ interface HarnessProps {
   tableDataLength: number;
   focusedRowIndex: number | null;
   focusedRowKey: string | null;
+  rowKeys?: string[];
   shortcutsActive?: boolean;
   shouldVirtualize?: boolean;
   virtualRowHeight?: number;
@@ -38,6 +39,7 @@ const KeyboardNavigationHarness: FC<HarnessProps> = ({
   tableDataLength,
   focusedRowIndex,
   focusedRowKey,
+  rowKeys,
   shortcutsActive = false,
   shouldVirtualize = false,
   virtualRowHeight = 0,
@@ -90,7 +92,7 @@ const KeyboardNavigationHarness: FC<HarnessProps> = ({
         <div
           key={index}
           className="gridtable-row"
-          data-row-key={`row-${index}`}
+          data-row-key={rowKeys?.[index] ?? `row-${index}`}
           data-testid={`row-${index}`}
         />
       ))}
@@ -197,6 +199,56 @@ describe('useGridTableKeyboardNavigation', () => {
           tableDataLength={3}
           focusedRowIndex={1}
           focusedRowKey="row-1"
+          shortcutsActive
+          updateHoverForElement={updateHoverForElement}
+          onCapture={(next) => {
+            capture = next;
+          }}
+        />
+      );
+    });
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+    expect(updateHoverForElement).toHaveBeenCalledWith(row);
+  });
+
+  it('matches rendered rows with selector-sensitive keys without CSS escaping', async () => {
+    const updateHoverForElement = vi.fn();
+    const rowKey = 'cluster|"prod]/pods/nginx:main';
+    let capture: HarnessCapture | null = null;
+
+    await act(async () => {
+      root.render(
+        <KeyboardNavigationHarness
+          tableDataLength={1}
+          focusedRowIndex={0}
+          focusedRowKey={rowKey}
+          rowKeys={[rowKey]}
+          shortcutsActive
+          updateHoverForElement={updateHoverForElement}
+          onCapture={(next) => {
+            capture = next;
+          }}
+        />
+      );
+    });
+
+    await act(async () => {
+      requireCapture(capture).jumpToIndex(0);
+    });
+    const row = container.querySelector<HTMLDivElement>('[data-testid="row-0"]');
+    const scrollIntoView = vi.fn();
+    if (row) {
+      row.scrollIntoView = scrollIntoView;
+    }
+
+    await act(async () => {
+      root.render(
+        <KeyboardNavigationHarness
+          tableDataLength={1}
+          focusedRowIndex={0}
+          focusedRowKey={rowKey}
+          rowKeys={[rowKey]}
           shortcutsActive
           updateHoverForElement={updateHoverForElement}
           onCapture={(next) => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
+import { findGridTableRowByKey } from '@shared/components/tables/GridTable.utils';
 
 type NavigationMethodRef = RefObject<'pointer' | 'keyboard'>;
 
@@ -111,15 +112,7 @@ export function useGridTableKeyboardNavigation({
       return;
     }
     const allowAutoScroll = lastNavigationMethodRef.current === 'keyboard';
-    const escapedKey =
-      typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-        ? CSS.escape(focusedRowKey)
-        : focusedRowKey;
-    // Both data-row-key and .gridtable-row are on the same element, so use
-    // a compound selector (not a descendant selector).
-    const rowElement = wrapper.querySelector<HTMLDivElement>(
-      `.gridtable-row[data-row-key="${escapedKey}"]`
-    );
+    const rowElement = findGridTableRowByKey(wrapper, focusedRowKey);
     if (rowElement) {
       if (allowAutoScroll && typeof rowElement.scrollIntoView === 'function') {
         rowElement.scrollIntoView({ block: 'nearest' });

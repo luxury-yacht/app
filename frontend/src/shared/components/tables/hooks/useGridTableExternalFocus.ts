@@ -15,6 +15,7 @@
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { eventBus } from '@/core/events';
+import { findGridTableRowByKey } from '@shared/components/tables/GridTable.utils';
 import { type GridTableFocusRequest, matchesGridTableFocusRequest } from './gridTableFocusRequest';
 
 interface UseGridTableExternalFocusOptions<T> {
@@ -37,13 +38,6 @@ let pendingFocusRequest: GridTableFocusRequest | null = null;
  */
 export function setPendingFocusRequest(request: GridTableFocusRequest | null): void {
   pendingFocusRequest = request;
-}
-
-/**
- * Escapes a row key for use in a CSS attribute selector.
- */
-function escapeKey(key: string): string {
-  return typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(key) : key;
 }
 
 /**
@@ -81,15 +75,13 @@ function scrollToFocusedRow(
   rowCount: number,
   wrapperRef: RefObject<HTMLDivElement | null>
 ): void {
-  const selector = `.gridtable-row[data-row-key="${escapeKey(key)}"]`;
-
   requestAnimationFrame(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
 
     // Try direct DOM lookup — works for non-virtualized tables and rows
     // that happen to be within the current virtual viewport.
-    const rowElement = wrapper.querySelector<HTMLElement>(selector);
+    const rowElement = findGridTableRowByKey(wrapper, key);
     if (rowElement) {
       rowElement.scrollIntoView({ block: 'nearest' });
       return;
@@ -108,7 +100,7 @@ function scrollToFocusedRow(
     // Retry a few frames later once the virtual viewport has re-rendered.
     let retries = 3;
     const retryScroll = () => {
-      const el = wrapperRef.current?.querySelector<HTMLElement>(selector);
+      const el = findGridTableRowByKey(wrapperRef.current, key);
       if (el) {
         el.scrollIntoView({ block: 'nearest' });
         return;

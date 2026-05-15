@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
+import { findGridTableRowByKey } from '@shared/components/tables/GridTable.utils';
 
 // Centralizes focus management for GridTable rows: tracks the focused row,
 // handles wrapper focus/blur, pointer vs keyboard navigation, and keeps hover
@@ -186,14 +187,8 @@ export function useGridTableFocusNavigation<T>({
     if (focusedRowIndex == null || focusedRowKey == null) {
       return;
     }
-    const escapedKey =
-      typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-        ? CSS.escape(focusedRowKey)
-        : focusedRowKey;
-    const currentRow = wrapperRef.current?.querySelector<HTMLElement>(
-      `.gridtable-row[data-row-key="${escapedKey}"]`
-    );
-    if (currentRow && currentRow instanceof HTMLDivElement) {
+    const currentRow = findGridTableRowByKey(wrapperRef.current, focusedRowKey);
+    if (currentRow) {
       updateHoverForElement(currentRow);
     }
   }, [focusedRowIndex, focusedRowKey, updateHoverForElement, wrapperRef]);

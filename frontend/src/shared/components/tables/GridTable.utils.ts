@@ -99,6 +99,22 @@ export const getStableRowId = (rowKey: string): string => {
   return `gridtable-row-${safe}`;
 };
 
+export const findGridTableRowByKey = (
+  wrapper: HTMLElement | null | undefined,
+  rowKey: string
+): HTMLDivElement | null => {
+  if (!wrapper) {
+    return null;
+  }
+  const rows = wrapper.querySelectorAll<HTMLDivElement>('.gridtable-row[data-row-key]');
+  for (const row of rows) {
+    if (row.dataset.rowKey === rowKey) {
+      return row;
+    }
+  }
+  return null;
+};
+
 export const defaultGetSearchText = (row: any): string[] => {
   if (!row || typeof row !== 'object') {
     return [];

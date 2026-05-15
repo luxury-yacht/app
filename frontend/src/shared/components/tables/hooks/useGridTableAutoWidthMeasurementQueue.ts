@@ -69,12 +69,10 @@ const createVisibleColumnSignature = (
   if (!table) {
     return null;
   }
-  const escapedKey =
-    typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-      ? CSS.escape(columnKey)
-      : columnKey;
-  const selector = `.grid-cell[data-column="${escapedKey}"] .grid-cell-content`;
-  const nodes = table.querySelectorAll<HTMLElement>(selector);
+  const nodes = Array.from(table.querySelectorAll<HTMLElement>('.grid-cell[data-column]'))
+    .filter((cell) => cell.dataset.column === columnKey)
+    .map((cell) => cell.querySelector<HTMLElement>('.grid-cell-content'))
+    .filter((node): node is HTMLElement => node != null);
   if (nodes.length === 0) {
     return null;
   }

@@ -1,10 +1,7 @@
 /**
  * frontend/src/shared/components/tables/hooks/useGridTableFocusNavigation.test.tsx
  *
- * Targeted regression test: when the focused row index changes, the hook must
- * find the row element via a compound selector (.gridtable-row[data-row-key="..."])
- * and pass it to updateHoverForElement. A descendant selector would return null
- * because both class and data attribute live on the same element.
+ * Targeted regression tests for focused-row lookup and activation behavior.
  */
 
 import React, { useRef, useImperativeHandle, forwardRef } from 'react';
@@ -102,9 +99,8 @@ describe('useGridTableFocusNavigation', () => {
       ref.current!.setFocusedRowKey('row-b');
     });
 
-    // The hook should have found the DOM element via compound selector and
-    // passed it to updateHoverForElement. If the selector were a descendant
-    // selector, the query would return null and this call would never happen.
+    // The hook should find the DOM element even though the class and
+    // data-row-key attribute live on the same element.
     expect(updateHover).toHaveBeenCalled();
     const calledWith = updateHover.mock.calls[updateHover.mock.calls.length - 1][0];
     expect(calledWith).toBeInstanceOf(HTMLDivElement);
@@ -112,10 +108,9 @@ describe('useGridTableFocusNavigation', () => {
     expect(calledWith.classList.contains('gridtable-row')).toBe(true);
   });
 
-  it('handles row keys that need CSS.escape', async () => {
+  it('handles selector-sensitive row keys', async () => {
     const updateHover = vi.fn();
-    // Key with special characters that CSS.escape would handle.
-    const data: Row[] = [{ id: 'ns/pod:container' }];
+    const data: Row[] = [{ id: 'cluster|"prod]/pods/nginx:main' }];
     const ref = React.createRef<HarnessHandle>();
 
     await act(async () => {
@@ -123,13 +118,13 @@ describe('useGridTableFocusNavigation', () => {
     });
 
     await act(async () => {
-      ref.current!.setFocusedRowKey('ns/pod:container');
+      ref.current!.setFocusedRowKey('cluster|"prod]/pods/nginx:main');
     });
 
     expect(updateHover).toHaveBeenCalled();
     const calledWith = updateHover.mock.calls[updateHover.mock.calls.length - 1][0];
     expect(calledWith).toBeInstanceOf(HTMLDivElement);
-    expect(calledWith.dataset.rowKey).toBe('ns/pod:container');
+    expect(calledWith.dataset.rowKey).toBe('cluster|"prod]/pods/nginx:main');
   });
 });
 

@@ -1320,10 +1320,8 @@ it('focuses the first row when the wrapper receives focus and moves with Arrow k
 });
 
 it('activates hover overlay on focused row when wrapper receives keyboard focus', async () => {
-  // Regression test: the effect in GridTable.tsx that syncs hover with focused
-  // row uses a compound selector (.gridtable-row[data-row-key="..."]) to find
-  // the row element. If this were a descendant selector, the query would return
-  // null and the hover overlay would never activate.
+  // Regression test: focused-row hover sync must find the row element even
+  // though .gridtable-row and data-row-key live on the same DOM node.
   const { container, cleanup, scrollWrapper } = renderGridTable({
     data: createRows(4),
     virtualization: { enabled: false },
