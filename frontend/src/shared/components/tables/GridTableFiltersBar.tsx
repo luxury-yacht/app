@@ -17,6 +17,7 @@ import type {
 import { useSearchShortcutTarget } from '@ui/shortcuts';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
+import { hasNonDefaultGridTableFilters } from '@shared/components/tables/gridTableFilterState';
 
 interface GridTableFiltersBarProps {
   activeFilters: GridTableFilterState;
@@ -85,10 +86,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   resultCount,
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const hasActiveFilters =
-    activeFilters.search.trim().length > 0 ||
-    activeFilters.kinds.length > 0 ||
-    activeFilters.namespaces.length > 0;
+  const hasActiveFilters = hasNonDefaultGridTableFilters(activeFilters);
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {

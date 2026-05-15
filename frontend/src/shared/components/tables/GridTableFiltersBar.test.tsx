@@ -306,6 +306,23 @@ describe('GridTableFiltersBar', () => {
     selectSpy.mockRestore();
   });
 
+  it('enables reset when filter toggles are non-default', async () => {
+    await renderFilters({
+      activeFilters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: true,
+      },
+    });
+
+    const resetButton = container.querySelector<HTMLButtonElement>(
+      '.icon-bar-button[title="Reset filters"]'
+    );
+    expect(resetButton?.disabled).toBe(false);
+  });
+
   it('renders the columns dropdown when enabled', async () => {
     const onColumnsChange = vi.fn();
     await renderFilters({

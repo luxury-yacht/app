@@ -57,6 +57,7 @@ import {
   normalizeKindClass,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
+import { hasNarrowingGridTableFilters } from '@shared/components/tables/gridTableFilterState';
 import ContextMenu from '@shared/components/ContextMenu';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { SortAscIcon, SortDescIcon } from '@shared/components/icons/SharedIcons';
@@ -349,11 +350,7 @@ export function useGridTableController<T>({
   ]);
 
   // Whether any filter is actively narrowing results (search text, kind, or namespace selections).
-  const hasActiveFilters =
-    filteringEnabled &&
-    (activeFilters.search !== '' ||
-      activeFilters.kinds.length > 0 ||
-      activeFilters.namespaces.length > 0);
+  const hasActiveFilters = filteringEnabled && hasNarrowingGridTableFilters(activeFilters);
 
   const loadingOverlayMessage = loadingOverlay?.message ?? 'Refreshing...';
   const showLoadingOverlay = loadingOverlay ? loadingOverlay.show : loading && tableData.length > 0;

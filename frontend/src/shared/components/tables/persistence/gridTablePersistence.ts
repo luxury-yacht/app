@@ -11,6 +11,11 @@ import type {
   GridTableFilterState,
 } from '@shared/components/tables/GridTable.types';
 import { requestAppState } from '@/core/app-state-access';
+import {
+  hasNonDefaultGridTableFilters,
+  normalizeGridTableFilterArray,
+  normalizeGridTableFilterState,
+} from '@shared/components/tables/gridTableFilterState';
 
 export interface GridTablePersistedState {
   version: 1;
@@ -293,29 +298,6 @@ export const setGridTablePersistenceCacheForTesting = (entries: GridTablePersist
   hydrated = true;
 };
 
-const normalizeFilterArray = (values?: string[]): string[] => {
-  if (!Array.isArray(values) || values.length === 0) {
-    return [];
-  }
-  const seen = new Set<string>();
-  const result: string[] = [];
-  values.forEach((value) => {
-    if (typeof value !== 'string') {
-      return;
-    }
-    const trimmed = value.trim();
-    const normalized = trimmed.toLowerCase();
-    if (!trimmed) {
-      return;
-    }
-    if (!seen.has(normalized)) {
-      seen.add(normalized);
-      result.push(trimmed);
-    }
-  });
-  return result;
-};
-
 const intersectsAllowed = (values: string[], allowed?: string[]): string[] => {
   if (!allowed || allowed.length === 0) {
     return values;
@@ -378,29 +360,22 @@ export const prunePersistedState = <T>(
 
   if (persisted.filters) {
     const isNamespaceScoped = context.filterOptions?.isNamespaceScoped ?? false;
-    const normalizedSearch = persisted.filters.search?.trim() ?? '';
-    const normalizedKinds = normalizeFilterArray(persisted.filters.kinds);
-    const normalizedNamespaces = normalizeFilterArray(persisted.filters.namespaces);
+    const normalized = normalizeGridTableFilterState(persisted.filters);
 
-    const kinds = intersectsAllowed(normalizedKinds, context.filterOptions?.kinds);
+    const kinds = intersectsAllowed(normalized.kinds, context.filterOptions?.kinds);
     const namespaces = isNamespaceScoped
       ? []
-      : intersectsAllowed(normalizedNamespaces, context.filterOptions?.namespaces);
+      : intersectsAllowed(normalized.namespaces, context.filterOptions?.namespaces);
 
     const filters: GridTableFilterState = {
-      search: normalizedSearch,
+      search: normalized.search,
       kinds,
       namespaces,
-      caseSensitive: persisted.filters.caseSensitive ?? false,
-      includeMetadata: persisted.filters.includeMetadata ?? false,
+      caseSensitive: normalized.caseSensitive,
+      includeMetadata: normalized.includeMetadata,
     };
 
-    if (
-      filters.search !== '' ||
-      filters.kinds.length > 0 ||
-      filters.namespaces.length > 0 ||
-      filters.caseSensitive
-    ) {
+    if (hasNonDefaultGridTableFilters(filters)) {
       pruned.filters = filters;
     }
   }
@@ -462,19 +437,15 @@ export const buildPersistedStateForSave = <T>(
 
   if (context.filters) {
     const isNamespaceScoped = context.filterOptions?.isNamespaceScoped ?? false;
+    const normalized = normalizeGridTableFilterState(context.filters);
     const filters: GridTableFilterState = {
-      search: context.filters.search?.trim() ?? '',
-      kinds: normalizeFilterArray(context.filters.kinds),
-      namespaces: isNamespaceScoped ? [] : normalizeFilterArray(context.filters.namespaces),
-      caseSensitive: context.filters.caseSensitive ?? false,
-      includeMetadata: context.filters.includeMetadata ?? false,
+      search: normalized.search,
+      kinds: normalizeGridTableFilterArray(normalized.kinds),
+      namespaces: isNamespaceScoped ? [] : normalizeGridTableFilterArray(normalized.namespaces),
+      caseSensitive: normalized.caseSensitive,
+      includeMetadata: normalized.includeMetadata,
     };
-    if (
-      filters.search ||
-      filters.kinds.length > 0 ||
-      filters.namespaces.length > 0 ||
-      filters.caseSensitive
-    ) {
+    if (hasNonDefaultGridTableFilters(filters)) {
       state.filters = filters;
     }
   }

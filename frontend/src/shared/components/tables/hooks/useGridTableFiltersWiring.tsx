@@ -5,7 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
@@ -22,7 +22,7 @@ import type {
   GridTableFilterConfig,
 } from '@shared/components/tables/GridTable.types';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CopyIcon } from '@shared/components/icons/LogIcons';
+import { useGridTableCsvExport } from '@shared/components/tables/hooks/useGridTableCsvExport';
 
 // Bundles all filter-bar wiring for GridTable: resolves filter state, builds
 // dropdown IDs and renderers, manages focus refs, and returns a ready-to-render
@@ -75,8 +75,6 @@ export function useGridTableFiltersWiring<T>({
 }: UseGridTableFiltersWiringOptions<T>) {
   const filtersContainerRef = useRef<HTMLDivElement | null>(null);
   const filterFocusIndexRef = useRef<number | null>(null);
-  const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<'success' | 'error' | null>(null);
 
   const {
     filteringEnabled,
@@ -156,86 +154,15 @@ export function useGridTableFiltersWiring<T>({
   const showColumnsDropdown = Boolean(columnsDropdown);
   const resolvedPreActions = preActions ?? resolvedFilterOptions.preActions;
   const resolvedCustomActions = resolvedFilterOptions.customActions;
-  const displayedTableData = useMemo(
-    () =>
-      typeof maxDisplayRows === 'number' && maxDisplayRows > 0
-        ? tableData.slice(0, maxDisplayRows)
-        : tableData,
-    [maxDisplayRows, tableData]
-  );
-  const canCopyToClipboard =
-    typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function';
-  const csvText = useMemo(() => {
-    if (!exportColumns?.length || !getTextContent) {
-      return '';
-    }
-
-    const escapeCsvCell = (value: string): string => {
-      const normalized = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-      return /[",\n]/.test(normalized) ? `"${normalized.replace(/"/g, '""')}"` : normalized;
-    };
-
-    const headerRow = exportColumns.map((column) =>
-      escapeCsvCell(getTextContent(column.header).trim() || column.key)
-    );
-    const dataRows = displayedTableData.map((item) =>
-      exportColumns.map((column) => escapeCsvCell(getTextContent(column.render(item)).trim()))
-    );
-
-    return [headerRow, ...dataRows].map((row) => row.join(',')).join('\n');
-  }, [displayedTableData, exportColumns, getTextContent]);
-  const hasCopyableContent = displayedTableData.length > 0 && Boolean(exportColumns?.length);
-
-  const scheduleCopyReset = useCallback(() => {
-    if (copyResetTimerRef.current) {
-      clearTimeout(copyResetTimerRef.current);
-    }
-    copyResetTimerRef.current = setTimeout(() => {
-      setCopyFeedback(null);
-    }, 750);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (copyResetTimerRef.current) {
-        clearTimeout(copyResetTimerRef.current);
-      }
-    };
-  }, []);
-
-  const handleCopyCsv = useCallback(async () => {
-    if (!canCopyToClipboard || !csvText) {
-      setCopyFeedback('error');
-      scheduleCopyReset();
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(csvText);
-      setCopyFeedback('success');
-      scheduleCopyReset();
-    } catch (error) {
-      console.error('Failed to copy GridTable CSV', error);
-      setCopyFeedback('error');
-      scheduleCopyReset();
-    }
-  }, [canCopyToClipboard, csvText, scheduleCopyReset]);
+  const csvExportAction = useGridTableCsvExport({
+    data: tableData,
+    maxDisplayRows,
+    columns: exportColumns,
+    getTextContent,
+  });
 
   const resolvedPostActions = useMemo<IconBarItem[]>(() => {
-    const items: IconBarItem[] = [
-      {
-        type: 'action',
-        id: 'copy-gridtable-csv',
-        icon: <CopyIcon width={18} height={18} />,
-        onClick: () => {
-          void handleCopyCsv();
-        },
-        title: 'Copy table as CSV',
-        ariaLabel: 'Copy table as CSV',
-        disabled: !canCopyToClipboard || !hasCopyableContent,
-        feedback: copyFeedback,
-      },
-    ];
+    const items: IconBarItem[] = [csvExportAction];
 
     if (resolvedFilterOptions.postActions?.length) {
       items.push(...resolvedFilterOptions.postActions);
@@ -245,14 +172,7 @@ export function useGridTableFiltersWiring<T>({
     }
 
     return items;
-  }, [
-    canCopyToClipboard,
-    copyFeedback,
-    handleCopyCsv,
-    hasCopyableContent,
-    postActions,
-    resolvedFilterOptions.postActions,
-  ]);
+  }, [csvExportAction, postActions, resolvedFilterOptions.postActions]);
 
   // Compute result count: displayed items vs total items.
   // If the consumer provides a totalCount override (e.g. server-side paginated total), use it.

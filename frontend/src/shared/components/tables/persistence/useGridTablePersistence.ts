@@ -30,6 +30,7 @@ import {
   type GridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
 import { subscribeGridTableResetAll } from '@shared/components/tables/persistence/gridTablePersistenceReset';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 
 export interface UseGridTablePersistenceParams<T> {
   viewId: string;
@@ -80,13 +81,7 @@ export function useGridTablePersistence<T>({
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean> | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, ColumnWidthState> | null>(null);
-  const [filters, setFilters] = useState<GridTableFilterState>({
-    search: '',
-    kinds: [],
-    namespaces: [],
-    caseSensitive: false,
-    includeMetadata: false,
-  });
+  const [filters, setFilters] = useState<GridTableFilterState>(DEFAULT_GRID_TABLE_FILTER_STATE);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavePayloadRef = useRef<string>('');
@@ -135,13 +130,7 @@ export function useGridTablePersistence<T>({
     setSortConfig(null);
     setColumnVisibility(null);
     setColumnWidths(null);
-    setFilters({
-      search: '',
-      kinds: [],
-      namespaces: [],
-      caseSensitive: false,
-      includeMetadata: false,
-    });
+    setFilters(DEFAULT_GRID_TABLE_FILTER_STATE);
   }, [storageKey]);
 
   useEffect(() => {
@@ -199,13 +188,7 @@ export function useGridTablePersistence<T>({
     setSortConfig(null);
     setColumnVisibility({});
     setColumnWidths({});
-    setFilters({
-      search: '',
-      kinds: [],
-      namespaces: [],
-      caseSensitive: false,
-      includeMetadata: false,
-    });
+    setFilters(DEFAULT_GRID_TABLE_FILTER_STATE);
   }, [storageKey]);
 
   useEffect(() => {

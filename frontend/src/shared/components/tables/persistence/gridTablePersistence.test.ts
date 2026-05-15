@@ -138,4 +138,78 @@ describe('gridTablePersistence', () => {
       },
     });
   });
+
+  it('persists non-default filter toggles even when no text filter is active', () => {
+    const state = buildPersistedStateForSave({
+      columns: sampleColumns,
+      rows: sampleRows,
+      keyExtractor: (row) => row.id,
+      filters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: true,
+      },
+      filterOptions: { isNamespaceScoped: false },
+    });
+
+    expect(state).toEqual({
+      version: 1,
+      filters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: true,
+      },
+    });
+  });
+
+  it('preserves the cluster-scoped namespace filter sentinel when saving shared views', () => {
+    const state = buildPersistedStateForSave({
+      columns: sampleColumns,
+      rows: sampleRows,
+      keyExtractor: (row) => row.id,
+      filters: {
+        search: '',
+        kinds: [],
+        namespaces: [''],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      filterOptions: { isNamespaceScoped: false },
+    });
+
+    expect(state?.filters?.namespaces).toEqual(['']);
+  });
+
+  it('preserves persisted non-default toggles and cluster-scoped namespace filters', () => {
+    const pruned = prunePersistedState(
+      {
+        version: 1,
+        filters: {
+          search: '',
+          kinds: [],
+          namespaces: [''],
+          caseSensitive: false,
+          includeMetadata: true,
+        },
+      },
+      {
+        columns: sampleColumns,
+        rows: sampleRows,
+        keyExtractor: (row) => row.id,
+        filterOptions: { isNamespaceScoped: false },
+      }
+    );
+
+    expect(pruned?.filters).toEqual({
+      search: '',
+      kinds: [],
+      namespaces: [''],
+      caseSensitive: false,
+      includeMetadata: true,
+    });
+  });
 });

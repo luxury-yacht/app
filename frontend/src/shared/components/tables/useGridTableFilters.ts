@@ -14,60 +14,11 @@ import type {
   InternalFilterOptions,
 } from '@shared/components/tables/GridTable.types';
 import { recordGridTablePerformanceSample } from '@shared/components/tables/performance/gridTablePerformanceStore';
-
-const DEFAULT_FILTER_STATE: GridTableFilterState = {
-  search: '',
-  kinds: [],
-  namespaces: [],
-  caseSensitive: false,
-  includeMetadata: false,
-};
-
-const normalizeFilterArray = (values?: string[]): string[] => {
-  if (!values || values.length === 0) {
-    return [];
-  }
-  const seen = new Set<string>();
-  const emptyKey = '__empty__';
-  const result: string[] = [];
-  for (const raw of values) {
-    if (typeof raw !== 'string') {
-      continue;
-    }
-    const trimmed = raw.trim();
-    const normalized = trimmed !== '' ? trimmed : '';
-    if (normalized === '') {
-      if (!seen.has(emptyKey)) {
-        seen.add(emptyKey);
-        result.push('');
-      }
-      continue;
-    }
-    const lowered = normalized.toLowerCase();
-    if (!seen.has(lowered)) {
-      seen.add(lowered);
-      result.push(trimmed);
-    }
-  }
-  return result;
-};
-
-const normalizeFilterState = (state?: Partial<GridTableFilterState>): GridTableFilterState => ({
-  search: state?.search?.trim() ?? '',
-  kinds: normalizeFilterArray(state?.kinds),
-  namespaces: normalizeFilterArray(state?.namespaces),
-  caseSensitive: state?.caseSensitive ?? false,
-  includeMetadata: state?.includeMetadata ?? false,
-});
-
-const areFilterStatesEqual = (a: GridTableFilterState, b: GridTableFilterState): boolean =>
-  a.search === b.search &&
-  a.caseSensitive === b.caseSensitive &&
-  a.includeMetadata === b.includeMetadata &&
-  a.kinds.length === b.kinds.length &&
-  a.namespaces.length === b.namespaces.length &&
-  a.kinds.every((value, index) => value === b.kinds[index]) &&
-  a.namespaces.every((value, index) => value === b.namespaces[index]);
+import {
+  areGridTableFilterStatesEqual,
+  DEFAULT_GRID_TABLE_FILTER_STATE,
+  normalizeGridTableFilterState,
+} from '@shared/components/tables/gridTableFilterState';
 
 export interface UseGridTableFiltersParams<T> {
   data: T[];
@@ -106,13 +57,13 @@ export function useGridTableFilters<T>({
   const isControlled = filteringEnabled && filters?.value !== undefined;
 
   const [internalFilters, setInternalFilters] = useState<GridTableFilterState>(() =>
-    normalizeFilterState(filters?.initial)
+    normalizeGridTableFilterState(filters?.initial)
   );
 
   // Track the last-applied initial filter signature so that a new object
   // reference with identical content doesn't reset user-typed search text.
   const lastAppliedInitialRef = useRef<string>(
-    filters?.initial ? JSON.stringify(normalizeFilterState(filters.initial)) : ''
+    filters?.initial ? JSON.stringify(normalizeGridTableFilterState(filters.initial)) : ''
   );
   const filterOptionsDurationRef = useRef<number | null>(null);
   const filterPassDurationRef = useRef<number | null>(null);
@@ -129,7 +80,7 @@ export function useGridTableFilters<T>({
     if (!filteringEnabled || isControlled || !filters?.initial) {
       return;
     }
-    const normalized = normalizeFilterState(filters.initial);
+    const normalized = normalizeGridTableFilterState(filters.initial);
     const signature = JSON.stringify(normalized);
     if (signature === lastAppliedInitialRef.current) {
       return;
@@ -141,9 +92,9 @@ export function useGridTableFilters<T>({
   const controlledValue = filters?.value;
   const activeFilters = useMemo(() => {
     if (!filteringEnabled) {
-      return DEFAULT_FILTER_STATE;
+      return DEFAULT_GRID_TABLE_FILTER_STATE;
     }
-    return normalizeFilterState(isControlled ? controlledValue! : internalFilters);
+    return normalizeGridTableFilterState(isControlled ? controlledValue! : internalFilters);
   }, [filteringEnabled, isControlled, controlledValue, internalFilters]);
 
   const filterSignature = useMemo(
@@ -163,7 +114,7 @@ export function useGridTableFilters<T>({
 
   // Toggle the case-sensitive flag through the shared filter state.
   const toggleCaseSensitive = useCallback(() => {
-    const next = normalizeFilterState({
+    const next = normalizeGridTableFilterState({
       ...activeFilters,
       caseSensitive: !activeFilters.caseSensitive,
     });
@@ -404,11 +355,11 @@ export function useGridTableFilters<T>({
       if (!filteringEnabled) {
         return;
       }
-      const nextState = normalizeFilterState({
+      const nextState = normalizeGridTableFilterState({
         ...activeFilters,
         ...changes,
       });
-      if (areFilterStatesEqual(nextState, activeFilters)) {
+      if (areGridTableFilterStatesEqual(nextState, activeFilters)) {
         return;
       }
       setFiltersState(nextState);
@@ -441,7 +392,7 @@ export function useGridTableFilters<T>({
     if (!filteringEnabled) {
       return;
     }
-    setFiltersState(DEFAULT_FILTER_STATE);
+    setFiltersState(DEFAULT_GRID_TABLE_FILTER_STATE);
     filters?.onReset?.();
   }, [filteringEnabled, setFiltersState, filters]);
 
