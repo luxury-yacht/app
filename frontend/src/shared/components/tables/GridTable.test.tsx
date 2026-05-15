@@ -1786,6 +1786,73 @@ it('does not hide locked columns through visibility menu', async () => {
   cleanup();
 });
 
+it('shows sort and hide actions in the sortable header context menu', async () => {
+  const onSort = vi.fn();
+  const onColumnVisibilityChange = vi.fn();
+  const columns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label, sortable: true },
+    { key: 'id', header: 'ID', render: (row) => row.id, sortable: true },
+  ];
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns,
+    virtualization: { enabled: false },
+    enableColumnVisibilityMenu: true,
+    onSort,
+    onColumnVisibilityChange,
+  });
+  cleanupRoot = cleanup;
+
+  await flushAsync();
+
+  const labelHeader = container.querySelector<HTMLDivElement>(
+    '.grid-cell-header[data-column="label"]'
+  );
+  expect(labelHeader).not.toBeNull();
+
+  await act(async () => {
+    labelHeader!.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 })
+    );
+    await Promise.resolve();
+  });
+  await flushAsync();
+
+  const menuItems = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+  const getMenuLabel = (item: HTMLElement) =>
+    item.querySelector('.context-menu-label')?.textContent?.trim();
+  expect(menuItems.map(getMenuLabel)).toEqual([
+    'Sort Ascending',
+    'Sort Descending',
+    'Clear Sort',
+    'Hide Column',
+  ]);
+
+  await act(async () => {
+    menuItems.find((item) => getMenuLabel(item) === 'Sort Descending')?.click();
+  });
+  expect(onSort).toHaveBeenCalledWith('label', 'desc');
+
+  await act(async () => {
+    labelHeader!.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 })
+    );
+    await Promise.resolve();
+  });
+  await flushAsync();
+
+  const reopenedItems = Array.from(
+    document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
+  );
+  await act(async () => {
+    reopenedItems.find((item) => getMenuLabel(item) === 'Hide Column')?.click();
+  });
+  expect(onColumnVisibilityChange).toHaveBeenCalledWith({ label: false });
+
+  cleanup();
+});
+
 it('filters rows using the kind dropdown initial state', () => {
   const rows: SimpleRow[] = [
     { id: 'a1', label: 'Alpha' },

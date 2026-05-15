@@ -11,7 +11,6 @@ import type { ComponentProps, ReactNode } from 'react';
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { useGridTableFilters } from '@shared/components/tables/useGridTableFilters';
-import { useGridTableFilterHandlers } from '@shared/components/tables/hooks/useGridTableFilterHandlers';
 import {
   defaultGetKind,
   defaultGetNamespace,
@@ -102,10 +101,23 @@ export function useGridTableFiltersWiring<T>({
     }
   }, [filteringEnabled]);
 
-  const { handleKindDropdownChange, handleNamespaceDropdownChange } = useGridTableFilterHandlers({
-    handleFilterKindsChange,
-    handleFilterNamespacesChange,
-  });
+  const normalizeDropdownValue = useCallback((value: string | string[]) => {
+    return Array.isArray(value) ? value : value ? [value] : [];
+  }, []);
+
+  const handleKindDropdownChange = useCallback(
+    (value: string | string[]) => {
+      handleFilterKindsChange(normalizeDropdownValue(value));
+    },
+    [handleFilterKindsChange, normalizeDropdownValue]
+  );
+
+  const handleNamespaceDropdownChange = useCallback(
+    (value: string | string[]) => {
+      handleFilterNamespacesChange(normalizeDropdownValue(value));
+    },
+    [handleFilterNamespacesChange, normalizeDropdownValue]
+  );
 
   const searchInputId = useId();
   const kindDropdownId = useId();
@@ -257,7 +269,7 @@ export function useGridTableFiltersWiring<T>({
     ]
   );
 
-  const filtersNode = filteringEnabled ? renderGridTableFiltersBar(filtersBarProps) : null;
+  const filtersNode = filteringEnabled ? <GridTableFiltersBar {...filtersBarProps} /> : null;
 
   return {
     filteringEnabled,
@@ -273,11 +285,4 @@ export function useGridTableFiltersWiring<T>({
     filtersNode,
     handleFilterReset,
   };
-}
-
-// Convenience helper so callers can render the filter bar without importing the
-// component directly. Keeping this here ensures the render path always uses the
-// same props shape produced by the wiring hook.
-function renderGridTableFiltersBar(props: ComponentProps<typeof GridTableFiltersBar>) {
-  return <GridTableFiltersBar {...props} />;
 }

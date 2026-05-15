@@ -43,85 +43,74 @@ export function buildGridTableFilterOptions<T>({
   defaultGetKind,
   defaultGetNamespace,
 }: BuildGridTableFilterOptionsParams<T>): InternalFilterOptions {
-  const searchBehavior = options?.searchBehavior ?? 'local';
-  const searchPlaceholder = options?.searchPlaceholder;
-  const kindDropdownSearchable = options?.kindDropdownSearchable ?? false;
-  const kindDropdownBulkActions = options?.kindDropdownBulkActions ?? false;
-  const namespaceDropdownSearchable = options?.namespaceDropdownSearchable ?? false;
-  const namespaceDropdownBulkActions = options?.namespaceDropdownBulkActions ?? false;
-  const preActions = options?.preActions;
-  const postActions = options?.postActions;
-  const customActions = options?.customActions;
+  const baseOptions = {
+    searchBehavior: options?.searchBehavior ?? 'local',
+    searchPlaceholder: options?.searchPlaceholder,
+    kindDropdownSearchable: options?.kindDropdownSearchable ?? false,
+    kindDropdownBulkActions: options?.kindDropdownBulkActions ?? false,
+    namespaceDropdownSearchable: options?.namespaceDropdownSearchable ?? false,
+    namespaceDropdownBulkActions: options?.namespaceDropdownBulkActions ?? false,
+    preActions: options?.preActions,
+    postActions: options?.postActions,
+    customActions: options?.customActions,
+  };
 
   if (!filteringEnabled) {
     return {
-      searchBehavior,
-      searchPlaceholder,
-      kindDropdownSearchable,
-      kindDropdownBulkActions,
-      namespaceDropdownSearchable,
-      namespaceDropdownBulkActions,
+      ...baseOptions,
       kinds: [],
       namespaces: [],
-      preActions,
-      postActions,
-      customActions,
     };
   }
 
-  const kindMap = new Map<string, DropdownOption>();
-  const namespaceMap = new Map<string, DropdownOption>();
   const includeClusterScoped = options?.includeClusterScopedSyntheticNamespace ?? false;
   const clusterScopedOption = includeClusterScoped
     ? ({ value: '', label: 'cluster-scoped' } satisfies DropdownOption)
     : null;
 
-  const addKind = (raw: string | null | undefined) => {
+  const addOption = (
+    map: Map<string, DropdownOption>,
+    raw: string | null | undefined,
+    normalize: (value: string) => string
+  ) => {
     if (typeof raw !== 'string') {
       return;
     }
-    const trimmed = raw.trim();
-    if (!trimmed) {
+    const value = normalize(raw.trim());
+    if (!value) {
       return;
     }
-    const lower = trimmed.toLowerCase();
-    if (!kindMap.has(lower)) {
-      kindMap.set(lower, { value: trimmed, label: trimmed });
+    const key = value.toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, { value, label: value });
     }
   };
 
-  const addNamespace = (raw: string | null | undefined) => {
-    const value = typeof raw === 'string' ? raw.trim() : '';
-    if (!value || value === '—') {
-      return;
+  const collectOptions = (
+    provided: string[] | undefined,
+    getValue: (row: T) => string | null | undefined,
+    normalize: (value: string) => string
+  ) => {
+    const map = new Map<string, DropdownOption>();
+    if (provided?.length) {
+      provided.forEach((value) => addOption(map, value, normalize));
+    } else {
+      for (const row of data) {
+        addOption(map, getValue(row), normalize);
+      }
     }
-    const lower = value.toLowerCase();
-    if (!namespaceMap.has(lower)) {
-      namespaceMap.set(lower, { value, label: value });
-    }
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
   };
 
-  const providedKinds = options?.kinds;
-  if (providedKinds && providedKinds.length > 0) {
-    providedKinds.forEach((value) => addKind(value));
-  } else {
-    for (const row of data) {
-      addKind(accessors.getKind?.(row) ?? defaultGetKind(row));
-    }
-  }
-
-  const providedNamespaces = options?.namespaces;
-  if (providedNamespaces && providedNamespaces.length > 0) {
-    providedNamespaces.forEach((value) => addNamespace(value));
-  } else {
-    for (const row of data) {
-      addNamespace(accessors.getNamespace?.(row) ?? defaultGetNamespace(row));
-    }
-  }
-
-  const kinds = Array.from(kindMap.values()).sort((a, b) => a.label.localeCompare(b.label));
-  const namespaces = Array.from(namespaceMap.values()).sort((a, b) =>
-    a.label.localeCompare(b.label)
+  const kinds = collectOptions(
+    options?.kinds,
+    (row) => accessors.getKind?.(row) ?? defaultGetKind(row),
+    (value) => value
+  );
+  const namespaces = collectOptions(
+    options?.namespaces,
+    (row) => accessors.getNamespace?.(row) ?? defaultGetNamespace(row),
+    (value) => (value === '—' ? '' : value)
   );
   const namespaceSeparator =
     clusterScopedOption && namespaces.length > 0
@@ -141,17 +130,9 @@ export function buildGridTableFilterOptions<T>({
   namespaceOptions.push(...namespaces);
 
   return {
-    searchBehavior,
-    searchPlaceholder,
-    kindDropdownSearchable,
-    kindDropdownBulkActions,
-    namespaceDropdownSearchable,
-    namespaceDropdownBulkActions,
+    ...baseOptions,
     kinds,
     namespaces: namespaceOptions,
-    preActions,
-    postActions,
-    customActions,
   };
 }
 

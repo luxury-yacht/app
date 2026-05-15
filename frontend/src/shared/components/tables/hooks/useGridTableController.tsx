@@ -9,10 +9,16 @@
  * Extracted from GridTable.tsx — no behavioral change, purely mechanical.
  */
 
-import { useEffect, useMemo, useRef } from 'react';
-import type { ReactElement, ReactNode, RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { MutableRefObject, ReactElement, ReactNode, RefObject } from 'react';
+import { eventBus } from '@/core/events';
+import { getMaxTableRows } from '@/core/settings/appPreferences';
+import ContextMenu from '@shared/components/ContextMenu';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { SortAscIcon, SortDescIcon } from '@shared/components/icons/SharedIcons';
 import {
   recordGridTablePerformanceSample,
+  recordGridTablePerformanceSnapshot,
   recordGridTableScrollFrameSample,
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import type { HoverState } from '@shared/components/tables/hooks/useGridTableHoverSync';
@@ -24,19 +30,17 @@ import { useColumnVisibilityController } from '@shared/components/tables/hooks/u
 import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
 import { useGridTableCellCache } from '@shared/components/tables/hooks/useGridTableCellCache';
 import { useGridTablePagination } from '@shared/components/tables/hooks/useGridTablePagination';
+import { useGridTableHeaderSyncEffects } from '@shared/components/tables/hooks/useGridTableHeaderSyncEffects';
 import { useGridTableExternalWidths } from '@shared/components/tables/hooks/useGridTableExternalWidths';
 import { useGridTableFiltersWiring } from '@shared/components/tables/hooks/useGridTableFiltersWiring';
 import { useGridTableColumnsDropdown } from '@shared/components/tables/hooks/useGridTableColumnsDropdown';
-import { useGridTableHeaderActions } from '@shared/components/tables/hooks/useGridTableHeaderActions';
+import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
+import { useGridTableKeyboardNavigation } from '@shared/components/tables/hooks/useGridTableKeyboardNavigation';
 import { useGridTableColumnLayout } from '@shared/components/tables/hooks/useGridTableColumnLayout';
 import { useGridTableInteractionWiring } from '@shared/components/tables/hooks/useGridTableInteractionWiring';
-import {
-  useGridTableDataPipeline,
-  useGridTableSourceData,
-} from '@shared/components/tables/hooks/useGridTableDataPipeline';
-import { useGridTableClusterKeyWarning } from '@shared/components/tables/hooks/useGridTableClusterKeyWarning';
-import { useGridTableKeyboardAndHeaderSync } from '@shared/components/tables/hooks/useGridTableKeyboardAndHeaderSync';
+import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
 import type { GridTableProps } from '@shared/components/tables/GridTable.types';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import {
   getTextContent,
   isFixedColumnKey,
@@ -109,6 +113,164 @@ export interface GridTableControllerResult<T> {
   wrapWithProfiler: (node: ReactElement) => ReactElement;
 }
 
+type SortDirection = 'asc' | 'desc' | null;
+type SortConfig = { key: string; direction: SortDirection };
+type OnSort = (key: string, targetDirection?: SortDirection) => void;
+type ApplyVisibilityChanges = (mutator: (next: Record<string, boolean>) => boolean) => void;
+
+function useHeaderActions<T>({
+  columns,
+  lockedColumns,
+  sortConfig,
+  onSort,
+  applyVisibilityChanges,
+  contextMenuActiveRef,
+}: {
+  columns: GridColumnDefinition<T>[];
+  lockedColumns: Set<string>;
+  sortConfig?: SortConfig | null;
+  onSort?: OnSort;
+  applyVisibilityChanges: ApplyVisibilityChanges;
+  contextMenuActiveRef: MutableRefObject<boolean>;
+}) {
+  const [headerContextMenuPosition, setHeaderContextMenuPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [headerContextMenuColumnKey, setHeaderContextMenuColumnKey] = useState<string | null>(null);
+
+  const renderSortIndicator = useCallback(
+    (columnKey: string) => {
+      if (!sortConfig || sortConfig.key !== columnKey) {
+        return null;
+      }
+      return (
+        <span className="sort-indicator">
+          {sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : ''}
+        </span>
+      );
+    },
+    [sortConfig]
+  );
+
+  const handleHeaderClick = useCallback(
+    (column: GridColumnDefinition<T>) => {
+      if (column.sortable && onSort) {
+        onSort(column.key);
+      }
+    },
+    [onSort]
+  );
+
+  const handleHeaderContextMenu = useCallback(
+    (event: React.MouseEvent, columnKey: string) => {
+      event.preventDefault();
+      contextMenuActiveRef.current = true;
+      setHeaderContextMenuPosition({ x: event.clientX, y: event.clientY });
+      setHeaderContextMenuColumnKey(columnKey);
+    },
+    [contextMenuActiveRef]
+  );
+
+  const headerContextMenuItems: ContextMenuItem[] = useMemo(() => {
+    if (!headerContextMenuColumnKey) {
+      return [];
+    }
+
+    const column = columns.find((candidate) => candidate.key === headerContextMenuColumnKey);
+    if (!column) {
+      return [];
+    }
+
+    const isSortable = Boolean(column.sortable);
+    const isHideable = !lockedColumns.has(column.key);
+
+    if (!isSortable && !isHideable) {
+      return [{ label: 'No Actions', disabled: true }];
+    }
+
+    const isCurrentlySorted = sortConfig?.key === column.key;
+    const currentDirection = isCurrentlySorted ? (sortConfig?.direction ?? null) : null;
+    const items: ContextMenuItem[] = [];
+
+    if (isSortable) {
+      items.push(
+        {
+          label: 'Sort Ascending',
+          icon: <SortAscIcon />,
+          onClick: () => onSort?.(column.key, 'asc'),
+          disabled: currentDirection === 'asc',
+        },
+        {
+          label: 'Sort Descending',
+          icon: <SortDescIcon />,
+          onClick: () => onSort?.(column.key, 'desc'),
+          disabled: currentDirection === 'desc',
+        },
+        {
+          label: 'Clear Sort',
+          icon: '×',
+          onClick: () => onSort?.(column.key, null),
+          disabled: !isCurrentlySorted,
+        }
+      );
+    }
+
+    if (isSortable && isHideable) {
+      items.push({ divider: true });
+    }
+
+    if (isHideable) {
+      items.push({
+        label: 'Hide Column',
+        onClick: () =>
+          applyVisibilityChanges((next) => {
+            next[column.key] = false;
+            return true;
+          }),
+      });
+    }
+
+    return items;
+  }, [
+    applyVisibilityChanges,
+    columns,
+    headerContextMenuColumnKey,
+    lockedColumns,
+    onSort,
+    sortConfig,
+  ]);
+
+  const headerContextMenuNode = useMemo(() => {
+    if (!headerContextMenuPosition || !headerContextMenuColumnKey) {
+      return null;
+    }
+    return (
+      <ContextMenu
+        items={headerContextMenuItems}
+        position={headerContextMenuPosition}
+        onClose={() => {
+          contextMenuActiveRef.current = false;
+          setHeaderContextMenuPosition(null);
+          setHeaderContextMenuColumnKey(null);
+        }}
+      />
+    );
+  }, [
+    contextMenuActiveRef,
+    headerContextMenuColumnKey,
+    headerContextMenuItems,
+    headerContextMenuPosition,
+  ]);
+
+  return {
+    renderSortIndicator,
+    handleHeaderClick,
+    handleHeaderContextMenu,
+    headerContextMenuNode,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // The hook
 // ---------------------------------------------------------------------------
@@ -148,13 +310,27 @@ export function useGridTableController<T>({
   allowHorizontalOverflow = true,
   isKindColumnKey = defaultIsKindColumnKey,
 }: GridTableProps<T>): GridTableControllerResult<T> {
-  const { maxTableRows, sourceData, totalDataCount } = useGridTableSourceData(inputData);
+  const [maxTableRows, setMaxTableRows] = useState<number>(() => getMaxTableRows());
+  const totalDataCount = Array.isArray(inputData) ? inputData.length : 0;
+  const sourceData = useMemo<T[]>(
+    () => (Array.isArray(inputData) ? inputData : ([] as T[])),
+    [inputData]
+  );
   const wrapperRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
   const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
   const headerInnerRef = useRef<HTMLDivElement | null>(null);
+  const previousInputDataRef = useRef(inputData);
   const paginationEnabled = Boolean(onRequestMore);
   const contextMenuActiveRef = useRef(false);
+  const clusterKeyCheckRef = useRef(false);
+  const keyExtractorRef = useRef(keyExtractor);
+
+  useEffect(() => {
+    return eventBus.on('settings:max-table-rows', (value) => {
+      setMaxTableRows(value);
+    });
+  }, []);
 
   const externalColumnWidths = useGridTableExternalWidths(controlledColumnWidths);
 
@@ -215,14 +391,34 @@ export function useGridTableController<T>({
     getTextContent,
   });
 
-  const { tableData } = useGridTableDataPipeline<T>({
-    inputData,
-    filteredData,
-    maxTableRows,
-    totalDataCount,
+  const tableData = useMemo<T[]>(
+    () => filteredData.slice(0, maxTableRows),
+    [filteredData, maxTableRows]
+  );
+
+  useEffect(() => {
+    if (!diagnosticsLabel) {
+      previousInputDataRef.current = inputData;
+      return;
+    }
+
+    const inputReferenceChanged = previousInputDataRef.current !== inputData;
+    recordGridTablePerformanceSnapshot(diagnosticsLabel, {
+      mode: diagnosticsMode,
+      inputRows: totalDataCount,
+      sourceRows: Math.min(totalDataCount, maxTableRows),
+      displayedRows: tableData.length,
+      inputReferenceChanged,
+    });
+    previousInputDataRef.current = inputData;
+  }, [
     diagnosticsLabel,
     diagnosticsMode,
-  });
+    inputData,
+    maxTableRows,
+    tableData.length,
+    totalDataCount,
+  ]);
 
   // Whether any filter is actively narrowing results (search text, kind, or namespace selections).
   const hasActiveFilters = filteringEnabled && hasNarrowingGridTableFilters(activeFilters);
@@ -337,7 +533,21 @@ export function useGridTableController<T>({
     markVisibleAutoColumnsDirty();
   }, [markVisibleAutoColumnsDirty, virtualRange.end, virtualRange.start]);
 
-  useGridTableKeyboardAndHeaderSync({
+  const { getPageSizeRef, moveSelectionByDelta, jumpToIndex } = useGridTableKeyboardNavigation({
+    tableDataLength: tableData.length,
+    focusedRowIndex,
+    focusedRowKey,
+    shortcutsActive,
+    focusByIndex,
+    lastNavigationMethodRef,
+    wrapperRef,
+    updateHoverForElement,
+    shouldVirtualize,
+    virtualRowHeight,
+    getRowTop,
+  });
+
+  useGridTableKeyboardScopes({
     filteringEnabled,
     showKindDropdown,
     showNamespaceDropdown,
@@ -345,30 +555,51 @@ export function useGridTableController<T>({
     filterFocusIndexRef,
     wrapperRef,
     tableDataLength: tableData.length,
-    focusedRowIndex,
     focusedRowKey,
     suppressFocusedRowHighlight,
-    shortcutsActive,
-    focusByIndex,
-    lastNavigationMethodRef,
-    updateHoverForElement,
-    shouldVirtualize,
-    virtualRowHeight,
-    getRowTop,
-    enableContextMenu,
-    activateFocusedRow,
-    openFocusedRowContextMenu,
-    isContextMenuVisible,
-    hideHeader,
-    scheduleHeaderSync,
-    hoverRowRef,
-    updateColumnWindowRange,
+    jumpToIndex,
   });
 
-  useGridTableClusterKeyWarning({ tableData, keyExtractor, warnDevOnce });
+  useGridTableShortcuts({
+    shortcutsActive,
+    enableContextMenu,
+    onOpenFocusedRow: activateFocusedRow,
+    onOpenContextMenu: openFocusedRowContextMenu,
+    moveSelectionByDelta,
+    jumpToIndex,
+    getPageSizeRef,
+    tableDataLength: tableData.length,
+    isContextMenuVisible,
+  });
+
+  useGridTableHeaderSyncEffects({
+    hideHeader,
+    wrapperRef,
+    scheduleHeaderSync,
+    updateHoverForElement,
+    hoverRowRef,
+    updateColumnWindowRange,
+    virtualizationHandlesScroll: shouldVirtualize,
+  });
+
+  if (keyExtractorRef.current !== keyExtractor) {
+    keyExtractorRef.current = keyExtractor;
+    clusterKeyCheckRef.current = false;
+  }
+  if (import.meta.env.DEV && !clusterKeyCheckRef.current && tableData.length > 0) {
+    clusterKeyCheckRef.current = true;
+    const sampleKey = keyExtractor(tableData[0], 0);
+    if (!sampleKey.includes('|')) {
+      warnDevOnce(
+        `GridTable: keyExtractor returned "${sampleKey}" which does not appear ` +
+          `cluster-scoped (missing "|" separator). Use buildClusterScopedKey() ` +
+          `to prevent key collisions in multi-cluster views.`
+      );
+    }
+  }
 
   const { renderSortIndicator, handleHeaderClick, handleHeaderContextMenu, headerContextMenuNode } =
-    useGridTableHeaderActions<T>({
+    useHeaderActions<T>({
       columns,
       lockedColumns,
       sortConfig,
