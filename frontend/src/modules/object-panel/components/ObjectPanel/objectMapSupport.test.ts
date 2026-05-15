@@ -29,4 +29,30 @@ describe('objectMapSupport', () => {
       })
     ).toBe(true);
   });
+
+  it('supports Gateway API resources as object-map seeds', () => {
+    for (const kind of [
+      'GatewayClass',
+      'Gateway',
+      'HTTPRoute',
+      'GRPCRoute',
+      'TLSRoute',
+      'ListenerSet',
+      'ReferenceGrant',
+      'BackendTLSPolicy',
+    ]) {
+      expect(isObjectMapSupportedKind(kind)).toBe(true);
+    }
+
+    expect(
+      hasCompleteObjectMapReference({
+        clusterId: 'cluster-a',
+        group: 'gateway.networking.k8s.io',
+        version: 'v1',
+        kind: 'HTTPRoute',
+        namespace: 'default',
+        name: 'web',
+      })
+    ).toBe(true);
+  });
 });

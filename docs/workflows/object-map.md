@@ -111,6 +111,14 @@ that provide richer relationship data:
 - NetworkPolicies
 - Ingresses
 - IngressClasses
+- GatewayClasses
+- Gateways
+- HTTPRoutes
+- GRPCRoutes
+- TLSRoutes
+- ListenerSets
+- ReferenceGrants
+- BackendTLSPolicies
 - ClusterRoles
 - ClusterRoleBindings
 
@@ -129,7 +137,7 @@ edge styling.
 | `owner`          | owns          | Ownership      | Any depth         |
 | `selector`       | selects       | Selector       | Any depth         |
 | `endpoint`       | has endpoints | Endpoint       | Any depth         |
-| `routes`         | routes to     | Ingress Route  | Any depth         |
+| `routes`         | routes to     | Traffic Route  | Any depth         |
 | `scales`         | scales        | Scaling        | Any depth         |
 | `schedules`      | scheduled on  | Scheduled On   | Seed only         |
 | `grants`         | grants        | Grants         | Any depth         |
@@ -195,6 +203,14 @@ Supported kinds:
 - NetworkPolicy
 - Ingress
 - IngressClass
+- GatewayClass
+- Gateway
+- HTTPRoute
+- GRPCRoute
+- TLSRoute
+- ListenerSet
+- ReferenceGrant
+- BackendTLSPolicy
 
 The allowlist lives in
 `frontend/src/modules/object-panel/components/ObjectPanel/objectMapSupport.ts`.

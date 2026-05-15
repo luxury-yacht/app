@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -52,6 +53,7 @@ type Config struct {
 	ResyncInterval             time.Duration                            // Interval for resyncing informers.
 	MetricsInterval            time.Duration                            // Interval for collecting metrics.
 	APIExtensionsClient        apiextensionsclientset.Interface         // Client for API extensions.
+	GatewayClient              gatewayversioned.Interface               // Gateway API client for direct Gateway API resource access.
 	GatewayInformerFactory     gatewayinformers.SharedInformerFactory   // Informers for Gateway API resources.
 	GatewayAPIPresence         common.GatewayAPIPresence                // Installed Gateway API kind set.
 	DynamicClient              dynamic.Interface                        // Dynamic client for interacting with Kubernetes resources.

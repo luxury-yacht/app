@@ -158,6 +158,7 @@ func (a *App) buildRefreshSubsystemForSelection(
 		ResyncInterval:             config.RefreshResyncInterval,
 		MetricsInterval:            a.resolveMetricsInterval(),
 		APIExtensionsClient:        clients.apiextensionsClient,
+		GatewayClient:              clients.gatewayClient,
 		GatewayInformerFactory:     clients.gatewayInformerFactory,
 		GatewayAPIPresence:         clients.gatewayAPIPresence,
 		DynamicClient:              clients.dynamicClient,

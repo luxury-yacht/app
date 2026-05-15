@@ -24,6 +24,14 @@ const MAP_SUPPORTED_KINDS = new Set([
   'networkpolicy',
   'ingress',
   'ingressclass',
+  'gatewayclass',
+  'gateway',
+  'httproute',
+  'grpcroute',
+  'tlsroute',
+  'listenerset',
+  'referencegrant',
+  'backendtlspolicy',
 ]);
 
 const hasText = (value: string | null | undefined): boolean => Boolean(value?.trim());
