@@ -20,22 +20,16 @@ import {
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import type { HoverState } from '@shared/components/tables/hooks/useGridTableHoverSync';
-import { useGridTableColumnVirtualization } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
 import { useGridTableVirtualization } from '@shared/components/tables/hooks/useGridTableVirtualization';
 import { useGridTableRowRenderer } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import { useGridTableHeaderRow } from '@shared/components/tables/hooks/useGridTableHeaderRow';
-import { useColumnResizeController } from '@shared/components/tables/hooks/useColumnResizeController';
-import { useContainerWidthObserver } from '@shared/components/tables/hooks/useContainerWidthObserver';
 import { useColumnVisibilityController } from '@shared/components/tables/hooks/useColumnVisibilityController';
 import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
-import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useGridTableColumnMeasurer';
 import { useGridTableCellCache } from '@shared/components/tables/hooks/useGridTableCellCache';
-import { useGridTableColumnWidths } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 import { useGridTablePagination } from '@shared/components/tables/hooks/useGridTablePagination';
 import { useGridTableHoverFallback } from '@shared/components/tables/hooks/useGridTableHoverFallback';
 import { useGridTableHeaderSyncEffects } from '@shared/components/tables/hooks/useGridTableHeaderSyncEffects';
-import { useGridTableAutoGrow } from '@shared/components/tables/hooks/useGridTableAutoGrow';
 import { useGridTableExternalWidths } from '@shared/components/tables/hooks/useGridTableExternalWidths';
 import { useGridTableFiltersWiring } from '@shared/components/tables/hooks/useGridTableFiltersWiring';
 import { useGridTableColumnsDropdown } from '@shared/components/tables/hooks/useGridTableColumnsDropdown';
@@ -45,19 +39,14 @@ import { useGridTableExternalFocus } from '@shared/components/tables/hooks/useGr
 import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
 import { useGridTableHeaderActions } from '@shared/components/tables/hooks/useGridTableHeaderActions';
 import { useGridTableKeyboardNavigation } from '@shared/components/tables/hooks/useGridTableKeyboardNavigation';
+import { useGridTableColumnLayout } from '@shared/components/tables/hooks/useGridTableColumnLayout';
 import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
-import type {
-  GridColumnDefinition,
-  GridTableProps,
-} from '@shared/components/tables/GridTable.types';
+import type { GridTableProps } from '@shared/components/tables/GridTable.types';
 import {
-  DEFAULT_COLUMN_MIN_WIDTH,
-  DEFAULT_COLUMN_WIDTH,
   getTextContent,
   isFixedColumnKey,
   isKindColumnKey as defaultIsKindColumnKey,
   normalizeKindClass,
-  parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
 import { hasNarrowingGridTableFilters } from '@shared/components/tables/gridTableFilterState';
 
@@ -74,39 +63,8 @@ const GRIDTABLE_ROW_TABSTOP_SELECTOR = GRIDTABLE_INTERACTIVE_STOP_SELECTOR.split
   .map((selector) => `.gridtable-row ${selector.trim()}`)
   .join(', ');
 
-const getColumnMinWidth = <T,>(column: GridColumnDefinition<T>) => {
-  const parsed = parseWidthInputToNumber(column.minWidth);
-  if (parsed != null) {
-    return parsed;
-  }
-  return DEFAULT_COLUMN_MIN_WIDTH;
-};
-
-const getColumnMaxWidth = <T,>(column: GridColumnDefinition<T>) => {
-  const parsed = parseWidthInputToNumber(column.maxWidth);
-  if (parsed != null) {
-    return parsed;
-  }
-  return Number.POSITIVE_INFINITY;
-};
-
 // Stable default to avoid re-creating lock lists on every render.
 const DEFAULT_NON_HIDEABLE_COLUMNS: string[] = [];
-
-// Shallow compare width maps so we can skip no-op reconciliations.
-const areWidthMapsEqual = (a: Record<string, number>, b: Record<string, number>): boolean => {
-  const aKeys = Object.keys(a);
-  const bKeys = Object.keys(b);
-  if (aKeys.length !== bKeys.length) {
-    return false;
-  }
-  for (const key of aKeys) {
-    if (a[key] !== b[key]) {
-      return false;
-    }
-  }
-  return true;
-};
 
 // ---------------------------------------------------------------------------
 // Return type — every value the render section of GridTable consumes
@@ -221,7 +179,6 @@ export function useGridTableController<T>({
   const previousInputDataRef = useRef(inputData);
   const paginationEnabled = Boolean(onRequestMore);
   const contextMenuActiveRef = useRef(false);
-  const [tableViewportWidth, setTableViewportWidth] = useState(0);
 
   useEffect(() => {
     return eventBus.on('settings:max-table-rows', (value) => {
@@ -463,32 +420,22 @@ export function useGridTableController<T>({
     return true;
   }, [focusedRowIndex, onRowClick, tableData]);
 
-  const { measureColumnWidth } = useGridTableColumnMeasurer<T>({
-    tableRef: tableRefMutable,
-    tableData,
-    parseWidthInputToNumber,
-    defaultColumnWidth: DEFAULT_COLUMN_WIDTH,
-    isKindColumnKey,
-    getTextContent,
-    normalizeKindClass,
-    getColumnMinWidth,
-    getColumnMaxWidth,
-  });
-
   const {
     columnWidths,
-    setColumnWidths,
-    manuallyResizedColumnsRef,
-    reconcileWidthsToContainer,
-    updateNaturalWidth,
-    isInitialized: columnWidthsInitialized,
-    markColumnsDirty,
-    markAllAutoColumnsDirty,
-    handleManualResizeEvent,
-  } = useGridTableColumnWidths<T>({
+    columnVirtualizationConfig,
+    columnRenderModelsWithOffsets,
+    columnWindowRange,
+    updateColumnWindowRange,
+    tableContentWidth,
+    tableViewportWidth,
+    handleResizeStart,
+    autoSizeColumn,
+    markVisibleAutoColumnsDirty,
+  } = useGridTableColumnLayout<T>({
     columns,
     renderedColumns,
-    tableRef: tableRefMutable,
+    tableRef,
+    wrapperRef,
     tableData,
     initialColumnWidths,
     controlledColumnWidths,
@@ -496,29 +443,11 @@ export function useGridTableController<T>({
     enableColumnResizing,
     onColumnWidthsChange,
     useShortNames,
-    measureColumnWidth,
     allowHorizontalOverflow,
-  });
-
-  const {
-    columnVirtualizationConfig,
-    columnRenderModelsWithOffsets,
-    columnWindowRange,
-    updateColumnWindowRange,
-  } = useGridTableColumnVirtualization({
-    renderedColumns,
-    columnWidths,
     virtualization,
-    wrapperRef,
+    isKindColumnKey,
+    getTextContent,
   });
-
-  const tableContentWidth = useMemo(() => {
-    if (columnRenderModelsWithOffsets.length === 0) {
-      return 0;
-    }
-    const lastModel = columnRenderModelsWithOffsets[columnRenderModelsWithOffsets.length - 1];
-    return Number.isFinite(lastModel.end) ? lastModel.end : 0;
-  }, [columnRenderModelsWithOffsets]);
 
   const { getCachedCellContent } = useGridTableCellCache<T>({
     renderedColumns,
@@ -527,10 +456,6 @@ export function useGridTableController<T>({
     normalizeKindClass,
     data: tableData,
   });
-
-  useEffect(() => {
-    markAllAutoColumnsDirty();
-  }, [markAllAutoColumnsDirty, columnVirtualizationConfig.enabled, allowHorizontalOverflow]);
 
   useGridTableHoverFallback({
     hoverStateVisible: hoverState.visible,
@@ -566,53 +491,9 @@ export function useGridTableController<T>({
     hideHeader,
   });
 
-  const visibleAutoColumnKeys = useMemo(() => {
-    if (renderedColumns.length === 0) {
-      return [];
-    }
-    if (!columnVirtualizationConfig.enabled) {
-      return renderedColumns.filter((column) => column.autoWidth).map((column) => column.key);
-    }
-    const total = columnRenderModelsWithOffsets.length;
-    if (total === 0) {
-      return [];
-    }
-    const stickyStart = Math.min(columnVirtualizationConfig.stickyStart, total);
-    const stickyEnd = Math.min(
-      columnVirtualizationConfig.stickyEnd,
-      Math.max(0, total - stickyStart)
-    );
-    const visibleKeys = new Set<string>();
-    columnRenderModelsWithOffsets.forEach((model, index) => {
-      const column = renderedColumns[index];
-      if (!column?.autoWidth) {
-        return;
-      }
-      const isSticky = index < stickyStart || index >= total - stickyEnd;
-      if (
-        isSticky ||
-        (index >= columnWindowRange.startIndex && index <= columnWindowRange.endIndex)
-      ) {
-        visibleKeys.add(model.key);
-      }
-    });
-    return Array.from(visibleKeys);
-  }, [
-    columnRenderModelsWithOffsets,
-    columnVirtualizationConfig.enabled,
-    columnVirtualizationConfig.stickyEnd,
-    columnVirtualizationConfig.stickyStart,
-    columnWindowRange.endIndex,
-    columnWindowRange.startIndex,
-    renderedColumns,
-  ]);
-
   useEffect(() => {
-    if (visibleAutoColumnKeys.length === 0) {
-      return;
-    }
-    markColumnsDirty(visibleAutoColumnKeys);
-  }, [markColumnsDirty, visibleAutoColumnKeys, virtualRange.end, virtualRange.start]);
+    markVisibleAutoColumnsDirty();
+  }, [markVisibleAutoColumnsDirty, virtualRange.end, virtualRange.start]);
 
   const { getPageSizeRef, moveSelectionByDelta, jumpToIndex } = useGridTableKeyboardNavigation({
     tableDataLength: tableData.length,
@@ -662,70 +543,6 @@ export function useGridTableController<T>({
     updateColumnWindowRange,
     virtualizationHandlesScroll: shouldVirtualize,
   });
-
-  useGridTableAutoGrow({
-    tableRef,
-    tableDataLength: tableData.length,
-    renderedColumns,
-    isKindColumnKey,
-    externalColumnWidths,
-    measureColumnWidth,
-    setColumnWidths,
-    reconcileWidthsToContainer: (base, width) => reconcileWidthsToContainer(base, width),
-    updateNaturalWidth,
-  });
-
-  const recalculateForContainerWidth = useCallback(
-    (incomingWidth: number) => {
-      if (!incomingWidth || incomingWidth <= 0) {
-        return;
-      }
-      setTableViewportWidth((prev) =>
-        Math.abs(prev - incomingWidth) < 0.5 ? prev : incomingWidth
-      );
-      setColumnWidths((prev) => {
-        if (allowHorizontalOverflow && !columnWidthsInitialized) {
-          return prev;
-        }
-        const next = reconcileWidthsToContainer(prev, incomingWidth);
-        // Avoid state updates when reconciled widths match the current map.
-        return areWidthMapsEqual(prev, next) ? prev : next;
-      });
-    },
-    [
-      allowHorizontalOverflow,
-      columnWidthsInitialized,
-      reconcileWidthsToContainer,
-      setColumnWidths,
-      setTableViewportWidth,
-    ]
-  );
-
-  useContainerWidthObserver({
-    tableRef: tableRefMutable,
-    onContainerWidth: recalculateForContainerWidth,
-    tableDataLength: tableData.length,
-  });
-
-  const { handleResizeStart, autoSizeColumn, resetManualResizes } = useColumnResizeController<T>({
-    columns,
-    renderedColumns,
-    columnWidths,
-    setColumnWidths,
-    manuallyResizedColumnsRef,
-    getColumnMinWidth,
-    getColumnMaxWidth,
-    measureColumnWidth,
-    enableColumnResizing,
-    isFixedColumnKey,
-    onManualResize: handleManualResizeEvent,
-  });
-
-  useEffect(() => {
-    if (!enableColumnResizing) {
-      resetManualResizes();
-    }
-  }, [enableColumnResizing, resetManualResizes]);
 
   // Dev-time check: keyExtractor must return cluster-scoped keys (containing '|')
   // to prevent silent key collisions in multi-cluster views.
