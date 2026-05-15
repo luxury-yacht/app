@@ -43,6 +43,8 @@ import { useGridTableContextMenuWiring } from '@shared/components/tables/hooks/u
 import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
 import { useGridTableExternalFocus } from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
+import { useGridTableHeaderActions } from '@shared/components/tables/hooks/useGridTableHeaderActions';
+import { useGridTableKeyboardNavigation } from '@shared/components/tables/hooks/useGridTableKeyboardNavigation';
 import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
 import type {
   GridColumnDefinition,
@@ -58,9 +60,6 @@ import {
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
 import { hasNarrowingGridTableFilters } from '@shared/components/tables/gridTableFilterState';
-import ContextMenu from '@shared/components/ContextMenu';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { SortAscIcon, SortDescIcon } from '@shared/components/icons/SharedIcons';
 
 // ---------------------------------------------------------------------------
 // Selectors / constants consumed only by the controller
@@ -223,13 +222,6 @@ export function useGridTableController<T>({
   const paginationEnabled = Boolean(onRequestMore);
   const contextMenuActiveRef = useRef(false);
   const [tableViewportWidth, setTableViewportWidth] = useState(0);
-
-  // Header context menu state
-  const [headerContextMenuPosition, setHeaderContextMenuPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  const [headerContextMenuColumnKey, setHeaderContextMenuColumnKey] = useState<string | null>(null);
 
   useEffect(() => {
     return eventBus.on('settings:max-table-rows', (value) => {
@@ -462,48 +454,6 @@ export function useGridTableController<T>({
     [contextMenuActiveRef, handleRowMouseLeave]
   );
 
-  const getPageSizeRef = useRef(1);
-
-  const moveSelectionByDelta = useCallback(
-    (delta: number) => {
-      if (tableData.length === 0) {
-        return false;
-      }
-      lastNavigationMethodRef.current = 'keyboard';
-      const base = focusedRowIndex == null ? (delta > 0 ? -1 : tableData.length) : focusedRowIndex;
-      const next = Math.min(Math.max(base + delta, 0), tableData.length - 1);
-      focusByIndex(next);
-      return true;
-    },
-    [focusByIndex, focusedRowIndex, tableData.length, lastNavigationMethodRef]
-  );
-
-  const jumpToIndex = useCallback(
-    (index: number) => {
-      if (tableData.length === 0) {
-        return false;
-      }
-      const clamped = Math.min(Math.max(index, 0), tableData.length - 1);
-      lastNavigationMethodRef.current = 'keyboard';
-      focusByIndex(clamped);
-      return true;
-    },
-    [focusByIndex, tableData.length, lastNavigationMethodRef]
-  );
-
-  useGridTableKeyboardScopes({
-    filteringEnabled,
-    showKindDropdown,
-    showNamespaceDropdown,
-    filtersContainerRef,
-    filterFocusIndexRef,
-    wrapperRef,
-    tableDataLength: tableData.length,
-    focusedRowKey,
-    suppressFocusedRowHighlight,
-    jumpToIndex,
-  });
-
   const activateFocusedRow = useCallback(() => {
     if (focusedRowIndex == null || focusedRowIndex < 0 || focusedRowIndex >= tableData.length) {
       return false;
@@ -512,18 +462,6 @@ export function useGridTableController<T>({
     onRowClick?.(item);
     return true;
   }, [focusedRowIndex, onRowClick, tableData]);
-
-  useGridTableShortcuts({
-    shortcutsActive,
-    enableContextMenu,
-    onOpenFocusedRow: activateFocusedRow,
-    onOpenContextMenu: openFocusedRowContextMenu,
-    moveSelectionByDelta,
-    jumpToIndex,
-    getPageSizeRef,
-    tableDataLength: tableData.length,
-    isContextMenuVisible,
-  });
 
   const { measureColumnWidth } = useGridTableColumnMeasurer<T>({
     tableRef: tableRefMutable,
@@ -676,102 +614,44 @@ export function useGridTableController<T>({
     markColumnsDirty(visibleAutoColumnKeys);
   }, [markColumnsDirty, visibleAutoColumnKeys, virtualRange.end, virtualRange.start]);
 
-  useEffect(() => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      getPageSizeRef.current = 1;
-      return;
-    }
-
-    const computePageSize = () => {
-      const height = wrapper.clientHeight || 1;
-      if (height <= 0) {
-        getPageSizeRef.current = 1;
-        return;
-      }
-
-      if (shouldVirtualize && virtualRowHeight > 0) {
-        getPageSizeRef.current = Math.max(1, Math.round(height / virtualRowHeight));
-        return;
-      }
-
-      const firstRow = wrapper.querySelector<HTMLElement>('.gridtable-row');
-      const rowHeight = firstRow?.getBoundingClientRect().height || 44;
-      getPageSizeRef.current = Math.max(1, Math.round(height / Math.max(rowHeight, 1)));
-    };
-
-    computePageSize();
-
-    const observer =
-      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(computePageSize) : null;
-    if (observer) {
-      observer.observe(wrapper);
-    }
-
-    return () => {
-      observer?.disconnect();
-    };
-  }, [shouldVirtualize, virtualRowHeight, wrapperRef, tableData.length]);
-
-  useEffect(() => {
-    if (!shortcutsActive || !focusedRowKey) {
-      return;
-    }
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return;
-    }
-    const allowAutoScroll = lastNavigationMethodRef.current === 'keyboard';
-    const escapedKey =
-      typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-        ? CSS.escape(focusedRowKey)
-        : focusedRowKey;
-    // Both data-row-key and .gridtable-row are on the same element, so use
-    // a compound selector (not a descendant selector).
-    const rowElement = wrapper.querySelector<HTMLDivElement>(
-      `.gridtable-row[data-row-key="${escapedKey}"]`
-    );
-    if (rowElement) {
-      if (allowAutoScroll && typeof rowElement.scrollIntoView === 'function') {
-        rowElement.scrollIntoView({ block: 'nearest' });
-      }
-      updateHoverForElement(rowElement);
-      return;
-    }
-    if (
-      allowAutoScroll &&
-      shouldVirtualize &&
-      virtualRowHeight > 0 &&
-      focusedRowIndex != null &&
-      focusedRowIndex >= 0
-    ) {
-      // Mimic scrollIntoView({ block: 'nearest' }) - only scroll if row is outside visible area.
-      // Uses getRowTop for accurate per-row positioning with variable row heights.
-      const rowTop = getRowTop(focusedRowIndex);
-      const rowBottom = getRowTop(focusedRowIndex + 1);
-      const viewportTop = wrapper.scrollTop;
-      const viewportBottom = viewportTop + wrapper.clientHeight;
-
-      if (rowTop < viewportTop) {
-        // Row is above viewport - scroll up to show it at top
-        wrapper.scrollTo({ top: rowTop, behavior: 'auto' });
-      } else if (rowBottom > viewportBottom) {
-        // Row is below viewport - scroll down to show it at bottom
-        wrapper.scrollTo({ top: rowBottom - wrapper.clientHeight, behavior: 'auto' });
-      }
-      // If row is already visible, don't scroll
-    }
-  }, [
+  const { getPageSizeRef, moveSelectionByDelta, jumpToIndex } = useGridTableKeyboardNavigation({
+    tableDataLength: tableData.length,
     focusedRowIndex,
     focusedRowKey,
     shortcutsActive,
-    shouldVirtualize,
+    focusByIndex,
+    lastNavigationMethodRef,
+    wrapperRef,
     updateHoverForElement,
+    shouldVirtualize,
     virtualRowHeight,
     getRowTop,
+  });
+
+  useGridTableKeyboardScopes({
+    filteringEnabled,
+    showKindDropdown,
+    showNamespaceDropdown,
+    filtersContainerRef,
+    filterFocusIndexRef,
     wrapperRef,
-    lastNavigationMethodRef,
-  ]);
+    tableDataLength: tableData.length,
+    focusedRowKey,
+    suppressFocusedRowHighlight,
+    jumpToIndex,
+  });
+
+  useGridTableShortcuts({
+    shortcutsActive,
+    enableContextMenu,
+    onOpenFocusedRow: activateFocusedRow,
+    onOpenContextMenu: openFocusedRowContextMenu,
+    moveSelectionByDelta,
+    jumpToIndex,
+    getPageSizeRef,
+    tableDataLength: tableData.length,
+    isContextMenuVisible,
+  });
 
   useGridTableHeaderSyncEffects({
     hideHeader,
@@ -867,126 +747,15 @@ export function useGridTableController<T>({
     }
   }
 
-  // Render sort indicator
-  const renderSortIndicator = useCallback(
-    (columnKey: string) => {
-      if (!sortConfig || sortConfig.key !== columnKey) {
-        return null;
-      }
-      return (
-        <span className="sort-indicator">
-          {sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : ''}
-        </span>
-      );
-    },
-    [sortConfig]
-  );
-
-  // Handle header click for sorting
-  const handleHeaderClick = useCallback(
-    (column: GridColumnDefinition<T>) => {
-      if (column.sortable && onSort) {
-        onSort(column.key);
-      }
-    },
-    [onSort]
-  );
-
-  const handleHeaderContextMenu = useCallback(
-    (event: React.MouseEvent, columnKey: string) => {
-      event.preventDefault();
-      contextMenuActiveRef.current = true;
-      setHeaderContextMenuPosition({ x: event.clientX, y: event.clientY });
-      setHeaderContextMenuColumnKey(columnKey);
-    },
-    [contextMenuActiveRef]
-  );
-
-  const headerContextMenuItems: ContextMenuItem[] = useMemo(() => {
-    if (!headerContextMenuColumnKey) return [];
-
-    const column = columns.find((c) => c.key === headerContextMenuColumnKey);
-    if (!column) return [];
-
-    const isSortable = !!column.sortable;
-    const isHideable = !lockedColumns.has(column.key);
-
-    if (!isSortable && !isHideable) {
-      return [{ label: 'No Actions', disabled: true }];
-    }
-
-    const isCurrentlySorted = sortConfig?.key === column.key;
-    const currentDirection = isCurrentlySorted ? (sortConfig?.direction ?? null) : null;
-
-    const items: ContextMenuItem[] = [];
-
-    if (isSortable) {
-      items.push(
-        {
-          label: 'Sort Ascending',
-          icon: <SortAscIcon />,
-          onClick: () => onSort?.(column.key, 'asc'),
-          disabled: currentDirection === 'asc',
-        },
-        {
-          label: 'Sort Descending',
-          icon: <SortDescIcon />,
-          onClick: () => onSort?.(column.key, 'desc'),
-          disabled: currentDirection === 'desc',
-        },
-        {
-          label: 'Clear Sort',
-          icon: '×',
-          onClick: () => onSort?.(column.key, null),
-          disabled: !isCurrentlySorted,
-        }
-      );
-    }
-
-    if (isSortable && isHideable) {
-      items.push({ divider: true });
-    }
-
-    if (isHideable) {
-      items.push({
-        label: 'Hide Column',
-        onClick: () =>
-          applyVisibilityChanges((next) => {
-            next[column.key] = false;
-            return true;
-          }),
-      });
-    }
-
-    return items;
-  }, [
-    headerContextMenuColumnKey,
-    columns,
-    lockedColumns,
-    sortConfig,
-    onSort,
-    applyVisibilityChanges,
-  ]);
-
-  const headerContextMenuNode = useMemo(() => {
-    if (!headerContextMenuPosition || !headerContextMenuColumnKey) return null;
-    return (
-      <ContextMenu
-        items={headerContextMenuItems}
-        position={headerContextMenuPosition}
-        onClose={() => {
-          contextMenuActiveRef.current = false;
-          setHeaderContextMenuPosition(null);
-          setHeaderContextMenuColumnKey(null);
-        }}
-      />
-    );
-  }, [
-    headerContextMenuItems,
-    headerContextMenuPosition,
-    headerContextMenuColumnKey,
-    contextMenuActiveRef,
-  ]);
+  const { renderSortIndicator, handleHeaderClick, handleHeaderContextMenu, headerContextMenuNode } =
+    useGridTableHeaderActions<T>({
+      columns,
+      lockedColumns,
+      sortConfig,
+      onSort,
+      applyVisibilityChanges,
+      contextMenuActiveRef,
+    });
 
   const renderRowContent = useGridTableRowRenderer({
     keyExtractor,
