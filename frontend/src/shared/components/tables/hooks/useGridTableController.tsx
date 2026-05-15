@@ -9,16 +9,12 @@
  * Extracted from GridTable.tsx — no behavioral change, purely mechanical.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { ReactElement, ReactNode, RefObject } from 'react';
-import { eventBus } from '@/core/events';
-import { getMaxTableRows } from '@/core/settings/appPreferences';
 import {
   recordGridTablePerformanceSample,
-  recordGridTablePerformanceSnapshot,
   recordGridTableScrollFrameSample,
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
-import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import type { HoverState } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import { useGridTableVirtualization } from '@shared/components/tables/hooks/useGridTableVirtualization';
 import { useGridTableRowRenderer } from '@shared/components/tables/hooks/useGridTableRowRenderer';
@@ -28,19 +24,18 @@ import { useColumnVisibilityController } from '@shared/components/tables/hooks/u
 import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
 import { useGridTableCellCache } from '@shared/components/tables/hooks/useGridTableCellCache';
 import { useGridTablePagination } from '@shared/components/tables/hooks/useGridTablePagination';
-import { useGridTableHoverFallback } from '@shared/components/tables/hooks/useGridTableHoverFallback';
-import { useGridTableHeaderSyncEffects } from '@shared/components/tables/hooks/useGridTableHeaderSyncEffects';
 import { useGridTableExternalWidths } from '@shared/components/tables/hooks/useGridTableExternalWidths';
 import { useGridTableFiltersWiring } from '@shared/components/tables/hooks/useGridTableFiltersWiring';
 import { useGridTableColumnsDropdown } from '@shared/components/tables/hooks/useGridTableColumnsDropdown';
-import { useGridTableContextMenuWiring } from '@shared/components/tables/hooks/useGridTableContextMenuWiring';
-import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
-import { useGridTableExternalFocus } from '@shared/components/tables/hooks/useGridTableExternalFocus';
-import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
 import { useGridTableHeaderActions } from '@shared/components/tables/hooks/useGridTableHeaderActions';
-import { useGridTableKeyboardNavigation } from '@shared/components/tables/hooks/useGridTableKeyboardNavigation';
 import { useGridTableColumnLayout } from '@shared/components/tables/hooks/useGridTableColumnLayout';
-import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
+import { useGridTableInteractionWiring } from '@shared/components/tables/hooks/useGridTableInteractionWiring';
+import {
+  useGridTableDataPipeline,
+  useGridTableSourceData,
+} from '@shared/components/tables/hooks/useGridTableDataPipeline';
+import { useGridTableClusterKeyWarning } from '@shared/components/tables/hooks/useGridTableClusterKeyWarning';
+import { useGridTableKeyboardAndHeaderSync } from '@shared/components/tables/hooks/useGridTableKeyboardAndHeaderSync';
 import type { GridTableProps } from '@shared/components/tables/GridTable.types';
 import {
   getTextContent,
@@ -49,19 +44,6 @@ import {
   normalizeKindClass,
 } from '@shared/components/tables/GridTable.utils';
 import { hasNarrowingGridTableFilters } from '@shared/components/tables/gridTableFilterState';
-
-// ---------------------------------------------------------------------------
-// Selectors / constants consumed only by the controller
-// ---------------------------------------------------------------------------
-
-const GRIDTABLE_SHORTCUT_OPT_OUT_SELECTOR = '[data-gridtable-shortcut-optout="true"]';
-const GRIDTABLE_ROWCLICK_SUPPRESS_SELECTOR = '[data-gridtable-rowclick="suppress"]';
-const GRIDTABLE_ROWCLICK_ALLOW_SELECTOR = '[data-gridtable-rowclick="allow"]';
-const GRIDTABLE_INTERACTIVE_STOP_SELECTOR =
-  'button, a[href], input, textarea, select, summary, [role="button"], [role="menuitem"], [data-gridtable-interactive="true"]';
-const GRIDTABLE_ROW_TABSTOP_SELECTOR = GRIDTABLE_INTERACTIVE_STOP_SELECTOR.split(',')
-  .map((selector) => `.gridtable-row ${selector.trim()}`)
-  .join(', ');
 
 // Stable default to avoid re-creating lock lists on every render.
 const DEFAULT_NON_HIDEABLE_COLUMNS: string[] = [];
@@ -166,50 +148,14 @@ export function useGridTableController<T>({
   allowHorizontalOverflow = true,
   isKindColumnKey = defaultIsKindColumnKey,
 }: GridTableProps<T>): GridTableControllerResult<T> {
-  const [maxTableRows, setMaxTableRows] = useState<number>(() => getMaxTableRows());
-  const totalDataCount = Array.isArray(inputData) ? inputData.length : 0;
-  const sourceData = useMemo<T[]>(
-    () => (Array.isArray(inputData) ? inputData : ([] as T[])),
-    [inputData]
-  );
+  const { maxTableRows, sourceData, totalDataCount } = useGridTableSourceData(inputData);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
   const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
   const headerInnerRef = useRef<HTMLDivElement | null>(null);
-  const previousInputDataRef = useRef(inputData);
   const paginationEnabled = Boolean(onRequestMore);
   const contextMenuActiveRef = useRef(false);
 
-  useEffect(() => {
-    return eventBus.on('settings:max-table-rows', (value) => {
-      setMaxTableRows(value);
-    });
-  }, []);
-
-  const isShortcutOptOutTarget = useCallback((target: EventTarget | null) => {
-    if (!(target instanceof HTMLElement)) {
-      return false;
-    }
-    return Boolean(target.closest(GRIDTABLE_SHORTCUT_OPT_OUT_SELECTOR));
-  }, []);
-
-  const shouldIgnoreRowClick = useCallback((event: React.MouseEvent) => {
-    if (event.defaultPrevented || event.isDefaultPrevented?.() || event.isPropagationStopped?.()) {
-      return true;
-    }
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) {
-      return false;
-    }
-    const isOptInTarget = Boolean(target.closest(GRIDTABLE_ROWCLICK_ALLOW_SELECTOR));
-    if (!isOptInTarget && target.closest(GRIDTABLE_ROWCLICK_SUPPRESS_SELECTOR)) {
-      return true;
-    }
-    if (!isOptInTarget && target.closest(GRIDTABLE_INTERACTIVE_STOP_SELECTOR)) {
-      return true;
-    }
-    return false;
-  }, []);
   const externalColumnWidths = useGridTableExternalWidths(controlledColumnWidths);
 
   const { wrapWithProfiler, warnDevOnce, startFrameSampler, stopFrameSampler } =
@@ -269,34 +215,14 @@ export function useGridTableController<T>({
     getTextContent,
   });
 
-  const tableData = useMemo<T[]>(
-    () => filteredData.slice(0, maxTableRows),
-    [filteredData, maxTableRows]
-  );
-
-  useEffect(() => {
-    if (!diagnosticsLabel) {
-      previousInputDataRef.current = inputData;
-      return;
-    }
-
-    const inputReferenceChanged = previousInputDataRef.current !== inputData;
-    recordGridTablePerformanceSnapshot(diagnosticsLabel, {
-      mode: diagnosticsMode,
-      inputRows: totalDataCount,
-      sourceRows: Math.min(totalDataCount, maxTableRows),
-      displayedRows: tableData.length,
-      inputReferenceChanged,
-    });
-    previousInputDataRef.current = inputData;
-  }, [
+  const { tableData } = useGridTableDataPipeline<T>({
+    inputData,
+    filteredData,
+    maxTableRows,
+    totalDataCount,
     diagnosticsLabel,
     diagnosticsMode,
-    inputData,
-    maxTableRows,
-    tableData.length,
-    totalDataCount,
-  ]);
+  });
 
   // Whether any filter is actively narrowing results (search text, kind, or namespace selections).
   const hasActiveFilters = filteringEnabled && hasNarrowingGridTableFilters(activeFilters);
@@ -304,121 +230,44 @@ export function useGridTableController<T>({
   const loadingOverlayMessage = loadingOverlay?.message ?? 'Refreshing...';
   const showLoadingOverlay = loadingOverlay ? loadingOverlay.show : loading && tableData.length > 0;
 
-  // References to the table and scroll wrapper
   const {
     hoverState,
     hoverRowRef,
     updateHoverForElement,
-    handleRowMouseEnter,
-    handleRowMouseLeave,
     scheduleHeaderSync,
-  } = useGridTableHoverSync({
-    wrapperRef,
-    headerInnerRef,
-    hideHeader,
-  });
-
-  const {
     focusedRowIndex,
     focusedRowKey,
-    setFocusedRowKey,
     focusByIndex,
     suppressFocusedRowHighlight,
-    isWrapperFocused,
     shortcutsActive,
     lastNavigationMethodRef,
     handleWrapperFocus,
     handleWrapperBlur,
-    handleRowActivation,
     handleRowClick,
     getRowClassNameWithFocus,
-  } = useGridTableFocusNavigation<T>({
-    tableData,
-    keyExtractor,
-    onRowClick,
-    isShortcutOptOutTarget,
-    wrapperRef,
-    updateHoverForElement,
-    getRowClassName,
-    shouldIgnoreRowClick,
-  });
-
-  useLayoutEffect(() => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return;
-    }
-
-    // Grid body navigation is wrapper/arrow-key driven. Remove row-internal
-    // controls from the native tab order so Tab exits the grid instead of
-    // walking through every interactive cell.
-    wrapper.querySelectorAll<HTMLElement>(GRIDTABLE_ROW_TABSTOP_SELECTOR).forEach((element) => {
-      if (element.tabIndex !== -1) {
-        element.tabIndex = -1;
-      }
-    });
-  });
-
-  // External focus — allows other parts of the app to request that this
-  // GridTable highlights a specific row (e.g., via alt+click navigation).
-  useGridTableExternalFocus<T>({
-    tableData,
-    keyExtractor,
-    setFocusedRowKey,
-    wrapperRef,
-  });
-
-  const {
     contextMenuNode,
     handleCellContextMenu,
     handleWrapperContextMenu,
     openFocusedRowContextMenu,
     isContextMenuVisible,
-  } = useGridTableContextMenuWiring<T>({
-    enableContextMenu,
-    columns,
+    handleRowMouseEnter,
+    handleRowMouseLeave,
+    activateFocusedRow,
+  } = useGridTableInteractionWiring<T>({
     tableData,
-    sortConfig,
-    getCustomContextMenuItems,
-    onSort,
+    columns,
     keyExtractor,
-    focusedRowIndex,
-    focusedRowKey,
+    getRowClassName,
+    onRowClick,
+    enableContextMenu,
+    getCustomContextMenuItems,
+    sortConfig,
+    onSort,
     wrapperRef,
-    handleRowActivation,
+    headerInnerRef,
+    hideHeader,
     contextMenuActiveRef,
   });
-
-  const handleRowMouseEnterWithReset = useCallback(
-    (element: HTMLDivElement) => {
-      // Only reset keyboard focus when transitioning to mouse while table is focused.
-      // When unfocused, preserve the selection.
-      if (isWrapperFocused && !shortcutsActive && !contextMenuActiveRef.current) {
-        setFocusedRowKey(null);
-      }
-      handleRowMouseEnter(element);
-    },
-    [contextMenuActiveRef, handleRowMouseEnter, isWrapperFocused, shortcutsActive, setFocusedRowKey]
-  );
-
-  const handleRowMouseLeaveWithReset = useCallback(
-    (element?: HTMLDivElement | null) => {
-      if (contextMenuActiveRef.current) {
-        return;
-      }
-      handleRowMouseLeave(element);
-    },
-    [contextMenuActiveRef, handleRowMouseLeave]
-  );
-
-  const activateFocusedRow = useCallback(() => {
-    if (focusedRowIndex == null || focusedRowIndex < 0 || focusedRowIndex >= tableData.length) {
-      return false;
-    }
-    const item = tableData[focusedRowIndex];
-    onRowClick?.(item);
-    return true;
-  }, [focusedRowIndex, onRowClick, tableData]);
 
   const {
     columnWidths,
@@ -457,13 +306,6 @@ export function useGridTableController<T>({
     data: tableData,
   });
 
-  useGridTableHoverFallback({
-    hoverStateVisible: hoverState.visible,
-    wrapperRef,
-    updateHoverForElement,
-    tableLength: tableData.length,
-  });
-
   const {
     shouldVirtualize,
     virtualRows,
@@ -495,21 +337,7 @@ export function useGridTableController<T>({
     markVisibleAutoColumnsDirty();
   }, [markVisibleAutoColumnsDirty, virtualRange.end, virtualRange.start]);
 
-  const { getPageSizeRef, moveSelectionByDelta, jumpToIndex } = useGridTableKeyboardNavigation({
-    tableDataLength: tableData.length,
-    focusedRowIndex,
-    focusedRowKey,
-    shortcutsActive,
-    focusByIndex,
-    lastNavigationMethodRef,
-    wrapperRef,
-    updateHoverForElement,
-    shouldVirtualize,
-    virtualRowHeight,
-    getRowTop,
-  });
-
-  useGridTableKeyboardScopes({
+  useGridTableKeyboardAndHeaderSync({
     filteringEnabled,
     showKindDropdown,
     showNamespaceDropdown,
@@ -517,52 +345,27 @@ export function useGridTableController<T>({
     filterFocusIndexRef,
     wrapperRef,
     tableDataLength: tableData.length,
+    focusedRowIndex,
     focusedRowKey,
     suppressFocusedRowHighlight,
-    jumpToIndex,
-  });
-
-  useGridTableShortcuts({
     shortcutsActive,
-    enableContextMenu,
-    onOpenFocusedRow: activateFocusedRow,
-    onOpenContextMenu: openFocusedRowContextMenu,
-    moveSelectionByDelta,
-    jumpToIndex,
-    getPageSizeRef,
-    tableDataLength: tableData.length,
-    isContextMenuVisible,
-  });
-
-  useGridTableHeaderSyncEffects({
-    hideHeader,
-    wrapperRef,
-    scheduleHeaderSync,
+    focusByIndex,
+    lastNavigationMethodRef,
     updateHoverForElement,
+    shouldVirtualize,
+    virtualRowHeight,
+    getRowTop,
+    enableContextMenu,
+    activateFocusedRow,
+    openFocusedRowContextMenu,
+    isContextMenuVisible,
+    hideHeader,
+    scheduleHeaderSync,
     hoverRowRef,
     updateColumnWindowRange,
-    virtualizationHandlesScroll: shouldVirtualize,
   });
 
-  // Dev-time check: keyExtractor must return cluster-scoped keys (containing '|')
-  // to prevent silent key collisions in multi-cluster views.
-  const clusterKeyCheckRef = useRef(false);
-  const keyExtractorRef = useRef(keyExtractor);
-  if (keyExtractorRef.current !== keyExtractor) {
-    keyExtractorRef.current = keyExtractor;
-    clusterKeyCheckRef.current = false;
-  }
-  if (import.meta.env.DEV && !clusterKeyCheckRef.current && tableData.length > 0) {
-    clusterKeyCheckRef.current = true;
-    const sampleKey = keyExtractor(tableData[0], 0);
-    if (!sampleKey.includes('|')) {
-      warnDevOnce(
-        `GridTable: keyExtractor returned "${sampleKey}" which does not appear ` +
-          `cluster-scoped (missing "|" separator). Use buildClusterScopedKey() ` +
-          `to prevent key collisions in multi-cluster views.`
-      );
-    }
-  }
+  useGridTableClusterKeyWarning({ tableData, keyExtractor, warnDevOnce });
 
   const { renderSortIndicator, handleHeaderClick, handleHeaderContextMenu, headerContextMenuNode } =
     useGridTableHeaderActions<T>({
@@ -579,8 +382,8 @@ export function useGridTableController<T>({
     getRowClassName: getRowClassNameWithFocus,
     getRowStyle,
     handleRowClick,
-    handleRowMouseEnter: handleRowMouseEnterWithReset,
-    handleRowMouseLeave: handleRowMouseLeaveWithReset,
+    handleRowMouseEnter,
+    handleRowMouseLeave,
     columnRenderModelsWithOffsets,
     columnVirtualizationConfig,
     columnWindowRange,
