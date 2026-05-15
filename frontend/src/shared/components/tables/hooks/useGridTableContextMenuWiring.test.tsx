@@ -91,12 +91,14 @@ describe('useGridTableContextMenuWiring', () => {
     focusedRowIndex?: number | null;
     focusedRowKey?: string | null;
     tableData?: Row[];
+    renderedColumnKey?: string;
   }): HarnessResult => {
     const tableData = opts.tableData ?? [
       { id: '1', name: 'Alice' },
       { id: '2', name: 'Bob' },
       { id: '3', name: 'Charlie' },
     ];
+    const renderedColumnKey = opts.renderedColumnKey ?? 'name';
     const wrapperRef = { current: null as HTMLDivElement | null };
     const handleRowActivation = vi.fn();
     let result: HarnessResult = null!;
@@ -107,11 +109,9 @@ describe('useGridTableContextMenuWiring', () => {
         columns,
         tableData,
         sortConfig: undefined,
-        keyExtractor: (item) => item.id,
         focusedRowIndex: opts.focusedRowIndex ?? null,
         focusedRowKey: opts.focusedRowKey ?? null,
         wrapperRef,
-        handleRowActivation,
       });
       result = { ...wiring, handleRowActivation };
       return (
@@ -123,7 +123,7 @@ describe('useGridTableContextMenuWiring', () => {
           >
             {tableData.map((row) => (
               <div key={row.id} data-row-key={row.id} className="gridtable-row">
-                <div className="grid-cell" data-column="name">
+                <div className="grid-cell" data-column={renderedColumnKey}>
                   {row.name}
                 </div>
               </div>
@@ -169,6 +169,35 @@ describe('useGridTableContextMenuWiring', () => {
     const callArgs = mockOpenCellContextMenuFromKeyboard.mock.calls[0] as unknown[];
     expect(callArgs[0]).toBe('name');
     expect(callArgs[1]).toEqual({ id: '2', name: 'Bob' });
+  });
+
+  it('matches focused rows and columns with selector-sensitive keys', () => {
+    const rowKey = 'cluster|"prod]/pods/nginx:main';
+    const columnKey = 'metadata.labels["app:kubernetes.io/name"]';
+    mockContextMenuState = {
+      columnKey,
+      item: { id: rowKey, name: 'nginx' },
+      position: { x: 100, y: 100 },
+      source: 'keyboard',
+    };
+
+    const result = renderHook({
+      focusedRowIndex: 0,
+      focusedRowKey: rowKey,
+      renderedColumnKey: columnKey,
+      tableData: [{ id: rowKey, name: 'nginx' }],
+    });
+
+    let opened = false;
+    act(() => {
+      opened = result.openFocusedRowContextMenu();
+    });
+
+    expect(opened).toBe(true);
+    expect(mockOpenCellContextMenuFromKeyboard).toHaveBeenCalledTimes(1);
+    const callArgs = mockOpenCellContextMenuFromKeyboard.mock.calls[0] as unknown[];
+    expect(callArgs[0]).toBe(columnKey);
+    expect(callArgs[1]).toEqual({ id: rowKey, name: 'nginx' });
   });
 
   it('openFocusedRowContextMenu returns false when the row element is not in the DOM', () => {

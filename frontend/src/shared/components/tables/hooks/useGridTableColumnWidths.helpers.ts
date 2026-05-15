@@ -15,6 +15,7 @@ import type {
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
 import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
+import { buildInitialMeasuredColumnWidthPlan } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 
 const getAutoSizeMaxWidth = <T>(
   column: GridColumnDefinition<T>,
@@ -420,7 +421,6 @@ export function useInitialMeasurementAndReconcile<T>({
   allowHorizontalOverflow,
   getColumnMinWidth,
   getColumnMaxWidth,
-  parseWidthInputToNumber,
   isFixedColumnKey,
   phaseRef,
   transitionPhase,
@@ -445,7 +445,6 @@ export function useInitialMeasurementAndReconcile<T>({
   allowHorizontalOverflow: boolean;
   getColumnMinWidth: (column: GridColumnDefinition<T>) => number;
   getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
-  parseWidthInputToNumber: (input: ColumnWidthInput | undefined) => number | null;
   isFixedColumnKey: (key: string) => boolean;
   phaseRef: RefObject<ColumnWidthPhase>;
   transitionPhase: (to: ColumnWidthPhase) => void;
@@ -510,32 +509,25 @@ export function useInitialMeasurementAndReconcile<T>({
         });
 
       if (allowHorizontalOverflow) {
-        const natural: Record<string, number> = {};
-
-        renderedColumns.forEach((col) => {
-          const min = getColumnMinWidth(col);
-          const max = getColumnMaxWidth(col);
-
-          let width: number | undefined;
-          if (manuallyResizedColumnsRef.current.has(col.key) && columnWidths[col.key] != null) {
-            width = columnWidths[col.key];
-          } else if (isFixedColumnKey(col.key)) {
-            width = measuredFixedWidths[col.key];
-          } else if (col.autoWidth) {
-            width = measuredAutoWidths[col.key];
-          } else {
-            width = parseWidthInputToNumber(col.width) ?? columnWidths[col.key];
-          }
-
-          if (width == null || Number.isNaN(width)) {
-            width = measureColumnWidth(col);
-          }
-
-          natural[col.key] = Math.max(min, Math.min(max, width));
+        const plan = buildInitialMeasuredColumnWidthPlan({
+          renderedColumns,
+          columnWidths,
+          measuredFixedWidths,
+          measuredAutoWidths,
+          externalColumnWidths,
+          manuallyResizedColumnKeys: manuallyResizedColumnsRef.current,
+          containerWidth,
+          allowHorizontalOverflow,
+          isFixedColumnKey,
+          measureColumnWidth,
+          getColumnMinWidth,
+          getColumnMaxWidth,
         });
 
-        naturalWidthsRef.current = { ...natural };
-        const display = reconcileWidthsToContainer(natural, containerWidth, { forceFit: false });
+        naturalWidthsRef.current = plan.naturalWidths;
+        const display = reconcileWidthsToContainer(plan.widths, containerWidth, {
+          forceFit: false,
+        });
         setColumnWidths(display);
 
         prevColumnsSignatureRef.current = columnsSignature;
@@ -548,124 +540,23 @@ export function useInitialMeasurementAndReconcile<T>({
       }
 
       if (needsInitialization || columnsChanged || dataArrivedAfterEmptyInit) {
-        const newWidths: Record<string, number> = {};
-        let fixedTotal = 0;
-
-        renderedColumns.forEach((col) => {
-          if (isFixedColumnKey(col.key)) {
-            const externalWidth = externalColumnWidths?.[col.key];
-            let width = externalWidth ?? measuredFixedWidths[col.key] ?? measureColumnWidth(col);
-            width = Math.max(getColumnMinWidth(col), Math.min(getColumnMaxWidth(col), width));
-            newWidths[col.key] = width;
-            naturalWidthsRef.current[col.key] = width;
-            fixedTotal += width;
-          } else if (col.autoWidth && !manuallyResizedColumnsRef.current.has(col.key)) {
-            const externalWidth = externalColumnWidths?.[col.key];
-            let width = externalWidth ?? measuredAutoWidths[col.key];
-            if (width == null) {
-              width = measureColumnWidth(col);
-            }
-            width = Math.max(getColumnMinWidth(col), Math.min(getColumnMaxWidth(col), width));
-            newWidths[col.key] = width;
-            naturalWidthsRef.current[col.key] = width;
-            fixedTotal += width;
-          }
+        const plan = buildInitialMeasuredColumnWidthPlan({
+          renderedColumns,
+          columnWidths,
+          measuredFixedWidths,
+          measuredAutoWidths,
+          externalColumnWidths,
+          manuallyResizedColumnKeys: manuallyResizedColumnsRef.current,
+          containerWidth,
+          allowHorizontalOverflow,
+          isFixedColumnKey,
+          measureColumnWidth,
+          getColumnMinWidth,
+          getColumnMaxWidth,
         });
 
-        const flexColumns = renderedColumns.filter(
-          (col) =>
-            !isFixedColumnKey(col.key) &&
-            !(col.autoWidth && !manuallyResizedColumnsRef.current.has(col.key))
-        );
-        let remaining = containerWidth - fixedTotal;
-        const flexWithoutExternal: GridColumnDefinition<T>[] = [];
-
-        flexColumns.forEach((col) => {
-          const externalWidth = externalColumnWidths?.[col.key];
-          if (typeof externalWidth === 'number' && !Number.isNaN(externalWidth)) {
-            let width = Math.max(
-              getColumnMinWidth(col),
-              Math.min(getColumnMaxWidth(col), externalWidth)
-            );
-            newWidths[col.key] = width;
-            remaining -= width;
-            naturalWidthsRef.current[col.key] = width;
-          } else {
-            flexWithoutExternal.push(col);
-          }
-        });
-
-        if (flexWithoutExternal.length > 0) {
-          if (remaining > 0) {
-            const baseWidth = Math.floor(remaining / flexWithoutExternal.length);
-            let remainder = remaining - baseWidth * flexWithoutExternal.length;
-
-            flexWithoutExternal.forEach((col, index) => {
-              let width = baseWidth;
-              if (index === 0) {
-                width += remainder;
-              }
-              width = Math.max(getColumnMinWidth(col), Math.min(getColumnMaxWidth(col), width));
-              newWidths[col.key] = width;
-              if (!allowHorizontalOverflow) {
-                naturalWidthsRef.current[col.key] = width;
-              }
-            });
-          } else {
-            flexWithoutExternal.forEach((col) => {
-              const fallback = Math.max(
-                getColumnMinWidth(col),
-                Math.min(
-                  getColumnMaxWidth(col),
-                  parseWidthInputToNumber(col.width) ?? getColumnMinWidth(col)
-                )
-              );
-              newWidths[col.key] = fallback;
-              if (
-                naturalWidthsRef.current[col.key] == null ||
-                Number.isNaN(naturalWidthsRef.current[col.key] as number)
-              ) {
-                naturalWidthsRef.current[col.key] = fallback;
-              }
-            });
-          }
-        }
-
-        renderedColumns.forEach((col) => {
-          if (!(col.key in newWidths)) {
-            const existingWidth = columnWidths[col.key];
-            if (typeof existingWidth === 'number' && !Number.isNaN(existingWidth)) {
-              newWidths[col.key] = Math.max(
-                getColumnMinWidth(col),
-                Math.min(getColumnMaxWidth(col), existingWidth)
-              );
-              if (
-                naturalWidthsRef.current[col.key] == null ||
-                Number.isNaN(naturalWidthsRef.current[col.key] as number)
-              ) {
-                naturalWidthsRef.current[col.key] = newWidths[col.key];
-              }
-            } else {
-              newWidths[col.key] = Math.max(
-                getColumnMinWidth(col),
-                Math.min(
-                  getColumnMaxWidth(col),
-                  parseWidthInputToNumber(col.width) ?? getColumnMinWidth(col)
-                )
-              );
-              if (
-                naturalWidthsRef.current[col.key] == null ||
-                Number.isNaN(naturalWidthsRef.current[col.key] as number)
-              ) {
-                naturalWidthsRef.current[col.key] = newWidths[col.key];
-              }
-            }
-          }
-        });
-
-        naturalWidthsRef.current = { ...newWidths };
-
-        const reconciled = reconcileWidthsToContainer(newWidths, containerWidth);
+        naturalWidthsRef.current = plan.naturalWidths;
+        const reconciled = reconcileWidthsToContainer(plan.widths, containerWidth);
         setColumnWidths(reconciled);
       } else if (shortNamesChanged) {
         const updated = { ...columnWidths };
@@ -707,7 +598,6 @@ export function useInitialMeasurementAndReconcile<T>({
     manuallyResizedColumnsRef,
     measureColumnWidth,
     naturalWidthsRef,
-    parseWidthInputToNumber,
     phaseRef,
     prevColumnsSignatureRef,
     prevShortNamesRef,

@@ -21,6 +21,7 @@ behavior, frontend infrastructure, or workflow-specific code.
 | Question                                                       | Start here                                                         |
 | -------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Where should frontend code live?                               | [frontend/component-structure.md](frontend/component-structure.md) |
+| How should shared resource tables be built and maintained?     | [frontend/gridtable.md](frontend/gridtable.md)                     |
 | How do keyboard shortcuts, surfaces, and focus ownership work? | [frontend/keyboard.md](frontend/keyboard.md)                       |
 | How should blocking modals be built?                           | [frontend/modals.md](frontend/modals.md)                           |
 | How do shared tabs and tab drag/drop work?                     | [frontend/tabs.md](frontend/tabs.md)                               |

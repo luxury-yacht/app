@@ -31,6 +31,7 @@ Applies to React/TypeScript code under `frontend/`.
 
 ## UI Infrastructure Docs
 
+- Shared table system: `docs/frontend/gridtable.md`.
 - Keyboard/focus and shortcut ownership: `docs/frontend/keyboard.md`.
 - Blocking modal foundation: `docs/frontend/modals.md`.
 - Shared tab component and drag coordinator: `docs/frontend/tabs.md`.

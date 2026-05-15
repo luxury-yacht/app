@@ -25,6 +25,7 @@ import {
   useDirtyQueue,
   type ManualResizeEvent,
 } from '@shared/components/tables/hooks/useGridTableAutoWidthMeasurementQueue';
+import { reconcileColumnWidthsToContainer } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
 
 // Column width lifecycle phase. Replaces the three coupled boolean refs
 // (initializedColumnsRef, isAutoSizingEnabledRef, isManualResizeActiveRef)
@@ -306,188 +307,20 @@ export function useGridTableColumnWidths<T>(
         return base;
       }
 
-      const forceFit = options?.forceFit ?? false;
-      const hasMissingColumns = renderedColumns.some(
-        (col) => typeof base[col.key] !== 'number' || Number.isNaN(base[col.key]!)
-      );
-
-      const resolvedWidths: Record<string, number> = {};
-      renderedColumns.forEach((col) => {
-        const min = getColumnMinWidth(col);
-        const max = getColumnMaxWidth(col);
-        let width = base[col.key];
-        if (typeof width !== 'number' || Number.isNaN(width)) {
-          width = naturalWidthsRef.current[col.key];
-        }
-        if (typeof width !== 'number' || Number.isNaN(width)) {
-          width = parseWidthInputToNumber(col.width) ?? min;
-        }
-        width = Math.max(min, Math.min(max, width));
-        resolvedWidths[col.key] = width;
+      return reconcileColumnWidthsToContainer({
+        baseWidths: base,
+        renderedColumns,
+        naturalWidths: naturalWidthsRef.current,
+        containerWidth,
+        allowHorizontalOverflow,
+        forceFit: options?.forceFit,
+        enableColumnResizing,
+        externalColumnWidths,
+        manuallyResizedColumnKeys: manuallyResizedColumnsRef.current,
+        isFixedColumnKey,
+        getColumnMinWidth,
+        getColumnMaxWidth,
       });
-
-      // With horizontal overflow, honor the provided widths unless we explicitly need to fill.
-      if (allowHorizontalOverflow) {
-        if (!forceFit) {
-          return resolvedWidths;
-        }
-
-        const flexColumns = renderedColumns.filter(
-          (col) => !isFixedColumnKey(col.key) && !manuallyResizedColumnsRef.current.has(col.key)
-        );
-
-        if (flexColumns.length === 0) {
-          return resolvedWidths;
-        }
-
-        const next = { ...resolvedWidths };
-        const naturalTotal = flexColumns.reduce((sum, col) => sum + (next[col.key] ?? 0), 0);
-        const targetTotal = Math.max(containerWidth, naturalTotal);
-        let remaining = Math.max(0, targetTotal - naturalTotal);
-
-        let adjustable = flexColumns.filter((col) => next[col.key] < getColumnMaxWidth(col) - 0.5);
-
-        while (remaining > 0 && adjustable.length > 0) {
-          const share = Math.max(1, Math.floor(remaining / adjustable.length));
-          const nextAdjustable: GridColumnDefinition<T>[] = [];
-
-          adjustable.forEach((col) => {
-            if (remaining <= 0) {
-              return;
-            }
-            const key = col.key;
-            const max = getColumnMaxWidth(col);
-            const current = next[key];
-            const capacity = Math.max(0, max - current);
-            if (capacity <= 0.5) {
-              return;
-            }
-            const delta = Math.min(share, capacity, remaining);
-            next[key] = current + delta;
-            remaining -= delta;
-            if (capacity - delta > 0.5) {
-              nextAdjustable.push(col);
-            }
-          });
-
-          adjustable = nextAdjustable;
-          if (nextAdjustable.length === 0) {
-            break;
-          }
-        }
-
-        return next;
-      }
-
-      // Without overflow, spread the remaining container space across flex columns while
-      // leaving fixed/locked widths alone.
-      const lockedKeys = new Set<string>();
-      if (!enableColumnResizing && externalColumnWidths) {
-        Object.keys(externalColumnWidths).forEach((key) => lockedKeys.add(key));
-      }
-      manuallyResizedColumnsRef.current.forEach((key) => lockedKeys.add(key));
-      const lockedKeysSet = lockedKeys.size > 0 ? lockedKeys : null;
-
-      const fixedColumns = renderedColumns.filter((col) => {
-        if (isFixedColumnKey(col.key)) {
-          return true;
-        }
-        return lockedKeysSet?.has(col.key) ?? false;
-      });
-
-      const fixedColumnKeys = new Set(fixedColumns.map((col) => col.key));
-      const flexColumns = renderedColumns.filter((col) => !fixedColumnKeys.has(col.key));
-
-      if (flexColumns.length === 0) {
-        return resolvedWidths;
-      }
-
-      const updated: Record<string, number> = { ...resolvedWidths };
-      let mutated = false;
-
-      const fixedWidth = fixedColumns.reduce((sum, col) => sum + (updated[col.key] ?? 0), 0);
-      const targetFlexWidth = containerWidth - fixedWidth;
-
-      if (targetFlexWidth <= 0) {
-        return updated;
-      }
-
-      const allColumnsProvided = !hasMissingColumns;
-      if (allColumnsProvided) {
-        return updated;
-      }
-
-      const currentFlexTotal = flexColumns.reduce((sum, col) => sum + (updated[col.key] ?? 0), 0);
-
-      if (currentFlexTotal <= 0) {
-        const widthPer = Math.floor(targetFlexWidth / flexColumns.length);
-        let remainder = targetFlexWidth - widthPer * flexColumns.length;
-
-        flexColumns.forEach((col, index) => {
-          let width = widthPer;
-          if (index === 0) {
-            width += remainder;
-          }
-          width = Math.max(getColumnMinWidth(col), Math.min(getColumnMaxWidth(col), width));
-          if (updated[col.key] !== width) {
-            updated[col.key] = width;
-            mutated = true;
-          }
-        });
-
-        return mutated || hasMissingColumns ? updated : base;
-      }
-
-      const scale = targetFlexWidth / currentFlexTotal;
-
-      flexColumns.forEach((col) => {
-        const prevWidth = updated[col.key] ?? 0;
-        let width = Math.round(prevWidth * scale);
-        const min = getColumnMinWidth(col);
-        const max = getColumnMaxWidth(col);
-        if (width < min) width = min;
-        if (width > max) width = max;
-        if (width !== prevWidth) {
-          updated[col.key] = width;
-          mutated = true;
-        }
-      });
-
-      const adjustedFlexTotal = flexColumns.reduce((sum, col) => sum + (updated[col.key] ?? 0), 0);
-      let delta = Math.round(targetFlexWidth - adjustedFlexTotal);
-
-      if (delta !== 0) {
-        const adjustables = [...flexColumns].reverse();
-        for (const col of adjustables) {
-          const key = col.key;
-          const min = getColumnMinWidth(col);
-          const max = getColumnMaxWidth(col);
-          const current = updated[key] ?? 0;
-
-          if (delta > 0 && current < max) {
-            const increase = Math.min(delta, max - current);
-            if (increase > 0) {
-              updated[key] = current + increase;
-              delta -= increase;
-              mutated = true;
-            }
-          } else if (delta < 0 && current > min) {
-            const decrease = Math.min(Math.abs(delta), current - min);
-            if (decrease > 0) {
-              updated[key] = current - decrease;
-              delta += decrease;
-              mutated = true;
-            }
-          }
-
-          if (delta === 0) {
-            break;
-          }
-        }
-      }
-
-      const shouldReturnUpdated = mutated || hasMissingColumns;
-      return shouldReturnUpdated ? updated : base;
     },
     [enableColumnResizing, externalColumnWidths, renderedColumns, allowHorizontalOverflow]
   );
@@ -509,7 +342,6 @@ export function useGridTableColumnWidths<T>(
     allowHorizontalOverflow,
     getColumnMinWidth,
     getColumnMaxWidth,
-    parseWidthInputToNumber,
     isFixedColumnKey,
     phaseRef,
     transitionPhase,

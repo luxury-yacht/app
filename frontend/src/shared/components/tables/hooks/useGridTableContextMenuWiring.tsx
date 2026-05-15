@@ -11,6 +11,10 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { useGridTableContextMenuItems } from '@shared/components/tables/hooks/useGridTableContextMenuItems';
 import { useGridTableContextMenu } from '@shared/components/tables/hooks/useGridTableContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import {
+  findGridTableCellByColumnKey,
+  findGridTableRowByKey,
+} from '@shared/components/tables/GridTable.utils';
 import type { MouseEvent, RefObject } from 'react';
 
 // Owns GridTable's context menu lifecycle: builds items, opens from pointer or
@@ -24,11 +28,9 @@ type ContextMenuWiringOptions<T> = {
   sortConfig: { key: string; direction: 'asc' | 'desc' | null } | undefined;
   getCustomContextMenuItems?: (item: T, columnKey: string) => ContextMenuItem[];
   onSort?: (key: string, targetDirection?: 'asc' | 'desc' | null) => void;
-  keyExtractor: (item: T, index: number) => string;
   focusedRowIndex: number | null;
   focusedRowKey: string | null;
   wrapperRef: RefObject<HTMLDivElement | null>;
-  handleRowActivation: (item: T, index: number, source: 'pointer' | 'keyboard') => void;
   contextMenuActiveRef?: RefObject<boolean>;
 };
 
@@ -42,7 +44,6 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
     sortConfig,
     getCustomContextMenuItems,
     onSort,
-    keyExtractor,
     focusedRowIndex,
     focusedRowKey,
     wrapperRef,
@@ -134,30 +135,17 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
       return false;
     }
     const item = tableData[focusedRowIndex];
-    const derivedRowKey = focusedRowKey ?? keyExtractor(item, focusedRowIndex);
-    if (!derivedRowKey) {
-      return false;
-    }
     const wrapper = wrapperRef.current;
     if (!wrapper) {
       return false;
     }
-    const rows = wrapper.querySelectorAll<HTMLElement>('[data-row-key]');
-    let rowElement: HTMLElement | null = null;
-    for (const row of rows) {
-      if (row.dataset.rowKey === derivedRowKey) {
-        rowElement = row;
-        break;
-      }
-    }
+    const rowElement = findGridTableRowByKey(wrapper, focusedRowKey);
     if (!rowElement) {
       return false;
     }
-    let anchorCell: HTMLElement | null =
+    const anchorCell: HTMLElement | null =
       (contextMenu?.columnKey
-        ? rowElement.querySelector<HTMLElement>(
-            `.grid-cell[data-column="${contextMenu.columnKey}"]`
-          )
+        ? findGridTableCellByColumnKey(rowElement, contextMenu.columnKey)
         : null) ?? rowElement.querySelector<HTMLElement>('.grid-cell');
 
     const resolvedColumnKey = anchorCell?.dataset.column ?? contextMenu?.columnKey ?? '';
@@ -180,7 +168,6 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
     enableContextMenu,
     focusedRowIndex,
     focusedRowKey,
-    keyExtractor,
     openCellContextMenuFromKeyboard,
     tableData,
     wrapperRef,

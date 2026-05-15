@@ -115,6 +115,22 @@ export const findGridTableRowByKey = (
   return null;
 };
 
+export const findGridTableCellByColumnKey = (
+  row: HTMLElement | null | undefined,
+  columnKey: string
+): HTMLElement | null => {
+  if (!row) {
+    return null;
+  }
+  const cells = row.querySelectorAll<HTMLElement>('.grid-cell[data-column]');
+  for (const cell of cells) {
+    if (cell.dataset.column === columnKey) {
+      return cell;
+    }
+  }
+  return null;
+};
+
 export const defaultGetSearchText = (row: any): string[] => {
   if (!row || typeof row !== 'object') {
     return [];

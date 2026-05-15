@@ -133,7 +133,6 @@ export function useGridTableInteractionWiring<T>({
     lastNavigationMethodRef,
     handleWrapperFocus,
     handleWrapperBlur,
-    handleRowActivation,
     handleRowClick,
     getRowClassNameWithFocus,
   } = useGridTableFocusNavigation<T>({
@@ -180,11 +179,9 @@ export function useGridTableInteractionWiring<T>({
     sortConfig,
     getCustomContextMenuItems,
     onSort,
-    keyExtractor,
     focusedRowIndex,
     focusedRowKey,
     wrapperRef,
-    handleRowActivation,
     contextMenuActiveRef,
   });
 
