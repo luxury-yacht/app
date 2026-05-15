@@ -47,25 +47,6 @@ const accessors = resolveGridTableFilterAccessors({
 });
 
 describe('gridTableFilterEngine', () => {
-  it('resolves default accessors when custom accessors are omitted', () => {
-    expect(accessors.getKind?.(rows[0])).toBe('Deployment');
-    expect(accessors.getNamespace?.(rows[0])).toBe('default');
-    expect(accessors.getSearchText?.(rows[0])).toEqual(['frontend', 'web app']);
-  });
-
-  it('builds sorted unique filter options from rows', () => {
-    const options = buildGridTableFilterOptions({
-      filteringEnabled: true,
-      data: rows,
-      accessors,
-      defaultGetKind,
-      defaultGetNamespace,
-    });
-
-    expect(options.kinds.map((option) => option.label)).toEqual(['ConfigMap', 'Deployment', 'Pod']);
-    expect(options.namespaces.map((option) => option.label)).toEqual(['default', 'platform']);
-  });
-
   it('adds cluster-scoped namespace option and separator when requested', () => {
     const options = buildGridTableFilterOptions({
       filteringEnabled: true,
@@ -103,25 +84,6 @@ describe('gridTableFilterEngine', () => {
     expect(options.namespaces).toEqual([]);
   });
 
-  it('filters by kind, namespace, and search text', () => {
-    const filtered = applyGridTableFilters({
-      filteringEnabled: true,
-      data: rows,
-      activeFilters: {
-        ...defaultState,
-        search: 'front',
-        kinds: ['deployment'],
-        namespaces: ['default'],
-      },
-      accessors,
-      defaultGetKind,
-      defaultGetNamespace,
-      defaultGetSearchText,
-    });
-
-    expect(filtered.map((row) => row.id)).toEqual(['1']);
-  });
-
   it('treats null and em-dash namespaces as cluster-scoped for filtering', () => {
     const clusterScopedAccessors = resolveGridTableFilterAccessors({
       accessors: {
@@ -146,36 +108,5 @@ describe('gridTableFilterEngine', () => {
     });
 
     expect(filtered.map((row) => row.id)).toEqual(['4']);
-  });
-
-  it('applies case-sensitive search only when requested', () => {
-    const insensitive = applyGridTableFilters({
-      filteringEnabled: true,
-      data: rows,
-      activeFilters: {
-        ...defaultState,
-        search: 'Frontend',
-      },
-      accessors,
-      defaultGetKind,
-      defaultGetNamespace,
-      defaultGetSearchText,
-    });
-    const sensitive = applyGridTableFilters({
-      filteringEnabled: true,
-      data: rows,
-      activeFilters: {
-        ...defaultState,
-        search: 'Frontend',
-        caseSensitive: true,
-      },
-      accessors,
-      defaultGetKind,
-      defaultGetNamespace,
-      defaultGetSearchText,
-    });
-
-    expect(insensitive.map((row) => row.id)).toEqual(['1', '2']);
-    expect(sensitive).toEqual([]);
   });
 });

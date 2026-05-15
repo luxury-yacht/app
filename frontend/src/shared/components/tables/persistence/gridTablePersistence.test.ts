@@ -139,62 +139,32 @@ describe('gridTablePersistence', () => {
     });
   });
 
-  it('persists non-default filter toggles even when no text filter is active', () => {
+  it('preserves non-default toggles and cluster-scoped namespace filters when saving and pruning', () => {
+    const filters = {
+      search: '',
+      kinds: [],
+      namespaces: [''],
+      caseSensitive: false,
+      includeMetadata: true,
+    };
+
     const state = buildPersistedStateForSave({
       columns: sampleColumns,
       rows: sampleRows,
       keyExtractor: (row) => row.id,
-      filters: {
-        search: '',
-        kinds: [],
-        namespaces: [],
-        caseSensitive: false,
-        includeMetadata: true,
-      },
+      filters,
       filterOptions: { isNamespaceScoped: false },
     });
 
     expect(state).toEqual({
       version: 1,
-      filters: {
-        search: '',
-        kinds: [],
-        namespaces: [],
-        caseSensitive: false,
-        includeMetadata: true,
-      },
-    });
-  });
-
-  it('preserves the cluster-scoped namespace filter sentinel when saving shared views', () => {
-    const state = buildPersistedStateForSave({
-      columns: sampleColumns,
-      rows: sampleRows,
-      keyExtractor: (row) => row.id,
-      filters: {
-        search: '',
-        kinds: [],
-        namespaces: [''],
-        caseSensitive: false,
-        includeMetadata: false,
-      },
-      filterOptions: { isNamespaceScoped: false },
+      filters,
     });
 
-    expect(state?.filters?.namespaces).toEqual(['']);
-  });
-
-  it('preserves persisted non-default toggles and cluster-scoped namespace filters', () => {
     const pruned = prunePersistedState(
       {
         version: 1,
-        filters: {
-          search: '',
-          kinds: [],
-          namespaces: [''],
-          caseSensitive: false,
-          includeMetadata: true,
-        },
+        filters,
       },
       {
         columns: sampleColumns,
@@ -204,12 +174,6 @@ describe('gridTablePersistence', () => {
       }
     );
 
-    expect(pruned?.filters).toEqual({
-      search: '',
-      kinds: [],
-      namespaces: [''],
-      caseSensitive: false,
-      includeMetadata: true,
-    });
+    expect(pruned?.filters).toEqual(filters);
   });
 });
