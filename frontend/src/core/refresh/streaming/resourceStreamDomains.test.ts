@@ -144,6 +144,10 @@ describe('resource stream domain descriptors', () => {
       expect(['pod', 'namespace', 'cluster']).toContain(descriptor.scopeKind);
       expect(typeof descriptor.sortRows).toBe('function');
       expect(typeof descriptor.buildSnapshotKeys).toBe('function');
+      expect(typeof descriptor.collection.getRows).toBe('function');
+      expect(typeof descriptor.collection.withRows).toBe('function');
+      expect(typeof descriptor.collection.buildRowKey).toBe('function');
+      expect(typeof descriptor.collection.buildUpdateKey).toBe('function');
       expect(descriptor.isClusterScoped).toBe(CLUSTER_SCOPED_DOMAINS.has(descriptor.domain));
       expect('supportsMultiCluster' in descriptor).toBe(false);
     });
@@ -174,11 +178,16 @@ describe('resource stream domain descriptors', () => {
 
   it('uses descriptor row identity to build snapshot drift keys', () => {
     EXPECTED_DOMAINS.forEach((domain) => {
-      const keys = getResourceStreamDomainDescriptor(domain).buildSnapshotKeys(
-        samplePayloads[domain],
-        'fallback-cluster'
-      );
+      const descriptor = getResourceStreamDomainDescriptor(domain);
+      const keys = descriptor.buildSnapshotKeys(samplePayloads[domain], 'fallback-cluster');
       expect(Array.from(keys).sort()).toEqual(expectedSnapshotKeys[domain]);
+
+      const collectionKeys = new Set(
+        descriptor.collection
+          .getRows(samplePayloads[domain])
+          .map((row: any) => descriptor.collection.buildRowKey(row, 'fallback-cluster'))
+      );
+      expect(collectionKeys).toEqual(keys);
     });
   });
 

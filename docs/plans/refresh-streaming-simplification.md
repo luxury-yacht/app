@@ -278,18 +278,38 @@ Progress:
 
 ## Phase 5: Resource Snapshot And Row Merge Simplification
 
-- [ ] Extract pure row merge helpers out of the stream manager.
-- [ ] Add descriptor-driven collection accessors for domains whose snapshot
+- [x] Extract pure row merge helpers out of the stream manager.
+- [x] Add descriptor-driven collection accessors for domains whose snapshot
       application is now "write payload, update stats, clear error."
-- [ ] Replace repeated `applySnapshot` branches with a shared single-cluster
+- [x] Replace repeated `applySnapshot` branches with a shared single-cluster
       snapshot writer where the behavior is identical.
-- [ ] Keep explicit handlers for domains that genuinely need custom behavior.
-- [ ] Keep metrics-preserving merge behavior for pods, workloads, and nodes.
-- [ ] Add focused tests for row replacement, metrics preservation, deletion,
+- [x] Keep explicit handlers for domains that genuinely need custom behavior.
+- [x] Keep metrics-preserving merge behavior for pods, workloads, and nodes.
+- [x] Add focused tests for row replacement, metrics preservation, deletion,
       cluster-isolated replacement, and stable row reuse.
-- [ ] Verify drift detection uses the same identity rule as row merging.
-- [ ] Keep refresh-store mutation in the manager until the pure behavior is
+- [x] Verify drift detection uses the same identity rule as row merging.
+- [x] Keep refresh-store mutation in the manager until the pure behavior is
       fully covered.
+
+Progress:
+
+- 2026-05-16: Extracted pure stream row behavior into
+  `resourceStreamRows.ts`, including metric-preserving row merge helpers,
+  stable row reuse, deletion handling, and single-cluster snapshot row
+  replacement.
+- 2026-05-16: Added descriptor-owned row collection accessors for every
+  resource stream domain. Stream update application, shadow-key drift tracking,
+  and snapshot resync row replacement now all use descriptor row identity.
+- 2026-05-16: Replaced repeated `ResourceStreamManager.applySnapshot` branches
+  with a shared writer that keeps refresh-store mutation in the manager while
+  delegating row extraction, identity, sorting, and payload reconstruction to
+  descriptors.
+- 2026-05-16: Added focused tests for descriptor collection contracts,
+  descriptor drift-key parity, pure row deletion, stable row reuse, and
+  cluster-isolated snapshot row replacement. Focused validation passed:
+  `npm --prefix frontend run test -- src/core/refresh/streaming/resourceStreamManager.test.ts src/core/refresh/streaming/resourceStreamDomains.test.ts src/core/refresh/streaming/resourceStreamRows.test.ts src/core/refresh/orchestrator.test.ts`
+  and `npm --prefix frontend run typecheck`.
+- 2026-05-16: Full validation passed with `mage qc:prerelease`.
 
 ## Phase 6: Metrics-Only Refresh Simplification
 
