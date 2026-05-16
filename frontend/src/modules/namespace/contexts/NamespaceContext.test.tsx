@@ -219,6 +219,36 @@ describe('NamespaceProvider selection behaviour', () => {
     cleanup();
   });
 
+  it('enables and starts namespace refresh separately for every open cluster', () => {
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-a|',
+      true
+    );
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      true
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-a|',
+      { isManual: false }
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      { isManual: false }
+    );
+
+    cleanup();
+  });
+
   it('keeps namespace selection scoped to the active cluster tab', () => {
     namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
       {
@@ -372,6 +402,11 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
+      { isManual: true }
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
       { isManual: true }
     );
     cleanup();

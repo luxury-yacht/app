@@ -101,15 +101,15 @@ Progress:
 
 - [x] Change `NamespaceContext` to read namespace data from the active
       cluster's `namespaces` scope.
-- [ ] Enable `namespaces` refresh for each open cluster that needs namespace
+- [x] Enable `namespaces` refresh for each open cluster that needs namespace
       data instead of one `clusters=...|` scope.
-- [ ] Keep namespace selection per cluster tab.
-- [ ] Keep the active namespace list filtered by active cluster, but derive it
+- [x] Keep namespace selection per cluster tab.
+- [x] Keep the active namespace list filtered by active cluster, but derive it
       from that cluster's namespace payload rather than from an aggregate
       payload.
-- [ ] Ensure background cluster namespace refresh still works when background
+- [x] Ensure background cluster namespace refresh still works when background
       refresh is enabled.
-- [ ] Update `NamespaceContext` tests to expect per-cluster namespace state.
+- [x] Update `NamespaceContext` tests to expect per-cluster namespace state.
 
 Implementation direction:
 
@@ -128,6 +128,17 @@ Progress:
 - 2026-05-16: Updated namespace context tests to assert the active-cluster
   namespace refresh scope. Focused frontend validation passed:
   `npm run test -- src/modules/namespace/contexts/NamespaceContext.test.tsx`.
+- 2026-05-16: `NamespaceContext` now builds a deduplicated namespace scope list
+  from open cluster tabs, enables and disables `namespaces` separately for each
+  `clusterId|` scope, startup-refreshes each open cluster once, and fans manual
+  namespace refresh out across the same per-cluster scopes.
+- 2026-05-16: Namespace startup tracking now drops closed cluster scopes so a
+  reopened background cluster can request namespace data again.
+- 2026-05-16: Namespace tests now assert separate `cluster-a|` and `cluster-b|`
+  enablement plus startup/manual fetches. Focused validation passed:
+  `npm run test -- src/modules/namespace/contexts/NamespaceContext.test.tsx`
+  and `npm run test -- src/core/refresh/orchestrator.test.ts`.
+- 2026-05-16: Full validation passed with `mage qc:prerelease`.
 
 ## Phase 3: Diagnostics And App Debug Surfaces
 
