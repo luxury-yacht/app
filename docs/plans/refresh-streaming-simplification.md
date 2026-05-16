@@ -4,7 +4,7 @@
 
 The refresh system is one of the app's core stability surfaces. It keeps
 cluster data current across snapshots, resource streams, event streams,
-diagnostics, telemetry, manual refreshes, and multi-cluster scope handling.
+diagnostics, telemetry, manual refreshes, and per-cluster background refresh.
 
 The current implementation is functional but expensive to extend. The frontend
 resource stream manager combines domain registration rules, scope
@@ -14,7 +14,33 @@ large module. The backend resource stream manager has a similar concentration
 of responsibilities: informer wiring, custom resource informers, subscription
 state, buffering, and every per-kind update projection live together.
 
-This plan reduces that complexity without changing the refresh contract.
+This plan reduces that complexity and corrects the resource-stream scope model.
+Resource streams should be single-cluster by construction. Multiple open
+cluster tabs can still refresh in the background, but that should happen by
+explicit per-cluster fan-out rather than by passing multi-cluster scopes into a
+single resource stream domain.
+
+## Architecture Decision
+
+The app can have multiple cluster tabs open, but only one cluster tab is the
+active foreground cluster. Background clusters should continue refreshing, but
+each cluster's refresh work should run under a cluster-specific runtime/scope.
+
+The target shape is:
+
+- Keep one global refresh coordinator for app-wide concerns: active cluster,
+  connected/background clusters, settings, visibility, kubeconfig lifecycle,
+  auth pause/recovery, and diagnostics aggregation.
+- Introduce or make explicit per-cluster refresh runtimes beneath that
+  coordinator. Each runtime owns enabled domains, in-flight work, stream
+  subscriptions, stream health, telemetry, and scoped store writes for exactly
+  one `clusterId`.
+- Treat resource stream subscriptions as single-cluster only. If multiple
+  clusters need the same domain refreshed, the coordinator/background refresher
+  should fan out to each cluster runtime.
+- Keep true aggregate domains explicit. For example, the `namespaces` domain
+  may aggregate open clusters for namespace selection, but resource WebSocket
+  domains should not inherit that aggregate scope model.
 
 ## Goals
 
@@ -23,7 +49,9 @@ This plan reduces that complexity without changing the refresh contract.
 - Keep snapshot and streaming row identity aligned for every streamed domain.
 - Make it easier to add a resource kind without touching unrelated stream
   lifecycle code.
-- Preserve all multi-cluster scope behavior.
+- Remove multi-cluster resource stream scopes in favor of explicit per-cluster
+  refresh fan-out.
+- Preserve background refresh for open clusters.
 - Preserve drift detection, fallback, resync, and diagnostics behavior.
 - Add tests that fail when snapshot and stream behavior drift apart.
 
@@ -34,12 +62,17 @@ This plan reduces that complexity without changing the refresh contract.
 - Do not change polling, SSE, WebSocket, or manual refresh semantics.
 - Do not combine list/table snapshot builders into `backend/resources`.
 - Do not remove diagnostics or telemetry while simplifying.
+- Do not create fully independent top-level orchestrators per cluster tab.
+  Global lifecycle concerns should remain coordinated in one place.
+- Do not remove aggregate behavior from domains that intentionally own it, such
+  as namespace listing.
 
 ## Current Hotspots
 
 - `frontend/src/core/refresh/streaming/resourceStreamManager.ts`
   - Supported domain lists and domain categories
   - Scope normalization
+  - Multi-cluster resource stream admission and merge handling
   - Row sorting
   - Row key building
   - Drift key-set construction
@@ -57,13 +90,17 @@ This plan reduces that complexity without changing the refresh contract.
 
 ## Design Direction
 
+Use descriptors for repetitive domain behavior, but keep cluster ownership out
+of the descriptor. A descriptor should answer "how does this domain identify,
+sort, merge, and drift-check rows?" It should not answer "can this domain be
+multiplexed across multiple clusters?"
+
 Introduce explicit stream domain descriptors on both sides.
 
 Frontend descriptors should declare:
 
 - Domain name
 - Scope kind: namespace, pod, cluster
-- Multi-cluster support
 - Store payload collection accessor
 - Row identity function
 - Row sort function
@@ -86,11 +123,43 @@ release signals, and custom resources can keep explicit handlers where needed.
 The goal is to remove repetitive mechanics, not to force every kind through a
 bad generic abstraction.
 
+The frontend coordinator/runtime boundary should declare:
+
+- Active foreground `clusterId`
+- Background/open `clusterId` set
+- Domain scope category: single-cluster resource, explicit aggregate, or
+  non-resource stream
+- Per-cluster runtime lookup and lifecycle
+- Per-cluster domain enablement and disablement
+- Per-cluster stream health and telemetry aggregation
+- Explicit fan-out for background refresh work
+
+Resource stream scopes should contain exactly one cluster. A multi-cluster scope
+reaching `ResourceStreamManager` should be treated as a bug or rejected at the
+boundary.
+
+## Implementation Sequence
+
+The simplification should proceed in dependency order:
+
+1. Separate resource-stream scope normalization from aggregate scope
+   normalization.
+2. Introduce the frontend per-cluster runtime boundary.
+3. Extract and simplify resource snapshot application and row merge behavior.
+4. Simplify metrics-only refresh once it can run inside the per-cluster model.
+5. Extract connection/subscription lifecycle after the ownership boundaries are
+   stable.
+6. Apply backend descriptor/helper work after frontend behavior is covered.
+
+The metrics-only phase should stay after the per-cluster runtime phase because
+metrics freshness and stream fallback are user-visible and currently depend on
+global orchestrator state.
+
 ## Phase 1: Frontend Domain Descriptors
 
 - [x] Add a resource stream domain descriptor module.
 - [x] Move supported-domain checks into descriptors.
-- [x] Move multi-cluster and cluster-scoped domain rules into descriptors.
+- [x] Move cluster-scoped domain rules into descriptors.
 - [x] Move `normalizeResourceScope` to use descriptor scope kind.
 - [x] Move row sort functions into descriptor entries.
 - [x] Move row key functions into descriptor entries.
@@ -102,22 +171,109 @@ Progress:
 
 - 2026-05-16: Added `resourceStreamDomains.ts` as the frontend descriptor table
   for all resource WebSocket domains. The stream manager now imports descriptor
-  rules for domain support, multi-cluster support, cluster scope handling,
-  scope normalization, metrics preservation, row sorting, row identity, and
-  snapshot drift key construction. Added descriptor completeness tests covering
-  every streamed domain.
+  rules for domain support, cluster scope handling, scope normalization,
+  metrics preservation, row sorting, row identity, and snapshot drift key
+  construction. Added descriptor completeness tests covering every streamed
+  domain.
+- 2026-05-16: Paused further implementation after identifying that
+  `supportsMultiCluster` preserved the old global-orchestrator scope model
+  rather than the desired product model. The follow-up phase should remove
+  multi-cluster resource-stream scope support instead of building on it.
 
-## Phase 2: Frontend Row Merge Extraction
+## Phase 2: Single-Cluster Resource Stream Contract
+
+- [x] Remove `supportsMultiCluster` from resource stream domain descriptors.
+- [x] Make `ResourceStreamManager` accept only single-cluster resource scopes.
+- [x] Replace resource stream multi-cluster fan-in with explicit per-cluster
+      fan-out at the coordinator/background-refresh boundary.
+- [x] Keep background refresh for open clusters by invoking per-cluster refresh
+      work separately for each background `clusterId`.
+- [x] Remove multi-cluster merge paths from resource stream snapshot handling
+      once no caller can pass multi-cluster resource scopes.
+- [x] Add tests proving resource stream scopes are single-cluster and that
+      background refresh still refreshes non-active clusters independently.
+- [x] Keep or explicitly document aggregate behavior for non-resource-stream
+      domains such as `namespaces`.
+
+Progress:
+
+- 2026-05-16: Removed `supportsMultiCluster` from the descriptor contract.
+  `ResourceStreamManager` now rejects multi-cluster resource scopes and no
+  longer fans one resource stream request into multiple subscriptions. The
+  orchestrator rejects multi-cluster resource stream refresh scopes and keeps
+  background cluster refresh working through `fetchDomainForCluster`, which
+  builds one single-cluster scope per cluster. Focused tests now cover
+  descriptor shape, stream rejection, and background per-cluster fetches.
+- 2026-05-16: Validation passed with focused refresh tests and
+  `mage qc:prerelease`.
+
+## Phase 3: Scope Normalization Boundaries
+
+- [ ] Split the generic `RefreshOrchestrator.normalizeScope()` path into
+      explicit normalization paths for resource streams, aggregate domains, and
+      other scoped domains.
+- [ ] Make resource stream normalization prefer an explicit single-cluster
+      scope when present, otherwise the active foreground `selectedClusterId`.
+- [ ] Keep aggregate domains such as `namespaces` on a separate path that may
+      intentionally use all connected/open clusters.
+- [ ] Update `setScopedDomainEnabled`, `fetchScopedDomain`,
+      `startStreamingDomain`, `stopStreamingDomain`, `refreshStreamingDomainOnce`,
+      `restartStreamingDomain`, and `resetScopedDomain` to use the appropriate
+      normalization path.
+- [ ] Add tests proving unprefixed resource stream scopes resolve to the active
+      cluster, multi-cluster resource stream scopes are rejected, and aggregate
+      domains can still normalize aggregate scopes.
+- [ ] Add regression coverage for active-cluster switches with multiple
+      background clusters open.
+
+## Phase 4: Per-Cluster Runtime Boundary
+
+- [ ] Introduce a small per-cluster runtime abstraction under the global
+      refresh coordinator.
+- [ ] Move per-cluster domain enablement state into the runtime or behind a
+      runtime-aware API.
+- [ ] Move per-cluster in-flight request tracking and cancellation behind the
+      runtime.
+- [ ] Move per-cluster stream health and telemetry behind runtime-aware APIs.
+- [ ] Route background refresh through runtime lookup instead of building
+      ad hoc cluster-scoped calls in the coordinator.
+- [ ] Keep aggregate/system domains that truly span clusters owned by the
+      global coordinator.
+- [ ] Keep global settings, visibility, kubeconfig lifecycle, auth
+      pause/recovery, and diagnostics aggregation in the coordinator.
+- [ ] Add tests for active-cluster switches, background cluster refresh,
+      cluster removal, auth failure/recovery, and diagnostics aggregation.
+
+## Phase 5: Resource Snapshot And Row Merge Simplification
 
 - [ ] Extract pure row merge helpers out of the stream manager.
+- [ ] Add descriptor-driven collection accessors for domains whose snapshot
+      application is now "write payload, update stats, clear error."
+- [ ] Replace repeated `applySnapshot` branches with a shared single-cluster
+      snapshot writer where the behavior is identical.
+- [ ] Keep explicit handlers for domains that genuinely need custom behavior.
 - [ ] Keep metrics-preserving merge behavior for pods, workloads, and nodes.
 - [ ] Add focused tests for row replacement, metrics preservation, deletion,
-      multi-cluster replacement, and stable row reuse.
+      cluster-isolated replacement, and stable row reuse.
 - [ ] Verify drift detection uses the same identity rule as row merging.
 - [ ] Keep refresh-store mutation in the manager until the pure behavior is
       fully covered.
 
-## Phase 3: Frontend Connection And Subscription Boundaries
+## Phase 6: Metrics-Only Refresh Simplification
+
+- [ ] Re-evaluate `metricsOnly` after per-cluster runtimes own resource stream
+      state.
+- [ ] Move metrics-only refresh decisions out of global multi-domain
+      orchestration where possible and into the single-cluster resource runtime.
+- [ ] Preserve the current behavior that healthy streams can receive metrics
+      updates without replacing stream-driven rows.
+- [ ] Preserve fallback polling when stream health is degraded or unavailable.
+- [ ] Remove obsolete global metrics-only special cases once per-cluster
+      behavior covers them.
+- [ ] Add tests for metrics freshness, stream fallback, manual refresh,
+      background cluster metrics refresh, and restricted-RBAC metrics behavior.
+
+## Phase 7: Frontend Connection And Subscription Boundaries
 
 - [ ] Extract WebSocket connection lifecycle into a connection module.
 - [ ] Extract subscription state, pending unsubscribe, and resume token handling
@@ -127,7 +283,7 @@ Progress:
 - [ ] Add tests for visibility suspend/resume, reconnect, pending reset,
       pending unsubscribe, complete/error handling, and kubeconfig-change stop.
 
-## Phase 4: Backend Update Projection Helpers
+## Phase 8: Backend Update Projection Helpers
 
 - [ ] Add a small helper for constructing common `resourcestream.Update`
       metadata from Kubernetes object metadata.
@@ -137,7 +293,7 @@ Progress:
       custom resources, Helm release resync signals.
 - [ ] Add tests around one simple handler per domain family before broadening.
 
-## Phase 5: Backend Registration And Handler Descriptors
+## Phase 9: Backend Registration And Handler Descriptors
 
 - [ ] Introduce backend stream resource descriptors for straightforward
       informer handlers.
@@ -147,12 +303,15 @@ Progress:
 - [ ] Add a test that descriptor-backed resources have matching domain,
       resource, and permission metadata.
 
-## Phase 6: Parity Guardrails
+## Phase 10: Parity Guardrails
 
 - [ ] Add tests that compare streamed domain descriptors with refresh domain
       registrations.
 - [ ] Add tests that each streamed frontend domain has a row identity, sort,
       and drift strategy.
+- [ ] Add tests that resource WebSocket domains reject multi-cluster scopes.
+- [ ] Add tests that background refresh fans out across cluster runtimes instead
+      of creating multi-cluster resource scopes.
 - [ ] Add backend tests that each streamed built-in resource produces
       `clusterId`, resource version, kind, namespace where applicable, and row
       payloads matching the snapshot shape.
@@ -165,6 +324,8 @@ During implementation, use targeted checks first:
 ```bash
 npm run test -- src/core/refresh/streaming/resourceStreamManager.test.ts
 npm run test -- src/core/refresh/orchestrator.test.ts
+npm run test -- src/modules/kubernetes/config/KubeconfigContext.test.tsx
+npm run test -- src/core/refresh/hooks/useBackgroundClusterRefresh.test.tsx
 go test ./backend/refresh/resourcestream ./backend/refresh/system ./backend/refresh/snapshot
 ```
 
@@ -179,6 +340,15 @@ frontend lint fixes.
 
 ## Rollout Notes
 
-This should be done incrementally. The safest first milestone is frontend-only
-descriptor extraction for row keys, sorting, and scope rules, because it can be
-covered by pure tests before touching stream lifecycle behavior.
+This should be done incrementally. The next milestone should be scope
+normalization boundaries. Do not continue extracting row merge, metrics-only
+refresh, or connection lifecycle code until resource-stream scope ownership is
+explicit, because otherwise the extracted modules will preserve ambiguous
+cluster ownership.
+
+## Open Questions
+
+No open product questions at this point. The current working assumption is that
+only one cluster is active in the foreground, background clusters refresh via
+explicit per-cluster fan-out, and resource WebSocket domains should never use
+multi-cluster scopes.

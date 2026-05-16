@@ -2058,244 +2058,35 @@ describe('ResourceStreamManager', () => {
     expect(cancelCount()).toBe(0);
   });
 
-  it('starts node streaming for each cluster in a multi-cluster scope', async () => {
+  it('rejects node streaming for multi-cluster scopes', async () => {
     const manager = new ResourceStreamManager();
     const storeScope = buildClusterScopeList(['cluster-a', 'cluster-b'], '');
 
-    fetchSnapshotMock.mockResolvedValueOnce({
-      snapshot: {
-        domain: 'nodes',
-        scope: '',
-        version: 1,
-        checksum: 'etag-a',
-        generatedAt: Date.now(),
-        sequence: 1,
-        payload: { nodes: [{ name: 'node-a', status: 'Ready', clusterId: 'cluster-a' }] },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      },
-      notModified: false,
-    });
-    fetchSnapshotMock.mockResolvedValueOnce({
-      snapshot: {
-        domain: 'nodes',
-        scope: '',
-        version: 1,
-        checksum: 'etag-b',
-        generatedAt: Date.now(),
-        sequence: 1,
-        payload: { nodes: [{ name: 'node-b', status: 'Ready', clusterId: 'cluster-b' }] },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      },
-      notModified: false,
-    });
+    await expect(manager.start('nodes', storeScope)).rejects.toThrow('single cluster');
 
-    await manager.start('nodes', storeScope);
-    await flushPromises();
-
-    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
-    expect(createdSockets).toHaveLength(1);
-    const socket = createdSockets[0];
-    expect(socket).toBeDefined();
-    socket.onopen?.(new Event('open'));
-    const requests = socket.send.mock.calls
-      .map(([payload]) => JSON.parse(payload))
-      .filter((message) => message.type === 'REQUEST');
-    const scopesByCluster = new Map(requests.map((message) => [message.clusterId, message.scope]));
-    expect(scopesByCluster.get('cluster-a')).toBe('cluster-a|');
-    expect(scopesByCluster.get('cluster-b')).toBe('cluster-b|');
+    expect(fetchSnapshotMock).not.toHaveBeenCalled();
+    expect(createdSockets).toHaveLength(0);
   });
 
-  test('merges pod updates from multiple clusters into a multi-cluster scope', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a', 'cluster-b'], 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('pods', storeScope);
-
-    setScopedDomainState('pods', storeScope, () => ({
-      status: 'ready',
-      data: { pods: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'pods',
-        scope: 'namespace:default',
-        resourceVersion: '2',
-        name: 'pod-a',
-        namespace: 'default',
-        row: {
-          clusterId: 'cluster-a',
-          name: 'pod-a',
-          namespace: 'default',
-          status: 'Running',
-          ready: '1/1',
-          restarts: 0,
-          age: '1m',
-          ownerKind: 'Deployment',
-          ownerName: 'web',
-          node: 'node-a',
-        },
-      })
-    );
-
-    manager.handleMessage(
-      'cluster-b',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'pods',
-        scope: 'namespace:default',
-        resourceVersion: '3',
-        name: 'pod-b',
-        namespace: 'default',
-        row: {
-          clusterId: 'cluster-b',
-          name: 'pod-b',
-          namespace: 'default',
-          status: 'Pending',
-          ready: '0/1',
-          restarts: 0,
-          age: '2m',
-          ownerKind: 'Deployment',
-          ownerName: 'api',
-          node: 'node-b',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('pods', storeScope);
-    expect(state.data?.pods).toHaveLength(2);
-    const clusterIds = (state.data?.pods ?? []).map((pod) => pod.clusterId).sort();
-    expect(clusterIds).toEqual(['cluster-a', 'cluster-b']);
-  });
-
-  test('resyncs a single cluster workload without dropping other clusters', async () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
+  test('rejects pod streaming for multi-cluster scopes', async () => {
     const manager = new ResourceStreamManager();
     const storeScope = buildClusterScopeList(['cluster-a', 'cluster-b'], 'namespace:default');
 
-    fetchSnapshotMock.mockResolvedValueOnce({
-      snapshot: {
-        domain: 'namespace-workloads',
-        scope: 'namespace:default',
-        version: 5,
-        checksum: 'etag-a',
-        generatedAt: Date.now(),
-        sequence: 1,
-        payload: {
-          workloads: [
-            {
-              clusterId: 'cluster-a',
-              kind: 'Deployment',
-              name: 'web',
-              namespace: 'default',
-              status: 'Healthy',
-              pods: '1/1',
-              age: '2m',
-            },
-          ],
-        },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      },
-      notModified: false,
-    });
-    fetchSnapshotMock.mockResolvedValueOnce({
-      snapshot: {
-        domain: 'namespace-workloads',
-        scope: 'namespace:default',
-        version: 6,
-        checksum: 'etag-b',
-        generatedAt: Date.now(),
-        sequence: 1,
-        payload: {
-          workloads: [
-            {
-              clusterId: 'cluster-b',
-              kind: 'Deployment',
-              name: 'api',
-              namespace: 'default',
-              status: 'Healthy',
-              pods: '2/2',
-              age: '3m',
-            },
-          ],
-        },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      },
-      notModified: false,
-    });
-    fetchSnapshotMock.mockResolvedValueOnce({
-      snapshot: {
-        domain: 'namespace-workloads',
-        scope: 'namespace:default',
-        version: 7,
-        checksum: 'etag-a-2',
-        generatedAt: Date.now(),
-        sequence: 2,
-        payload: {
-          workloads: [
-            {
-              clusterId: 'cluster-a',
-              kind: 'Deployment',
-              name: 'web',
-              namespace: 'default',
-              status: 'Degraded',
-              pods: '0/1',
-              age: '4m',
-            },
-          ],
-        },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      },
-      notModified: false,
-    });
+    await expect(manager.start('pods', storeScope)).rejects.toThrow('single cluster');
 
-    await manager.start('namespace-workloads', storeScope);
-    await flushPromises();
+    expect(fetchSnapshotMock).not.toHaveBeenCalled();
+    expect(createdSockets).toHaveLength(0);
+  });
 
-    const initialState = getScopedDomainState('namespace-workloads', storeScope);
-    expect(initialState.data?.workloads).toHaveLength(2);
+  test('rejects namespace workload streaming for multi-cluster scopes', async () => {
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a', 'cluster-b'], 'namespace:default');
 
-    vi.advanceTimersByTime(1100);
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'MODIFIED',
-        domain: 'namespace-workloads',
-        scope: 'namespace:default',
-        resourceVersion: '1',
-        name: 'web',
-        namespace: 'default',
-        kind: 'Deployment',
-        row: {
-          clusterId: 'cluster-a',
-          kind: 'Deployment',
-          name: 'web',
-          namespace: 'default',
-          status: 'Degraded',
-          pods: '0/1',
-          age: '4m',
-        },
-      })
+    await expect(manager.start('namespace-workloads', storeScope)).rejects.toThrow(
+      'single cluster'
     );
 
-    await flushPromises();
-
-    const state = getScopedDomainState('namespace-workloads', storeScope);
-    const names = (state.data?.workloads ?? []).map((row) => row.name).sort();
-    expect(names).toEqual(['api', 'web']);
+    expect(fetchSnapshotMock).not.toHaveBeenCalled();
+    expect(createdSockets).toHaveLength(0);
   });
 });

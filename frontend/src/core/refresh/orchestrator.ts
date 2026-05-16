@@ -700,7 +700,7 @@ class RefreshOrchestrator {
     }
     // Build a cluster-scoped scope string and perform a direct snapshot fetch.
     const clusterScope = buildClusterScopeList([clusterId], scope ?? '');
-    await this.performFetch(domain, clusterScope, { isManual: false }, config);
+    await this.performFetch(domain, clusterScope, { isManual: false });
   }
 
   isStreamingDomain(domain: RefreshDomain): boolean {
@@ -744,19 +744,6 @@ class RefreshOrchestrator {
       domain === 'cluster-crds' ||
       domain === 'cluster-custom' ||
       domain === 'nodes'
-    );
-  }
-
-  private isMultiClusterStreamDomain(domain: RefreshDomain): boolean {
-    return (
-      domain === 'pods' ||
-      domain === 'namespace-workloads' ||
-      domain === 'nodes' ||
-      domain === 'cluster-rbac' ||
-      domain === 'cluster-storage' ||
-      domain === 'cluster-config' ||
-      domain === 'cluster-crds' ||
-      domain === 'cluster-custom'
     );
   }
 
@@ -897,7 +884,7 @@ class RefreshOrchestrator {
     if (parsed.clusterIds.length === 0) {
       return false;
     }
-    if (parsed.isMultiCluster && !this.isMultiClusterStreamDomain(domain)) {
+    if (parsed.isMultiCluster) {
       return false;
     }
     if (this.isStreamingBlocked(domain, trimmed)) {
@@ -1127,23 +1114,6 @@ class RefreshOrchestrator {
     return buildClusterScopeList(selectedClusterIds, parsed.scope || trimmed);
   }
 
-  private isMultiClusterMetricsDomain(domain: RefreshDomain): boolean {
-    return domain === 'pods' || domain === 'namespace-workloads' || domain === 'nodes';
-  }
-
-  private parseMultiClusterScope(
-    scope?: string | null
-  ): { clusterIds: string[]; scope: string } | null {
-    if (!scope) {
-      return null;
-    }
-    const parsed = parseClusterScopeList(scope);
-    if (!parsed.isMultiCluster || parsed.clusterIds.length < 2) {
-      return null;
-    }
-    return { clusterIds: parsed.clusterIds, scope: parsed.scope };
-  }
-
   private getSelectedClusterIds(context: RefreshContext = this.context): string[] {
     // Prefer the explicit multi-select list, fall back to the active selection.
     const explicit = (context.selectedClusterIds ?? [])
@@ -1223,6 +1193,13 @@ class RefreshOrchestrator {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope`);
     }
 
+    if (
+      this.isResourceStreamDomain(domain) &&
+      parseClusterScopeList(normalizedScope).isMultiCluster
+    ) {
+      throw new Error(`Resource stream domain "${domain}" requires a single cluster scope`);
+    }
+
     if (config.streaming) {
       const shouldStream = this.shouldStreamScope(domain, normalizedScope);
       if (shouldStream) {
@@ -1253,12 +1230,11 @@ class RefreshOrchestrator {
         if (metricsOnly && this.shouldSkipStreamingMetricsRefresh(domain, normalizedScope)) {
           return;
         }
-        await this.performFetch(
-          domain,
-          normalizedScope,
-          { isManual: options.isManual ?? true, signal: options.signal, metricsOnly },
-          config
-        );
+        await this.performFetch(domain, normalizedScope, {
+          isManual: options.isManual ?? true,
+          signal: options.signal,
+          metricsOnly,
+        });
         return;
       }
       // Skip polling when the stream is healthy — but not for manual fetches,
@@ -1268,19 +1244,16 @@ class RefreshOrchestrator {
       }
     }
 
-    await this.performFetch(
-      domain,
-      normalizedScope,
-      { isManual: options.isManual ?? true, signal: options.signal },
-      config
-    );
+    await this.performFetch(domain, normalizedScope, {
+      isManual: options.isManual ?? true,
+      signal: options.signal,
+    });
   }
 
   private async performFetch<K extends RefreshDomain>(
     domain: K,
     scope: string | undefined,
-    options: DomainFetchOptions,
-    config: DomainRegistration<RefreshDomain>
+    options: DomainFetchOptions
   ): Promise<void> {
     const metricsOnly = Boolean(options.metricsOnly);
     // All domains are scoped — normalizeScope without allowEmpty.
@@ -1352,23 +1325,6 @@ class RefreshOrchestrator {
     markPendingRequest(1);
 
     try {
-      const multiClusterScope = metricsOnly ? this.parseMultiClusterScope(normalizedScope) : null;
-      if (metricsOnly && multiClusterScope && this.isMultiClusterMetricsDomain(domain)) {
-        await this.performMultiClusterMetricsFetch(
-          domain,
-          normalizedScope,
-          multiClusterScope,
-          options,
-          config,
-          controller,
-          contextVersion
-        );
-        if (metricsOnly && !options.isManual) {
-          this.recordStreamingMetricsRefresh(domain, normalizedScope);
-        }
-        return;
-      }
-
       const { snapshot, etag, notModified } = await fetchSnapshot<DomainPayloadMap[K]>(domain, {
         scope: normalizedScope,
         signal: controller.signal,
@@ -1453,67 +1409,6 @@ class RefreshOrchestrator {
 
       markPendingRequest(-1);
     }
-  }
-
-  private async performMultiClusterMetricsFetch<K extends RefreshDomain>(
-    domain: K,
-    reportScope: string,
-    clusterScope: { clusterIds: string[]; scope: string },
-    options: DomainFetchOptions,
-    _config: DomainRegistration<RefreshDomain>,
-    controller: AbortController,
-    contextVersion: number
-  ): Promise<void> {
-    // Fan out metrics-only refreshes per cluster to avoid invalid multi-cluster scopes.
-    let applied = false;
-
-    for (const clusterId of clusterScope.clusterIds) {
-      const scope = buildClusterScopeList([clusterId], clusterScope.scope);
-      const { snapshot, etag, notModified } = await fetchSnapshot<DomainPayloadMap[K]>(domain, {
-        scope,
-        signal: controller.signal,
-      });
-
-      if (controller.signal.aborted) {
-        return;
-      }
-
-      if (contextVersion !== this.contextVersion) {
-        return;
-      }
-
-      if (notModified || !snapshot) {
-        continue;
-      }
-
-      const appliedMetrics = this.applyMetricsSnapshot(
-        domain,
-        snapshot,
-        etag,
-        options.isManual,
-        reportScope
-      );
-      if (!appliedMetrics) {
-        this.applySnapshot(domain, snapshot, etag, options.isManual, reportScope);
-      }
-      applied = true;
-    }
-
-    if (applied) {
-      return;
-    }
-
-    if (!this.isScopedDomainEnabledInternal(domain, reportScope)) {
-      return;
-    }
-    setScopedDomainState(domain, reportScope, (prev) => ({
-      ...prev,
-      status: prev.data ? 'ready' : 'idle',
-      isManual: options.isManual,
-      lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
-    }));
-
-    this.clearRefreshError(domain, reportScope);
   }
 
   private applySnapshot<K extends RefreshDomain>(

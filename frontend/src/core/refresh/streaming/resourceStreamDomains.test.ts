@@ -10,7 +10,6 @@ import {
   RESOURCE_STREAM_DOMAINS,
   getResourceStreamDomainDescriptor,
   isClusterScopedDomain,
-  isMultiClusterDomain,
   isSupportedDomain,
   normalizeResourceScope,
   resourceStreamDomainDescriptors,
@@ -35,17 +34,6 @@ const EXPECTED_DOMAINS: ResourceDomain[] = [
   'cluster-custom',
   'nodes',
 ];
-
-const MULTI_CLUSTER_DOMAINS = new Set<ResourceDomain>([
-  'pods',
-  'namespace-workloads',
-  'nodes',
-  'cluster-rbac',
-  'cluster-storage',
-  'cluster-config',
-  'cluster-crds',
-  'cluster-custom',
-]);
 
 const CLUSTER_SCOPED_DOMAINS = new Set<ResourceDomain>([
   'cluster-rbac',
@@ -156,8 +144,8 @@ describe('resource stream domain descriptors', () => {
       expect(['pod', 'namespace', 'cluster']).toContain(descriptor.scopeKind);
       expect(typeof descriptor.sortRows).toBe('function');
       expect(typeof descriptor.buildSnapshotKeys).toBe('function');
-      expect(descriptor.supportsMultiCluster).toBe(MULTI_CLUSTER_DOMAINS.has(descriptor.domain));
       expect(descriptor.isClusterScoped).toBe(CLUSTER_SCOPED_DOMAINS.has(descriptor.domain));
+      expect('supportsMultiCluster' in descriptor).toBe(false);
     });
   });
 
@@ -197,7 +185,6 @@ describe('resource stream domain descriptors', () => {
   it('exposes domain guards from the descriptor table', () => {
     EXPECTED_DOMAINS.forEach((domain) => {
       expect(isSupportedDomain(domain)).toBe(true);
-      expect(isMultiClusterDomain(domain)).toBe(MULTI_CLUSTER_DOMAINS.has(domain));
       expect(isClusterScopedDomain(domain)).toBe(CLUSTER_SCOPED_DOMAINS.has(domain));
     });
     expect(isSupportedDomain('not-a-domain')).toBe(false);

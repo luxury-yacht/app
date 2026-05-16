@@ -47,7 +47,6 @@ export type ResourceStreamScopeKind = 'pod' | 'namespace' | 'cluster';
 export type ResourceStreamDomainDescriptor = {
   domain: ResourceDomain;
   scopeKind: ResourceStreamScopeKind;
-  supportsMultiCluster: boolean;
   isClusterScoped: boolean;
   preserveMetrics: boolean;
   sortRows: (rows: unknown[]) => void;
@@ -597,7 +596,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'pods',
     scopeKind: 'pod',
-    supportsMultiCluster: true,
     isClusterScoped: false,
     preserveMetrics: true,
     sortRows: rowSorter(sortPodRows),
@@ -606,7 +604,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'namespace-workloads',
     scopeKind: 'namespace',
-    supportsMultiCluster: true,
     isClusterScoped: false,
     preserveMetrics: true,
     sortRows: rowSorter(sortWorkloadRows),
@@ -615,7 +612,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'namespace-config',
     scopeKind: 'namespace',
-    supportsMultiCluster: false,
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortConfigRows),
@@ -624,7 +620,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'namespace-network',
     scopeKind: 'namespace',
-    supportsMultiCluster: false,
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortNetworkRows),
@@ -633,7 +628,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'namespace-rbac',
     scopeKind: 'namespace',
-    supportsMultiCluster: false,
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortRBACRows),
@@ -642,7 +636,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'namespace-custom',
     scopeKind: 'namespace',
-    supportsMultiCluster: false,
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortCustomRows),
@@ -651,7 +644,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'namespace-helm',
     scopeKind: 'namespace',
-    supportsMultiCluster: false,
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortHelmRows),
@@ -660,7 +652,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'namespace-autoscaling',
     scopeKind: 'namespace',
-    supportsMultiCluster: false,
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortAutoscalingRows),
@@ -669,7 +660,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'namespace-quotas',
     scopeKind: 'namespace',
-    supportsMultiCluster: false,
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortQuotaRows),
@@ -678,7 +668,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'namespace-storage',
     scopeKind: 'namespace',
-    supportsMultiCluster: false,
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortStorageRows),
@@ -687,7 +676,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'cluster-rbac',
     scopeKind: 'cluster',
-    supportsMultiCluster: true,
     isClusterScoped: true,
     preserveMetrics: false,
     sortRows: rowSorter(sortClusterRBACRows),
@@ -696,7 +684,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'cluster-storage',
     scopeKind: 'cluster',
-    supportsMultiCluster: true,
     isClusterScoped: true,
     preserveMetrics: false,
     sortRows: rowSorter(sortClusterStorageRows),
@@ -705,7 +692,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'cluster-config',
     scopeKind: 'cluster',
-    supportsMultiCluster: true,
     isClusterScoped: true,
     preserveMetrics: false,
     sortRows: rowSorter(sortClusterConfigRows),
@@ -714,7 +700,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'cluster-crds',
     scopeKind: 'cluster',
-    supportsMultiCluster: true,
     isClusterScoped: true,
     preserveMetrics: false,
     sortRows: rowSorter(sortClusterCRDRows),
@@ -723,7 +708,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'cluster-custom',
     scopeKind: 'cluster',
-    supportsMultiCluster: true,
     isClusterScoped: true,
     preserveMetrics: false,
     sortRows: rowSorter(sortClusterCustomRows),
@@ -732,7 +716,6 @@ export const resourceStreamDomainDescriptors = [
   {
     domain: 'nodes',
     scopeKind: 'cluster',
-    supportsMultiCluster: true,
     isClusterScoped: true,
     preserveMetrics: true,
     sortRows: rowSorter(sortNodeRows),
@@ -754,9 +737,6 @@ export const isSupportedDomain = (value: string | undefined): value is ResourceD
 export const getResourceStreamDomainDescriptor = (
   domain: ResourceDomain
 ): ResourceStreamDomainDescriptor => resourceStreamDescriptorByDomain.get(domain)!;
-
-export const isMultiClusterDomain = (domain: ResourceDomain): boolean =>
-  getResourceStreamDomainDescriptor(domain).supportsMultiCluster;
 
 export const isClusterScopedDomain = (domain: ResourceDomain): boolean =>
   getResourceStreamDomainDescriptor(domain).isClusterScoped;
