@@ -240,21 +240,41 @@ Progress:
 
 ## Phase 4: Per-Cluster Runtime Boundary
 
-- [ ] Introduce a small per-cluster runtime abstraction under the global
+- [x] Introduce a small per-cluster runtime abstraction under the global
       refresh coordinator.
-- [ ] Move per-cluster domain enablement state into the runtime or behind a
+- [x] Move per-cluster domain enablement state into the runtime or behind a
       runtime-aware API.
-- [ ] Move per-cluster in-flight request tracking and cancellation behind the
+- [x] Move per-cluster in-flight request tracking and cancellation behind the
       runtime.
-- [ ] Move per-cluster stream health and telemetry behind runtime-aware APIs.
-- [ ] Route background refresh through runtime lookup instead of building
+- [x] Move per-cluster stream health and telemetry behind runtime-aware APIs.
+- [x] Route background refresh through runtime lookup instead of building
       ad hoc cluster-scoped calls in the coordinator.
-- [ ] Keep aggregate/system domains that truly span clusters owned by the
+- [x] Keep aggregate/system domains that truly span clusters owned by the
       global coordinator.
-- [ ] Keep global settings, visibility, kubeconfig lifecycle, auth
+- [x] Keep global settings, visibility, kubeconfig lifecycle, auth
       pause/recovery, and diagnostics aggregation in the coordinator.
-- [ ] Add tests for active-cluster switches, background cluster refresh,
+- [x] Add tests for active-cluster switches, background cluster refresh,
       cluster removal, auth failure/recovery, and diagnostics aggregation.
+
+Progress:
+
+- 2026-05-16: Added `ClusterRefreshRuntime` and routed single-cluster resource
+  domain state through per-cluster runtimes. The coordinator now owns only
+  aggregate/global state for domains such as `namespaces` and
+  `cluster-overview`.
+- 2026-05-16: Moved scoped enablement, in-flight request tracking, stream
+  startup/cleanup bookkeeping, stream health, blocked-stream state, and
+  metrics refresh telemetry behind runtime-aware lookup. Background cluster
+  snapshot refresh now creates/uses the target cluster runtime before fetching.
+- 2026-05-16: Added runtime pruning when `allConnectedClusterIds` removes a
+  cluster. Removed runtimes stop streaming, abort in-flight work, clear
+  transient telemetry, and reset their scoped refresh state.
+- 2026-05-16: Added regression tests for cluster-runtime ownership,
+  aggregate-domain coordinator ownership, background cluster refresh, cluster
+  removal, stream drift/health ownership, and auth failure/recovery restart
+  behavior. Focused validation passed:
+  `npm --prefix frontend run test -- src/core/refresh/orchestrator.test.ts src/core/refresh/streaming/resourceStreamManager.test.ts src/core/refresh/streaming/resourceStreamDomains.test.ts src/modules/kubernetes/config/KubeconfigContext.test.tsx src/core/refresh/hooks/useBackgroundRefresh.test.tsx`.
+- 2026-05-16: Full validation passed with `mage qc:prerelease`.
 
 ## Phase 5: Resource Snapshot And Row Merge Simplification
 
