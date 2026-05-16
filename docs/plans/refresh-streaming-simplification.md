@@ -313,17 +313,35 @@ Progress:
 
 ## Phase 6: Metrics-Only Refresh Simplification
 
-- [ ] Re-evaluate `metricsOnly` after per-cluster runtimes own resource stream
+- [x] Re-evaluate `metricsOnly` after per-cluster runtimes own resource stream
       state.
-- [ ] Move metrics-only refresh decisions out of global multi-domain
+- [x] Move metrics-only refresh decisions out of global multi-domain
       orchestration where possible and into the single-cluster resource runtime.
-- [ ] Preserve the current behavior that healthy streams can receive metrics
+- [x] Preserve the current behavior that healthy streams can receive metrics
       updates without replacing stream-driven rows.
-- [ ] Preserve fallback polling when stream health is degraded or unavailable.
-- [ ] Remove obsolete global metrics-only special cases once per-cluster
+- [x] Preserve fallback polling when stream health is degraded or unavailable.
+- [x] Remove obsolete global metrics-only special cases once per-cluster
       behavior covers them.
-- [ ] Add tests for metrics freshness, stream fallback, manual refresh,
+- [x] Add tests for metrics freshness, stream fallback, manual refresh,
       background cluster metrics refresh, and restricted-RBAC metrics behavior.
+
+Progress:
+
+- 2026-05-16: Moved streaming fetch-mode selection into
+  `ClusterRefreshRuntime`. The owning runtime now decides whether a scoped
+  streaming domain should run a normal snapshot, apply a metrics-only snapshot,
+  or skip because the stream/metrics state is already fresh.
+- 2026-05-16: Removed the coordinator-level metrics freshness helpers. Metrics
+  refresh timestamps are still per-cluster runtime state, and metrics-only
+  snapshots now record freshness through that runtime after successful
+  not-modified or applied snapshot responses.
+- 2026-05-16: Added regression tests for active-stream manual refresh,
+  unhealthy-stream fallback snapshots, per-cluster metrics freshness isolation,
+  background-cluster metrics refresh, and restricted-RBAC metrics errors that
+  update metrics status without replacing stream-owned rows. Focused validation
+  passed:
+  `npm --prefix frontend run test -- src/core/refresh/orchestrator.test.ts src/core/refresh/streaming/resourceStreamManager.test.ts src/core/refresh/streaming/resourceStreamDomains.test.ts src/core/refresh/streaming/resourceStreamRows.test.ts`.
+- 2026-05-16: Full validation passed with `mage qc:prerelease`.
 
 ## Phase 7: Frontend Connection And Subscription Boundaries
 

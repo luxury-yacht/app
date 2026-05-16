@@ -12,7 +12,7 @@ import {
   setAppPreferencesForTesting,
   setAutoRefreshEnabled,
 } from '@/core/settings/appPreferences';
-import type { RefreshDomain } from './types';
+import type { PodSnapshotEntry, RefreshDomain } from './types';
 import {
   getRefreshState,
   getScopedDomainState,
@@ -249,6 +249,41 @@ describe('refreshOrchestrator', () => {
       category: 'system',
     });
   };
+
+  const registerStreamingPodsDomain = () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'pods',
+      refresherName: SYSTEM_REFRESHERS.unifiedPods,
+      category: 'system',
+      streaming: {
+        start: (scope: string) => resourceStreamMocks.start(scope),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          resourceStreamMocks.stop(scope, options),
+        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
+        metricsOnly: true,
+      },
+    });
+  };
+
+  const makePodRow = (overrides: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry => ({
+    clusterId: 'cluster-a',
+    namespace: 'default',
+    name: 'pod-a',
+    node: 'node-a',
+    status: 'Running',
+    ready: '1/1',
+    restarts: 0,
+    age: '1m',
+    ownerKind: 'ReplicaSet',
+    ownerName: 'pod-a-rs',
+    cpuRequest: '10m',
+    cpuLimit: '20m',
+    cpuUsage: '10m',
+    memRequest: '10Mi',
+    memLimit: '20Mi',
+    memUsage: '20Mi',
+    ...overrides,
+  });
 
   it('refreshes namespaces domain alongside context targets during manual refresh', async () => {
     refreshManagerMocks.triggerManualRefreshForContextMock.mockResolvedValue(
@@ -1156,6 +1191,97 @@ describe('refreshOrchestrator', () => {
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
   });
 
+  it('uses resource stream refreshOnce for manual metrics domains with an active stream', async () => {
+    registerStreamingPodsDomain();
+    const scope = buildClusterScopeList(['cluster-a'], 'namespace:team-a');
+    refreshOrchestrator.updateContext({
+      currentView: 'namespace',
+      activeNamespaceView: 'pods',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+    });
+    markResourceStreamActive('pods', scope);
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
+
+    await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: true });
+
+    expect(resourceStreamMocks.refreshOnce).toHaveBeenCalledWith(scope);
+    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to full snapshots for metrics domains when a stream is unhealthy', async () => {
+    registerStreamingPodsDomain();
+    const scope = buildClusterScopeList(['cluster-a'], 'namespace:team-a');
+    refreshOrchestrator.updateContext({
+      currentView: 'namespace',
+      activeNamespaceView: 'pods',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+    });
+    markResourceStreamActive('pods', scope);
+    resourceStreamMocks.isHealthy.mockReturnValue(false);
+
+    setScopedDomainState('pods', scope, () => ({
+      status: 'ready',
+      data: {
+        clusterId: 'cluster-a',
+        pods: [
+          makePodRow({
+            clusterId: 'cluster-a',
+            namespace: 'team-a',
+            name: 'pod-a',
+            status: 'Running',
+            cpuUsage: '10m',
+            memUsage: '20Mi',
+          }),
+        ],
+      },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope,
+    }));
+
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope,
+        version: 1,
+        checksum: 'etag-pods',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          clusterId: 'cluster-a',
+          pods: [
+            makePodRow({
+              clusterId: 'cluster-a',
+              namespace: 'team-a',
+              name: 'pod-a',
+              status: 'Pending',
+              cpuUsage: '15m',
+              memUsage: '25Mi',
+            }),
+          ],
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      etag: 'etag-pods',
+      notModified: false,
+    });
+
+    await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: false });
+
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
+      'pods',
+      expect.objectContaining({ scope })
+    );
+    const nextPod = getScopedDomainState('pods', scope).data?.pods?.[0];
+    expect(nextPod?.status).toBe('Pending');
+    expect(nextPod?.cpuUsage).toBe('15m');
+
+    resetAllScopedDomainStates('pods');
+  });
+
   it('skips enabling streaming domains when no scope is available', async () => {
     catalogStreamMocks.start.mockClear();
     refreshManagerMocks.enableMock.mockClear();
@@ -1929,6 +2055,173 @@ describe('refreshOrchestrator', () => {
     await Promise.resolve();
     expect(resourceStreamMocks.start).toHaveBeenCalledWith(scopeA);
     expect(resourceStreamMocks.start).toHaveBeenCalledWith(scopeB);
+  });
+
+  it('keeps metrics freshness isolated to the owning cluster runtime', async () => {
+    registerStreamingPodsDomain();
+    const scopeA = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const scopeB = buildClusterScopeList(['cluster-b'], 'namespace:default');
+    refreshOrchestrator.updateContext({
+      currentView: 'namespace',
+      activeNamespaceView: 'pods',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    markResourceStreamActive('pods', scopeA);
+    markResourceStreamActive('pods', scopeB);
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
+
+    const podA = makePodRow({
+      clusterId: 'cluster-a',
+      namespace: 'default',
+      name: 'pod-a',
+      status: 'Running',
+      cpuUsage: '10m',
+      memUsage: '20Mi',
+    });
+    const podB = makePodRow({
+      clusterId: 'cluster-b',
+      namespace: 'default',
+      name: 'pod-b',
+      node: 'node-b',
+      status: 'Running',
+      cpuUsage: '30m',
+      memUsage: '40Mi',
+    });
+
+    setScopedDomainState('pods', scopeA, () => ({
+      status: 'ready',
+      data: { clusterId: 'cluster-a', pods: [podA] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: scopeA,
+    }));
+    setScopedDomainState('pods', scopeB, () => ({
+      status: 'ready',
+      data: { clusterId: 'cluster-b', pods: [podB] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: scopeB,
+    }));
+    orchestratorInternals
+      .getRuntimeForScope('pods', scopeA)
+      .recordMetricsRefresh('pods', scopeA, Date.now());
+
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope: scopeB,
+        version: 2,
+        checksum: 'etag-pods-b',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          clusterId: 'cluster-b',
+          pods: [
+            {
+              ...podB,
+              status: 'Pending',
+              cpuUsage: '35m',
+              memUsage: '45Mi',
+            },
+          ],
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      etag: 'etag-pods-b',
+      notModified: false,
+    });
+
+    await refreshOrchestrator.fetchScopedDomain('pods', scopeA, { isManual: false });
+    await refreshOrchestrator.fetchScopedDomain('pods', scopeB, { isManual: false });
+
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
+      'pods',
+      expect.objectContaining({ scope: scopeB })
+    );
+    expect(getScopedDomainState('pods', scopeA).data?.pods?.[0]).toBe(podA);
+    const nextPodB = getScopedDomainState('pods', scopeB).data?.pods?.[0];
+    expect(nextPodB?.status).toBe('Running');
+    expect(nextPodB?.cpuUsage).toBe('35m');
+    expect(nextPodB?.memUsage).toBe('45Mi');
+
+    resetAllScopedDomainStates('pods');
+  });
+
+  it('records restricted metrics errors without replacing stream rows', async () => {
+    registerStreamingPodsDomain();
+    const scope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    refreshOrchestrator.updateContext({
+      currentView: 'namespace',
+      activeNamespaceView: 'pods',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+    });
+    markResourceStreamActive('pods', scope);
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
+
+    const existingPod = makePodRow({
+      clusterId: 'cluster-a',
+      namespace: 'default',
+      name: 'pod-a',
+      status: 'Running',
+      cpuUsage: '10m',
+      memUsage: '20Mi',
+    });
+    setScopedDomainState('pods', scope, () => ({
+      status: 'ready',
+      data: {
+        clusterId: 'cluster-a',
+        pods: [existingPod],
+        metrics: { stale: false, successCount: 1, failureCount: 0 },
+      },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope,
+    }));
+
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope,
+        version: 2,
+        checksum: 'etag-pods-rbac',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          clusterId: 'cluster-a',
+          pods: [
+            {
+              ...existingPod,
+              status: 'Pending',
+            },
+          ],
+          metrics: {
+            stale: true,
+            lastError: 'forbidden: cannot list metrics.k8s.io pods',
+            successCount: 1,
+            failureCount: 1,
+          },
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      etag: 'etag-pods-rbac',
+      notModified: false,
+    });
+
+    await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: false });
+
+    const nextState = getScopedDomainState('pods', scope);
+    expect(nextState.data?.pods?.[0]).toBe(existingPod);
+    expect(nextState.data?.metrics?.stale).toBe(true);
+    expect(nextState.data?.metrics?.lastError).toContain('forbidden');
+
+    resetAllScopedDomainStates('pods');
   });
 
   it('preserves node status fields when applying metrics-only snapshots', () => {

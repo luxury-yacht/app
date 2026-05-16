@@ -96,6 +96,21 @@ type InFlightRequest = {
   scope?: string;
 };
 
+type StreamingFetchMode = 'snapshot' | 'metrics-only' | 'skip';
+
+type StreamingFetchDecisionInput = {
+  domain: RefreshDomain;
+  scope: string;
+  shouldStream: boolean;
+  isManual: boolean;
+  metricsOnly: boolean;
+  streamingHealthy: boolean;
+  metricsMinIntervalMs: number;
+  now?: number;
+};
+
+const makeInFlightKey = (domain: RefreshDomain, scope?: string) => `${domain}::${scope ?? '*'}`;
+
 class ClusterRefreshRuntime {
   readonly inFlight = new Map<string, InFlightRequest>();
   readonly streamingCleanup = new Map<string, () => void>();
@@ -108,6 +123,51 @@ class ClusterRefreshRuntime {
   readonly scopedEnabledState = new Map<RefreshDomain, Map<string, boolean>>();
 
   constructor(readonly clusterId: string) {}
+
+  isStreamingBlocked(domain: RefreshDomain, scope: string): boolean {
+    return this.blockedStreaming.has(makeInFlightKey(domain, scope));
+  }
+
+  isStreamingActive(domain: RefreshDomain, scope: string): boolean {
+    return this.streamingCleanup.has(makeInFlightKey(domain, scope));
+  }
+
+  resolveStreamingFetchMode(input: StreamingFetchDecisionInput): StreamingFetchMode {
+    if (input.isManual || !input.shouldStream) {
+      return 'snapshot';
+    }
+
+    if (!input.metricsOnly) {
+      return input.streamingHealthy ? 'skip' : 'snapshot';
+    }
+
+    if (!this.isStreamingActive(input.domain, input.scope) || !input.streamingHealthy) {
+      return 'snapshot';
+    }
+
+    return this.isMetricsRefreshFresh(
+      input.domain,
+      input.scope,
+      input.metricsMinIntervalMs,
+      input.now
+    )
+      ? 'skip'
+      : 'metrics-only';
+  }
+
+  recordMetricsRefresh(domain: RefreshDomain, scope: string, now = Date.now()): void {
+    this.lastMetricsRefreshAt.set(makeInFlightKey(domain, scope), now);
+  }
+
+  private isMetricsRefreshFresh(
+    domain: RefreshDomain,
+    scope: string,
+    minIntervalMs: number,
+    now = Date.now()
+  ): boolean {
+    const last = this.lastMetricsRefreshAt.get(makeInFlightKey(domain, scope));
+    return last !== undefined && now - last < minIntervalMs;
+  }
 }
 
 // Refreshers are disabled at registration by default. Most domains rely on
@@ -129,7 +189,6 @@ const logWarning = (message: string): void => {
   logAppLogsWarn(message, APP_LOG_SOURCES.RefreshOrchestrator);
 };
 
-const makeInFlightKey = (domain: RefreshDomain, scope?: string) => `${domain}::${scope ?? '*'}`;
 // Domains that should never keep multiple concurrently-enabled scopes.
 const SINGLE_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>(['namespaces', 'cluster-overview']);
 // Domains that intentionally aggregate across connected clusters.
@@ -875,15 +934,11 @@ class RefreshOrchestrator {
     if (!this.isResourceStreamDomain(domain) || !scope) {
       return false;
     }
-    return this.getRuntimeForScope(domain, scope).blockedStreaming.has(
-      makeInFlightKey(domain, scope)
-    );
+    return this.getRuntimeForScope(domain, scope).isStreamingBlocked(domain, scope);
   }
 
   private isStreamingActive(domain: RefreshDomain, scope: string): boolean {
-    return this.getRuntimeForScope(domain, scope).streamingCleanup.has(
-      makeInFlightKey(domain, scope)
-    );
+    return this.getRuntimeForScope(domain, scope).isStreamingActive(domain, scope);
   }
 
   // Resource stream health gates polling so snapshots stay active until delivery resumes.
@@ -926,28 +981,6 @@ class RefreshOrchestrator {
       return false;
     }
     return true;
-  }
-
-  private shouldSkipStreamingMetricsRefresh(domain: RefreshDomain, scope?: string): boolean {
-    if (!scope) {
-      return false;
-    }
-    const key = makeInFlightKey(domain, scope);
-    const last = this.getRuntimeForScope(domain, scope).lastMetricsRefreshAt.get(key);
-    if (!last) {
-      return false;
-    }
-    return Date.now() - last < getStreamingMetricsMinIntervalMs();
-  }
-
-  private recordStreamingMetricsRefresh(domain: RefreshDomain, scope?: string): void {
-    if (!scope) {
-      return;
-    }
-    this.getRuntimeForScope(domain, scope).lastMetricsRefreshAt.set(
-      makeInFlightKey(domain, scope),
-      Date.now()
-    );
   }
 
   private getConfig(domain: RefreshDomain): DomainRegistration<RefreshDomain> {
@@ -1390,6 +1423,7 @@ class RefreshOrchestrator {
 
     if (config.streaming) {
       const shouldStream = this.shouldStreamScope(domain, normalizedScope);
+      const runtime = this.getRuntimeForScope(domain, normalizedScope);
       if (shouldStream) {
         if (options.isManual) {
           // For resource-stream (WebSocket) domains, use refreshOnce when
@@ -1410,24 +1444,24 @@ class RefreshOrchestrator {
           this.startStreamingScope(domain, normalizedScope, config.streaming);
         }
       }
-      if (config.streaming.metricsOnly && !options.isManual) {
-        const metricsOnly =
-          shouldStream &&
-          this.isStreamingActive(domain, normalizedScope) &&
-          this.isStreamingHealthy(domain, normalizedScope);
-        if (metricsOnly && this.shouldSkipStreamingMetricsRefresh(domain, normalizedScope)) {
-          return;
-        }
+      const fetchMode = runtime.resolveStreamingFetchMode({
+        domain,
+        scope: normalizedScope,
+        shouldStream,
+        isManual: Boolean(options.isManual),
+        metricsOnly: Boolean(config.streaming.metricsOnly),
+        streamingHealthy: this.isStreamingHealthy(domain, normalizedScope),
+        metricsMinIntervalMs: getStreamingMetricsMinIntervalMs(),
+      });
+      if (fetchMode === 'skip') {
+        return;
+      }
+      if (fetchMode === 'metrics-only') {
         await this.performFetch(domain, normalizedScope, {
           isManual: options.isManual ?? true,
           signal: options.signal,
-          metricsOnly,
+          metricsOnly: true,
         });
-        return;
-      }
-      // Skip polling when the stream is healthy — but not for manual fetches,
-      // which may be explicit pagination requests that the stream won't serve.
-      if (!options.isManual && shouldStream && this.isStreamingHealthy(domain, normalizedScope)) {
         return;
       }
     }
@@ -1539,7 +1573,7 @@ class RefreshOrchestrator {
           lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
         }));
         if (metricsOnly && !options.isManual) {
-          this.recordStreamingMetricsRefresh(domain, normalizedScope);
+          runtime.recordMetricsRefresh(domain, normalizedScope);
         }
         this.clearRefreshError(domain, normalizedScope);
         return;
@@ -1560,7 +1594,7 @@ class RefreshOrchestrator {
         this.applySnapshot(domain, snapshot, etag, options.isManual, normalizedScope);
       }
       if (metricsOnly && !options.isManual) {
-        this.recordStreamingMetricsRefresh(domain, normalizedScope);
+        runtime.recordMetricsRefresh(domain, normalizedScope);
       }
     } catch (error) {
       if (controller.signal.aborted) {
