@@ -487,21 +487,33 @@ func (s *session) writeMessage(msg ServerMessage) error {
 
 // resolveClusterID determines the cluster to use for the incoming message.
 func (s *session) resolveClusterID(msg ClientMessage) (string, error) {
+	scopeClusterIDs, _ := refresh.SplitClusterScopeList(msg.Scope)
+	if len(scopeClusterIDs) > 1 {
+		return "", errors.New("stream scope must target a single cluster")
+	}
+	scopeClusterID := ""
+	if len(scopeClusterIDs) == 1 {
+		scopeClusterID = scopeClusterIDs[0]
+	}
+
 	if !s.allowClusterScopedRequest {
 		if msg.ClusterID != "" && msg.ClusterID != s.clusterID {
+			return "", errors.New("cluster mismatch")
+		}
+		if scopeClusterID != "" && scopeClusterID != s.clusterID {
 			return "", errors.New("cluster mismatch")
 		}
 		return s.clusterID, nil
 	}
 	clusterID := strings.TrimSpace(msg.ClusterID)
 	if clusterID == "" {
-		clusterIDs, _ := refresh.SplitClusterScopeList(msg.Scope)
-		if len(clusterIDs) == 1 {
-			clusterID = clusterIDs[0]
-		}
+		clusterID = scopeClusterID
 	}
 	if clusterID == "" {
 		return "", errors.New("cluster id is required")
+	}
+	if scopeClusterID != "" && scopeClusterID != clusterID {
+		return "", errors.New("cluster mismatch")
 	}
 	return clusterID, nil
 }

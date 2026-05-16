@@ -194,8 +194,10 @@ Stream endpoints are registered in `backend/refresh/system/streams.go`:
 Streaming behavior is registered per domain in the orchestrator:
 
 - Resource-stream domains are view-gated. They only start when their matching
-  view is active. Multi-cluster streaming is allowed for `pods`,
-  `namespace-workloads`, `nodes`, and cluster-level resource stream domains.
+  view is active, and every resource stream subscription targets exactly one
+  cluster. When multiple cluster tabs are open, active and background clusters
+  refresh through separate per-cluster requests instead of one `clusters=...`
+  resource stream scope.
 - `pods`, `namespace-workloads`, and `nodes` use resource streams for rows and
   continue metrics-only snapshot refreshes for usage fields.
 - `catalog` uses SSE snapshots from the object catalog and also supports normal
@@ -222,9 +224,20 @@ Streaming behavior is registered per domain in the orchestrator:
 
 Resource stream safety rules:
 
+- Frontend resource stream descriptors live in
+  `frontend/src/core/refresh/streaming/resourceStreamDomains.ts`. Each
+  descriptor must declare scope kind, cluster-scoped behavior, row collection
+  accessors, row identity, snapshot drift-key construction, row sorting, and
+  whether metrics should be preserved across row updates.
+- Backend resource stream supported domains live in
+  `backend/refresh/resourcestream/domains.go`. Keep them aligned with backend
+  refresh domain registrations and the frontend descriptors.
 - Each domain/scope stream must deliver monotonic `resourceVersion` values.
   Missing or regressing versions trigger a snapshot resync and temporarily block
   the stream for that scope.
+- Resource WebSocket streams reject multi-cluster scopes. Background refresh is
+  implemented as fanout across cluster runtimes, not as a multi-cluster stream
+  subscription.
 - Backend sends `RESET` at subscription start and `COMPLETE` when a subscriber
   is dropped or a resync is required.
 - Per-subscriber backpressure drops slow subscribers and forces snapshot resync.
@@ -334,11 +347,15 @@ When adding a streaming domain:
 
 1. Register the endpoint in `backend/refresh/system/streams.go`.
 2. For resource-stream domains, add event handlers in
-   `backend/refresh/resourcestream/manager.go`.
+   `backend/refresh/resourcestream/stream_registration_*.go` and add the domain
+   to `backend/refresh/resourcestream/domains.go`.
 3. For SSE domains, implement a handler similar to
    `backend/refresh/snapshot/catalog_stream.go` or
    `backend/refresh/eventstream/handler.go`.
 4. Wire the frontend manager in `frontend/src/core/refresh/orchestrator.ts`.
+5. For resource-stream domains, add a descriptor in
+   `frontend/src/core/refresh/streaming/resourceStreamDomains.ts` and extend
+   the descriptor parity tests.
 
 When adding a field to an existing row type:
 

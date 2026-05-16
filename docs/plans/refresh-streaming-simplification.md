@@ -446,17 +446,40 @@ Progress:
 
 ## Phase 10: Parity Guardrails
 
-- [ ] Add tests that compare streamed domain descriptors with refresh domain
+- [x] Add tests that compare streamed domain descriptors with refresh domain
       registrations.
-- [ ] Add tests that each streamed frontend domain has a row identity, sort,
+- [x] Add tests that each streamed frontend domain has a row identity, sort,
       and drift strategy.
-- [ ] Add tests that resource WebSocket domains reject multi-cluster scopes.
-- [ ] Add tests that background refresh fans out across cluster runtimes instead
+- [x] Add tests that resource WebSocket domains reject multi-cluster scopes.
+- [x] Add tests that background refresh fans out across cluster runtimes instead
       of creating multi-cluster resource scopes.
-- [ ] Add backend tests that each streamed built-in resource produces
+- [x] Add backend tests that each streamed built-in resource produces
       `clusterId`, resource version, kind, namespace where applicable, and row
       payloads matching the snapshot shape.
-- [ ] Document the descriptor pattern in `docs/architecture/refresh-system.md`.
+- [x] Document the descriptor pattern in `docs/architecture/refresh-system.md`.
+
+Progress:
+
+- 2026-05-16: Started Phase 10 by adding a backend resource stream supported
+  domain list and a system registration guard so every streamed resource domain
+  must also be registered as a refresh domain.
+- 2026-05-16: Added frontend descriptor guardrails for row identity, update
+  identity, sort functions, empty payloads, and snapshot drift keys.
+- 2026-05-16: Added resource stream single-cluster guardrails on both sides:
+  frontend subscription scope tests cover every streamed resource domain, and
+  backend stream mux scope resolution rejects multi-cluster scopes and cluster
+  prefix mismatches.
+- 2026-05-16: Added a background refresh fanout test proving background clusters
+  refresh as separate single-cluster requests rather than `clusters=...` stream
+  scopes.
+- 2026-05-16: Documented the resource stream descriptor pattern and the
+  single-cluster stream subscription rule in
+  `docs/architecture/refresh-system.md`.
+- 2026-05-16: Focused validation passed:
+  `go test ./backend/refresh/resourcestream ./backend/refresh/system ./backend/refresh/streammux`
+  and
+  `npm run test -- src/core/refresh/streaming/resourceStreamDomains.test.ts src/core/refresh/streaming/resourceStreamSubscriptions.test.ts src/core/refresh/backgroundClusterRefresher.test.ts`.
+- 2026-05-16: Full validation passed with `mage qc:prerelease`.
 
 ## Validation
 

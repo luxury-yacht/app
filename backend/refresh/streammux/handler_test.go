@@ -78,6 +78,44 @@ func TestSessionSendErrorIncludesPermissionDetails(t *testing.T) {
 	}
 }
 
+func TestSessionResolveClusterIDRejectsMultiClusterScope(t *testing.T) {
+	session := newSession(stubConn{}, stubAdapter{}, noopLogger{}, nil, "", "", "resources", true, true, nil)
+
+	_, err := session.resolveClusterID(ClientMessage{
+		ClusterID: "cluster-a",
+		Scope:     "clusters=cluster-a,cluster-b|namespace:default",
+	})
+
+	if err == nil || err.Error() != "stream scope must target a single cluster" {
+		t.Fatalf("expected single-cluster scope error, got %v", err)
+	}
+}
+
+func TestSessionResolveClusterIDRequiresScopeClusterToMatchMessageCluster(t *testing.T) {
+	session := newSession(stubConn{}, stubAdapter{}, noopLogger{}, nil, "", "", "resources", true, true, nil)
+
+	_, err := session.resolveClusterID(ClientMessage{
+		ClusterID: "cluster-a",
+		Scope:     "cluster-b|namespace:default",
+	})
+
+	if err == nil || err.Error() != "cluster mismatch" {
+		t.Fatalf("expected cluster mismatch, got %v", err)
+	}
+}
+
+func TestSessionResolveClusterIDRejectsMismatchedScopeForSingleClusterHandler(t *testing.T) {
+	session := newSession(stubConn{}, stubAdapter{}, noopLogger{}, nil, "cluster-a", "", "resources", true, false, nil)
+
+	_, err := session.resolveClusterID(ClientMessage{
+		Scope: "cluster-b|namespace:default",
+	})
+
+	if err == nil || err.Error() != "cluster mismatch" {
+		t.Fatalf("expected cluster mismatch, got %v", err)
+	}
+}
+
 func TestHandlerSetsHandshakeTimeout(t *testing.T) {
 	handler, err := NewHandler(Config{
 		Adapter:    stubAdapter{},

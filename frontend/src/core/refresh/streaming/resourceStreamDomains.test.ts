@@ -182,12 +182,24 @@ describe('resource stream domain descriptors', () => {
       const keys = descriptor.buildSnapshotKeys(samplePayloads[domain], 'fallback-cluster');
       expect(Array.from(keys).sort()).toEqual(expectedSnapshotKeys[domain]);
 
+      const rows = descriptor.collection.getRows(samplePayloads[domain]);
       const collectionKeys = new Set(
-        descriptor.collection
-          .getRows(samplePayloads[domain])
-          .map((row: any) => descriptor.collection.buildRowKey(row, 'fallback-cluster'))
+        rows.map((row: any) => descriptor.collection.buildRowKey(row, 'fallback-cluster'))
       );
       expect(collectionKeys).toEqual(keys);
+
+      const [row] = rows;
+      const clusterId = (row as { clusterId?: string }).clusterId;
+      expect(descriptor.collection.buildUpdateKey({ clusterId, row }, 'fallback-cluster')).toBe(
+        expectedSnapshotKeys[domain][0]
+      );
+
+      const sortedRows = [...rows];
+      descriptor.sortRows(sortedRows);
+      descriptor.collection.sortRows(sortedRows);
+
+      const emptyPayload = descriptor.collection.emptyPayload('empty-cluster');
+      expect(descriptor.buildSnapshotKeys(emptyPayload, 'empty-cluster')).toEqual(new Set());
     });
   });
 

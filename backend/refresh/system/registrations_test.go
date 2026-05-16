@@ -3,6 +3,7 @@ package system
 import (
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -51,6 +52,18 @@ func TestDomainRegistrationOrder(t *testing.T) {
 	}
 
 	require.Equal(t, expected, actual)
+}
+
+func TestResourceStreamDomainsAreRegisteredRefreshDomains(t *testing.T) {
+	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	registered := make(map[string]struct{}, len(registrations))
+	for _, registration := range registrations {
+		registered[registration.name] = struct{}{}
+	}
+
+	for _, domainName := range resourcestream.SupportedDomains() {
+		require.Contains(t, registered, domainName)
+	}
 }
 
 func TestDomainRegistrationRequiresDependencies(t *testing.T) {

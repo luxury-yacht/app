@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildClusterScopeList } from '../clusterScope';
+import { RESOURCE_STREAM_DOMAINS, type ResourceDomain } from './resourceStreamDomains';
 import {
   ResourceStreamSubscriptionStore,
   resolveResourceStreamSubscriptionScope,
@@ -34,6 +35,19 @@ describe('ResourceStreamSubscriptionStore', () => {
         buildClusterScopeList(['cluster-a', 'cluster-b'], 'namespace:default')
       )
     ).toThrow('single cluster');
+  });
+
+  it('rejects multi-cluster scopes for every resource stream domain', () => {
+    const multiClusterScope = buildClusterScopeList(
+      ['cluster-a', 'cluster-b'],
+      'namespace:default'
+    );
+
+    RESOURCE_STREAM_DOMAINS.forEach((domain: ResourceDomain) => {
+      expect(() => resolveResourceStreamSubscriptionScope(domain, multiClusterScope)).toThrow(
+        'single cluster'
+      );
+    });
   });
 
   it('builds resume-capable request messages from subscription state', () => {
