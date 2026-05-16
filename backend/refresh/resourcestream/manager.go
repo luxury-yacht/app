@@ -982,20 +982,7 @@ func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildConfigMapSummary(m.clusterMeta, cm)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceConfig,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: cm.ResourceVersion,
-		UID:             string(cm.UID),
-		Name:            cm.Name,
-		Namespace:       cm.Namespace,
-		Kind:            "ConfigMap",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, cm, "ConfigMap", summary)
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(cm.Namespace), update)
 	m.maybeBroadcastHelmRefreshFromConfigMap(cm, updateType)
@@ -1008,20 +995,7 @@ func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildSecretSummary(m.clusterMeta, secret)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceConfig,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: secret.ResourceVersion,
-		UID:             string(secret.UID),
-		Name:            secret.Name,
-		Namespace:       secret.Namespace,
-		Kind:            "Secret",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, secret, "Secret", summary)
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(secret.Namespace), update)
 	m.maybeBroadcastHelmRefresh(secret, updateType)
@@ -1078,20 +1052,7 @@ func (m *Manager) handleRole(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildRoleSummary(m.clusterMeta, role)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceRBAC,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: role.ResourceVersion,
-		UID:             string(role.UID),
-		Name:            role.Name,
-		Namespace:       role.Namespace,
-		Kind:            "Role",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, role, "Role", summary)
 
 	m.broadcast(domainNamespaceRBAC, scopesForNamespace(role.Namespace), update)
 }
@@ -1103,20 +1064,7 @@ func (m *Manager) handleRoleBinding(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildRoleBindingSummary(m.clusterMeta, binding)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceRBAC,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: binding.ResourceVersion,
-		UID:             string(binding.UID),
-		Name:            binding.Name,
-		Namespace:       binding.Namespace,
-		Kind:            "RoleBinding",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, binding, "RoleBinding", summary)
 
 	m.broadcast(domainNamespaceRBAC, scopesForNamespace(binding.Namespace), update)
 }
@@ -1128,20 +1076,7 @@ func (m *Manager) handleServiceAccount(obj interface{}, updateType MessageType) 
 	}
 
 	summary := snapshot.BuildServiceAccountSummary(m.clusterMeta, serviceAccount)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceRBAC,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: serviceAccount.ResourceVersion,
-		UID:             string(serviceAccount.UID),
-		Name:            serviceAccount.Name,
-		Namespace:       serviceAccount.Namespace,
-		Kind:            "ServiceAccount",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, serviceAccount, "ServiceAccount", summary)
 
 	m.broadcast(domainNamespaceRBAC, scopesForNamespace(serviceAccount.Namespace), update)
 }
@@ -1154,20 +1089,7 @@ func (m *Manager) handleClusterRole(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildClusterRoleSummary(m.clusterMeta, role)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainClusterRBAC,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: role.ResourceVersion,
-		UID:             string(role.UID),
-		Name:            role.Name,
-		Namespace:       role.Namespace,
-		Kind:            "ClusterRole",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainClusterRBAC, role, "ClusterRole", summary)
 
 	m.broadcast(domainClusterRBAC, scopesForCluster(), update)
 }
@@ -1179,20 +1101,7 @@ func (m *Manager) handleClusterRoleBinding(obj interface{}, updateType MessageTy
 	}
 
 	summary := snapshot.BuildClusterRoleBindingSummary(m.clusterMeta, binding)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainClusterRBAC,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: binding.ResourceVersion,
-		UID:             string(binding.UID),
-		Name:            binding.Name,
-		Namespace:       binding.Namespace,
-		Kind:            "ClusterRoleBinding",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainClusterRBAC, binding, "ClusterRoleBinding", summary)
 
 	m.broadcast(domainClusterRBAC, scopesForCluster(), update)
 }
@@ -1215,17 +1124,7 @@ func (m *Manager) handleService(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceNetwork,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: service.ResourceVersion,
-		UID:             string(service.UID),
-		Name:            service.Name,
-		Namespace:       service.Namespace,
-		Kind:            "Service",
-	}
+	update := m.newObjectUpdate(updateType, domainNamespaceNetwork, service, "Service")
 	if updateType != MessageTypeDeleted {
 		update.Row = snapshot.BuildServiceNetworkSummary(m.clusterMeta, service, slices)
 	}
@@ -1299,17 +1198,7 @@ func (m *Manager) handleIngress(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceNetwork,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: ingress.ResourceVersion,
-		UID:             string(ingress.UID),
-		Name:            ingress.Name,
-		Namespace:       ingress.Namespace,
-		Kind:            "Ingress",
-	}
+	update := m.newObjectUpdate(updateType, domainNamespaceNetwork, ingress, "Ingress")
 	if updateType != MessageTypeDeleted {
 		update.Row = snapshot.BuildIngressNetworkSummary(m.clusterMeta, ingress)
 	}
@@ -1323,17 +1212,7 @@ func (m *Manager) handleNetworkPolicy(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceNetwork,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: policy.ResourceVersion,
-		UID:             string(policy.UID),
-		Name:            policy.Name,
-		Namespace:       policy.Namespace,
-		Kind:            "NetworkPolicy",
-	}
+	update := m.newObjectUpdate(updateType, domainNamespaceNetwork, policy, "NetworkPolicy")
 	if updateType != MessageTypeDeleted {
 		update.Row = snapshot.BuildNetworkPolicySummary(m.clusterMeta, policy)
 	}
@@ -1346,7 +1225,7 @@ func (m *Manager) handleGateway(obj interface{}, updateType MessageType) {
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "Gateway", snapshot.BuildGatewayNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "Gateway", snapshot.BuildGatewayNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleHTTPRoute(obj interface{}, updateType MessageType) {
@@ -1354,7 +1233,7 @@ func (m *Manager) handleHTTPRoute(obj interface{}, updateType MessageType) {
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "HTTPRoute", snapshot.BuildHTTPRouteNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "HTTPRoute", snapshot.BuildHTTPRouteNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleGRPCRoute(obj interface{}, updateType MessageType) {
@@ -1362,7 +1241,7 @@ func (m *Manager) handleGRPCRoute(obj interface{}, updateType MessageType) {
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "GRPCRoute", snapshot.BuildGRPCRouteNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "GRPCRoute", snapshot.BuildGRPCRouteNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleTLSRoute(obj interface{}, updateType MessageType) {
@@ -1370,7 +1249,7 @@ func (m *Manager) handleTLSRoute(obj interface{}, updateType MessageType) {
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "TLSRoute", snapshot.BuildTLSRouteNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "TLSRoute", snapshot.BuildTLSRouteNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleListenerSet(obj interface{}, updateType MessageType) {
@@ -1378,7 +1257,7 @@ func (m *Manager) handleListenerSet(obj interface{}, updateType MessageType) {
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "ListenerSet", snapshot.BuildListenerSetNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "ListenerSet", snapshot.BuildListenerSetNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleReferenceGrant(obj interface{}, updateType MessageType) {
@@ -1386,7 +1265,7 @@ func (m *Manager) handleReferenceGrant(obj interface{}, updateType MessageType) 
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "ReferenceGrant", snapshot.BuildReferenceGrantNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "ReferenceGrant", snapshot.BuildReferenceGrantNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleBackendTLSPolicy(obj interface{}, updateType MessageType) {
@@ -1394,25 +1273,12 @@ func (m *Manager) handleBackendTLSPolicy(obj interface{}, updateType MessageType
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "BackendTLSPolicy", snapshot.BuildBackendTLSPolicyNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "BackendTLSPolicy", snapshot.BuildBackendTLSPolicyNetworkSummary(m.clusterMeta, item))
 }
 
-func (m *Manager) broadcastGatewayNetworkUpdate(updateType MessageType, name, namespace, resourceVersion, uid, kind string, row snapshot.NetworkSummary) {
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceNetwork,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: resourceVersion,
-		UID:             uid,
-		Name:            name,
-		Namespace:       namespace,
-		Kind:            kind,
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = row
-	}
-	m.broadcast(domainNamespaceNetwork, scopesForNamespace(namespace), update)
+func (m *Manager) broadcastGatewayNetworkUpdate(updateType MessageType, obj metav1.Object, kind string, row snapshot.NetworkSummary) {
+	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, obj, kind, row)
+	m.broadcast(domainNamespaceNetwork, scopesForNamespace(obj.GetNamespace()), update)
 }
 
 // Cluster configuration updates stream shared cluster resources.
@@ -1423,20 +1289,7 @@ func (m *Manager) handleStorageClass(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildClusterStorageClassSummary(m.clusterMeta, storageClass)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainClusterConfig,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: storageClass.ResourceVersion,
-		UID:             string(storageClass.UID),
-		Name:            storageClass.Name,
-		Namespace:       storageClass.Namespace,
-		Kind:            "StorageClass",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainClusterConfig, storageClass, "StorageClass", summary)
 
 	m.broadcast(domainClusterConfig, scopesForCluster(), update)
 }
@@ -1448,20 +1301,7 @@ func (m *Manager) handleIngressClass(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildClusterIngressClassSummary(m.clusterMeta, ingressClass)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainClusterConfig,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: ingressClass.ResourceVersion,
-		UID:             string(ingressClass.UID),
-		Name:            ingressClass.Name,
-		Namespace:       ingressClass.Namespace,
-		Kind:            "IngressClass",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainClusterConfig, ingressClass, "IngressClass", summary)
 
 	m.broadcast(domainClusterConfig, scopesForCluster(), update)
 }
@@ -1473,19 +1313,7 @@ func (m *Manager) handleGatewayClass(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildClusterGatewayClassSummary(m.clusterMeta, gatewayClass)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainClusterConfig,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: gatewayClass.ResourceVersion,
-		UID:             string(gatewayClass.UID),
-		Name:            gatewayClass.Name,
-		Kind:            "GatewayClass",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainClusterConfig, gatewayClass, "GatewayClass", summary)
 
 	m.broadcast(domainClusterConfig, scopesForCluster(), update)
 }
@@ -1497,20 +1325,7 @@ func (m *Manager) handleValidatingWebhook(obj interface{}, updateType MessageTyp
 	}
 
 	summary := snapshot.BuildClusterValidatingWebhookSummary(m.clusterMeta, webhook)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainClusterConfig,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: webhook.ResourceVersion,
-		UID:             string(webhook.UID),
-		Name:            webhook.Name,
-		Namespace:       webhook.Namespace,
-		Kind:            "ValidatingWebhookConfiguration",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainClusterConfig, webhook, "ValidatingWebhookConfiguration", summary)
 
 	m.broadcast(domainClusterConfig, scopesForCluster(), update)
 }
@@ -1522,20 +1337,7 @@ func (m *Manager) handleMutatingWebhook(obj interface{}, updateType MessageType)
 	}
 
 	summary := snapshot.BuildClusterMutatingWebhookSummary(m.clusterMeta, webhook)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainClusterConfig,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: webhook.ResourceVersion,
-		UID:             string(webhook.UID),
-		Name:            webhook.Name,
-		Namespace:       webhook.Namespace,
-		Kind:            "MutatingWebhookConfiguration",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainClusterConfig, webhook, "MutatingWebhookConfiguration", summary)
 
 	m.broadcast(domainClusterConfig, scopesForCluster(), update)
 }
@@ -1546,17 +1348,7 @@ func (m *Manager) handlePersistentVolumeClaim(obj interface{}, updateType Messag
 		return
 	}
 
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceStorage,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: pvc.ResourceVersion,
-		UID:             string(pvc.UID),
-		Name:            pvc.Name,
-		Namespace:       pvc.Namespace,
-		Kind:            "PersistentVolumeClaim",
-	}
+	update := m.newObjectUpdate(updateType, domainNamespaceStorage, pvc, "PersistentVolumeClaim")
 	if updateType != MessageTypeDeleted {
 		update.Row = snapshot.BuildPVCStorageSummary(m.clusterMeta, pvc)
 	}
@@ -1572,20 +1364,7 @@ func (m *Manager) handlePersistentVolume(obj interface{}, updateType MessageType
 	}
 
 	summary := snapshot.BuildClusterStorageSummary(m.clusterMeta, pv)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainClusterStorage,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: pv.ResourceVersion,
-		UID:             string(pv.UID),
-		Name:            pv.Name,
-		Namespace:       pv.Namespace,
-		Kind:            "PersistentVolume",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainClusterStorage, pv, "PersistentVolume", summary)
 
 	m.broadcast(domainClusterStorage, scopesForCluster(), update)
 }
@@ -1596,17 +1375,7 @@ func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceAutoscaling,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: hpa.ResourceVersion,
-		UID:             string(hpa.UID),
-		Name:            hpa.Name,
-		Namespace:       hpa.Namespace,
-		Kind:            "HorizontalPodAutoscaler",
-	}
+	update := m.newObjectUpdate(updateType, domainNamespaceAutoscaling, hpa, "HorizontalPodAutoscaler")
 	if updateType != MessageTypeDeleted {
 		update.Row = snapshot.BuildHPASummary(m.clusterMeta, hpa)
 	}
@@ -1621,20 +1390,7 @@ func (m *Manager) handleResourceQuota(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildResourceQuotaSummary(m.clusterMeta, quota)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceQuotas,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: quota.ResourceVersion,
-		UID:             string(quota.UID),
-		Name:            quota.Name,
-		Namespace:       quota.Namespace,
-		Kind:            "ResourceQuota",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, quota, "ResourceQuota", summary)
 
 	m.broadcast(domainNamespaceQuotas, scopesForNamespace(quota.Namespace), update)
 }
@@ -1646,20 +1402,7 @@ func (m *Manager) handleLimitRange(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildLimitRangeSummary(m.clusterMeta, limit)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceQuotas,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: limit.ResourceVersion,
-		UID:             string(limit.UID),
-		Name:            limit.Name,
-		Namespace:       limit.Namespace,
-		Kind:            "LimitRange",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, limit, "LimitRange", summary)
 
 	m.broadcast(domainNamespaceQuotas, scopesForNamespace(limit.Namespace), update)
 }
@@ -1671,20 +1414,7 @@ func (m *Manager) handlePodDisruptionBudget(obj interface{}, updateType MessageT
 	}
 
 	summary := snapshot.BuildPodDisruptionBudgetSummary(m.clusterMeta, pdb)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceQuotas,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: pdb.ResourceVersion,
-		UID:             string(pdb.UID),
-		Name:            pdb.Name,
-		Namespace:       pdb.Namespace,
-		Kind:            "PodDisruptionBudget",
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, pdb, "PodDisruptionBudget", summary)
 
 	m.broadcast(domainNamespaceQuotas, scopesForNamespace(pdb.Namespace), update)
 }

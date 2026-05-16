@@ -377,13 +377,30 @@ Progress:
 
 ## Phase 8: Backend Update Projection Helpers
 
-- [ ] Add a small helper for constructing common `resourcestream.Update`
+- [x] Add a small helper for constructing common `resourcestream.Update`
       metadata from Kubernetes object metadata.
-- [ ] Apply it to straightforward handlers first: config maps, secrets, RBAC,
+- [x] Apply it to straightforward handlers first: config maps, secrets, RBAC,
       storage, admissions, and simple network resources.
-- [ ] Keep special-case handlers explicit: pods, endpoint slices, workloads,
+- [x] Keep special-case handlers explicit: pods, endpoint slices, workloads,
       custom resources, Helm release resync signals.
-- [ ] Add tests around one simple handler per domain family before broadening.
+- [x] Add tests around one simple handler per domain family before broadening.
+
+Progress:
+
+- 2026-05-16: Started Phase 8 by confirming the existing backend resource
+  stream tests already cover representative simple handlers across config,
+  RBAC, network, cluster config, storage, quotas, and autoscaling domains.
+- 2026-05-16: Added `newObjectUpdate` and `newObjectRowUpdate` helpers for
+  common stream metadata projection and delete-row suppression. Applied them
+  to straightforward config, RBAC, network, Gateway API network, cluster
+  config/admission, storage, autoscaling, and quota handlers while keeping
+  pods, endpoint slices, workloads, custom resources, node-derived updates,
+  and Helm resync signals explicit.
+- 2026-05-16: Strengthened representative simple handler tests to assert
+  cluster metadata, resource version, UID, name, namespace, and kind, and added
+  focused helper tests. Focused validation passed:
+  `go test ./backend/refresh/resourcestream ./backend/refresh/system ./backend/refresh/snapshot`.
+- 2026-05-16: Full validation passed with `mage qc:prerelease`.
 
 ## Phase 9: Backend Registration And Handler Descriptors
 

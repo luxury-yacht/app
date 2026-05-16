@@ -25,6 +25,17 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 )
 
+func requireUpdateObjectMetadata(t *testing.T, update Update, resourceVersion, uid, name, namespace, kind string) {
+	t.Helper()
+	require.Equal(t, "c1", update.ClusterID)
+	require.Equal(t, "cluster", update.ClusterName)
+	require.Equal(t, resourceVersion, update.ResourceVersion)
+	require.Equal(t, uid, update.UID)
+	require.Equal(t, name, update.Name)
+	require.Equal(t, namespace, update.Namespace)
+	require.Equal(t, kind, update.Kind)
+}
+
 func TestManagerPodUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
@@ -94,8 +105,7 @@ func TestManagerConfigUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainNamespaceConfig, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "cfg-1", update.Name)
-		require.Equal(t, "default", update.Namespace)
+		requireUpdateObjectMetadata(t, update, "9", "cfg-uid", "cfg-1", "default", "ConfigMap")
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected config update to be delivered")
@@ -130,8 +140,7 @@ func TestManagerRBACUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainNamespaceRBAC, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "role-1", update.Name)
-		require.Equal(t, "default", update.Namespace)
+		requireUpdateObjectMetadata(t, update, "4", "role-uid", "role-1", "default", "Role")
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected rbac update to be delivered")
@@ -237,8 +246,7 @@ func TestManagerClusterRBACUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainClusterRBAC, update.Domain)
 		require.Equal(t, "", update.Scope)
-		require.Equal(t, "cluster-role-1", update.Name)
-		require.Equal(t, "ClusterRole", update.Kind)
+		requireUpdateObjectMetadata(t, update, "10", "cr-uid", "cluster-role-1", "", "ClusterRole")
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected cluster rbac update to be delivered")
@@ -271,8 +279,7 @@ func TestManagerQuotasUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainNamespaceQuotas, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "quota-1", update.Name)
-		require.Equal(t, "default", update.Namespace)
+		requireUpdateObjectMetadata(t, update, "7", "quota-uid", "quota-1", "default", "ResourceQuota")
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected quotas update to be delivered")
@@ -309,8 +316,7 @@ func TestManagerNetworkUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainNamespaceNetwork, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "svc-1", update.Name)
-		require.Equal(t, "default", update.Namespace)
+		requireUpdateObjectMetadata(t, update, "3", "svc-uid", "svc-1", "default", "Service")
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected network update to be delivered")
@@ -343,8 +349,7 @@ func TestManagerClusterConfigUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainClusterConfig, update.Domain)
 		require.Equal(t, "", update.Scope)
-		require.Equal(t, "fast", update.Name)
-		require.Equal(t, "StorageClass", update.Kind)
+		requireUpdateObjectMetadata(t, update, "2", "sc-uid", "fast", "", "StorageClass")
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected cluster config update to be delivered")
@@ -380,8 +385,7 @@ func TestManagerStorageUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainNamespaceStorage, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "pvc-1", update.Name)
-		require.Equal(t, "default", update.Namespace)
+		requireUpdateObjectMetadata(t, update, "2", "pvc-uid", "pvc-1", "default", "PersistentVolumeClaim")
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected storage update to be delivered")
@@ -416,8 +420,7 @@ func TestManagerClusterStorageUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainClusterStorage, update.Domain)
 		require.Equal(t, "", update.Scope)
-		require.Equal(t, "pv-1", update.Name)
-		require.Equal(t, "PersistentVolume", update.Kind)
+		requireUpdateObjectMetadata(t, update, "5", "pv-uid", "pv-1", "", "PersistentVolume")
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected cluster storage update to be delivered")
@@ -710,8 +713,7 @@ func TestManagerAutoscalingUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainNamespaceAutoscaling, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "hpa-1", update.Name)
-		require.Equal(t, "default", update.Namespace)
+		requireUpdateObjectMetadata(t, update, "3", "hpa-uid", "hpa-1", "default", "HorizontalPodAutoscaler")
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected autoscaling update to be delivered")
