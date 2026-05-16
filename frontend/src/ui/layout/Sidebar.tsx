@@ -92,7 +92,7 @@ function Sidebar() {
   const { selectedClusterId } = useKubeconfig();
   const dimInactiveNamespaces = useDimInactiveNamespaces();
   const exclusiveNamespaces = useExclusiveNamespaces();
-  // Catalog is scoped — aggregate namespace metadata across active scopes, then
+  // Catalog is scoped — collect namespace metadata across active scopes, then
   // select the active cluster's groups explicitly instead of trusting whichever
   // scope happened to populate first.
   const catalogScopedStates = useRefreshScopedDomainStates('catalog');

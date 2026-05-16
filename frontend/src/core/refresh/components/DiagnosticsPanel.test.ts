@@ -19,7 +19,7 @@ import type {
 } from '@/core/capabilities/permissionTypes';
 import type { DomainSnapshotState } from '../store';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
-import { buildClusterScopeList } from '@/core/refresh/clusterScope';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 
 const fetchTelemetrySummaryMock = vi.hoisted(() =>
   vi.fn<() => Promise<TelemetrySummary>>(async () => {
@@ -756,13 +756,14 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
   });
 
-  test('keeps multi-cluster namespaces and overview rows cluster-inclusive', async () => {
-    const multiClusterScope = buildClusterScopeList(['cluster-a', 'cluster-b'], '');
+  test('renders active and background namespace and overview scopes as separate rows', async () => {
+    const clusterAScope = buildClusterScope('cluster-a', '');
+    const clusterBScope = buildClusterScope('cluster-b', '');
     mockKubeconfigState.selectedClusterId = 'cluster-b';
 
     setScopedEntries('namespaces', [
       [
-        multiClusterScope,
+        clusterAScope,
         {
           ...createReadyState({
             namespaces: [
@@ -773,6 +774,16 @@ describe('DiagnosticsPanel component', () => {
                 creationTimestamp: Date.now(),
                 clusterId: 'cluster-a',
               },
+            ],
+          }),
+          scope: clusterAScope,
+        },
+      ],
+      [
+        clusterBScope,
+        {
+          ...createReadyState({
+            namespaces: [
               {
                 name: 'ns-b',
                 phase: 'Active',
@@ -782,28 +793,30 @@ describe('DiagnosticsPanel component', () => {
               },
             ],
           }),
-          scope: multiClusterScope,
+          scope: clusterBScope,
         },
       ],
     ]);
 
     setScopedEntries('cluster-overview', [
       [
-        multiClusterScope,
+        clusterAScope,
         {
           ...createReadyState({
-            overview: { totalNodes: 10 },
-            metrics: { stale: false, successCount: 1, failureCount: 0 },
-            overviewByCluster: {
-              'cluster-a': { totalNodes: 4 },
-              'cluster-b': { totalNodes: 6 },
-            },
-            metricsByCluster: {
-              'cluster-a': { stale: false, successCount: 3, failureCount: 0 },
-              'cluster-b': { stale: false, successCount: 9, failureCount: 0 },
-            },
+            overview: { totalNodes: 4 },
+            metrics: { stale: false, successCount: 3, failureCount: 0 },
           }),
-          scope: multiClusterScope,
+          scope: clusterAScope,
+        },
+      ],
+      [
+        clusterBScope,
+        {
+          ...createReadyState({
+            overview: { totalNodes: 6 },
+            metrics: { stale: false, successCount: 9, failureCount: 0 },
+          }),
+          scope: clusterBScope,
         },
       ],
     ]);
@@ -814,27 +827,44 @@ describe('DiagnosticsPanel component', () => {
 
     await flushAsync();
 
-    const findRowByLabel = (label: string) => {
+    const findRowsByLabel = (label: string) => {
       const rows = Array.from(rendered.container.querySelectorAll('.diagnostics-table tbody tr'));
-      return rows.find((row) => row.querySelector('td')?.textContent?.includes(label));
+      return rows.filter((row) => row.querySelector('td')?.textContent?.includes(label));
     };
 
-    const namespacesRow = findRowByLabel('Namespaces');
-    expect(namespacesRow).toBeDefined();
-    const namespacesCells = namespacesRow?.querySelectorAll('td') ?? [];
-    const namespacesScope = namespacesCells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-    expect(namespacesScope).toContain('cluster-a');
-    expect(namespacesScope).toContain('cluster-b (active)');
-    expect(namespacesCells[8]?.textContent?.trim()).toBe('2');
+    const namespaceRows = findRowsByLabel('Namespaces');
+    expect(namespaceRows).toHaveLength(2);
+    const namespaceSummaries = namespaceRows.map((row) => {
+      const cells = row.querySelectorAll('td');
+      return {
+        scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        count: cells[8]?.textContent?.trim() ?? '',
+      };
+    });
+    expect(namespaceSummaries).toEqual(
+      expect.arrayContaining([
+        { scope: 'cluster-a', count: '1' },
+        { scope: 'cluster-b (active)', count: '1' },
+      ])
+    );
 
-    const overviewRow = findRowByLabel('Cluster Overview');
-    expect(overviewRow).toBeDefined();
-    const overviewCells = overviewRow?.querySelectorAll('td') ?? [];
-    const overviewScope = overviewCells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-    expect(overviewScope).toContain('cluster-a');
-    expect(overviewScope).toContain('cluster-b (active)');
-    expect(overviewCells[8]?.textContent?.trim()).toBe('10');
-    expect(overviewCells[13]?.textContent?.trim()).toContain('OK (1 polls)');
+    const overviewRows = findRowsByLabel('Cluster Overview');
+    expect(overviewRows).toHaveLength(2);
+    const overviewSummaries = overviewRows.map((row) => {
+      const cells = row.querySelectorAll('td');
+      return {
+        scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        count: cells[8]?.textContent?.trim() ?? '',
+        metrics: cells[13]?.textContent?.trim() ?? '',
+      };
+    });
+    expect(overviewSummaries).toEqual(
+      expect.arrayContaining([
+        { scope: 'cluster-a', count: '4', metrics: 'OK (3 polls)' },
+        { scope: 'cluster-b (active)', count: '6', metrics: 'OK (9 polls)' },
+      ])
+    );
+    expect(rendered.container.textContent).not.toContain('clusters=');
 
     await rendered.unmount();
   });
@@ -1092,7 +1122,7 @@ describe('DiagnosticsPanel component', () => {
     const now = Date.now();
     mockKubeconfigState.selectedClusterId = 'cluster-a';
 
-    const scope = buildClusterScopeList(['cluster-a'], '');
+    const scope = buildClusterScope('cluster-a', '');
     const configState = {
       ...createReadyState({
         resources: [{ kind: 'ConfigMap', name: 'app-config', namespace: 'default', data: 2 }],

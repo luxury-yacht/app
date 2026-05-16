@@ -142,15 +142,15 @@ Progress:
 
 ## Phase 3: Diagnostics And App Debug Surfaces
 
-- [ ] Update diagnostics refresh-domain rows to show separate per-cluster
+- [x] Update diagnostics refresh-domain rows to show separate per-cluster
       `namespaces` entries.
-- [ ] Remove diagnostics tests that preserve multi-cluster namespace or overview
+- [x] Remove diagnostics tests that preserve multi-cluster namespace or overview
       rows.
-- [ ] Add diagnostics tests proving active/background cluster scopes are visible
+- [x] Add diagnostics tests proving active/background cluster scopes are visible
       as separate rows.
-- [ ] Check Application Logs wording for stale references to aggregate
+- [x] Check Application Logs wording for stale references to aggregate
       namespaces or `clusterId=all`.
-- [ ] Check refresh docs/debug notes for `clusters=...` snapshot scope examples
+- [x] Check refresh docs/debug notes for `clusters=...` snapshot scope examples
       that are no longer valid.
 
 Expected diagnostics result:
@@ -159,6 +159,22 @@ Expected diagnostics result:
 - A multi-cluster session may show multiple `namespaces` rows, one per cluster.
 - Resource stream diagnostics remain unchanged except for any cleanup from
   removed aggregate helpers.
+
+Progress:
+
+- 2026-05-16: Replaced the diagnostics test that seeded one multi-cluster
+  `namespaces` and `cluster-overview` scope with a test that seeds separate
+  `cluster-a|` and `cluster-b|` entries. The test now asserts active and
+  background refresh-domain rows remain visible separately and that no
+  `clusters=` scope text appears in the panel.
+- 2026-05-16: Checked Application Logs, Debug Overlay, Icon Debug Overlay, and
+  refresh diagnostics sources for stale aggregate namespace or `clusterId=all`
+  wording. No app-log or debug-panel code changes were needed.
+- 2026-05-16: Removed one stale Sidebar source comment that used aggregate
+  terminology for catalog namespace metadata collection. Durable architecture
+  docs still contain backend snapshot `clusters=...` references and remain
+  scheduled for Phase 6 after backend routing is simplified.
+- 2026-05-16: Full validation passed with `mage qc:prerelease`.
 
 ## Phase 4: Backend Single-Cluster Snapshot Routing
 
