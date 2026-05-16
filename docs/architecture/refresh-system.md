@@ -2,7 +2,7 @@
 
 Luxury Yacht refreshes Kubernetes data through backend snapshot builders,
 streaming endpoints, and a frontend orchestrator that scopes every request to
-the relevant cluster or cluster list.
+exactly one relevant cluster.
 
 See [README.md](README.md) for the architecture doc map.
 
@@ -19,9 +19,10 @@ The refresh system has three layers:
 
 Multi-cluster support uses one frontend orchestrator with per-cluster runtimes
 and one backend refresh subsystem per active cluster. Aggregate backend services
-in `backend/app_refresh_setup.go` fan out snapshot, manual queue, resource
-stream, event stream, log stream, and catalog stream requests to the correct
-cluster subsystem(s).
+in `backend/app_refresh_setup.go` route snapshot, manual queue, resource stream,
+event stream, log stream, and catalog stream requests to the correct cluster
+subsystem. Cross-cluster UI summaries are derived above refresh state from
+separate per-cluster domain results.
 
 Backend resource responsibilities are intentionally split:
 
@@ -48,7 +49,7 @@ Backend resource responsibilities are intentionally split:
 | Refresh manager      | Frontend scheduler. It decides when refresh callbacks should run.                                                                   |
 | Refresh orchestrator | Frontend executor. It normalizes scopes, fetches snapshots, starts/stops streams, and writes store state.                           |
 | Refresh store        | Frontend in-memory state keyed by domain and full scope, including status, data, stats, errors, and ETags.                          |
-| Cluster scope        | A scope prefix such as `clusterId\|...` or `clusters=id1,id2\|...`.                                                                 |
+| Cluster scope        | A scope prefix such as `clusterId\|...`. Refresh domains target one cluster; legacy multi-cluster selectors are parsed only to return validation errors. |
 
 ## Domains And Scopes
 
@@ -63,25 +64,28 @@ Frontend domain registrations live in
 `backend/refresh/system/registrations.go`; stream routes are registered in
 `backend/refresh/system/streams.go`.
 
-Current frontend domains are fully scoped. The orchestrator normalizes every
-scope with `buildClusterScope` or `buildClusterScopeList` from
+Current frontend domains are fully scoped and single-cluster by contract. The
+orchestrator normalizes every scope with `buildClusterScope` from
 `frontend/src/core/refresh/clusterScope.ts` before a network request or store
 write. The HTTP API enforces this: `/api/v2/snapshots/{domain}` and
-`/api/v2/refresh/{domain}` return `400` when no cluster scope is present.
+`/api/v2/refresh/{domain}` return `400` when no cluster scope is present or
+when the scope names more than one cluster.
 
 Scope rules:
 
 - Single cluster: `clusterId|<scope>`
-- Multi-cluster: `clusters=id1,id2|<scope>`
-- Cluster-wide with empty tail: `clusterId|` or `clusters=id1,id2|`
+- Cluster-wide with empty tail: `clusterId|`
 - Namespace scopes use the `namespace:<name>` tail and then receive the cluster
   prefix.
 - Existing cluster-prefixed scopes are preserved so enable/disable calls do not
   rewrite historical store keys after selection changes.
 
-`namespaces` and `cluster-overview` are single-active-scope domains in the
-orchestrator. Enabling a new scope for either disables stale scopes so closed
-tabs and old active-cluster selections do not keep refreshing.
+Each refresh domain normally has one active scope per cluster runtime. Domains
+with multiple concurrent consumers opt into multiple active scopes explicitly;
+the opt-in still applies inside one cluster runtime, not across clusters.
+`namespaces` and `cluster-overview` are ordinary single-cluster domains. Views
+that need a cross-cluster display read multiple per-cluster entries and derive
+that display outside the refresh store.
 
 ## Snapshot Path
 
@@ -148,9 +152,9 @@ UI code reads state through hooks such as:
 Context updates come from active view changes, namespace changes, cluster tab
 changes, object panel state, and settings. The background refresh setting
 (`refreshBackgroundClustersEnabled`) controls whether `selectedClusterIds`
-contains all active clusters or only the active tab cluster. Resource WebSocket
-domains still run as one subscription per cluster; multi-cluster `clusters=...`
-scopes are reserved for aggregate snapshot behavior.
+contains all active clusters or only the active tab cluster. Background refresh
+fans out as separate single-cluster work in each cluster runtime; it does not
+build one multi-cluster refresh scope.
 
 ## Backend Architecture
 
@@ -199,8 +203,8 @@ Streaming behavior is registered per domain in the orchestrator:
 - Resource-stream domains are view-gated. They only start when their matching
   view is active, and every resource stream subscription targets exactly one
   cluster. When multiple cluster tabs are open, active and background clusters
-  refresh through separate per-cluster requests instead of one `clusters=...`
-  resource stream scope.
+  refresh through separate per-cluster requests instead of one multi-cluster
+  scope.
 - `pods`, `namespace-workloads`, and `nodes` use resource streams for rows and
   continue metrics-only snapshot refreshes for usage fields.
 - `catalog` uses SSE snapshots from the object catalog and also supports normal
@@ -238,9 +242,9 @@ Resource stream safety rules:
 - Each domain/scope stream must deliver monotonic `resourceVersion` values.
   Missing or regressing versions trigger a snapshot resync and temporarily block
   the stream for that scope.
-- Resource WebSocket streams reject multi-cluster scopes. Background refresh is
-  implemented as fanout across cluster runtimes, not as a multi-cluster stream
-  subscription.
+- Resource WebSocket streams reject multi-cluster scopes. This matches the
+  broader refresh-domain contract: background refresh is implemented as fanout
+  across cluster runtimes, not as a multi-cluster subscription or snapshot.
 - Backend sends `RESET` at subscription start and `COMPLETE` when a subscriber
   is dropped or a resync is required.
 - Per-subscriber backpressure drops slow subscribers and forces snapshot resync.

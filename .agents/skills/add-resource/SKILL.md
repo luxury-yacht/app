@@ -275,10 +275,10 @@ contract together:
   mapping, and diagnostics panel config under `frontend/src/core/refresh`
 - GridTable consumer and shared column factories when rendering a table
 
-Resource WebSocket domains are single-cluster only. Do not add
-`supportsMultiCluster`-style descriptor flags or send `clusters=...` scopes to
-resource stream domains; background refresh should fan out as separate
-single-cluster requests.
+Refresh domains are single-cluster only, including Resource WebSocket domains.
+Do not add multi-cluster descriptor flags or send multi-cluster scopes to
+snapshot, manual refresh, or stream paths; background refresh should fan out as
+separate single-cluster requests.
 
 For larger table/list work, use `.agents/skills/browse-tables/SKILL.md` and
 `.agents/skills/refresh-subsystem/SKILL.md` alongside this skill.

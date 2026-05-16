@@ -24,7 +24,7 @@ Frontend RefreshManager + RefreshOrchestrator
 React UI
 ```
 
-The frontend has one global coordinator for app lifecycle concerns, with per-cluster runtimes underneath it. Each runtime owns enabled scopes, in-flight work, stream health, metrics freshness, and streaming cleanup for exactly one cluster. Resource WebSocket streams are single-cluster by contract; background cluster refresh fans out as separate per-cluster requests instead of using `clusters=...` resource stream scopes.
+The frontend has one global coordinator for app lifecycle concerns, with per-cluster runtimes underneath it. Each runtime owns enabled scopes, in-flight work, stream health, metrics freshness, and streaming cleanup for exactly one cluster. Refresh domains are single-cluster by contract; background cluster refresh fans out as separate per-cluster requests instead of using multi-cluster refresh scopes.
 
 ```
 Global coordinator
@@ -108,7 +108,9 @@ Resource WebSocket domains also require:
 | `backend/refresh/resourcestream/stream_registration_*.go`                 | Informer registration and lister/indexer setup                                  |
 | `backend/refresh/resourcestream/update_helpers_test.go` and manager tests | Stream envelope metadata and row-shape parity                                   |
 
-Resource stream descriptors describe row behavior only. They must not reintroduce multi-cluster capability flags.
+Resource stream descriptors describe row behavior only. Domain descriptors must
+not reintroduce multi-cluster capability flags; cross-cluster UI should derive
+from separate per-cluster domain state above the refresh store.
 
 ## Snapshot Building
 
@@ -134,7 +136,7 @@ Four stream types use the refresh HTTP server, with different transports:
 
 **Event stream resume:** Backend buffers recent events in a circular buffer per scope. On reconnect, frontend sends `?since=<sequence>` to resume. If the buffer overflowed, resume returns empty and the client must re-snapshot. **Resume is not guaranteed.**
 
-**Resource stream resume:** Resource WebSocket subscriptions are keyed by a single cluster, domain, and normalized scope. The frontend sends resume tokens per subscription; expired buffers trigger `RESET` and a snapshot resync. Multi-cluster resource stream scopes are rejected on both the frontend subscription path and backend stream mux path.
+**Resource stream resume:** Resource WebSocket subscriptions are keyed by a single cluster, domain, and normalized scope. The frontend sends resume tokens per subscription; expired buffers trigger `RESET` and a snapshot resync. Multi-cluster resource stream scopes are rejected on both the frontend subscription path and backend stream mux path, matching the broader single-cluster refresh-domain contract.
 
 **Stream endpoints:**
 
@@ -179,9 +181,9 @@ Keep permission checks before lazy informer creation. Do not replace these files
 
 2. **Metrics polling** — Can be disabled for two different reasons (permissions vs discovery) with different UI messages. Getting the disabled reason wrong makes diagnostics confusing.
 
-3. **Multi-cluster add/remove** — Aggregate handlers must be updated via the update path, not just init. If a cluster is removed while a refresh is running, the aggregate handler can crash.
+3. **Multi-cluster add/remove** — Aggregate handlers must be updated via the update path, not just init. They route requests to per-cluster subsystems; they must not merge multiple clusters into one refresh-domain result.
 
-4. **Resource stream scope ownership** — Resource WebSocket streams must target exactly one cluster. Do not pass `clusters=...` scopes to resource stream domains; fan out to per-cluster runtimes instead.
+4. **Refresh scope ownership** — Refresh domains must target exactly one cluster. Do not pass multi-cluster scopes to snapshot, manual refresh, or resource stream domains; fan out to per-cluster runtimes instead.
 
 5. **Stream reconnection** — Event/resource buffer overflow means resume fails and the frontend must fall back to full re-snapshot. If this detection is wrong, the UI shows stale data with no indication.
 
@@ -196,6 +198,7 @@ Keep permission checks before lazy informer creation. Do not replace these files
 - [ ] Check if permission checks need updating (both layers)
 - [ ] Check if frontend mappings need updating (types, refresher config, diagnostics)
 - [ ] For resource streams, check frontend descriptors, backend supported domains, registration files, and single-cluster scope tests
+- [ ] Confirm new refresh-domain code builds one cluster scope at a time and derives any cross-cluster display above refresh state
 - [ ] Check if stream resume semantics are affected
 - [ ] Test with multiple clusters connected
 - [ ] Test with a cluster that has restricted RBAC (not cluster-admin)

@@ -145,8 +145,10 @@ All cluster/resource request scopes must preserve Kubernetes identity:
 - object-scoped reads include `clusterId`, `group`, `version`, `kind`, and
   object identity
 
-Foreground views scope reads to the active cluster only. Multi-cluster scopes
-are valid only for intentionally aggregated, background, or system behavior.
+Foreground views scope reads to the active cluster only. Refresh-domain reads
+always use one cluster scope at a time; background refresh and cross-cluster
+displays fan out across per-cluster state instead of using aggregate refresh
+scopes.
 
 ## Loading And Diagnostics
 

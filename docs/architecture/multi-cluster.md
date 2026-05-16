@@ -32,12 +32,15 @@ The same context name may exist in multiple kubeconfig files (e.g., "dev" in bot
 
 Scopes are prefixed with cluster identity for stable keying:
 
-| Type           | Format                      | Example                                         |
-| -------------- | --------------------------- | ----------------------------------------------- |
-| Single cluster | `clusterId\|<scope>`        | `config:prod\|namespace:default`                |
-| Multi-cluster  | `clusters=id1,id2\|<scope>` | `clusters=config:prod,config:staging\|limit=25` |
+| Type           | Format               | Example                          |
+| -------------- | -------------------- | -------------------------------- |
+| Single cluster | `clusterId\|<scope>` | `config:prod\|namespace:default` |
 
-See `clusterScope.ts` for encoding/decoding helpers.
+Refresh domains are single-cluster by construction. Cross-cluster displays read
+multiple per-cluster entries and derive their summaries above refresh state.
+Unsupported multi-cluster scope strings may still be parsed so malformed
+requests can be rejected cleanly, but the frontend should not produce them for
+refresh domains. See `clusterScope.ts` for encoding/decoding helpers.
 
 ## Architecture
 
@@ -91,15 +94,18 @@ The subsystem contains:
 - Refresh manager
 - Registry (permissions/capabilities)
 
-### Aggregate Handlers
+### Aggregate Routing
 
-For cross-cluster operations, aggregate handlers merge data from all clusters:
+Aggregate handlers provide one stable HTTP surface while each cluster keeps its
+own refresh subsystem:
 
 ```go
 refreshAggregates *refreshAggregateHandlers
 ```
 
-When a cluster is added/removed/rebuilt, aggregates must be updated:
+Snapshot, manual refresh, and stream requests route to the single cluster named
+by the request scope. The aggregate layer is a mux, not a merge engine. When a
+cluster is added/removed/rebuilt, aggregate routing must be updated:
 
 ```go
 clusterOrder := make([]string, 0, len(a.refreshSubsystems))
@@ -215,14 +221,16 @@ const groups = catalogDomain.data?.namespaceGroups ?? [];
 
 ### Domain Scoping
 
-- Unscoped domains are still cluster-prefixed to avoid cross-tab data bleed
-- `cluster-overview` is scoped to the active tab cluster only
-- Catalog and namespace browse are scoped to the active cluster
+- All refresh domains are cluster-prefixed to avoid cross-tab data bleed.
+- `cluster-overview` and `namespaces` are scoped to one cluster at a time.
+- Catalog and namespace browse are scoped to the active cluster.
+- Background refresh fans out as separate per-cluster requests instead of a
+  single multi-cluster refresh scope.
 
 ## Backend API Requirements
 
 - Resource/detail/YAML/Helm endpoints **require** `clusterId`
-- Missing cluster scope returns HTTP 400 - no legacy fallback
+- Missing or multi-cluster refresh scope returns HTTP 400 - no legacy fallback
 - Response cache keys must be scoped by `clusterId` to prevent cross-cluster reuse
 
 ```go
@@ -374,14 +382,18 @@ jobs := store.GetJobsForCluster(clusterID)
 
 This prevents cross-cluster bleed when node names overlap.
 
-## Single-Cluster Domains
+## Refresh Domains
 
-Some domains are intentionally restricted to single-cluster scope. Attempting multi-cluster operations on these domains returns an error.
+All refresh domains use single-cluster scope. Attempting multi-cluster
+operations on refresh snapshot, manual refresh, or stream endpoints returns an
+error.
 
-### Why Some Domains Are Single-Cluster Only
+### Why Refresh Domains Are Single-Cluster Only
 
 | Domain                             | Reason                                                                                  |
 | ---------------------------------- | --------------------------------------------------------------------------------------- |
+| List/table domains                 | Each cluster has its own runtime, cache keys, informers, and permissions                |
+| `cluster-overview`, `namespaces`   | Views show the active cluster; cross-cluster summaries derive from per-cluster entries  |
 | `object-*` (details, events, yaml) | Operates on a specific object that exists in exactly one cluster                        |
 | `catalog`, `catalog-diff`          | Catalog is per-cluster; diff compares states within one cluster                         |
 | `node-maintenance`                 | Node operations (cordon, uncordon, drain, delete) target a specific node in one cluster |
@@ -391,38 +403,27 @@ Some domains are intentionally restricted to single-cluster scope. Attempting mu
 
 ### Implementation
 
-The `isSingleClusterDomain()` function in `refresh_aggregate_snapshot.go` enforces this:
-
-```go
-func isSingleClusterDomain(domain string) bool {
-    switch domain {
-    case "catalog", "catalog-diff", "node-maintenance":
-        return true
-    default:
-        return strings.HasPrefix(domain, "object-")
-    }
-}
-```
-
-Resource WebSocket streams enforce the same rule in
-`backend/refresh/streammux/handler.go`: any `clusters=id1,id2|...` scope is
-rejected, and a single-cluster scope prefix must match the request `clusterId`.
-The frontend enforces this before subscribing in
+The refresh HTTP API validates snapshot and manual refresh scopes before the
+aggregate router is invoked. `backend/refresh_aggregate_snapshot.go` and
+`backend/refresh_aggregate_manual_queue.go` route exactly one cluster-scoped
+request to exactly one per-cluster subsystem. Resource WebSocket streams enforce
+the same rule in `backend/refresh/streammux/handler.go`: a single-cluster scope
+prefix must match the request `clusterId`. The frontend enforces this before
+subscribing in
 `frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts`.
 
 ### Frontend Considerations
 
-When building scopes for these domains, the frontend must ensure only a single cluster is targeted. The scope should use `clusterId|<scope>` format, not `clusters=id1,id2|<scope>`.
-
-For resource stream domains, background refresh should call the orchestrator
-once per background cluster. Do not create a multi-cluster resource stream scope
-to refresh several tabs at once.
+When building scopes for any refresh domain, the frontend must target one
+cluster using `clusterId|<scope>`. Background refresh should call the
+orchestrator once per background cluster. Do not create a multi-cluster refresh
+scope to refresh several tabs at once.
 
 ## Risks and Considerations
 
 - Refresh fan-out can increase load per cluster; watch for timeouts
-- Stream merge volume/order can create backpressure; throttle if needed
-- Single-cluster domain restrictions must allow explicit cluster scopes
+- Stream volume/order can create backpressure; throttle if needed
+- Single-cluster scope enforcement must allow explicit cluster scopes
 
 ## Common Patterns
 

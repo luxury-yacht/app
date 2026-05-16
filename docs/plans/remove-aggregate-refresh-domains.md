@@ -240,16 +240,32 @@ Progress:
 
 ## Phase 6: Documentation And Agent Notes
 
-- [ ] Update `docs/architecture/refresh-system.md` to state that refresh
+- [x] Update `docs/architecture/refresh-system.md` to state that refresh
       domains are single-cluster only.
-- [ ] Update `docs/architecture/multi-cluster.md` to remove multi-cluster
+- [x] Update `docs/architecture/multi-cluster.md` to remove multi-cluster
       refresh-domain scope guidance.
-- [ ] Update `.agents/skills/refresh-subsystem/SKILL.md`.
-- [ ] Update `.agents/skills/add-resource/SKILL.md` if it still mentions
+- [x] Update `.agents/skills/refresh-subsystem/SKILL.md`.
+- [x] Update `.agents/skills/add-resource/SKILL.md` if it still mentions
       aggregate domain behavior.
-- [ ] Update `.agents/context/code-map.md` and `.agents/context/lessons.md` if
+- [x] Update `.agents/context/code-map.md` and `.agents/context/lessons.md` if
       their refresh notes mention aggregate snapshot domains.
-- [ ] Update this plan with completed progress as each phase lands.
+- [x] Update this plan with completed progress as each phase lands.
+
+Progress:
+
+- 2026-05-16: Updated the refresh system architecture doc so refresh domains
+  are described as single-cluster by contract, with background refresh and
+  cross-cluster summaries derived from separate per-cluster domain state.
+- 2026-05-16: Updated the multi-cluster architecture doc to replace
+  multi-cluster refresh scope guidance with aggregate routing/mux language and
+  single-cluster snapshot/manual/stream enforcement.
+- 2026-05-16: Updated refresh-related agent notes and skills so new refresh
+  work does not reintroduce aggregate domain descriptors or multi-cluster
+  refresh scopes.
+- 2026-05-16: Also updated the data-access architecture note because it still
+  allowed aggregate refresh scopes for background/system behavior.
+- 2026-05-16: Validation passed with `git diff --check`. No prerelease run was
+  needed because Phase 6 changed only documentation and agent notes.
 
 ## Validation
 
