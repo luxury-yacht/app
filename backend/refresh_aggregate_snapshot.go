@@ -5,15 +5,13 @@ import (
 	"fmt"
 	"maps"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
-// aggregateSnapshotService fans out snapshot builds to per-cluster services and merges results.
+// aggregateSnapshotService routes cluster-scoped snapshot builds to per-cluster services.
 type aggregateSnapshotService struct {
 	clusterOrder []string
 	services     map[string]refresh.SnapshotService
@@ -57,110 +55,52 @@ func newAggregateSnapshotService(
 	}
 }
 
-// Build fans out the snapshot request and merges payloads for multi-cluster domains.
+// Build routes one cluster-scoped snapshot request to the owning per-cluster service.
 func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
 	services := s.snapshotConfig()
 	clusterIDs, scopeValue := refresh.SplitClusterScopeList(scope)
-	targets, err := s.resolveTargets(domain, clusterIDs, services)
+	target, err := s.resolveTarget(domain, clusterIDs, services)
 	if err != nil {
 		return nil, err
 	}
-	if len(targets) == 0 {
-		return nil, fmt.Errorf("no clusters available for %s", domain)
-	}
 
-	allowPartial := len(clusterIDs) > 1
-	snapshots := make([]*refresh.Snapshot, 0, len(targets))
-	warnings := make([]string, 0, len(targets))
-	var firstErr error
-	for _, id := range targets {
-		service := services[id]
-		if service == nil {
-			buildErr := fmt.Errorf("snapshot service unavailable for %s", id)
-			if !allowPartial {
-				return nil, buildErr
-			}
-			if firstErr == nil {
-				firstErr = buildErr
-			}
-			warnings = append(warnings, formatClusterWarning(id, buildErr))
-			continue
-		}
-		scoped := refresh.JoinClusterScope(id, scopeValue)
-		snapshotData, err := service.Build(ctx, domain, scoped)
-		if err != nil {
-			if !allowPartial {
-				return nil, err
-			}
-			if firstErr == nil {
-				firstErr = err
-			}
-			// Preserve partial data when a cluster fails in multi-cluster views.
-			warnings = append(warnings, formatClusterWarning(id, err))
-			continue
-		}
-		snapshots = append(snapshots, snapshotData)
-
-		// Notify the lifecycle module on every successful namespace snapshot.
-		// The lifecycle callback is state-gated, so this also recovers clusters
-		// that re-enter loading after an in-place subsystem rebuild.
-		if domain == "namespaces" {
-			s.notifyNamespaceSnapshot(id)
-		}
+	service := services[target]
+	if service == nil {
+		return nil, fmt.Errorf("snapshot service unavailable for %s", target)
 	}
-
-	if len(snapshots) == 0 {
-		if firstErr != nil {
-			return nil, firstErr
-		}
-		return nil, fmt.Errorf("no snapshots built for %s", domain)
-	}
-	if len(snapshots) == 1 {
-		merged := snapshots[0]
-		if len(warnings) > 0 {
-			merged.Stats.Warnings = append(merged.Stats.Warnings, warnings...)
-		}
-		return merged, nil
-	}
-
-	merged, err := snapshot.MergeSnapshots(domain, scope, snapshots)
+	scoped := refresh.JoinClusterScope(target, scopeValue)
+	snapshotData, err := service.Build(ctx, domain, scoped)
 	if err != nil {
 		return nil, err
 	}
-	if len(warnings) > 0 {
-		merged.Stats.Warnings = append(merged.Stats.Warnings, warnings...)
+
+	// Notify the lifecycle module on every successful namespace snapshot.
+	// The lifecycle callback is state-gated, so this also recovers clusters
+	// that re-enter loading after an in-place subsystem rebuild.
+	if domain == "namespaces" {
+		s.notifyNamespaceSnapshot(target)
 	}
-	return merged, nil
+	return snapshotData, nil
 }
 
-// resolveTargets chooses which clusters should handle the requested domain/scope pair.
-// Clusters without services (e.g., due to auth failure) are skipped gracefully.
-func (s *aggregateSnapshotService) resolveTargets(
+// resolveTarget chooses which cluster should handle the requested domain/scope pair.
+func (s *aggregateSnapshotService) resolveTarget(
 	domain string,
 	clusterIDs []string,
 	services map[string]refresh.SnapshotService,
-) ([]string, error) {
-	if len(clusterIDs) > 0 {
-		if isSingleClusterDomain(domain) && len(clusterIDs) > 1 {
-			return nil, fmt.Errorf("domain %s is only available on a single cluster", domain)
-		}
-		targets := make([]string, 0, len(clusterIDs))
-		for _, id := range clusterIDs {
-			// Skip clusters without services (e.g., auth failure caused subsystem to be skipped).
-			// This allows multi-cluster views to show data from working clusters.
-			if _, ok := services[id]; !ok {
-				continue
-			}
-			targets = append(targets, id)
-		}
-		// Only error if NO clusters are available
-		if len(targets) == 0 {
-			return nil, fmt.Errorf("no active clusters available (requested: %v)", clusterIDs)
-		}
-		return targets, nil
+) (string, error) {
+	if len(clusterIDs) == 0 {
+		return "", fmt.Errorf("cluster scope is required for domain %s", domain)
+	}
+	if len(clusterIDs) > 1 {
+		return "", fmt.Errorf("domain %s requires a single cluster scope (requested: %v)", domain, clusterIDs)
 	}
 
-	return nil, fmt.Errorf("cluster scope is required for domain %s", domain)
+	target := clusterIDs[0]
+	if _, ok := services[target]; !ok {
+		return "", fmt.Errorf("no active clusters available (requested: %v)", clusterIDs)
+	}
+	return target, nil
 }
 
 func (s *aggregateSnapshotService) snapshotConfig() map[string]refresh.SnapshotService {
@@ -183,28 +123,10 @@ func (s *aggregateSnapshotService) Update(clusterOrder []string, subsystems map[
 	s.mu.Unlock()
 }
 
-// isSingleClusterDomain restricts object-scoped and catalog domains to one cluster for now.
-func isSingleClusterDomain(domain string) bool {
-	switch domain {
-	case "catalog", "catalog-diff":
-		return true
-	default:
-		return strings.HasPrefix(domain, "object-")
-	}
-}
-
 // notifyNamespaceSnapshot fires the lifecycle callback for a successful namespace snapshot.
 func (s *aggregateSnapshotService) notifyNamespaceSnapshot(clusterID string) {
 	if s.onNamespaceSnapshot == nil {
 		return
 	}
 	s.onNamespaceSnapshot(clusterID)
-}
-
-// formatClusterWarning prefixes a cluster identifier onto a warning message.
-func formatClusterWarning(clusterID string, err error) string {
-	if err == nil {
-		return fmt.Sprintf("Cluster %s: unknown error", clusterID)
-	}
-	return fmt.Sprintf("Cluster %s: %s", clusterID, err.Error())
 }

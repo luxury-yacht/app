@@ -12,7 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
-// aggregateManualQueue fans out manual refresh jobs to per-cluster queues and aggregates status.
+// aggregateManualQueue routes cluster-scoped manual refresh jobs to per-cluster queues.
 type aggregateManualQueue struct {
 	clusterOrder []string
 	queues       map[string]refresh.ManualQueue
@@ -22,7 +22,7 @@ type aggregateManualQueue struct {
 	jobs     map[string]*aggregateManualJob
 }
 
-// aggregateManualJob tracks the child jobs created per cluster.
+// aggregateManualJob tracks the child job created for a cluster-scoped refresh.
 type aggregateManualJob struct {
 	job         *refresh.ManualRefreshJob
 	clusterJobs map[string]string
@@ -56,34 +56,27 @@ func newAggregateManualQueue(clusterOrder []string, subsystems map[string]*syste
 	}
 }
 
-// Enqueue registers a manual refresh job across the target clusters.
+// Enqueue registers a manual refresh job for exactly one target cluster.
 func (q *aggregateManualQueue) Enqueue(ctx context.Context, domain, scope, reason string) (*refresh.ManualRefreshJob, error) {
 	if domain == "" {
 		return nil, errors.New("domain is required")
 	}
 	queues := q.snapshotConfig()
 	clusterIDs, scopeValue := refresh.SplitClusterScopeList(scope)
-	targets, err := q.resolveTargets(domain, clusterIDs, queues)
+	target, err := q.resolveTarget(domain, clusterIDs, queues)
 	if err != nil {
 		return nil, err
 	}
-	if len(targets) == 0 {
-		return nil, fmt.Errorf("no clusters available for %s", domain)
+	queue := queues[target]
+	if queue == nil {
+		return nil, fmt.Errorf("manual queue unavailable for %s", target)
 	}
-
-	clusterJobs := make(map[string]string, len(targets))
-	for _, id := range targets {
-		queue := queues[id]
-		if queue == nil {
-			return nil, fmt.Errorf("manual queue unavailable for %s", id)
-		}
-		scoped := refresh.JoinClusterScope(id, scopeValue)
-		job, err := queue.Enqueue(ctx, domain, scoped, reason)
-		if err != nil {
-			return nil, err
-		}
-		clusterJobs[id] = job.ID
+	scoped := refresh.JoinClusterScope(target, scopeValue)
+	job, err := queue.Enqueue(ctx, domain, scoped, reason)
+	if err != nil {
+		return nil, err
 	}
+	clusterJobs := map[string]string{target: job.ID}
 
 	aggregateJob := &refresh.ManualRefreshJob{
 		ID:       generateAggregateJobID(),
@@ -101,7 +94,7 @@ func (q *aggregateManualQueue) Enqueue(ctx context.Context, domain, scope, reaso
 	return aggregateJob, nil
 }
 
-// Status returns the aggregated job state for a composite manual refresh job.
+// Status returns the aggregate job state mirrored from its per-cluster child job.
 func (q *aggregateManualQueue) Status(jobID string) (*refresh.ManualRefreshJob, bool) {
 	q.mu.RLock()
 	agg := q.jobs[jobID]
@@ -138,26 +131,23 @@ func (q *aggregateManualQueue) Next(ctx context.Context) (*refresh.ManualRefresh
 	return nil, ctx.Err()
 }
 
-func (q *aggregateManualQueue) resolveTargets(
+func (q *aggregateManualQueue) resolveTarget(
 	domain string,
 	clusterIDs []string,
 	queues map[string]refresh.ManualQueue,
-) ([]string, error) {
-	if len(clusterIDs) > 0 {
-		if isSingleClusterDomain(domain) && len(clusterIDs) > 1 {
-			return nil, fmt.Errorf("domain %s is only available on a single cluster", domain)
-		}
-		targets := make([]string, 0, len(clusterIDs))
-		for _, id := range clusterIDs {
-			if _, ok := queues[id]; !ok {
-				return nil, fmt.Errorf("cluster %s not active", id)
-			}
-			targets = append(targets, id)
-		}
-		return targets, nil
+) (string, error) {
+	if len(clusterIDs) == 0 {
+		return "", fmt.Errorf("cluster scope is required for domain %s", domain)
+	}
+	if len(clusterIDs) > 1 {
+		return "", fmt.Errorf("domain %s requires a single cluster scope (requested: %v)", domain, clusterIDs)
 	}
 
-	return nil, fmt.Errorf("cluster scope is required for domain %s", domain)
+	target := clusterIDs[0]
+	if _, ok := queues[target]; !ok {
+		return "", fmt.Errorf("cluster %s not active", target)
+	}
+	return target, nil
 }
 
 func (q *aggregateManualQueue) buildAggregateStatus(

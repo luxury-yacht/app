@@ -178,13 +178,13 @@ Progress:
 
 ## Phase 4: Backend Single-Cluster Snapshot Routing
 
-- [ ] Change `backend/refresh_aggregate_snapshot.go` so snapshot requests must
+- [x] Change `backend/refresh_aggregate_snapshot.go` so snapshot requests must
       resolve to exactly one cluster.
-- [ ] Reject scopes whose cluster selector contains more than one cluster.
-- [ ] Keep missing/unavailable cluster handling for single-cluster requests.
-- [ ] Update aggregate snapshot tests that currently assert partial
+- [x] Reject scopes whose cluster selector contains more than one cluster.
+- [x] Keep missing/unavailable cluster handling for single-cluster requests.
+- [x] Update aggregate snapshot tests that currently assert partial
       multi-cluster merge behavior.
-- [ ] Update aggregate manual queue behavior and tests to reject multi-cluster
+- [x] Update aggregate manual queue behavior and tests to reject multi-cluster
       snapshot scopes instead of splitting them.
 
 Important distinction:
@@ -192,6 +192,23 @@ Important distinction:
 - The backend aggregate layer can remain as a mux across per-cluster services.
 - The aggregate layer should no longer be a merge engine for one request that
   targets multiple clusters.
+
+Progress:
+
+- 2026-05-16: `aggregateSnapshotService` now routes one cluster-scoped snapshot
+  request to the matching per-cluster snapshot service. It rejects missing
+  cluster scopes and any scope that resolves to more than one cluster, and it no
+  longer calls `snapshot.MergeSnapshots`.
+- 2026-05-16: `aggregateManualQueue` now routes manual refresh jobs to exactly
+  one per-cluster queue. Multi-cluster manual refresh scopes are rejected before
+  any child job is created.
+- 2026-05-16: The refresh HTTP API now rejects snapshot and manual refresh
+  requests whose scope contains multiple clusters, returning a 400 before the
+  aggregate router is invoked.
+- 2026-05-16: Updated backend tests to cover multi-cluster rejection,
+  single-cluster routing, unavailable cluster errors, namespace lifecycle
+  callback preservation, and manual queue child failure status.
+- 2026-05-16: Full validation passed with `mage qc:prerelease`.
 
 ## Phase 5: Delete Snapshot Merge Code
 

@@ -66,7 +66,7 @@ func (q *stubManualQueue) Next(ctx context.Context) (*refresh.ManualRefreshJob, 
 	return nil, ctx.Err()
 }
 
-func TestAggregateManualQueueEnqueueFansOut(t *testing.T) {
+func TestAggregateManualQueueEnqueueRoutesSingleCluster(t *testing.T) {
 	queueA := newStubManualQueue()
 	queueB := newStubManualQueue()
 	subsystems := map[string]*system.Subsystem{
@@ -75,16 +75,15 @@ func TestAggregateManualQueueEnqueueFansOut(t *testing.T) {
 	}
 	aggregate := newAggregateManualQueue([]string{"cluster-a", "cluster-b"}, subsystems)
 
-	job, err := aggregate.Enqueue(context.Background(), "namespaces", "clusters=cluster-a,cluster-b|namespace:default", "manual")
+	job, err := aggregate.Enqueue(context.Background(), "namespaces", "cluster-a|namespace:default", "manual")
 	require.NoError(t, err)
 	require.NotNil(t, job)
 	require.Len(t, queueA.scopes, 1)
-	require.Len(t, queueB.scopes, 1)
+	require.Empty(t, queueB.scopes)
 	require.Equal(t, "cluster-a|namespace:default", queueA.scopes[0])
-	require.Equal(t, "cluster-b|namespace:default", queueB.scopes[0])
 }
 
-func TestAggregateManualQueueStatusAggregatesFailures(t *testing.T) {
+func TestAggregateManualQueueRejectsMultiClusterScope(t *testing.T) {
 	queueA := newStubManualQueue()
 	queueB := newStubManualQueue()
 	subsystems := map[string]*system.Subsystem{
@@ -94,25 +93,35 @@ func TestAggregateManualQueueStatusAggregatesFailures(t *testing.T) {
 	aggregate := newAggregateManualQueue([]string{"cluster-a", "cluster-b"}, subsystems)
 
 	job, err := aggregate.Enqueue(context.Background(), "namespaces", "clusters=cluster-a,cluster-b|", "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "single cluster scope")
+	require.Nil(t, job)
+	require.Empty(t, queueA.scopes)
+	require.Empty(t, queueB.scopes)
+}
+
+func TestAggregateManualQueueStatusReflectsChildFailure(t *testing.T) {
+	queueA := newStubManualQueue()
+	subsystems := map[string]*system.Subsystem{
+		"cluster-a": {ManualQueue: queueA},
+	}
+	aggregate := newAggregateManualQueue([]string{"cluster-a"}, subsystems)
+
+	job, err := aggregate.Enqueue(context.Background(), "namespaces", "cluster-a|", "")
 	require.NoError(t, err)
 	require.NotNil(t, job)
 
 	require.Len(t, queueA.jobs, 1)
-	require.Len(t, queueB.jobs, 1)
 	for _, child := range queueA.jobs {
-		child.State = refresh.JobStateSucceeded
-		queueA.Update(child)
-	}
-	for _, child := range queueB.jobs {
 		child.State = refresh.JobStateFailed
 		child.Error = "boom"
-		queueB.Update(child)
+		queueA.Update(child)
 	}
 
 	aggStatus, ok := aggregate.Status(job.ID)
 	require.True(t, ok)
 	require.Equal(t, refresh.JobStateFailed, aggStatus.State)
-	require.Contains(t, aggStatus.Error, "cluster-b")
+	require.Contains(t, aggStatus.Error, "cluster-a")
 }
 
 func TestAggregateManualQueueUpdateReplacesJob(t *testing.T) {

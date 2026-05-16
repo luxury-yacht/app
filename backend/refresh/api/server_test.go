@@ -168,6 +168,30 @@ func TestSnapshotEndpointRejectsMissingClusterScope(t *testing.T) {
 	}
 }
 
+func TestSnapshotEndpointRejectsMultiClusterScope(t *testing.T) {
+	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, nil)
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=clusters=cluster-a,cluster-b|", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 got %d", rr.Code)
+	}
+
+	var payload struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode error payload: %v", err)
+	}
+	if !strings.Contains(payload.Message, "single cluster scope is required") {
+		t.Fatalf("unexpected error message: %s", payload.Message)
+	}
+}
+
 func snapshotService() refresh.SnapshotService {
 	return &fakeSnapshotService{snapshot: &refresh.Snapshot{Version: 1, Payload: map[string]int{"items": 1}}}
 }
@@ -221,6 +245,31 @@ func TestManualRefreshEndpointRejectsMissingClusterScope(t *testing.T) {
 		t.Fatalf("failed to decode error payload: %v", err)
 	}
 	if !strings.Contains(payload.Message, "cluster scope is required") {
+		t.Fatalf("unexpected error message: %s", payload.Message)
+	}
+}
+
+func TestManualRefreshEndpointRejectsMultiClusterScope(t *testing.T) {
+	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, nil)
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"clusters=cluster-a,cluster-b|"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 got %d", rr.Code)
+	}
+
+	var payload struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode error payload: %v", err)
+	}
+	if !strings.Contains(payload.Message, "single cluster scope is required") {
 		t.Fatalf("unexpected error message: %s", payload.Message)
 	}
 }

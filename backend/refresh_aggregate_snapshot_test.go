@@ -52,25 +52,18 @@ func TestAggregateSnapshotServiceBuildRequiresClusterScope(t *testing.T) {
 	require.Nil(t, snap)
 }
 
-func TestAggregateSnapshotServiceBuildAllowsPartialFailuresForClusterList(t *testing.T) {
-	successSnapshot := &refresh.Snapshot{
-		Domain: "namespaces",
-		Payload: snapshot.NamespaceSnapshot{
-			Namespaces: []snapshot.NamespaceSummary{
-				{Name: "default"},
-			},
-		},
-	}
-
+func TestAggregateSnapshotServiceBuildRejectsMultiClusterScope(t *testing.T) {
 	services := map[string]refresh.SnapshotService{
 		"cluster-a": stubSnapshotService{
 			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				return successSnapshot, nil
+				t.Fatalf("multi-cluster snapshot request should not reach a cluster service")
+				return nil, nil
 			},
 		},
 		"cluster-b": stubSnapshotService{
 			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				return nil, refresh.NewPermissionDeniedError(domain, "")
+				t.Fatalf("multi-cluster snapshot request should not reach a cluster service")
+				return nil, nil
 			},
 		},
 	}
@@ -80,14 +73,9 @@ func TestAggregateSnapshotServiceBuildAllowsPartialFailuresForClusterList(t *tes
 	}
 
 	snap, err := aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a,cluster-b|")
-	require.NoError(t, err)
-	require.NotNil(t, snap)
-
-	payload, ok := snap.Payload.(snapshot.NamespaceSnapshot)
-	require.True(t, ok)
-	require.Len(t, payload.Namespaces, 1)
-	require.Equal(t, "default", payload.Namespaces[0].Name)
-	require.Contains(t, snap.Stats.Warnings, "Cluster cluster-b: permission denied for domain namespaces")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "single cluster scope")
+	require.Nil(t, snap)
 }
 
 func TestAggregateSnapshotServiceNamespaceSnapshotTriggersLifecycleCallback(t *testing.T) {
@@ -315,26 +303,40 @@ func TestAggregateSnapshotServiceLifecycleNoTransitionIfAlreadyReady(t *testing.
 	require.Equal(t, emittedEvent{"cluster-a", "ready", ""}, events[0])
 }
 
-func TestAggregateSnapshotServiceBuildReturnsErrorWhenAllClustersFail(t *testing.T) {
+func TestAggregateSnapshotServiceBuildReturnsErrorWhenClusterFails(t *testing.T) {
 	services := map[string]refresh.SnapshotService{
 		"cluster-a": stubSnapshotService{
 			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
 				return nil, refresh.NewPermissionDeniedError(domain, "")
 			},
 		},
-		"cluster-b": stubSnapshotService{
+	}
+	aggregate := &aggregateSnapshotService{
+		clusterOrder: []string{"cluster-a"},
+		services:     services,
+	}
+
+	snap, err := aggregate.Build(context.Background(), "namespaces", "cluster-a|")
+	require.Error(t, err)
+	require.True(t, refresh.IsPermissionDenied(err))
+	require.Nil(t, snap)
+}
+
+func TestAggregateSnapshotServiceBuildReturnsErrorWhenClusterUnavailable(t *testing.T) {
+	services := map[string]refresh.SnapshotService{
+		"cluster-a": stubSnapshotService{
 			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				return nil, refresh.NewPermissionDeniedError(domain, "")
+				return &refresh.Snapshot{Domain: domain, Scope: scope}, nil
 			},
 		},
 	}
 	aggregate := &aggregateSnapshotService{
-		clusterOrder: []string{"cluster-a", "cluster-b"},
+		clusterOrder: []string{"cluster-a"},
 		services:     services,
 	}
 
-	snap, err := aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a,cluster-b|")
+	snap, err := aggregate.Build(context.Background(), "namespaces", "cluster-b|")
 	require.Error(t, err)
-	require.True(t, refresh.IsPermissionDenied(err))
+	require.Contains(t, err.Error(), "no active clusters available")
 	require.Nil(t, snap)
 }

@@ -24,6 +24,7 @@ var (
 	errDomainNotSpecified = errors.New("domain not specified")
 	errJobIDNotSpecified  = errors.New("job id not specified")
 	errClusterScopeNeeded = errors.New("cluster scope is required")
+	errSingleClusterScope = errors.New("single cluster scope is required")
 )
 
 // Server exposes HTTP endpoints for snapshot retrieval and manual refresh.
@@ -169,6 +170,9 @@ func requireClusterScope(scope string) error {
 	clusterIDs, _ := refresh.SplitClusterScopeList(scope)
 	if len(clusterIDs) == 0 {
 		return errClusterScopeNeeded
+	}
+	if len(clusterIDs) > 1 {
+		return errSingleClusterScope
 	}
 	return nil
 }
