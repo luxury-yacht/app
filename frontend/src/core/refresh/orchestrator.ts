@@ -189,10 +189,16 @@ const logWarning = (message: string): void => {
   logAppLogsWarn(message, APP_LOG_SOURCES.RefreshOrchestrator);
 };
 
-// Domains that should never keep multiple concurrently-enabled scopes.
-const SINGLE_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>(['namespaces', 'cluster-overview']);
-// Domains that intentionally aggregate across connected clusters.
-const AGGREGATE_SCOPE_DOMAINS = new Set<RefreshDomain>(['namespaces', 'cluster-overview']);
+// Most domains should only keep one enabled scope per cluster runtime. These
+// domains have real concurrent consumers, such as browse data plus metadata,
+// object-diff left/right panes, or namespace table plus object-panel pod lists.
+const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
+  'catalog',
+  'catalog-diff',
+  'object-map',
+  'object-yaml',
+  'pods',
+]);
 
 const shallowEqualRecord = (left: Record<string, unknown>, right: Record<string, unknown>) => {
   if (left === right) {
@@ -606,7 +612,7 @@ class RefreshOrchestrator {
       runtime.scopedEnabledState.set(domain, scopedMap);
     }
 
-    if (enabled && SINGLE_ACTIVE_SCOPE_DOMAINS.has(domain)) {
+    if (enabled && !MULTI_ACTIVE_SCOPE_DOMAINS.has(domain)) {
       const staleScopes: string[] = [];
       scopedMap.forEach((scopeEnabled, existingScope) => {
         if (!scopeEnabled || existingScope === normalizedScope) {
@@ -1175,30 +1181,16 @@ class RefreshOrchestrator {
     if (this.isResourceStreamDomain(domain)) {
       return this.normalizeResourceStreamScope(domain, value, allowEmpty);
     }
-    if (this.isAggregateScopeDomain(domain)) {
-      return this.normalizeAggregateScope(value, allowEmpty);
-    }
     return this.normalizeDefaultScope(value, allowEmpty);
   }
 
   private normalizeDefaultScope(value?: string | null, allowEmpty = false): string | undefined {
-    return this.normalizeScopeForClusters(this.getSelectedClusterIds(), value, allowEmpty);
-  }
-
-  private normalizeAggregateScope(value?: string | null, allowEmpty = false): string | undefined {
-    return this.normalizeScopeForClusters(this.getAllConnectedClusterIds(), value, allowEmpty);
-  }
-
-  private normalizeScopeForClusters(
-    clusterIds: string[],
-    value?: string | null,
-    allowEmpty = false
-  ): string | undefined {
+    const clusterId = this.getSelectedClusterId();
     if (!value) {
       if (!allowEmpty) {
         return undefined;
       }
-      const clusterScope = buildClusterScopeList(clusterIds, '');
+      const clusterScope = buildClusterScope(clusterId, '');
       return clusterScope || undefined;
     }
     const trimmed = value.trim();
@@ -1206,16 +1198,19 @@ class RefreshOrchestrator {
       if (!allowEmpty) {
         return undefined;
       }
-      const clusterScope = buildClusterScopeList(clusterIds, '');
+      const clusterScope = buildClusterScope(clusterId, '');
       return clusterScope || undefined;
     }
     const parsed = parseClusterScopeList(trimmed);
+    if (parsed.isMultiCluster) {
+      throw new Error('Refresh domain scopes must target a single cluster');
+    }
     // Preserve explicit cluster-scoped inputs to avoid rewriting historical keys
-    // when selectedClusterIds changes between enable/disable calls.
+    // when the selected cluster changes between enable/disable calls.
     if (parsed.clusterIds.length > 0) {
       return buildClusterScopeList(parsed.clusterIds, parsed.scope);
     }
-    return buildClusterScopeList(clusterIds, parsed.scope || trimmed);
+    return buildClusterScope(clusterId, parsed.scope || trimmed) || undefined;
   }
 
   private normalizeResourceStreamScope(
@@ -1242,10 +1237,6 @@ class RefreshOrchestrator {
     return buildClusterScope(this.getSelectedClusterId(), parsed.scope || trimmed) || undefined;
   }
 
-  private isAggregateScopeDomain(domain: RefreshDomain): boolean {
-    return AGGREGATE_SCOPE_DOMAINS.has(domain);
-  }
-
   private getClusterRuntime(clusterId: string): ClusterRefreshRuntime {
     const normalized = clusterId.trim();
     let runtime = this.clusterRuntimes.get(normalized);
@@ -1257,10 +1248,13 @@ class RefreshOrchestrator {
   }
 
   private getRuntimeForScope(domain: RefreshDomain, scope?: string): ClusterRefreshRuntime {
-    if (!scope || this.isAggregateScopeDomain(domain)) {
+    if (!scope) {
       return this.coordinatorRuntime;
     }
     const parsed = parseClusterScopeList(scope);
+    if (parsed.isMultiCluster) {
+      throw new Error(`Refresh domain "${domain}" requires a single cluster scope`);
+    }
     if (!parsed.isMultiCluster && parsed.clusterIds.length === 1) {
       return this.getClusterRuntime(parsed.clusterIds[0]);
     }

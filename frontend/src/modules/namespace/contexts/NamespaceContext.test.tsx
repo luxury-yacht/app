@@ -371,7 +371,7 @@ describe('NamespaceProvider selection behaviour', () => {
 
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
-      expect.any(String),
+      'cluster-a|',
       { isManual: true }
     );
     cleanup();
@@ -391,7 +391,7 @@ describe('NamespaceProvider selection behaviour', () => {
 
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
-      expect.any(String),
+      'cluster-a|',
       { isManual: false }
     );
     cleanup();

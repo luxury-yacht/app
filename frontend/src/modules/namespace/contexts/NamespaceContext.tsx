@@ -23,7 +23,7 @@ import { errorHandler } from '@utils/errorHandler';
 import { queryNamespacePermissions } from '@/core/capabilities';
 import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
-import { buildClusterScopeList } from '@/core/refresh/clusterScope';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import {
@@ -80,10 +80,11 @@ interface NamespaceProviderProps {
 export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }) => {
   const { selectedKubeconfig, selectedClusterId, selectedClusterIds } = useKubeconfig();
 
-  // Build scope covering all connected clusters for the namespaces domain.
+  // Namespace refresh state is per cluster. Cross-cluster namespace views should
+  // derive from per-cluster scoped entries rather than one aggregate domain.
   const namespacesScope = useMemo(
-    () => buildClusterScopeList(selectedClusterIds, ''),
-    [selectedClusterIds]
+    () => buildClusterScope(selectedClusterId ?? undefined, ''),
+    [selectedClusterId]
   );
 
   const namespaceDomain = useRefreshScopedDomain('namespaces', namespacesScope);

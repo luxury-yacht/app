@@ -61,16 +61,16 @@ Remaining aggregate behavior:
 
 ## Phase 1: Frontend Domain Ownership
 
-- [ ] Remove `AGGREGATE_SCOPE_DOMAINS` from
+- [x] Remove `AGGREGATE_SCOPE_DOMAINS` from
       `frontend/src/core/refresh/orchestrator.ts`.
-- [ ] Remove `normalizeAggregateScope()` or make it unnecessary.
-- [ ] Ensure `namespaces` and `cluster-overview` normalize through the same
+- [x] Remove `normalizeAggregateScope()` or make it unnecessary.
+- [x] Ensure `namespaces` and `cluster-overview` normalize through the same
       single-cluster path as other non-resource-stream domains.
-- [ ] Ensure `getRuntimeForScope()` routes all cluster-scoped domain state to a
+- [x] Ensure `getRuntimeForScope()` routes all cluster-scoped domain state to a
       `ClusterRefreshRuntime`.
-- [ ] Keep the coordinator runtime only for non-cluster lifecycle state, if any
+- [x] Keep the coordinator runtime only for non-cluster lifecycle state, if any
       remains.
-- [ ] Update orchestrator tests that currently assert aggregate-domain
+- [x] Update orchestrator tests that currently assert aggregate-domain
       behavior.
 
 Notes:
@@ -81,9 +81,25 @@ Notes:
 - `namespaces` is the live frontend producer of multi-cluster refresh scopes
   and needs the larger change.
 
+Progress:
+
+- 2026-05-16: Removed the frontend aggregate-domain exception list. Non-resource
+  refresh domains now normalize through the single-cluster path, explicit
+  multi-cluster refresh scopes are rejected at the orchestrator boundary, and
+  cluster-scoped runtime ownership goes to `ClusterRefreshRuntime`.
+- 2026-05-16: Replaced the old single-active special-case list with a default
+  single-active-scope policy per domain/runtime. Domains with proven concurrent
+  consumers now opt into multiple active scopes explicitly.
+- 2026-05-16: Updated orchestrator tests so `namespaces` uses the active
+  cluster scope, namespace enablement is stored in a cluster runtime, and
+  `cluster-overview` scopes are isolated per cluster runtime instead of using
+  coordinator aggregate state.
+- 2026-05-16: Focused frontend validation passed:
+  `npm run test -- src/core/refresh/orchestrator.test.ts`.
+
 ## Phase 2: Namespace State Per Cluster
 
-- [ ] Change `NamespaceContext` to read namespace data from the active
+- [x] Change `NamespaceContext` to read namespace data from the active
       cluster's `namespaces` scope.
 - [ ] Enable `namespaces` refresh for each open cluster that needs namespace
       data instead of one `clusters=...|` scope.
@@ -102,6 +118,16 @@ Implementation direction:
   calls instead of `buildClusterScopeList(selectedClusterIds, '')`.
 - Avoid a new aggregate namespace store. If a UI needs all namespaces across
   clusters later, derive it by reading per-cluster scoped entries.
+
+Progress:
+
+- 2026-05-16: Started Phase 2 by changing `NamespaceContext` to build the
+  active cluster's `namespaces` scope with `buildClusterScope(selectedClusterId,
+  '')`. This removes the live frontend producer of `clusters=...|` namespace
+  scopes while preserving the existing active-cluster namespace UI behavior.
+- 2026-05-16: Updated namespace context tests to assert the active-cluster
+  namespace refresh scope. Focused frontend validation passed:
+  `npm run test -- src/modules/namespace/contexts/NamespaceContext.test.tsx`.
 
 ## Phase 3: Diagnostics And App Debug Surfaces
 

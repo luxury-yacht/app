@@ -451,7 +451,7 @@ describe('refreshOrchestrator', () => {
     expect(scopes).toEqual(['cluster-a|namespace:team-a', 'cluster-b|namespace:team-a']);
   });
 
-  it('normalizes aggregate domains against all connected clusters', async () => {
+  it('normalizes namespaces against the active cluster only', async () => {
     refreshOrchestrator.registerDomain({
       domain: 'namespaces',
       refresherName: SYSTEM_REFRESHERS.namespaces,
@@ -466,7 +466,7 @@ describe('refreshOrchestrator', () => {
     clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
         domain: 'namespaces',
-        scope: 'clusters=cluster-a,cluster-b|all',
+        scope: 'cluster-a|all',
         version: 1,
         checksum: 'etag-namespaces',
         generatedAt: Date.now(),
@@ -485,7 +485,7 @@ describe('refreshOrchestrator', () => {
 
     expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
       'namespaces',
-      expect.objectContaining({ scope: 'clusters=cluster-a,cluster-b|all' })
+      expect.objectContaining({ scope: 'cluster-a|all' })
     );
   });
 
@@ -509,7 +509,7 @@ describe('refreshOrchestrator', () => {
     ).toBe(true);
   });
 
-  it('keeps aggregate enablement in the coordinator runtime', () => {
+  it('stores namespaces enablement in the active cluster runtime', () => {
     refreshOrchestrator.registerDomain({
       domain: 'namespaces',
       refresherName: SYSTEM_REFRESHERS.namespaces,
@@ -523,11 +523,16 @@ describe('refreshOrchestrator', () => {
 
     refreshOrchestrator.setScopedDomainEnabled('namespaces', 'all', true);
 
-    const scope = 'clusters=cluster-a,cluster-b|all';
+    const scope = 'cluster-a|all';
     expect(
-      orchestratorInternals.coordinatorRuntime.scopedEnabledState.get('namespaces')?.get(scope)
+      orchestratorInternals.coordinatorRuntime.scopedEnabledState.get('namespaces')
+    ).toBeUndefined();
+    expect(
+      orchestratorInternals.clusterRuntimes
+        .get('cluster-a')
+        ?.scopedEnabledState.get('namespaces')
+        ?.get(scope)
     ).toBe(true);
-    expect(orchestratorInternals.clusterRuntimes.size).toBe(0);
   });
 
   it('applies snapshots fetched during manual refresh callbacks', async () => {
@@ -967,7 +972,7 @@ describe('refreshOrchestrator', () => {
     expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps only the latest scope active for single-scope system domains', () => {
+  it('keeps single-scope system domains isolated by cluster runtime', () => {
     refreshOrchestrator.registerDomain({
       domain: 'cluster-overview',
       refresherName: SYSTEM_REFRESHERS.clusterOverview,
@@ -975,7 +980,7 @@ describe('refreshOrchestrator', () => {
     });
 
     const scopeA = buildClusterScopeList(['cluster-a'], '');
-    const scopeAB = buildClusterScopeList(['cluster-a', 'cluster-b'], '');
+    const scopeB = buildClusterScopeList(['cluster-b'], '');
 
     refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scopeA, true);
     setScopedDomainState('cluster-overview', scopeA, (previous) => ({
@@ -986,14 +991,53 @@ describe('refreshOrchestrator', () => {
       scope: scopeA,
     }));
 
-    refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scopeAB, true);
+    refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scopeB, true);
 
-    const scopedMap = orchestratorInternals.coordinatorRuntime.scopedEnabledState.get(
-      'cluster-overview'
-    ) as Map<string, boolean>;
-    expect(scopedMap.get(scopeAB)).toBe(true);
-    expect(scopedMap.get(scopeA)).toBe(false);
-    expect(getScopedDomainState('cluster-overview', scopeA).status).toBe('idle');
+    expect(
+      orchestratorInternals.clusterRuntimes
+        .get('cluster-a')
+        ?.scopedEnabledState.get('cluster-overview')
+        ?.get(scopeA)
+    ).toBe(true);
+    expect(
+      orchestratorInternals.clusterRuntimes
+        .get('cluster-b')
+        ?.scopedEnabledState.get('cluster-overview')
+        ?.get(scopeB)
+    ).toBe(true);
+    expect(
+      orchestratorInternals.coordinatorRuntime.scopedEnabledState.get('cluster-overview')
+    ).toBeUndefined();
+    expect(getScopedDomainState('cluster-overview', scopeA).status).toBe('ready');
+  });
+
+  it('keeps one active scope by default within a cluster runtime', () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-config',
+      refresherName: CLUSTER_REFRESHERS.config,
+      category: 'cluster',
+    });
+
+    const firstScope = buildClusterScopeList(['cluster-a'], 'config');
+    const secondScope = buildClusterScopeList(['cluster-a'], 'secrets');
+
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', firstScope, true);
+    setScopedDomainState('cluster-config', firstScope, (previous) => ({
+      ...previous,
+      status: 'ready',
+      data: { resources: [{ kind: 'ConfigMap', name: 'app-config' }] } as any,
+      stats: { itemCount: 1, buildDurationMs: 0 },
+      scope: firstScope,
+    }));
+
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', secondScope, true);
+
+    const scopedMap = orchestratorInternals.clusterRuntimes
+      .get('cluster-a')
+      ?.scopedEnabledState.get('cluster-config');
+    expect(scopedMap?.get(firstScope)).toBe(false);
+    expect(scopedMap?.get(secondScope)).toBe(true);
+    expect(getScopedDomainState('cluster-config', firstScope).status).toBe('idle');
   });
 
   it('replaces existing non-scoped subscriptions when re-registering a domain', () => {
