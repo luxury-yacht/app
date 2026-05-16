@@ -41,6 +41,7 @@ data, but they must preserve catalog-shaped identity.
 - `frontend/src/modules/namespace`
 - `frontend/src/core/data-access`
 - `frontend/src/core/refresh`
+- `frontend/src/core/refresh/streaming/resourceStreamDomains.ts`
 - `frontend/src/shared/components/tables`
 
 Use `GridTable` and shared column factories. Frontend reads should flow through
@@ -52,6 +53,8 @@ Use `GridTable` and shared column factories. Frontend reads should flow through
 - [ ] Refresh domain, payload type, refresher config, orchestrator, diagnostics,
       and backend registration stay synchronized.
 - [ ] Snapshot and resource-stream row shapes match for streamed domains.
+- [ ] Streamed table domains update resource stream descriptors, backend
+      supported domains, registration files, and single-cluster stream tests.
 - [ ] Catalog-backed browse behavior remains the identity/existence source of
       truth.
 - [ ] Large datasets retain pagination/load-more, truncation diagnostics, and

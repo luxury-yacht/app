@@ -46,6 +46,8 @@ add/remove behavior.
       cluster in a backend/API/cache/action path.
 - [ ] Selected and background cluster sets stay distinct and refresh scopes are
       rebuilt or cleared when cluster selection changes.
+- [ ] Resource WebSocket streams stay single-cluster; background cluster
+      refresh fans out through per-cluster runtime/scope work.
 - [ ] Cluster add/remove updates aggregate refresh handlers and object catalog
       services through the live update path, not only initial setup.
 - [ ] Auth-failed clusters do not block healthy clusters.

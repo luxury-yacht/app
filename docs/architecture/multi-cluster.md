@@ -385,6 +385,7 @@ Some domains are intentionally restricted to single-cluster scope. Attempting mu
 | `object-*` (details, events, yaml) | Operates on a specific object that exists in exactly one cluster                        |
 | `catalog`, `catalog-diff`          | Catalog is per-cluster; diff compares states within one cluster                         |
 | `node-maintenance`                 | Node operations (cordon, uncordon, drain, delete) target a specific node in one cluster |
+| Resource WebSocket streams         | Live row deltas are owned by one per-cluster resource stream manager                    |
 | Container logs streams             | Container logs come from a specific pod in one cluster                                  |
 | Catalog streams                    | Catalog operations require a single source                                              |
 
@@ -403,9 +404,19 @@ func isSingleClusterDomain(domain string) bool {
 }
 ```
 
+Resource WebSocket streams enforce the same rule in
+`backend/refresh/streammux/handler.go`: any `clusters=id1,id2|...` scope is
+rejected, and a single-cluster scope prefix must match the request `clusterId`.
+The frontend enforces this before subscribing in
+`frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts`.
+
 ### Frontend Considerations
 
 When building scopes for these domains, the frontend must ensure only a single cluster is targeted. The scope should use `clusterId|<scope>` format, not `clusters=id1,id2|<scope>`.
+
+For resource stream domains, background refresh should call the orchestrator
+once per background cluster. Do not create a multi-cluster resource stream scope
+to refresh several tabs at once.
 
 ## Risks and Considerations
 

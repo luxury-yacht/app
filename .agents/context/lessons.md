@@ -36,6 +36,13 @@ sessions. Keep it short, durable, and tied to code contracts.
   kept in sync.
 - Snapshot rows and stream rows for the same resource surface must stay shape
   compatible.
+- Resource WebSocket streams are single-cluster only. Multi-cluster/background
+  refresh should fan out across per-cluster runtimes instead of using
+  `clusters=...` resource stream scopes.
+- Frontend resource stream descriptors own row identity, sorting, drift keys,
+  row collections, and metric preservation. Backend resource stream supported
+  domains live in `backend/refresh/resourcestream/domains.go`; keep both aligned
+  with refresh domain registration.
 - Multi-cluster behavior must be checked at scope keys, caches, requests,
   stores, and UI state reset boundaries.
 

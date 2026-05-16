@@ -14,13 +14,14 @@ The refresh system has three layers:
 - A lightweight HTTP API serves snapshots, manual refresh jobs, telemetry, and
   stream endpoints.
 - The frontend refresh manager and orchestrator schedule refreshes, normalize
-  cluster-aware scopes, start and stop streams, and store results for UI hooks.
+  cluster-aware scopes, route single-cluster work through per-cluster runtimes,
+  start and stop streams, and store results for UI hooks.
 
-Multi-cluster support uses one frontend orchestrator and one backend refresh
-subsystem per active cluster. Aggregate backend services in
-`backend/app_refresh_setup.go` fan out snapshot, manual queue, resource stream,
-event stream, log stream, and catalog stream requests to the correct cluster
-subsystem(s).
+Multi-cluster support uses one frontend orchestrator with per-cluster runtimes
+and one backend refresh subsystem per active cluster. Aggregate backend services
+in `backend/app_refresh_setup.go` fan out snapshot, manual queue, resource
+stream, event stream, log stream, and catalog stream requests to the correct
+cluster subsystem(s).
 
 Backend resource responsibilities are intentionally split:
 
@@ -147,7 +148,9 @@ UI code reads state through hooks such as:
 Context updates come from active view changes, namespace changes, cluster tab
 changes, object panel state, and settings. The background refresh setting
 (`refreshBackgroundClustersEnabled`) controls whether `selectedClusterIds`
-contains all active clusters or only the active tab cluster.
+contains all active clusters or only the active tab cluster. Resource WebSocket
+domains still run as one subscription per cluster; multi-cluster `clusters=...`
+scopes are reserved for aggregate snapshot behavior.
 
 ## Backend Architecture
 

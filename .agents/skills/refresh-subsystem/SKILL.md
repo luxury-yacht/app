@@ -19,7 +19,19 @@ Per-Cluster Subsystem (manager, registry, informers, permissions)
     ↓ (snapshots, SSE, WebSocket)
 Aggregate Mux (routes requests to correct cluster)
     ↓ (HTTP API on loopback)
-Frontend RefreshManager + Stream Managers
+Frontend RefreshManager + RefreshOrchestrator
+    ↓ (per-cluster runtimes, stream managers, store writes)
+React UI
+```
+
+The frontend has one global coordinator for app lifecycle concerns, with per-cluster runtimes underneath it. Each runtime owns enabled scopes, in-flight work, stream health, metrics freshness, and streaming cleanup for exactly one cluster. Resource WebSocket streams are single-cluster by contract; background cluster refresh fans out as separate per-cluster requests instead of using `clusters=...` resource stream scopes.
+
+```
+Global coordinator
+    ↓
+ClusterRefreshRuntime(cluster-a)  ClusterRefreshRuntime(cluster-b)
+    ↓                             ↓
+single-cluster snapshots/streams  single-cluster snapshots/streams
     ↓ (callbacks, store updates)
 React UI
 ```
@@ -87,6 +99,17 @@ Every backend domain has a frontend counterpart:
 
 **These must stay synchronized.** A backend domain without a frontend mapping breaks diagnostics. A frontend refresher without a backend domain gets empty snapshots.
 
+Resource WebSocket domains also require:
+
+| File                                                                      | What to update                                                                  |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `frontend/src/core/refresh/streaming/resourceStreamDomains.ts`            | Scope kind, row collection, row identity, sort, drift keys, metric preservation |
+| `backend/refresh/resourcestream/domains.go`                               | Supported streamed refresh domain list                                          |
+| `backend/refresh/resourcestream/stream_registration_*.go`                 | Informer registration and lister/indexer setup                                  |
+| `backend/refresh/resourcestream/update_helpers_test.go` and manager tests | Stream envelope metadata and row-shape parity                                   |
+
+Resource stream descriptors describe row behavior only. They must not reintroduce multi-cluster capability flags.
+
 ## Snapshot Building
 
 **File:** `backend/refresh/snapshot/service.go`
@@ -111,6 +134,8 @@ Four stream types use the refresh HTTP server, with different transports:
 
 **Event stream resume:** Backend buffers recent events in a circular buffer per scope. On reconnect, frontend sends `?since=<sequence>` to resume. If the buffer overflowed, resume returns empty and the client must re-snapshot. **Resume is not guaranteed.**
 
+**Resource stream resume:** Resource WebSocket subscriptions are keyed by a single cluster, domain, and normalized scope. The frontend sends resume tokens per subscription; expired buffers trigger `RESET` and a snapshot resync. Multi-cluster resource stream scopes are rejected on both the frontend subscription path and backend stream mux path.
+
 **Stream endpoints:**
 
 - `/api/v2/stream/events`
@@ -132,6 +157,20 @@ Key behaviors:
 - Global pause blocks automatic refresh but not manual refresh
 - Visibility: streams suspend on hidden tab, resume on visible
 
+## Resource Stream Registration
+
+Backend resource stream registration is split by behavior:
+
+| File                             | Purpose                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| `stream_registration_helpers.go` | Permission checks and Add/Update/Delete event mapping                    |
+| `stream_registration_direct.go`  | Direct object-to-stream handlers without manager listers/indexers        |
+| `stream_registration_network.go` | Network and Gateway API handlers, including service/route/policy listers |
+| `stream_registration_related.go` | Pod/node/workload registrations that seed related-object lookup state    |
+| `domains.go`                     | Supported resource stream domain list used for parity guardrails         |
+
+Keep permission checks before lazy informer creation. Do not replace these files with a large descriptor table if the behavior-specific split is clearer.
+
 ## Known Fragility Points
 
 ### Things that break easily
@@ -142,11 +181,13 @@ Key behaviors:
 
 3. **Multi-cluster add/remove** — Aggregate handlers must be updated via the update path, not just init. If a cluster is removed while a refresh is running, the aggregate handler can crash.
 
-4. **Stream reconnection** — Event buffer overflow means resume fails silently. Frontend must detect empty resume and fall back to full re-snapshot. If this detection is wrong, the UI shows stale data with no indication.
+4. **Resource stream scope ownership** — Resource WebSocket streams must target exactly one cluster. Do not pass `clusters=...` scopes to resource stream domains; fan out to per-cluster runtimes instead.
 
-5. **Rapid context changes** — Switching namespaces/clusters quickly can leave refreshers in undefined state. The abort→retrigger path has race conditions if context updates arrive faster than abort completes.
+5. **Stream reconnection** — Event/resource buffer overflow means resume fails and the frontend must fall back to full re-snapshot. If this detection is wrong, the UI shows stale data with no indication.
 
-6. **Informer shutdown** — `Shutdown()` clears references but doesn't stop informers (context cancellation does that). If the context isn't cancelled before shutdown, informers leak.
+6. **Rapid context changes** — Switching namespaces/clusters quickly can leave refreshers in undefined state. The abort→retrigger path has race conditions if context updates arrive faster than abort completes.
+
+7. **Informer shutdown** — `Shutdown()` clears references but doesn't stop informers (context cancellation does that). If the context isn't cancelled before shutdown, informers leak.
 
 ### Before modifying this subsystem
 
@@ -154,6 +195,7 @@ Key behaviors:
 - [ ] Check if domain registration order is affected
 - [ ] Check if permission checks need updating (both layers)
 - [ ] Check if frontend mappings need updating (types, refresher config, diagnostics)
+- [ ] For resource streams, check frontend descriptors, backend supported domains, registration files, and single-cluster scope tests
 - [ ] Check if stream resume semantics are affected
 - [ ] Test with multiple clusters connected
 - [ ] Test with a cluster that has restricted RBAC (not cluster-admin)
