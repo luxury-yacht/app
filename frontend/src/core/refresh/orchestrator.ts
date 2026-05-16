@@ -108,6 +108,8 @@ const logWarning = (message: string): void => {
 const makeInFlightKey = (domain: RefreshDomain, scope?: string) => `${domain}::${scope ?? '*'}`;
 // Domains that should never keep multiple concurrently-enabled scopes.
 const SINGLE_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>(['namespaces', 'cluster-overview']);
+// Domains that intentionally aggregate across connected clusters.
+const AGGREGATE_SCOPE_DOMAINS = new Set<RefreshDomain>(['namespaces', 'cluster-overview']);
 
 const shallowEqualRecord = (left: Record<string, unknown>, right: Record<string, unknown>) => {
   if (left === right) {
@@ -508,7 +510,7 @@ class RefreshOrchestrator {
   ): void {
     const config = this.getConfig(domain);
     const allowRefresher = this.shouldAllowRefresher(config);
-    const normalizedScope = this.normalizeScope(scope);
+    const normalizedScope = this.normalizeDomainScope(domain, scope);
     if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope value`);
     }
@@ -601,7 +603,7 @@ class RefreshOrchestrator {
   }
 
   resetScopedDomain(domain: RefreshDomain, scope: string): void {
-    const normalizedScope = this.normalizeScope(scope);
+    const normalizedScope = this.normalizeDomainScope(domain, scope);
     if (!normalizedScope) {
       return;
     }
@@ -613,7 +615,7 @@ class RefreshOrchestrator {
     if (!config.streaming) {
       throw new Error(`Domain "${domain}" is not registered as streaming`);
     }
-    const normalizedScope = this.normalizeScope(scope);
+    const normalizedScope = this.normalizeDomainScope(domain, scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -629,7 +631,7 @@ class RefreshOrchestrator {
     if (!config.streaming) {
       throw new Error(`Domain "${domain}" is not registered as streaming`);
     }
-    const normalizedScope = this.normalizeScope(scope);
+    const normalizedScope = this.normalizeDomainScope(domain, scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -645,7 +647,7 @@ class RefreshOrchestrator {
       await this.restartStreamingDomain(domain, scope);
       return;
     }
-    const normalizedScope = this.normalizeScope(scope);
+    const normalizedScope = this.normalizeDomainScope(domain, scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -657,7 +659,7 @@ class RefreshOrchestrator {
     if (!config.streaming) {
       throw new Error(`Domain "${domain}" is not registered as streaming`);
     }
-    const normalizedScope = this.normalizeScope(scope);
+    const normalizedScope = this.normalizeDomainScope(domain, scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -1088,13 +1090,38 @@ class RefreshOrchestrator {
     return this.fetchScopedDomain('pods', scope, { isManual: true });
   }
 
-  private normalizeScope(value?: string | null, allowEmpty = false): string | undefined {
-    const selectedClusterIds = this.getSelectedClusterIds();
+  private normalizeDomainScope(
+    domain: RefreshDomain,
+    value?: string | null,
+    allowEmpty = false
+  ): string | undefined {
+    if (this.isResourceStreamDomain(domain)) {
+      return this.normalizeResourceStreamScope(domain, value, allowEmpty);
+    }
+    if (this.isAggregateScopeDomain(domain)) {
+      return this.normalizeAggregateScope(value, allowEmpty);
+    }
+    return this.normalizeDefaultScope(value, allowEmpty);
+  }
+
+  private normalizeDefaultScope(value?: string | null, allowEmpty = false): string | undefined {
+    return this.normalizeScopeForClusters(this.getSelectedClusterIds(), value, allowEmpty);
+  }
+
+  private normalizeAggregateScope(value?: string | null, allowEmpty = false): string | undefined {
+    return this.normalizeScopeForClusters(this.getAllConnectedClusterIds(), value, allowEmpty);
+  }
+
+  private normalizeScopeForClusters(
+    clusterIds: string[],
+    value?: string | null,
+    allowEmpty = false
+  ): string | undefined {
     if (!value) {
       if (!allowEmpty) {
         return undefined;
       }
-      const clusterScope = buildClusterScopeList(selectedClusterIds, '');
+      const clusterScope = buildClusterScopeList(clusterIds, '');
       return clusterScope || undefined;
     }
     const trimmed = value.trim();
@@ -1102,7 +1129,7 @@ class RefreshOrchestrator {
       if (!allowEmpty) {
         return undefined;
       }
-      const clusterScope = buildClusterScopeList(selectedClusterIds, '');
+      const clusterScope = buildClusterScopeList(clusterIds, '');
       return clusterScope || undefined;
     }
     const parsed = parseClusterScopeList(trimmed);
@@ -1111,7 +1138,35 @@ class RefreshOrchestrator {
     if (parsed.clusterIds.length > 0) {
       return buildClusterScopeList(parsed.clusterIds, parsed.scope);
     }
-    return buildClusterScopeList(selectedClusterIds, parsed.scope || trimmed);
+    return buildClusterScopeList(clusterIds, parsed.scope || trimmed);
+  }
+
+  private normalizeResourceStreamScope(
+    domain: RefreshDomain,
+    value?: string | null,
+    allowEmpty = false
+  ): string | undefined {
+    if (!value || !value.trim()) {
+      if (!allowEmpty) {
+        return undefined;
+      }
+      return buildClusterScope(this.getSelectedClusterId(), '') || undefined;
+    }
+
+    const trimmed = value.trim();
+    const parsed = parseClusterScopeList(trimmed);
+    if (parsed.isMultiCluster) {
+      throw new Error(`Resource stream domain "${domain}" requires a single cluster scope`);
+    }
+    if (parsed.clusterIds.length > 0) {
+      return buildClusterScopeList(parsed.clusterIds, parsed.scope);
+    }
+
+    return buildClusterScope(this.getSelectedClusterId(), parsed.scope || trimmed) || undefined;
+  }
+
+  private isAggregateScopeDomain(domain: RefreshDomain): boolean {
+    return AGGREGATE_SCOPE_DOMAINS.has(domain);
   }
 
   private getSelectedClusterIds(context: RefreshContext = this.context): string[] {
@@ -1188,7 +1243,7 @@ class RefreshOrchestrator {
     options: { signal?: AbortSignal; isManual?: boolean } = {}
   ): Promise<void> {
     const config = this.getConfig(domain);
-    const normalizedScope = this.normalizeScope(scope);
+    const normalizedScope = this.normalizeDomainScope(domain, scope);
     if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope`);
     }
@@ -1257,7 +1312,7 @@ class RefreshOrchestrator {
   ): Promise<void> {
     const metricsOnly = Boolean(options.metricsOnly);
     // All domains are scoped — normalizeScope without allowEmpty.
-    const normalizedScope = this.normalizeScope(scope);
+    const normalizedScope = this.normalizeDomainScope(domain, scope);
 
     if (options.signal?.aborted) {
       return;

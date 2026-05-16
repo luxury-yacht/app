@@ -277,6 +277,7 @@ describe('refreshOrchestrator', () => {
       currentView: 'namespace',
       activeNamespaceView: 'pods',
       selectedNamespace: 'team-a',
+      selectedClusterId: 'cluster-a',
     });
     refreshOrchestrator.setScopedDomainEnabled('pods', 'namespace:team-a', true);
 
@@ -284,7 +285,7 @@ describe('refreshOrchestrator', () => {
 
     expect(scopedFetch).toHaveBeenCalledWith(
       'pods',
-      'namespace:team-a',
+      'cluster-a|namespace:team-a',
       expect.objectContaining({ isManual: true })
     );
   });
@@ -294,6 +295,7 @@ describe('refreshOrchestrator', () => {
     refreshManagerMocks.disableMock.mockReset();
 
     registerPodsDomain();
+    refreshOrchestrator.updateContext({ selectedClusterId: 'cluster-a' });
 
     refreshOrchestrator.setScopedDomainEnabled('pods', 'namespace:team-a', true);
     expect(refreshManagerMocks.enableMock).toHaveBeenCalledWith(SYSTEM_REFRESHERS.unifiedPods);
@@ -306,6 +308,7 @@ describe('refreshOrchestrator', () => {
     scopedFetch.mockReset();
 
     registerPodsDomain();
+    refreshOrchestrator.updateContext({ selectedClusterId: 'cluster-a' });
 
     refreshOrchestrator.setScopedDomainEnabled('pods', 'namespace:team-a', true);
     refreshOrchestrator.setScopedDomainEnabled('pods', 'namespace:team-b', true);
@@ -318,13 +321,124 @@ describe('refreshOrchestrator', () => {
 
     expect(scopedFetch).toHaveBeenCalledWith(
       'pods',
-      'namespace:team-a',
+      'cluster-a|namespace:team-a',
       expect.objectContaining({ isManual: false })
     );
     expect(scopedFetch).toHaveBeenCalledWith(
       'pods',
-      'namespace:team-b',
+      'cluster-a|namespace:team-b',
       expect.objectContaining({ isManual: false })
+    );
+  });
+
+  it('normalizes unprefixed resource stream fetches to the active cluster', async () => {
+    registerPodsDomain();
+    refreshOrchestrator.updateContext({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope: 'cluster-a|namespace:team-a',
+        version: 1,
+        checksum: 'etag-a',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          clusterId: 'cluster-a',
+          pods: [],
+        },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      etag: 'etag-a',
+      notModified: false,
+    });
+
+    await refreshOrchestrator.fetchScopedDomain('pods', 'namespace:team-a', { isManual: true });
+
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
+      'pods',
+      expect.objectContaining({ scope: 'cluster-a|namespace:team-a' })
+    );
+  });
+
+  it('keeps unprefixed resource stream scopes tied to the active cluster after tab switches', async () => {
+    registerPodsDomain();
+
+    clientMocks.fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'pods',
+        scope: 'namespace:team-a',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          clusterId: 'cluster-a',
+          pods: [],
+        },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      etag: 'etag',
+      notModified: false,
+    });
+
+    refreshOrchestrator.updateContext({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    await refreshOrchestrator.fetchScopedDomain('pods', 'namespace:team-a', { isManual: true });
+
+    refreshOrchestrator.updateContext({
+      selectedClusterId: 'cluster-b',
+      selectedClusterIds: ['cluster-b'],
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    await refreshOrchestrator.fetchScopedDomain('pods', 'namespace:team-a', { isManual: true });
+
+    const scopes = clientMocks.fetchSnapshotMock.mock.calls.map((call) => call[1]?.scope);
+    expect(scopes).toEqual(['cluster-a|namespace:team-a', 'cluster-b|namespace:team-a']);
+  });
+
+  it('normalizes aggregate domains against all connected clusters', async () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'namespaces',
+      refresherName: SYSTEM_REFRESHERS.namespaces,
+      category: 'system',
+    });
+    refreshOrchestrator.updateContext({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'namespaces',
+        scope: 'clusters=cluster-a,cluster-b|all',
+        version: 1,
+        checksum: 'etag-namespaces',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          clusterId: 'cluster-a',
+          namespaces: [],
+        },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      etag: 'etag-namespaces',
+      notModified: false,
+    });
+
+    await refreshOrchestrator.fetchScopedDomain('namespaces', 'all', { isManual: true });
+
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
+      'namespaces',
+      expect.objectContaining({ scope: 'clusters=cluster-a,cluster-b|all' })
     );
   });
 

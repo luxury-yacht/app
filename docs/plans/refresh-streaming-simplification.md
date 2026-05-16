@@ -209,22 +209,34 @@ Progress:
 
 ## Phase 3: Scope Normalization Boundaries
 
-- [ ] Split the generic `RefreshOrchestrator.normalizeScope()` path into
+- [x] Split the generic `RefreshOrchestrator.normalizeScope()` path into
       explicit normalization paths for resource streams, aggregate domains, and
       other scoped domains.
-- [ ] Make resource stream normalization prefer an explicit single-cluster
+- [x] Make resource stream normalization prefer an explicit single-cluster
       scope when present, otherwise the active foreground `selectedClusterId`.
-- [ ] Keep aggregate domains such as `namespaces` on a separate path that may
+- [x] Keep aggregate domains such as `namespaces` on a separate path that may
       intentionally use all connected/open clusters.
-- [ ] Update `setScopedDomainEnabled`, `fetchScopedDomain`,
+- [x] Update `setScopedDomainEnabled`, `fetchScopedDomain`,
       `startStreamingDomain`, `stopStreamingDomain`, `refreshStreamingDomainOnce`,
       `restartStreamingDomain`, and `resetScopedDomain` to use the appropriate
       normalization path.
-- [ ] Add tests proving unprefixed resource stream scopes resolve to the active
+- [x] Add tests proving unprefixed resource stream scopes resolve to the active
       cluster, multi-cluster resource stream scopes are rejected, and aggregate
       domains can still normalize aggregate scopes.
-- [ ] Add regression coverage for active-cluster switches with multiple
+- [x] Add regression coverage for active-cluster switches with multiple
       background clusters open.
+
+Progress:
+
+- 2026-05-16: Replaced the generic orchestrator scope normalization path with
+  domain-aware normalization. Resource stream domains now bind unprefixed
+  scopes to the active foreground cluster and still reject explicit
+  multi-cluster scopes. Aggregate domains use the connected/open cluster set.
+  Public scoped-domain operations now route through the domain-aware normalizer.
+  Added tests for active-cluster resource scopes, active tab switches with
+  background clusters open, and aggregate-domain normalization.
+- 2026-05-16: Validation passed with focused refresh tests and
+  `mage qc:prerelease`.
 
 ## Phase 4: Per-Cluster Runtime Boundary
 
@@ -325,7 +337,7 @@ During implementation, use targeted checks first:
 npm run test -- src/core/refresh/streaming/resourceStreamManager.test.ts
 npm run test -- src/core/refresh/orchestrator.test.ts
 npm run test -- src/modules/kubernetes/config/KubeconfigContext.test.tsx
-npm run test -- src/core/refresh/hooks/useBackgroundClusterRefresh.test.tsx
+npm run test -- src/core/refresh/hooks/useBackgroundRefresh.test.tsx
 go test ./backend/refresh/resourcestream ./backend/refresh/system ./backend/refresh/snapshot
 ```
 
