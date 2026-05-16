@@ -52,6 +52,53 @@ import { errorHandler } from '@utils/errorHandler';
 import { eventBus, type AppEvents } from '@/core/events';
 import { APP_LOG_SOURCES, logAppLogsInfo, logAppLogsWarn } from '@/core/logging/appLogsClient';
 import { resolvePermissionDeniedMessage } from '../permissionErrors';
+import {
+  buildAutoscalingKey,
+  buildClusterConfigKey,
+  buildClusterCRDKey,
+  buildClusterCustomKey,
+  buildClusterRBACKey,
+  buildClusterStorageKey,
+  buildConfigKey,
+  buildCustomKey,
+  buildHelmKey,
+  buildNetworkKey,
+  buildNodeKey,
+  buildPodKey,
+  buildQuotaKey,
+  buildRBACKey,
+  buildStorageKey,
+  buildWorkloadKey,
+  getResourceStreamDomainDescriptor,
+  isClusterScopedDomain,
+  isMultiClusterDomain,
+  isSupportedDomain,
+  normalizeResourceScope,
+  sortAutoscalingRows,
+  sortClusterConfigRows,
+  sortClusterCRDRows,
+  sortClusterCustomRows,
+  sortClusterRBACRows,
+  sortClusterStorageRows,
+  sortConfigRows,
+  sortCustomRows,
+  sortHelmRows,
+  sortNetworkRows,
+  sortNodeRows,
+  sortPodRows,
+  sortQuotaRows,
+  sortRBACRows,
+  sortStorageRows,
+  sortWorkloadRows,
+  type ResourceDomain,
+} from './resourceStreamDomains';
+
+export {
+  normalizeResourceScope,
+  sortNodeRows,
+  sortPodRows,
+  sortWorkloadRows,
+} from './resourceStreamDomains';
 
 const RESOURCE_STREAM_PATH = '/api/v2/stream/resources';
 const UPDATE_COALESCE_MS = 150;
@@ -86,9 +133,6 @@ const MESSAGE_TYPES = {
   deleted: 'DELETED',
 } as const;
 
-// Keep stream domain literals aligned with the event bus payload contract.
-type ResourceStreamDomain = AppEvents['refresh:resource-stream-drift']['domain'];
-type ResourceDomain = ResourceStreamDomain;
 type ResourceStreamHealthStatus = AppEvents['refresh:resource-stream-health']['status'];
 type ResourceStreamHealthPayload = AppEvents['refresh:resource-stream-health'];
 type ResourceStreamConnectionStatus = ResourceStreamHealthPayload['connectionStatus'];
@@ -129,42 +173,6 @@ type ServerMessage = {
 };
 
 type UpdateMessage = ServerMessage & { domain: ResourceDomain; scope: string };
-
-const isSupportedDomain = (value: string | undefined): value is ResourceDomain =>
-  value === 'pods' ||
-  value === 'namespace-workloads' ||
-  value === 'namespace-config' ||
-  value === 'namespace-network' ||
-  value === 'namespace-rbac' ||
-  value === 'namespace-custom' ||
-  value === 'namespace-helm' ||
-  value === 'namespace-autoscaling' ||
-  value === 'namespace-quotas' ||
-  value === 'namespace-storage' ||
-  value === 'cluster-rbac' ||
-  value === 'cluster-storage' ||
-  value === 'cluster-config' ||
-  value === 'cluster-crds' ||
-  value === 'cluster-custom' ||
-  value === 'nodes';
-
-const isMultiClusterDomain = (domain: ResourceDomain): boolean =>
-  domain === 'pods' ||
-  domain === 'namespace-workloads' ||
-  domain === 'nodes' ||
-  domain === 'cluster-rbac' ||
-  domain === 'cluster-storage' ||
-  domain === 'cluster-config' ||
-  domain === 'cluster-crds' ||
-  domain === 'cluster-custom';
-
-const isClusterScopedDomain = (domain: ResourceDomain): boolean =>
-  domain === 'cluster-rbac' ||
-  domain === 'cluster-storage' ||
-  domain === 'cluster-config' ||
-  domain === 'cluster-crds' ||
-  domain === 'cluster-custom' ||
-  domain === 'nodes';
 
 const isMultiClusterScope = (scope: string): boolean => parseClusterScopeList(scope).isMultiCluster;
 
@@ -243,119 +251,6 @@ const parseResourceVersion = (value?: string | number): bigint | null => {
 // Stream sequence parsing mirrors resourceVersion semantics for resume tokens.
 const parseStreamSequence = (value?: string | number): bigint | null => parseResourceVersion(value);
 
-const normalizeNamespaceScope = (scope: string, label: string): string => {
-  const value = scope.trim();
-  if (!value) {
-    throw new Error(`${label} scope is required`);
-  }
-  if (value.startsWith('namespace:')) {
-    const trimmed = value
-      .replace(/^namespace:/, '')
-      .replace(/^:/, '')
-      .trim();
-    const token = normalizeNamespaceToken(trimmed);
-    if (!token) {
-      throw new Error(`${label} scope is required`);
-    }
-    return `namespace:${token}`;
-  }
-  const token = normalizeNamespaceToken(value);
-  if (!token) {
-    throw new Error(`${label} scope is required`);
-  }
-  return `namespace:${token}`;
-};
-
-const normalizeNamespaceToken = (value: string): string => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-  const lowered = trimmed.toLowerCase();
-  if (lowered === '*' || lowered === 'all') {
-    return 'all';
-  }
-  return trimmed;
-};
-
-const normalizePodScope = (scope: string): string => {
-  const trimmed = scope.trim();
-  if (!trimmed) {
-    throw new Error('pods scope is required');
-  }
-  if (trimmed.startsWith('namespace:')) {
-    return normalizeNamespaceScope(trimmed, 'pods');
-  }
-  if (trimmed.startsWith('node:')) {
-    const value = trimmed
-      .replace(/^node:/, '')
-      .replace(/^:/, '')
-      .trim();
-    if (!value) {
-      throw new Error('pods node scope is required');
-    }
-    return `node:${value}`;
-  }
-  if (trimmed.startsWith('workload:')) {
-    const value = trimmed
-      .replace(/^workload:/, '')
-      .replace(/^:/, '')
-      .trim();
-    const parts = value
-      .split(':')
-      .map((part) => part.trim())
-      .filter(Boolean);
-    if (parts.length !== 3) {
-      throw new Error('pods workload scope requires namespace:kind:name');
-    }
-    return `workload:${parts[0]}:${parts[1]}:${parts[2]}`;
-  }
-  throw new Error(`unsupported pods scope ${scope}`);
-};
-
-export const normalizeResourceScope = (domain: ResourceDomain, scope: string): string => {
-  switch (domain) {
-    case 'pods':
-      return normalizePodScope(scope);
-    case 'namespace-workloads':
-      return normalizeNamespaceScope(scope, 'namespace-workloads');
-    case 'namespace-config':
-      return normalizeNamespaceScope(scope, 'namespace-config');
-    case 'namespace-network':
-      return normalizeNamespaceScope(scope, 'namespace-network');
-    case 'namespace-rbac':
-      return normalizeNamespaceScope(scope, 'namespace-rbac');
-    case 'namespace-custom':
-      return normalizeNamespaceScope(scope, 'namespace-custom');
-    case 'namespace-helm':
-      return normalizeNamespaceScope(scope, 'namespace-helm');
-    case 'namespace-autoscaling':
-      return normalizeNamespaceScope(scope, 'namespace-autoscaling');
-    case 'namespace-quotas':
-      return normalizeNamespaceScope(scope, 'namespace-quotas');
-    case 'namespace-storage':
-      return normalizeNamespaceScope(scope, 'namespace-storage');
-    case 'cluster-rbac':
-    case 'cluster-storage':
-    case 'cluster-config':
-    case 'cluster-crds':
-    case 'cluster-custom':
-      if (!scope || scope.trim() === '' || scope.trim().toLowerCase() === 'cluster') {
-        return '';
-      }
-      throw new Error(`cluster stream does not accept scope ${scope}`);
-    case 'nodes':
-      if (!scope || scope.trim() === '' || scope.trim().toLowerCase() === 'cluster') {
-        return '';
-      }
-      throw new Error(`nodes stream does not accept scope ${scope}`);
-    default:
-      throw new Error(`unsupported resource stream domain ${domain}`);
-  }
-};
-
-const normalizeSortKey = (value: string | undefined): string => (value ?? '').toLowerCase();
-
 const shallowEqualRecord = (left: Record<string, unknown>, right: Record<string, unknown>) => {
   if (left === right) {
     return true;
@@ -375,250 +270,6 @@ const shallowEqualRecord = (left: Record<string, unknown>, right: Record<string,
 
 const hasSameArrayItems = <T>(previous: T[], next: T[]): boolean =>
   previous.length === next.length && previous.every((item, index) => Object.is(item, next[index]));
-
-export const sortPodRows = (rows: PodSnapshotEntry[]): void => {
-  rows.sort((a, b) => {
-    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
-    if (ns !== 0) {
-      return ns;
-    }
-    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-  });
-};
-
-export const sortWorkloadRows = (rows: NamespaceWorkloadSummary[]): void => {
-  rows.sort((a, b) => {
-    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
-    if (kind !== 0) {
-      return kind;
-    }
-    const name = normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-    if (name !== 0) {
-      return name;
-    }
-    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
-    if (ns !== 0) {
-      return ns;
-    }
-    return normalizeSortKey(a.status).localeCompare(normalizeSortKey(b.status));
-  });
-};
-
-const sortConfigRows = (rows: NamespaceConfigSummary[]): void => {
-  rows.sort((a, b) => {
-    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
-    if (ns !== 0) {
-      return ns;
-    }
-    const name = normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-    if (name !== 0) {
-      return name;
-    }
-    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
-    if (kind !== 0) {
-      return kind;
-    }
-    return normalizeSortKey(a.typeAlias).localeCompare(normalizeSortKey(b.typeAlias));
-  });
-};
-
-const sortRBACRows = (rows: NamespaceRBACSummary[]): void => {
-  rows.sort((a, b) => {
-    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
-    if (ns !== 0) {
-      return ns;
-    }
-    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
-    if (kind !== 0) {
-      return kind;
-    }
-    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-  });
-};
-
-const sortNetworkRows = (rows: NamespaceNetworkSummary[]): void => {
-  rows.sort((a, b) => {
-    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
-    if (ns !== 0) {
-      return ns;
-    }
-    const name = normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-    if (name !== 0) {
-      return name;
-    }
-    return normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
-  });
-};
-
-// Keep custom rows ordered to match snapshot sorting.
-const sortCustomRows = (rows: NamespaceCustomSummary[]): void => {
-  rows.sort((a, b) => {
-    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
-    if (ns !== 0) {
-      return ns;
-    }
-    const group = normalizeSortKey(a.apiGroup).localeCompare(normalizeSortKey(b.apiGroup));
-    if (group !== 0) {
-      return group;
-    }
-    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
-    if (kind !== 0) {
-      return kind;
-    }
-    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-  });
-};
-
-// Keep helm rows ordered to match snapshot sorting.
-const sortHelmRows = (rows: NamespaceHelmSummary[]): void => {
-  rows.sort((a, b) => {
-    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
-    if (ns !== 0) {
-      return ns;
-    }
-    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-  });
-};
-
-// Keep autoscaling rows ordered to match snapshot sorting.
-const sortAutoscalingRows = (rows: NamespaceAutoscalingSummary[]): void => {
-  rows.sort((a, b) => {
-    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
-    if (ns !== 0) {
-      return ns;
-    }
-    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-  });
-};
-
-const sortQuotaRows = (rows: NamespaceQuotaSummary[]): void => {
-  rows.sort((a, b) => {
-    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
-    if (ns !== 0) {
-      return ns;
-    }
-    const name = normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-    if (name !== 0) {
-      return name;
-    }
-    return normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
-  });
-};
-
-const sortStorageRows = (rows: NamespaceStorageSummary[]): void => {
-  rows.sort((a, b) => {
-    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
-    if (ns !== 0) {
-      return ns;
-    }
-    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-  });
-};
-
-// Keep cluster tab rows ordered to match snapshot sorting.
-const sortClusterRBACRows = (rows: ClusterRBACEntry[]): void => {
-  rows.sort((a, b) => {
-    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
-    if (kind !== 0) {
-      return kind;
-    }
-    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-  });
-};
-
-const sortClusterStorageRows = (rows: ClusterStorageEntry[]): void => {
-  rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
-};
-
-const sortClusterConfigRows = (rows: ClusterConfigEntry[]): void => {
-  rows.sort((a, b) => {
-    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
-    if (kind !== 0) {
-      return kind;
-    }
-    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-  });
-};
-
-const sortClusterCRDRows = (rows: ClusterCRDEntry[]): void => {
-  rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
-};
-
-const sortClusterCustomRows = (rows: ClusterCustomEntry[]): void => {
-  rows.sort((a, b) => {
-    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
-    if (kind !== 0) {
-      return kind;
-    }
-    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
-  });
-};
-
-export const sortNodeRows = (rows: ClusterNodeSnapshotEntry[]): void => {
-  rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
-};
-
-const buildPodKey = (clusterId: string, namespace: string, name: string): string =>
-  `${clusterId}::${namespace}::${name}`;
-
-const buildWorkloadKey = (
-  clusterId: string,
-  namespace: string,
-  kind: string,
-  name: string
-): string => `${clusterId}::${namespace}::${kind}::${name}`;
-
-const buildConfigKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
-  `${clusterId}::${namespace}::${kind}::${name}`;
-
-const buildRBACKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
-  `${clusterId}::${namespace}::${kind}::${name}`;
-
-const buildNetworkKey = (
-  clusterId: string,
-  namespace: string,
-  kind: string,
-  name: string
-): string => `${clusterId}::${namespace}::${kind}::${name}`;
-
-const buildCustomKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
-  `${clusterId}::${namespace}::${kind}::${name}`;
-
-const buildHelmKey = (clusterId: string, namespace: string, name: string): string =>
-  `${clusterId}::${namespace}::${name}`;
-
-// Include kind so autoscaling entries remain distinct if multiple autoscaler types land later.
-const buildAutoscalingKey = (
-  clusterId: string,
-  namespace: string,
-  kind: string,
-  name: string
-): string => `${clusterId}::${namespace}::${kind}::${name}`;
-
-const buildQuotaKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
-  `${clusterId}::${namespace}::${kind}::${name}`;
-
-const buildStorageKey = (
-  clusterId: string,
-  namespace: string,
-  kind: string,
-  name: string
-): string => `${clusterId}::${namespace}::${kind}::${name}`;
-
-const buildClusterRBACKey = (clusterId: string, kind: string, name: string): string =>
-  `${clusterId}::${kind}::${name}`;
-
-const buildClusterStorageKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
-
-const buildClusterConfigKey = (clusterId: string, kind: string, name: string): string =>
-  `${clusterId}::${kind}::${name}`;
-
-const buildClusterCRDKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
-
-const buildClusterCustomKey = (clusterId: string, kind: string, name: string): string =>
-  `${clusterId}::${kind}::${name}`;
-
-const buildNodeKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
 
 type KeyDiff = {
   missingKeys: number;
@@ -652,206 +303,6 @@ const diffKeySets = (expected: Set<string>, actual: Set<string>, sampleLimit: nu
   });
 
   return { missingKeys, extraKeys, missingSample, extraSample };
-};
-
-const buildPodKeySet = (
-  payload: PodSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.pods ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildPodKey(row.clusterId ?? fallbackClusterId, row.namespace, row.name));
-  });
-  return keys;
-};
-
-const buildWorkloadKeySet = (
-  payload: NamespaceWorkloadSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.workloads ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(
-      buildWorkloadKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
-    );
-  });
-  return keys;
-};
-
-const buildConfigKeySet = (
-  payload: NamespaceConfigSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildConfigKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildRBACKeySet = (
-  payload: NamespaceRBACSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildRBACKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildNetworkKeySet = (
-  payload: NamespaceNetworkSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(
-      buildNetworkKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
-    );
-  });
-  return keys;
-};
-
-const buildCustomKeySet = (
-  payload: NamespaceCustomSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildCustomKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildHelmKeySet = (
-  payload: NamespaceHelmSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.releases ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildHelmKey(row.clusterId ?? fallbackClusterId, row.namespace, row.name));
-  });
-  return keys;
-};
-
-const buildAutoscalingKeySet = (
-  payload: NamespaceAutoscalingSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(
-      buildAutoscalingKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
-    );
-  });
-  return keys;
-};
-
-const buildQuotaKeySet = (
-  payload: NamespaceQuotasSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildQuotaKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildStorageKeySet = (
-  payload: NamespaceStorageSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(
-      buildStorageKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
-    );
-  });
-  return keys;
-};
-
-const buildClusterRBACKeySet = (
-  payload: ClusterRBACSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildClusterRBACKey(row.clusterId ?? fallbackClusterId, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildClusterStorageKeySet = (
-  payload: ClusterStorageSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.volumes ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildClusterStorageKey(row.clusterId ?? fallbackClusterId, row.name));
-  });
-  return keys;
-};
-
-const buildClusterConfigKeySet = (
-  payload: ClusterConfigSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildClusterConfigKey(row.clusterId ?? fallbackClusterId, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildClusterCRDKeySet = (
-  payload: ClusterCRDSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.definitions ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildClusterCRDKey(row.clusterId ?? fallbackClusterId, row.name));
-  });
-  return keys;
-};
-
-const buildClusterCustomKeySet = (
-  payload: ClusterCustomSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildClusterCustomKey(row.clusterId ?? fallbackClusterId, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildNodeKeySet = (
-  payload: ClusterNodeSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.nodes ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildNodeKey(row.clusterId ?? fallbackClusterId, row.name));
-  });
-  return keys;
 };
 
 const preferMetric = (existing: string | undefined, incoming: string): string =>
@@ -1425,7 +876,7 @@ export class ResourceStreamManager {
       pendingReset: false,
       resyncInFlight: false,
       lastResyncAt: 0,
-      preserveMetrics: domain === 'pods' || domain === 'namespace-workloads' || domain === 'nodes',
+      preserveMetrics: getResourceStreamDomainDescriptor(domain).preserveMetrics,
       shadowKeys: new Set(),
       hasBaseline: false,
       driftDetected: false,
@@ -3486,93 +2937,10 @@ export class ResourceStreamManager {
   }
 
   private updateShadowBaseline(subscription: StreamSubscription, snapshot: Snapshot<any>): void {
-    let snapshotKeys: Set<string> | null = null;
-
-    if (subscription.domain === 'pods') {
-      snapshotKeys = buildPodKeySet(
-        snapshot.payload as PodSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'namespace-workloads') {
-      snapshotKeys = buildWorkloadKeySet(
-        snapshot.payload as NamespaceWorkloadSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'namespace-config') {
-      snapshotKeys = buildConfigKeySet(
-        snapshot.payload as NamespaceConfigSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'namespace-network') {
-      snapshotKeys = buildNetworkKeySet(
-        snapshot.payload as NamespaceNetworkSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'namespace-rbac') {
-      snapshotKeys = buildRBACKeySet(
-        snapshot.payload as NamespaceRBACSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'namespace-custom') {
-      snapshotKeys = buildCustomKeySet(
-        snapshot.payload as NamespaceCustomSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'namespace-helm') {
-      snapshotKeys = buildHelmKeySet(
-        snapshot.payload as NamespaceHelmSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'namespace-autoscaling') {
-      snapshotKeys = buildAutoscalingKeySet(
-        snapshot.payload as NamespaceAutoscalingSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'namespace-quotas') {
-      snapshotKeys = buildQuotaKeySet(
-        snapshot.payload as NamespaceQuotasSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'namespace-storage') {
-      snapshotKeys = buildStorageKeySet(
-        snapshot.payload as NamespaceStorageSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'cluster-rbac') {
-      snapshotKeys = buildClusterRBACKeySet(
-        snapshot.payload as ClusterRBACSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'cluster-storage') {
-      snapshotKeys = buildClusterStorageKeySet(
-        snapshot.payload as ClusterStorageSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'cluster-config') {
-      snapshotKeys = buildClusterConfigKeySet(
-        snapshot.payload as ClusterConfigSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'cluster-crds') {
-      snapshotKeys = buildClusterCRDKeySet(
-        snapshot.payload as ClusterCRDSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'cluster-custom') {
-      snapshotKeys = buildClusterCustomKeySet(
-        snapshot.payload as ClusterCustomSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'nodes') {
-      snapshotKeys = buildNodeKeySet(
-        snapshot.payload as ClusterNodeSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    }
-
-    if (!snapshotKeys) {
-      return;
-    }
+    const snapshotKeys = getResourceStreamDomainDescriptor(subscription.domain).buildSnapshotKeys(
+      snapshot.payload,
+      subscription.clusterId
+    );
 
     if (subscription.hasBaseline && !subscription.driftDetected) {
       const streamCount = subscription.shadowKeys.size;

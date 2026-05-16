@@ -88,15 +88,24 @@ bad generic abstraction.
 
 ## Phase 1: Frontend Domain Descriptors
 
-- [ ] Add a resource stream domain descriptor module.
-- [ ] Move supported-domain checks into descriptors.
-- [ ] Move multi-cluster and cluster-scoped domain rules into descriptors.
-- [ ] Move `normalizeResourceScope` to use descriptor scope kind.
-- [ ] Move row sort functions into descriptor entries.
-- [ ] Move row key functions into descriptor entries.
-- [ ] Derive drift key-set builders from descriptor row keys where possible.
-- [ ] Keep the existing `ResourceStreamManager` public API unchanged.
-- [ ] Add unit tests for descriptor completeness across every streamed domain.
+- [x] Add a resource stream domain descriptor module.
+- [x] Move supported-domain checks into descriptors.
+- [x] Move multi-cluster and cluster-scoped domain rules into descriptors.
+- [x] Move `normalizeResourceScope` to use descriptor scope kind.
+- [x] Move row sort functions into descriptor entries.
+- [x] Move row key functions into descriptor entries.
+- [x] Derive drift key-set builders from descriptor row keys where possible.
+- [x] Keep the existing `ResourceStreamManager` public API unchanged.
+- [x] Add unit tests for descriptor completeness across every streamed domain.
+
+Progress:
+
+- 2026-05-16: Added `resourceStreamDomains.ts` as the frontend descriptor table
+  for all resource WebSocket domains. The stream manager now imports descriptor
+  rules for domain support, multi-cluster support, cluster scope handling,
+  scope normalization, metrics preservation, row sorting, row identity, and
+  snapshot drift key construction. Added descriptor completeness tests covering
+  every streamed domain.
 
 ## Phase 2: Frontend Row Merge Extraction
 
