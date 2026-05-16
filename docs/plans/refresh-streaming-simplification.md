@@ -402,15 +402,47 @@ Progress:
   `go test ./backend/refresh/resourcestream ./backend/refresh/system ./backend/refresh/snapshot`.
 - 2026-05-16: Full validation passed with `mage qc:prerelease`.
 
-## Phase 9: Backend Registration And Handler Descriptors
+## Phase 9: Backend Registration Boundaries
 
-- [ ] Introduce backend stream resource descriptors for straightforward
-      informer handlers.
-- [ ] Use descriptors to register informer handlers where no special behavior
-      is required.
-- [ ] Keep permission gates aligned with `backend/refresh/system/registrations.go`.
-- [ ] Add a test that descriptor-backed resources have matching domain,
-      resource, and permission metadata.
+- [x] Introduce named backend stream registration modules grouped by resource
+      behavior.
+- [x] Use a shared Add/Update/Delete event-handler helper where no special
+      event mapping is required.
+- [x] Keep permission gates aligned with `backend/refresh/system/registrations.go`.
+- [x] Add tests around the shared registration helper and keep stream handler
+      metadata coverage from Phase 8.
+
+Progress:
+
+- 2026-05-16: Started Phase 9 by tracing resource stream informer wiring,
+  backend domain registrations, and runtime permission checks. The descriptor
+  extraction will target only simple informer handlers and leave derived
+  handlers explicit.
+- 2026-05-16: Initially added descriptor-backed resource stream registration
+  for simple config, RBAC, storage, autoscaling, quota, admission/cluster-config,
+  and simple network/Gateway API handlers. This was validated but later
+  superseded by the cleaner behavior-focused registration split below.
+- 2026-05-16: Added descriptor metadata tests for the initial descriptor table.
+  These were later replaced by shared registration-helper tests after removing
+  the descriptor table. Focused validation passed:
+  `go test ./backend/refresh/resourcestream ./backend/refresh/system ./backend/refresh/snapshot`.
+- 2026-05-16: Full validation passed with `mage qc:prerelease`.
+- 2026-05-16: Reopening Phase 9 cleanup after review: the large descriptor
+  table with embedded registration closures is still hard to reason about.
+  Replace it with named registration modules grouped by behavior, keeping
+  permission checks before lazy informer creation.
+- 2026-05-16: Replaced the descriptor table with behavior-focused registration
+  modules: direct object-to-stream resources, network resources, and
+  related-object pod/node/workload registrations. `NewManager` now reads as
+  lifecycle plus named registration steps, and the only shared abstraction is
+  the uniform Add/Update/Delete event handler helper.
+- 2026-05-16: Renamed the vague `simple` and `derived` registration files to
+  `direct` and `related`, and added file comments explaining the purpose of each
+  registration bucket.
+- 2026-05-16: Focused validation after the cleanup passed:
+  `go test ./backend/refresh/resourcestream ./backend/refresh/system ./backend/refresh/snapshot`.
+- 2026-05-16: Full validation after the cleanup passed with
+  `mage qc:prerelease`.
 
 ## Phase 10: Parity Guardrails
 
