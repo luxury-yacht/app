@@ -160,30 +160,3 @@ export const buildObjectScope = (args: {
   const group = (args.group ?? '').trim();
   return `${namespace}:${group}/${version}:${kind}:${name}`;
 };
-
-// buildClusterScopeList prefixes scope with a list of cluster IDs for multi-cluster refreshes.
-export const buildClusterScopeList = (
-  clusterIds: Array<string | null | undefined>,
-  scope?: string | null
-): string => {
-  const raw = (scope ?? '').trim();
-  if (raw) {
-    const { clusterId: existingClusterId } = splitClusterScope(raw);
-    if (existingClusterId) {
-      return raw;
-    }
-  }
-
-  const ids = normalizeClusterIds(clusterIds);
-  if (ids.length === 0) {
-    return raw;
-  }
-
-  const clusterToken = ids.length === 1 ? ids[0] : `${CLUSTER_SCOPE_LIST_PREFIX}${ids.join(',')}`;
-
-  if (!raw) {
-    return `${clusterToken}${CLUSTER_SCOPE_DELIMITER}`;
-  }
-
-  return `${clusterToken}${CLUSTER_SCOPE_DELIMITER}${raw}`;
-};

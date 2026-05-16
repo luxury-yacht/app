@@ -212,15 +212,31 @@ Progress:
 
 ## Phase 5: Delete Snapshot Merge Code
 
-- [ ] Remove `backend/refresh/snapshot/merge.go` once no production path calls
+- [x] Remove `backend/refresh/snapshot/merge.go` once no production path calls
       `snapshot.MergeSnapshots`.
-- [ ] Remove merge-specific tests from `backend/refresh/snapshot/merge_test.go`.
-- [ ] Remove any helper code that only exists for aggregate snapshot merging.
-- [ ] Keep row-level merge helpers used by frontend resource stream updates;
+- [x] Remove merge-specific tests from `backend/refresh/snapshot/merge_test.go`.
+- [x] Remove any helper code that only exists for aggregate snapshot merging.
+- [x] Keep row-level merge helpers used by frontend resource stream updates;
       those are unrelated to backend aggregate snapshots.
-- [ ] Run a repo-wide search for `MergeSnapshots`, `clusters=`, and
+- [x] Run a repo-wide search for `MergeSnapshots`, `clusters=`, and
       `buildClusterScopeList` to confirm no unsupported production path
       remains.
+
+Progress:
+
+- 2026-05-16: Deleted `backend/refresh/snapshot/merge.go` and
+  `backend/refresh/snapshot/merge_test.go`. No production backend code calls
+  `snapshot.MergeSnapshots`.
+- 2026-05-16: Removed the frontend `buildClusterScopeList` helper. Production
+  refresh code now builds single-cluster keys with `buildClusterScope`; tests
+  that intentionally exercise rejection use literal `clusters=...` scopes.
+- 2026-05-16: Repo-wide searches found no backend aggregate snapshot merge
+  helpers and no `buildClusterScopeList` symbol in source. Remaining merge-like
+  symbols are frontend catalog/resource-stream row merge helpers, which are
+  unrelated to backend aggregate snapshots.
+- 2026-05-16: Remaining `clusters=...` source hits are parser/rejection tests,
+  stream/catalog aggregate tests, and durable docs scheduled for Phase 6.
+- 2026-05-16: Full validation passed with `mage qc:prerelease`.
 
 ## Phase 6: Documentation And Agent Notes
 

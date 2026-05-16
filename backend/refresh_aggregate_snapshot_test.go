@@ -102,14 +102,14 @@ func TestAggregateSnapshotServiceNamespaceSnapshotTriggersLifecycleCallback(t *t
 		},
 	}
 
-	snap, err := aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a|")
+	snap, err := aggregate.Build(context.Background(), "namespaces", "cluster-a|")
 	require.NoError(t, err)
 	require.NotNil(t, snap)
 	require.Equal(t, []string{"cluster-a"}, called)
 
 	// A later namespace snapshot should trigger the callback again. The lifecycle
 	// callback decides whether the cluster currently needs a ready transition.
-	snap, err = aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a|")
+	snap, err = aggregate.Build(context.Background(), "namespaces", "cluster-a|")
 	require.NoError(t, err)
 	require.NotNil(t, snap)
 	require.Equal(t, []string{"cluster-a", "cluster-a"}, called)
@@ -137,7 +137,7 @@ func TestAggregateSnapshotServiceNonNamespaceDomainDoesNotTriggerCallback(t *tes
 		},
 	}
 
-	snap, err := aggregate.Build(context.Background(), "cluster-overview", "clusters=cluster-a|")
+	snap, err := aggregate.Build(context.Background(), "cluster-overview", "cluster-a|")
 	require.NoError(t, err)
 	require.NotNil(t, snap)
 	require.False(t, callbackFired, "callback must only fire for namespaces domain")
@@ -161,7 +161,7 @@ func TestAggregateSnapshotServiceFailedBuildDoesNotTriggerCallback(t *testing.T)
 		},
 	}
 
-	_, _ = aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a|")
+	_, _ = aggregate.Build(context.Background(), "namespaces", "cluster-a|")
 	require.False(t, callbackFired, "callback must not fire on build failure")
 }
 
@@ -195,7 +195,7 @@ func TestAggregateSnapshotServiceLifecycleTransitionsReadyAfterInPlaceRebuild(t 
 	}
 
 	// Initial namespace snapshot moves loading -> ready.
-	_, err := aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a|")
+	_, err := aggregate.Build(context.Background(), "namespaces", "cluster-a|")
 	require.NoError(t, err)
 	require.Equal(t, ClusterStateReady, lifecycle.GetState("cluster-a"))
 
@@ -213,7 +213,7 @@ func TestAggregateSnapshotServiceLifecycleTransitionsReadyAfterInPlaceRebuild(t 
 		},
 	})
 
-	_, err = aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a|")
+	_, err = aggregate.Build(context.Background(), "namespaces", "cluster-a|")
 	require.NoError(t, err)
 	require.Equal(t, ClusterStateReady, lifecycle.GetState("cluster-a"))
 
@@ -254,7 +254,7 @@ func TestAggregateSnapshotServiceLifecycleIntegration(t *testing.T) {
 		},
 	}
 
-	snap, err := aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a|")
+	snap, err := aggregate.Build(context.Background(), "namespaces", "cluster-a|")
 	require.NoError(t, err)
 	require.NotNil(t, snap)
 	require.Equal(t, ClusterStateReady, lifecycle.GetState("cluster-a"))
@@ -294,7 +294,7 @@ func TestAggregateSnapshotServiceLifecycleNoTransitionIfAlreadyReady(t *testing.
 		},
 	}
 
-	_, err := aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a|")
+	_, err := aggregate.Build(context.Background(), "namespaces", "cluster-a|")
 	require.NoError(t, err)
 
 	// Only the initial SetState should have fired, not a duplicate ready transition.

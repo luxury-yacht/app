@@ -1,4 +1,4 @@
-import { buildClusterScopeList, parseClusterScopeList } from '../clusterScope';
+import { buildClusterScope, parseClusterScopeList } from '../clusterScope';
 import {
   getResourceStreamDomainDescriptor,
   normalizeResourceScope,
@@ -75,7 +75,7 @@ export const resolveResourceStreamSubscriptionScope = (
     throw new Error('Resource streaming requires a single cluster scope');
   }
   const normalizedScope = normalizeResourceScope(domain, parsed.scope);
-  const reportScope = buildClusterScopeList([parsed.clusterIds[0]], normalizedScope);
+  const reportScope = buildClusterScope(parsed.clusterIds[0], normalizedScope);
   return { clusterIds: parsed.clusterIds, normalizedScope, reportScope };
 };
 
@@ -238,7 +238,7 @@ export class ResourceStreamSubscriptionStore {
       return existing;
     }
 
-    const storeScope = buildClusterScopeList([clusterId], normalizedScope);
+    const storeScope = buildClusterScope(clusterId, normalizedScope);
     const subscription: StreamSubscription = {
       key,
       domain,

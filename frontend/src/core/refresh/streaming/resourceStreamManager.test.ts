@@ -35,7 +35,7 @@ vi.mock('@/core/logging/appLogsClient', () => ({
   logAppLogsWarn: logAppLogsWarnMock,
 }));
 
-import { buildClusterScopeList } from '../clusterScope';
+import { buildClusterScope } from '../clusterScope';
 import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
 import {
   ResourceStreamManager,
@@ -333,7 +333,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('pods', storeScope);
@@ -392,7 +392,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-workloads', storeScope);
@@ -447,7 +447,7 @@ describe('ResourceStreamManager', () => {
 
   test('reuses workload rows when an identical workload snapshot is applied', () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     const existingWorkload = {
       clusterId: 'cluster-a',
       kind: 'Deployment',
@@ -507,7 +507,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-config', storeScope);
@@ -555,7 +555,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-config', storeScope);
@@ -604,7 +604,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-config', storeScope);
@@ -652,7 +652,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-network', storeScope);
@@ -699,7 +699,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-rbac', storeScope);
@@ -746,7 +746,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-custom', storeScope);
@@ -794,7 +794,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-custom', storeScope);
@@ -850,7 +850,7 @@ describe('ResourceStreamManager', () => {
 
   test('reuses namespace custom rows when an identical custom snapshot is applied', () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     const existingResource = {
       clusterId: 'cluster-a',
       clusterName: 'cluster-a',
@@ -911,7 +911,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-helm', storeScope);
@@ -961,7 +961,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-helm', storeScope);
@@ -1011,7 +1011,7 @@ describe('ResourceStreamManager', () => {
 
   test('reuses namespace helm rows when an identical helm snapshot is applied', () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-helm', storeScope);
@@ -1074,7 +1074,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-autoscaling', storeScope);
@@ -1124,7 +1124,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-autoscaling', storeScope);
@@ -1177,7 +1177,7 @@ describe('ResourceStreamManager', () => {
 
   test('reuses namespace autoscaling rows when an identical autoscaling snapshot is applied', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-autoscaling', storeScope);
@@ -1246,7 +1246,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-quotas', storeScope);
@@ -1293,7 +1293,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-storage', storeScope);
@@ -1342,7 +1342,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('cluster-rbac', storeScope);
@@ -1388,7 +1388,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('cluster-rbac', storeScope);
@@ -1445,7 +1445,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('cluster-storage', storeScope);
@@ -1493,7 +1493,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('cluster-config', storeScope);
@@ -1539,7 +1539,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('cluster-crds', storeScope);
@@ -1587,7 +1587,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('cluster-custom', storeScope);
@@ -1632,7 +1632,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('nodes', storeScope);
@@ -1667,7 +1667,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('nodes', storeScope);
@@ -1711,7 +1711,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('nodes', storeScope);
@@ -1752,7 +1752,7 @@ describe('ResourceStreamManager', () => {
 
   test('resyncs on reset messages', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-workloads', storeScope);
@@ -1787,7 +1787,7 @@ describe('ResourceStreamManager', () => {
 
   test('resyncs after connection errors', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('pods', storeScope);
@@ -1817,7 +1817,7 @@ describe('ResourceStreamManager', () => {
 
   test('does not resync on connection error when resume sequence exists', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('pods', storeScope);
@@ -1853,7 +1853,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -1911,7 +1911,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1950,7 +1950,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -2000,7 +2000,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -2050,7 +2050,7 @@ describe('ResourceStreamManager', () => {
 
   test('stops subscriptions and closes the socket on kubeconfig change cleanup', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -2084,7 +2084,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -2157,7 +2157,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -2195,7 +2195,7 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    const storeScope = buildClusterScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -2233,7 +2233,7 @@ describe('ResourceStreamManager', () => {
 
   it('rejects node streaming for multi-cluster scopes', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a', 'cluster-b'], '');
+    const storeScope = 'clusters=cluster-a,cluster-b|';
 
     await expect(manager.start('nodes', storeScope)).rejects.toThrow('single cluster');
 
@@ -2243,7 +2243,7 @@ describe('ResourceStreamManager', () => {
 
   test('rejects pod streaming for multi-cluster scopes', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a', 'cluster-b'], 'namespace:default');
+    const storeScope = 'clusters=cluster-a,cluster-b|namespace:default';
 
     await expect(manager.start('pods', storeScope)).rejects.toThrow('single cluster');
 
@@ -2253,7 +2253,7 @@ describe('ResourceStreamManager', () => {
 
   test('rejects namespace workload streaming for multi-cluster scopes', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScopeList(['cluster-a', 'cluster-b'], 'namespace:default');
+    const storeScope = 'clusters=cluster-a,cluster-b|namespace:default';
 
     await expect(manager.start('namespace-workloads', storeScope)).rejects.toThrow(
       'single cluster'

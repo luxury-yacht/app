@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildClusterScopeList } from '../clusterScope';
+import { buildClusterScope } from '../clusterScope';
 import { RESOURCE_STREAM_DOMAINS, type ResourceDomain } from './resourceStreamDomains';
 import {
   ResourceStreamSubscriptionStore,
@@ -21,7 +21,7 @@ describe('ResourceStreamSubscriptionStore', () => {
   });
 
   it('resolves single-cluster resource stream scopes and rejects multi-cluster scopes', () => {
-    const scope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const scope = buildClusterScope('cluster-a', 'namespace:default');
 
     expect(resolveResourceStreamSubscriptionScope('pods', scope)).toEqual({
       clusterIds: ['cluster-a'],
@@ -32,16 +32,13 @@ describe('ResourceStreamSubscriptionStore', () => {
     expect(() =>
       resolveResourceStreamSubscriptionScope(
         'pods',
-        buildClusterScopeList(['cluster-a', 'cluster-b'], 'namespace:default')
+        'clusters=cluster-a,cluster-b|namespace:default'
       )
     ).toThrow('single cluster');
   });
 
   it('rejects multi-cluster scopes for every resource stream domain', () => {
-    const multiClusterScope = buildClusterScopeList(
-      ['cluster-a', 'cluster-b'],
-      'namespace:default'
-    );
+    const multiClusterScope = 'clusters=cluster-a,cluster-b|namespace:default';
 
     RESOURCE_STREAM_DOMAINS.forEach((domain: ResourceDomain) => {
       expect(() => resolveResourceStreamSubscriptionScope(domain, multiClusterScope)).toThrow(
@@ -52,7 +49,7 @@ describe('ResourceStreamSubscriptionStore', () => {
 
   it('builds resume-capable request messages from subscription state', () => {
     const store = new ResourceStreamSubscriptionStore(500, vi.fn());
-    const scope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const scope = buildClusterScope('cluster-a', 'namespace:default');
     const [subscription] = store.ensure('pods', scope);
 
     const initialRequest = store.buildRequestMessage(subscription);
@@ -78,7 +75,7 @@ describe('ResourceStreamSubscriptionStore', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const store = new ResourceStreamSubscriptionStore(500, vi.fn());
-    const scope = buildClusterScopeList(['cluster-a'], '');
+    const scope = buildClusterScope('cluster-a', '');
     const [subscription] = store.ensure('nodes', scope);
     const unsubscribe = vi.fn();
 

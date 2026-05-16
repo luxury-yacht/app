@@ -22,7 +22,7 @@ import {
 } from './store';
 import { refreshOrchestrator } from './orchestrator';
 import { CLUSTER_REFRESHERS, NAMESPACE_REFRESHERS, SYSTEM_REFRESHERS } from './refresherTypes';
-import { buildClusterScopeList } from './clusterScope';
+import { buildClusterScope } from './clusterScope';
 
 const refreshManagerMocks = vi.hoisted(() => ({
   subscribeMock: vi.fn(),
@@ -979,8 +979,8 @@ describe('refreshOrchestrator', () => {
       category: 'system',
     });
 
-    const scopeA = buildClusterScopeList(['cluster-a'], '');
-    const scopeB = buildClusterScopeList(['cluster-b'], '');
+    const scopeA = buildClusterScope('cluster-a', '');
+    const scopeB = buildClusterScope('cluster-b', '');
 
     refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scopeA, true);
     setScopedDomainState('cluster-overview', scopeA, (previous) => ({
@@ -1018,8 +1018,8 @@ describe('refreshOrchestrator', () => {
       category: 'cluster',
     });
 
-    const firstScope = buildClusterScopeList(['cluster-a'], 'config');
-    const secondScope = buildClusterScopeList(['cluster-a'], 'secrets');
+    const firstScope = buildClusterScope('cluster-a', 'config');
+    const secondScope = buildClusterScope('cluster-a', 'secrets');
 
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', firstScope, true);
     setScopedDomainState('cluster-config', firstScope, (previous) => ({
@@ -1125,7 +1125,7 @@ describe('refreshOrchestrator', () => {
   it('keeps polling enabled when a resource stream is active but unhealthy', () => {
     registerStreamingClusterConfigDomain();
 
-    const scope = buildClusterScopeList(['cluster-a'], '');
+    const scope = buildClusterScope('cluster-a', '');
     setRuntimeScopeEnabled('cluster-config', scope, true);
     markResourceStreamActive('cluster-config', scope);
     resourceStreamMocks.isHealthy.mockReturnValue(false);
@@ -1151,7 +1151,7 @@ describe('refreshOrchestrator', () => {
   it('pauses polling when a resource stream is active and healthy', () => {
     registerStreamingClusterConfigDomain();
 
-    const scope = buildClusterScopeList(['cluster-a'], '');
+    const scope = buildClusterScope('cluster-a', '');
     setRuntimeScopeEnabled('cluster-config', scope, true);
     markResourceStreamActive('cluster-config', scope);
     resourceStreamMocks.isHealthy.mockReturnValue(true);
@@ -1189,7 +1189,7 @@ describe('refreshOrchestrator', () => {
       },
     });
 
-    const scope = buildClusterScopeList(['cluster-a'], '');
+    const scope = buildClusterScope('cluster-a', '');
     orchestratorInternals.context = {
       currentView: 'cluster',
       activeClusterView: 'config',
@@ -1237,7 +1237,7 @@ describe('refreshOrchestrator', () => {
 
   it('uses resource stream refreshOnce for manual metrics domains with an active stream', async () => {
     registerStreamingPodsDomain();
-    const scope = buildClusterScopeList(['cluster-a'], 'namespace:team-a');
+    const scope = buildClusterScope('cluster-a', 'namespace:team-a');
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
       activeNamespaceView: 'pods',
@@ -1255,7 +1255,7 @@ describe('refreshOrchestrator', () => {
 
   it('falls back to full snapshots for metrics domains when a stream is unhealthy', async () => {
     registerStreamingPodsDomain();
-    const scope = buildClusterScopeList(['cluster-a'], 'namespace:team-a');
+    const scope = buildClusterScope('cluster-a', 'namespace:team-a');
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
       activeNamespaceView: 'pods',
@@ -1359,7 +1359,7 @@ describe('refreshOrchestrator', () => {
       selectedClusterIds: ['cluster-a'],
     });
 
-    const scope = buildClusterScopeList(['cluster-a'], 'config');
+    const scope = buildClusterScope('cluster-a', 'config');
     setAutoRefreshEnabled(false);
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
     await Promise.resolve();
@@ -1376,7 +1376,7 @@ describe('refreshOrchestrator', () => {
       selectedClusterIds: ['cluster-a'],
     });
 
-    const scope = buildClusterScopeList(['cluster-a'], 'config');
+    const scope = buildClusterScope('cluster-a', 'config');
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
     await Promise.resolve();
 
@@ -1923,7 +1923,7 @@ describe('refreshOrchestrator', () => {
 
   it('rejects multi-cluster resource stream refresh scopes', async () => {
     registerPodsDomain();
-    const scope = buildClusterScopeList(['cluster-a', 'cluster-b'], 'namespace:default');
+    const scope = 'clusters=cluster-a,cluster-b|namespace:default';
 
     await expect(
       refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: false })
@@ -1938,7 +1938,7 @@ describe('refreshOrchestrator', () => {
     clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
         domain: 'pods',
-        scope: buildClusterScopeList(['cluster-a'], 'namespace:default'),
+        scope: buildClusterScope('cluster-a', 'namespace:default'),
         version: 1,
         checksum: 'etag-a',
         generatedAt: Date.now(),
@@ -1962,7 +1962,7 @@ describe('refreshOrchestrator', () => {
     clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
         domain: 'pods',
-        scope: buildClusterScopeList(['cluster-b'], 'namespace:default'),
+        scope: buildClusterScope('cluster-b', 'namespace:default'),
         version: 1,
         checksum: 'etag-b',
         generatedAt: Date.now(),
@@ -2006,8 +2006,8 @@ describe('refreshOrchestrator', () => {
       allConnectedClusterIds: ['cluster-a', 'cluster-b'],
     });
 
-    const scopeA = buildClusterScopeList(['cluster-a'], '');
-    const scopeB = buildClusterScopeList(['cluster-b'], '');
+    const scopeA = buildClusterScope('cluster-a', '');
+    const scopeB = buildClusterScope('cluster-b', '');
     setRuntimeScopeEnabled('cluster-config', scopeA, true);
     setRuntimeScopeEnabled('cluster-config', scopeB, true);
     markResourceStreamActive('cluster-config', scopeA);
@@ -2033,7 +2033,7 @@ describe('refreshOrchestrator', () => {
 
   it('records resource stream drift in the owning cluster runtime', () => {
     registerStreamingClusterConfigDomain();
-    const scope = buildClusterScopeList(['cluster-a'], '');
+    const scope = buildClusterScope('cluster-a', '');
     markResourceStreamActive('cluster-config', scope);
 
     orchestratorInternals.handleResourceStreamDrift({
@@ -2063,8 +2063,8 @@ describe('refreshOrchestrator', () => {
       allConnectedClusterIds: ['cluster-a', 'cluster-b'],
     });
 
-    const scopeA = buildClusterScopeList(['cluster-a'], '');
-    const scopeB = buildClusterScopeList(['cluster-b'], '');
+    const scopeA = buildClusterScope('cluster-a', '');
+    const scopeB = buildClusterScope('cluster-b', '');
     setRuntimeScopeEnabled('cluster-config', scopeA, true);
     setRuntimeScopeEnabled('cluster-config', scopeB, true);
 
@@ -2103,8 +2103,8 @@ describe('refreshOrchestrator', () => {
 
   it('keeps metrics freshness isolated to the owning cluster runtime', async () => {
     registerStreamingPodsDomain();
-    const scopeA = buildClusterScopeList(['cluster-a'], 'namespace:default');
-    const scopeB = buildClusterScopeList(['cluster-b'], 'namespace:default');
+    const scopeA = buildClusterScope('cluster-a', 'namespace:default');
+    const scopeB = buildClusterScope('cluster-b', 'namespace:default');
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
       activeNamespaceView: 'pods',
@@ -2198,7 +2198,7 @@ describe('refreshOrchestrator', () => {
 
   it('records restricted metrics errors without replacing stream rows', async () => {
     registerStreamingPodsDomain();
-    const scope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const scope = buildClusterScope('cluster-a', 'namespace:default');
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
       activeNamespaceView: 'pods',
@@ -2269,7 +2269,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('preserves node status fields when applying metrics-only snapshots', () => {
-    const scope = buildClusterScopeList(['cluster-a'], '');
+    const scope = buildClusterScope('cluster-a', '');
     const baseNode = {
       clusterId: 'cluster-a',
       name: 'node-a',
@@ -2373,7 +2373,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('reuses existing pod rows when pod metrics snapshots are unchanged', () => {
-    const scope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const scope = buildClusterScope('cluster-a', 'namespace:default');
     const existingPod = {
       clusterId: 'cluster-a',
       name: 'pod-a',
@@ -2450,7 +2450,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('preserves workload readiness when applying metrics-only snapshots', () => {
-    const scope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const scope = buildClusterScope('cluster-a', 'namespace:default');
     const existingWorkload = {
       clusterId: 'cluster-a',
       kind: 'Deployment',
@@ -2519,7 +2519,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('reuses the existing workload rows when workload metrics snapshots are unchanged', () => {
-    const scope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const scope = buildClusterScope('cluster-a', 'namespace:default');
     const existingWorkload = {
       clusterId: 'cluster-a',
       kind: 'Deployment',

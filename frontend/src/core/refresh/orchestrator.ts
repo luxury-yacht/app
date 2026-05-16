@@ -55,12 +55,7 @@ import { catalogStreamManager } from './streaming/catalogStreamManager';
 import { errorHandler } from '@utils/errorHandler';
 import { APP_LOG_SOURCES, logAppLogsInfo, logAppLogsWarn } from '@/core/logging/appLogsClient';
 import { getAutoRefreshEnabled, getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
-import {
-  buildClusterScope,
-  buildClusterScopeList,
-  parseClusterScope,
-  parseClusterScopeList,
-} from './clusterScope';
+import { buildClusterScope, parseClusterScope, parseClusterScopeList } from './clusterScope';
 
 type DomainCategory = 'system' | 'cluster' | 'namespace';
 
@@ -795,7 +790,7 @@ class RefreshOrchestrator {
     }
     // Route background work through the target cluster runtime, then perform a direct snapshot fetch.
     this.getClusterRuntime(clusterId);
-    const clusterScope = buildClusterScopeList([clusterId], scope ?? '');
+    const clusterScope = buildClusterScope(clusterId, scope ?? '');
     await this.performFetch(domain, clusterScope, { isManual: false });
   }
 
@@ -1208,7 +1203,7 @@ class RefreshOrchestrator {
     // Preserve explicit cluster-scoped inputs to avoid rewriting historical keys
     // when the selected cluster changes between enable/disable calls.
     if (parsed.clusterIds.length > 0) {
-      return buildClusterScopeList(parsed.clusterIds, parsed.scope);
+      return buildClusterScope(parsed.clusterIds[0], parsed.scope);
     }
     return buildClusterScope(clusterId, parsed.scope || trimmed) || undefined;
   }
@@ -1231,7 +1226,7 @@ class RefreshOrchestrator {
       throw new Error(`Resource stream domain "${domain}" requires a single cluster scope`);
     }
     if (parsed.clusterIds.length > 0) {
-      return buildClusterScopeList(parsed.clusterIds, parsed.scope);
+      return buildClusterScope(parsed.clusterIds[0], parsed.scope);
     }
 
     return buildClusterScope(this.getSelectedClusterId(), parsed.scope || trimmed) || undefined;
