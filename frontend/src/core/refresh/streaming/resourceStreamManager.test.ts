@@ -1906,6 +1906,179 @@ describe('ResourceStreamManager', () => {
     expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
   });
 
+  test('suspends and resumes streams for visibility changes', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'pods',
+        scope: 'namespace:default',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { pods: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    await manager.start('pods', storeScope);
+    await flushPromises();
+
+    const firstSocket = createdSockets[0];
+    expect(firstSocket).toBeDefined();
+
+    (manager as unknown as { suspendForVisibility: () => void }).suspendForVisibility();
+    expect(firstSocket.close).toHaveBeenCalled();
+    expect(manager.getHealthStatus('pods', storeScope)).toBe('unhealthy');
+
+    vi.advanceTimersByTime(1100);
+    (manager as unknown as { resumeFromVisibility: () => void }).resumeFromVisibility();
+    await flushPromises();
+
+    expect(createdSockets[1]).toBeDefined();
+    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('treats the first reset after subscribe as an acknowledgement', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'pods',
+        scope: 'namespace:default',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { pods: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    await manager.start('pods', storeScope);
+    await flushPromises();
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'RESET',
+        domain: 'pods',
+        scope: 'namespace:default',
+      })
+    );
+    await flushPromises();
+
+    expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1100);
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'RESET',
+        domain: 'pods',
+        scope: 'namespace:default',
+      })
+    );
+    await flushPromises();
+
+    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('resyncs on complete and error stream messages', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'pods',
+        scope: 'namespace:default',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { pods: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    await manager.start('pods', storeScope);
+    await flushPromises();
+
+    vi.advanceTimersByTime(1100);
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'COMPLETE',
+        domain: 'pods',
+        scope: 'namespace:default',
+      })
+    );
+    await flushPromises();
+
+    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ERROR',
+        domain: 'pods',
+        scope: 'namespace:default',
+        error: 'watch closed',
+      })
+    );
+    await flushPromises();
+
+    expect(fetchSnapshotMock).toHaveBeenCalledTimes(3);
+    expect(manager.getHealthStatus('pods', storeScope)).not.toBe('healthy');
+  });
+
+  test('stops subscriptions and closes the socket on kubeconfig change cleanup', async () => {
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'nodes',
+        scope: '',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { nodes: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    await manager.start('nodes', storeScope);
+    await flushPromises();
+
+    const socket = createdSockets[0];
+    expect(socket).toBeDefined();
+
+    (manager as unknown as { stopAll: (reset: boolean) => void }).stopAll(true);
+
+    expect(socket.close).toHaveBeenCalled();
+    expect(manager.getHealthStatus('nodes', storeScope)).toBe('unhealthy');
+    expect(manager.getTelemetrySummary()).toEqual({ resyncCount: 0, fallbackCount: 0 });
+  });
+
   test('accepts newer updates after stale resource versions when sequences advance', async () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;

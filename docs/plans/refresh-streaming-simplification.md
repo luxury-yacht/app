@@ -345,13 +345,35 @@ Progress:
 
 ## Phase 7: Frontend Connection And Subscription Boundaries
 
-- [ ] Extract WebSocket connection lifecycle into a connection module.
-- [ ] Extract subscription state, pending unsubscribe, and resume token handling
+- [x] Extract WebSocket connection lifecycle into a connection module.
+- [x] Extract subscription state, pending unsubscribe, and resume token handling
       into a subscription module.
-- [ ] Keep resync orchestration in the manager until connection/subscription
+- [x] Keep resync orchestration in the manager until connection/subscription
       tests are in place.
-- [ ] Add tests for visibility suspend/resume, reconnect, pending reset,
+- [x] Add tests for visibility suspend/resume, reconnect, pending reset,
       pending unsubscribe, complete/error handling, and kubeconfig-change stop.
+
+Progress:
+
+- 2026-05-16: Extracted `ResourceStreamConnection` into
+  `resourceStreamConnection.ts`. The connection module now owns WebSocket URL
+  resolution, open/message/error/close handling, queued outbound messages,
+  pause/resume, close, reconnect backoff, jitter, and refresh base URL
+  invalidation.
+- 2026-05-16: Extracted `ResourceStreamSubscriptionStore` into
+  `resourceStreamSubscriptions.ts`. The subscription module now owns
+  single-cluster scope resolution, subscription creation/lookup, pending
+  unsubscribe debounce/cancel state, request/cancel message construction, and
+  resume token handling.
+- 2026-05-16: Kept snapshot resync orchestration, drift detection, health
+  aggregation, telemetry, and refresh-store mutation in `ResourceStreamManager`.
+  Added focused tests for connection lifecycle, subscription resume/debounce
+  behavior, visibility suspend/resume, reconnect/resubscribe, pending reset
+  acknowledgement, pending unsubscribe cancellation, complete/error resync, and
+  kubeconfig cleanup. Focused validation passed:
+  `npm --prefix frontend run test -- src/core/refresh/orchestrator.test.ts src/core/refresh/streaming/resourceStreamManager.test.ts src/core/refresh/streaming/resourceStreamConnection.test.ts src/core/refresh/streaming/resourceStreamSubscriptions.test.ts src/core/refresh/streaming/resourceStreamDomains.test.ts src/core/refresh/streaming/resourceStreamRows.test.ts`
+  and `npm --prefix frontend run typecheck`.
+- 2026-05-16: Full validation passed with `mage qc:prerelease`.
 
 ## Phase 8: Backend Update Projection Helpers
 

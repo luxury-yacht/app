@@ -4,16 +4,10 @@
  * Resource stream manager for watch-style resource updates.
  */
 
-import {
-  ensureRefreshBaseURL,
-  fetchSnapshot,
-  invalidateRefreshBaseURL,
-  type Snapshot,
-  type SnapshotStats,
-} from '../client';
+import { fetchSnapshot, type Snapshot, type SnapshotStats } from '../client';
 import { setScopedDomainState } from '../store';
 import type { PermissionDeniedStatus } from '../types';
-import { buildClusterScopeList, parseClusterScopeList, stripClusterScope } from '../clusterScope';
+import { stripClusterScope } from '../clusterScope';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus, type AppEvents } from '@/core/events';
 import { APP_LOG_SOURCES, logAppLogsInfo, logAppLogsWarn } from '@/core/logging/appLogsClient';
@@ -22,10 +16,15 @@ import {
   getResourceStreamDomainDescriptor,
   isClusterScopedDomain,
   isSupportedDomain,
-  normalizeResourceScope,
   type ResourceDomain,
 } from './resourceStreamDomains';
 import { applyResourceRowUpdates, mergeSnapshotRows } from './resourceStreamRows';
+import { ResourceStreamConnection } from './resourceStreamConnection';
+import {
+  ResourceStreamSubscriptionStore,
+  resourceStreamSubscriptionKey,
+  type StreamSubscription,
+} from './resourceStreamSubscriptions';
 
 export {
   normalizeResourceScope,
@@ -39,7 +38,6 @@ export {
   mergeWorkloadMetricsRow,
 } from './resourceStreamRows';
 
-const RESOURCE_STREAM_PATH = '/api/v2/stream/resources';
 const UPDATE_COALESCE_MS = 150;
 const RESYNC_COOLDOWN_MS = 1000;
 const RESYNC_MESSAGE = 'Stream resyncing';
@@ -49,8 +47,6 @@ const DRIFT_SAMPLE_SIZE = 5;
 const STREAM_UNSUBSCRIBE_DEBOUNCE_MS = 500;
 // Cap queued updates to avoid unbounded memory growth under bursty streams.
 const MAX_UPDATE_QUEUE = 1000;
-// Add jitter to reconnect backoff to avoid thundering-herd reconnects.
-const RECONNECT_JITTER_FACTOR = 0.2;
 
 const logInfo = (message: string): void => {
   logAppLogsInfo(message, APP_LOG_SOURCES.ResourceStream);
@@ -83,15 +79,6 @@ const STREAM_HEALTH_STATUS_ORDER: Record<ResourceStreamHealthStatus, number> = {
   healthy: 0,
   degraded: 1,
   unhealthy: 2,
-};
-
-type ClientMessage = {
-  type: StreamMessageType;
-  clusterId?: string;
-  domain: ResourceDomain;
-  scope: string;
-  resourceVersion?: string;
-  resumeToken?: string;
 };
 
 type ServerMessage = {
@@ -229,34 +216,6 @@ const updateStats = (stats: SnapshotStats | null, itemCount: number): SnapshotSt
   return { ...stats, itemCount };
 };
 
-type StreamSubscription = {
-  key: string;
-  domain: ResourceDomain;
-  storeScope: string;
-  reportScope: string;
-  normalizedScope: string;
-  clusterId: string;
-  clusterName?: string;
-  resourceVersion?: bigint;
-  // Track the last stream sequence applied so we can resume after reconnects.
-  lastSequence?: bigint;
-  // Track message activity so polling is paused only after delivery resumes.
-  lastMessageAt?: number;
-  lastDeliveryAt?: number;
-  lastDeliveryEpoch?: number;
-  lastErrorAt?: number;
-  lastErrorReason?: string;
-  updateQueue: UpdateMessage[];
-  updateTimer: number | null;
-  pendingReset: boolean;
-  resyncInFlight: boolean;
-  lastResyncAt: number;
-  preserveMetrics: boolean;
-  shadowKeys: Set<string>;
-  hasBaseline: boolean;
-  driftDetected: boolean;
-};
-
 export type ResourceStreamTelemetrySummary = {
   resyncCount: number;
   fallbackCount: number;
@@ -275,137 +234,11 @@ type StreamTelemetry = {
   lastFallbackReason?: string;
 };
 
-type PendingUnsubscribe = {
-  timerId: number;
-};
-
-class ResourceStreamConnection {
-  private socket: WebSocket | null = null;
-  private attempt = 0;
-  private closed = false;
-  private paused = false;
-  private reconnectTimer: number | null = null;
-  private pendingMessages: ClientMessage[] = [];
-
-  constructor(private readonly manager: ResourceStreamManager) {}
-
-  async connect(): Promise<void> {
-    if (this.closed || this.paused || typeof window === 'undefined') {
-      return;
-    }
-    try {
-      const baseURL = await ensureRefreshBaseURL();
-      if (this.closed || this.paused) {
-        return;
-      }
-      const url = new URL(RESOURCE_STREAM_PATH, baseURL);
-      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-
-      const socket = new WebSocket(url.toString());
-      this.socket = socket;
-      socket.onopen = () => this.handleOpen();
-      socket.onmessage = (event) => this.handleMessage(event);
-      socket.onerror = () => this.handleError('Resource stream connection error');
-      socket.onclose = () => this.handleClose('Resource stream connection closed');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to open resource stream';
-      this.handleError(message);
-      this.scheduleReconnect();
-    }
-  }
-
-  pause(): void {
-    this.paused = true;
-    this.clearReconnect();
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-    }
-  }
-
-  resume(): void {
-    if (!this.paused) {
-      return;
-    }
-    this.paused = false;
-    this.closed = false;
-    void this.connect();
-  }
-
-  close(): void {
-    this.closed = true;
-    this.clearReconnect();
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-    }
-  }
-
-  send(message: ClientMessage): void {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify(message));
-      return;
-    }
-    this.pendingMessages.push(message);
-  }
-
-  private handleOpen(): void {
-    this.attempt = 0;
-    this.manager.handleConnectionOpen('');
-    const pending = [...this.pendingMessages];
-    this.pendingMessages = [];
-    pending.forEach((message) => this.send(message));
-  }
-
-  private handleMessage(event: MessageEvent): void {
-    this.manager.handleMessage('', event.data);
-  }
-
-  private handleError(message: string): void {
-    if (this.closed || this.paused) {
-      return;
-    }
-    // Refresh base URLs can change when the backend rebuilds the refresh subsystem.
-    invalidateRefreshBaseURL();
-    this.manager.handleConnectionError('', message);
-    this.scheduleReconnect();
-  }
-
-  private handleClose(message: string): void {
-    if (this.closed || this.paused) {
-      return;
-    }
-    // Force a fresh base URL lookup on reconnect in case the port rotated.
-    invalidateRefreshBaseURL();
-    this.manager.handleConnectionError('', message);
-    this.scheduleReconnect();
-  }
-
-  private scheduleReconnect(): void {
-    if (this.closed || this.paused) {
-      return;
-    }
-    this.clearReconnect();
-    const baseDelay = Math.min(30_000, 1000 * Math.pow(2, this.attempt));
-    const jitter = 1 + (Math.random() * 2 - 1) * RECONNECT_JITTER_FACTOR;
-    const delay = Math.max(0, Math.round(baseDelay * jitter));
-    this.attempt += 1;
-    this.reconnectTimer = window.setTimeout(() => {
-      this.reconnectTimer = null;
-      void this.connect();
-    }, delay);
-  }
-
-  private clearReconnect(): void {
-    if (this.reconnectTimer !== null) {
-      window.clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-  }
-}
-
 export class ResourceStreamManager {
-  private subscriptions = new Map<string, StreamSubscription>();
+  private subscriptions = new ResourceStreamSubscriptionStore(
+    STREAM_UNSUBSCRIBE_DEBOUNCE_MS,
+    logInfo
+  );
   // Single socket used to multiplex subscriptions across clusters.
   private connection: ResourceStreamConnection | null = null;
   private connectionStatus: ResourceStreamConnectionStatus = 'disconnected';
@@ -416,7 +249,6 @@ export class ResourceStreamManager {
   private consecutiveErrors = new Map<string, number>();
   private suspendedForVisibility = false;
   private streamTelemetry = new Map<string, StreamTelemetry>();
-  private pendingUnsubscribes = new Map<string, PendingUnsubscribe>();
 
   constructor() {
     eventBus.on('kubeconfig:changing', () => this.stopAll(true));
@@ -515,7 +347,11 @@ export class ResourceStreamManager {
     if (!messageClusterId) {
       return;
     }
-    const subscriptionKey = this.subscriptionKey(messageClusterId, update.domain, update.scope);
+    const subscriptionKey = resourceStreamSubscriptionKey(
+      messageClusterId,
+      update.domain,
+      update.scope
+    );
     let subscription = this.subscriptions.get(subscriptionKey);
     let resolvedUpdate = update;
     if (!subscription) {
@@ -565,17 +401,7 @@ export class ResourceStreamManager {
     domain: ResourceDomain,
     scope: string
   ): StreamSubscription | undefined {
-    let match: StreamSubscription | undefined;
-    for (const subscription of this.subscriptions.values()) {
-      if (subscription.domain !== domain || subscription.normalizedScope !== scope) {
-        continue;
-      }
-      if (match) {
-        return undefined;
-      }
-      match = subscription;
-    }
-    return match;
+    return this.subscriptions.findByScope(domain, scope);
   }
 
   handleConnectionOpen(clusterId: string): void {
@@ -640,94 +466,15 @@ export class ResourceStreamManager {
   }
 
   private ensureSubscriptions(domain: ResourceDomain, scope: string): StreamSubscription[] {
-    const { clusterIds, normalizedScope, reportScope } = this.resolveSubscriptionScope(
-      domain,
-      scope
+    const subscriptions = this.subscriptions.ensure(domain, scope);
+    subscriptions.forEach((subscription) =>
+      this.updateHealthForScope(subscription.domain, subscription.reportScope)
     );
-    return clusterIds.map((clusterId) =>
-      this.ensureSubscriptionForCluster(domain, clusterId, normalizedScope, reportScope)
-    );
-  }
-
-  private ensureSubscriptionForCluster(
-    domain: ResourceDomain,
-    clusterId: string,
-    normalizedScope: string,
-    reportScope: string
-  ): StreamSubscription {
-    const key = this.subscriptionKey(clusterId, domain, normalizedScope);
-    const existing = this.subscriptions.get(key);
-    if (existing) {
-      this.cancelPendingUnsubscribe(existing);
-      return existing;
-    }
-
-    const storeScope = buildClusterScopeList([clusterId], normalizedScope);
-    const subscription: StreamSubscription = {
-      key,
-      domain,
-      storeScope,
-      reportScope,
-      normalizedScope,
-      clusterId,
-      updateQueue: [],
-      updateTimer: null,
-      pendingReset: false,
-      resyncInFlight: false,
-      lastResyncAt: 0,
-      preserveMetrics: getResourceStreamDomainDescriptor(domain).preserveMetrics,
-      shadowKeys: new Set(),
-      hasBaseline: false,
-      driftDetected: false,
-    };
-    this.subscriptions.set(key, subscription);
-    logInfo(
-      `[resource-stream] subscription created domain=${subscription.domain} scope=${subscription.storeScope}`
-    );
-    this.updateHealthForScope(subscription.domain, subscription.reportScope);
-    return subscription;
+    return subscriptions;
   }
 
   private getSubscriptions(domain: ResourceDomain, scope: string): StreamSubscription[] {
-    const parsed = parseClusterScopeList(scope);
-    if (parsed.clusterIds.length === 0) {
-      return [];
-    }
-    if (parsed.isMultiCluster) {
-      return [];
-    }
-    let normalizedScope = '';
-    try {
-      normalizedScope = normalizeResourceScope(domain, parsed.scope);
-    } catch (_err) {
-      return [];
-    }
-
-    return parsed.clusterIds
-      .map((clusterId) =>
-        this.subscriptions.get(this.subscriptionKey(clusterId, domain, normalizedScope))
-      )
-      .filter((subscription): subscription is StreamSubscription => Boolean(subscription));
-  }
-
-  private resolveSubscriptionScope(
-    domain: ResourceDomain,
-    scope: string
-  ): { clusterIds: string[]; normalizedScope: string; reportScope: string } {
-    const parsed = parseClusterScopeList(scope);
-    if (parsed.clusterIds.length === 0) {
-      throw new Error('Resource streaming requires a cluster scope');
-    }
-    if (parsed.isMultiCluster) {
-      throw new Error('Resource streaming requires a single cluster scope');
-    }
-    const normalizedScope = normalizeResourceScope(domain, parsed.scope);
-    const reportScope = buildClusterScopeList([parsed.clusterIds[0]], normalizedScope);
-    return { clusterIds: parsed.clusterIds, normalizedScope, reportScope };
-  }
-
-  private subscriptionKey(clusterId: string, domain: ResourceDomain, scope: string): string {
-    return `${clusterId}::${domain}::${scope}`;
+    return this.subscriptions.getForScope(domain, scope);
   }
 
   private getConnection(): ResourceStreamConnection {
@@ -742,42 +489,24 @@ export class ResourceStreamManager {
 
   private subscribe(subscription: StreamSubscription): void {
     // Avoid re-subscribing while a debounced stop is pending.
-    if (this.pendingUnsubscribes.has(subscription.key)) {
+    if (this.subscriptions.hasPendingUnsubscribe(subscription)) {
       return;
     }
     const connection = this.getConnection();
-    const resumeToken = subscription.lastSequence
-      ? subscription.lastSequence.toString()
-      : undefined;
-    subscription.pendingReset = !resumeToken;
-    connection.send({
-      type: MESSAGE_TYPES.request,
-      clusterId: subscription.clusterId,
-      domain: subscription.domain,
-      scope: subscription.storeScope,
-      resourceVersion: subscription.resourceVersion
-        ? subscription.resourceVersion.toString()
-        : undefined,
-      resumeToken,
-    });
+    connection.send(this.subscriptions.buildRequestMessage(subscription));
   }
 
   private unsubscribe(subscription: StreamSubscription, reset: boolean): void {
-    this.cancelPendingUnsubscribe(subscription);
+    this.subscriptions.cancelPendingUnsubscribe(subscription);
     const connection = this.connection;
     if (connection) {
-      connection.send({
-        type: MESSAGE_TYPES.cancel,
-        clusterId: subscription.clusterId,
-        domain: subscription.domain,
-        scope: subscription.storeScope,
-      });
+      connection.send(this.subscriptions.buildCancelMessage(subscription));
     }
 
     if (subscription.updateTimer !== null) {
       window.clearTimeout(subscription.updateTimer);
     }
-    this.subscriptions.delete(subscription.key);
+    this.subscriptions.delete(subscription);
     this.updateHealthForScope(subscription.domain, subscription.reportScope);
 
     if (reset) {
@@ -792,38 +521,9 @@ export class ResourceStreamManager {
   }
 
   private scheduleUnsubscribe(subscription: StreamSubscription, reset: boolean): void {
-    if (reset || typeof window === 'undefined' || STREAM_UNSUBSCRIBE_DEBOUNCE_MS <= 0) {
-      this.unsubscribe(subscription, reset);
-      return;
-    }
-    if (this.pendingUnsubscribes.has(subscription.key)) {
-      return;
-    }
-    const timerId = window.setTimeout(() => {
-      this.pendingUnsubscribes.delete(subscription.key);
-      this.unsubscribe(subscription, reset);
-    }, STREAM_UNSUBSCRIBE_DEBOUNCE_MS);
-    this.pendingUnsubscribes.set(subscription.key, { timerId });
-    logInfo(
-      `[resource-stream] debounce unsubscribe domain=${subscription.domain} scope=${subscription.storeScope} delayMs=${STREAM_UNSUBSCRIBE_DEBOUNCE_MS}`
+    this.subscriptions.scheduleUnsubscribe(subscription, reset, (target, shouldReset) =>
+      this.unsubscribe(target, shouldReset)
     );
-  }
-
-  private cancelPendingUnsubscribe(subscription: StreamSubscription): void {
-    const pending = this.pendingUnsubscribes.get(subscription.key);
-    if (!pending) {
-      return;
-    }
-    window.clearTimeout(pending.timerId);
-    this.pendingUnsubscribes.delete(subscription.key);
-    logInfo(
-      `[resource-stream] debounce cancel domain=${subscription.domain} scope=${subscription.storeScope}`
-    );
-  }
-
-  private clearPendingUnsubscribes(): void {
-    this.pendingUnsubscribes.forEach((pending) => window.clearTimeout(pending.timerId));
-    this.pendingUnsubscribes.clear();
   }
 
   private healthKey(domain: ResourceDomain, scope: string): string {
@@ -1008,7 +708,10 @@ export class ResourceStreamManager {
     if (subscription.updateQueue.length === 0) {
       return;
     }
-    const updates = subscription.updateQueue.splice(0, subscription.updateQueue.length);
+    const updates = subscription.updateQueue.splice(
+      0,
+      subscription.updateQueue.length
+    ) as UpdateMessage[];
     const now = Date.now();
 
     // Always update shadow keys so drift checks can compare snapshots to streamed changes.
@@ -1119,7 +822,7 @@ export class ResourceStreamManager {
     force = false
   ): Promise<void> {
     // Skip resync work for subscriptions that are already scheduled to stop.
-    if (this.pendingUnsubscribes.has(subscription.key)) {
+    if (this.subscriptions.hasPendingUnsubscribe(subscription)) {
       return;
     }
     if (subscription.resyncInFlight) {
@@ -1832,7 +1535,6 @@ export class ResourceStreamManager {
     this.lastNotifiedErrors.clear();
     this.consecutiveErrors.clear();
     this.streamTelemetry.clear();
-    this.clearPendingUnsubscribes();
   }
 }
 
