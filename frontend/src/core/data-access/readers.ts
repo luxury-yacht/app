@@ -1,4 +1,7 @@
 import {
+  DiscoverNodeLogs,
+  FetchContainerLogs,
+  FetchNodeLogs,
   FindCatalogObjectByUID,
   FindCatalogObjectMatch,
   GetContainerLogsScopeContainers,
@@ -8,6 +11,7 @@ import {
   GetTargetPorts,
   IsWorkloadHPAManaged,
 } from '@wailsjs/go/backend/App';
+import type { types } from '@wailsjs/go/models';
 
 export const readTargetPorts = (
   clusterId: string,
@@ -23,6 +27,18 @@ export const readPodContainers = (clusterId: string, namespace: string, resource
 
 export const readContainerLogsScopeContainers = (clusterId: string, scope: string) =>
   GetContainerLogsScopeContainers(clusterId, scope);
+
+export const readContainerLogs = (clusterId: string, request: types.ContainerLogsFetchRequest) =>
+  FetchContainerLogs(clusterId, request);
+
+export const readNodeLogDiscovery = (clusterId: string, nodeName: string) =>
+  DiscoverNodeLogs(clusterId, nodeName);
+
+export const readNodeLogs = (
+  clusterId: string,
+  nodeName: string,
+  request: types.NodeLogFetchRequest
+) => FetchNodeLogs(clusterId, nodeName, request);
 
 export const readObjectYAMLByGVK = (
   clusterId: string,

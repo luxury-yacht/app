@@ -5,18 +5,17 @@
  * Extracts logic into hooks for clarity.
  * Uses a reducer for state management.
  */
-import React, { useReducer, useEffect, useRef, useMemo, useCallback, useState } from 'react';
-import { FetchContainerLogs } from '@wailsjs/go/backend/App';
-import { readContainerLogsScopeContainers, requestData } from '@/core/data-access';
+import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
+import {
+  readContainerLogs,
+  readContainerLogsScopeContainers,
+  requestData,
+} from '@/core/data-access';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { useLogFiltering } from './hooks/useLogFiltering';
-import { useVirtualizedLogRows } from './hooks/useVirtualizedLogRows';
 import {
   useContainerLogsStreamFallback,
   isLogDataUnavailable,
@@ -66,7 +65,15 @@ import {
   setLogViewerScrollTop,
 } from './logViewerPrefsCache';
 import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
-import { formatParsedValue, tryParseJSONObject } from './jsonLogs';
+import {
+  deriveParsedLogFieldKeys,
+  formatParsedValue,
+  formatRawOrPrettyJsonLine,
+} from './parsedLogUtils';
+import { buildCsv } from './logExport';
+import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
+import ParsedLogTable from './ParsedLogTable';
+import RawLogViewer, { type RenderedLogRow } from './RawLogViewer';
 import { buildStablePodColorMap } from './podColors';
 import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
 import { INACTIVE_SCOPE } from '../constants';
@@ -76,13 +83,10 @@ import {
   formatObjPanelLogsApiTimestamp,
 } from '@/utils/objPanelLogsApiTimestampFormat';
 import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
-import {
-  DEFAULT_TERMINAL_THEME,
-  resolveTerminalTheme,
-  type TerminalThemeColors,
-} from '@shared/terminal/terminalTheme';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from './textSelection';
+import { useTerminalTheme } from './hooks/useTerminalTheme';
+import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
 
 interface LogViewerProps {
   namespace: string;
@@ -199,10 +203,6 @@ const parseContainerLabel = (
   }
   return { name: label, isInit: false, isEphemeral: false };
 };
-
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const escapeCsvCell = (value: string): string =>
-  /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 
 const POD_FILTER_PREFIX = 'pod:';
 const INIT_FILTER_PREFIX = 'init:';
@@ -335,41 +335,6 @@ const formatSelectedFilterLabel = (
   return filterValue;
 };
 
-const buildHighlightRegex = (
-  searchText: string,
-  regexMode: boolean,
-  caseSensitive: boolean
-): RegExp | null => {
-  const trimmed = searchText.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  try {
-    return new RegExp(regexMode ? trimmed : escapeRegExp(trimmed), caseSensitive ? 'g' : 'gi');
-  } catch {
-    return null;
-  }
-};
-
-const isValidRegexPattern = (pattern: string): boolean => {
-  const trimmed = pattern.trim();
-  if (!trimmed) {
-    return true;
-  }
-  try {
-    new RegExp(trimmed, 'i');
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-interface RenderedLogRow {
-  key: string;
-  line: string;
-}
-
 type LogEmptyState =
   | 'none'
   | 'no_logs_yet'
@@ -472,12 +437,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const filterInputRef = useRef<HTMLInputElement>(null);
   const seqCounterRef = useRef(0);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [terminalTheme, setTerminalTheme] = useState<TerminalThemeColors>(DEFAULT_TERMINAL_THEME);
-  // True until the restoration effect has successfully positioned the
-  // scroll container after a (re)mount. Prevents the auto-scroll effect
-  // from fighting the restoration for the first paint, and makes the
-  // restore-once behavior idempotent across state changes.
-  const scrollRestoredRef = useRef<boolean>(false);
+  const terminalTheme = useTerminalTheme(logsContentRef);
 
   useEffect(
     () => eventBus.on('settings:obj-panel-logs-api-timestamp-format', setApiTimestampFormatState),
@@ -491,26 +451,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       ),
     []
   );
-  useEffect(() => {
-    const updateTheme = () => {
-      setTerminalTheme(
-        resolveTerminalTheme(
-          logsContentRef.current ? getComputedStyle(logsContentRef.current) : null
-        )
-      );
-    };
-
-    updateTheme();
-
-    const observer = new MutationObserver(updateTheme);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-appearance-mode', 'class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
   const resourceKindKey = resourceKind?.toLowerCase() ?? '';
   const isWorkload = resourceKindKey !== 'pod';
   const supportsPreviousContainerLogs = resourceKindKey === 'pod';
@@ -573,11 +513,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
   const highlightRegex = useMemo(
     () =>
-      buildHighlightRegex(
-        highlightMatches && !inverseMatches ? textFilter : '',
-        regexMatches,
-        caseSensitiveMatches
-      ),
+      buildLogSearchRegex(highlightMatches && !inverseMatches ? textFilter : '', {
+        regexMode: regexMatches,
+        caseSensitive: caseSensitiveMatches,
+        global: true,
+      }),
     [caseSensitiveMatches, highlightMatches, inverseMatches, regexMatches, textFilter]
   );
   const backendLogSelection = useMemo(() => {
@@ -788,7 +728,19 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           sinceSeconds: 0,
         };
 
-        const response = await FetchContainerLogs(resolvedClusterId, request);
+        const result = await requestData({
+          resource: 'container-logs-fallback',
+          reason: isManual ? 'user' : 'background',
+          adapter: 'rpc-read',
+          label: previous ? 'Previous Container Logs' : 'Container Logs Fallback',
+          scope: containerLogsScope,
+          read: () => readContainerLogs(resolvedClusterId, request),
+        });
+        if (result.status === 'blocked') {
+          return;
+        }
+
+        const response = result.data;
         if (response?.error) {
           throw new Error(response.error);
         }
@@ -1359,18 +1311,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
 
     return filteredEntries.map((entry) => {
-      const parsed = tryParseJSONObject(entry.line);
-      const normalizedLine = showAnsiColors ? entry.line : stripAnsi(entry.line);
-      const lineContent =
-        displayMode === 'structured'
-          ? parsed
-            ? JSON.stringify(parsed)
-            : normalizedLine
-          : displayMode === 'pretty'
-            ? parsed
-              ? JSON.stringify(parsed, null, 2)
-              : normalizedLine
-            : normalizedLine;
+      const lineContent = formatRawOrPrettyJsonLine(entry.line, displayMode, showAnsiColors);
       const displayContent =
         lineContent.trim().length > 0 ? lineContent : EMPTY_CONTAINER_LOG_PLACEHOLDER;
       const timestamp = formatTimestampForMode(
@@ -1448,21 +1389,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const displayedLogCount = filteredEntries.length;
   const countLabel = `${displayedLogCount} matching log${displayedLogCount === 1 ? '' : 's'}`;
   const countTitle = countLabel;
-
-  const {
-    shouldVirtualize: shouldVirtualizeRawLogs,
-    visibleRows: visibleRenderedLogRows,
-    totalHeight: virtualizedRawHeight,
-    offsetTop: virtualizedRawOffsetTop,
-    measureRowRef: measureVirtualizedRawRow,
-  } = useVirtualizedLogRows({
-    rows: renderedDisplayRows,
-    scrollContainerRef: logsContentRef,
-    keyExtractor: (row) => row.key,
-    threshold: RAW_LOG_VIRTUALIZATION_THRESHOLD,
-    overscan: RAW_LOG_VIRTUALIZATION_OVERSCAN,
-    estimateRowHeight: RAW_LOG_ESTIMATE_ROW_HEIGHT,
-  });
 
   useEffect(() => {
     if (displayMode !== 'raw' && !canParseContainerLogs) {
@@ -1719,7 +1645,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       try {
         const result = await requestData({
           resource: 'log-scope-containers',
-          reason: 'user',
+          reason: 'startup',
+          adapter: 'rpc-read',
+          label: 'Log Scope Containers',
+          scope: containerLogsScope,
           read: () => readContainerLogsScopeContainers(resolvedClusterId, containerLogsScope),
         });
         const containerList = result.status === 'executed' ? (result.data ?? []) : [];
@@ -1751,189 +1680,20 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     };
   }, [isWorkload, containerLogsScope, resolvedClusterId]);
 
-  // --- Scroll position and tail-follow ---
-  //
-  // Four concerns, all reading from the same scroll container:
-  //
-  //   1. getScrollContainer — returns the element that actually
-  //      scrolls for the current view mode. Raw view is
-  //      logs-viewer-content itself; parsed view is the GridTable's
-  //      virtualization wrapper inside it.
-  //
-  //   2. Scroll listener — on every scroll event, saves the current
-  //      scrollTop to the panel-scoped prefs cache (so it survives
-  //      a tab-switch remount) and refreshes wasAtBottomRef so the
-  //      tail-follow effect knows whether the user is currently
-  //      pinned to the tail. Gated on scrollRestoredRef for the
-  //      writeback path to ignore the synthetic scroll events the
-  //      restoration effect itself triggers.
-  //
-  //   3. Restoration effect — on (re)mount, once entries have
-  //      rendered, scrolls to the saved position from the prefs
-  //      cache (clamped to the current maxScrollTop). Falls back to
-  //      the bottom (newest entries) when nothing was saved. Runs
-  //      exactly once per mount via scrollRestoredRef.
-  //
-  //   4. Smart tail-follow — derives the follow-the-tail intent
-  //      from the user's current scroll position:
-  //
-  //        - If the viewport was at (or very near) the bottom just
-  //          before React committed the new entries, scroll to the
-  //          new bottom after commit so new entries come into view.
-  //        - Otherwise leave scrollTop alone; when the user scrolls
-  //          back down to the bottom they automatically resume
-  //          tail-following on the next entry.
-  //
-  //      wasAtBottomRef is updated by the scroll listener above,
-  //      not by a per-render useLayoutEffect — measuring in render
-  //      forces a synchronous reflow on every unrelated parent
-  //      re-render (e.g. ObjectPanel drag/resize), which tanks
-  //      drag performance. Scroll events are the only thing that
-  //      can change at-bottom status between log appends, so the
-  //      ref is always fresh when the tail-follow effect reads it.
-
-  const AT_BOTTOM_THRESHOLD_PX = 16;
-  const wasAtBottomRef = useRef<boolean>(true);
-
-  const getScrollContainer = useCallback((): HTMLElement | null => {
-    const root = logsContentRef.current;
-    if (!root) return null;
-    if (isParsedView) {
-      return root.querySelector<HTMLElement>('.gridtable-wrapper');
-    }
-    return root;
-  }, [isParsedView]);
-
-  // Scroll listener — writes scrollTop to the cache and refreshes
-  // wasAtBottomRef so the tail-follow effect has an up-to-date
-  // "was the user at the bottom?" signal without having to measure
-  // on every render. Attaches to whichever container is active for
-  // the current view mode; re-runs when isParsedView changes.
-  //
-  // Measuring here (instead of in a depless useLayoutEffect) keeps
-  // draggable parents fast: unrelated parent re-renders no longer
-  // trigger forced reflows inside LogViewer. Scroll events are the
-  // only thing that can change at-bottom status between log
-  // appends — programmatic scrollTop writes fire one too, so the
-  // restoration effect and the tail-follow scroll both keep this
-  // ref in sync automatically.
-  useEffect(() => {
-    const scrollEl = getScrollContainer();
-    if (!scrollEl) return;
-
-    const handler = () => {
-      wasAtBottomRef.current =
-        scrollEl.scrollTop + scrollEl.clientHeight >=
-        scrollEl.scrollHeight - AT_BOTTOM_THRESHOLD_PX;
-      // Skip writeback until the initial restore has completed —
-      // the browser fires scroll events as we restore scrollTop,
-      // and we don't want those synthetic events to overwrite the
-      // saved value with 0 before the restoration runs.
-      if (!scrollRestoredRef.current) return;
-      setLogViewerScrollTop(panelId, scrollEl.scrollTop);
-    };
-
-    scrollEl.addEventListener('scroll', handler, { passive: true });
-    return () => {
-      scrollEl.removeEventListener('scroll', handler);
-    };
-  }, [getScrollContainer, panelId]);
-
-  // Restoration effect — runs on every render but is a no-op after
-  // the first successful positioning. Re-runs until the scroll
-  // container is actually present (parsed view needs the
-  // virtualization wrapper to be mounted, which may take a frame or
-  // two) and has entries to render into.
-  //
-  // Policy on (re)mount:
-  //   - If a saved scrollTop exists in the prefs cache (the user
-  //     had scrolled somewhere during a previous session), restore
-  //     it — clamped to the current maxScrollTop so a smaller
-  //     buffer doesn't land us past the bottom.
-  //   - Otherwise, scroll to the bottom (newest entries). This is
-  //     the intuitive default for a fresh view.
-  useEffect(() => {
-    if (scrollRestoredRef.current) return;
-
-    const entryCount = isParsedView ? parsedContainerLogs.length : logEntries.length;
-    if (entryCount === 0) return;
-
-    const scrollEl = getScrollContainer();
-    if (!scrollEl) return;
-    // scrollHeight === clientHeight means content hasn't laid out
-    // yet (parsed view virtualization wrapper takes a frame or
-    // two). Defer to the next render.
-    if (scrollEl.scrollHeight <= scrollEl.clientHeight) return;
-
-    const maxScrollTop = scrollEl.scrollHeight - scrollEl.clientHeight;
-    const savedScrollTop = getLogViewerScrollTop(panelId);
-    const targetScrollTop =
-      savedScrollTop != null ? Math.min(savedScrollTop, maxScrollTop) : maxScrollTop;
-
-    scrollEl.scrollTop = targetScrollTop;
-    scrollRestoredRef.current = true;
-  }, [getScrollContainer, isParsedView, logEntries.length, panelId, parsedContainerLogs.length]);
-
-  // After commit: if the user was tail-following, scroll to the new
-  // bottom so the newly appended entries come into view. If not,
-  // leave scrollTop alone — the user is reading in place.
-  useEffect(() => {
-    if (!wasAtBottomRef.current) return;
-    // Don't interfere with the initial restoration effect; it owns
-    // the first scroll position of the mount.
-    if (!scrollRestoredRef.current) return;
-
-    const scrollEl = getScrollContainer();
-    if (!scrollEl) return;
-
-    // Parsed view's virtualization wrapper may not have laid out
-    // yet on the same frame the entries land — retry a few frames
-    // if scrollHeight hasn't caught up.
-    let rafId: number | undefined;
-    const scrollToBottom = () => {
-      const el = getScrollContainer();
-      if (!el) return;
-      el.scrollTop = el.scrollHeight;
-    };
-    if (isParsedView) {
-      let attempts = 0;
-      const maxAttempts = 20;
-      const checkAndScroll = () => {
-        const el = getScrollContainer();
-        if (el && el.scrollHeight > el.clientHeight) {
-          rafId = requestAnimationFrame(scrollToBottom);
-        } else if (attempts < maxAttempts) {
-          attempts += 1;
-          rafId = requestAnimationFrame(checkAndScroll);
-        }
-      };
-      rafId = requestAnimationFrame(checkAndScroll);
-    } else {
-      rafId = requestAnimationFrame(scrollToBottom);
-    }
-    return () => {
-      if (rafId !== undefined) cancelAnimationFrame(rafId);
-    };
-  }, [
-    getScrollContainer,
+  useLogScrollRestoration({
+    rootRef: logsContentRef,
     isParsedView,
-    logEntries.length,
-    parsedContainerLogs.length,
-    displayLogs,
-  ]);
+    rowCount: isParsedView ? parsedContainerLogs.length : logEntries.length,
+    tailFollowSignal: displayLogs,
+    cacheKey: panelId,
+    getScrollTop: getLogViewerScrollTop,
+    setScrollTop: setLogViewerScrollTop,
+  });
 
-  // Derive field keys directly from parsed log data
-  const derivedFieldKeys = useMemo(() => {
-    if (parsedContainerLogs.length === 0) return [];
-    const seen = new Set<string>();
-    for (const entry of parsedContainerLogs) {
-      for (const key of Object.keys(entry.data)) {
-        seen.add(key);
-      }
-    }
-    // Sort alphabetically so column order is stable across buffer changes
-    return Array.from(seen).sort();
-  }, [parsedContainerLogs]);
+  const derivedFieldKeys = useMemo(
+    () => deriveParsedLogFieldKeys(parsedContainerLogs),
+    [parsedContainerLogs]
+  );
 
   const tableColumns = useMemo(() => {
     if (derivedFieldKeys.length === 0) return [];
@@ -2129,13 +1889,13 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     };
 
     const headerRow = tableColumns.map((column) =>
-      escapeCsvCell(typeof column.header === 'string' ? column.header : column.key)
+      typeof column.header === 'string' ? column.header : column.key
     );
     const dataRows = parsedContainerLogs.map((entry) =>
-      tableColumns.map((column) => escapeCsvCell(getParsedColumnValue(entry, column.key)))
+      tableColumns.map((column) => getParsedColumnValue(entry, column.key))
     );
 
-    return [headerRow, ...dataRows].map((row) => row.join(',')).join('\n');
+    return buildCsv([headerRow, ...dataRows]);
   }, [
     apiTimestampFormat,
     apiTimestampUseLocalTimeZone,
@@ -2204,36 +1964,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     logsContentRef,
   });
 
-  // Row expansion for parsed view.
-  // GridTable's onRowClick only fires for keyboard activation (Enter), not mouse
-  // clicks, so we use event delegation on a wrapper to handle pointer clicks.
-  const handleParsedTableClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const row = (e.target as HTMLElement).closest<HTMLElement>('.gridtable-row');
-      if (!row) return;
-      const key = row.dataset.rowKey;
-      if (key) {
-        dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: key });
-      }
+  const handleToggleParsedRow = useCallback(
+    (rowKey: string) => {
+      dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: rowKey });
     },
     [dispatch]
-  );
-
-  // Also wire onRowClick for keyboard (Enter) accessibility
-  const handleParsedRowKeyboard = useCallback(
-    (item: ParsedLogEntry) => {
-      const key = `log-${item.seq ?? item.lineNumber}`;
-      dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: key });
-    },
-    [dispatch]
-  );
-
-  const getParsedRowClassName = useCallback(
-    (_item: ParsedLogEntry, index: number) => {
-      const key = `log-${parsedContainerLogs[index]?.seq ?? parsedContainerLogs[index]?.lineNumber ?? index}`;
-      return expandedRows.has(key) ? 'parsed-row-expanded' : undefined;
-    },
-    [expandedRows, parsedContainerLogs]
   );
 
   // Loading state
@@ -2531,59 +2266,29 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
           <div className="logs-viewer-content selectable" ref={logsContentRef} tabIndex={-1}>
             {isParsedView ? (
-              <div onClick={handleParsedTableClick} style={{ height: '100%' }}>
-                <GridTable
-                  data={parsedContainerLogs}
-                  columns={tableColumns}
-                  keyExtractor={(item: ParsedLogEntry) => `log-${item.seq ?? item.lineNumber}`}
-                  onRowClick={handleParsedRowKeyboard}
-                  getRowClassName={getParsedRowClassName}
-                  className="parsed-logs-table"
-                  tableClassName="gridtable-parsed-logs"
-                  virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-                  isKindColumnKey={() => false}
-                />
-              </div>
+              <ParsedLogTable
+                rows={parsedContainerLogs}
+                columns={tableColumns}
+                expandedRows={expandedRows}
+                onToggleRow={handleToggleParsedRow}
+              />
             ) : (
-              <div
-                className={`logs-viewer-text ${!wrapText ? 'no-wrap' : ''} ${shouldVirtualizeRawLogs ? 'logs-viewer-text--virtualized' : ''}`}
-              >
+              <>
                 {displayLogs ? (
-                  shouldVirtualizeRawLogs ? (
-                    <div
-                      className="logs-viewer-virtual-body"
-                      style={{ height: `${virtualizedRawHeight + RAW_LOG_VERTICAL_PADDING_PX}px` }}
-                    >
-                      <div
-                        className="logs-viewer-virtual-inner"
-                        style={{
-                          transform: `translateY(${virtualizedRawOffsetTop + RAW_LOG_VERTICAL_PADDING_PX / 2}px)`,
-                        }}
-                      >
-                        {visibleRenderedLogRows.map((row) => (
-                          <div
-                            key={row.key}
-                            className="log-viewer-row"
-                            ref={(node) => {
-                              measureVirtualizedRawRow(row.key, node);
-                            }}
-                          >
-                            {renderRawLogRow(row)}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    renderedDisplayRows.map((row) => (
-                      <div key={row.key} className="log-viewer-row">
-                        {renderRawLogRow(row)}
-                      </div>
-                    ))
-                  )
+                  <RawLogViewer
+                    rows={renderedDisplayRows}
+                    scrollContainerRef={logsContentRef}
+                    wrapText={wrapText}
+                    renderRow={renderRawLogRow}
+                    virtualizationThreshold={RAW_LOG_VIRTUALIZATION_THRESHOLD}
+                    virtualizationOverscan={RAW_LOG_VIRTUALIZATION_OVERSCAN}
+                    estimateRowHeight={RAW_LOG_ESTIMATE_ROW_HEIGHT}
+                    verticalPaddingPx={RAW_LOG_VERTICAL_PADDING_PX}
+                  />
                 ) : (
                   emptyStateMessage
                 )}
-              </div>
+              </>
             )}
           </div>
         </div>

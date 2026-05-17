@@ -7,10 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import {
@@ -28,18 +25,24 @@ import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
 import type { LogDisplayMode, CapabilityState } from '../types';
 import { containsAnsi, parseAnsiTextSegments, stripAnsi } from '../Logs/ansi';
 import {
-  DEFAULT_TERMINAL_THEME,
-  resolveTerminalTheme,
-  type TerminalThemeColors,
-} from '@shared/terminal/terminalTheme';
-import { formatParsedValue, tryParseJSONObject } from '../Logs/jsonLogs';
+  deriveParsedLogFieldKeys,
+  formatParsedValue,
+  formatRawOrPrettyJsonLine,
+  tryParseJSONObject,
+} from '../Logs/parsedLogUtils';
+import { buildCsv } from '../Logs/logExport';
+import { buildLogSearchRegex } from '../Logs/logSearch';
 import { getLogViewerScrollTop, setLogViewerScrollTop } from '../Logs/logViewerPrefsCache';
 import type { ParsedLogEntry } from '../Logs/logViewerReducer';
-import { fetchNodeLogs, type NodeLogSource } from './nodeLogsApi';
+import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './nodeLogsApi';
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from '../Logs/textSelection';
+import ParsedLogTable from '../Logs/ParsedLogTable';
+import RawLogViewer, { type RenderedLogRow } from '../Logs/RawLogViewer';
+import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
+import { useLogScrollRestoration } from '../Logs/hooks/useLogScrollRestoration';
 
 const NODE_LOG_TAIL_BYTES = 256 * 1024;
 const NODE_LOG_AUTO_REFRESH_MS = 5000;
@@ -58,29 +61,6 @@ type NodeLogSourceOptionMetadata =
       childLabel: string;
       isLastChild: boolean;
     };
-
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const escapeCsvCell = (value: string): string =>
-  /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-
-const buildSearchRegex = (
-  searchText: string,
-  regexMode: boolean,
-  caseSensitive: boolean
-): RegExp | null => {
-  const trimmed = searchText.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  try {
-    return new RegExp(regexMode ? trimmed : escapeRegExp(trimmed), caseSensitive ? 'g' : 'gi');
-  } catch {
-    return null;
-  }
-};
-
-const getParsedRowKey = (item: ParsedLogEntry): string => `log-${item.seq ?? item.lineNumber}`;
 
 const getNodeLogSourceLeafLabel = (label: string): string => {
   const segments = label.split(' / ');
@@ -137,6 +117,15 @@ const appendNodeLogContent = (existingContent: string, incomingContent: string):
   }
 
   return `${existingContent}\n${remainingLines.join('\n')}`;
+};
+
+const getExecutedNodeLogResponse = (
+  result: Awaited<ReturnType<typeof fetchNodeLogs>> | NodeLogFetchResponse
+): NodeLogFetchResponse | null => {
+  if ('status' in result) {
+    return result.status === 'executed' ? (result.data ?? null) : null;
+  }
+  return result;
 };
 
 const buildNodeLogSourceOptions = (sources: NodeLogSource[]): DropdownOption[] => {
@@ -223,40 +212,17 @@ const NodeLogsTab = ({
   const [displayMode, setDisplayMode] = useState<LogDisplayMode>('raw');
   const [parsedLogs, setParsedLogs] = useState<ParsedLogEntry[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set<string>());
-  const [terminalTheme, setTerminalTheme] = useState<TerminalThemeColors>(DEFAULT_TERMINAL_THEME);
   const logsContentRef = useRef<HTMLDivElement>(null);
+  const terminalTheme = useTerminalTheme(logsContentRef);
   const contentRef = useRef('');
   const loadedSourcePathRef = useRef<string | null>(null);
   const lastSuccessfulFetchAtRef = useRef<string | null>(null);
-  const scrollRestoredRef = useRef(false);
-  const wasAtBottomRef = useRef(true);
   const previousSourcePathRef = useRef<string | null>(null);
-  const forceTailRestoreRef = useRef(true);
   const deferredTextFilter = useDeferredValue(textFilter);
   const sourceOptions = useMemo<DropdownOption[]>(
     () => buildNodeLogSourceOptions(sources),
     [sources]
   );
-
-  useEffect(() => {
-    const updateTheme = () => {
-      setTerminalTheme(
-        resolveTerminalTheme(
-          logsContentRef.current ? getComputedStyle(logsContentRef.current) : null
-        )
-      );
-    };
-
-    updateTheme();
-
-    const observer = new MutationObserver(updateTheme);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-appearance-mode', 'class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     if (sources.length === 0) {
@@ -277,13 +243,21 @@ const NodeLogsTab = ({
     contentRef.current = content;
   }, [content]);
   const filterRegex = useMemo(
-    () => buildSearchRegex(deferredTextFilter, regexMatches, caseSensitiveMatches),
+    () =>
+      buildLogSearchRegex(deferredTextFilter, {
+        regexMode: regexMatches,
+        caseSensitive: caseSensitiveMatches,
+      }),
     [caseSensitiveMatches, deferredTextFilter, regexMatches]
   );
   const highlightRegex = useMemo(
     () =>
       highlightMatches && !inverseMatches
-        ? buildSearchRegex(deferredTextFilter, regexMatches, caseSensitiveMatches)
+        ? buildLogSearchRegex(deferredTextFilter, {
+            regexMode: regexMatches,
+            caseSensitive: caseSensitiveMatches,
+            global: true,
+          })
         : null,
     [caseSensitiveMatches, deferredTextFilter, highlightMatches, inverseMatches, regexMatches]
   );
@@ -302,6 +276,7 @@ const NodeLogsTab = ({
       !sourceChanged && refreshNonce > 0
         ? buildNodeLogSinceTime(lastSuccessfulFetchAtRef.current)
         : undefined;
+    const requestReason = sourceChanged || refreshNonce === 0 ? 'user' : 'background';
     const requestStartedAt = new Date().toISOString();
 
     if (sourceChanged) {
@@ -312,18 +287,30 @@ const NodeLogsTab = ({
     setError(null);
 
     const fetchLogs = async () => {
-      const runFetch = async (sinceTime?: string) =>
-        fetchNodeLogs(clusterId, nodeName, {
+      const runFetch = async (sinceTime?: string) => {
+        const request = {
           sourcePath: activeSourcePath,
           tailBytes: NODE_LOG_TAIL_BYTES,
           sinceTime,
-        });
+        };
+        return requestReason === 'background'
+          ? fetchNodeLogs(clusterId, nodeName, request, requestReason)
+          : fetchNodeLogs(clusterId, nodeName, request);
+      };
 
       let appendMode = Boolean(incrementalSinceTime);
-      let response = await runFetch(incrementalSinceTime);
+      let result = await runFetch(incrementalSinceTime);
+      let response = getExecutedNodeLogResponse(result);
+      if (!response) {
+        return { appendMode, response: null };
+      }
 
       if (appendMode && (response.error || response.truncated)) {
-        response = await runFetch();
+        result = await runFetch();
+        response = getExecutedNodeLogResponse(result);
+        if (!response) {
+          return { appendMode, response: null };
+        }
         appendMode = false;
       }
 
@@ -333,6 +320,9 @@ const NodeLogsTab = ({
     void fetchLogs()
       .then(({ appendMode, response }) => {
         if (cancelled) {
+          return;
+        }
+        if (!response) {
           return;
         }
         if (response.error) {
@@ -467,20 +457,7 @@ const NodeLogsTab = ({
     setParsedLogs(parsedCandidates);
   }, [isParsedView, parsedCandidates]);
 
-  const derivedFieldKeys = useMemo(() => {
-    if (parsedLogs.length === 0) {
-      return [] as string[];
-    }
-
-    const seen = new Set<string>();
-    parsedLogs.forEach((entry) => {
-      Object.keys(entry.data).forEach((key) => {
-        seen.add(key);
-      });
-    });
-
-    return Array.from(seen).sort();
-  }, [parsedLogs]);
+  const derivedFieldKeys = useMemo(() => deriveParsedLogFieldKeys(parsedLogs), [parsedLogs]);
 
   const tableColumns = useMemo(() => {
     if (derivedFieldKeys.length === 0) {
@@ -539,19 +516,12 @@ const NodeLogsTab = ({
   const displayLines = useMemo(
     () =>
       filteredLines.map((line) => {
-        if (displayMode === 'pretty') {
-          const parsed = tryParseJSONObject(line);
-          if (parsed) {
-            return JSON.stringify(parsed, null, 2);
-          }
-        }
-
-        return showAnsiColors ? line : stripAnsi(line);
+        return formatRawOrPrettyJsonLine(line, displayMode, showAnsiColors);
       }),
     [displayMode, filteredLines, showAnsiColors]
   );
 
-  const renderedDisplayRows = useMemo(
+  const renderedDisplayRows = useMemo<RenderedLogRow[]>(
     () =>
       displayLines.flatMap((line, index) =>
         line.split('\n').map((segment, segmentIndex) => ({
@@ -568,13 +538,13 @@ const NodeLogsTab = ({
     }
 
     const headerRow = tableColumns.map((column) =>
-      escapeCsvCell(typeof column.header === 'string' ? column.header : column.key)
+      typeof column.header === 'string' ? column.header : column.key
     );
     const dataRows = parsedLogs.map((entry) =>
-      tableColumns.map((column) => escapeCsvCell(formatParsedValue(entry.data[column.key])))
+      tableColumns.map((column) => formatParsedValue(entry.data[column.key]))
     );
 
-    return [headerRow, ...dataRows].map((row) => row.join(',')).join('\n');
+    return buildCsv([headerRow, ...dataRows]);
   }, [isParsedView, parsedLogs, tableColumns]);
 
   const displayedText = useMemo(
@@ -594,16 +564,17 @@ const NodeLogsTab = ({
     ? `${displayedLogCount} matching log${displayedLogCount === 1 ? '' : 's'}`
     : 'Select a log source';
 
-  const getScrollContainer = useCallback((): HTMLElement | null => {
-    const root = logsContentRef.current;
-    if (!root) {
-      return null;
-    }
-    if (isParsedView) {
-      return root.querySelector<HTMLElement>('.gridtable-wrapper');
-    }
-    return root;
-  }, [isParsedView]);
+  const { resetScrollRestoration } = useLogScrollRestoration({
+    rootRef: logsContentRef,
+    isParsedView,
+    rowCount:
+      content.length === 0 ? 0 : isParsedView ? parsedLogs.length : renderedDisplayRows.length,
+    tailFollowSignal: `${selectedSource?.path ?? ''}:${parsedLogs.length}:${renderedDisplayRows.length}`,
+    cacheKey: panelId,
+    getScrollTop: getLogViewerScrollTop,
+    setScrollTop: setLogViewerScrollTop,
+    forceTailOnNextRestore: true,
+  });
 
   useEffect(() => {
     const sourcePath = selectedSource?.path ?? null;
@@ -614,121 +585,10 @@ const NodeLogsTab = ({
     previousSourcePathRef.current = sourcePath;
     loadedSourcePathRef.current = null;
     lastSuccessfulFetchAtRef.current = null;
-    scrollRestoredRef.current = false;
-    wasAtBottomRef.current = true;
-    forceTailRestoreRef.current = true;
-  }, [selectedSource?.path]);
+    resetScrollRestoration({ forceTail: true });
+  }, [resetScrollRestoration, selectedSource?.path]);
 
-  useEffect(() => {
-    const scrollEl = getScrollContainer();
-    if (!scrollEl) {
-      return;
-    }
-
-    const handler = () => {
-      wasAtBottomRef.current =
-        scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 16;
-      if (!scrollRestoredRef.current) {
-        return;
-      }
-      setLogViewerScrollTop(panelId, scrollEl.scrollTop);
-    };
-
-    scrollEl.addEventListener('scroll', handler, { passive: true });
-    return () => {
-      scrollEl.removeEventListener('scroll', handler);
-    };
-  }, [getScrollContainer, panelId]);
-
-  useEffect(() => {
-    if (scrollRestoredRef.current) {
-      return;
-    }
-
-    const rowCount =
-      content.length === 0 ? 0 : isParsedView ? parsedLogs.length : renderedDisplayRows.length;
-    if (rowCount === 0) {
-      return;
-    }
-
-    const scrollEl = getScrollContainer();
-    if (!scrollEl) {
-      return;
-    }
-    if (scrollEl.scrollHeight <= scrollEl.clientHeight) {
-      return;
-    }
-
-    const maxScrollTop = scrollEl.scrollHeight - scrollEl.clientHeight;
-    const savedScrollTop = forceTailRestoreRef.current ? undefined : getLogViewerScrollTop(panelId);
-    const targetScrollTop =
-      savedScrollTop != null ? Math.min(savedScrollTop, maxScrollTop) : maxScrollTop;
-
-    scrollEl.scrollTop = targetScrollTop;
-    scrollRestoredRef.current = true;
-    forceTailRestoreRef.current = false;
-  }, [
-    content.length,
-    getScrollContainer,
-    isParsedView,
-    panelId,
-    parsedLogs.length,
-    renderedDisplayRows.length,
-    selectedSource?.path,
-  ]);
-
-  useEffect(() => {
-    if (!wasAtBottomRef.current || !scrollRestoredRef.current) {
-      return;
-    }
-
-    const scrollEl = getScrollContainer();
-    if (!scrollEl) {
-      return;
-    }
-
-    let rafId: number | undefined;
-    const scrollToBottom = () => {
-      const element = getScrollContainer();
-      if (!element) {
-        return;
-      }
-      element.scrollTop = element.scrollHeight;
-    };
-
-    if (isParsedView) {
-      let attempts = 0;
-      const maxAttempts = 20;
-      const checkAndScroll = () => {
-        const element = getScrollContainer();
-        if (element && element.scrollHeight > element.clientHeight) {
-          rafId = requestAnimationFrame(scrollToBottom);
-        } else if (attempts < maxAttempts) {
-          attempts += 1;
-          rafId = requestAnimationFrame(checkAndScroll);
-        }
-      };
-      rafId = requestAnimationFrame(checkAndScroll);
-    } else {
-      rafId = requestAnimationFrame(scrollToBottom);
-    }
-
-    return () => {
-      if (rafId != null) {
-        cancelAnimationFrame(rafId);
-      }
-    };
-  }, [
-    getScrollContainer,
-    isParsedView,
-    parsedLogs.length,
-    renderedDisplayRows.length,
-    selectedSource?.path,
-  ]);
-
-  const handleParsedTableClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    const row = (event.target as HTMLElement | null)?.closest<HTMLElement>('.gridtable-row');
-    const rowKey = row?.dataset.rowKey;
+  const handleToggleParsedRow = useCallback((rowKey: string) => {
     if (!rowKey) {
       return;
     }
@@ -743,25 +603,6 @@ const NodeLogsTab = ({
       return next;
     });
   }, []);
-
-  const handleParsedRowKeyboard = useCallback((item: ParsedLogEntry) => {
-    const rowKey = getParsedRowKey(item);
-    setExpandedRows((current) => {
-      const next = new Set(current);
-      if (next.has(rowKey)) {
-        next.delete(rowKey);
-      } else {
-        next.add(rowKey);
-      }
-      return next;
-    });
-  }, []);
-
-  const getParsedRowClassName = useCallback(
-    (item: ParsedLogEntry) =>
-      expandedRows.has(getParsedRowKey(item)) ? 'parsed-row-expanded' : undefined,
-    [expandedRows]
-  );
 
   const resetCopyFeedback = useCallback(() => {
     window.setTimeout(() => {
@@ -1140,28 +981,24 @@ const NodeLogsTab = ({
                 No JSON log lines match the current filter.
               </div>
             ) : (
-              <div onClick={handleParsedTableClick} style={{ height: '100%' }}>
-                <GridTable
-                  data={parsedLogs}
-                  columns={tableColumns}
-                  keyExtractor={(item: ParsedLogEntry) => getParsedRowKey(item)}
-                  onRowClick={handleParsedRowKeyboard}
-                  getRowClassName={getParsedRowClassName}
-                  className="parsed-logs-table"
-                  tableClassName="gridtable-parsed-logs"
-                  virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-                  isKindColumnKey={() => false}
-                />
-              </div>
+              <ParsedLogTable
+                rows={parsedLogs}
+                columns={tableColumns}
+                expandedRows={expandedRows}
+                onToggleRow={handleToggleParsedRow}
+              />
             )
           ) : (
-            <div className={`logs-viewer-text ${!wrapText ? 'no-wrap' : ''}`}>
-              {renderedDisplayRows.map((row, index) => (
-                <div key={row.key} className="log-viewer-line">
+            <RawLogViewer
+              rows={renderedDisplayRows}
+              scrollContainerRef={logsContentRef}
+              wrapText={wrapText}
+              renderRow={(row, index) => (
+                <div className="log-viewer-line">
                   {renderMessageContent(row.line, `node-log-line-${index}`)}
                 </div>
-              ))}
-            </div>
+              )}
+            />
           )}
         </div>
       </div>
