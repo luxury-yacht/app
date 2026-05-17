@@ -25,7 +25,7 @@ type eventStreamSubscriber interface {
 	Subscribe(scope string) (<-chan eventstream.StreamEvent, context.CancelFunc)
 }
 
-// aggregateEventStreamHandler merges event streams across multiple clusters.
+// aggregateEventStreamHandler routes event streams for cluster-scoped requests.
 type aggregateEventStreamHandler struct {
 	snapshotService refresh.SnapshotService
 	managers        map[string]eventStreamSubscriber
@@ -49,7 +49,7 @@ type aggregateEventScope struct {
 	ClusterIDs     []string
 }
 
-// newAggregateEventStreamHandler builds an aggregated /api/v2/stream/events handler.
+// newAggregateEventStreamHandler builds the cluster-scoped /api/v2/stream/events handler.
 func newAggregateEventStreamHandler(
 	snapshotService refresh.SnapshotService,
 	managers map[string]eventStreamSubscriber,
@@ -73,7 +73,7 @@ func newAggregateEventStreamHandler(
 	}
 }
 
-// ServeHTTP implements http.Handler for the aggregated event stream endpoint.
+// ServeHTTP implements http.Handler for the cluster-scoped event stream endpoint.
 func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if ok := applyEventCORS(w, r); !ok {
 		return
@@ -458,6 +458,9 @@ func parseAggregateEventScope(raw string) (aggregateEventScope, error) {
 	clusterIDs, scopeValue := refresh.SplitClusterScopeList(raw)
 	if len(clusterIDs) == 0 {
 		return aggregateEventScope{}, fmt.Errorf("cluster scope is required")
+	}
+	if len(clusterIDs) > 1 {
+		return aggregateEventScope{}, fmt.Errorf("event stream requires a single cluster scope")
 	}
 	scopeValue = strings.TrimSpace(scopeValue)
 	if scopeValue == "" || scopeValue == "cluster" {

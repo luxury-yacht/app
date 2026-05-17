@@ -57,7 +57,7 @@ func (m *stubEventManager) Subscribe(scope string) (<-chan eventstream.StreamEve
 	}
 }
 
-func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
+func TestAggregateEventStreamHandlerStreamsSingleCluster(t *testing.T) {
 	initialTimestamp := time.Now().Add(-2 * time.Hour)
 	service := stubSnapshotService{
 		build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
@@ -95,7 +95,7 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/events?scope=clusters=cluster-a,cluster-b|cluster", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/events?scope=cluster-a|cluster", nil).WithContext(ctx)
 	rec := newFlushRecorder()
 
 	go handler.ServeHTTP(rec, req)
@@ -110,26 +110,23 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 	managerA.mu.Unlock()
 
 	managerB.mu.Lock()
-	require.Equal(t, "cluster", managerB.scope)
+	require.Empty(t, managerB.scope)
 	managerB.mu.Unlock()
 
 	liveLink := resourcemodel.NewNamespacedResourceLink("", "", "v1", "Pod", "pods", "default", "web", "pod-uid-live")
 	managerA.ch <- eventstream.StreamEvent{Entry: eventstream.Entry{Message: "event-a", InvolvedObject: &liveLink}, Sequence: 2}
-	managerB.ch <- eventstream.StreamEvent{Entry: eventstream.Entry{Message: "event-b"}, Sequence: 3}
 
 	require.Eventually(t, func() bool {
 		body := rec.BodyString()
 		return strings.Contains(body, "event-a") &&
-			strings.Contains(body, "event-b") &&
 			strings.Contains(body, `"clusterId":"cluster-a"`) &&
-			strings.Contains(body, `"clusterId":"cluster-b"`) &&
 			strings.Contains(body, `"involvedObject":{"ref":{"clusterId":"cluster-a"`)
 	}, time.Second, 10*time.Millisecond)
 
 	var bufferedClusterID string
 	var bufferedLinkClusterID string
 	handler.mu.Lock()
-	if buffer := handler.buffers["clusters=cluster-a,cluster-b|cluster"]; buffer != nil {
+	if buffer := handler.buffers["cluster-a|cluster"]; buffer != nil {
 		for i := 0; i < buffer.count; i++ {
 			item := buffer.items[(buffer.start+i)%buffer.max]
 			if item.Entry.Message != "event-a" {
@@ -144,6 +141,42 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 	handler.mu.Unlock()
 	require.Equal(t, "cluster-a", bufferedClusterID)
 	require.Equal(t, "cluster-a", bufferedLinkClusterID)
+}
+
+func TestAggregateEventStreamHandlerRejectsMultiClusterScope(t *testing.T) {
+	service := stubSnapshotService{}
+	managerA := &stubEventManager{ch: make(chan eventstream.StreamEvent, 1)}
+	managerB := &stubEventManager{ch: make(chan eventstream.StreamEvent, 1)}
+	handler := newAggregateEventStreamHandler(
+		service,
+		map[string]eventStreamSubscriber{
+			"cluster-a": managerA,
+			"cluster-b": managerB,
+		},
+		map[string]snapshot.ClusterMeta{
+			"cluster-a": {ClusterID: "cluster-a", ClusterName: "alpha"},
+			"cluster-b": {ClusterID: "cluster-b", ClusterName: "bravo"},
+		},
+		[]string{"cluster-a", "cluster-b"},
+		nil,
+		noopLogger{},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/events?scope=clusters=cluster-a,cluster-b|cluster", nil)
+	rec := newFlushRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.BodyString(), "event stream requires a single cluster scope")
+
+	managerA.mu.Lock()
+	require.Empty(t, managerA.scope)
+	managerA.mu.Unlock()
+
+	managerB.mu.Lock()
+	require.Empty(t, managerB.scope)
+	managerB.mu.Unlock()
 }
 
 func TestConvertAggregateSnapshotPreservesEventObjectIdentity(t *testing.T) {

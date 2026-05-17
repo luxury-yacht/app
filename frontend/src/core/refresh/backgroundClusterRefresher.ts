@@ -155,8 +155,7 @@ export class BackgroundClusterRefresher {
     let scope: string | undefined;
 
     if (viewType === 'overview') {
-      // cluster-overview is handled by the all-cluster scopeResolver — skip it.
-      return;
+      domain = 'cluster-overview';
     }
 
     if (viewType === 'cluster') {

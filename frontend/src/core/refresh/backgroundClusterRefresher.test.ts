@@ -32,6 +32,12 @@ describe('BackgroundClusterRefresher', () => {
         activeNamespaceView: 'workloads',
         activeClusterView: 'nodes',
       },
+      'cluster-d': {
+        viewType: 'overview',
+        previousView: 'cluster',
+        activeNamespaceView: 'workloads',
+        activeClusterView: 'nodes',
+      },
     };
     const namespaceByCluster: Record<string, string> = {
       'cluster-b': 'default',
@@ -41,11 +47,11 @@ describe('BackgroundClusterRefresher', () => {
       (clusterId) => navigationByCluster[clusterId],
       (clusterId) => namespaceByCluster[clusterId]
     );
-    refresher.updateClusters('cluster-a', ['cluster-a', 'cluster-b', 'cluster-c']);
+    refresher.updateClusters('cluster-a', ['cluster-a', 'cluster-b', 'cluster-c', 'cluster-d']);
 
     await (refresher as unknown as { tick: () => Promise<void> }).tick();
 
-    expect(fetchForCluster).toHaveBeenCalledTimes(2);
+    expect(fetchForCluster).toHaveBeenCalledTimes(3);
     expect(fetchForCluster).toHaveBeenNthCalledWith(
       1,
       'namespace-network',
@@ -53,6 +59,7 @@ describe('BackgroundClusterRefresher', () => {
       'namespace:default'
     );
     expect(fetchForCluster).toHaveBeenNthCalledWith(2, 'nodes', 'cluster-c', undefined);
+    expect(fetchForCluster).toHaveBeenNthCalledWith(3, 'cluster-overview', 'cluster-d', undefined);
     fetchForCluster.mock.calls.forEach(([, clusterId, scope]) => {
       expect(clusterId).not.toBe('cluster-a');
       expect(scope ?? '').not.toContain('clusters=');

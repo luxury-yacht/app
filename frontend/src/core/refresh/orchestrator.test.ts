@@ -21,7 +21,12 @@ import {
   setScopedDomainState,
 } from './store';
 import { refreshOrchestrator } from './orchestrator';
-import { CLUSTER_REFRESHERS, NAMESPACE_REFRESHERS, SYSTEM_REFRESHERS } from './refresherTypes';
+import {
+  CLUSTER_REFRESHERS,
+  NAMESPACE_REFRESHERS,
+  SYSTEM_REFRESHERS,
+  type SystemRefresherName,
+} from './refresherTypes';
 import { buildClusterScope } from './clusterScope';
 
 const refreshManagerMocks = vi.hoisted(() => ({
@@ -1038,6 +1043,48 @@ describe('refreshOrchestrator', () => {
     expect(scopedMap?.get(firstScope)).toBe(false);
     expect(scopedMap?.get(secondScope)).toBe(true);
     expect(getScopedDomainState('cluster-config', firstScope).status).toBe('idle');
+  });
+
+  it('allows object-panel domains to keep multiple active object scopes', () => {
+    const objectPanelDomains: Array<[RefreshDomain, SystemRefresherName]> = [
+      ['container-logs', SYSTEM_REFRESHERS.containerLogs],
+      ['object-details', SYSTEM_REFRESHERS.objectDetails],
+      ['object-events', SYSTEM_REFRESHERS.objectEvents],
+      ['object-helm-manifest', SYSTEM_REFRESHERS.objectHelmManifest],
+      ['object-helm-values', SYSTEM_REFRESHERS.objectHelmValues],
+      ['object-map', SYSTEM_REFRESHERS.objectMap],
+      ['object-yaml', SYSTEM_REFRESHERS.objectYaml],
+    ];
+
+    objectPanelDomains.forEach(([domain, refresherName]) => {
+      resetAllScopedDomainStates(domain);
+      refreshOrchestrator.registerDomain({
+        domain,
+        refresherName,
+        category: 'system',
+      });
+
+      const firstScope = buildClusterScope('cluster-a', `${domain}:first`);
+      const secondScope = buildClusterScope('cluster-a', `${domain}:second`);
+
+      refreshOrchestrator.setScopedDomainEnabled(domain, firstScope, true);
+      setScopedDomainState(domain, firstScope, (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: { value: 'first' } as any,
+        stats: { itemCount: 1, buildDurationMs: 0 },
+        scope: firstScope,
+      }));
+
+      refreshOrchestrator.setScopedDomainEnabled(domain, secondScope, true);
+
+      const scopedMap = orchestratorInternals.clusterRuntimes
+        .get('cluster-a')
+        ?.scopedEnabledState.get(domain);
+      expect(scopedMap?.get(firstScope)).toBe(true);
+      expect(scopedMap?.get(secondScope)).toBe(true);
+      expect(getScopedDomainState(domain, firstScope).status).toBe('ready');
+    });
   });
 
   it('replaces existing non-scoped subscriptions when re-registering a domain', () => {

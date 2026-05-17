@@ -190,6 +190,11 @@ const logWarning = (message: string): void => {
 const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
   'catalog',
   'catalog-diff',
+  'container-logs',
+  'object-details',
+  'object-events',
+  'object-helm-manifest',
+  'object-helm-values',
   'object-map',
   'object-yaml',
   'pods',
