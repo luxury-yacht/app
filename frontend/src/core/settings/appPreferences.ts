@@ -5,30 +5,26 @@
  */
 
 import {
-  SetAppearanceMode,
-  SetDimInactiveNamespaces,
-  SetExclusiveNamespaces,
-  SetUseShortResourceNames,
   SaveTheme,
   DeleteTheme,
   ReorderThemes,
   ApplyTheme,
   MatchThemeForCluster,
   ValidateThemeClusterPattern,
-  SetObjPanelLogsBufferMaxSize as SetObjPanelLogsBufferMaxSizeBackend,
-  SetMaxTableRows as SetMaxTableRowsBackend,
-  SetObjPanelLogsAPITimestampFormat as SetObjPanelLogsAPITimestampFormatBackend,
-  SetObjPanelLogsAPITimestampUseLocalTimeZone as SetObjPanelLogsAPITimestampUseLocalTimeZoneBackend,
-  SetObjPanelLogsTargetGlobalLimit as SetObjPanelLogsTargetGlobalLimitBackend,
-  SetObjPanelLogsTargetPerScopeLimit as SetObjPanelLogsTargetPerScopeLimitBackend,
-  SetKubernetesClientBurst as SetKubernetesClientBurstBackend,
-  SetKubernetesClientQPS as SetKubernetesClientQPSBackend,
-  SetPermissionSSRRFetchConcurrency as SetPermissionSSRRFetchConcurrencyBackend,
+  UpdateAppPreferences,
 } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
-import { readAppSettings, readThemes, requestAppState } from '@/core/app-state-access';
+import {
+  readAppSettings,
+  readAppSettingsSchema,
+  readThemes,
+  requestAppState,
+} from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
-import { saveAppearanceBootstrapToLocalStorage } from '@/utils/appearanceBootstrap';
+import {
+  APPEARANCE_BOOTSTRAP_STORAGE_KEY,
+  saveAppearanceBootstrapToLocalStorage,
+} from '@/utils/appearanceBootstrap';
 import {
   DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
   getObjPanelLogsApiTimestampFormatValidationError,
@@ -185,6 +181,7 @@ const DEFAULT_PREFERENCES: AppPreferences = {
 
 let preferenceCache: AppPreferences = { ...DEFAULT_PREFERENCES };
 let hydrated = false;
+let preferenceSchemaByKey = new Map<string, types.AppPreferenceSchema>();
 
 const APPEARANCE_MODE_STORAGE_KEY = 'app-appearance-mode-preference';
 const OLD_APPEARANCE_MODE_STORAGE_KEY = 'app-theme-preference';
@@ -221,70 +218,92 @@ const normalizeAppearanceMode = (value: string | undefined): AppearanceMode => {
   if (value === 'light' || value === 'dark' || value === 'system') {
     return value;
   }
-  return DEFAULT_PREFERENCES.appearanceMode;
+  return schemaDefault('appearanceMode', DEFAULT_PREFERENCES.appearanceMode);
 };
 
 const normalizeGridTableMode = (value: string | undefined): GridTablePersistenceMode => {
   if (value === 'shared' || value === 'namespaced') {
     return value;
   }
-  return DEFAULT_PREFERENCES.gridTablePersistenceMode;
+  return schemaDefault('gridTablePersistenceMode', DEFAULT_PREFERENCES.gridTablePersistenceMode);
 };
 
 const normalizeObjectPanelPosition = (value: string | undefined): ObjectPanelPosition => {
   if (value === 'right' || value === 'bottom' || value === 'floating') {
     return value;
   }
-  return DEFAULT_PREFERENCES.defaultObjectPanelPosition;
+  return schemaDefault(
+    'defaultObjectPanelPosition',
+    DEFAULT_PREFERENCES.defaultObjectPanelPosition
+  );
 };
 
 const normalizeMetricsIntervalMs = (value?: number): number => {
   if (value == null || Number.isNaN(value) || value <= 0) {
-    return DEFAULT_METRICS_REFRESH_INTERVAL_MS;
+    return schemaDefault('metricsRefreshIntervalMs', DEFAULT_METRICS_REFRESH_INTERVAL_MS);
   }
   return Math.floor(value);
 };
 
 const normalizeMaxTableRows = (value?: number): number => {
   if (value == null || Number.isNaN(value) || value <= 0) {
-    return MAX_TABLE_ROWS_DEFAULT;
+    return schemaDefault('maxTableRows', MAX_TABLE_ROWS_DEFAULT);
   }
   const floored = Math.floor(value);
-  if (floored < MAX_TABLE_ROWS_MIN) return MAX_TABLE_ROWS_MIN;
-  if (floored > MAX_TABLE_ROWS_MAX) return MAX_TABLE_ROWS_MAX;
+  if (floored < schemaMin('maxTableRows', MAX_TABLE_ROWS_MIN)) {
+    return schemaMin('maxTableRows', MAX_TABLE_ROWS_MIN);
+  }
+  if (floored > schemaMax('maxTableRows', MAX_TABLE_ROWS_MAX)) {
+    return schemaMax('maxTableRows', MAX_TABLE_ROWS_MAX);
+  }
   return floored;
 };
 
 const normalizeKubernetesClientQPS = (value?: number): number => {
   if (value == null || Number.isNaN(value) || value <= 0) {
-    return KUBERNETES_CLIENT_QPS_DEFAULT;
+    return schemaDefault('kubernetesClientQPS', KUBERNETES_CLIENT_QPS_DEFAULT);
   }
   const floored = Math.floor(value);
-  if (floored < KUBERNETES_CLIENT_QPS_MIN) return KUBERNETES_CLIENT_QPS_MIN;
-  if (floored > KUBERNETES_CLIENT_QPS_MAX) return KUBERNETES_CLIENT_QPS_MAX;
+  if (floored < schemaMin('kubernetesClientQPS', KUBERNETES_CLIENT_QPS_MIN)) {
+    return schemaMin('kubernetesClientQPS', KUBERNETES_CLIENT_QPS_MIN);
+  }
+  if (floored > schemaMax('kubernetesClientQPS', KUBERNETES_CLIENT_QPS_MAX)) {
+    return schemaMax('kubernetesClientQPS', KUBERNETES_CLIENT_QPS_MAX);
+  }
   return floored;
 };
 
 const normalizeKubernetesClientBurst = (value?: number): number => {
   if (value == null || Number.isNaN(value) || value <= 0) {
-    return KUBERNETES_CLIENT_BURST_DEFAULT;
+    return schemaDefault('kubernetesClientBurst', KUBERNETES_CLIENT_BURST_DEFAULT);
   }
   const floored = Math.floor(value);
-  if (floored < KUBERNETES_CLIENT_BURST_MIN) return KUBERNETES_CLIENT_BURST_MIN;
-  if (floored > KUBERNETES_CLIENT_BURST_MAX) return KUBERNETES_CLIENT_BURST_MAX;
+  if (floored < schemaMin('kubernetesClientBurst', KUBERNETES_CLIENT_BURST_MIN)) {
+    return schemaMin('kubernetesClientBurst', KUBERNETES_CLIENT_BURST_MIN);
+  }
+  if (floored > schemaMax('kubernetesClientBurst', KUBERNETES_CLIENT_BURST_MAX)) {
+    return schemaMax('kubernetesClientBurst', KUBERNETES_CLIENT_BURST_MAX);
+  }
   return floored;
 };
 
 const normalizePermissionSSRRFetchConcurrency = (value?: number): number => {
   if (value == null || Number.isNaN(value) || value <= 0) {
-    return PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT;
+    return schemaDefault(
+      'permissionSSRRFetchConcurrency',
+      PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT
+    );
   }
   const floored = Math.floor(value);
-  if (floored < PERMISSION_SSRR_FETCH_CONCURRENCY_MIN) {
-    return PERMISSION_SSRR_FETCH_CONCURRENCY_MIN;
+  if (
+    floored < schemaMin('permissionSSRRFetchConcurrency', PERMISSION_SSRR_FETCH_CONCURRENCY_MIN)
+  ) {
+    return schemaMin('permissionSSRRFetchConcurrency', PERMISSION_SSRR_FETCH_CONCURRENCY_MIN);
   }
-  if (floored > PERMISSION_SSRR_FETCH_CONCURRENCY_MAX) {
-    return PERMISSION_SSRR_FETCH_CONCURRENCY_MAX;
+  if (
+    floored > schemaMax('permissionSSRRFetchConcurrency', PERMISSION_SSRR_FETCH_CONCURRENCY_MAX)
+  ) {
+    return schemaMax('permissionSSRRFetchConcurrency', PERMISSION_SSRR_FETCH_CONCURRENCY_MAX);
   }
   return floored;
 };
@@ -295,31 +314,46 @@ const normalizePermissionSSRRFetchConcurrency = (value?: number): number => {
 // Object Panel Logs Tab to empty.
 const normalizeObjPanelLogsBufferMaxSize = (value?: number): number => {
   if (value == null || Number.isNaN(value) || value <= 0) {
-    return OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE;
+    return schemaDefault('objPanelLogsBufferMaxSize', OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
   }
   const floored = Math.floor(value);
-  if (floored < OBJ_PANEL_LOGS_BUFFER_MIN_SIZE) return OBJ_PANEL_LOGS_BUFFER_MIN_SIZE;
-  if (floored > OBJ_PANEL_LOGS_BUFFER_MAX_SIZE) return OBJ_PANEL_LOGS_BUFFER_MAX_SIZE;
+  if (floored < schemaMin('objPanelLogsBufferMaxSize', OBJ_PANEL_LOGS_BUFFER_MIN_SIZE)) {
+    return schemaMin('objPanelLogsBufferMaxSize', OBJ_PANEL_LOGS_BUFFER_MIN_SIZE);
+  }
+  if (floored > schemaMax('objPanelLogsBufferMaxSize', OBJ_PANEL_LOGS_BUFFER_MAX_SIZE)) {
+    return schemaMax('objPanelLogsBufferMaxSize', OBJ_PANEL_LOGS_BUFFER_MAX_SIZE);
+  }
   return floored;
 };
 
 const normalizeObjPanelLogsTargetPerScopeLimit = (value?: number): number => {
   if (value == null || Number.isNaN(value) || value <= 0) {
-    return OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT;
+    return schemaDefault(
+      'objPanelLogsTargetPerScopeLimit',
+      OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT
+    );
   }
   const floored = Math.floor(value);
-  if (floored < OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN) return OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN;
-  if (floored > OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX) return OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX;
+  if (floored < schemaMin('objPanelLogsTargetPerScopeLimit', OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN)) {
+    return schemaMin('objPanelLogsTargetPerScopeLimit', OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN);
+  }
+  if (floored > schemaMax('objPanelLogsTargetPerScopeLimit', OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX)) {
+    return schemaMax('objPanelLogsTargetPerScopeLimit', OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX);
+  }
   return floored;
 };
 
 const normalizeObjPanelLogsTargetGlobalLimit = (value?: number): number => {
   if (value == null || Number.isNaN(value) || value <= 0) {
-    return OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT;
+    return schemaDefault('objPanelLogsTargetGlobalLimit', OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT);
   }
   const floored = Math.floor(value);
-  if (floored < OBJ_PANEL_LOGS_TARGET_GLOBAL_MIN) return OBJ_PANEL_LOGS_TARGET_GLOBAL_MIN;
-  if (floored > OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX) return OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX;
+  if (floored < schemaMin('objPanelLogsTargetGlobalLimit', OBJ_PANEL_LOGS_TARGET_GLOBAL_MIN)) {
+    return schemaMin('objPanelLogsTargetGlobalLimit', OBJ_PANEL_LOGS_TARGET_GLOBAL_MIN);
+  }
+  if (floored > schemaMax('objPanelLogsTargetGlobalLimit', OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX)) {
+    return schemaMax('objPanelLogsTargetGlobalLimit', OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX);
+  }
   return floored;
 };
 
@@ -439,42 +473,89 @@ const updatePreferenceCache = (updates: Partial<AppPreferences>): void => {
   emitPreferenceChanges(previous, next);
 };
 
-// Skip persistence if the Wails runtime isn't available (e.g., unit tests).
-const persistBooleanPreference = async (name: string, value: boolean): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  const setter = runtimeApp?.[name];
-  if (typeof setter !== 'function') {
-    throw new Error(`${name} is not available`);
-  }
-  await setter(value);
+const wailsRuntimeAvailable = (): boolean => {
+  return Boolean((window as any)?.go?.backend?.App);
 };
 
-// Skip persistence if the Wails runtime isn't available (e.g., unit tests).
-const persistGridTableMode = async (mode: GridTablePersistenceMode): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
+interface LocalStorageSnapshot {
+  appearanceMode: string | null;
+  appearanceBootstrap: string | null;
+}
+
+const captureLocalStorageSnapshot = (): LocalStorageSnapshot => {
+  try {
+    return {
+      appearanceMode: localStorage.getItem(APPEARANCE_MODE_STORAGE_KEY),
+      appearanceBootstrap: localStorage.getItem(APPEARANCE_BOOTSTRAP_STORAGE_KEY),
+    };
+  } catch {
+    return { appearanceMode: null, appearanceBootstrap: null };
   }
-  const setter = runtimeApp?.SetGridTablePersistenceMode;
-  if (typeof setter !== 'function') {
-    throw new Error('SetGridTablePersistenceMode is not available');
-  }
-  await setter(mode);
 };
 
-const persistObjectPanelPosition = async (position: ObjectPanelPosition): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
+const restoreLocalStorageValue = (key: string, value: string | null): void => {
+  try {
+    if (value == null) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, value);
+    }
+  } catch {
+    // Storage can be unavailable in tests, private browsing, or locked-down environments.
+  }
+};
+
+const restoreLocalStorageSnapshot = (snapshot: LocalStorageSnapshot): void => {
+  restoreLocalStorageValue(APPEARANCE_MODE_STORAGE_KEY, snapshot.appearanceMode);
+  restoreLocalStorageValue(APPEARANCE_BOOTSTRAP_STORAGE_KEY, snapshot.appearanceBootstrap);
+};
+
+const persistPreferenceChanges = async (
+  changes: Array<{ key: keyof AppPreferences; value: unknown }>
+): Promise<void> => {
+  if (!wailsRuntimeAvailable()) {
     return;
   }
-  const setter = runtimeApp?.SetDefaultObjectPanelPosition;
-  if (typeof setter !== 'function') {
-    throw new Error('SetDefaultObjectPanelPosition is not available');
+  await UpdateAppPreferences({
+    changes: changes.map((change) => ({ key: change.key, value: change.value })),
+  } as types.UpdateAppPreferencesRequest);
+};
+
+const optimisticPreferenceUpdate = async (
+  updates: Partial<AppPreferences>,
+  changes: Array<{ key: keyof AppPreferences; value: unknown }>,
+  options?: { persistAppearanceMode?: AppearanceMode; persistAppearanceBootstrap?: boolean }
+): Promise<void> => {
+  const previousPreferences = { ...preferenceCache };
+  const previousStorage = captureLocalStorageSnapshot();
+
+  hydrated = true;
+  updatePreferenceCache(updates);
+  if (options?.persistAppearanceMode) {
+    persistAppearanceModeToLocalStorage(options.persistAppearanceMode);
   }
-  await setter(position);
+  if (options?.persistAppearanceBootstrap) {
+    persistAppearanceBootstrapToLocalStorage();
+  }
+
+  try {
+    await persistPreferenceChanges(changes);
+  } catch (error) {
+    updatePreferenceCache(previousPreferences);
+    restoreLocalStorageSnapshot(previousStorage);
+    throw error;
+  }
+};
+
+const fireAndForgetPreferenceUpdate = (
+  label: string,
+  updates: Partial<AppPreferences>,
+  changes: Array<{ key: keyof AppPreferences; value: unknown }>,
+  options?: { persistAppearanceMode?: AppearanceMode; persistAppearanceBootstrap?: boolean }
+): void => {
+  void optimisticPreferenceUpdate(updates, changes, options).catch((error) => {
+    console.error(label, error);
+  });
 };
 
 const fetchAppSettings = async (): Promise<AppSettingsPayload | null> => {
@@ -489,6 +570,44 @@ const fetchAppSettings = async (): Promise<AppSettingsPayload | null> => {
   }
 };
 
+const fetchAppSettingsSchema = async (): Promise<types.AppSettingsSchema | null> => {
+  try {
+    const schema = (await requestAppState({
+      resource: 'app-settings-schema',
+      read: () => readAppSettingsSchema(),
+    })) as types.AppSettingsSchema | null;
+    return schema ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const schemaPayloadFromPreferences = (
+  schema: types.AppSettingsSchema | null
+): AppSettingsPayload | null => {
+  if (!schema?.preferences) {
+    return null;
+  }
+  preferenceSchemaByKey = new Map(schema.preferences.map((entry) => [entry.key, entry]));
+  return schema.preferences.reduce<AppSettingsPayload>((payload, entry) => {
+    (payload as Record<string, unknown>)[entry.key] = entry.currentValue ?? entry.defaultValue;
+    return payload;
+  }, {});
+};
+
+const schemaDefault = <T>(key: keyof AppPreferences, fallback: T): T => {
+  const entry = preferenceSchemaByKey.get(key);
+  return (entry?.defaultValue ?? fallback) as T;
+};
+
+const schemaMin = (key: keyof AppPreferences, fallback: number): number => {
+  return preferenceSchemaByKey.get(key)?.min ?? fallback;
+};
+
+const schemaMax = (key: keyof AppPreferences, fallback: number): number => {
+  return preferenceSchemaByKey.get(key)?.max ?? fallback;
+};
+
 export const hydrateAppPreferences = async (options?: {
   force?: boolean;
 }): Promise<AppPreferences> => {
@@ -496,7 +615,8 @@ export const hydrateAppPreferences = async (options?: {
     return { ...preferenceCache };
   }
 
-  const backendSettings = await fetchAppSettings();
+  const backendSchema = await fetchAppSettingsSchema();
+  const backendSettings = schemaPayloadFromPreferences(backendSchema) ?? (await fetchAppSettings());
   const preferences: AppPreferences = {
     appearanceMode: normalizeAppearanceMode(backendSettings?.appearanceMode),
     useShortResourceNames:
@@ -693,24 +813,13 @@ export const getAccentColor = (mode: 'light' | 'dark'): string => {
 
 // Persist accent color for a specific resolved appearance mode to backend via fire-and-forget.
 export const setAccentColor = (mode: 'light' | 'dark', color: string): void => {
-  hydrated = true;
-  if (mode === 'light') {
-    updatePreferenceCache({ accentColorLight: color });
-  } else {
-    updatePreferenceCache({ accentColorDark: color });
-  }
-  persistAppearanceBootstrapToLocalStorage();
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  const setter = runtimeApp?.SetAccentColor;
-  if (typeof setter !== 'function') {
-    return;
-  }
-  void setter(mode, color).catch((error: unknown) => {
-    console.error('Failed to persist accent color:', error);
-  });
+  const key = mode === 'light' ? 'accentColorLight' : 'accentColorDark';
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist accent color:',
+    { [key]: color },
+    [{ key, value: color }],
+    { persistAppearanceBootstrap: true }
+  );
 };
 
 // Returns the custom link color hex for the specified resolved appearance mode (empty = default).
@@ -720,186 +829,99 @@ export const getLinkColor = (mode: 'light' | 'dark'): string => {
 
 // Persist link color for a specific resolved appearance mode to backend via fire-and-forget.
 export const setLinkColor = (mode: 'light' | 'dark', color: string): void => {
-  hydrated = true;
-  if (mode === 'light') {
-    updatePreferenceCache({ linkColorLight: color });
-  } else {
-    updatePreferenceCache({ linkColorDark: color });
-  }
-  persistAppearanceBootstrapToLocalStorage();
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  const setter = runtimeApp?.SetLinkColor;
-  if (typeof setter !== 'function') {
-    return;
-  }
-  void setter(mode, color).catch((error: unknown) => {
-    console.error('Failed to persist link color:', error);
-  });
+  const key = mode === 'light' ? 'linkColorLight' : 'linkColorDark';
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist link color:',
+    { [key]: color },
+    [{ key, value: color }],
+    { persistAppearanceBootstrap: true }
+  );
 };
 
 export const setAppearanceModePreference = async (mode: AppearanceMode): Promise<void> => {
   const normalized = normalizeAppearanceMode(mode);
-  await SetAppearanceMode(normalized);
-  hydrated = true;
-  updatePreferenceCache({ appearanceMode: normalized });
-  persistAppearanceModeToLocalStorage(normalized);
+  await optimisticPreferenceUpdate(
+    { appearanceMode: normalized },
+    [{ key: 'appearanceMode', value: normalized }],
+    { persistAppearanceMode: normalized }
+  );
 };
 
 export const setUseShortResourceNames = async (useShort: boolean): Promise<void> => {
-  await SetUseShortResourceNames(useShort);
-  hydrated = true;
-  updatePreferenceCache({ useShortResourceNames: useShort });
+  await optimisticPreferenceUpdate({ useShortResourceNames: useShort }, [
+    { key: 'useShortResourceNames', value: useShort },
+  ]);
 };
 
 export const setDimInactiveNamespaces = async (enabled: boolean): Promise<void> => {
-  await SetDimInactiveNamespaces(enabled);
-  hydrated = true;
-  updatePreferenceCache({ dimInactiveNamespaces: enabled });
+  await optimisticPreferenceUpdate({ dimInactiveNamespaces: enabled }, [
+    { key: 'dimInactiveNamespaces', value: enabled },
+  ]);
 };
 
 export const setExclusiveNamespaces = async (enabled: boolean): Promise<void> => {
-  await SetExclusiveNamespaces(enabled);
-  hydrated = true;
-  updatePreferenceCache({ exclusiveNamespaces: enabled });
+  await optimisticPreferenceUpdate({ exclusiveNamespaces: enabled }, [
+    { key: 'exclusiveNamespaces', value: enabled },
+  ]);
 };
 
 export const setAutoRefreshEnabled = (enabled: boolean): void => {
-  hydrated = true;
-  updatePreferenceCache({ autoRefreshEnabled: enabled });
-  void persistBooleanPreference('SetAutoRefreshEnabled', enabled).catch((error) => {
-    console.error('Failed to persist auto-refresh preference:', error);
-  });
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist auto-refresh preference:',
+    { autoRefreshEnabled: enabled },
+    [{ key: 'autoRefreshEnabled', value: enabled }]
+  );
 };
 
 export const setBackgroundRefreshEnabled = (enabled: boolean): void => {
-  hydrated = true;
-  updatePreferenceCache({ refreshBackgroundClustersEnabled: enabled });
-  void persistBooleanPreference('SetBackgroundRefreshEnabled', enabled).catch((error) => {
-    console.error('Failed to persist background refresh preference:', error);
-  });
-};
-
-// Fire-and-forget persistence for Object Panel Logs Tab buffer size. Skips the backend
-// call when Wails isn't present (unit tests) so the cache update still
-// lands in the event bus.
-const persistObjPanelLogsBufferMaxSize = async (size: number): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  await SetObjPanelLogsBufferMaxSizeBackend(size);
-};
-
-const persistMaxTableRows = async (size: number): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  await SetMaxTableRowsBackend(size);
-};
-
-const persistKubernetesClientQPS = async (qps: number): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  await SetKubernetesClientQPSBackend(qps);
-};
-
-const persistKubernetesClientBurst = async (burst: number): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  await SetKubernetesClientBurstBackend(burst);
-};
-
-const persistPermissionSSRRFetchConcurrency = async (limit: number): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  await SetPermissionSSRRFetchConcurrencyBackend(limit);
-};
-
-const persistObjPanelLogsApiTimestampFormat = async (format: string): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  await SetObjPanelLogsAPITimestampFormatBackend(format);
-};
-
-const persistObjPanelLogsApiTimestampUseLocalTimeZone = async (enabled: boolean): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  await SetObjPanelLogsAPITimestampUseLocalTimeZoneBackend(enabled);
-};
-
-const persistObjPanelLogsTargetPerScopeLimit = async (limit: number): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  await SetObjPanelLogsTargetPerScopeLimitBackend(limit);
-};
-
-const persistObjPanelLogsTargetGlobalLimit = async (limit: number): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  await SetObjPanelLogsTargetGlobalLimitBackend(limit);
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist background refresh preference:',
+    { refreshBackgroundClustersEnabled: enabled },
+    [{ key: 'refreshBackgroundClustersEnabled', value: enabled }]
+  );
 };
 
 export const setObjPanelLogsBufferMaxSize = (size: number): void => {
   const normalized = normalizeObjPanelLogsBufferMaxSize(size);
-  hydrated = true;
-  updatePreferenceCache({ objPanelLogsBufferMaxSize: normalized });
-  void persistObjPanelLogsBufferMaxSize(normalized).catch((error) => {
-    console.error('Failed to persist Object Panel Logs Tab buffer max size:', error);
-  });
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist Object Panel Logs Tab buffer max size:',
+    { objPanelLogsBufferMaxSize: normalized },
+    [{ key: 'objPanelLogsBufferMaxSize', value: normalized }]
+  );
 };
 
 export const setMaxTableRows = (size: number): void => {
   const normalized = normalizeMaxTableRows(size);
-  hydrated = true;
-  updatePreferenceCache({ maxTableRows: normalized });
-  void persistMaxTableRows(normalized).catch((error) => {
-    console.error('Failed to persist max table rows:', error);
-  });
+  fireAndForgetPreferenceUpdate('Failed to persist max table rows:', { maxTableRows: normalized }, [
+    { key: 'maxTableRows', value: normalized },
+  ]);
 };
 
 export const setKubernetesClientQPS = (qps: number): void => {
   const normalized = normalizeKubernetesClientQPS(qps);
-  hydrated = true;
-  updatePreferenceCache({ kubernetesClientQPS: normalized });
-  void persistKubernetesClientQPS(normalized).catch((error) => {
-    console.error('Failed to persist Kubernetes client QPS:', error);
-  });
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist Kubernetes client QPS:',
+    { kubernetesClientQPS: normalized },
+    [{ key: 'kubernetesClientQPS', value: normalized }]
+  );
 };
 
 export const setKubernetesClientBurst = (burst: number): void => {
   const normalized = normalizeKubernetesClientBurst(burst);
-  hydrated = true;
-  updatePreferenceCache({ kubernetesClientBurst: normalized });
-  void persistKubernetesClientBurst(normalized).catch((error) => {
-    console.error('Failed to persist Kubernetes client burst:', error);
-  });
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist Kubernetes client burst:',
+    { kubernetesClientBurst: normalized },
+    [{ key: 'kubernetesClientBurst', value: normalized }]
+  );
 };
 
 export const setPermissionSSRRFetchConcurrency = (limit: number): void => {
   const normalized = normalizePermissionSSRRFetchConcurrency(limit);
-  hydrated = true;
-  updatePreferenceCache({ permissionSSRRFetchConcurrency: normalized });
-  void persistPermissionSSRRFetchConcurrency(normalized).catch((error) => {
-    console.error('Failed to persist permission SSRR fetch concurrency:', error);
-  });
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist permission SSRR fetch concurrency:',
+    { permissionSSRRFetchConcurrency: normalized },
+    [{ key: 'permissionSSRRFetchConcurrency', value: normalized }]
+  );
 };
 
 export const setObjPanelLogsApiTimestampFormat = (format: string): void => {
@@ -908,92 +930,77 @@ export const setObjPanelLogsApiTimestampFormat = (format: string): void => {
     throw new Error(validationError);
   }
   const normalized = format.trim();
-  hydrated = true;
-  updatePreferenceCache({ objPanelLogsApiTimestampFormat: normalized });
-  void persistObjPanelLogsApiTimestampFormat(normalized).catch((error) => {
-    console.error('Failed to persist Object Panel Logs Tab API timestamp format:', error);
-  });
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist Object Panel Logs Tab API timestamp format:',
+    { objPanelLogsApiTimestampFormat: normalized },
+    [{ key: 'objPanelLogsApiTimestampFormat', value: normalized }]
+  );
 };
 
 export const setObjPanelLogsApiTimestampUseLocalTimeZone = (enabled: boolean): void => {
-  hydrated = true;
-  updatePreferenceCache({ objPanelLogsApiTimestampUseLocalTimeZone: enabled });
-  void persistObjPanelLogsApiTimestampUseLocalTimeZone(enabled).catch((error) => {
-    console.error(
-      'Failed to persist Object Panel Logs Tab API timestamp local timezone setting:',
-      error
-    );
-  });
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist Object Panel Logs Tab API timestamp local timezone setting:',
+    { objPanelLogsApiTimestampUseLocalTimeZone: enabled },
+    [{ key: 'objPanelLogsApiTimestampUseLocalTimeZone', value: enabled }]
+  );
 };
 
 export const setObjPanelLogsTargetPerScopeLimit = (limit: number): void => {
   const normalized = normalizeObjPanelLogsTargetPerScopeLimit(limit);
-  hydrated = true;
-  updatePreferenceCache({ objPanelLogsTargetPerScopeLimit: normalized });
-  void persistObjPanelLogsTargetPerScopeLimit(normalized).catch((error) => {
-    console.error('Failed to persist Object Panel Logs Tab target per-scope limit:', error);
-  });
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist Object Panel Logs Tab target per-scope limit:',
+    { objPanelLogsTargetPerScopeLimit: normalized },
+    [{ key: 'objPanelLogsTargetPerScopeLimit', value: normalized }]
+  );
 };
 
 export const setObjPanelLogsTargetGlobalLimit = (limit: number): void => {
   const normalized = normalizeObjPanelLogsTargetGlobalLimit(limit);
-  hydrated = true;
-  updatePreferenceCache({ objPanelLogsTargetGlobalLimit: normalized });
-  void persistObjPanelLogsTargetGlobalLimit(normalized).catch((error) => {
-    console.error('Failed to persist Object Panel Logs Tab target global limit:', error);
-  });
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist Object Panel Logs Tab target global limit:',
+    { objPanelLogsTargetGlobalLimit: normalized },
+    [{ key: 'objPanelLogsTargetGlobalLimit', value: normalized }]
+  );
 };
 
 export const setGridTablePersistenceMode = (mode: GridTablePersistenceMode): void => {
   const normalized = normalizeGridTableMode(mode);
-  hydrated = true;
-  updatePreferenceCache({ gridTablePersistenceMode: normalized });
-  void persistGridTableMode(normalized).catch((error) => {
-    console.error('Failed to persist grid table persistence mode:', error);
-  });
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist grid table persistence mode:',
+    { gridTablePersistenceMode: normalized },
+    [{ key: 'gridTablePersistenceMode', value: normalized }]
+  );
 };
 
 export const setDefaultObjectPanelPosition = (position: ObjectPanelPosition): void => {
   const normalized = normalizeObjectPanelPosition(position);
-  hydrated = true;
-  updatePreferenceCache({ defaultObjectPanelPosition: normalized });
-  void persistObjectPanelPosition(normalized).catch((error) => {
-    console.error('Failed to persist default object panel position:', error);
-  });
-};
-
-const persistObjectPanelLayout = async (layout: ObjectPanelLayoutDefaults): Promise<void> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  const setter = runtimeApp?.SetObjectPanelLayout;
-  if (typeof setter !== 'function') {
-    throw new Error('SetObjectPanelLayout is not available');
-  }
-  await setter(
-    layout.dockedRightWidth,
-    layout.dockedBottomHeight,
-    layout.floatingWidth,
-    layout.floatingHeight,
-    layout.floatingX,
-    layout.floatingY
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist default object panel position:',
+    { defaultObjectPanelPosition: normalized },
+    [{ key: 'defaultObjectPanelPosition', value: normalized }]
   );
 };
 
 export const setObjectPanelLayoutDefaults = (layout: ObjectPanelLayoutDefaults): void => {
-  hydrated = true;
-  updatePreferenceCache({
-    objectPanelDockedRightWidth: layout.dockedRightWidth,
-    objectPanelDockedBottomHeight: layout.dockedBottomHeight,
-    objectPanelFloatingWidth: layout.floatingWidth,
-    objectPanelFloatingHeight: layout.floatingHeight,
-    objectPanelFloatingX: layout.floatingX,
-    objectPanelFloatingY: layout.floatingY,
-  });
-  void persistObjectPanelLayout(layout).catch((error) => {
-    console.error('Failed to persist object panel layout defaults:', error);
-  });
+  fireAndForgetPreferenceUpdate(
+    'Failed to persist object panel layout defaults:',
+    {
+      objectPanelDockedRightWidth: layout.dockedRightWidth,
+      objectPanelDockedBottomHeight: layout.dockedBottomHeight,
+      objectPanelFloatingWidth: layout.floatingWidth,
+      objectPanelFloatingHeight: layout.floatingHeight,
+      objectPanelFloatingX: layout.floatingX,
+      objectPanelFloatingY: layout.floatingY,
+    },
+    [
+      { key: 'objectPanelDockedRightWidth', value: layout.dockedRightWidth },
+      { key: 'objectPanelDockedBottomHeight', value: layout.dockedBottomHeight },
+      { key: 'objectPanelFloatingWidth', value: layout.floatingWidth },
+      { key: 'objectPanelFloatingHeight', value: layout.floatingHeight },
+      { key: 'objectPanelFloatingX', value: layout.floatingX },
+      { key: 'objectPanelFloatingY', value: layout.floatingY },
+    ]
+  );
 };
 
 // Persist palette tint for a specific resolved appearance mode to backend via fire-and-forget.
@@ -1003,31 +1010,32 @@ export const setPaletteTint = (
   saturation: number,
   brightness: number = 0
 ): void => {
-  hydrated = true;
-  if (mode === 'light') {
-    updatePreferenceCache({
-      paletteHueLight: hue,
-      paletteSaturationLight: saturation,
-      paletteBrightnessLight: brightness,
-    });
-  } else {
-    updatePreferenceCache({
-      paletteHueDark: hue,
-      paletteSaturationDark: saturation,
-      paletteBrightnessDark: brightness,
-    });
-  }
-  persistAppearanceBootstrapToLocalStorage();
-  const runtimeApp = (window as any)?.go?.backend?.App;
-  if (!runtimeApp) {
-    return;
-  }
-  const setter = runtimeApp?.SetPaletteTint;
-  if (typeof setter !== 'function') {
-    return;
-  }
-  void setter(mode, hue, saturation, brightness).catch((error: unknown) => {
-    console.error('Failed to persist palette tint:', error);
+  const updates =
+    mode === 'light'
+      ? {
+          paletteHueLight: hue,
+          paletteSaturationLight: saturation,
+          paletteBrightnessLight: brightness,
+        }
+      : {
+          paletteHueDark: hue,
+          paletteSaturationDark: saturation,
+          paletteBrightnessDark: brightness,
+        };
+  const changes =
+    mode === 'light'
+      ? [
+          { key: 'paletteHueLight' as const, value: hue },
+          { key: 'paletteSaturationLight' as const, value: saturation },
+          { key: 'paletteBrightnessLight' as const, value: brightness },
+        ]
+      : [
+          { key: 'paletteHueDark' as const, value: hue },
+          { key: 'paletteSaturationDark' as const, value: saturation },
+          { key: 'paletteBrightnessDark' as const, value: brightness },
+        ];
+  fireAndForgetPreferenceUpdate('Failed to persist palette tint:', updates, changes, {
+    persistAppearanceBootstrap: true,
   });
 };
 
@@ -1081,6 +1089,7 @@ export const matchThemeForCluster = async (contextName: string): Promise<types.T
 // Test helper to reset cached values between test runs.
 export const resetAppPreferencesCacheForTesting = (): void => {
   preferenceCache = { ...DEFAULT_PREFERENCES };
+  preferenceSchemaByKey = new Map();
   hydrated = false;
 };
 

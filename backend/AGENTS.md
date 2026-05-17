@@ -51,6 +51,21 @@ Applies to Go code under `backend/`.
 - Object-map backend graph behavior is documented in
   `docs/workflows/object-map.md`.
 
+## App Settings
+
+- Persisted app preferences and runtime-enforced settings are backend-owned.
+  Keep defaults, normalization, schema metadata, validation, Wails DTOs, and
+  runtime side effects aligned in `backend/app_settings.go`.
+- `UpdateAppPreferences` is the common mutation path for app preferences. It
+  validates the whole batch before mutating in-memory settings, persists the
+  normalized settings file before applying runtime side effects, and rejects the
+  whole batch on validation or persistence failure.
+- Existing one-off settings setters are compatibility wrappers around the
+  common update path. Do not add new preference-specific Wails setters unless a
+  separate workflow needs a distinct command contract.
+- Defaults for persisted object panel position and layout belong in the backend
+  settings contract, not frontend-only hydration fallbacks.
+
 ## HTTP Server (Refresh API)
 
 - The loopback HTTP server (`backend/refresh/api/`) is consumed by a native Wails

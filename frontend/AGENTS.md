@@ -29,6 +29,21 @@ Applies to React/TypeScript code under `frontend/`.
 - Frontend reads must go through `dataAccess` or `appStateAccess` as documented
   in `docs/architecture/data-access.md`.
 
+## App State And Settings
+
+- Persisted app preferences hydrate from the backend settings schema through
+  `appStateAccess` (`readAppSettingsSchema`) and mutate through the shared
+  `UpdateAppPreferences` command.
+- Keep typed frontend getters/setters in `frontend/src/core/settings`, but route
+  persistence through the common optimistic update path instead of importing
+  preference-specific generated Wails setters in UI components.
+- On failed preference persistence, rollback every frontend-owned optimistic
+  side effect: preference cache values, preference change events, appearance
+  mode localStorage, and appearance bootstrap localStorage.
+- Frontend-owned state stays local when it is transient, component-local, or
+  needed before Wails is available. Examples include the last active Settings
+  tab and first-paint appearance bootstrap caches.
+
 ## UI Infrastructure Docs
 
 - Shared table system: `docs/frontend/gridtable.md`.

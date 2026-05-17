@@ -46,9 +46,7 @@ const { mocks } = vi.hoisted(() => ({
       toggle: vi.fn(),
     },
     appSettings: {
-      SetUseShortResourceNames: vi.fn(),
-      SetDimInactiveNamespaces: vi.fn(),
-      SetExclusiveNamespaces: vi.fn(),
+      UpdateAppPreferences: vi.fn(),
     },
     refreshOrchestrator: {
       triggerManualRefreshForContext: vi.fn(),
@@ -96,11 +94,7 @@ vi.mock('@/core/refresh', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  SetUseShortResourceNames: (...args: unknown[]) =>
-    mocks.appSettings.SetUseShortResourceNames(...args),
-  SetDimInactiveNamespaces: (...args: unknown[]) =>
-    mocks.appSettings.SetDimInactiveNamespaces(...args),
-  SetExclusiveNamespaces: (...args: unknown[]) => mocks.appSettings.SetExclusiveNamespaces(...args),
+  UpdateAppPreferences: (...args: unknown[]) => mocks.appSettings.UpdateAppPreferences(...args),
 }));
 
 vi.mock('@/utils/appearanceMode', () => ({
@@ -170,16 +164,14 @@ describe('CommandPaletteCommands', () => {
     mocks.kubeconfig.setSelectedKubeconfigs.mockReset();
     mocks.autoRefresh.enabled = true;
     mocks.autoRefresh.toggle.mockReset();
-    mocks.appSettings.SetUseShortResourceNames.mockReset();
-    mocks.appSettings.SetDimInactiveNamespaces.mockReset();
-    mocks.appSettings.SetExclusiveNamespaces.mockReset();
-    mocks.appSettings.SetUseShortResourceNames.mockResolvedValue(undefined);
-    mocks.appSettings.SetDimInactiveNamespaces.mockResolvedValue(undefined);
-    mocks.appSettings.SetExclusiveNamespaces.mockResolvedValue(undefined);
+    mocks.appSettings.UpdateAppPreferences.mockReset();
+    mocks.appSettings.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
+    (window as any).go = { backend: { App: {} } };
     resetAppPreferencesCacheForTesting();
   });
 
   afterEach(() => {
+    delete (window as any).go;
     document.body.innerHTML = '';
   });
 
@@ -302,8 +294,12 @@ describe('CommandPaletteCommands', () => {
       await Promise.resolve();
     });
 
-    expect(mocks.appSettings.SetDimInactiveNamespaces).toHaveBeenCalledWith(false);
-    expect(mocks.appSettings.SetExclusiveNamespaces).toHaveBeenCalledWith(false);
+    expect(mocks.appSettings.UpdateAppPreferences).toHaveBeenCalledWith({
+      changes: [{ key: 'dimInactiveNamespaces', value: false }],
+    });
+    expect(mocks.appSettings.UpdateAppPreferences).toHaveBeenCalledWith({
+      changes: [{ key: 'exclusiveNamespaces', value: false }],
+    });
 
     unmount();
   });
@@ -357,7 +353,9 @@ describe('CommandPaletteCommands', () => {
     });
 
     expect(mocks.autoRefresh.toggle).toHaveBeenCalledTimes(1);
-    expect(mocks.appSettings.SetUseShortResourceNames).toHaveBeenCalledWith(false);
+    expect(mocks.appSettings.UpdateAppPreferences).toHaveBeenCalledWith({
+      changes: [{ key: 'useShortResourceNames', value: false }],
+    });
 
     unmount();
   });

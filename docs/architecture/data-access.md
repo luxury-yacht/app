@@ -95,6 +95,52 @@ Internal infrastructure reads such as `GetRefreshBaseURL` and
 Reader wrappers are the only place generated Wails read imports should be
 needed for these paths.
 
+## Settings Contract
+
+Persisted app preferences and runtime-enforced settings are described by the
+backend settings schema returned through the `appStateAccess` reader
+`readAppSettingsSchema`. Frontend settings code should hydrate defaults, bounds,
+enum values, and current values from that schema instead of duplicating the
+backend contract.
+
+The ownership boundary is:
+
+- backend-owned: values persisted in `settings.json`, values validated or
+  clamped by backend code, and values with backend/runtime side effects
+- frontend-owned: transient component state, UI-local preferences that are not
+  persisted by the backend, and localStorage bootstrap caches needed before
+  Wails/backend reads are available
+- derived frontend cache: appearance mode and appearance bootstrap localStorage
+  mirror backend-owned persisted values for first paint, but they are not an
+  independent source of truth
+
+Object panel position and layout defaults are persisted preferences with
+backend-normalized defaults. Do not reintroduce frontend-only fallback constants
+as the source of truth for those settings.
+
+Settings mutations use `UpdateAppPreferences` as an atomic batch command:
+
+- validate every requested key before mutating backend in-memory settings
+- persist normalized settings before applying runtime side effects
+- apply runtime side effects only after persistence succeeds
+- fail the whole batch when any key is invalid or persistence fails
+
+The frontend may still keep local-only state, such as the last active Settings
+tab, and first-paint appearance bootstrap values in localStorage. Appearance
+bootstrap localStorage is a derived cache used before Wails is available, not an
+independent source of truth.
+
+When adding or changing a preference:
+
+1. Classify it as backend-owned persisted/runtime state, frontend-owned
+   local-only state, or a derived frontend cache.
+2. For backend-owned preferences, update backend defaults, normalization,
+   schema metadata, validation, Wails DTOs, and tests together.
+3. Route frontend reads through `appStateAccess` and the settings schema.
+4. Route frontend persistence through `UpdateAppPreferences` and preserve
+   optimistic rollback behavior.
+5. Keep compatibility setters only when external Wails callers still need them.
+
 ## Refresh Domains
 
 Refresh domains are defined in `frontend/src/core/refresh/types.ts`,

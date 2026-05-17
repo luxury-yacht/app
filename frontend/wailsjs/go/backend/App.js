@@ -142,6 +142,10 @@ export function GetAppSettings() {
   return window['go']['backend']['App']['GetAppSettings']();
 }
 
+export function GetAppSettingsSchema() {
+  return window['go']['backend']['App']['GetAppSettingsSchema']();
+}
+
 export function GetAppearanceModeInfo() {
   return window['go']['backend']['App']['GetAppearanceModeInfo']();
 }
@@ -668,6 +672,10 @@ export function TriggerCronJob(arg1, arg2, arg3) {
 
 export function UncordonNode(arg1, arg2) {
   return window['go']['backend']['App']['UncordonNode'](arg1, arg2);
+}
+
+export function UpdateAppPreferences(arg1) {
+  return window['go']['backend']['App']['UpdateAppPreferences'](arg1);
 }
 
 export function UpdateFavorite(arg1) {

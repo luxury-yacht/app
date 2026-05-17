@@ -2,6 +2,7 @@ import {
   GetAllClusterAuthStates,
   GetAppInfo,
   GetAppSettings,
+  GetAppSettingsSchema,
   GetKubeconfigSearchPaths,
   GetKubeconfigs,
   GetAppLogs,
@@ -18,6 +19,7 @@ import {
 export const readKubeconfigs = () => GetKubeconfigs();
 export const readSelectedKubeconfigs = () => GetSelectedKubeconfigs();
 export const readAppSettings = () => GetAppSettings();
+export const readAppSettingsSchema = () => GetAppSettingsSchema();
 export const readThemes = () => GetThemes();
 export const readAllClusterAuthStates = () => GetAllClusterAuthStates();
 export const readZoomLevel = () => GetZoomLevel();

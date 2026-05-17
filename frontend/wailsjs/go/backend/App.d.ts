@@ -77,6 +77,8 @@ export function GetAppLogsSince(arg1:number):Promise<Array<backend.LogEntry>>;
 
 export function GetAppSettings():Promise<types.AppSettings>;
 
+export function GetAppSettingsSchema():Promise<types.AppSettingsSchema>;
+
 export function GetAppearanceModeInfo():Promise<types.AppearanceModeInfo>;
 
 export function GetBackendTLSPolicy(arg1:string,arg2:string,arg3:string):Promise<types.BackendTLSPolicyDetails>;
@@ -340,6 +342,8 @@ export function ToggleSidebar():Promise<void>;
 export function TriggerCronJob(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function UncordonNode(arg1:string,arg2:string):Promise<void>;
+
+export function UpdateAppPreferences(arg1:types.UpdateAppPreferencesRequest):Promise<types.UpdateAppPreferencesResponse>;
 
 export function UpdateFavorite(arg1:backend.Favorite):Promise<void>;
 

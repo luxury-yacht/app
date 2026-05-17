@@ -22,10 +22,25 @@ Read:
 7. `docs/frontend/dockable-panels.md`
 8. `docs/architecture/data-access.md` for app state and persisted reads
 
+Settings-specific contract:
+
+- Persisted app preferences and runtime-enforced settings are backend-owned and
+  described by `readAppSettingsSchema`.
+- Frontend preference setters should use the shared optimistic update path that
+  calls `UpdateAppPreferences`, then roll back cache, emitted events, and any
+  appearance localStorage mirrors on failure.
+- Frontend-only or bootstrap state stays local when it is transient or needed
+  before Wails is available. Do not move local UI state into the backend just
+  because it appears in Settings.
+- Object panel position and layout defaults are persisted preferences with
+  backend-normalized defaults.
+
 ## Entry Points
 
 - `frontend/src/ui/settings`
 - `frontend/src/core/settings`
+- `frontend/src/core/app-state-access`
+- `backend/app_settings.go`
 - `frontend/src/ui/command-palette`
 - `frontend/src/ui/shortcuts`
 - `frontend/src/ui/navigation`
@@ -42,6 +57,13 @@ Read:
       aligned across surfaces.
 - [ ] Settings and persistence keys are scoped correctly, including cluster or
       namespace identity when the state is cluster data.
+- [ ] Persisted preferences hydrate from backend schema metadata instead of
+      duplicating defaults and bounds in UI code.
+- [ ] Preference mutations use `UpdateAppPreferences` semantics: atomic
+      validation, persistence before runtime side effects, and rollback on
+      failure.
+- [ ] Local-only Settings state and first-paint bootstrap caches remain
+      frontend-owned.
 - [ ] Keyboard shortcuts respect focus ownership and text-input behavior.
 - [ ] Modals preserve focus trap, drag regions, and keyboard dismissal behavior.
 - [ ] Dockable panel and tab changes preserve selection, close, drag/drop, and

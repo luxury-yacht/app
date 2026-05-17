@@ -27,6 +27,43 @@ const (
 	defaultThemeName = "default"
 )
 
+const (
+	appPreferenceAppearanceMode                           = "appearanceMode"
+	appPreferenceUseShortResourceNames                    = "useShortResourceNames"
+	appPreferenceDimInactiveNamespaces                    = "dimInactiveNamespaces"
+	appPreferenceExclusiveNamespaces                      = "exclusiveNamespaces"
+	appPreferenceAutoRefreshEnabled                       = "autoRefreshEnabled"
+	appPreferenceRefreshBackgroundClustersEnabled         = "refreshBackgroundClustersEnabled"
+	appPreferenceMetricsRefreshIntervalMs                 = "metricsRefreshIntervalMs"
+	appPreferenceMaxTableRows                             = "maxTableRows"
+	appPreferenceKubernetesClientQPS                      = "kubernetesClientQPS"
+	appPreferenceKubernetesClientBurst                    = "kubernetesClientBurst"
+	appPreferencePermissionSSRRFetchConcurrency           = "permissionSSRRFetchConcurrency"
+	appPreferenceObjPanelLogsBufferMaxSize                = "objPanelLogsBufferMaxSize"
+	appPreferenceObjPanelLogsAPITimestampFormat           = "objPanelLogsApiTimestampFormat"
+	appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone = "objPanelLogsApiTimestampUseLocalTimeZone"
+	appPreferenceObjPanelLogsTargetPerScopeLimit          = "objPanelLogsTargetPerScopeLimit"
+	appPreferenceObjPanelLogsTargetGlobalLimit            = "objPanelLogsTargetGlobalLimit"
+	appPreferenceGridTablePersistenceMode                 = "gridTablePersistenceMode"
+	appPreferenceDefaultObjectPanelPosition               = "defaultObjectPanelPosition"
+	appPreferenceObjectPanelDockedRightWidth              = "objectPanelDockedRightWidth"
+	appPreferenceObjectPanelDockedBottomHeight            = "objectPanelDockedBottomHeight"
+	appPreferenceObjectPanelFloatingWidth                 = "objectPanelFloatingWidth"
+	appPreferenceObjectPanelFloatingHeight                = "objectPanelFloatingHeight"
+	appPreferenceObjectPanelFloatingX                     = "objectPanelFloatingX"
+	appPreferenceObjectPanelFloatingY                     = "objectPanelFloatingY"
+	appPreferencePaletteHueLight                          = "paletteHueLight"
+	appPreferencePaletteSaturationLight                   = "paletteSaturationLight"
+	appPreferencePaletteBrightnessLight                   = "paletteBrightnessLight"
+	appPreferencePaletteHueDark                           = "paletteHueDark"
+	appPreferencePaletteSaturationDark                    = "paletteSaturationDark"
+	appPreferencePaletteBrightnessDark                    = "paletteBrightnessDark"
+	appPreferenceAccentColorLight                         = "accentColorLight"
+	appPreferenceAccentColorDark                          = "accentColorDark"
+	appPreferenceLinkColorLight                           = "linkColorLight"
+	appPreferenceLinkColorDark                            = "linkColorDark"
+)
+
 // settingsFile captures the persisted application settings stored in settings.json.
 type settingsFile struct {
 	SchemaVersion int                 `json:"schemaVersion"`
@@ -149,6 +186,19 @@ const (
 	defaultPermissionSSRRFetchConcurrency  = config.PermissionSSRRFetchConcurrency
 	minPermissionSSRRFetchConcurrency      = 1
 	maxPermissionSSRRFetchConcurrency      = config.PermissionSSRRFetchConcurrency * 8
+	defaultObjectPanelPosition             = "right"
+	defaultObjectPanelDockedRightWidth     = 600
+	defaultObjectPanelDockedBottomHeight   = 400
+	defaultObjectPanelFloatingWidth        = 500
+	defaultObjectPanelFloatingHeight       = 400
+	defaultObjectPanelFloatingX            = 100
+	defaultObjectPanelFloatingY            = 100
+	minPaletteHue                          = 0
+	maxPaletteHue                          = 360
+	minPaletteSaturation                   = 0
+	maxPaletteSaturation                   = 100
+	minPaletteBrightness                   = -50
+	maxPaletteBrightness                   = 50
 )
 
 func clampMaxTableRows(size int) int {
@@ -258,12 +308,15 @@ func defaultSettingsFile() *settingsFile {
 				APITimestampFormat:  defaultObjPanelLogsAPITimestampFormat,
 			},
 
-			GridTablePersistenceMode: "shared",
-			// DefaultObjectPanelPosition and object panel layout defaults are
-			// intentionally omitted. The frontend's DEFAULT_PREFERENCES is the
-			// single source of truth; zero/empty values from the backend are
-			// filled in during hydration.
-			Themes: []Theme{defaultTheme()},
+			GridTablePersistenceMode:      "shared",
+			DefaultObjectPanelPosition:    defaultObjectPanelPosition,
+			ObjectPanelDockedRightWidth:   defaultObjectPanelDockedRightWidth,
+			ObjectPanelDockedBottomHeight: defaultObjectPanelDockedBottomHeight,
+			ObjectPanelFloatingWidth:      defaultObjectPanelFloatingWidth,
+			ObjectPanelFloatingHeight:     defaultObjectPanelFloatingHeight,
+			ObjectPanelFloatingX:          defaultObjectPanelFloatingX,
+			ObjectPanelFloatingY:          defaultObjectPanelFloatingY,
+			Themes:                        []Theme{defaultTheme()},
 		},
 		Kubeconfig: settingsKubeconfig{
 			SearchPaths: defaultKubeconfigSearchPaths(),
@@ -350,6 +403,27 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.GridTablePersistenceMode == "" {
 		settings.Preferences.GridTablePersistenceMode = "shared"
+	}
+	if settings.Preferences.DefaultObjectPanelPosition == "" {
+		settings.Preferences.DefaultObjectPanelPosition = defaultObjectPanelPosition
+	}
+	if settings.Preferences.ObjectPanelDockedRightWidth <= 0 {
+		settings.Preferences.ObjectPanelDockedRightWidth = defaultObjectPanelDockedRightWidth
+	}
+	if settings.Preferences.ObjectPanelDockedBottomHeight <= 0 {
+		settings.Preferences.ObjectPanelDockedBottomHeight = defaultObjectPanelDockedBottomHeight
+	}
+	if settings.Preferences.ObjectPanelFloatingWidth <= 0 {
+		settings.Preferences.ObjectPanelFloatingWidth = defaultObjectPanelFloatingWidth
+	}
+	if settings.Preferences.ObjectPanelFloatingHeight <= 0 {
+		settings.Preferences.ObjectPanelFloatingHeight = defaultObjectPanelFloatingHeight
+	}
+	if settings.Preferences.ObjectPanelFloatingX <= 0 {
+		settings.Preferences.ObjectPanelFloatingX = defaultObjectPanelFloatingX
+	}
+	if settings.Preferences.ObjectPanelFloatingY <= 0 {
+		settings.Preferences.ObjectPanelFloatingY = defaultObjectPanelFloatingY
 	}
 	// Migrate old single-value palette fields to per-mode fields.
 	prefs := &settings.Preferences
@@ -495,11 +569,13 @@ func (a *App) saveSettingsFile(settings *settingsFile) error {
 		return fmt.Errorf("failed to marshal settings: %w", err)
 	}
 
-	if err := writeFileAtomic(configFile, data, 0o644); err != nil {
+	if err := writeSettingsFileAtomic(configFile, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write settings file: %w", err)
 	}
 	return nil
 }
+
+var writeSettingsFileAtomic = writeFileAtomic
 
 // writeFileAtomic persists data with a temp file + rename sequence.
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
@@ -584,6 +660,13 @@ func getDefaultAppSettings() *AppSettings {
 		ObjPanelLogsAPITimestampFormat:           defaultObjPanelLogsAPITimestampFormat,
 		ObjPanelLogsAPITimestampUseLocalTimeZone: false,
 		GridTablePersistenceMode:                 "shared",
+		DefaultObjectPanelPosition:               defaultObjectPanelPosition,
+		ObjectPanelDockedRightWidth:              defaultObjectPanelDockedRightWidth,
+		ObjectPanelDockedBottomHeight:            defaultObjectPanelDockedBottomHeight,
+		ObjectPanelFloatingWidth:                 defaultObjectPanelFloatingWidth,
+		ObjectPanelFloatingHeight:                defaultObjectPanelFloatingHeight,
+		ObjectPanelFloatingX:                     defaultObjectPanelFloatingX,
+		ObjectPanelFloatingY:                     defaultObjectPanelFloatingY,
 		Themes:                                   []Theme{defaultTheme()},
 	}
 }
@@ -815,6 +898,537 @@ func (a *App) GetAppSettings() (*AppSettings, error) {
 	return &cp, nil
 }
 
+func intPtr(v int) *int {
+	return &v
+}
+
+func appPreferenceSchema(key, valueType string, defaultValue, currentValue any, minValue, maxValue *int, enumOptions []string, validation string, runtimeSideEffect bool) AppPreferenceSchema {
+	return AppPreferenceSchema{
+		Key:               key,
+		Type:              valueType,
+		DefaultValue:      defaultValue,
+		CurrentValue:      currentValue,
+		Min:               minValue,
+		Max:               maxValue,
+		EnumOptions:       enumOptions,
+		Validation:        validation,
+		RuntimeSideEffect: runtimeSideEffect,
+	}
+}
+
+func buildAppSettingsSchema(settings *AppSettings) *AppSettingsSchema {
+	if settings == nil {
+		settings = getDefaultAppSettings()
+	}
+	return &AppSettingsSchema{Preferences: []AppPreferenceSchema{
+		appPreferenceSchema(appPreferenceAppearanceMode, "enum", "system", settings.AppearanceMode, nil, nil, []string{"light", "dark", "system"}, "", true),
+		appPreferenceSchema(appPreferenceUseShortResourceNames, "boolean", false, settings.UseShortResourceNames, nil, nil, nil, "", false),
+		appPreferenceSchema(appPreferenceDimInactiveNamespaces, "boolean", true, settings.DimInactiveNamespaces, nil, nil, nil, "", false),
+		appPreferenceSchema(appPreferenceExclusiveNamespaces, "boolean", true, settings.ExclusiveNamespaces, nil, nil, nil, "", false),
+		appPreferenceSchema(appPreferenceAutoRefreshEnabled, "boolean", true, settings.AutoRefreshEnabled, nil, nil, nil, "", true),
+		appPreferenceSchema(appPreferenceRefreshBackgroundClustersEnabled, "boolean", true, settings.RefreshBackgroundClustersEnabled, nil, nil, nil, "", true),
+		appPreferenceSchema(appPreferenceMetricsRefreshIntervalMs, "integer", defaultMetricsIntervalMs(), settings.MetricsRefreshIntervalMs, intPtr(1), nil, nil, "", true),
+		appPreferenceSchema(appPreferenceMaxTableRows, "integer", defaultMaxTableRows, settings.MaxTableRows, intPtr(minMaxTableRows), intPtr(maxMaxTableRows), nil, "", false),
+		appPreferenceSchema(appPreferenceKubernetesClientQPS, "integer", defaultKubernetesClientQPS, settings.KubernetesClientQPS, intPtr(minKubernetesClientQPS), intPtr(maxKubernetesClientQPS), nil, "", true),
+		appPreferenceSchema(appPreferenceKubernetesClientBurst, "integer", defaultKubernetesClientBurst, settings.KubernetesClientBurst, intPtr(minKubernetesClientBurst), intPtr(maxKubernetesClientBurst), nil, "", true),
+		appPreferenceSchema(appPreferencePermissionSSRRFetchConcurrency, "integer", defaultPermissionSSRRFetchConcurrency, settings.PermissionSSRRFetchConcurrency, intPtr(minPermissionSSRRFetchConcurrency), intPtr(maxPermissionSSRRFetchConcurrency), nil, "", false),
+		appPreferenceSchema(appPreferenceObjPanelLogsBufferMaxSize, "integer", defaultObjPanelLogsBufferMaxSize, settings.ObjPanelLogsBufferMaxSize, intPtr(minObjPanelLogsBufferMaxSize), intPtr(maxObjPanelLogsBufferMaxSize), nil, "", false),
+		appPreferenceSchema(appPreferenceObjPanelLogsAPITimestampFormat, "string", defaultObjPanelLogsAPITimestampFormat, settings.ObjPanelLogsAPITimestampFormat, nil, nil, nil, "dayjs-format", false),
+		appPreferenceSchema(appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone, "boolean", false, settings.ObjPanelLogsAPITimestampUseLocalTimeZone, nil, nil, nil, "", false),
+		appPreferenceSchema(appPreferenceObjPanelLogsTargetPerScopeLimit, "integer", defaultObjPanelLogsTargetPerScopeLimit, settings.ObjPanelLogsTargetPerScopeLimit, intPtr(minObjPanelLogsTargetPerScopeLimit), intPtr(maxObjPanelLogsTargetPerScopeLimit), nil, "", true),
+		appPreferenceSchema(appPreferenceObjPanelLogsTargetGlobalLimit, "integer", defaultObjPanelLogsTargetGlobalLimit, settings.ObjPanelLogsTargetGlobalLimit, intPtr(minObjPanelLogsTargetGlobalLimit), intPtr(maxObjPanelLogsTargetGlobalLimit), nil, "", true),
+		appPreferenceSchema(appPreferenceGridTablePersistenceMode, "enum", "shared", settings.GridTablePersistenceMode, nil, nil, []string{"shared", "namespaced"}, "", false),
+		appPreferenceSchema(appPreferenceDefaultObjectPanelPosition, "enum", defaultObjectPanelPosition, settings.DefaultObjectPanelPosition, nil, nil, []string{"right", "bottom", "floating"}, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelDockedRightWidth, "integer", defaultObjectPanelDockedRightWidth, settings.ObjectPanelDockedRightWidth, intPtr(1), nil, nil, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelDockedBottomHeight, "integer", defaultObjectPanelDockedBottomHeight, settings.ObjectPanelDockedBottomHeight, intPtr(1), nil, nil, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelFloatingWidth, "integer", defaultObjectPanelFloatingWidth, settings.ObjectPanelFloatingWidth, intPtr(1), nil, nil, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelFloatingHeight, "integer", defaultObjectPanelFloatingHeight, settings.ObjectPanelFloatingHeight, intPtr(1), nil, nil, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelFloatingX, "integer", defaultObjectPanelFloatingX, settings.ObjectPanelFloatingX, intPtr(1), nil, nil, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelFloatingY, "integer", defaultObjectPanelFloatingY, settings.ObjectPanelFloatingY, intPtr(1), nil, nil, "", false),
+		appPreferenceSchema(appPreferencePaletteHueLight, "integer", 0, settings.PaletteHueLight, intPtr(minPaletteHue), intPtr(maxPaletteHue), nil, "", false),
+		appPreferenceSchema(appPreferencePaletteSaturationLight, "integer", 0, settings.PaletteSaturationLight, intPtr(minPaletteSaturation), intPtr(maxPaletteSaturation), nil, "", false),
+		appPreferenceSchema(appPreferencePaletteBrightnessLight, "integer", 0, settings.PaletteBrightnessLight, intPtr(minPaletteBrightness), intPtr(maxPaletteBrightness), nil, "", false),
+		appPreferenceSchema(appPreferencePaletteHueDark, "integer", 0, settings.PaletteHueDark, intPtr(minPaletteHue), intPtr(maxPaletteHue), nil, "", false),
+		appPreferenceSchema(appPreferencePaletteSaturationDark, "integer", 0, settings.PaletteSaturationDark, intPtr(minPaletteSaturation), intPtr(maxPaletteSaturation), nil, "", false),
+		appPreferenceSchema(appPreferencePaletteBrightnessDark, "integer", 0, settings.PaletteBrightnessDark, intPtr(minPaletteBrightness), intPtr(maxPaletteBrightness), nil, "", false),
+		appPreferenceSchema(appPreferenceAccentColorLight, "color", "", settings.AccentColorLight, nil, nil, nil, "#rrggbb-or-empty", false),
+		appPreferenceSchema(appPreferenceAccentColorDark, "color", "", settings.AccentColorDark, nil, nil, nil, "#rrggbb-or-empty", false),
+		appPreferenceSchema(appPreferenceLinkColorLight, "color", "", settings.LinkColorLight, nil, nil, nil, "#rrggbb-or-empty", false),
+		appPreferenceSchema(appPreferenceLinkColorDark, "color", "", settings.LinkColorDark, nil, nil, nil, "#rrggbb-or-empty", false),
+	}}
+}
+
+func (a *App) GetAppSettingsSchema() (*AppSettingsSchema, error) {
+	settings, err := a.GetAppSettings()
+	if err != nil {
+		return nil, err
+	}
+	return buildAppSettingsSchema(settings), nil
+}
+
+func copyAppSettings(settings *AppSettings) *AppSettings {
+	if settings == nil {
+		return nil
+	}
+	cp := *settings
+	cp.SelectedKubeconfigs = append([]string(nil), settings.SelectedKubeconfigs...)
+	cp.Themes = append([]Theme(nil), settings.Themes...)
+	return &cp
+}
+
+func boolPreferenceValue(value any) (bool, error) {
+	v, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf("expected boolean value")
+	}
+	return v, nil
+}
+
+func stringPreferenceValue(value any) (string, error) {
+	v, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("expected string value")
+	}
+	return v, nil
+}
+
+func intPreferenceValue(value any) (int, error) {
+	switch v := value.(type) {
+	case int:
+		return v, nil
+	case int8:
+		return int(v), nil
+	case int16:
+		return int(v), nil
+	case int32:
+		return int(v), nil
+	case int64:
+		return int(v), nil
+	case float64:
+		return int(v), nil
+	case float32:
+		return int(v), nil
+	case json.Number:
+		i, err := v.Int64()
+		return int(i), err
+	default:
+		return 0, fmt.Errorf("expected integer value")
+	}
+}
+
+type settingsSideEffects struct {
+	kubernetesClientRateLimits bool
+	containerLogsPerScopeLimit bool
+	containerLogsGlobalLimit   bool
+}
+
+func applyAppPreferenceChange(settings *AppSettings, change AppPreferenceChange, effects *settingsSideEffects) error {
+	if settings == nil {
+		return fmt.Errorf("settings are not loaded")
+	}
+	switch change.Key {
+	case appPreferenceAppearanceMode:
+		mode, err := stringPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if mode != "light" && mode != "dark" && mode != "system" {
+			return fmt.Errorf("invalid appearance mode: %s", mode)
+		}
+		settings.AppearanceMode = mode
+	case appPreferenceUseShortResourceNames:
+		value, err := boolPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.UseShortResourceNames = value
+	case appPreferenceDimInactiveNamespaces:
+		value, err := boolPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.DimInactiveNamespaces = value
+	case appPreferenceExclusiveNamespaces:
+		value, err := boolPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.ExclusiveNamespaces = value
+	case appPreferenceAutoRefreshEnabled:
+		value, err := boolPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.AutoRefreshEnabled = value
+	case appPreferenceRefreshBackgroundClustersEnabled:
+		value, err := boolPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.RefreshBackgroundClustersEnabled = value
+	case appPreferenceMetricsRefreshIntervalMs:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if value <= 0 {
+			value = defaultMetricsIntervalMs()
+		}
+		settings.MetricsRefreshIntervalMs = value
+	case appPreferenceMaxTableRows:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.MaxTableRows = clampMaxTableRows(value)
+	case appPreferenceKubernetesClientQPS:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.KubernetesClientQPS = clampKubernetesClientQPS(value)
+		effects.kubernetesClientRateLimits = true
+	case appPreferenceKubernetesClientBurst:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.KubernetesClientBurst = clampKubernetesClientBurst(value)
+		effects.kubernetesClientRateLimits = true
+	case appPreferencePermissionSSRRFetchConcurrency:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.PermissionSSRRFetchConcurrency = clampPermissionSSRRFetchConcurrency(value)
+	case appPreferenceObjPanelLogsBufferMaxSize:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.ObjPanelLogsBufferMaxSize = clampObjPanelLogsBufferMaxSize(value)
+	case appPreferenceObjPanelLogsAPITimestampFormat:
+		value, err := stringPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if value == "" {
+			value = defaultObjPanelLogsAPITimestampFormat
+		}
+		settings.ObjPanelLogsAPITimestampFormat = value
+	case appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone:
+		value, err := boolPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.ObjPanelLogsAPITimestampUseLocalTimeZone = value
+	case appPreferenceObjPanelLogsTargetPerScopeLimit:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.ObjPanelLogsTargetPerScopeLimit = clampObjPanelLogsTargetPerScopeLimit(value)
+		effects.containerLogsPerScopeLimit = true
+	case appPreferenceObjPanelLogsTargetGlobalLimit:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.ObjPanelLogsTargetGlobalLimit = clampObjPanelLogsTargetGlobalLimit(value)
+		effects.containerLogsGlobalLimit = true
+	case appPreferenceGridTablePersistenceMode:
+		mode, err := stringPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if mode != "shared" && mode != "namespaced" {
+			return fmt.Errorf("invalid grid table persistence mode: %s", mode)
+		}
+		settings.GridTablePersistenceMode = mode
+	case appPreferenceDefaultObjectPanelPosition:
+		position, err := stringPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if position != "right" && position != "bottom" && position != "floating" {
+			return fmt.Errorf("invalid default object panel position: %s", position)
+		}
+		settings.DefaultObjectPanelPosition = position
+	case appPreferenceObjectPanelDockedRightWidth:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if value <= 0 {
+			value = defaultObjectPanelDockedRightWidth
+		}
+		settings.ObjectPanelDockedRightWidth = value
+	case appPreferenceObjectPanelDockedBottomHeight:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if value <= 0 {
+			value = defaultObjectPanelDockedBottomHeight
+		}
+		settings.ObjectPanelDockedBottomHeight = value
+	case appPreferenceObjectPanelFloatingWidth:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if value <= 0 {
+			value = defaultObjectPanelFloatingWidth
+		}
+		settings.ObjectPanelFloatingWidth = value
+	case appPreferenceObjectPanelFloatingHeight:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if value <= 0 {
+			value = defaultObjectPanelFloatingHeight
+		}
+		settings.ObjectPanelFloatingHeight = value
+	case appPreferenceObjectPanelFloatingX:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if value <= 0 {
+			value = defaultObjectPanelFloatingX
+		}
+		settings.ObjectPanelFloatingX = value
+	case appPreferenceObjectPanelFloatingY:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if value <= 0 {
+			value = defaultObjectPanelFloatingY
+		}
+		settings.ObjectPanelFloatingY = value
+	case appPreferencePaletteHueLight:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.PaletteHueLight = clampInt(value, minPaletteHue, maxPaletteHue)
+	case appPreferencePaletteSaturationLight:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.PaletteSaturationLight = clampInt(value, minPaletteSaturation, maxPaletteSaturation)
+	case appPreferencePaletteBrightnessLight:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.PaletteBrightnessLight = clampInt(value, minPaletteBrightness, maxPaletteBrightness)
+	case appPreferencePaletteHueDark:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.PaletteHueDark = clampInt(value, minPaletteHue, maxPaletteHue)
+	case appPreferencePaletteSaturationDark:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.PaletteSaturationDark = clampInt(value, minPaletteSaturation, maxPaletteSaturation)
+	case appPreferencePaletteBrightnessDark:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.PaletteBrightnessDark = clampInt(value, minPaletteBrightness, maxPaletteBrightness)
+	case appPreferenceAccentColorLight, appPreferenceAccentColorDark, appPreferenceLinkColorLight, appPreferenceLinkColorDark:
+		color, err := stringPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		if color != "" && !validHexColorRe.MatchString(color) {
+			return fmt.Errorf("invalid color format for %s: %s (expected #rrggbb)", change.Key, color)
+		}
+		switch change.Key {
+		case appPreferenceAccentColorLight:
+			settings.AccentColorLight = color
+		case appPreferenceAccentColorDark:
+			settings.AccentColorDark = color
+		case appPreferenceLinkColorLight:
+			settings.LinkColorLight = color
+		case appPreferenceLinkColorDark:
+			settings.LinkColorDark = color
+		}
+	default:
+		return fmt.Errorf("unknown preference key: %s", change.Key)
+	}
+	return nil
+}
+
+func clampInt(value, minValue, maxValue int) int {
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
+}
+
+func logPreferenceChange(logger *Logger, key string, value any) {
+	if logger == nil {
+		return
+	}
+	switch key {
+	case appPreferenceAppearanceMode:
+		logger.Info(fmt.Sprintf("Appearance mode changed to: %v", value), logsources.Settings)
+	case appPreferenceUseShortResourceNames:
+		logger.Info(fmt.Sprintf("Use short resource names changed to: %v", value), logsources.Settings)
+	case appPreferenceDimInactiveNamespaces:
+		logger.Info(fmt.Sprintf("Dim inactive namespaces changed to: %v", value), logsources.Settings)
+	case appPreferenceExclusiveNamespaces:
+		logger.Info(fmt.Sprintf("Exclusive namespaces changed to: %v", value), logsources.Settings)
+	case appPreferenceAutoRefreshEnabled:
+		logger.Info(fmt.Sprintf("Auto refresh enabled changed to: %v", value), logsources.Settings)
+	case appPreferenceRefreshBackgroundClustersEnabled:
+		logger.Info(fmt.Sprintf("Background refresh enabled changed to: %v", value), logsources.Settings)
+	case appPreferenceMaxTableRows:
+		logger.Info(fmt.Sprintf("Max table rows changed to: %v", value), logsources.Settings)
+	case appPreferenceKubernetesClientQPS:
+		logger.Info(fmt.Sprintf("Kubernetes client QPS changed to: %v", value), logsources.Settings)
+	case appPreferenceKubernetesClientBurst:
+		logger.Info(fmt.Sprintf("Kubernetes client burst changed to: %v", value), logsources.Settings)
+	case appPreferencePermissionSSRRFetchConcurrency:
+		logger.Info(fmt.Sprintf("Permission SSRR fetch concurrency changed to: %v", value), logsources.Settings)
+	case appPreferenceObjPanelLogsBufferMaxSize:
+		logger.Info(fmt.Sprintf("ObjPanelLogs buffer max size changed to: %v", value), logsources.Settings)
+	case appPreferenceObjPanelLogsTargetPerScopeLimit:
+		logger.Info(fmt.Sprintf("Object Panel Logs Tab target per-scope limit changed to: %v", value), logsources.Settings)
+	case appPreferenceObjPanelLogsTargetGlobalLimit:
+		logger.Info(fmt.Sprintf("Object Panel Logs Tab target global limit changed to: %v", value), logsources.Settings)
+	case appPreferenceObjPanelLogsAPITimestampFormat:
+		logger.Info(fmt.Sprintf("Object Panel Logs Tab API timestamp format changed to: %v", value), logsources.Settings)
+	case appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone:
+		logger.Info(fmt.Sprintf("Object Panel Logs Tab API timestamp local timezone changed to: %v", value), logsources.Settings)
+	case appPreferenceGridTablePersistenceMode:
+		logger.Info(fmt.Sprintf("Grid table persistence mode changed to: %v", value), logsources.Settings)
+	case appPreferenceDefaultObjectPanelPosition:
+		logger.Info(fmt.Sprintf("Default object panel position changed to: %v", value), logsources.Settings)
+	default:
+		logger.Info(fmt.Sprintf("Preference %s changed to: %v", key, value), logsources.Settings)
+	}
+}
+
+func (a *App) UpdateAppPreferences(request UpdateAppPreferencesRequest) (*UpdateAppPreferencesResponse, error) {
+	a.settingsMu.Lock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			a.settingsMu.Unlock()
+			return nil, err
+		}
+	}
+
+	previous := copyAppSettings(a.appSettings)
+	next := copyAppSettings(a.appSettings)
+	effects := settingsSideEffects{}
+	changedKeys := make([]string, 0, len(request.Changes))
+	seen := make(map[string]struct{}, len(request.Changes))
+
+	for _, change := range request.Changes {
+		if err := applyAppPreferenceChange(next, change, &effects); err != nil {
+			a.settingsMu.Unlock()
+			return nil, err
+		}
+		if _, ok := seen[change.Key]; !ok {
+			seen[change.Key] = struct{}{}
+			changedKeys = append(changedKeys, change.Key)
+		}
+	}
+
+	a.appSettings = next
+	if err := a.saveAppSettings(); err != nil {
+		a.appSettings = previous
+		a.settingsMu.Unlock()
+		return nil, err
+	}
+
+	for _, key := range changedKeys {
+		logPreferenceChange(a.logger, key, preferenceValueForLog(next, key))
+	}
+
+	effectiveQPS := next.KubernetesClientQPS
+	effectiveBurst := next.KubernetesClientBurst
+	perScopeLimit := next.ObjPanelLogsTargetPerScopeLimit
+	globalLimit := next.ObjPanelLogsTargetGlobalLimit
+	responseSettings := copyAppSettings(next)
+	a.settingsMu.Unlock()
+
+	if effects.kubernetesClientRateLimits {
+		a.applyKubernetesClientRateLimits(effectiveQPS, effectiveBurst)
+	}
+	if effects.containerLogsPerScopeLimit {
+		containerlogs.SetPerScopeTargetLimit(perScopeLimit)
+	}
+	if effects.containerLogsGlobalLimit && a.containerLogsTargetLimiter != nil {
+		a.containerLogsTargetLimiter.SetLimit(globalLimit)
+	}
+
+	return &UpdateAppPreferencesResponse{
+		Settings:    responseSettings,
+		ChangedKeys: changedKeys,
+	}, nil
+}
+
+func preferenceValueForLog(settings *AppSettings, key string) any {
+	if settings == nil {
+		return nil
+	}
+	switch key {
+	case appPreferenceAppearanceMode:
+		return settings.AppearanceMode
+	case appPreferenceUseShortResourceNames:
+		return settings.UseShortResourceNames
+	case appPreferenceDimInactiveNamespaces:
+		return settings.DimInactiveNamespaces
+	case appPreferenceExclusiveNamespaces:
+		return settings.ExclusiveNamespaces
+	case appPreferenceAutoRefreshEnabled:
+		return settings.AutoRefreshEnabled
+	case appPreferenceRefreshBackgroundClustersEnabled:
+		return settings.RefreshBackgroundClustersEnabled
+	case appPreferenceMetricsRefreshIntervalMs:
+		return settings.MetricsRefreshIntervalMs
+	case appPreferenceMaxTableRows:
+		return settings.MaxTableRows
+	case appPreferenceKubernetesClientQPS:
+		return settings.KubernetesClientQPS
+	case appPreferenceKubernetesClientBurst:
+		return settings.KubernetesClientBurst
+	case appPreferencePermissionSSRRFetchConcurrency:
+		return settings.PermissionSSRRFetchConcurrency
+	case appPreferenceObjPanelLogsBufferMaxSize:
+		return settings.ObjPanelLogsBufferMaxSize
+	case appPreferenceObjPanelLogsAPITimestampFormat:
+		return settings.ObjPanelLogsAPITimestampFormat
+	case appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone:
+		return settings.ObjPanelLogsAPITimestampUseLocalTimeZone
+	case appPreferenceObjPanelLogsTargetPerScopeLimit:
+		return settings.ObjPanelLogsTargetPerScopeLimit
+	case appPreferenceObjPanelLogsTargetGlobalLimit:
+		return settings.ObjPanelLogsTargetGlobalLimit
+	case appPreferenceGridTablePersistenceMode:
+		return settings.GridTablePersistenceMode
+	case appPreferenceDefaultObjectPanelPosition:
+		return settings.DefaultObjectPanelPosition
+	default:
+		return nil
+	}
+}
+
 func (a *App) kubernetesClientRateLimits() (qps int, burst int) {
 	if a == nil {
 		return defaultKubernetesClientQPS, defaultKubernetesClientBurst
@@ -848,338 +1462,110 @@ func (a *App) permissionSSRRFetchConcurrency() int {
 }
 
 func (a *App) SetAppearanceMode(mode string) error {
-	if mode != "light" && mode != "dark" && mode != "system" {
-		return fmt.Errorf("invalid appearance mode: %s", mode)
-	}
-
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	a.logger.Info(fmt.Sprintf("Appearance mode changed to: %s", mode), logsources.Settings)
-	a.appSettings.AppearanceMode = mode
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceAppearanceMode, Value: mode}}})
+	return err
 }
 
 func (a *App) SetUseShortResourceNames(useShort bool) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	a.logger.Info(fmt.Sprintf("Use short resource names changed to: %v", useShort), logsources.Settings)
-	a.appSettings.UseShortResourceNames = useShort
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceUseShortResourceNames, Value: useShort}}})
+	return err
 }
 
 func (a *App) SetDimInactiveNamespaces(enabled bool) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	a.logger.Info(fmt.Sprintf("Dim inactive namespaces changed to: %v", enabled), logsources.Settings)
-	a.appSettings.DimInactiveNamespaces = enabled
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceDimInactiveNamespaces, Value: enabled}}})
+	return err
 }
 
 func (a *App) SetExclusiveNamespaces(enabled bool) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	a.logger.Info(fmt.Sprintf("Exclusive namespaces changed to: %v", enabled), logsources.Settings)
-	a.appSettings.ExclusiveNamespaces = enabled
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceExclusiveNamespaces, Value: enabled}}})
+	return err
 }
 
 // SetAutoRefreshEnabled persists the auto-refresh preference.
 func (a *App) SetAutoRefreshEnabled(enabled bool) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	a.logger.Info(fmt.Sprintf("Auto refresh enabled changed to: %v", enabled), logsources.Settings)
-	a.appSettings.AutoRefreshEnabled = enabled
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceAutoRefreshEnabled, Value: enabled}}})
+	return err
 }
 
 // SetBackgroundRefreshEnabled persists the background refresh preference.
 func (a *App) SetBackgroundRefreshEnabled(enabled bool) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	a.logger.Info(fmt.Sprintf("Background refresh enabled changed to: %v", enabled), logsources.Settings)
-	a.appSettings.RefreshBackgroundClustersEnabled = enabled
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceRefreshBackgroundClustersEnabled, Value: enabled}}})
+	return err
 }
 
 // SetMaxTableRows persists the max number of rows shown in a data table.
 // Values are clamped to [minMaxTableRows, maxMaxTableRows].
 func (a *App) SetMaxTableRows(size int) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	clamped := clampMaxTableRows(size)
-	a.logger.Info(fmt.Sprintf("Max table rows changed to: %d", clamped), logsources.Settings)
-	a.appSettings.MaxTableRows = clamped
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceMaxTableRows, Value: size}}})
+	return err
 }
 
 func (a *App) SetKubernetesClientQPS(qps int) error {
-	a.settingsMu.Lock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			a.settingsMu.Unlock()
-			return err
-		}
-	}
-
-	clamped := clampKubernetesClientQPS(qps)
-	a.logger.Info(fmt.Sprintf("Kubernetes client QPS changed to: %d", clamped), logsources.Settings)
-	a.appSettings.KubernetesClientQPS = clamped
-	effectiveQPS := a.appSettings.KubernetesClientQPS
-	effectiveBurst := a.appSettings.KubernetesClientBurst
-	if effectiveBurst <= 0 {
-		effectiveBurst = defaultKubernetesClientBurst
-	}
-	err := a.saveAppSettings()
-	a.settingsMu.Unlock()
-	if err != nil {
-		return err
-	}
-	a.applyKubernetesClientRateLimits(effectiveQPS, effectiveBurst)
-	return nil
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceKubernetesClientQPS, Value: qps}}})
+	return err
 }
 
 func (a *App) SetKubernetesClientBurst(burst int) error {
-	a.settingsMu.Lock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			a.settingsMu.Unlock()
-			return err
-		}
-	}
-
-	clamped := clampKubernetesClientBurst(burst)
-	a.logger.Info(fmt.Sprintf("Kubernetes client burst changed to: %d", clamped), logsources.Settings)
-	a.appSettings.KubernetesClientBurst = clamped
-	effectiveQPS := a.appSettings.KubernetesClientQPS
-	if effectiveQPS <= 0 {
-		effectiveQPS = defaultKubernetesClientQPS
-	}
-	effectiveBurst := a.appSettings.KubernetesClientBurst
-	err := a.saveAppSettings()
-	a.settingsMu.Unlock()
-	if err != nil {
-		return err
-	}
-	a.applyKubernetesClientRateLimits(effectiveQPS, effectiveBurst)
-	return nil
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceKubernetesClientBurst, Value: burst}}})
+	return err
 }
 
 func (a *App) SetPermissionSSRRFetchConcurrency(limit int) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	clamped := clampPermissionSSRRFetchConcurrency(limit)
-	a.logger.Info(fmt.Sprintf("Permission SSRR fetch concurrency changed to: %d", clamped), logsources.Settings)
-	a.appSettings.PermissionSSRRFetchConcurrency = clamped
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferencePermissionSSRRFetchConcurrency, Value: limit}}})
+	return err
 }
 
 // SetObjPanelLogsBufferMaxSize persists the max container log entries each
 // Object Panel Logs Tab keeps in memory.
 // Values are clamped to [minObjPanelLogsBufferMaxSize, maxObjPanelLogsBufferMaxSize].
 func (a *App) SetObjPanelLogsBufferMaxSize(size int) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	clamped := clampObjPanelLogsBufferMaxSize(size)
-	a.logger.Info(fmt.Sprintf("ObjPanelLogs buffer max size changed to: %d", clamped), logsources.Settings)
-	a.appSettings.ObjPanelLogsBufferMaxSize = clamped
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsBufferMaxSize, Value: size}}})
+	return err
 }
 
 func (a *App) SetObjPanelLogsTargetPerScopeLimit(limit int) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	clamped := clampObjPanelLogsTargetPerScopeLimit(limit)
-	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab target per-scope limit changed to: %d", clamped), logsources.Settings)
-	a.appSettings.ObjPanelLogsTargetPerScopeLimit = clamped
-	containerlogs.SetPerScopeTargetLimit(clamped)
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsTargetPerScopeLimit, Value: limit}}})
+	return err
 }
 
 func (a *App) SetObjPanelLogsTargetGlobalLimit(limit int) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	clamped := clampObjPanelLogsTargetGlobalLimit(limit)
-	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab target global limit changed to: %d", clamped), logsources.Settings)
-	a.appSettings.ObjPanelLogsTargetGlobalLimit = clamped
-	if a.containerLogsTargetLimiter != nil {
-		a.containerLogsTargetLimiter.SetLimit(clamped)
-	}
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsTargetGlobalLimit, Value: limit}}})
+	return err
 }
 
 func (a *App) SetObjPanelLogsAPITimestampFormat(format string) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	if format == "" {
-		format = defaultObjPanelLogsAPITimestampFormat
-	}
-	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab API timestamp format changed to: %s", format), logsources.Settings)
-	a.appSettings.ObjPanelLogsAPITimestampFormat = format
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsAPITimestampFormat, Value: format}}})
+	return err
 }
 
 func (a *App) SetObjPanelLogsAPITimestampUseLocalTimeZone(enabled bool) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	a.logger.Info(
-		fmt.Sprintf("Object Panel Logs Tab API timestamp local timezone changed to: %v", enabled),
-		"Settings",
-	)
-	a.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone = enabled
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone, Value: enabled}}})
+	return err
 }
 
 // SetGridTablePersistenceMode persists the grid table persistence mode.
 func (a *App) SetGridTablePersistenceMode(mode string) error {
-	if mode != "shared" && mode != "namespaced" {
-		return fmt.Errorf("invalid grid table persistence mode: %s", mode)
-	}
-
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	a.logger.Info(fmt.Sprintf("Grid table persistence mode changed to: %s", mode), logsources.Settings)
-	a.appSettings.GridTablePersistenceMode = mode
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceGridTablePersistenceMode, Value: mode}}})
+	return err
 }
 
 // SetDefaultObjectPanelPosition persists the default object panel position.
 func (a *App) SetDefaultObjectPanelPosition(position string) error {
-	if position != "right" && position != "bottom" && position != "floating" {
-		return fmt.Errorf("invalid default object panel position: %s", position)
-	}
-
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	a.logger.Info(fmt.Sprintf("Default object panel position changed to: %s", position), logsources.Settings)
-	a.appSettings.DefaultObjectPanelPosition = position
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceDefaultObjectPanelPosition, Value: position}}})
+	return err
 }
 
 // SetObjectPanelLayout persists the default object panel dimensions and floating position.
 func (a *App) SetObjectPanelLayout(dockedRightWidth, dockedBottomHeight, floatingWidth, floatingHeight, floatingX, floatingY int) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	a.appSettings.ObjectPanelDockedRightWidth = dockedRightWidth
-	a.appSettings.ObjectPanelDockedBottomHeight = dockedBottomHeight
-	a.appSettings.ObjectPanelFloatingWidth = floatingWidth
-	a.appSettings.ObjectPanelFloatingHeight = floatingHeight
-	a.appSettings.ObjectPanelFloatingX = floatingX
-	a.appSettings.ObjectPanelFloatingY = floatingY
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
+		{Key: appPreferenceObjectPanelDockedRightWidth, Value: dockedRightWidth},
+		{Key: appPreferenceObjectPanelDockedBottomHeight, Value: dockedBottomHeight},
+		{Key: appPreferenceObjectPanelFloatingWidth, Value: floatingWidth},
+		{Key: appPreferenceObjectPanelFloatingHeight, Value: floatingHeight},
+		{Key: appPreferenceObjectPanelFloatingX, Value: floatingX},
+		{Key: appPreferenceObjectPanelFloatingY, Value: floatingY},
+	}})
+	return err
 }
 
 func (a *App) GetAppearanceModeInfo() (*AppearanceModeInfo, error) {
@@ -1263,51 +1649,32 @@ func (a *App) SetPaletteTint(mode string, hue, saturation, brightness int) error
 	if mode != "light" && mode != "dark" {
 		return fmt.Errorf("invalid palette mode: %s", mode)
 	}
-
-	// Clamp hue to 0-360
-	if hue < 0 {
-		hue = 0
-	}
-	if hue > 360 {
-		hue = 360
-	}
-	// Clamp saturation to 0-100
-	if saturation < 0 {
-		saturation = 0
-	}
-	if saturation > 100 {
-		saturation = 100
-	}
-	// Clamp brightness to -50 to +50
-	if brightness < -50 {
-		brightness = -50
-	}
-	if brightness > 50 {
-		brightness = 50
-	}
-
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
-	}
-
-	a.logger.Info(fmt.Sprintf("Palette tint (%s) changed to hue=%d saturation=%d brightness=%d", mode, hue, saturation, brightness), logsources.Settings)
-
+	hueKey := appPreferencePaletteHueDark
+	saturationKey := appPreferencePaletteSaturationDark
+	brightnessKey := appPreferencePaletteBrightnessDark
 	if mode == "light" {
-		a.appSettings.PaletteHueLight = hue
-		a.appSettings.PaletteSaturationLight = saturation
-		a.appSettings.PaletteBrightnessLight = brightness
-	} else {
-		a.appSettings.PaletteHueDark = hue
-		a.appSettings.PaletteSaturationDark = saturation
-		a.appSettings.PaletteBrightnessDark = brightness
+		hueKey = appPreferencePaletteHueLight
+		saturationKey = appPreferencePaletteSaturationLight
+		brightnessKey = appPreferencePaletteBrightnessLight
 	}
-
-	return a.saveAppSettings()
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
+		{Key: hueKey, Value: hue},
+		{Key: saturationKey, Value: saturation},
+		{Key: brightnessKey, Value: brightness},
+	}})
+	if err == nil && a.logger != nil {
+		a.logger.Info(
+			fmt.Sprintf(
+				"Palette tint (%s) changed to hue=%d saturation=%d brightness=%d",
+				mode,
+				clampInt(hue, minPaletteHue, maxPaletteHue),
+				clampInt(saturation, minPaletteSaturation, maxPaletteSaturation),
+				clampInt(brightness, minPaletteBrightness, maxPaletteBrightness),
+			),
+			logsources.Settings,
+		)
+	}
+	return err
 }
 
 // validHexColorRe matches a 7-character hex color string (#rrggbb).
@@ -1319,28 +1686,18 @@ func (a *App) SetLinkColor(mode string, color string) error {
 	if mode != "light" && mode != "dark" {
 		return fmt.Errorf("invalid link color mode: %s", mode)
 	}
-	if color != "" && !validHexColorRe.MatchString(color) {
+	key := appPreferenceLinkColorDark
+	if mode == "light" {
+		key = appPreferenceLinkColorLight
+	}
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: key, Value: color}}})
+	if err != nil && color != "" && !validHexColorRe.MatchString(color) {
 		return fmt.Errorf("invalid link color format: %s (expected #rrggbb)", color)
 	}
-
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
+	if err == nil && a.logger != nil {
+		a.logger.Info(fmt.Sprintf("Link color (%s) changed to: %s", mode, color), logsources.Settings)
 	}
-
-	a.logger.Info(fmt.Sprintf("Link color (%s) changed to: %s", mode, color), logsources.Settings)
-
-	if mode == "light" {
-		a.appSettings.LinkColorLight = color
-	} else {
-		a.appSettings.LinkColorDark = color
-	}
-
-	return a.saveAppSettings()
+	return err
 }
 
 // SetAccentColor persists a custom accent color for the specified resolved appearance mode ("light" or "dark").
@@ -1349,28 +1706,18 @@ func (a *App) SetAccentColor(mode string, color string) error {
 	if mode != "light" && mode != "dark" {
 		return fmt.Errorf("invalid accent color mode: %s", mode)
 	}
-	if color != "" && !validHexColorRe.MatchString(color) {
+	key := appPreferenceAccentColorDark
+	if mode == "light" {
+		key = appPreferenceAccentColorLight
+	}
+	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: key, Value: color}}})
+	if err != nil && color != "" && !validHexColorRe.MatchString(color) {
 		return fmt.Errorf("invalid accent color format: %s (expected #rrggbb)", color)
 	}
-
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return err
-		}
+	if err == nil && a.logger != nil {
+		a.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", mode, color), logsources.Settings)
 	}
-
-	a.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", mode, color), logsources.Settings)
-
-	if mode == "light" {
-		a.appSettings.AccentColorLight = color
-	} else {
-		a.appSettings.AccentColorDark = color
-	}
-
-	return a.saveAppSettings()
+	return err
 }
 
 // syncThemesCacheLocked updates the in-memory appSettings cache with the current

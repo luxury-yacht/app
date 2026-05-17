@@ -83,6 +83,25 @@ sessions. Keep it short, durable, and tied to code contracts.
   systems. Keep labels, icons, persistence, focus, and drag behavior aligned
   across surfaces.
 
+## Settings And Preferences
+
+- Persisted app preferences and runtime-enforced settings are backend-owned:
+  defaults, clamping, validation, schema metadata, and side effects should live
+  in the backend settings contract.
+- Frontend settings code should hydrate editable preference metadata through
+  `readAppSettingsSchema` and mutate preferences through the common
+  `UpdateAppPreferences` command, not through one setter per UI control.
+- `UpdateAppPreferences` is atomic. Validate all requested keys first, persist
+  normalized settings before runtime side effects, and reject the whole batch on
+  validation or persistence failure.
+- Frontend optimistic updates must roll back cache values, preference events,
+  and appearance localStorage mirrors when persistence fails.
+- Keep transient UI state and first-paint bootstrap caches frontend-owned.
+  Appearance localStorage mirrors backend-owned values only so the first paint
+  can render before Wails responds.
+- Object panel position and layout defaults are backend-normalized persisted
+  preferences.
+
 ## Wails Bindings
 
 - When Go DTOs change, generated frontend bindings may need refresh. If

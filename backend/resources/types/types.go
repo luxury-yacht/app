@@ -67,6 +67,42 @@ type AppSettings struct {
 	Themes                                   []Theme  `json:"themes"`                                   // Saved theme library
 }
 
+// AppPreferenceSchema describes one persisted/runtime app preference the
+// frontend can edit through the settings contract.
+type AppPreferenceSchema struct {
+	Key               string   `json:"key"`
+	Type              string   `json:"type"`
+	DefaultValue      any      `json:"defaultValue"`
+	CurrentValue      any      `json:"currentValue"`
+	Min               *int     `json:"min,omitempty"`
+	Max               *int     `json:"max,omitempty"`
+	EnumOptions       []string `json:"enumOptions,omitempty"`
+	Validation        string   `json:"validation,omitempty"`
+	RuntimeSideEffect bool     `json:"runtimeSideEffect"`
+}
+
+// AppSettingsSchema describes the persisted/runtime settings contract.
+type AppSettingsSchema struct {
+	Preferences []AppPreferenceSchema `json:"preferences"`
+}
+
+// AppPreferenceChange updates one persisted/runtime app preference.
+type AppPreferenceChange struct {
+	Key   string `json:"key"`
+	Value any    `json:"value"`
+}
+
+// UpdateAppPreferencesRequest applies one atomic batch of preference changes.
+type UpdateAppPreferencesRequest struct {
+	Changes []AppPreferenceChange `json:"changes"`
+}
+
+// UpdateAppPreferencesResponse returns the normalized settings after an update.
+type UpdateAppPreferencesResponse struct {
+	Settings    *AppSettings `json:"settings"`
+	ChangedKeys []string     `json:"changedKeys"`
+}
+
 // AppearanceModeInfo represents the appearance mode payload sent to the frontend.
 type AppearanceModeInfo struct {
 	CurrentMode string `json:"currentMode"` // Stored appearance mode: "light", "dark", or "system"
