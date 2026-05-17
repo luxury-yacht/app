@@ -138,6 +138,17 @@ execution:
 - Invalidating the cached refresh base URL and suppressing transient network
   errors while backend refresh services rebuild.
 
+The orchestrator is one global coordinator with per-cluster runtimes beneath it.
+The coordinator owns app-wide lifecycle concerns such as active cluster,
+connected/background clusters, settings, visibility, kubeconfig lifecycle, auth
+pause/recovery, and diagnostics aggregation. Cluster data state belongs in
+`ClusterRefreshRuntime` instances. Each runtime owns enabled scopes, in-flight
+requests, stream startup/cleanup bookkeeping, stream health, blocked-stream
+state, metrics freshness, and scoped store writes for exactly one `clusterId`.
+Do not add aggregate-domain exception lists to the coordinator; domains that
+need several visible scopes should opt into multiple active scopes inside each
+cluster runtime.
+
 Refreshers are disabled by default (`DEFAULT_AUTO_START = false`). Views and
 hooks enable the scopes they need, then trigger startup or manual refreshes. This
 keeps unused domains from polling or streaming at app startup.
@@ -155,6 +166,13 @@ changes, object panel state, and settings. The background refresh setting
 contains all active clusters or only the active tab cluster. Background refresh
 fans out as separate single-cluster work in each cluster runtime; it does not
 build one multi-cluster refresh scope.
+
+Namespace and overview state follow the same rule. `namespaces` and
+`cluster-overview` store per-cluster scoped entries; namespace selection remains
+per cluster tab, and the active namespace list is derived from the active
+cluster's `namespaces` payload. If a future UI needs an all-cluster summary, it
+should read multiple per-cluster entries and derive that display outside the
+refresh store.
 
 ## Backend Architecture
 
@@ -236,9 +254,31 @@ Resource stream safety rules:
   descriptor must declare scope kind, cluster-scoped behavior, row collection
   accessors, row identity, snapshot drift-key construction, row sorting, and
   whether metrics should be preserved across row updates.
+- Resource stream descriptors describe row behavior only. They must not contain
+  multi-cluster capability flags or decide whether a domain can be multiplexed
+  across clusters. Cross-cluster display is derived from separate per-cluster
+  domain state above the refresh store.
+- `frontend/src/core/refresh/streaming/resourceStreamRows.ts` owns pure row
+  replacement, deletion, stable row reuse, and metrics-preserving row merge
+  helpers. `ResourceStreamManager` owns refresh-store mutation, snapshot resync,
+  drift detection, stream health, telemetry, and fallback decisions. Keep those
+  responsibilities separate when extending streaming behavior.
+- `ResourceStreamConnection` owns WebSocket URL resolution, open/message/error
+  handling, queued outbound messages, reconnect backoff, pause/resume, and
+  refresh base URL invalidation. `ResourceStreamSubscriptionStore` owns
+  subscription lookup, single-cluster scope resolution, pending unsubscribe
+  debounce/cancel state, request/cancel messages, and resume tokens.
 - Backend resource stream supported domains live in
   `backend/refresh/resourcestream/domains.go`. Keep them aligned with backend
   refresh domain registrations and the frontend descriptors.
+- Backend resource stream registration is split by behavior under
+  `backend/refresh/resourcestream/stream_registration_*.go`. Keep direct
+  object-to-stream handlers, network/Gateway API handlers, and related-object
+  pod/node/workload handlers in the matching files. Shared helpers should cover
+  permission checks and ordinary Add/Update/Delete mapping; do not hide pods,
+  endpoint slices, workloads, custom resources, node-derived updates, or Helm
+  resync signals behind a generic descriptor table when explicit behavior is
+  clearer.
 - Each domain/scope stream must deliver monotonic `resourceVersion` values.
   Missing or regressing versions trigger a snapshot resync and temporarily block
   the stream for that scope.
@@ -363,6 +403,9 @@ When adding a streaming domain:
 5. For resource-stream domains, add a descriptor in
    `frontend/src/core/refresh/streaming/resourceStreamDomains.ts` and extend
    the descriptor parity tests.
+6. Add or update tests proving row identity, update identity, sorting, snapshot
+   drift keys, empty payloads, single-cluster subscription rejection, and
+   background-refresh fanout behavior.
 
 When adding a field to an existing row type:
 

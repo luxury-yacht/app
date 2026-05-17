@@ -104,6 +104,9 @@ Resource WebSocket domains also require:
 | File                                                                      | What to update                                                                  |
 | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `frontend/src/core/refresh/streaming/resourceStreamDomains.ts`            | Scope kind, row collection, row identity, sort, drift keys, metric preservation |
+| `frontend/src/core/refresh/streaming/resourceStreamRows.ts`               | Pure row replacement, deletion, stable reuse, and metrics-preserving merge logic |
+| `frontend/src/core/refresh/streaming/resourceStreamConnection.ts`         | WebSocket connection lifecycle, queued sends, reconnect, pause/resume           |
+| `frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts`      | Single-cluster scope resolution, subscription state, unsubscribe debounce, resume tokens |
 | `backend/refresh/resourcestream/domains.go`                               | Supported streamed refresh domain list                                          |
 | `backend/refresh/resourcestream/stream_registration_*.go`                 | Informer registration and lister/indexer setup                                  |
 | `backend/refresh/resourcestream/update_helpers_test.go` and manager tests | Stream envelope metadata and row-shape parity                                   |
@@ -111,6 +114,12 @@ Resource WebSocket domains also require:
 Resource stream descriptors describe row behavior only. Domain descriptors must
 not reintroduce multi-cluster capability flags; cross-cluster UI should derive
 from separate per-cluster domain state above the refresh store.
+
+`ResourceStreamManager` should remain responsible for refresh-store mutation,
+snapshot resync, drift detection, health, telemetry, and fallback decisions.
+Keep connection lifecycle in `ResourceStreamConnection`, subscription mechanics
+in `ResourceStreamSubscriptionStore`, and pure row math in
+`resourceStreamRows.ts`.
 
 ## Snapshot Building
 
@@ -172,6 +181,9 @@ Backend resource stream registration is split by behavior:
 | `domains.go`                     | Supported resource stream domain list used for parity guardrails         |
 
 Keep permission checks before lazy informer creation. Do not replace these files with a large descriptor table if the behavior-specific split is clearer.
+Ordinary object updates may use shared `newObjectUpdate`/`newObjectRowUpdate`
+helpers, but keep pods, endpoint slices, workloads, custom resources,
+node-derived updates, and Helm resync signals explicit.
 
 ## Known Fragility Points
 
@@ -199,6 +211,9 @@ Keep permission checks before lazy informer creation. Do not replace these files
 - [ ] Check if frontend mappings need updating (types, refresher config, diagnostics)
 - [ ] For resource streams, check frontend descriptors, backend supported domains, registration files, and single-cluster scope tests
 - [ ] Confirm new refresh-domain code builds one cluster scope at a time and derives any cross-cluster display above refresh state
+- [ ] Confirm `namespaces` and `cluster-overview` remain ordinary per-cluster domains, not aggregate-domain exceptions
+- [ ] Confirm backend aggregate handlers still route as a mux and do not merge snapshot/manual/event/resource results across clusters
+- [ ] For streamed table rows, check descriptor parity tests for row identity, update identity, sorting, empty payloads, and drift keys
 - [ ] Check if stream resume semantics are affected
 - [ ] Test with multiple clusters connected
 - [ ] Test with a cluster that has restricted RBAC (not cluster-admin)

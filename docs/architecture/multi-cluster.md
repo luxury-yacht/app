@@ -226,6 +226,14 @@ const groups = catalogDomain.data?.namespaceGroups ?? [];
 - Catalog and namespace browse are scoped to the active cluster.
 - Background refresh fans out as separate per-cluster requests instead of a
   single multi-cluster refresh scope.
+- The backend aggregate layer is a mux, not a merge engine. Snapshot, manual
+  refresh, resource stream, and event stream requests route to the one cluster
+  named by the scope and reject missing or multi-cluster selectors.
+- Namespace refresh state is per cluster. The active namespace list is derived
+  from the active cluster's `namespaces` payload; background/open cluster
+  namespace refreshes are enabled and fetched as separate `clusterId|` scopes.
+  Diagnostics should show those scopes as separate rows, never as one
+  `clusters=...` refresh-domain row.
 
 ## Backend API Requirements
 

@@ -39,10 +39,20 @@ sessions. Keep it short, durable, and tied to code contracts.
 - Refresh domains are single-cluster only. Multi-cluster/background refresh
   should fan out across per-cluster runtimes instead of using one multi-cluster
   refresh scope.
+- `namespaces` and `cluster-overview` are ordinary per-cluster domains. Do not
+  add aggregate-domain exceptions for them; derive cross-cluster displays from
+  multiple per-cluster entries above refresh state.
+- Backend aggregate refresh handlers are muxes, not merge engines. Snapshot,
+  manual refresh, event stream, and resource stream requests should route to
+  exactly one scoped cluster and reject multi-cluster selectors.
 - Frontend resource stream descriptors own row identity, sorting, drift keys,
   row collections, and metric preservation. Backend resource stream supported
   domains live in `backend/refresh/resourcestream/domains.go`; keep both aligned
   with refresh domain registration.
+- Keep resource stream connection lifecycle, subscription state, pure row
+  merge math, and manager-owned resync/drift/store mutation in their dedicated
+  modules. A descriptor table should not hide pods, endpoint slices, workloads,
+  custom resources, node-derived updates, or Helm resync behavior.
 - Multi-cluster behavior must be checked at scope keys, caches, requests,
   stores, and UI state reset boundaries.
 
