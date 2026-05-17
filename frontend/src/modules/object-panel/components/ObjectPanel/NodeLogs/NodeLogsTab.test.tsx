@@ -737,12 +737,42 @@ describe('NodeLogsTab', () => {
           sourcePath: 'journal/kubelet',
           tailBytes: 262144,
           sinceTime: expect.any(String),
-        })
+        }),
+        'background'
       );
       const logLines = Array.from(container.querySelectorAll('.log-viewer-line')).map(
         (element) => element.textContent
       );
       expect(logLines).toEqual(['line one', 'line two', 'line three']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps current node logs when a background refresh is blocked', async () => {
+    vi.useFakeTimers();
+    mockFetchNodeLogs.mockResolvedValueOnce({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: 'line one\nline two',
+    });
+    mockFetchNodeLogs.mockResolvedValueOnce({
+      status: 'blocked',
+      blockedReason: 'auto-refresh-disabled',
+    });
+
+    try {
+      await renderTab();
+      await selectSource('kubelet');
+
+      await act(async () => {
+        vi.advanceTimersByTime(5000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(container.querySelector('.logs-viewer-text')?.textContent).toContain('line two');
+      expect(container.textContent).not.toContain('Loading logs…');
     } finally {
       vi.useRealTimers();
     }

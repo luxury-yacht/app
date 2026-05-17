@@ -61,6 +61,8 @@ The frontend falls back to `FetchContainerLogs` when the stream is unavailable o
 
 Current fetch behavior:
 
+- fallback/manual fetches are invoked through the frontend `dataAccess` broker
+  using typed readers in `frontend/src/core/data-access/readers.ts`
 - live fallback and explicit manual fetch use the same canonical scope as streaming
 - previous logs use `previous=true` and remain a non-follow fetch path
 - total fetch failure returns an error instead of an empty success
@@ -105,6 +107,17 @@ The current Object Panel logs UI does not expose those controls. The user-facing
 ## Frontend viewer
 
 The frontend owns log presentation, search, display modes, copy behavior, and per-tab viewer state.
+
+Container Logs and Node Logs share viewer infrastructure from
+`frontend/src/modules/object-panel/components/ObjectPanel/Logs`, including:
+
+- `logSearch.ts` for text/regex matching helpers
+- `logExport.ts` for parsed-view CSV export
+- `parsedLogUtils.ts` for JSON parsing, display formatting, field-key
+  derivation, and parsed row keys
+- `ParsedLogTable.tsx` and `RawLogViewer.tsx` for parsed and raw rendering
+- `useTerminalTheme` and `useLogScrollRestoration` for terminal colors and
+  panel-scoped scroll restoration
 
 ### Persistence model
 
@@ -296,6 +309,10 @@ The frontend intentionally preserves per-tab log state across transient remounts
 ### 4. Fallback/manual fetch and live stream must consume the same scope
 
 `FetchContainerLogs` and `/api/v2/stream/container-logs` both derive from the same `containerLogsScope` value built from full object identity. Do not reintroduce a second legacy identity path for manual fetches.
+
+The frontend fallback path must call the typed `readContainerLogs` wrapper
+through `requestData` so diagnostics and paused auto-refresh policy stay
+consistent.
 
 ### 5. The current UI is intentionally simpler than the backend contract
 

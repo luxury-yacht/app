@@ -1,3 +1,11 @@
+import {
+  readNodeLogDiscovery,
+  readNodeLogs,
+  requestData,
+  type DataRequestReason,
+} from '@/core/data-access';
+import type { types } from '@wailsjs/go/models';
+
 export interface NodeLogSource {
   id: string;
   label: string;
@@ -25,10 +33,11 @@ export interface NodeLogFetchResponse {
   truncated?: boolean;
 }
 
-const getRuntimeApp = (): Record<string, (...args: unknown[]) => Promise<unknown>> | null => {
-  const runtimeApp = (window as any).go?.backend?.App;
-  return runtimeApp && typeof runtimeApp === 'object' ? runtimeApp : null;
-};
+export interface NodeLogFetchResult {
+  status: 'executed' | 'blocked';
+  data?: NodeLogFetchResponse;
+  blockedReason?: string;
+}
 
 const nodeLogDiscoveryCache = new Map<string, NodeLogDiscoveryResponse>();
 const nodeLogDiscoveryInflight = new Map<string, Promise<NodeLogDiscoveryResponse>>();
@@ -36,12 +45,22 @@ const nodeLogDiscoveryInflight = new Map<string, Promise<NodeLogDiscoveryRespons
 const getNodeLogDiscoveryKey = (clusterId: string, nodeName: string): string =>
   `${clusterId}::${nodeName}`;
 
-const cloneNodeLogSource = (source: NodeLogSource): NodeLogSource => ({ ...source });
+const normalizeNodeLogKind = (kind: unknown): NodeLogSource['kind'] =>
+  kind === 'journal' || kind === 'path' || kind === 'service' ? kind : 'path';
 
-const cloneNodeLogDiscoveryResponse = (
-  response: NodeLogDiscoveryResponse
-): NodeLogDiscoveryResponse => ({
-  supported: response.supported,
+const cloneNodeLogSource = (source: Partial<NodeLogSource>): NodeLogSource => ({
+  id: source.id ?? source.path ?? '',
+  label: source.label ?? source.path ?? '',
+  kind: normalizeNodeLogKind(source.kind),
+  path: source.path ?? '',
+});
+
+const cloneNodeLogDiscoveryResponse = (response: {
+  supported?: boolean;
+  reason?: string;
+  sources?: Array<Partial<NodeLogSource>>;
+}): NodeLogDiscoveryResponse => ({
+  supported: Boolean(response.supported),
   reason: response.reason,
   sources: Array.isArray(response.sources) ? response.sources.map(cloneNodeLogSource) : [],
 });
@@ -56,7 +75,8 @@ export const getCachedNodeLogDiscovery = (
 
 export const discoverNodeLogs = async (
   clusterId: string,
-  nodeName: string
+  nodeName: string,
+  reason: DataRequestReason = 'startup'
 ): Promise<NodeLogDiscoveryResponse> => {
   const cacheKey = getNodeLogDiscoveryKey(clusterId, nodeName);
   const cached = nodeLogDiscoveryCache.get(cacheKey);
@@ -69,16 +89,27 @@ export const discoverNodeLogs = async (
     return inflight.then(cloneNodeLogDiscoveryResponse);
   }
 
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.DiscoverNodeLogs !== 'function') {
-    throw new Error('Node log discovery is unavailable');
-  }
-
-  const request = (
-    runtimeApp.DiscoverNodeLogs(clusterId, nodeName) as Promise<NodeLogDiscoveryResponse>
-  )
-    .then((response) => {
-      const normalized = cloneNodeLogDiscoveryResponse(response);
+  const request = requestData({
+    resource: 'node-log-discovery',
+    reason,
+    adapter: 'rpc-read',
+    label: 'Node Log Discovery',
+    scope: `${clusterId}:Node:${nodeName}`,
+    read: () => readNodeLogDiscovery(clusterId, nodeName),
+  })
+    .then((result) => {
+      if (result.status === 'blocked') {
+        return {
+          supported: false,
+          sources: [],
+          reason: 'Cluster data refresh is paused',
+        } satisfies NodeLogDiscoveryResponse;
+      }
+      const normalized = cloneNodeLogDiscoveryResponse(
+        (result.data as unknown as Partial<NodeLogDiscoveryResponse> | undefined) ?? {
+          supported: false,
+        }
+      );
       nodeLogDiscoveryCache.set(cacheKey, normalized);
       return normalized;
     })
@@ -93,11 +124,27 @@ export const discoverNodeLogs = async (
 export const fetchNodeLogs = async (
   clusterId: string,
   nodeName: string,
-  request: NodeLogFetchRequest
-): Promise<NodeLogFetchResponse> => {
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.FetchNodeLogs !== 'function') {
-    throw new Error('Node log fetch is unavailable');
+  request: NodeLogFetchRequest,
+  reason: DataRequestReason = 'user'
+): Promise<NodeLogFetchResult> => {
+  const result = await requestData({
+    resource: 'node-logs',
+    reason,
+    adapter: 'rpc-read',
+    label: 'Node Logs',
+    scope: `${clusterId}:Node:${nodeName}:${request.sourcePath}`,
+    read: () => readNodeLogs(clusterId, nodeName, request as types.NodeLogFetchRequest),
+  });
+
+  if (result.status === 'blocked') {
+    return {
+      status: 'blocked',
+      blockedReason: result.blockedReason,
+    };
   }
-  return runtimeApp.FetchNodeLogs(clusterId, nodeName, request) as Promise<NodeLogFetchResponse>;
+
+  return {
+    status: 'executed',
+    data: result.data as NodeLogFetchResponse,
+  };
 };

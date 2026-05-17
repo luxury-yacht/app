@@ -76,7 +76,8 @@ Internal infrastructure reads such as `GetRefreshBaseURL` and
 
 `dataAccess` reader wrappers currently cover:
 
-- target ports, pod containers, and log-scope containers
+- target ports, pod containers, log-scope containers, container logs, and node
+  logs
 - object YAML by GVK
 - catalog object lookup by UID or object match
 - revision history

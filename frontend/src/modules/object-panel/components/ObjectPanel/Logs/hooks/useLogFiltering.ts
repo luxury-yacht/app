@@ -8,7 +8,8 @@ import { useMemo } from 'react';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
 import type { ParsedLogEntry } from '../logViewerReducer';
 import { stripAnsi } from '../ansi';
-import { tryParseJSONObject } from '../jsonLogs';
+import { tryParseJSONObject } from '../parsedLogUtils';
+import { buildLogSearchRegex } from '../logSearch';
 
 interface UseLogFilteringParams {
   logEntries: ContainerLogsEntry[];
@@ -137,7 +138,9 @@ export function useLogFiltering({
     // Filter by text search
     if (textFilter.trim()) {
       const searchText = caseSensitiveMatches ? textFilter : textFilter.toLowerCase();
-      const regex = regexMatches ? buildSearchRegex(textFilter, caseSensitiveMatches) : null;
+      const regex = regexMatches
+        ? buildLogSearchRegex(textFilter, { regexMode: true, caseSensitive: caseSensitiveMatches })
+        : null;
       if (regexMatches && !regex) {
         return [] as ContainerLogsEntry[];
       }
@@ -200,16 +203,4 @@ export function useLogFiltering({
   const canParseContainerLogs = parsedCandidates.length > 0;
 
   return { filteredEntries, parsedCandidates, canParseContainerLogs };
-}
-
-function buildSearchRegex(pattern: string, caseSensitive: boolean): RegExp | null {
-  const trimmed = pattern.trim();
-  if (!trimmed) {
-    return null;
-  }
-  try {
-    return new RegExp(trimmed, caseSensitive ? '' : 'i');
-  } catch {
-    return null;
-  }
 }

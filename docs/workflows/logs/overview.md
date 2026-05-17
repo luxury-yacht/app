@@ -25,8 +25,13 @@ belong to Container Logs.
 When changing log-related code:
 
 - Keep canonical object identity and `clusterId` on Kubernetes log paths.
+- Route Kubernetes log reads through `dataAccess`; Application Logs remain
+  app-state/runtime data.
 - Do not share Application Logs settings with Container Logs or Node Logs.
 - Prefer shared viewer behavior for search, wrapping, ANSI rendering, copy, and
   parsed JSON where the underlying log source supports it.
+- Shared Container Logs / Node Logs viewer behavior belongs under
+  `frontend/src/modules/object-panel/components/ObjectPanel/Logs`; keep
+  transport and source-selection wiring in the specific log surface.
 - Document whether a new control is frontend-only filtering or backend-side
   target reduction.

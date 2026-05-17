@@ -51,7 +51,13 @@ There is no cluster-wide preflight outside the node object panel.
 - `frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.css`
   - Node log selector tree styling and node-only overrides for the shared logs UI.
 - `frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs/nodeLogsApi.ts`
-  - Frontend RPC calls and session-lifetime discovery cache.
+  - Brokered frontend data-access calls and session-lifetime discovery cache.
+- `frontend/src/core/data-access/readers.ts`
+  - Typed `readNodeLogDiscovery` and `readNodeLogs` wrappers around generated
+    Wails methods.
+- `frontend/src/modules/object-panel/components/ObjectPanel/Logs`
+  - Shared search, parsed JSON, copy/export, raw rendering, terminal theme, and
+    scroll restoration infrastructure reused by node and container logs.
 
 ## Backend model
 
@@ -148,6 +154,8 @@ Current behavior:
 - node panels start discovery immediately on mount
 - there is no separate frontend `nodes/proxy` pre-check
 - cached discovery results are reused by `clusterId + nodeName`
+- cache misses run through `dataAccess` with `reason: "startup"` so paused
+  auto-refresh policy and diagnostics apply consistently
 - the `Logs` tab stays visible for nodes while discovery runs
 
 ### Availability states
@@ -179,6 +187,8 @@ Current behavior:
 Current fetch behavior:
 
 - one source at a time
+- selected-source fetches run through `dataAccess` as user-initiated direct
+  reads
 - default tail fetch is bounded to the most recent `256 KB`
 - oversized responses are truncated client-side and marked as truncated
 - the view shows a truncation notice when only the recent tail is displayed
@@ -188,6 +198,9 @@ Current refresh behavior:
 - no dedicated refresh button
 - refresh is driven by the existing auto-refresh control
 - append-style refresh uses `sinceTime`
+- timer-driven refreshes use `dataAccess` with `reason: "background"`; when
+  auto-refresh is paused, blocked results preserve the current content instead
+  of showing passive loading or clearing the buffer
 - a small overlap window is applied and duplicate boundary lines are deduped
 - if incremental refresh fails or becomes unsafe, the viewer falls back to a full tail reload
 

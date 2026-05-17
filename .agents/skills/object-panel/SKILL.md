@@ -43,6 +43,8 @@ GVK/object identity. Rich detail and imperative operations belong in
 
 - `frontend/src/modules/object-panel`
 - `frontend/src/modules/object-panel/components/ObjectPanel`
+- `frontend/src/modules/object-panel/components/ObjectPanel/Logs`
+- `frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs`
 - `frontend/src/modules/object-panel/hooks`
 - `frontend/src/ui/dockable`
 - `frontend/src/shared/components/modals`
@@ -51,6 +53,12 @@ GVK/object identity. Rich detail and imperative operations belong in
 Frontend object-panel work must use backend-provided `statusPresentation` and
 `ResourceLink.ref` where available. Do not reconstruct object identity from kind
 and name when a full backend reference should be carried.
+
+Log viewer presentation shared by container logs and node logs lives under
+`frontend/src/modules/object-panel/components/ObjectPanel/Logs`. Keep
+transport-specific wiring in the container or node shell, and put shared search,
+CSV export, parsed JSON, ANSI rendering, scroll restoration, and terminal theme
+behavior in the shared log viewer utilities/components.
 
 ## Checklist
 
