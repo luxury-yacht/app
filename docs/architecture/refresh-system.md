@@ -38,17 +38,17 @@ Backend resource responsibilities are intentionally split:
 
 ## Terms
 
-| Term                 | Meaning                                                                                                                             |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Backend subsystem    | Per-cluster refresh services: domain registry, snapshot service, manual queue, streams, telemetry, informers, and permission gates. |
-| Refresh domain       | A named data set such as `cluster-overview`, `namespace-workloads`, `object-details`, `object-map`, or `catalog`.                   |
-| Scope                | The requested slice of a domain. In this app it must be cluster-prefixed before crossing the API boundary.                          |
-| Snapshot             | A point-in-time response for one domain and scope, including payload, version, checksum, timestamps, and stats.                     |
-| Stream               | A long-lived WebSocket or SSE connection that pushes updates instead of relying only on polling.                                    |
-| Refresher            | Frontend timer configuration for a domain: interval, cooldown, and timeout.                                                         |
-| Refresh manager      | Frontend scheduler. It decides when refresh callbacks should run.                                                                   |
-| Refresh orchestrator | Frontend executor. It normalizes scopes, fetches snapshots, starts/stops streams, and writes store state.                           |
-| Refresh store        | Frontend in-memory state keyed by domain and full scope, including status, data, stats, errors, and ETags.                          |
+| Term                 | Meaning                                                                                                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend subsystem    | Per-cluster refresh services: domain registry, snapshot service, manual queue, streams, telemetry, informers, and permission gates.                      |
+| Refresh domain       | A named data set such as `cluster-overview`, `namespace-workloads`, `object-details`, `object-map`, or `catalog`.                                        |
+| Scope                | The requested slice of a domain. In this app it must be cluster-prefixed before crossing the API boundary.                                               |
+| Snapshot             | A point-in-time response for one domain and scope, including payload, version, checksum, timestamps, and stats.                                          |
+| Stream               | A long-lived WebSocket or SSE connection that pushes updates instead of relying only on polling.                                                         |
+| Refresher            | Frontend timer configuration for a domain: interval, cooldown, and timeout.                                                                              |
+| Refresh manager      | Frontend scheduler. It decides when refresh callbacks should run.                                                                                        |
+| Refresh orchestrator | Frontend executor. It normalizes scopes, fetches snapshots, starts/stops streams, and writes store state.                                                |
+| Refresh store        | Frontend in-memory state keyed by domain and full scope, including status, data, stats, errors, and ETags.                                               |
 | Cluster scope        | A scope prefix such as `clusterId\|...`. Refresh domains target one cluster; legacy multi-cluster selectors are parsed only to return validation errors. |
 
 ## Domains And Scopes
@@ -249,50 +249,31 @@ Streaming behavior is registered per domain in the orchestrator:
 
 Resource stream safety rules:
 
-- Frontend resource stream descriptors live in
-  `frontend/src/core/refresh/streaming/resourceStreamDomains.ts`. Each
-  descriptor must declare scope kind, cluster-scoped behavior, row collection
-  accessors, row identity, snapshot drift-key construction, row sorting, and
-  whether metrics should be preserved across row updates.
-- Resource stream descriptors describe row behavior only. They must not contain
-  multi-cluster capability flags or decide whether a domain can be multiplexed
-  across clusters. Cross-cluster display is derived from separate per-cluster
-  domain state above the refresh store.
-- `frontend/src/core/refresh/streaming/resourceStreamRows.ts` owns pure row
-  replacement, deletion, stable row reuse, and metrics-preserving row merge
-  helpers. `ResourceStreamManager` owns refresh-store mutation, snapshot resync,
-  drift detection, stream health, telemetry, and fallback decisions. Keep those
-  responsibilities separate when extending streaming behavior.
-- `ResourceStreamConnection` owns WebSocket URL resolution, open/message/error
-  handling, queued outbound messages, reconnect backoff, pause/resume, and
-  refresh base URL invalidation. `ResourceStreamSubscriptionStore` owns
-  subscription lookup, single-cluster scope resolution, pending unsubscribe
-  debounce/cancel state, request/cancel messages, and resume tokens.
-- Backend resource stream supported domains live in
-  `backend/refresh/resourcestream/domains.go`. Keep them aligned with backend
-  refresh domain registrations and the frontend descriptors.
-- Backend resource stream registration is split by behavior under
-  `backend/refresh/resourcestream/stream_registration_*.go`. Keep direct
-  object-to-stream handlers, network/Gateway API handlers, and related-object
-  pod/node/workload handlers in the matching files. Shared helpers should cover
-  permission checks and ordinary Add/Update/Delete mapping; do not hide pods,
-  endpoint slices, workloads, custom resources, node-derived updates, or Helm
-  resync signals behind a generic descriptor table when explicit behavior is
-  clearer.
+- Descriptors in `resourceStreamDomains.ts` describe row behavior only: scope
+  kind, row collection access, row identity, drift keys, sorting, and metrics
+  preservation. They must not encode multi-cluster capability flags.
+- Keep implementation ownership split: `resourceStreamRows.ts` owns pure row
+  math; `ResourceStreamManager` owns store mutation, resync, drift, health,
+  telemetry, and fallback decisions; `ResourceStreamConnection` owns WebSocket
+  lifecycle; `ResourceStreamSubscriptionStore` owns subscription state, scope
+  resolution, debounce, messages, and resume tokens.
+- Backend supported domains live in `backend/refresh/resourcestream/domains.go`
+  and behavior-specific registration files under
+  `backend/refresh/resourcestream/stream_registration_*.go`. Keep permission
+  checks, direct object handlers, network/Gateway API handlers, and
+  related-object handlers explicit when a generic table would hide behavior.
 - Each domain/scope stream must deliver monotonic `resourceVersion` values.
-  Missing or regressing versions trigger a snapshot resync and temporarily block
+  Missing or regressing versions trigger snapshot resync and temporarily block
   the stream for that scope.
-- Resource WebSocket streams reject multi-cluster scopes. This matches the
-  broader refresh-domain contract: background refresh is implemented as fanout
-  across cluster runtimes, not as a multi-cluster subscription or snapshot.
+- Resource WebSocket streams reject multi-cluster scopes. Background refresh is
+  fanout across cluster runtimes, not a multi-cluster subscription or snapshot.
 - Backend sends `RESET` at subscription start and `COMPLETE` when a subscriber
-  is dropped or a resync is required.
-- Per-subscriber backpressure drops slow subscribers and forces snapshot resync.
+  is dropped or a resync is required. Per-subscriber backpressure drops slow
+  subscribers and forces snapshot resync.
 - The frontend coalesces update bursts and ignores deltas while a resync is in
-  flight.
-- Drift detection compares sampled stream updates against snapshot data. Large
-  divergence emits `refresh:resource-stream-drift`, stops streaming for that
-  domain/scope, and falls back to polling.
+  flight. Drift detection compares sampled stream updates against snapshot data;
+  large divergence emits `refresh:resource-stream-drift`, stops streaming for
+  that domain/scope, and falls back to polling.
 
 ## Catalog Integration
 
@@ -341,33 +322,9 @@ Exceptions still have one constructor path:
   streaming helper also uses.
 - `NodeSummary` goes through `BuildNodeSnapshot`.
 
-## Common Flows
+## Lifecycle Edge Cases
 
-Cluster overview:
-
-- Frontend enables `cluster-overview` for the active cluster only and fetches a
-  snapshot.
-- Backend registers the informer-based builder when nodes/pods/namespaces
-  list/watch permissions exist, otherwise it falls back to a list-only builder.
-- The payload is assembled in `backend/refresh/snapshot/cluster_overview.go` and
-  includes overview totals, metrics, version, and recent events.
-
-Nodes:
-
-- The Nodes tab enables the `nodes` scope through
-  `ClusterResourcesContext`.
-- The resource stream supplies live row changes through `/api/v2/stream/resources`.
-- Metrics-only snapshots update usage fields while the stream remains healthy.
-- Snapshot fetches provide the baseline and fallback/resync path.
-
-Object panel:
-
-- Opening the panel updates refresh context with canonical object identity.
-- `object-details`, `object-events`, `object-yaml`, Helm manifest/value domains,
-  and `object-map` use cluster-prefixed object scopes.
-- Logs use `container-logs` streaming with fallback polling in the log viewer.
-
-Kubeconfig changes:
+Kubeconfig changes are a full refresh lifecycle reset:
 
 - `kubeconfig:changing` cancels in-flight requests, stops streams, disables
   scopes, clears store state, invalidates the refresh base URL, and suppresses
@@ -375,46 +332,29 @@ Kubeconfig changes:
 - `kubeconfig:changed` and `kubeconfig:selection-changed` invalidate the base URL
   and let normal context updates re-enable required scopes.
 
+`cluster-overview` is an active-cluster snapshot domain. Backend registration
+uses an informer-based builder when nodes/pods/namespaces list/watch permissions
+exist and falls back to list-only behavior when required.
+
+Object-panel refresh scopes must use canonical object identity. `object-details`,
+`object-events`, `object-yaml`, Helm manifest/value domains, and `object-map`
+use cluster-prefixed object scopes; logs use `container-logs` streaming with
+fallback polling in the log viewer.
+
 ## Adding Or Updating Domains
 
-When adding a domain, update:
+Domain changes must keep these surfaces synchronized:
 
-1. `frontend/src/core/refresh/types.ts` and `DomainPayloadMap`.
-2. `frontend/src/core/refresh/refresherTypes.ts` and `refresherConfig.ts`.
-3. `frontend/src/core/refresh/orchestrator.ts` domain registration, scope
-   behavior, and streaming behavior if any.
-4. `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts`.
-5. Backend snapshot builders in `backend/refresh/snapshot`.
-6. Backend registration in `backend/refresh/system/registrations.go`.
-7. Shared row construction in `backend/refresh/snapshot/streaming_helpers.go`
-   and matching tests in `streaming_helpers_test.go` when the domain emits table
-   rows.
+| Surface           | Required updates                                                                                      |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
+| Frontend domain   | `types.ts`, `DomainPayloadMap`, refresher names/config, orchestrator registration, diagnostics config |
+| Backend domain    | Snapshot builder, `backend/refresh/system/registrations.go`, permission checks, tests                |
+| Streaming domain  | `streams.go`, frontend stream manager wiring, SSE handler or resource-stream registration/descriptors |
+| Table row payload | Shared Go row helper, matching `TestBuild*SummaryPopulatesAllFields`, TypeScript type, UI mapping    |
 
-When adding a streaming domain:
-
-1. Register the endpoint in `backend/refresh/system/streams.go`.
-2. For resource-stream domains, add event handlers in
-   `backend/refresh/resourcestream/stream_registration_*.go` and add the domain
-   to `backend/refresh/resourcestream/domains.go`.
-3. For SSE domains, implement a handler similar to
-   `backend/refresh/snapshot/catalog_stream.go` or
-   `backend/refresh/eventstream/handler.go`.
-4. Wire the frontend manager in `frontend/src/core/refresh/orchestrator.ts`.
-5. For resource-stream domains, add a descriptor in
-   `frontend/src/core/refresh/streaming/resourceStreamDomains.ts` and extend
-   the descriptor parity tests.
-6. Add or update tests proving row identity, update identity, sorting, snapshot
-   drift keys, empty payloads, single-cluster subscription rejection, and
-   background-refresh fanout behavior.
-
-When adding a field to an existing row type:
-
-- Add it to the Go struct in `backend/refresh/snapshot/*.go`.
-- Populate it in the shared row helper, not in a separate inline struct literal.
-- Extend the matching `TestBuild*SummaryPopulatesAllFields` test.
-- Add it to the matching TypeScript interface in
-  `frontend/src/core/refresh/types.ts`.
-- Thread it through any frontend mapping in resource contexts.
+For resource-stream domains, also prove row identity, update identity, sorting,
+drift keys, empty payloads, single-cluster subscription rejection, and background
+refresh fanout behavior.
 
 Always include cluster metadata in snapshot payloads and use full object
 references (`clusterId`, `group`, `version`, `kind`, and `namespace`/`name` for
