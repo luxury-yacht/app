@@ -21,6 +21,7 @@ import {
   setScopedDomainState,
 } from './store';
 import { refreshOrchestrator } from './orchestrator';
+import { applyMetricsSnapshot } from './metricsSnapshotApplicator';
 import {
   CLUSTER_REFRESHERS,
   NAMESPACE_REFRESHERS,
@@ -836,17 +837,18 @@ describe('refreshOrchestrator', () => {
     const orchestratorWithInternals = refreshOrchestrator as unknown as {
       notifyRefreshError: (domain: string, scope: string | undefined, message: string) => void;
       clearRefreshError: (domain: string, scope?: string) => void;
-      lastNotifiedErrors: Map<string, string>;
     };
 
+    errorHandlerMock.handle.mockClear();
     orchestratorWithInternals.notifyRefreshError('cluster-config', undefined, 'temporary failure');
-    expect(orchestratorWithInternals.lastNotifiedErrors.size).toBe(1);
+    expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
 
     orchestratorWithInternals.clearRefreshError('cluster-config');
-    expect(orchestratorWithInternals.lastNotifiedErrors.size).toBe(0);
+    orchestratorWithInternals.notifyRefreshError('cluster-config', undefined, 'temporary failure');
+    expect(errorHandlerMock.handle).toHaveBeenCalledTimes(2);
 
     orchestratorWithInternals.clearRefreshError('cluster-config');
-    expect(orchestratorWithInternals.lastNotifiedErrors.size).toBe(0);
+    expect(() => orchestratorWithInternals.clearRefreshError('cluster-config')).not.toThrow();
   });
 
   it('deduplicates identical refresh error notifications per scope', () => {
@@ -855,7 +857,7 @@ describe('refreshOrchestrator', () => {
       clearRefreshError: (domain: string, scope?: string) => void;
     };
 
-    orchestratorInternals.lastNotifiedErrors.clear();
+    orchestratorWithInternals.clearRefreshError('cluster-config');
     errorHandlerMock.handle.mockClear();
 
     orchestratorWithInternals.notifyRefreshError('cluster-config', undefined, 'already failing');
@@ -2433,9 +2435,9 @@ describe('refreshOrchestrator', () => {
       ],
     };
 
-    const applied = orchestratorInternals.applyMetricsSnapshot(
-      'nodes',
-      {
+    const applied = applyMetricsSnapshot({
+      domain: 'nodes',
+      snapshot: {
         domain: 'nodes',
         scope,
         version: 2,
@@ -2443,15 +2445,17 @@ describe('refreshOrchestrator', () => {
         generatedAt: Date.now(),
         sequence: 1,
         payload: {
+          clusterId: 'test-cluster',
           nodes: [incomingNode],
           metrics: { stale: false, successCount: 2, failureCount: 0 },
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
-      'etag-node',
-      false,
-      scope
-    );
+      etag: 'etag-node',
+      isManual: false,
+      scope,
+      clearRefreshError: vi.fn(),
+    });
 
     expect(applied).toBe(true);
     const nextState = getScopedDomainState('nodes', scope);
@@ -2508,9 +2512,9 @@ describe('refreshOrchestrator', () => {
     const previousRows = previousState.data?.pods;
     const previousMetrics = previousState.data?.metrics;
 
-    const applied = orchestratorInternals.applyMetricsSnapshot(
-      'pods',
-      {
+    const applied = applyMetricsSnapshot({
+      domain: 'pods',
+      snapshot: {
         domain: 'pods',
         scope,
         version: 2,
@@ -2518,6 +2522,7 @@ describe('refreshOrchestrator', () => {
         generatedAt: Date.now(),
         sequence: 1,
         payload: {
+          clusterId: 'cluster-a',
           pods: [{ ...existingPod }],
           metrics: {
             stale: false,
@@ -2528,10 +2533,11 @@ describe('refreshOrchestrator', () => {
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
-      'etag-pods-stable',
-      false,
-      scope
-    );
+      etag: 'etag-pods-stable',
+      isManual: false,
+      scope,
+      clearRefreshError: vi.fn(),
+    });
 
     expect(applied).toBe(true);
     const nextState = getScopedDomainState('pods', scope);
@@ -2581,9 +2587,9 @@ describe('refreshOrchestrator', () => {
       memUsage: '35Mi',
     };
 
-    const applied = orchestratorInternals.applyMetricsSnapshot(
-      'namespace-workloads',
-      {
+    const applied = applyMetricsSnapshot({
+      domain: 'namespace-workloads',
+      snapshot: {
         domain: 'namespace-workloads',
         scope,
         version: 3,
@@ -2591,14 +2597,16 @@ describe('refreshOrchestrator', () => {
         generatedAt: Date.now(),
         sequence: 1,
         payload: {
+          clusterId: 'test-cluster',
           workloads: [incomingWorkload],
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
-      'etag-workload',
-      false,
-      scope
-    );
+      etag: 'etag-workload',
+      isManual: false,
+      scope,
+      clearRefreshError: vi.fn(),
+    });
 
     expect(applied).toBe(true);
     const nextState = getScopedDomainState('namespace-workloads', scope);
@@ -2645,9 +2653,9 @@ describe('refreshOrchestrator', () => {
     const previousState = getScopedDomainState('namespace-workloads', scope);
     const previousRows = previousState.data?.workloads;
 
-    const applied = orchestratorInternals.applyMetricsSnapshot(
-      'namespace-workloads',
-      {
+    const applied = applyMetricsSnapshot({
+      domain: 'namespace-workloads',
+      snapshot: {
         domain: 'namespace-workloads',
         scope,
         version: 4,
@@ -2655,14 +2663,16 @@ describe('refreshOrchestrator', () => {
         generatedAt: Date.now(),
         sequence: 2,
         payload: {
+          clusterId: 'test-cluster',
           workloads: [{ ...existingWorkload }],
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
-      'etag-workload-stable',
-      false,
-      scope
-    );
+      etag: 'etag-workload-stable',
+      isManual: false,
+      scope,
+      clearRefreshError: vi.fn(),
+    });
 
     expect(applied).toBe(true);
     const nextState = getScopedDomainState('namespace-workloads', scope);
