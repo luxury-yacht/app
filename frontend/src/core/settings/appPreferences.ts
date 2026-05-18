@@ -35,7 +35,7 @@ export type AppearanceMode = 'light' | 'dark' | 'system';
 export type GridTablePersistenceMode = 'namespaced' | 'shared';
 export type ObjectPanelPosition = 'right' | 'bottom' | 'floating';
 
-interface AppPreferences {
+export interface AppPreferences {
   appearanceMode: AppearanceMode;
   useShortResourceNames: boolean;
   dimInactiveNamespaces: boolean;
@@ -70,6 +70,20 @@ interface AppPreferences {
   accentColorDark: string;
   linkColorLight: string;
   linkColorDark: string;
+}
+
+export type AppPreferenceKey = keyof AppPreferences;
+
+export interface AppPreferenceMetadata<K extends AppPreferenceKey = AppPreferenceKey> {
+  key: K;
+  type: 'boolean' | 'color' | 'enum' | 'integer' | 'string';
+  defaultValue: AppPreferences[K];
+  currentValue: AppPreferences[K];
+  min?: number;
+  max?: number;
+  enumOptions?: string[];
+  validation?: string;
+  runtimeSideEffect: boolean;
 }
 
 interface AppSettingsPayload {
@@ -115,9 +129,19 @@ interface AppSettingsPayload {
 }
 
 const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
+const OBJECT_PANEL_DOCKED_RIGHT_MIN_WIDTH = 240;
+const OBJECT_PANEL_DOCKED_BOTTOM_MIN_HEIGHT = 180;
+const OBJECT_PANEL_FLOATING_MIN_WIDTH = 320;
+const OBJECT_PANEL_FLOATING_MIN_HEIGHT = 240;
+const OBJECT_PANEL_FLOATING_MIN_POSITION = 1;
+const OBJECT_PANEL_LAYOUT_MAX = 9999;
+const PALETTE_HUE_MIN = 0;
+const PALETTE_HUE_MAX = 360;
+const PALETTE_SATURATION_MIN = 0;
+const PALETTE_SATURATION_MAX = 100;
+const PALETTE_BRIGHTNESS_MIN = -50;
+const PALETTE_BRIGHTNESS_MAX = 50;
 
-// ObjPanelLogs buffer bounds — keep in lockstep with backend/app_settings.go so
-// the client and server agree on the clamp range.
 export const OBJ_PANEL_LOGS_BUFFER_MIN_SIZE = 100;
 export const OBJ_PANEL_LOGS_BUFFER_MAX_SIZE = 10000;
 export const OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE = 1000;
@@ -168,7 +192,7 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   linkColorLight: '',
   linkColorDark: '',
 
-  // make sure these match the defaults in backend/app_settings.go
+  // Used only before backend schema metadata is available.
   gridTablePersistenceMode: 'shared',
   defaultObjectPanelPosition: 'right',
   objectPanelDockedRightWidth: 600,
@@ -179,9 +203,203 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   objectPanelFloatingY: 100,
 };
 
+const createPreferenceMetadata = <K extends AppPreferenceKey>(
+  key: K,
+  type: AppPreferenceMetadata<K>['type'],
+  options: Omit<AppPreferenceMetadata<K>, 'currentValue' | 'defaultValue' | 'key' | 'type'> & {
+    defaultValue?: AppPreferences[K];
+    currentValue?: AppPreferences[K];
+  }
+): AppPreferenceMetadata<K> => ({
+  key,
+  type,
+  defaultValue: options.defaultValue ?? DEFAULT_PREFERENCES[key],
+  currentValue: options.currentValue ?? DEFAULT_PREFERENCES[key],
+  min: options.min,
+  max: options.max,
+  enumOptions: options.enumOptions,
+  validation: options.validation,
+  runtimeSideEffect: options.runtimeSideEffect,
+});
+
+const FALLBACK_PREFERENCE_METADATA: {
+  [K in AppPreferenceKey]: AppPreferenceMetadata<K>;
+} = {
+  appearanceMode: createPreferenceMetadata('appearanceMode', 'enum', {
+    enumOptions: ['light', 'dark', 'system'],
+    runtimeSideEffect: true,
+  }),
+  useShortResourceNames: createPreferenceMetadata('useShortResourceNames', 'boolean', {
+    runtimeSideEffect: false,
+  }),
+  dimInactiveNamespaces: createPreferenceMetadata('dimInactiveNamespaces', 'boolean', {
+    runtimeSideEffect: false,
+  }),
+  exclusiveNamespaces: createPreferenceMetadata('exclusiveNamespaces', 'boolean', {
+    runtimeSideEffect: false,
+  }),
+  autoRefreshEnabled: createPreferenceMetadata('autoRefreshEnabled', 'boolean', {
+    runtimeSideEffect: true,
+  }),
+  refreshBackgroundClustersEnabled: createPreferenceMetadata(
+    'refreshBackgroundClustersEnabled',
+    'boolean',
+    { runtimeSideEffect: true }
+  ),
+  metricsRefreshIntervalMs: createPreferenceMetadata('metricsRefreshIntervalMs', 'integer', {
+    min: 1,
+    runtimeSideEffect: true,
+  }),
+  maxTableRows: createPreferenceMetadata('maxTableRows', 'integer', {
+    min: MAX_TABLE_ROWS_MIN,
+    max: MAX_TABLE_ROWS_MAX,
+    runtimeSideEffect: false,
+  }),
+  kubernetesClientQPS: createPreferenceMetadata('kubernetesClientQPS', 'integer', {
+    min: KUBERNETES_CLIENT_QPS_MIN,
+    max: KUBERNETES_CLIENT_QPS_MAX,
+    runtimeSideEffect: true,
+  }),
+  kubernetesClientBurst: createPreferenceMetadata('kubernetesClientBurst', 'integer', {
+    min: KUBERNETES_CLIENT_BURST_MIN,
+    max: KUBERNETES_CLIENT_BURST_MAX,
+    runtimeSideEffect: true,
+  }),
+  permissionSSRRFetchConcurrency: createPreferenceMetadata(
+    'permissionSSRRFetchConcurrency',
+    'integer',
+    {
+      min: PERMISSION_SSRR_FETCH_CONCURRENCY_MIN,
+      max: PERMISSION_SSRR_FETCH_CONCURRENCY_MAX,
+      runtimeSideEffect: false,
+    }
+  ),
+  objPanelLogsBufferMaxSize: createPreferenceMetadata('objPanelLogsBufferMaxSize', 'integer', {
+    min: OBJ_PANEL_LOGS_BUFFER_MIN_SIZE,
+    max: OBJ_PANEL_LOGS_BUFFER_MAX_SIZE,
+    runtimeSideEffect: false,
+  }),
+  objPanelLogsApiTimestampFormat: createPreferenceMetadata(
+    'objPanelLogsApiTimestampFormat',
+    'string',
+    { validation: 'dayjs-format', runtimeSideEffect: false }
+  ),
+  objPanelLogsApiTimestampUseLocalTimeZone: createPreferenceMetadata(
+    'objPanelLogsApiTimestampUseLocalTimeZone',
+    'boolean',
+    { runtimeSideEffect: false }
+  ),
+  objPanelLogsTargetPerScopeLimit: createPreferenceMetadata(
+    'objPanelLogsTargetPerScopeLimit',
+    'integer',
+    {
+      min: OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN,
+      max: OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX,
+      runtimeSideEffect: true,
+    }
+  ),
+  objPanelLogsTargetGlobalLimit: createPreferenceMetadata(
+    'objPanelLogsTargetGlobalLimit',
+    'integer',
+    {
+      min: OBJ_PANEL_LOGS_TARGET_GLOBAL_MIN,
+      max: OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX,
+      runtimeSideEffect: true,
+    }
+  ),
+  gridTablePersistenceMode: createPreferenceMetadata('gridTablePersistenceMode', 'enum', {
+    enumOptions: ['shared', 'namespaced'],
+    runtimeSideEffect: false,
+  }),
+  defaultObjectPanelPosition: createPreferenceMetadata('defaultObjectPanelPosition', 'enum', {
+    enumOptions: ['right', 'bottom', 'floating'],
+    runtimeSideEffect: false,
+  }),
+  objectPanelDockedRightWidth: createPreferenceMetadata('objectPanelDockedRightWidth', 'integer', {
+    min: OBJECT_PANEL_DOCKED_RIGHT_MIN_WIDTH,
+    max: OBJECT_PANEL_LAYOUT_MAX,
+    runtimeSideEffect: false,
+  }),
+  objectPanelDockedBottomHeight: createPreferenceMetadata(
+    'objectPanelDockedBottomHeight',
+    'integer',
+    {
+      min: OBJECT_PANEL_DOCKED_BOTTOM_MIN_HEIGHT,
+      max: OBJECT_PANEL_LAYOUT_MAX,
+      runtimeSideEffect: false,
+    }
+  ),
+  objectPanelFloatingWidth: createPreferenceMetadata('objectPanelFloatingWidth', 'integer', {
+    min: OBJECT_PANEL_FLOATING_MIN_WIDTH,
+    max: OBJECT_PANEL_LAYOUT_MAX,
+    runtimeSideEffect: false,
+  }),
+  objectPanelFloatingHeight: createPreferenceMetadata('objectPanelFloatingHeight', 'integer', {
+    min: OBJECT_PANEL_FLOATING_MIN_HEIGHT,
+    max: OBJECT_PANEL_LAYOUT_MAX,
+    runtimeSideEffect: false,
+  }),
+  objectPanelFloatingX: createPreferenceMetadata('objectPanelFloatingX', 'integer', {
+    min: OBJECT_PANEL_FLOATING_MIN_POSITION,
+    max: OBJECT_PANEL_LAYOUT_MAX,
+    runtimeSideEffect: false,
+  }),
+  objectPanelFloatingY: createPreferenceMetadata('objectPanelFloatingY', 'integer', {
+    min: OBJECT_PANEL_FLOATING_MIN_POSITION,
+    max: OBJECT_PANEL_LAYOUT_MAX,
+    runtimeSideEffect: false,
+  }),
+  paletteHueLight: createPreferenceMetadata('paletteHueLight', 'integer', {
+    min: PALETTE_HUE_MIN,
+    max: PALETTE_HUE_MAX,
+    runtimeSideEffect: false,
+  }),
+  paletteSaturationLight: createPreferenceMetadata('paletteSaturationLight', 'integer', {
+    min: PALETTE_SATURATION_MIN,
+    max: PALETTE_SATURATION_MAX,
+    runtimeSideEffect: false,
+  }),
+  paletteBrightnessLight: createPreferenceMetadata('paletteBrightnessLight', 'integer', {
+    min: PALETTE_BRIGHTNESS_MIN,
+    max: PALETTE_BRIGHTNESS_MAX,
+    runtimeSideEffect: false,
+  }),
+  paletteHueDark: createPreferenceMetadata('paletteHueDark', 'integer', {
+    min: PALETTE_HUE_MIN,
+    max: PALETTE_HUE_MAX,
+    runtimeSideEffect: false,
+  }),
+  paletteSaturationDark: createPreferenceMetadata('paletteSaturationDark', 'integer', {
+    min: PALETTE_SATURATION_MIN,
+    max: PALETTE_SATURATION_MAX,
+    runtimeSideEffect: false,
+  }),
+  paletteBrightnessDark: createPreferenceMetadata('paletteBrightnessDark', 'integer', {
+    min: PALETTE_BRIGHTNESS_MIN,
+    max: PALETTE_BRIGHTNESS_MAX,
+    runtimeSideEffect: false,
+  }),
+  accentColorLight: createPreferenceMetadata('accentColorLight', 'color', {
+    validation: '#rrggbb-or-empty',
+    runtimeSideEffect: false,
+  }),
+  accentColorDark: createPreferenceMetadata('accentColorDark', 'color', {
+    validation: '#rrggbb-or-empty',
+    runtimeSideEffect: false,
+  }),
+  linkColorLight: createPreferenceMetadata('linkColorLight', 'color', {
+    validation: '#rrggbb-or-empty',
+    runtimeSideEffect: false,
+  }),
+  linkColorDark: createPreferenceMetadata('linkColorDark', 'color', {
+    validation: '#rrggbb-or-empty',
+    runtimeSideEffect: false,
+  }),
+};
+
 let preferenceCache: AppPreferences = { ...DEFAULT_PREFERENCES };
 let hydrated = false;
-let preferenceSchemaByKey = new Map<string, types.AppPreferenceSchema>();
+let preferenceSchemaByKey = new Map<AppPreferenceKey, AppPreferenceMetadata>();
 
 const APPEARANCE_MODE_STORAGE_KEY = 'app-appearance-mode-preference';
 const OLD_APPEARANCE_MODE_STORAGE_KEY = 'app-theme-preference';
@@ -214,148 +432,154 @@ const persistAppearanceBootstrapToLocalStorage = (): void => {
   });
 };
 
-const normalizeAppearanceMode = (value: string | undefined): AppearanceMode => {
-  if (value === 'light' || value === 'dark' || value === 'system') {
+const isPreferenceKey = (key: string): key is AppPreferenceKey => key in DEFAULT_PREFERENCES;
+
+const schemaEntryToMetadata = (entry: types.AppPreferenceSchema): AppPreferenceMetadata | null => {
+  if (!isPreferenceKey(entry.key)) {
+    return null;
+  }
+  const fallback = FALLBACK_PREFERENCE_METADATA[entry.key];
+  return {
+    key: entry.key,
+    type: (entry.type || fallback.type) as AppPreferenceMetadata['type'],
+    defaultValue: (entry.defaultValue ?? fallback.defaultValue) as AppPreferences[AppPreferenceKey],
+    currentValue: (entry.currentValue ??
+      entry.defaultValue ??
+      fallback.defaultValue) as AppPreferences[AppPreferenceKey],
+    min: entry.min,
+    max: entry.max,
+    enumOptions: entry.enumOptions ?? fallback.enumOptions,
+    validation: entry.validation ?? fallback.validation,
+    runtimeSideEffect: entry.runtimeSideEffect ?? fallback.runtimeSideEffect,
+  };
+};
+
+const preferenceMetadataForKey = <K extends AppPreferenceKey>(key: K): AppPreferenceMetadata<K> => {
+  return (preferenceSchemaByKey.get(key) ??
+    FALLBACK_PREFERENCE_METADATA[key]) as AppPreferenceMetadata<K>;
+};
+
+export const getPreferenceMetadata = <K extends AppPreferenceKey>(
+  key: K
+): AppPreferenceMetadata<K> => preferenceMetadataForKey(key);
+
+export const getIntegerPreferenceMetadata = (
+  key: AppPreferenceKey
+): AppPreferenceMetadata & {
+  min: number;
+  max?: number;
+  defaultValue: number;
+  currentValue: number;
+} => {
+  const metadata = preferenceMetadataForKey(key);
+  if (metadata.type !== 'integer') {
+    throw new Error(`Preference ${key} is not an integer setting`);
+  }
+  return {
+    ...metadata,
+    defaultValue: Number(metadata.defaultValue),
+    currentValue: Number(metadata.currentValue),
+    min: metadata.min ?? Number.NEGATIVE_INFINITY,
+  };
+};
+
+const numericPreferenceDefault = (key: AppPreferenceKey): number => {
+  return Number(preferenceMetadataForKey(key).defaultValue);
+};
+
+export const normalizeIntegerPreferenceValue = (
+  key: AppPreferenceKey,
+  value?: number,
+  options?: { defaultOnNonPositive?: boolean }
+): number => {
+  const metadata = getIntegerPreferenceMetadata(key);
+  if (value == null || Number.isNaN(value) || (options?.defaultOnNonPositive && value <= 0)) {
+    return numericPreferenceDefault(key);
+  }
+  const floored = Math.floor(value);
+  if (metadata.min != null && floored < metadata.min) {
+    return metadata.min;
+  }
+  if (metadata.max != null && floored > metadata.max) {
+    return metadata.max;
+  }
+  return floored;
+};
+
+const normalizeEnumPreferenceValue = <T extends string>(
+  key: AppPreferenceKey,
+  value: string | undefined
+): T => {
+  const metadata = preferenceMetadataForKey(key);
+  if (typeof value === 'string' && metadata.enumOptions?.includes(value)) {
+    return value as T;
+  }
+  return String(metadata.defaultValue) as T;
+};
+
+const normalizeBooleanPreferenceValue = (
+  key: AppPreferenceKey,
+  value: boolean | undefined
+): boolean => value ?? Boolean(preferenceMetadataForKey(key).defaultValue);
+
+const validHexColorRe = /^#[0-9a-fA-F]{6}$/;
+
+const normalizeColorPreferenceValue = (
+  key: AppPreferenceKey,
+  value: string | undefined
+): string => {
+  if (typeof value === 'string' && (value === '' || validHexColorRe.test(value))) {
     return value;
   }
-  return schemaDefault('appearanceMode', DEFAULT_PREFERENCES.appearanceMode);
+  return String(preferenceMetadataForKey(key).defaultValue);
 };
 
-const normalizeGridTableMode = (value: string | undefined): GridTablePersistenceMode => {
-  if (value === 'shared' || value === 'namespaced') {
-    return value;
-  }
-  return schemaDefault('gridTablePersistenceMode', DEFAULT_PREFERENCES.gridTablePersistenceMode);
-};
+const normalizeAppearanceMode = (value: string | undefined): AppearanceMode =>
+  normalizeEnumPreferenceValue<AppearanceMode>('appearanceMode', value);
 
-const normalizeObjectPanelPosition = (value: string | undefined): ObjectPanelPosition => {
-  if (value === 'right' || value === 'bottom' || value === 'floating') {
-    return value;
-  }
-  return schemaDefault(
-    'defaultObjectPanelPosition',
-    DEFAULT_PREFERENCES.defaultObjectPanelPosition
-  );
-};
+const normalizeGridTableMode = (value: string | undefined): GridTablePersistenceMode =>
+  normalizeEnumPreferenceValue<GridTablePersistenceMode>('gridTablePersistenceMode', value);
 
-const normalizeMetricsIntervalMs = (value?: number): number => {
-  if (value == null || Number.isNaN(value) || value <= 0) {
-    return schemaDefault('metricsRefreshIntervalMs', DEFAULT_METRICS_REFRESH_INTERVAL_MS);
-  }
-  return Math.floor(value);
-};
+const normalizeObjectPanelPosition = (value: string | undefined): ObjectPanelPosition =>
+  normalizeEnumPreferenceValue<ObjectPanelPosition>('defaultObjectPanelPosition', value);
 
-const normalizeMaxTableRows = (value?: number): number => {
-  if (value == null || Number.isNaN(value) || value <= 0) {
-    return schemaDefault('maxTableRows', MAX_TABLE_ROWS_DEFAULT);
-  }
-  const floored = Math.floor(value);
-  if (floored < schemaMin('maxTableRows', MAX_TABLE_ROWS_MIN)) {
-    return schemaMin('maxTableRows', MAX_TABLE_ROWS_MIN);
-  }
-  if (floored > schemaMax('maxTableRows', MAX_TABLE_ROWS_MAX)) {
-    return schemaMax('maxTableRows', MAX_TABLE_ROWS_MAX);
-  }
-  return floored;
-};
+const normalizeMetricsIntervalMs = (value?: number): number =>
+  normalizeIntegerPreferenceValue('metricsRefreshIntervalMs', value, {
+    defaultOnNonPositive: true,
+  });
 
-const normalizeKubernetesClientQPS = (value?: number): number => {
-  if (value == null || Number.isNaN(value) || value <= 0) {
-    return schemaDefault('kubernetesClientQPS', KUBERNETES_CLIENT_QPS_DEFAULT);
-  }
-  const floored = Math.floor(value);
-  if (floored < schemaMin('kubernetesClientQPS', KUBERNETES_CLIENT_QPS_MIN)) {
-    return schemaMin('kubernetesClientQPS', KUBERNETES_CLIENT_QPS_MIN);
-  }
-  if (floored > schemaMax('kubernetesClientQPS', KUBERNETES_CLIENT_QPS_MAX)) {
-    return schemaMax('kubernetesClientQPS', KUBERNETES_CLIENT_QPS_MAX);
-  }
-  return floored;
-};
+const normalizeMaxTableRows = (value?: number): number =>
+  normalizeIntegerPreferenceValue('maxTableRows', value, { defaultOnNonPositive: true });
 
-const normalizeKubernetesClientBurst = (value?: number): number => {
-  if (value == null || Number.isNaN(value) || value <= 0) {
-    return schemaDefault('kubernetesClientBurst', KUBERNETES_CLIENT_BURST_DEFAULT);
-  }
-  const floored = Math.floor(value);
-  if (floored < schemaMin('kubernetesClientBurst', KUBERNETES_CLIENT_BURST_MIN)) {
-    return schemaMin('kubernetesClientBurst', KUBERNETES_CLIENT_BURST_MIN);
-  }
-  if (floored > schemaMax('kubernetesClientBurst', KUBERNETES_CLIENT_BURST_MAX)) {
-    return schemaMax('kubernetesClientBurst', KUBERNETES_CLIENT_BURST_MAX);
-  }
-  return floored;
-};
+const normalizeKubernetesClientQPS = (value?: number): number =>
+  normalizeIntegerPreferenceValue('kubernetesClientQPS', value, {
+    defaultOnNonPositive: true,
+  });
 
-const normalizePermissionSSRRFetchConcurrency = (value?: number): number => {
-  if (value == null || Number.isNaN(value) || value <= 0) {
-    return schemaDefault(
-      'permissionSSRRFetchConcurrency',
-      PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT
-    );
-  }
-  const floored = Math.floor(value);
-  if (
-    floored < schemaMin('permissionSSRRFetchConcurrency', PERMISSION_SSRR_FETCH_CONCURRENCY_MIN)
-  ) {
-    return schemaMin('permissionSSRRFetchConcurrency', PERMISSION_SSRR_FETCH_CONCURRENCY_MIN);
-  }
-  if (
-    floored > schemaMax('permissionSSRRFetchConcurrency', PERMISSION_SSRR_FETCH_CONCURRENCY_MAX)
-  ) {
-    return schemaMax('permissionSSRRFetchConcurrency', PERMISSION_SSRR_FETCH_CONCURRENCY_MAX);
-  }
-  return floored;
-};
+const normalizeKubernetesClientBurst = (value?: number): number =>
+  normalizeIntegerPreferenceValue('kubernetesClientBurst', value, {
+    defaultOnNonPositive: true,
+  });
 
-// Clamp to [OBJ_PANEL_LOGS_BUFFER_MIN_SIZE, OBJ_PANEL_LOGS_BUFFER_MAX_SIZE]. A zero/undefined
-// value from an old settings file (before this preference existed) maps
-// to the default, not to zero — otherwise an upgrade would wipe every
-// Object Panel Logs Tab to empty.
-const normalizeObjPanelLogsBufferMaxSize = (value?: number): number => {
-  if (value == null || Number.isNaN(value) || value <= 0) {
-    return schemaDefault('objPanelLogsBufferMaxSize', OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
-  }
-  const floored = Math.floor(value);
-  if (floored < schemaMin('objPanelLogsBufferMaxSize', OBJ_PANEL_LOGS_BUFFER_MIN_SIZE)) {
-    return schemaMin('objPanelLogsBufferMaxSize', OBJ_PANEL_LOGS_BUFFER_MIN_SIZE);
-  }
-  if (floored > schemaMax('objPanelLogsBufferMaxSize', OBJ_PANEL_LOGS_BUFFER_MAX_SIZE)) {
-    return schemaMax('objPanelLogsBufferMaxSize', OBJ_PANEL_LOGS_BUFFER_MAX_SIZE);
-  }
-  return floored;
-};
+const normalizePermissionSSRRFetchConcurrency = (value?: number): number =>
+  normalizeIntegerPreferenceValue('permissionSSRRFetchConcurrency', value, {
+    defaultOnNonPositive: true,
+  });
 
-const normalizeObjPanelLogsTargetPerScopeLimit = (value?: number): number => {
-  if (value == null || Number.isNaN(value) || value <= 0) {
-    return schemaDefault(
-      'objPanelLogsTargetPerScopeLimit',
-      OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT
-    );
-  }
-  const floored = Math.floor(value);
-  if (floored < schemaMin('objPanelLogsTargetPerScopeLimit', OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN)) {
-    return schemaMin('objPanelLogsTargetPerScopeLimit', OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN);
-  }
-  if (floored > schemaMax('objPanelLogsTargetPerScopeLimit', OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX)) {
-    return schemaMax('objPanelLogsTargetPerScopeLimit', OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX);
-  }
-  return floored;
-};
+const normalizeObjPanelLogsBufferMaxSize = (value?: number): number =>
+  normalizeIntegerPreferenceValue('objPanelLogsBufferMaxSize', value, {
+    defaultOnNonPositive: true,
+  });
 
-const normalizeObjPanelLogsTargetGlobalLimit = (value?: number): number => {
-  if (value == null || Number.isNaN(value) || value <= 0) {
-    return schemaDefault('objPanelLogsTargetGlobalLimit', OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT);
-  }
-  const floored = Math.floor(value);
-  if (floored < schemaMin('objPanelLogsTargetGlobalLimit', OBJ_PANEL_LOGS_TARGET_GLOBAL_MIN)) {
-    return schemaMin('objPanelLogsTargetGlobalLimit', OBJ_PANEL_LOGS_TARGET_GLOBAL_MIN);
-  }
-  if (floored > schemaMax('objPanelLogsTargetGlobalLimit', OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX)) {
-    return schemaMax('objPanelLogsTargetGlobalLimit', OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX);
-  }
-  return floored;
-};
+const normalizeObjPanelLogsTargetPerScopeLimit = (value?: number): number =>
+  normalizeIntegerPreferenceValue('objPanelLogsTargetPerScopeLimit', value, {
+    defaultOnNonPositive: true,
+  });
+
+const normalizeObjPanelLogsTargetGlobalLimit = (value?: number): number =>
+  normalizeIntegerPreferenceValue('objPanelLogsTargetGlobalLimit', value, {
+    defaultOnNonPositive: true,
+  });
 
 const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): void => {
   if (previous.appearanceMode !== next.appearanceMode) {
@@ -577,7 +801,8 @@ const fetchAppSettingsSchema = async (): Promise<types.AppSettingsSchema | null>
       read: () => readAppSettingsSchema(),
     })) as types.AppSettingsSchema | null;
     return schema ?? null;
-  } catch {
+  } catch (error) {
+    console.error('Failed to load app settings schema:', error);
     return null;
   }
 };
@@ -586,26 +811,21 @@ const schemaPayloadFromPreferences = (
   schema: types.AppSettingsSchema | null
 ): AppSettingsPayload | null => {
   if (!schema?.preferences) {
+    preferenceSchemaByKey = new Map();
     return null;
   }
-  preferenceSchemaByKey = new Map(schema.preferences.map((entry) => [entry.key, entry]));
-  return schema.preferences.reduce<AppSettingsPayload>((payload, entry) => {
-    (payload as Record<string, unknown>)[entry.key] = entry.currentValue ?? entry.defaultValue;
-    return payload;
+  const nextSchema = new Map<AppPreferenceKey, AppPreferenceMetadata>();
+  const payload = schema.preferences.reduce<AppSettingsPayload>((nextPayload, entry) => {
+    const metadata = schemaEntryToMetadata(entry);
+    if (!metadata) {
+      return nextPayload;
+    }
+    nextSchema.set(metadata.key, metadata);
+    (nextPayload as Record<string, unknown>)[metadata.key] = metadata.currentValue;
+    return nextPayload;
   }, {});
-};
-
-const schemaDefault = <T>(key: keyof AppPreferences, fallback: T): T => {
-  const entry = preferenceSchemaByKey.get(key);
-  return (entry?.defaultValue ?? fallback) as T;
-};
-
-const schemaMin = (key: keyof AppPreferences, fallback: number): number => {
-  return preferenceSchemaByKey.get(key)?.min ?? fallback;
-};
-
-const schemaMax = (key: keyof AppPreferences, fallback: number): number => {
-  return preferenceSchemaByKey.get(key)?.max ?? fallback;
+  preferenceSchemaByKey = nextSchema;
+  return payload;
 };
 
 export const hydrateAppPreferences = async (options?: {
@@ -619,17 +839,26 @@ export const hydrateAppPreferences = async (options?: {
   const backendSettings = schemaPayloadFromPreferences(backendSchema) ?? (await fetchAppSettings());
   const preferences: AppPreferences = {
     appearanceMode: normalizeAppearanceMode(backendSettings?.appearanceMode),
-    useShortResourceNames:
-      backendSettings?.useShortResourceNames ?? DEFAULT_PREFERENCES.useShortResourceNames,
-    dimInactiveNamespaces:
-      backendSettings?.dimInactiveNamespaces ?? DEFAULT_PREFERENCES.dimInactiveNamespaces,
-    exclusiveNamespaces:
-      backendSettings?.exclusiveNamespaces ?? DEFAULT_PREFERENCES.exclusiveNamespaces,
-    autoRefreshEnabled:
-      backendSettings?.autoRefreshEnabled ?? DEFAULT_PREFERENCES.autoRefreshEnabled,
-    refreshBackgroundClustersEnabled:
-      backendSettings?.refreshBackgroundClustersEnabled ??
-      DEFAULT_PREFERENCES.refreshBackgroundClustersEnabled,
+    useShortResourceNames: normalizeBooleanPreferenceValue(
+      'useShortResourceNames',
+      backendSettings?.useShortResourceNames
+    ),
+    dimInactiveNamespaces: normalizeBooleanPreferenceValue(
+      'dimInactiveNamespaces',
+      backendSettings?.dimInactiveNamespaces
+    ),
+    exclusiveNamespaces: normalizeBooleanPreferenceValue(
+      'exclusiveNamespaces',
+      backendSettings?.exclusiveNamespaces
+    ),
+    autoRefreshEnabled: normalizeBooleanPreferenceValue(
+      'autoRefreshEnabled',
+      backendSettings?.autoRefreshEnabled
+    ),
+    refreshBackgroundClustersEnabled: normalizeBooleanPreferenceValue(
+      'refreshBackgroundClustersEnabled',
+      backendSettings?.refreshBackgroundClustersEnabled
+    ),
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
     maxTableRows: normalizeMaxTableRows(backendSettings?.maxTableRows),
     kubernetesClientQPS: normalizeKubernetesClientQPS(backendSettings?.kubernetesClientQPS),
@@ -643,9 +872,10 @@ export const hydrateAppPreferences = async (options?: {
     objPanelLogsApiTimestampFormat: normalizeObjPanelLogsApiTimestampFormat(
       backendSettings?.objPanelLogsApiTimestampFormat
     ),
-    objPanelLogsApiTimestampUseLocalTimeZone:
-      backendSettings?.objPanelLogsApiTimestampUseLocalTimeZone ??
-      DEFAULT_PREFERENCES.objPanelLogsApiTimestampUseLocalTimeZone,
+    objPanelLogsApiTimestampUseLocalTimeZone: normalizeBooleanPreferenceValue(
+      'objPanelLogsApiTimestampUseLocalTimeZone',
+      backendSettings?.objPanelLogsApiTimestampUseLocalTimeZone
+    ),
     objPanelLogsTargetPerScopeLimit: normalizeObjPanelLogsTargetPerScopeLimit(
       backendSettings?.objPanelLogsTargetPerScopeLimit
     ),
@@ -656,38 +886,73 @@ export const hydrateAppPreferences = async (options?: {
     defaultObjectPanelPosition: normalizeObjectPanelPosition(
       backendSettings?.defaultObjectPanelPosition
     ),
-    // Panel layout: backend stores 0 when unset (Go zero value), so treat
-    // 0 as "use default" for all fields. This means a user who explicitly
-    // sets a position to 0 will see it revert to the default on restart,
-    // which is acceptable since the default is close to 0 anyway.
-    objectPanelDockedRightWidth:
-      backendSettings?.objectPanelDockedRightWidth ||
-      DEFAULT_PREFERENCES.objectPanelDockedRightWidth,
-    objectPanelDockedBottomHeight:
-      backendSettings?.objectPanelDockedBottomHeight ||
-      DEFAULT_PREFERENCES.objectPanelDockedBottomHeight,
-    objectPanelFloatingWidth:
-      backendSettings?.objectPanelFloatingWidth || DEFAULT_PREFERENCES.objectPanelFloatingWidth,
-    objectPanelFloatingHeight:
-      backendSettings?.objectPanelFloatingHeight || DEFAULT_PREFERENCES.objectPanelFloatingHeight,
-    objectPanelFloatingX:
-      backendSettings?.objectPanelFloatingX || DEFAULT_PREFERENCES.objectPanelFloatingX,
-    objectPanelFloatingY:
-      backendSettings?.objectPanelFloatingY || DEFAULT_PREFERENCES.objectPanelFloatingY,
-    paletteHueLight: backendSettings?.paletteHueLight ?? DEFAULT_PREFERENCES.paletteHueLight,
-    paletteSaturationLight:
-      backendSettings?.paletteSaturationLight ?? DEFAULT_PREFERENCES.paletteSaturationLight,
-    paletteBrightnessLight:
-      backendSettings?.paletteBrightnessLight ?? DEFAULT_PREFERENCES.paletteBrightnessLight,
-    paletteHueDark: backendSettings?.paletteHueDark ?? DEFAULT_PREFERENCES.paletteHueDark,
-    paletteSaturationDark:
-      backendSettings?.paletteSaturationDark ?? DEFAULT_PREFERENCES.paletteSaturationDark,
-    paletteBrightnessDark:
-      backendSettings?.paletteBrightnessDark ?? DEFAULT_PREFERENCES.paletteBrightnessDark,
-    accentColorLight: backendSettings?.accentColorLight ?? DEFAULT_PREFERENCES.accentColorLight,
-    accentColorDark: backendSettings?.accentColorDark ?? DEFAULT_PREFERENCES.accentColorDark,
-    linkColorLight: backendSettings?.linkColorLight ?? DEFAULT_PREFERENCES.linkColorLight,
-    linkColorDark: backendSettings?.linkColorDark ?? DEFAULT_PREFERENCES.linkColorDark,
+    objectPanelDockedRightWidth: normalizeIntegerPreferenceValue(
+      'objectPanelDockedRightWidth',
+      backendSettings?.objectPanelDockedRightWidth,
+      { defaultOnNonPositive: true }
+    ),
+    objectPanelDockedBottomHeight: normalizeIntegerPreferenceValue(
+      'objectPanelDockedBottomHeight',
+      backendSettings?.objectPanelDockedBottomHeight,
+      { defaultOnNonPositive: true }
+    ),
+    objectPanelFloatingWidth: normalizeIntegerPreferenceValue(
+      'objectPanelFloatingWidth',
+      backendSettings?.objectPanelFloatingWidth,
+      { defaultOnNonPositive: true }
+    ),
+    objectPanelFloatingHeight: normalizeIntegerPreferenceValue(
+      'objectPanelFloatingHeight',
+      backendSettings?.objectPanelFloatingHeight,
+      { defaultOnNonPositive: true }
+    ),
+    objectPanelFloatingX: normalizeIntegerPreferenceValue(
+      'objectPanelFloatingX',
+      backendSettings?.objectPanelFloatingX,
+      { defaultOnNonPositive: true }
+    ),
+    objectPanelFloatingY: normalizeIntegerPreferenceValue(
+      'objectPanelFloatingY',
+      backendSettings?.objectPanelFloatingY,
+      { defaultOnNonPositive: true }
+    ),
+    paletteHueLight: normalizeIntegerPreferenceValue(
+      'paletteHueLight',
+      backendSettings?.paletteHueLight
+    ),
+    paletteSaturationLight: normalizeIntegerPreferenceValue(
+      'paletteSaturationLight',
+      backendSettings?.paletteSaturationLight
+    ),
+    paletteBrightnessLight: normalizeIntegerPreferenceValue(
+      'paletteBrightnessLight',
+      backendSettings?.paletteBrightnessLight
+    ),
+    paletteHueDark: normalizeIntegerPreferenceValue(
+      'paletteHueDark',
+      backendSettings?.paletteHueDark
+    ),
+    paletteSaturationDark: normalizeIntegerPreferenceValue(
+      'paletteSaturationDark',
+      backendSettings?.paletteSaturationDark
+    ),
+    paletteBrightnessDark: normalizeIntegerPreferenceValue(
+      'paletteBrightnessDark',
+      backendSettings?.paletteBrightnessDark
+    ),
+    accentColorLight: normalizeColorPreferenceValue(
+      'accentColorLight',
+      backendSettings?.accentColorLight
+    ),
+    accentColorDark: normalizeColorPreferenceValue(
+      'accentColorDark',
+      backendSettings?.accentColorDark
+    ),
+    linkColorLight: normalizeColorPreferenceValue(
+      'linkColorLight',
+      backendSettings?.linkColorLight
+    ),
+    linkColorDark: normalizeColorPreferenceValue('linkColorDark', backendSettings?.linkColorDark),
   };
 
   hydrated = true;
@@ -982,23 +1247,53 @@ export const setDefaultObjectPanelPosition = (position: ObjectPanelPosition): vo
 };
 
 export const setObjectPanelLayoutDefaults = (layout: ObjectPanelLayoutDefaults): void => {
+  const normalized: ObjectPanelLayoutDefaults = {
+    dockedRightWidth: normalizeIntegerPreferenceValue(
+      'objectPanelDockedRightWidth',
+      layout.dockedRightWidth,
+      { defaultOnNonPositive: true }
+    ),
+    dockedBottomHeight: normalizeIntegerPreferenceValue(
+      'objectPanelDockedBottomHeight',
+      layout.dockedBottomHeight,
+      { defaultOnNonPositive: true }
+    ),
+    floatingWidth: normalizeIntegerPreferenceValue(
+      'objectPanelFloatingWidth',
+      layout.floatingWidth,
+      {
+        defaultOnNonPositive: true,
+      }
+    ),
+    floatingHeight: normalizeIntegerPreferenceValue(
+      'objectPanelFloatingHeight',
+      layout.floatingHeight,
+      { defaultOnNonPositive: true }
+    ),
+    floatingX: normalizeIntegerPreferenceValue('objectPanelFloatingX', layout.floatingX, {
+      defaultOnNonPositive: true,
+    }),
+    floatingY: normalizeIntegerPreferenceValue('objectPanelFloatingY', layout.floatingY, {
+      defaultOnNonPositive: true,
+    }),
+  };
   fireAndForgetPreferenceUpdate(
     'Failed to persist object panel layout defaults:',
     {
-      objectPanelDockedRightWidth: layout.dockedRightWidth,
-      objectPanelDockedBottomHeight: layout.dockedBottomHeight,
-      objectPanelFloatingWidth: layout.floatingWidth,
-      objectPanelFloatingHeight: layout.floatingHeight,
-      objectPanelFloatingX: layout.floatingX,
-      objectPanelFloatingY: layout.floatingY,
+      objectPanelDockedRightWidth: normalized.dockedRightWidth,
+      objectPanelDockedBottomHeight: normalized.dockedBottomHeight,
+      objectPanelFloatingWidth: normalized.floatingWidth,
+      objectPanelFloatingHeight: normalized.floatingHeight,
+      objectPanelFloatingX: normalized.floatingX,
+      objectPanelFloatingY: normalized.floatingY,
     },
     [
-      { key: 'objectPanelDockedRightWidth', value: layout.dockedRightWidth },
-      { key: 'objectPanelDockedBottomHeight', value: layout.dockedBottomHeight },
-      { key: 'objectPanelFloatingWidth', value: layout.floatingWidth },
-      { key: 'objectPanelFloatingHeight', value: layout.floatingHeight },
-      { key: 'objectPanelFloatingX', value: layout.floatingX },
-      { key: 'objectPanelFloatingY', value: layout.floatingY },
+      { key: 'objectPanelDockedRightWidth', value: normalized.dockedRightWidth },
+      { key: 'objectPanelDockedBottomHeight', value: normalized.dockedBottomHeight },
+      { key: 'objectPanelFloatingWidth', value: normalized.floatingWidth },
+      { key: 'objectPanelFloatingHeight', value: normalized.floatingHeight },
+      { key: 'objectPanelFloatingX', value: normalized.floatingX },
+      { key: 'objectPanelFloatingY', value: normalized.floatingY },
     ]
   );
 };
@@ -1010,29 +1305,41 @@ export const setPaletteTint = (
   saturation: number,
   brightness: number = 0
 ): void => {
+  const normalizedHue = normalizeIntegerPreferenceValue(
+    mode === 'light' ? 'paletteHueLight' : 'paletteHueDark',
+    hue
+  );
+  const normalizedSaturation = normalizeIntegerPreferenceValue(
+    mode === 'light' ? 'paletteSaturationLight' : 'paletteSaturationDark',
+    saturation
+  );
+  const normalizedBrightness = normalizeIntegerPreferenceValue(
+    mode === 'light' ? 'paletteBrightnessLight' : 'paletteBrightnessDark',
+    brightness
+  );
   const updates =
     mode === 'light'
       ? {
-          paletteHueLight: hue,
-          paletteSaturationLight: saturation,
-          paletteBrightnessLight: brightness,
+          paletteHueLight: normalizedHue,
+          paletteSaturationLight: normalizedSaturation,
+          paletteBrightnessLight: normalizedBrightness,
         }
       : {
-          paletteHueDark: hue,
-          paletteSaturationDark: saturation,
-          paletteBrightnessDark: brightness,
+          paletteHueDark: normalizedHue,
+          paletteSaturationDark: normalizedSaturation,
+          paletteBrightnessDark: normalizedBrightness,
         };
   const changes =
     mode === 'light'
       ? [
-          { key: 'paletteHueLight' as const, value: hue },
-          { key: 'paletteSaturationLight' as const, value: saturation },
-          { key: 'paletteBrightnessLight' as const, value: brightness },
+          { key: 'paletteHueLight' as const, value: normalizedHue },
+          { key: 'paletteSaturationLight' as const, value: normalizedSaturation },
+          { key: 'paletteBrightnessLight' as const, value: normalizedBrightness },
         ]
       : [
-          { key: 'paletteHueDark' as const, value: hue },
-          { key: 'paletteSaturationDark' as const, value: saturation },
-          { key: 'paletteBrightnessDark' as const, value: brightness },
+          { key: 'paletteHueDark' as const, value: normalizedHue },
+          { key: 'paletteSaturationDark' as const, value: normalizedSaturation },
+          { key: 'paletteBrightnessDark' as const, value: normalizedBrightness },
         ];
   fireAndForgetPreferenceUpdate('Failed to persist palette tint:', updates, changes, {
     persistAppearanceBootstrap: true,

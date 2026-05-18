@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
 import {
   getAccentColor,
   getAppearanceModePreference,
@@ -16,6 +17,10 @@ import {
   getGridTablePersistenceMode,
   getKubernetesClientBurst,
   getKubernetesClientQPS,
+  getIntegerPreferenceMetadata,
+  getPreferenceMetadata,
+  getObjectPanelLayoutDefaults,
+  getLinkColor,
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
   getObjPanelLogsBufferMaxSize,
@@ -47,6 +52,7 @@ import {
   PERMISSION_SSRR_FETCH_CONCURRENCY_MAX,
   PERMISSION_SSRR_FETCH_CONCURRENCY_MIN,
   resetAppPreferencesCacheForTesting,
+  normalizeIntegerPreferenceValue,
   setAccentColor,
   setAppearanceModePreference,
   setAutoRefreshEnabled,
@@ -60,12 +66,15 @@ import {
   setObjPanelLogsApiTimestampUseLocalTimeZone,
   setObjPanelLogsBufferMaxSize,
   setMaxTableRows,
+  setObjectPanelLayoutDefaults,
   setObjPanelLogsTargetGlobalLimit,
   setObjPanelLogsTargetPerScopeLimit,
   setPaletteTint,
   setPermissionSSRRFetchConcurrency,
+  setLinkColor,
   setUseShortResourceNames,
   validateThemeClusterPattern,
+  type AppPreferenceKey,
 } from './appPreferences';
 
 const appMocks = vi.hoisted(() => ({
@@ -74,6 +83,315 @@ const appMocks = vi.hoisted(() => ({
   UpdateAppPreferences: vi.fn(),
   ValidateThemeClusterPattern: vi.fn(),
 }));
+
+const flushPromises = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+const preferenceSchema = (overrides: Record<string, Partial<Record<string, unknown>>> = {}) => {
+  const definitions: Array<{
+    key: string;
+    type: string;
+    defaultValue: unknown;
+    currentValue: unknown;
+    min?: number;
+    max?: number;
+    enumOptions?: string[];
+    validation?: string;
+    runtimeSideEffect: boolean;
+  }> = [
+    {
+      key: 'appearanceMode',
+      type: 'enum',
+      defaultValue: 'system',
+      currentValue: 'system',
+      enumOptions: ['light', 'dark', 'system'],
+      runtimeSideEffect: true,
+    },
+    {
+      key: 'useShortResourceNames',
+      type: 'boolean',
+      defaultValue: false,
+      currentValue: false,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'dimInactiveNamespaces',
+      type: 'boolean',
+      defaultValue: true,
+      currentValue: true,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'exclusiveNamespaces',
+      type: 'boolean',
+      defaultValue: true,
+      currentValue: true,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'autoRefreshEnabled',
+      type: 'boolean',
+      defaultValue: true,
+      currentValue: true,
+      runtimeSideEffect: true,
+    },
+    {
+      key: 'refreshBackgroundClustersEnabled',
+      type: 'boolean',
+      defaultValue: true,
+      currentValue: true,
+      runtimeSideEffect: true,
+    },
+    {
+      key: 'metricsRefreshIntervalMs',
+      type: 'integer',
+      defaultValue: 5000,
+      currentValue: 5000,
+      min: 1,
+      runtimeSideEffect: true,
+    },
+    {
+      key: 'maxTableRows',
+      type: 'integer',
+      defaultValue: 1000,
+      currentValue: 1000,
+      min: 100,
+      max: 10000,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'kubernetesClientQPS',
+      type: 'integer',
+      defaultValue: 200,
+      currentValue: 200,
+      min: 1,
+      max: 5000,
+      runtimeSideEffect: true,
+    },
+    {
+      key: 'kubernetesClientBurst',
+      type: 'integer',
+      defaultValue: 500,
+      currentValue: 500,
+      min: 1,
+      max: 10000,
+      runtimeSideEffect: true,
+    },
+    {
+      key: 'permissionSSRRFetchConcurrency',
+      type: 'integer',
+      defaultValue: 32,
+      currentValue: 32,
+      min: 1,
+      max: 256,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'objPanelLogsBufferMaxSize',
+      type: 'integer',
+      defaultValue: 1000,
+      currentValue: 1000,
+      min: 100,
+      max: 10000,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'objPanelLogsApiTimestampFormat',
+      type: 'string',
+      defaultValue: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
+      currentValue: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
+      validation: 'dayjs-format',
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'objPanelLogsApiTimestampUseLocalTimeZone',
+      type: 'boolean',
+      defaultValue: false,
+      currentValue: false,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'objPanelLogsTargetPerScopeLimit',
+      type: 'integer',
+      defaultValue: 100,
+      currentValue: 100,
+      min: 1,
+      max: 1000,
+      runtimeSideEffect: true,
+    },
+    {
+      key: 'objPanelLogsTargetGlobalLimit',
+      type: 'integer',
+      defaultValue: 200,
+      currentValue: 200,
+      min: 1,
+      max: 1000,
+      runtimeSideEffect: true,
+    },
+    {
+      key: 'gridTablePersistenceMode',
+      type: 'enum',
+      defaultValue: 'shared',
+      currentValue: 'shared',
+      enumOptions: ['shared', 'namespaced'],
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'defaultObjectPanelPosition',
+      type: 'enum',
+      defaultValue: 'right',
+      currentValue: 'right',
+      enumOptions: ['right', 'bottom', 'floating'],
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'objectPanelDockedRightWidth',
+      type: 'integer',
+      defaultValue: 600,
+      currentValue: 600,
+      min: 240,
+      max: 9999,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'objectPanelDockedBottomHeight',
+      type: 'integer',
+      defaultValue: 400,
+      currentValue: 400,
+      min: 180,
+      max: 9999,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'objectPanelFloatingWidth',
+      type: 'integer',
+      defaultValue: 500,
+      currentValue: 500,
+      min: 320,
+      max: 9999,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'objectPanelFloatingHeight',
+      type: 'integer',
+      defaultValue: 400,
+      currentValue: 400,
+      min: 240,
+      max: 9999,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'objectPanelFloatingX',
+      type: 'integer',
+      defaultValue: 100,
+      currentValue: 100,
+      min: 1,
+      max: 9999,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'objectPanelFloatingY',
+      type: 'integer',
+      defaultValue: 100,
+      currentValue: 100,
+      min: 1,
+      max: 9999,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'paletteHueLight',
+      type: 'integer',
+      defaultValue: 0,
+      currentValue: 0,
+      min: 0,
+      max: 360,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'paletteSaturationLight',
+      type: 'integer',
+      defaultValue: 0,
+      currentValue: 0,
+      min: 0,
+      max: 100,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'paletteBrightnessLight',
+      type: 'integer',
+      defaultValue: 0,
+      currentValue: 0,
+      min: -50,
+      max: 50,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'paletteHueDark',
+      type: 'integer',
+      defaultValue: 0,
+      currentValue: 0,
+      min: 0,
+      max: 360,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'paletteSaturationDark',
+      type: 'integer',
+      defaultValue: 0,
+      currentValue: 0,
+      min: 0,
+      max: 100,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'paletteBrightnessDark',
+      type: 'integer',
+      defaultValue: 0,
+      currentValue: 0,
+      min: -50,
+      max: 50,
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'accentColorLight',
+      type: 'color',
+      defaultValue: '',
+      currentValue: '',
+      validation: '#rrggbb-or-empty',
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'accentColorDark',
+      type: 'color',
+      defaultValue: '',
+      currentValue: '',
+      validation: '#rrggbb-or-empty',
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'linkColorLight',
+      type: 'color',
+      defaultValue: '',
+      currentValue: '',
+      validation: '#rrggbb-or-empty',
+      runtimeSideEffect: false,
+    },
+    {
+      key: 'linkColorDark',
+      type: 'color',
+      defaultValue: '',
+      currentValue: '',
+      validation: '#rrggbb-or-empty',
+      runtimeSideEffect: false,
+    },
+  ];
+
+  return {
+    preferences: definitions.map((definition) => ({
+      ...definition,
+      ...overrides[definition.key],
+    })),
+  };
+};
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetAppSettings: (...args: unknown[]) => appMocks.GetAppSettings(...args),
@@ -198,6 +516,52 @@ describe('appPreferences', () => {
     expect(getDefaultObjectPanelPosition()).toBe('bottom');
   });
 
+  it('exposes typed preference metadata from the backend schema', async () => {
+    appMocks.GetAppSettingsSchema.mockResolvedValue(
+      preferenceSchema({
+        maxTableRows: { defaultValue: 750, currentValue: 5000, min: 50, max: 9000 },
+        appearanceMode: { defaultValue: 'system', currentValue: 'dark' },
+      })
+    );
+
+    await hydrateAppPreferences({ force: true });
+
+    expect(getPreferenceMetadata('appearanceMode')).toMatchObject({
+      key: 'appearanceMode',
+      type: 'enum',
+      defaultValue: 'system',
+      currentValue: 'dark',
+      enumOptions: ['light', 'dark', 'system'],
+      runtimeSideEffect: true,
+    });
+    expect(getIntegerPreferenceMetadata('maxTableRows')).toMatchObject({
+      key: 'maxTableRows',
+      type: 'integer',
+      defaultValue: 750,
+      currentValue: 5000,
+      min: 50,
+      max: 9000,
+    });
+    expect(normalizeIntegerPreferenceValue('maxTableRows', 10)).toBe(50);
+    expect(normalizeIntegerPreferenceValue('maxTableRows', 99999)).toBe(9000);
+  });
+
+  it('tracks schema metadata for every appPreferences key', async () => {
+    const schema = preferenceSchema();
+    appMocks.GetAppSettingsSchema.mockResolvedValue(schema);
+
+    await hydrateAppPreferences({ force: true });
+
+    const keys = schema.preferences.map((entry) => entry.key);
+    for (const key of keys) {
+      expect(getPreferenceMetadata(key as AppPreferenceKey)).toMatchObject({
+        key,
+      });
+    }
+    expect(keys).not.toContain('selectedKubeconfigs');
+    expect(keys).not.toContain('themes');
+  });
+
   it('defaults palette hue, saturation, and brightness to 0 when not present', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       appearanceMode: 'system',
@@ -306,6 +670,93 @@ describe('appPreferences', () => {
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(6000);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
+  });
+
+  it('normalizes Object Panel layout updates from schema metadata', async () => {
+    appMocks.GetAppSettingsSchema.mockResolvedValue(preferenceSchema());
+    await hydrateAppPreferences({ force: true });
+
+    setObjectPanelLayoutDefaults({
+      dockedRightWidth: 1,
+      dockedBottomHeight: 20_000,
+      floatingWidth: 1,
+      floatingHeight: 20_000,
+      floatingX: -5,
+      floatingY: 20_000,
+    });
+
+    expect(getObjectPanelLayoutDefaults()).toEqual({
+      dockedRightWidth: 240,
+      dockedBottomHeight: 9999,
+      floatingWidth: 320,
+      floatingHeight: 9999,
+      floatingX: 100,
+      floatingY: 9999,
+    });
+    expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
+      changes: [
+        { key: 'objectPanelDockedRightWidth', value: 240 },
+        { key: 'objectPanelDockedBottomHeight', value: 9999 },
+        { key: 'objectPanelFloatingWidth', value: 320 },
+        { key: 'objectPanelFloatingHeight', value: 9999 },
+        { key: 'objectPanelFloatingX', value: 100 },
+        { key: 'objectPanelFloatingY', value: 9999 },
+      ],
+    });
+  });
+
+  it('persists link color updates through the shared update path', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      appearanceMode: 'system',
+      linkColorLight: '',
+      linkColorDark: '',
+    });
+
+    await hydrateAppPreferences({ force: true });
+
+    setLinkColor('light', '#326ce5');
+
+    expect(getLinkColor('light')).toBe('#326ce5');
+    expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
+      changes: [{ key: 'linkColorLight', value: '#326ce5' }],
+    });
+  });
+
+  it('rolls back optimistic runtime preference state and events when persistence fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const events: boolean[] = [];
+    appMocks.GetAppSettings.mockResolvedValue({
+      appearanceMode: 'system',
+      autoRefreshEnabled: true,
+    });
+    await hydrateAppPreferences({ force: true });
+    const unsubscribe = eventBus.on('settings:auto-refresh', (enabled) => events.push(enabled));
+    appMocks.UpdateAppPreferences.mockRejectedValueOnce(new Error('forced failure'));
+
+    setAutoRefreshEnabled(false);
+    expect(getAutoRefreshEnabled()).toBe(false);
+    await flushPromises();
+
+    expect(getAutoRefreshEnabled()).toBe(true);
+    expect(events).toEqual([false, true]);
+    unsubscribe();
+    consoleError.mockRestore();
+  });
+
+  it('rolls back appearance localStorage mirrors when persistence fails', async () => {
+    localStorage.setItem('app-appearance-mode-preference', 'system');
+    localStorage.setItem('app-appearance-bootstrap-v1', '{"light":{},"dark":{}}');
+    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
+    await hydrateAppPreferences({ force: true });
+    localStorage.setItem('app-appearance-mode-preference', 'system');
+    localStorage.setItem('app-appearance-bootstrap-v1', 'previous-bootstrap');
+    appMocks.UpdateAppPreferences.mockRejectedValueOnce(new Error('forced failure'));
+
+    await expect(setAppearanceModePreference('dark')).rejects.toThrow('forced failure');
+
+    expect(getAppearanceModePreference()).toBe('system');
+    expect(localStorage.getItem('app-appearance-mode-preference')).toBe('system');
+    expect(localStorage.getItem('app-appearance-bootstrap-v1')).toBe('previous-bootstrap');
   });
 
   it('rejects invalid Object Panel Logs Tab API timestamp formats before persisting', async () => {

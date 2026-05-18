@@ -26,6 +26,10 @@ Settings-specific contract:
 
 - Persisted app preferences and runtime-enforced settings are backend-owned and
   described by `readAppSettingsSchema`.
+- `frontend/src/core/settings/appPreferences.ts` owns the frontend schema
+  metadata cache and typed metadata helpers. Settings UI sections should consume
+  defaults, bounds, enum values, validation hints, and runtime flags through
+  those helpers instead of duplicating backend constants.
 - Frontend preference setters should use the shared optimistic update path that
   calls `UpdateAppPreferences`, then roll back cache, emitted events, and any
   appearance localStorage mirrors on failure.
@@ -59,6 +63,9 @@ Settings-specific contract:
       namespace identity when the state is cluster data.
 - [ ] Persisted preferences hydrate from backend schema metadata instead of
       duplicating defaults and bounds in UI code.
+- [ ] Backend-owned Settings controls read min/max/default/current values from
+      schema metadata helpers in `core/settings`; keep fallback constants local
+      to the metadata layer only.
 - [ ] Preference mutations use `UpdateAppPreferences` semantics: atomic
       validation, persistence before runtime side effects, and rollback on
       failure.

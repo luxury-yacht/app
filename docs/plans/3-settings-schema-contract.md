@@ -75,15 +75,17 @@ Current broadness:
 
 ## Phases
 
-- [ ] Phase 1: Schema coverage tests
-  - Add backend tests that every backend-owned `AppSettings` preference appears
-    in `buildAppSettingsSchema`.
+- [x] Phase 1: Schema coverage tests
+  - Add backend tests that every backend-owned app preference key handled by
+    `UpdateAppPreferences` appears in `buildAppSettingsSchema`, without pulling
+    non-preference `AppSettings` fields such as selected kubeconfigs or saved
+    themes into the preference schema.
   - Add frontend tests that every schema entry used by `appPreferences` has a
     typed accessor and update path.
   - Add a test that frontend fallback constants match backend schema values only
     for the explicitly allowed bootstrap fallback keys.
 
-- [ ] Phase 2: Preference metadata access layer
+- [x] Phase 2: Preference metadata access layer
   - Add a small frontend schema metadata helper that returns typed default,
     current value, min, max, enum values, validation format, and runtime flag by
     key.
@@ -91,7 +93,7 @@ Current broadness:
   - Make failed schema loads explicit in diagnostics or logged error handling
     without breaking first paint.
 
-- [ ] Phase 3: Normalize from schema
+- [x] Phase 3: Normalize from schema
   - Replace duplicated numeric normalization in `appPreferences.ts` with
     schema-driven integer, enum, boolean, string, and color normalization
     helpers.
@@ -100,36 +102,41 @@ Current broadness:
   - Keep derived caches for appearance bootstrap localStorage, but document that
     they are not a source of truth.
 
-- [ ] Phase 4: Schema-backed settings controls
+- [x] Phase 4: Schema-backed settings controls
   - Update Advanced settings controls to read `min`, `max`, `default`, and
     current value from schema metadata.
   - Update Object Panel layout controls to use schema metadata for persisted
     dimensions and positions.
+  - Update Appearance controls to use schema metadata for backend-owned palette,
+    color, and appearance-mode defaults, bounds, enum values, and validation
+    hints.
   - Keep frontend-only controls outside schema-driven helpers.
 
-- [ ] Phase 5: Persistence and rollback hardening
+- [x] Phase 5: Persistence and rollback hardening
   - Ensure all backend-owned settings use `UpdateAppPreferences`.
   - Add tests for rollback after persistence failure, including emitted events
     and appearance bootstrap cache restoration.
-  - Add tests for runtime-effect preferences so the frontend does not assume
-    success before backend persistence completes.
+  - Add tests for runtime-effect preferences so any optimistic frontend runtime
+    or UI state is restored when backend persistence fails, while preserving the
+    shared optimistic update path.
 
-- [ ] Phase 6: Documentation and skill update
+- [x] Phase 6: Documentation and skill update
   - Update `docs/architecture/data-access.md` Settings Contract with the final
     schema-driven frontend shape.
   - Update `.agents/skills/app-shell/SKILL.md` with the new checklist for
     adding settings.
   - Remove obsolete "keep in lockstep" comments once tests enforce the contract.
 
-## Open Questions
+## Resolved Decisions
 
-- Which fallback constants are truly needed before Wails is available, and which
-  can be removed entirely?
-- Should schema metadata be exposed to Settings components directly, or only
-  through typed hooks in `core/settings`?
-- Should `UpdateAppPreferences` return schema metadata with the updated
-  settings to avoid a separate schema refresh?
-- Should runtime-effect flags drive UI copy or only validation and diagnostics?
+- Fallback metadata remains only inside `appPreferences.ts` for first paint,
+  Wails-unavailable tests, and schema-load failure.
+- Settings components consume typed metadata helpers from `core/settings`;
+  backend-owned schema details are not fetched directly by UI sections.
+- `UpdateAppPreferences` keeps returning normalized settings and changed keys;
+  schema refresh stays separate because response-shape changes were not needed.
+- Runtime-effect flags are exposed through metadata for diagnostics and future UI
+  decisions, but this implementation does not add new runtime-effect copy.
 
 ## Validation Plan
 
@@ -137,6 +144,8 @@ Current broadness:
 - `npm run test --prefix frontend -- settings appPreferences`
 - `npm run typecheck --prefix frontend`
 - Browser or Storybook validation for Settings controls if UI behavior changes.
+- `wails generate` if backend settings DTOs, schema fields, or response shapes
+  change.
 - `mage qc:prerelease`
 - Inspect `git status --short` after the final gate because lint/fix steps may
   modify files.
@@ -144,3 +153,6 @@ Current broadness:
 ## Progress Notes
 
 - 2026-05-17: Plan created from app-review findings. No implementation started.
+- 2026-05-17: Completed schema coverage tests, frontend metadata helpers,
+  schema-driven normalization, schema-backed Advanced/Object Panel/Appearance
+  controls, rollback hardening tests, and durable docs/skill updates.

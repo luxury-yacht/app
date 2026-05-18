@@ -8,14 +8,17 @@
 import { useState, useMemo, type FC } from 'react';
 import {
   getDefaultObjectPanelPosition,
+  getIntegerPreferenceMetadata,
   setDefaultObjectPanelPosition,
   getObjectPanelLayoutDefaults,
+  normalizeIntegerPreferenceValue,
   setObjectPanelLayoutDefaults,
+  type AppPreferenceKey,
   type ObjectPanelPosition,
   type ObjectPanelLayoutDefaults,
 } from '@core/settings/appPreferences';
 import { useDockablePanelContext } from '@ui/dockable';
-import { getContentBounds, PANEL_DEFAULTS } from '@ui/dockable/dockablePanelLayout';
+import { getContentBounds } from '@ui/dockable/dockablePanelLayout';
 import {
   DockBottomIcon,
   DockRightIcon,
@@ -57,14 +60,20 @@ function ObjectPanelSection() {
     };
   });
 
-  const fieldMinimums: Record<keyof ObjectPanelLayoutDefaults, number> = {
-    dockedRightWidth: PANEL_DEFAULTS.RIGHT_MIN_WIDTH,
-    dockedBottomHeight: PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT,
-    floatingWidth: PANEL_DEFAULTS.FLOATING_MIN_WIDTH,
-    floatingHeight: PANEL_DEFAULTS.FLOATING_MIN_HEIGHT,
-    floatingX: 0,
-    floatingY: 0,
+  const fieldPreferenceKeys: Record<keyof ObjectPanelLayoutDefaults, AppPreferenceKey> = {
+    dockedRightWidth: 'objectPanelDockedRightWidth',
+    dockedBottomHeight: 'objectPanelDockedBottomHeight',
+    floatingWidth: 'objectPanelFloatingWidth',
+    floatingHeight: 'objectPanelFloatingHeight',
+    floatingX: 'objectPanelFloatingX',
+    floatingY: 'objectPanelFloatingY',
   };
+  const fieldMetadata = Object.fromEntries(
+    Object.entries(fieldPreferenceKeys).map(([field, key]) => [
+      field,
+      getIntegerPreferenceMetadata(key),
+    ])
+  ) as Record<keyof ObjectPanelLayoutDefaults, ReturnType<typeof getIntegerPreferenceMetadata>>;
 
   const handleObjectPanelPositionChange = (position: ObjectPanelPosition) => {
     setObjectPanelPositionState(position);
@@ -75,7 +84,9 @@ function ObjectPanelSection() {
     setPanelLayoutInputs((prev) => ({ ...prev, [field]: raw }));
     const parsed = parseInt(raw, 10);
     if (!Number.isNaN(parsed)) {
-      const clamped = Math.max(fieldMinimums[field], Math.min(9999, parsed));
+      const clamped = normalizeIntegerPreferenceValue(fieldPreferenceKeys[field], parsed, {
+        defaultOnNonPositive: true,
+      });
       const updated = { ...panelLayout, [field]: clamped };
       setPanelLayout(updated);
       setObjectPanelLayoutDefaults(updated);
@@ -173,8 +184,8 @@ function ObjectPanelSection() {
               <input
                 id="panel-docked-right-width"
                 type="number"
-                min={PANEL_DEFAULTS.RIGHT_MIN_WIDTH}
-                max={9999}
+                min={fieldMetadata.dockedRightWidth.min}
+                max={fieldMetadata.dockedRightWidth.max}
                 className={
                   panelLayoutWarning?.fields.has('dockedRightWidth') ? 'opd-input-warn' : ''
                 }
@@ -188,8 +199,8 @@ function ObjectPanelSection() {
               <input
                 id="panel-docked-bottom-height"
                 type="number"
-                min={PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT}
-                max={9999}
+                min={fieldMetadata.dockedBottomHeight.min}
+                max={fieldMetadata.dockedBottomHeight.max}
                 className={
                   panelLayoutWarning?.fields.has('dockedBottomHeight') ? 'opd-input-warn' : ''
                 }
@@ -216,8 +227,8 @@ function ObjectPanelSection() {
               <input
                 id="panel-floating-width"
                 type="number"
-                min={PANEL_DEFAULTS.FLOATING_MIN_WIDTH}
-                max={9999}
+                min={fieldMetadata.floatingWidth.min}
+                max={fieldMetadata.floatingWidth.max}
                 className={panelLayoutWarning?.fields.has('floatingWidth') ? 'opd-input-warn' : ''}
                 value={panelLayoutInputs.floatingWidth}
                 onChange={(e) => handlePanelLayoutInput('floatingWidth', e.target.value)}
@@ -229,8 +240,8 @@ function ObjectPanelSection() {
               <input
                 id="panel-floating-height"
                 type="number"
-                min={PANEL_DEFAULTS.FLOATING_MIN_HEIGHT}
-                max={9999}
+                min={fieldMetadata.floatingHeight.min}
+                max={fieldMetadata.floatingHeight.max}
                 className={panelLayoutWarning?.fields.has('floatingHeight') ? 'opd-input-warn' : ''}
                 value={panelLayoutInputs.floatingHeight}
                 onChange={(e) => handlePanelLayoutInput('floatingHeight', e.target.value)}
@@ -255,8 +266,8 @@ function ObjectPanelSection() {
               <input
                 id="panel-floating-y"
                 type="number"
-                min={0}
-                max={9999}
+                min={fieldMetadata.floatingY.min}
+                max={fieldMetadata.floatingY.max}
                 className={panelLayoutWarning?.fields.has('floatingY') ? 'opd-input-warn' : ''}
                 value={panelLayoutInputs.floatingY}
                 onChange={(e) => handlePanelLayoutInput('floatingY', e.target.value)}
@@ -268,8 +279,8 @@ function ObjectPanelSection() {
               <input
                 id="panel-floating-x"
                 type="number"
-                min={0}
-                max={9999}
+                min={fieldMetadata.floatingX.min}
+                max={fieldMetadata.floatingX.max}
                 className={panelLayoutWarning?.fields.has('floatingX') ? 'opd-input-warn' : ''}
                 value={panelLayoutInputs.floatingX}
                 onChange={(e) => handlePanelLayoutInput('floatingX', e.target.value)}

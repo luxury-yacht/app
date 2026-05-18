@@ -103,6 +103,13 @@ backend settings schema returned through the `appStateAccess` reader
 enum values, and current values from that schema instead of duplicating the
 backend contract.
 
+`frontend/src/core/settings/appPreferences.ts` owns the frontend schema metadata
+cache. Settings UI code should read backend-owned defaults, bounds, enum values,
+validation hints, and runtime flags through the typed metadata helpers in that
+module, not through section-local constants. The module may keep fallback
+metadata for first paint, Wails-unavailable tests, or schema-load failure, but
+those fallbacks are not a second contract.
+
 The ownership boundary is:
 
 - backend-owned: values persisted in `settings.json`, values validated or
@@ -130,6 +137,11 @@ tab, and first-paint appearance bootstrap values in localStorage. Appearance
 bootstrap localStorage is a derived cache used before Wails is available, not an
 independent source of truth.
 
+Frontend preference setters may update local cache and derived runtime/UI state
+optimistically. On persistence failure they must restore the cache, re-emit
+events for restored values, and restore derived localStorage mirrors such as
+appearance mode and appearance bootstrap data.
+
 When adding or changing a preference:
 
 1. Classify it as backend-owned persisted/runtime state, frontend-owned
@@ -139,7 +151,8 @@ When adding or changing a preference:
 3. Route frontend reads through `appStateAccess` and the settings schema.
 4. Route frontend persistence through `UpdateAppPreferences` and preserve
    optimistic rollback behavior.
-5. Keep compatibility setters only when external Wails callers still need them.
+5. Regenerate Wails bindings when DTO/schema fields or response shapes change.
+6. Keep compatibility setters only when external Wails callers still need them.
 
 ## Refresh Domains
 
