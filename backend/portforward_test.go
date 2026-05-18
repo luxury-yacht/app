@@ -320,6 +320,43 @@ func TestStopPortForward_Success(t *testing.T) {
 	}
 }
 
+func TestRunPortForwarderUnregistersRuntimeOperationOnTerminalError(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app.clusterClients = make(map[string]*clusterClients)
+	app.eventEmitter = func(context.Context, string, ...interface{}) {}
+
+	session := &portForwardSessionInternal{
+		PortForwardSession: PortForwardSession{
+			ID:            "session-terminal-error",
+			ClusterID:     "missing-cluster",
+			Namespace:     "default",
+			PodName:       "pod-1",
+			ContainerPort: 8080,
+			LocalPort:     9000,
+			TargetKind:    "Pod",
+			TargetVersion: "v1",
+			TargetName:    "pod-1",
+			Status:        "active",
+			StartedAt:     time.Now().Format(time.RFC3339),
+		},
+		stopChan:  make(chan struct{}),
+		readyChan: make(chan error, 1),
+	}
+	app.portForwardSessions[session.ID] = session
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(session), nil)
+
+	app.runPortForwarder(context.Background(), session)
+
+	if operations := app.ListRuntimeOperations(); len(operations) != 0 {
+		t.Fatalf("expected runtime operation to be removed, got %+v", operations)
+	}
+	if _, exists := app.portForwardSessions[session.ID]; exists {
+		t.Fatal("expected terminal port forward session to be removed")
+	}
+}
+
 func TestStopClusterPortForwards(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()

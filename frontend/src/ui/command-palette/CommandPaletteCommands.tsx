@@ -51,6 +51,7 @@ import {
 import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
 import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
 import { useShortNames } from '@/hooks/useShortNames';
+import { CloseCluster } from '@wailsjs/go/backend/App';
 
 export interface Command {
   id: string;
@@ -76,6 +77,7 @@ export function useCommandPaletteCommands() {
     kubeconfigs,
     setActiveKubeconfig,
     getClusterMeta,
+    loadKubeconfigs,
   } = useKubeconfig();
   const { favorites, setPendingFavorite } = useFavorites();
   const { mode } = useAppearanceMode();
@@ -109,9 +111,12 @@ export function useCommandPaletteCommands() {
     if (!selectedKubeconfigs.includes(active)) {
       return;
     }
-    const nextSelections = selectedKubeconfigs.filter((selection) => selection !== active);
-    void setSelectedKubeconfigs(nextSelections);
-  }, [selectedKubeconfig, selectedKubeconfigs, setSelectedKubeconfigs]);
+    void CloseCluster(active)
+      .then(() => loadKubeconfigs())
+      .catch((err) => {
+        console.warn('Failed to close cluster:', err);
+      });
+  }, [loadKubeconfigs, selectedKubeconfig, selectedKubeconfigs]);
 
   const selectNamespace = useCallback(
     (scope: string) => {

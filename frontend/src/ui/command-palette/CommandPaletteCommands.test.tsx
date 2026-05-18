@@ -26,6 +26,7 @@ const { mocks } = vi.hoisted(() => ({
       setSelectedKubeconfigs: vi.fn(),
       setActiveKubeconfig: vi.fn(),
       getClusterMeta: vi.fn(() => ({ id: '', name: '' })),
+      loadKubeconfigs: vi.fn(),
     },
     viewState: {
       setIsAboutOpen: vi.fn(),
@@ -47,6 +48,9 @@ const { mocks } = vi.hoisted(() => ({
     },
     appSettings: {
       UpdateAppPreferences: vi.fn(),
+    },
+    appLifecycle: {
+      CloseCluster: vi.fn(),
     },
     refreshOrchestrator: {
       triggerManualRefreshForContext: vi.fn(),
@@ -95,6 +99,7 @@ vi.mock('@/core/refresh', () => ({
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   UpdateAppPreferences: (...args: unknown[]) => mocks.appSettings.UpdateAppPreferences(...args),
+  CloseCluster: (...args: unknown[]) => mocks.appLifecycle.CloseCluster(...args),
 }));
 
 vi.mock('@/utils/appearanceMode', () => ({
@@ -162,10 +167,14 @@ describe('CommandPaletteCommands', () => {
     mocks.kubeconfig.selectedKubeconfig = '';
     mocks.kubeconfig.setActiveKubeconfig.mockReset();
     mocks.kubeconfig.setSelectedKubeconfigs.mockReset();
+    mocks.kubeconfig.loadKubeconfigs.mockReset();
+    mocks.kubeconfig.loadKubeconfigs.mockResolvedValue(undefined);
     mocks.autoRefresh.enabled = true;
     mocks.autoRefresh.toggle.mockReset();
     mocks.appSettings.UpdateAppPreferences.mockReset();
     mocks.appSettings.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
+    mocks.appLifecycle.CloseCluster.mockReset();
+    mocks.appLifecycle.CloseCluster.mockResolvedValue(undefined);
     (window as any).go = { backend: { App: {} } };
     resetAppPreferencesCacheForTesting();
   });
@@ -227,7 +236,7 @@ describe('CommandPaletteCommands', () => {
     unmount();
   });
 
-  it('closes the current cluster tab when requested', () => {
+  it('closes the current cluster tab when requested', async () => {
     mocks.kubeconfig.kubeconfigs = [
       {
         name: 'alpha',
@@ -251,9 +260,14 @@ describe('CommandPaletteCommands', () => {
     const commands = getCommands();
     const command = commands.find((entry) => entry.id === 'close-cluster-tab');
 
-    command?.action();
+    await act(async () => {
+      command?.action();
+      await Promise.resolve();
+    });
 
-    expect(mocks.kubeconfig.setSelectedKubeconfigs).toHaveBeenCalledWith(['/kube/alpha:dev']);
+    expect(mocks.appLifecycle.CloseCluster).toHaveBeenCalledWith('/kube/beta:prod');
+    expect(mocks.kubeconfig.loadKubeconfigs).toHaveBeenCalledTimes(1);
+    expect(mocks.kubeconfig.setSelectedKubeconfigs).not.toHaveBeenCalled();
     unmount();
   });
 

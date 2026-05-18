@@ -105,15 +105,13 @@ func (a *App) StartDrainNode(clusterID, nodeName string, options DrainNodeOption
 	if err := a.requireDrainPodPermission(deps, options); err != nil {
 		return "", err
 	}
-	var jobID string
-	job, err := nodes.NewService(deps).StartDrainWithCompletion(nodeName, options, func() {
+	job, err := nodes.NewService(deps).StartDrainWithCompletion(nodeName, options, func(jobID string) {
 		a.clearNodeCaches(selectionKey, nodeName)
 		a.unregisterRuntimeOperation(jobID)
 	})
 	if err != nil {
 		return "", err
 	}
-	jobID = job.ID
 	a.registerRuntimeOperation(runtimeOperationFromDrainJob(job), func(reason string) error {
 		nodemaintenance.GlobalStore().CancelActiveDrainsForClusterLifecycle(deps.ClusterID, reason)
 		return nil

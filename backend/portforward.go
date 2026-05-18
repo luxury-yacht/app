@@ -237,6 +237,7 @@ func (a *App) GetClusterPortForwardCount(clusterID string) int {
 func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionInternal) {
 	defer func() {
 		a.removePortForwardSession(session.ID)
+		a.unregisterRuntimeOperation(session.ID)
 		a.emitPortForwardList()
 	}()
 

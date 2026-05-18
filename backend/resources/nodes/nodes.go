@@ -160,7 +160,7 @@ func (s *Service) StartDrain(nodeName string, options restypes.DrainNodeOptions)
 }
 
 // StartDrainWithCompletion starts a drain job and invokes onComplete after the job exits.
-func (s *Service) StartDrainWithCompletion(nodeName string, options restypes.DrainNodeOptions, onComplete func()) (*nodemaintenance.DrainJob, error) {
+func (s *Service) StartDrainWithCompletion(nodeName string, options restypes.DrainNodeOptions, onComplete func(string)) (*nodemaintenance.DrainJob, error) {
 	if err := ValidateDrainOptions(options); err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ func (s *Service) StartDrainWithCompletion(nodeName string, options restypes.Dra
 		defer store.ClearCancel(job.ID)
 		defer cancel()
 		if onComplete != nil {
-			defer onComplete()
+			defer onComplete(job.ID)
 		}
 		_ = NewService(deps).runDrainJob(job, nodeName, options)
 	}()

@@ -38,6 +38,26 @@ func TestDrainHelperTimeoutMatchesKubectlDefault(t *testing.T) {
 	require.Equal(t, 5*time.Minute, drainHelperTimeout(restypes.DrainNodeOptions{TimeoutSeconds: &custom}))
 }
 
+func TestStartDrainWithCompletionPassesCreatedJobID(t *testing.T) {
+	deps := testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(cgofake.NewClientset()))
+	deps.ClusterID = "cluster-a-" + t.Name()
+	deps.ClusterName = "Cluster A"
+	service := NewService(deps)
+	completed := make(chan string, 1)
+
+	job, err := service.StartDrainWithCompletion("missing-"+t.Name(), restypes.DrainNodeOptions{}, func(jobID string) {
+		completed <- jobID
+	})
+	require.NoError(t, err)
+
+	select {
+	case jobID := <-completed:
+		require.Equal(t, job.ID, jobID)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for drain completion callback")
+	}
+}
+
 func TestEnsureMetricsClientInitializesClient(t *testing.T) {
 	setterCalled := false
 	deps := testsupport.NewResourceDependencies(

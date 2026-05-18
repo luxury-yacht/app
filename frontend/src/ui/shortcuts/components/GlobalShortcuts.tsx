@@ -18,6 +18,7 @@ import {
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
 import { EventsOn, EventsOff, Quit } from '@wailsjs/runtime/runtime';
+import { CloseCluster } from '@wailsjs/go/backend/App';
 
 interface GlobalShortcutsProps {
   onToggleSidebar?: () => void;
@@ -44,7 +45,7 @@ export function GlobalShortcuts({
 }: GlobalShortcutsProps) {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isModalAnimating, setIsModalAnimating] = useState(false);
-  const { selectedKubeconfig, selectedKubeconfigs, setSelectedKubeconfigs, setActiveKubeconfig } =
+  const { selectedKubeconfig, selectedKubeconfigs, setActiveKubeconfig, loadKubeconfigs } =
     useKubeconfig();
   const { zoomIn, zoomOut, resetZoom } = useZoom();
   const [clusterTabOrder, setClusterTabOrder] = useState<string[]>(() => getClusterTabOrder());
@@ -113,13 +114,15 @@ export function GlobalShortcuts({
     if (!selectedKubeconfig) {
       return;
     }
-    // Close the active cluster tab by removing it from the selection list.
-    const nextSelections = selectedKubeconfigs.filter((config) => config !== selectedKubeconfig);
-    if (nextSelections.length === selectedKubeconfigs.length) {
+    if (!selectedKubeconfigs.includes(selectedKubeconfig)) {
       return;
     }
-    void setSelectedKubeconfigs(nextSelections);
-  }, [selectedKubeconfig, selectedKubeconfigs, setSelectedKubeconfigs]);
+    void CloseCluster(selectedKubeconfig)
+      .then(() => loadKubeconfigs())
+      .catch((err) => {
+        console.warn('Failed to close cluster:', err);
+      });
+  }, [loadKubeconfigs, selectedKubeconfig, selectedKubeconfigs]);
 
   const orderedClusterSelections = useMemo(() => {
     // Follow the persisted tab order to mirror the visible cluster tabs.
