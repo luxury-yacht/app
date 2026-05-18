@@ -216,6 +216,9 @@ func (s *Service) runLoop(ctx context.Context) error {
 }
 
 func (s *Service) sync(ctx context.Context) error {
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+
 	start := s.now()
 	s.syncInProgress.Store(true)
 	defer s.syncInProgress.Store(false)

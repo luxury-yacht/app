@@ -8,6 +8,9 @@ package objectcatalog
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -34,37 +37,91 @@ type watchEvent struct {
 }
 
 var watchInformerAccessor = map[schema.GroupResource]func(informers.SharedInformerFactory) cache.SharedIndexInformer{
-	{Group: "", Resource: "pods"}:                                          func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Pods().Informer() },
-	{Group: "apps", Resource: "deployments"}:                               func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Apps().V1().Deployments().Informer() },
-	{Group: "apps", Resource: "statefulsets"}:                              func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Apps().V1().StatefulSets().Informer() },
-	{Group: "apps", Resource: "daemonsets"}:                                func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Apps().V1().DaemonSets().Informer() },
-	{Group: "apps", Resource: "replicasets"}:                               func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Apps().V1().ReplicaSets().Informer() },
-	{Group: "batch", Resource: "jobs"}:                                     func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Batch().V1().Jobs().Informer() },
-	{Group: "batch", Resource: "cronjobs"}:                                 func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Batch().V1().CronJobs().Informer() },
-	{Group: "", Resource: "services"}:                                      func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Services().Informer() },
-	{Group: "discovery.k8s.io", Resource: "endpointslices"}:                func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Discovery().V1().EndpointSlices().Informer() },
-	{Group: "", Resource: "configmaps"}:                                    func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().ConfigMaps().Informer() },
-	{Group: "", Resource: "secrets"}:                                       func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Secrets().Informer() },
-	{Group: "", Resource: "persistentvolumeclaims"}:                        func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().PersistentVolumeClaims().Informer() },
-	{Group: "", Resource: "resourcequotas"}:                                func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().ResourceQuotas().Informer() },
-	{Group: "", Resource: "limitranges"}:                                   func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().LimitRanges().Informer() },
-	{Group: "networking.k8s.io", Resource: "ingresses"}:                    func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Networking().V1().Ingresses().Informer() },
-	{Group: "networking.k8s.io", Resource: "networkpolicies"}:              func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Networking().V1().NetworkPolicies().Informer() },
-	{Group: "autoscaling", Resource: "horizontalpodautoscalers"}:           func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Autoscaling().V1().HorizontalPodAutoscalers().Informer() },
-	{Group: "rbac.authorization.k8s.io", Resource: "clusterroles"}:        func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Rbac().V1().ClusterRoles().Informer() },
-	{Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Rbac().V1().ClusterRoleBindings().Informer() },
-	{Group: "rbac.authorization.k8s.io", Resource: "roles"}:               func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Rbac().V1().Roles().Informer() },
-	{Group: "rbac.authorization.k8s.io", Resource: "rolebindings"}:        func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Rbac().V1().RoleBindings().Informer() },
-	{Group: "", Resource: "namespaces"}:                                    func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Namespaces().Informer() },
-	{Group: "", Resource: "nodes"}:                                         func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Nodes().Informer() },
-	{Group: "", Resource: "persistentvolumes"}:                             func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().PersistentVolumes().Informer() },
-	{Group: "storage.k8s.io", Resource: "storageclasses"}:                 func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Storage().V1().StorageClasses().Informer() },
+	{Group: "", Resource: "pods"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Core().V1().Pods().Informer()
+	},
+	{Group: "apps", Resource: "deployments"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Apps().V1().Deployments().Informer()
+	},
+	{Group: "apps", Resource: "statefulsets"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Apps().V1().StatefulSets().Informer()
+	},
+	{Group: "apps", Resource: "daemonsets"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Apps().V1().DaemonSets().Informer()
+	},
+	{Group: "apps", Resource: "replicasets"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Apps().V1().ReplicaSets().Informer()
+	},
+	{Group: "batch", Resource: "jobs"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Batch().V1().Jobs().Informer()
+	},
+	{Group: "batch", Resource: "cronjobs"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Batch().V1().CronJobs().Informer()
+	},
+	{Group: "", Resource: "services"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Core().V1().Services().Informer()
+	},
+	{Group: "discovery.k8s.io", Resource: "endpointslices"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Discovery().V1().EndpointSlices().Informer()
+	},
+	{Group: "", Resource: "configmaps"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Core().V1().ConfigMaps().Informer()
+	},
+	{Group: "", Resource: "secrets"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Core().V1().Secrets().Informer()
+	},
+	{Group: "", Resource: "persistentvolumeclaims"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Core().V1().PersistentVolumeClaims().Informer()
+	},
+	{Group: "", Resource: "resourcequotas"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Core().V1().ResourceQuotas().Informer()
+	},
+	{Group: "", Resource: "limitranges"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Core().V1().LimitRanges().Informer()
+	},
+	{Group: "networking.k8s.io", Resource: "ingresses"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Networking().V1().Ingresses().Informer()
+	},
+	{Group: "networking.k8s.io", Resource: "networkpolicies"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Networking().V1().NetworkPolicies().Informer()
+	},
+	{Group: "autoscaling", Resource: "horizontalpodautoscalers"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Autoscaling().V1().HorizontalPodAutoscalers().Informer()
+	},
+	{Group: "rbac.authorization.k8s.io", Resource: "clusterroles"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Rbac().V1().ClusterRoles().Informer()
+	},
+	{Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Rbac().V1().ClusterRoleBindings().Informer()
+	},
+	{Group: "rbac.authorization.k8s.io", Resource: "roles"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Rbac().V1().Roles().Informer()
+	},
+	{Group: "rbac.authorization.k8s.io", Resource: "rolebindings"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Rbac().V1().RoleBindings().Informer()
+	},
+	{Group: "", Resource: "namespaces"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Core().V1().Namespaces().Informer()
+	},
+	{Group: "", Resource: "nodes"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Core().V1().Nodes().Informer()
+	},
+	{Group: "", Resource: "persistentvolumes"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Core().V1().PersistentVolumes().Informer()
+	},
+	{Group: "storage.k8s.io", Resource: "storageclasses"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+		return f.Storage().V1().StorageClasses().Informer()
+	},
 }
 
 type watchNotifier struct {
-	service *Service
-	pending chan watchEvent
-	ctx     context.Context
+	service            *Service
+	pending            chan watchEvent
+	ctx                context.Context
+	recoveryMu         sync.Mutex
+	fullSyncRequested  bool
+	coalescedDropCount int
+	lastOverflowWarn   time.Time
 }
 
 func newWatchNotifier(ctx context.Context, svc *Service) *watchNotifier {
@@ -80,13 +137,20 @@ func (n *watchNotifier) flush(events []watchEvent) {
 	if len(events) == 0 {
 		return
 	}
+	s := n.service
+	if !s.syncMu.TryLock() {
+		n.requestFullSync(len(events), false)
+		return
+	}
+	defer s.syncMu.Unlock()
+
 	// sync() parallel goroutines write to the aliased s.items/newItems map
-	// without holding s.mu. Skip to avoid a concurrent-write race.
-	if n.service.syncInProgress.Load() {
+	// without holding s.mu. Defer to a full resync to avoid a concurrent-write race.
+	if s.syncInProgress.Load() {
+		n.requestFullSync(len(events), false)
 		return
 	}
 
-	s := n.service
 	changed := false
 
 	s.mu.Lock()
@@ -152,34 +216,82 @@ func (n *watchNotifier) run() {
 			if timer == nil {
 				timer = time.NewTimer(config.ObjectCatalogWatchDebounceInterval)
 				timerC = timer.C
-			} else {
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
+			}
+			if len(batch) >= config.ObjectCatalogWatchPendingBufferSize {
+				n.flush(batch)
+				batch = nil
+				n.runRecoverySync()
+				if timer != nil {
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
 					}
+					timer = nil
+					timerC = nil
 				}
-				timer.Reset(config.ObjectCatalogWatchDebounceInterval)
 			}
 		case <-timerC:
 			if len(batch) > 0 {
 				n.flush(batch)
 				batch = nil
 			}
+			n.runRecoverySync()
 			timer = nil
 			timerC = nil
 		}
 	}
 }
 
-// send enqueues a watch event. Drops if buffer is full.
+// send enqueues a watch event. If the bounded queue is saturated, it drops the
+// individual payload but schedules a full sync so the catalog converges.
 func (n *watchNotifier) send(evt watchEvent) {
 	select {
 	case n.pending <- evt:
 	default:
-		if n.service.deps.Logger != nil {
-			n.service.logWarn("catalog watch notifier buffer full, dropping event")
+		n.requestFullSync(1, true)
+	}
+}
+
+func (n *watchNotifier) requestFullSync(coalescedDrops int, warn bool) {
+	var warnMsg string
+	n.recoveryMu.Lock()
+	n.fullSyncRequested = true
+	n.coalescedDropCount += coalescedDrops
+	if warn && n.service.deps.Logger != nil {
+		now := n.service.now()
+		if n.lastOverflowWarn.IsZero() || now.Sub(n.lastOverflowWarn) >= config.ObjectCatalogWatchOverflowWarnInterval {
+			n.lastOverflowWarn = now
+			warnMsg = fmt.Sprintf("catalog watch notifier buffer full; coalescing events and scheduling full catalog resync (coalesced=%d)", n.coalescedDropCount)
 		}
+	}
+	n.recoveryMu.Unlock()
+
+	if warnMsg != "" {
+		n.service.logWarn(warnMsg)
+	}
+}
+
+func (n *watchNotifier) takeFullSyncRequest() (int, bool) {
+	n.recoveryMu.Lock()
+	defer n.recoveryMu.Unlock()
+	if !n.fullSyncRequested {
+		return 0, false
+	}
+	count := n.coalescedDropCount
+	n.fullSyncRequested = false
+	n.coalescedDropCount = 0
+	return count, true
+}
+
+func (n *watchNotifier) runRecoverySync() {
+	coalescedDrops, requested := n.takeFullSyncRequest()
+	if !requested {
+		return
+	}
+	if err := n.service.sync(n.ctx); err != nil && !errors.Is(err, context.Canceled) {
+		n.service.logWarn(fmt.Sprintf("catalog watch recovery sync failed after coalescing %d event(s): %v", coalescedDrops, err))
 	}
 }
 

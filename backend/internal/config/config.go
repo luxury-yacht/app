@@ -349,6 +349,9 @@ const (
 	// ObjectCatalogWatchDebounceInterval coalesces informer watch flushes.
 	ObjectCatalogWatchDebounceInterval = 200 * time.Millisecond
 
+	// ObjectCatalogWatchOverflowWarnInterval throttles notifier overflow warnings per cluster.
+	ObjectCatalogWatchOverflowWarnInterval = 30 * time.Second
+
 	// ObjectCatalogReactiveMinResyncInterval is the minimum full resync interval when reactive updates are enabled.
 	ObjectCatalogReactiveMinResyncInterval = 5 * time.Minute
 )

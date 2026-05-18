@@ -2,14 +2,28 @@ package objectcatalog
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+type recordingWatchLogger struct {
+	warnings []string
+}
+
+func (l *recordingWatchLogger) Debug(string, ...string) {}
+func (l *recordingWatchLogger) Info(string, ...string)  {}
+func (l *recordingWatchLogger) Error(string, ...string) {}
+
+func (l *recordingWatchLogger) Warn(msg string, _ ...string) {
+	l.warnings = append(l.warnings, msg)
+}
 
 func newTestWatchService() *Service {
 	return &Service{
@@ -171,6 +185,9 @@ func TestFlushSkipsDuringSyncInProgress(t *testing.T) {
 	if svc.Count() != 0 {
 		t.Fatalf("expected 0 items, got %d", svc.Count())
 	}
+	if coalesced, ok := notifier.takeFullSyncRequest(); !ok || coalesced != 1 {
+		t.Fatalf("expected full sync request for skipped event, got ok=%v coalesced=%d", ok, coalesced)
+	}
 }
 
 func TestFlushClusterScopedResource(t *testing.T) {
@@ -251,6 +268,77 @@ func TestWatchNotifierDebouncesBatch(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 	if svc.Count() != 3 {
 		t.Fatalf("expected 3 items, got %d", svc.Count())
+	}
+}
+
+func TestWatchNotifierFlushesDuringContinuousEvents(t *testing.T) {
+	svc := newTestWatchService()
+	desc := testDeploymentDescriptor()
+	registerDesc(svc, desc)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	notifier := newWatchNotifier(ctx, svc)
+	go notifier.run()
+
+	for i := 0; i < 6; i++ {
+		name := "busy-" + string(rune('a'+i))
+		obj := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+			Name: name, Namespace: "default", UID: types.UID("uid-" + name),
+		}}
+		notifier.send(watchEvent{
+			eventType: watchEventAdd,
+			gvr:       desc.GVR.String(),
+			key:       catalogKey(desc, "default", name),
+			obj:       obj,
+		})
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	time.Sleep(75 * time.Millisecond)
+	if svc.Count() == 0 {
+		t.Fatal("expected continuous watch traffic to flush without waiting for a quiet period")
+	}
+}
+
+func TestWatchNotifierOverflowCoalescesAndThrottlesWarnings(t *testing.T) {
+	logger := &recordingWatchLogger{}
+	now := time.Unix(10, 0)
+	svc := newTestWatchService()
+	svc.deps.Logger = logger
+	svc.now = func() time.Time { return now }
+
+	notifier := newWatchNotifier(context.Background(), svc)
+	evt := watchEvent{}
+	for i := 0; i < cap(notifier.pending); i++ {
+		notifier.send(evt)
+	}
+
+	notifier.send(evt)
+	notifier.send(evt)
+
+	if len(logger.warnings) != 1 {
+		t.Fatalf("expected one throttled warning, got %d", len(logger.warnings))
+	}
+	if !strings.Contains(logger.warnings[0], "scheduling full catalog resync") {
+		t.Fatalf("expected recovery warning, got %q", logger.warnings[0])
+	}
+	if coalesced, ok := notifier.takeFullSyncRequest(); !ok || coalesced != 2 {
+		t.Fatalf("expected two coalesced drops, got ok=%v coalesced=%d", ok, coalesced)
+	}
+
+	notifier.send(evt)
+	if len(logger.warnings) != 1 {
+		t.Fatalf("expected warning to remain throttled, got %d", len(logger.warnings))
+	}
+
+	now = now.Add(config.ObjectCatalogWatchOverflowWarnInterval)
+	notifier.send(evt)
+	if len(logger.warnings) != 2 {
+		t.Fatalf("expected warning after throttle interval, got %d", len(logger.warnings))
+	}
+	if coalesced, ok := notifier.takeFullSyncRequest(); !ok || coalesced != 2 {
+		t.Fatalf("expected two more coalesced drops, got ok=%v coalesced=%d", ok, coalesced)
 	}
 }
 
