@@ -164,6 +164,62 @@ func TestServiceBuildDoesNotCacheObjectMaintenance(t *testing.T) {
 	}
 }
 
+func TestServiceBuildDoesNotSingleflightObjectMaintenance(t *testing.T) {
+	reg := domain.New()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var mu sync.Mutex
+	callCount := 0
+
+	if err := reg.Register(refresh.DomainConfig{
+		Name: "object-maintenance",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			mu.Lock()
+			callCount++
+			count := callCount
+			mu.Unlock()
+			if count == 1 {
+				close(started)
+				<-release
+			}
+			return &refresh.Snapshot{
+				Domain:  "object-maintenance",
+				Scope:   scope,
+				Version: uint64(count),
+				Payload: map[string]int{"items": count},
+			}, nil
+		},
+	}); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	service := NewService(reg, nil, ClusterMeta{})
+	ctx := context.Background()
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = service.Build(ctx, "object-maintenance", "cluster-a|node:worker-1")
+		close(done)
+	}()
+
+	<-started
+	snap, err := service.Build(ctx, "object-maintenance", "cluster-a|node:worker-1")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	close(release)
+	<-done
+
+	if snap.Version != 2 {
+		t.Fatalf("expected second object-maintenance build to run independently, got version %d", snap.Version)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if callCount != 2 {
+		t.Fatalf("expected object-maintenance to avoid singleflight join, got %d calls", callCount)
+	}
+}
+
 func TestServiceBuildBypassUsesSeparateSingleflightKey(t *testing.T) {
 	reg := domain.New()
 	started := make(chan struct{})

@@ -27,6 +27,30 @@ Workflow-owned details stay in their existing stores:
 - Port-forward local port and reconnect status stay in `backend/portforward.go`.
 - Drain history and event details stay in `backend/nodemaintenance` and the
   `object-maintenance` refresh domain.
+- `DrainNodeModal` owns drain result presentation. The active or most recent
+  drain attempt remains pinned in the modal, and older attempts render as
+  history.
+
+## Drain Maintenance Refresh
+
+`object-maintenance` is live app-managed maintenance state, not a Kubernetes
+list snapshot. It has two concurrent consumer shapes:
+
+- aggregate cluster scopes used by node-table/object-panel drain indicators;
+- node-specific scopes used by an open `DrainNodeModal`.
+
+The frontend refresh orchestrator must allow multiple active
+`object-maintenance` scopes at the same time. Enabling an aggregate scope must
+not disable or reset an open modal's node-specific scope, and enabling a modal
+scope must not disable aggregate drain indicators.
+
+The backend snapshot service also treats `object-maintenance` specially:
+
+- it bypasses the normal short snapshot cache;
+- it bypasses snapshot singleflight coalescing.
+
+This prevents a modal refresh after `StartDrainNode` from being satisfied by an
+older in-flight empty snapshot that started before the drain job was recorded.
 
 ## Cleanup Contract
 
@@ -50,12 +74,17 @@ Cleanup behavior:
 ## Frontend Contract
 
 - `frontend/src/ui/status/SessionsStatus.tsx` reads
-  `runtime-operations:list` for global operation presence, counts, and
-  removed-cluster cleanup.
+  `runtime-operations:list` for shell and port-forward presence plus
+  removed-cluster cleanup. It does not render drain detail rows.
 - Shell and port-forward rows may still use workflow-specific list events for
   details such as container, command, pod name, local port, and status reason.
+- Active drains stay visible to lifecycle cleanup and close-cluster warnings,
+  but drain progress, history, and detail presentation remain owned by the node
+  maintenance workflow.
 - `frontend/src/ui/layout/ClusterTabs.tsx` calls `CloseCluster(...)` instead of
   directly stopping shell sessions or port forwards.
+- Cluster close confirmation may use the runtime operation list for total
+  active-operation counts and type breakdowns, including active drain jobs.
 
 ## Validation
 
@@ -63,9 +92,15 @@ Focused checks:
 
 ```sh
 go test ./backend ./backend/resources/nodes ./backend/nodemaintenance
+go test ./backend/refresh/snapshot
 npm run test --prefix frontend -- SessionsStatus ClusterTabs port-forward drain
+npm run test --prefix frontend -- orchestrator
 npm run typecheck --prefix frontend
 ```
 
 Run `mage qc:prerelease` before presenting non-documentation changes as
 complete.
+
+When changing drain-modal refresh behavior, also manually smoke test starting a
+drain from an already-open `DrainNodeModal` and confirm the result appears and
+remains visible after completion.

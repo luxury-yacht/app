@@ -43,6 +43,10 @@ export interface TooltipProps {
   className?: string;
   /** When true the tooltip is completely suppressed */
   disabled?: boolean;
+  /** Optional z-index override for portal layering. */
+  zIndex?: React.CSSProperties['zIndex'];
+  /** Changing this value closes the tooltip. */
+  closeSignal?: unknown;
   /** Render trigger as inline <span> (true, default) or block <div> (false).
    *  Use false when wrapping block-level children like ResourceBar. */
   inline?: boolean;
@@ -77,6 +81,8 @@ const Tooltip: React.FC<TooltipProps> = ({
   minWidth,
   className,
   disabled = false,
+  zIndex,
+  closeSignal,
   inline = true,
   interactive = false,
 }) => {
@@ -164,6 +170,14 @@ const Tooltip: React.FC<TooltipProps> = ({
       clearTimers();
     };
   }, [clearTimers]);
+
+  useEffect(() => {
+    if (closeSignal === undefined) {
+      return;
+    }
+    clearTimers();
+    setVisible(false);
+  }, [clearTimers, closeSignal]);
 
   // ------------------------------------------------------------------
   // Outside-click handler for click-trigger mode
@@ -337,7 +351,7 @@ const Tooltip: React.FC<TooltipProps> = ({
     .join(' ');
 
   const inlineStyle: React.CSSProperties = { ...style };
-  inlineStyle.zIndex = resolveTooltipZIndex();
+  inlineStyle.zIndex = zIndex ?? resolveTooltipZIndex();
   if (maxWidth !== undefined) inlineStyle.maxWidth = maxWidth;
   if (minWidth !== undefined) inlineStyle.minWidth = minWidth;
 

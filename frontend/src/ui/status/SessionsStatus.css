@@ -166,14 +166,6 @@
   cursor: pointer;
 }
 
-.sessions-status-message .as-shell-session-jump:hover:not(:disabled) {
-  background: var(--color-bg-tertiary);
-}
-
-.sessions-status-message .as-pf-session:hover {
-  background: var(--color-bg-tertiary);
-}
-
 .sessions-status-message .as-shell-session-jump:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
@@ -188,7 +180,10 @@
   flex-shrink: 0;
   color: var(--color-text-secondary);
   opacity: 0.35;
-  transition: opacity 0.12s ease;
+  transition:
+    color 0.12s ease,
+    filter 0.12s ease,
+    opacity 0.12s ease;
 }
 
 .sessions-status-message .as-shell-open-affordance svg {
@@ -197,7 +192,9 @@
 
 .sessions-status-message .as-shell-session-jump:hover:not(:disabled) .as-shell-open-affordance,
 .sessions-status-message .as-shell-session-jump:focus-visible .as-shell-open-affordance {
-  opacity: 0.9;
+  color: var(--color-accent);
+  opacity: 1;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--color-accent) 70%, transparent));
 }
 
 .sessions-status-message .as-shell-session .ss-field-label {
@@ -241,12 +238,15 @@
   /* Keep the larger button, but align its icon center with the shell affordance icon. */
   margin-right: -9px;
   opacity: 0.45;
-  transition: opacity 0.12s ease;
+  transition:
+    filter 0.12s ease,
+    opacity 0.12s ease;
 }
 
 .sessions-status-message .as-pf-session:hover .as-pf-actions,
 .sessions-status-message .as-pf-session:focus-within .as-pf-actions {
   opacity: 1;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--color-error) 70%, transparent));
 }
 
 .sessions-status-message .as-compact-icon-action {

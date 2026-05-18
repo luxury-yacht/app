@@ -23,7 +23,11 @@ import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import { Tabs, type TabDescriptor } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
-import { readClusterRuntimeOperationCount, requestAppState } from '@/core/app-state-access';
+import {
+  readClusterRuntimeOperationSummary,
+  requestAppState,
+  type ClusterRuntimeOperationSummary,
+} from '@/core/app-state-access';
 import './ClusterTabs.css';
 
 const ordersMatch = (left: string[], right: string[]) =>
@@ -35,9 +39,27 @@ type ClusterTab = {
   selection: string;
 };
 
+const formatOperationSummaryPart = (count: number, singular: string, plural = `${singular}s`) =>
+  count > 0 ? `${count} ${count === 1 ? singular : plural}` : null;
+
+const formatOperationSummary = (summary: ClusterRuntimeOperationSummary) =>
+  [
+    formatOperationSummaryPart(summary.shells, 'shell session'),
+    formatOperationSummaryPart(summary.portForwards, 'port-forward'),
+    formatOperationSummaryPart(summary.drains, 'node drain'),
+    formatOperationSummaryPart(summary.other, 'other operation'),
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(', ');
+
 const ClusterTabs: React.FC = () => {
-  const { selectedKubeconfigs, selectedKubeconfig, setActiveKubeconfig, getClusterMeta } =
-    useKubeconfig();
+  const {
+    selectedKubeconfigs,
+    selectedKubeconfig,
+    setActiveKubeconfig,
+    getClusterMeta,
+    loadKubeconfigs,
+  } = useKubeconfig();
   const [tabOrder, setTabOrder] = useState<string[]>(() => getClusterTabOrder());
   const tabsRef = useRef<HTMLDivElement | null>(null);
   // State for cluster close confirmation modal when runtime operations are active.
@@ -46,7 +68,8 @@ const ClusterTabs: React.FC = () => {
     clusterId: string | null;
     clusterLabel: string;
     operationCount: number;
-  }>({ show: false, clusterId: null, clusterLabel: '', operationCount: 0 });
+    operationSummary: string;
+  }>({ show: false, clusterId: null, clusterLabel: '', operationCount: 0, operationSummary: '' });
 
   useEffect(() => {
     let active = true;
@@ -123,6 +146,14 @@ const ClusterTabs: React.FC = () => {
     [setActiveKubeconfig]
   );
 
+  const closeClusterSelection = useCallback(
+    async (selection: string) => {
+      await CloseCluster(selection);
+      await loadKubeconfigs();
+    },
+    [loadKubeconfigs]
+  );
+
   // Handles closing a cluster tab. Checks for active runtime operations first
   // and prompts for confirmation if any are found.
   const handleCloseTab = useCallback(
@@ -134,18 +165,19 @@ const ClusterTabs: React.FC = () => {
 
       // Check if there are active runtime operations for this cluster.
       try {
-        const count = await requestAppState({
-          resource: 'cluster-runtime-operation-count',
+        const summary = await requestAppState({
+          resource: 'cluster-runtime-operation-summary',
           adapter: 'runtime-read',
-          read: () => readClusterRuntimeOperationCount(clusterId),
+          read: () => readClusterRuntimeOperationSummary(clusterId),
         });
-        if (count > 0) {
+        if (summary.total > 0) {
           // Show confirmation modal with the count.
           setCloseConfirm({
             show: true,
             clusterId: selection,
             clusterLabel: label,
-            operationCount: count,
+            operationCount: summary.total,
+            operationSummary: formatOperationSummary(summary),
           });
           return;
         }
@@ -154,12 +186,12 @@ const ClusterTabs: React.FC = () => {
       }
 
       try {
-        await CloseCluster(selection);
+        await closeClusterSelection(selection);
       } catch (err) {
         console.warn('Failed to close cluster:', err);
       }
     },
-    [getClusterMeta, tabs]
+    [closeClusterSelection, getClusterMeta, tabs]
   );
 
   // Handles confirmed close when user accepts stopping runtime operations.
@@ -167,14 +199,20 @@ const ClusterTabs: React.FC = () => {
     if (!closeConfirm.clusterId) return;
 
     try {
-      await CloseCluster(closeConfirm.clusterId);
+      await closeClusterSelection(closeConfirm.clusterId);
     } catch (err) {
       console.warn('Failed to close cluster:', err);
     }
 
     // Reset confirmation state.
-    setCloseConfirm({ show: false, clusterId: null, clusterLabel: '', operationCount: 0 });
-  }, [closeConfirm.clusterId]);
+    setCloseConfirm({
+      show: false,
+      clusterId: null,
+      clusterLabel: '',
+      operationCount: 0,
+      operationSummary: '',
+    });
+  }, [closeClusterSelection, closeConfirm.clusterId]);
 
   // One useContext call for the entire drag coordinator, regardless of how
   // many tabs are rendered. Returned factory is a plain function legal inside
@@ -288,13 +326,19 @@ const ClusterTabs: React.FC = () => {
       <ConfirmationModal
         isOpen={closeConfirm.show}
         title="Active Operations"
-        message={`Cluster "${closeConfirm.clusterLabel}" has ${closeConfirm.operationCount} active operation${closeConfirm.operationCount > 1 ? 's' : ''}. Stop ${closeConfirm.operationCount > 1 ? 'them' : 'it'} and close?`}
+        message={`Cluster "${closeConfirm.clusterLabel}" has ${closeConfirm.operationCount} active operation${closeConfirm.operationCount > 1 ? 's' : ''}${closeConfirm.operationSummary ? ` (${closeConfirm.operationSummary})` : ''}. Stop ${closeConfirm.operationCount > 1 ? 'them' : 'it'} and close?`}
         confirmText="Stop & Close"
         cancelText="Cancel"
         confirmButtonClass="danger"
         onConfirm={handleConfirmClose}
         onCancel={() =>
-          setCloseConfirm({ show: false, clusterId: null, clusterLabel: '', operationCount: 0 })
+          setCloseConfirm({
+            show: false,
+            clusterId: null,
+            clusterLabel: '',
+            operationCount: 0,
+            operationSummary: '',
+          })
         }
       />
     </>

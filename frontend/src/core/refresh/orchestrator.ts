@@ -195,6 +195,7 @@ const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
   'object-events',
   'object-helm-manifest',
   'object-helm-values',
+  'object-maintenance',
   'object-map',
   'object-yaml',
   'pods',

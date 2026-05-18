@@ -473,6 +473,33 @@ describe('Tooltip', () => {
     vi.useRealTimers();
   });
 
+  it('closes an open tooltip when closeSignal changes', async () => {
+    vi.useFakeTimers();
+
+    const { container, root, cleanup } = await renderTooltip({
+      content: 'Closable tip',
+      closeSignal: 0,
+    });
+    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(container.querySelector('.tooltip')).toBeTruthy();
+
+    await act(async () => {
+      root.render(<Tooltip content="Closable tip" closeSignal={1} />);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.tooltip')).toBeFalsy();
+
+    cleanup();
+    vi.useRealTimers();
+  });
+
   // -----------------------------------------------------------------------
   // Variant class
   // -----------------------------------------------------------------------

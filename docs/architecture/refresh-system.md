@@ -111,8 +111,12 @@ registered builders with:
 - Checksums used as ETags.
 - Telemetry recording.
 
-Partial or truncated snapshots are not cached, and `object-maintenance` bypasses
-snapshot caching so long-running drain status stays current.
+Partial or truncated snapshots are not cached.
+
+`object-maintenance` is live app-managed drain state. It bypasses both snapshot
+caching and snapshot singleflight coalescing so long-running drain status stays
+current and a refresh triggered after `StartDrainNode` cannot reuse an older
+in-flight empty snapshot.
 
 ## Frontend Architecture
 

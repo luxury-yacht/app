@@ -37,6 +37,8 @@ export interface StatusIndicatorProps {
   tooltipClassName?: string;
   /** Hide the tooltip title row for indicators with self-describing content. */
   hideTitle?: boolean;
+  /** Changing this value closes the open status popover. */
+  closeSignal?: unknown;
 }
 
 const StatusIndicator: React.FC<StatusIndicatorProps> = ({
@@ -49,6 +51,7 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   ariaLabel,
   tooltipClassName,
   hideTitle,
+  closeSignal,
 }) => {
   const actionItems =
     actions && actions.length > 0
@@ -87,6 +90,8 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
       showArrow={false}
       hoverDelay={150}
       className={tooltipClassName ? `status-popover ${tooltipClassName}` : 'status-popover'}
+      zIndex="var(--z-index-tooltip, 3200)"
+      closeSignal={closeSignal}
       interactive
     >
       <div className="status-indicator" aria-label={ariaLabel} role="status">

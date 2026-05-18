@@ -18,7 +18,10 @@ import {
 } from '@shared/components/icons/SharedIcons';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
+import {
+  getRequestedObjectPanelTab,
+  requestObjectPanelTab,
+} from '@modules/object-panel/objectPanelTabRequests';
 import {
   readPortForwardSessions,
   readRuntimeOperations,
@@ -68,16 +71,8 @@ interface RuntimeOperation {
   type: string;
   clusterId: string;
   clusterName?: string;
-  target?: {
-    kind: string;
-    namespace?: string;
-    name: string;
-  };
   status: string;
-  statusReason?: string;
   startedAt: string;
-  displayName?: string;
-  summary?: Record<string, string>;
 }
 
 function parseTimestamp(value?: string | { time?: string }): number {
@@ -150,6 +145,7 @@ const SessionsStatus: React.FC = () => {
     session: ShellSessionInfo;
     targetClusterId: string;
   } | null>(null);
+  const [statusPopoverCloseSignal, setStatusPopoverCloseSignal] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -208,7 +204,7 @@ const SessionsStatus: React.FC = () => {
   }, []);
 
   const openShellSessionTab = useCallback(
-    (session: ShellSessionInfo) => {
+    (session: ShellSessionInfo): boolean => {
       const targetRef = buildRequiredObjectReference({
         kind: 'Pod',
         name: session.podName,
@@ -219,9 +215,17 @@ const SessionsStatus: React.FC = () => {
       const panelId = objectPanelId(targetRef);
       openWithObject(targetRef);
       requestObjectPanelTab(panelId, 'shell');
+      if (getRequestedObjectPanelTab(panelId) !== 'shell') {
+        throw new Error('Shell session tab request was not accepted.');
+      }
+      return true;
     },
     [openWithObject, selectedClusterId]
   );
+
+  const closeStatusPopover = useCallback(() => {
+    setStatusPopoverCloseSignal((signal) => signal + 1);
+  }, []);
 
   const clusterSelectionById = useMemo(() => {
     const map = new Map<string, string>();
@@ -245,7 +249,18 @@ const SessionsStatus: React.FC = () => {
       setJumpingShellSessionId(session.sessionId);
 
       if (!targetClusterId || selectedClusterId === targetClusterId) {
-        openShellSessionTab(session);
+        try {
+          if (openShellSessionTab(session)) {
+            closeStatusPopover();
+          }
+        } catch (err) {
+          errorHandler.handle(err, {
+            action: 'jumpToShellSession',
+            sessionId: session.sessionId,
+            clusterId: targetClusterId,
+            source: 'SessionsStatus',
+          });
+        }
         setJumpingShellSessionId(null);
         return;
       }
@@ -266,6 +281,7 @@ const SessionsStatus: React.FC = () => {
       setActiveKubeconfig(targetSelection);
     },
     [
+      closeStatusPopover,
       clusterSelectionById,
       jumpingShellSessionId,
       openShellSessionTab,
@@ -347,10 +363,21 @@ const SessionsStatus: React.FC = () => {
     ) {
       return;
     }
-    openShellSessionTab(pendingShellJump.session);
+    try {
+      if (openShellSessionTab(pendingShellJump.session)) {
+        closeStatusPopover();
+      }
+    } catch (err) {
+      errorHandler.handle(err, {
+        action: 'jumpToShellSession',
+        sessionId: pendingShellJump.session.sessionId,
+        clusterId: pendingShellJump.targetClusterId,
+        source: 'SessionsStatus',
+      });
+    }
     setPendingShellJump(null);
     setJumpingShellSessionId(null);
-  }, [openShellSessionTab, pendingShellJump, selectedClusterId]);
+  }, [closeStatusPopover, openShellSessionTab, pendingShellJump, selectedClusterId]);
 
   useEffect(() => {
     if (!pendingShellJump) {
@@ -416,23 +443,12 @@ const SessionsStatus: React.FC = () => {
     [portForwardSessions, runtimePortForwardIds]
   );
 
-  const filteredDrainOperations = useMemo(
-    () =>
-      filteredRuntimeOperations
-        .filter((operation) => operation.type === 'drain')
-        .sort((a, b) => parseTimestamp(b.startedAt) - parseTimestamp(a.startedAt)),
-    [filteredRuntimeOperations]
-  );
-
   const shellCount = filteredShellSessions.length;
   const portForwardCount = filteredPortForwards.length;
-  const drainCount = filteredDrainOperations.length;
 
-  const totalCount = filteredRuntimeOperations.length;
+  const totalCount = shellCount + portForwardCount;
   const totalHealthy =
-    shellCount +
-    drainCount +
-    filteredPortForwards.filter((session) => session.status === 'active').length;
+    shellCount + filteredPortForwards.filter((session) => session.status === 'active').length;
   const totalUnhealthy = Math.max(0, totalCount - totalHealthy);
 
   const status = useMemo<StatusState>(() => {
@@ -449,9 +465,7 @@ const SessionsStatus: React.FC = () => {
           {totalCount === 0 ? (
             <div className="as-empty sessions-status-empty">
               <span className="as-empty-icon">◎</span>
-              <span className="as-empty-text">
-                No active shell sessions, port forwards, or node drains
-              </span>
+              <span className="as-empty-text">No active shell sessions or port forwards</span>
             </div>
           ) : (
             <>
@@ -604,51 +618,6 @@ const SessionsStatus: React.FC = () => {
                   )}
                 </div>
               </section>
-
-              <section className="as-section">
-                <header className="as-section-header">
-                  <h3 className="as-section-title">Node Drains</h3>
-                  <span className="as-section-count">{drainCount}</span>
-                </header>
-                <div className="as-section-body">
-                  {drainCount === 0 ? (
-                    <div className="as-section-empty">No active node drains</div>
-                  ) : (
-                    filteredDrainOperations.map((operation) => {
-                      const fields = [
-                        {
-                          label: 'cluster',
-                          value: operation.clusterName || operation.clusterId || '-',
-                        },
-                        { label: 'node', value: operation.target?.name || '-' },
-                        { label: 'status', value: operation.status || '-' },
-                      ];
-                      return (
-                        <div key={operation.id} className="ss-session-item as-pf-session">
-                          <div className="ss-session-main">
-                            <div className="ss-session-fields as-pf-fields">
-                              {fields.map((field, index) => (
-                                <div key={field.label} className="ss-field-row as-pf-field-row">
-                                  <span className="as-pf-status-slot" aria-hidden={index !== 0}>
-                                    {index === 0 ? renderPortForwardStatusIcon('active') : null}
-                                  </span>
-                                  <span className="ss-field-label">{field.label}:</span>
-                                  <span className="ss-field-value">{field.value}</span>
-                                </div>
-                              ))}
-                            </div>
-                            {operation.statusReason && (
-                              <div className="pf-session-reason as-pf-reason">
-                                {operation.statusReason}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </section>
             </>
           )}
         </div>
@@ -656,12 +625,10 @@ const SessionsStatus: React.FC = () => {
     ),
     [
       filteredPortForwards,
-      filteredDrainOperations,
       filteredShellSessions,
       handleJumpToShellSession,
       handleStopPortForward,
       jumpingShellSessionId,
-      drainCount,
       portForwardCount,
       shellCount,
       stoppingPortForwardIds,
@@ -670,9 +637,8 @@ const SessionsStatus: React.FC = () => {
   );
 
   const messageAria = useMemo(
-    () =>
-      `Shell Sessions: ${shellCount}. Port Forwards: ${portForwardCount}. Node Drains: ${drainCount}.`,
-    [drainCount, portForwardCount, shellCount]
+    () => `Shell Sessions: ${shellCount}. Port Forwards: ${portForwardCount}.`,
+    [portForwardCount, shellCount]
   );
 
   return (
@@ -683,6 +649,7 @@ const SessionsStatus: React.FC = () => {
       ariaLabel={`Sessions: ${messageAria}`}
       tooltipClassName="sessions-status-popover"
       hideTitle
+      closeSignal={statusPopoverCloseSignal}
     />
   );
 };

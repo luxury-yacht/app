@@ -162,6 +162,11 @@ const DrainNodeModal = ({
   );
 
   const mostRecentJob: NodeMaintenanceDrainJob | null = useMemo(() => drains[0] ?? null, [drains]);
+  const primaryDrainJob = activeDrainJob ?? mostRecentJob;
+  const earlierDrains = useMemo(
+    () => (primaryDrainJob ? drains.filter((job) => job.id !== primaryDrainJob.id) : drains),
+    [drains, primaryDrainJob]
+  );
 
   const drainsLoadingState = applyPassiveLoadingPolicy({
     loading: scope
@@ -339,6 +344,30 @@ const DrainNodeModal = ({
           )}
         </div>
 
+        {primaryDrainJob && (
+          <div className="drain-node-modal-current">
+            <DrainProgressCard
+              job={primaryDrainJob}
+              isActive={Boolean(activeDrainJob && activeDrainJob.id === primaryDrainJob.id)}
+              onCancel={
+                activeDrainJob && activeDrainJob.id === primaryDrainJob.id
+                  ? () => void cancelActiveDrain()
+                  : undefined
+              }
+              cancelDisabled={
+                activeDrainJob && activeDrainJob.id === primaryDrainJob.id
+                  ? cancelDrainPending || Boolean(cancelPermissionReason)
+                  : undefined
+              }
+              cancelDisabledReason={
+                activeDrainJob && activeDrainJob.id === primaryDrainJob.id
+                  ? cancelPermissionReason
+                  : undefined
+              }
+            />
+          </div>
+        )}
+
         {showOptions && (
           <details className="drain-node-modal-advanced">
             <summary>Advanced Options</summary>
@@ -465,30 +494,17 @@ const DrainNodeModal = ({
           </details>
         )}
 
-        {drainsLoadingState.loading && drains.length === 0 && (
+        {drainsLoadingState.loading && !primaryDrainJob && drains.length === 0 && (
           <div className="drain-node-modal-helper">Loading drain status…</div>
         )}
 
-        {drains.length > 0 && (
+        {earlierDrains.length > 0 && (
           <div className="drain-node-modal-history">
-            {drains.map((job, idx) => {
-              const isActiveCard = Boolean(activeDrainJob && activeDrainJob.id === job.id);
+            <div className="drain-node-modal-history-label">Earlier drains</div>
+            {earlierDrains.map((job) => {
               return (
                 <div key={job.id} className="drain-node-modal-history-entry">
-                  {idx === 1 && (
-                    <div className="drain-node-modal-history-label">Earlier drains</div>
-                  )}
-                  <DrainProgressCard
-                    job={job}
-                    isActive={isActiveCard}
-                    onCancel={isActiveCard ? () => void cancelActiveDrain() : undefined}
-                    cancelDisabled={
-                      isActiveCard
-                        ? cancelDrainPending || Boolean(cancelPermissionReason)
-                        : undefined
-                    }
-                    cancelDisabledReason={isActiveCard ? cancelPermissionReason : undefined}
-                  />
+                  <DrainProgressCard job={job} isActive={false} />
                 </div>
               );
             })}

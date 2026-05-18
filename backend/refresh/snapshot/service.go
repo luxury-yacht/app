@@ -29,6 +29,7 @@ type Service struct {
 	cacheTTL          time.Duration
 	permissionChecker *permissions.Checker
 	permissionChecks  map[string]permissionCheck
+	requestSerial     uint64
 }
 
 type cacheEntry struct {
@@ -86,6 +87,9 @@ func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh
 	if refresh.HasCacheBypass(ctx) {
 		// Keep cache-bypass builds isolated from cached singleflight requests.
 		groupKey = cacheKey + ":bypass"
+	}
+	if s.shouldBypassSingleflight(domainName) {
+		groupKey = fmt.Sprintf("%s:live:%d", cacheKey, atomic.AddUint64(&s.requestSerial, 1))
 	}
 	if !refresh.HasCacheBypass(ctx) {
 		if cached := s.loadCache(cacheKey); cached != nil {
@@ -299,6 +303,10 @@ func (s *Service) shouldCacheSnapshot(snap *refresh.Snapshot) bool {
 		return false
 	}
 	return true
+}
+
+func (s *Service) shouldBypassSingleflight(domainName string) bool {
+	return domainName == "object-maintenance"
 }
 
 func checksumBytes(data []byte) string {

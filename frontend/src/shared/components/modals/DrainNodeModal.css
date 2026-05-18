@@ -110,6 +110,11 @@
   font-size: var(--font-size-xs);
 }
 
+.drain-node-modal-current {
+  display: flex;
+  flex-direction: column;
+}
+
 .drain-node-modal-history {
   display: flex;
   flex-direction: column;

@@ -26,6 +26,7 @@ type MockState = {
   setSelectedKubeconfigs: (next: string[]) => Promise<void>;
   setActiveKubeconfig: (config: string) => void;
   getClusterMeta: (config: string) => { id: string; name: string };
+  loadKubeconfigs: () => Promise<void>;
 };
 
 const mockState: MockState = {
@@ -34,6 +35,7 @@ const mockState: MockState = {
   setSelectedKubeconfigs: vi.fn().mockResolvedValue(undefined),
   setActiveKubeconfig: vi.fn(),
   getClusterMeta: (config: string) => ({ id: config, name: config }),
+  loadKubeconfigs: vi.fn().mockResolvedValue(undefined),
 };
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -59,6 +61,7 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfig = '';
     mockState.setSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
     mockState.setActiveKubeconfig = vi.fn();
+    mockState.loadKubeconfigs = vi.fn().mockResolvedValue(undefined);
     backendMocks.CloseCluster.mockResolvedValue(undefined);
     backendMocks.ListRuntimeOperations.mockResolvedValue([]);
     vi.clearAllMocks();
@@ -149,7 +152,58 @@ describe('ClusterTabs', () => {
 
     expect(backendMocks.ListRuntimeOperations).toHaveBeenCalled();
     expect(backendMocks.CloseCluster).toHaveBeenCalledWith('b');
+    expect(mockState.loadKubeconfigs).toHaveBeenCalledTimes(1);
     expect(mockState.setSelectedKubeconfigs).not.toHaveBeenCalled();
+  });
+
+  it('reloads kubeconfig context after confirmed close with active operations', async () => {
+    mockState.selectedKubeconfigs = ['a', 'b'];
+    mockState.selectedKubeconfig = 'a';
+    backendMocks.ListRuntimeOperations.mockResolvedValue([
+      {
+        id: 'shell-b',
+        type: 'shell',
+        clusterId: 'b',
+        status: 'active',
+        startedAt: '2026-05-17T00:00:00Z',
+      },
+      {
+        id: 'drain-b',
+        type: 'drain',
+        clusterId: 'b',
+        status: 'active',
+        startedAt: '2026-05-17T00:00:01Z',
+      },
+    ]);
+    await renderTabs();
+
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+    const targetTab = tabs.find((tab) =>
+      tab.querySelector('.tab-item__label')?.textContent?.includes('b')
+    );
+    const closeButton = targetTab?.querySelector('.tab-item__close') as HTMLElement;
+
+    await act(async () => {
+      closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(document.body.textContent).toContain('Active Operations');
+    expect(document.body.textContent).toContain('2 active operations');
+    expect(document.body.textContent).toContain('1 shell session, 1 node drain');
+
+    const confirmButton = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Stop & Close'
+    ) as HTMLElement | undefined;
+    expect(confirmButton).toBeTruthy();
+
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(backendMocks.CloseCluster).toHaveBeenCalledWith('b');
+    expect(mockState.loadKubeconfigs).toHaveBeenCalledTimes(1);
   });
 
   it('shows filename:context for tabs with name collisions', async () => {

@@ -1052,6 +1052,7 @@ describe('refreshOrchestrator', () => {
       ['object-events', SYSTEM_REFRESHERS.objectEvents],
       ['object-helm-manifest', SYSTEM_REFRESHERS.objectHelmManifest],
       ['object-helm-values', SYSTEM_REFRESHERS.objectHelmValues],
+      ['object-maintenance', SYSTEM_REFRESHERS.objectMaintenance],
       ['object-map', SYSTEM_REFRESHERS.objectMap],
       ['object-yaml', SYSTEM_REFRESHERS.objectYaml],
     ];

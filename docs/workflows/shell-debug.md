@@ -47,9 +47,9 @@ The same backend session manager powers both flows.
     - shell exec (`create` on `pods/exec`)
     - debug (`update` on `pods/ephemeralcontainers`)
 - `frontend/src/ui/status/SessionsStatus.tsx`
-  - Header runtime operation panel for shell sessions, port forwards, and
-    active node drains. It reads `runtime-operations:list` for global presence
-    and uses workflow lists for shell/port-forward row details.
+  - Header runtime operation panel for shell sessions and port forwards. It
+    reads `runtime-operations:list` for shell/port-forward presence and uses
+    workflow lists for shell/port-forward row details.
 - `frontend/src/ui/layout/ClusterTabs.tsx`
   - Calls the backend close-cluster command so runtime operation cleanup and
     selected-kubeconfig updates happen through one backend lifecycle path.
@@ -83,8 +83,10 @@ Backend emits three event streams:
   - Payload: full `[]ShellSessionInfo` snapshot
 
 `object-shell:list` is the source of truth for shell session row details.
-`runtime-operations:list` is the global status/cleanup view that includes shell
-sessions alongside port forwards and active node drains.
+`runtime-operations:list` is the lifecycle/cleanup view that includes shell
+sessions alongside port forwards and active node drains. The Sessions status
+panel only renders shell and port-forward details; drain UI remains owned by
+node maintenance.
 
 ### 3) Session lifecycle, timeouts, replay
 
