@@ -14,11 +14,11 @@ import type { PortForwardTarget } from './PortForwardModal';
 import { KeyboardProvider } from '@ui/shortcuts';
 
 // Mock the Wails backend
-const startPortForwardMock = vi.hoisted(() => vi.fn());
+const runObjectActionMock = vi.hoisted(() => vi.fn());
 const getTargetPortsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  StartPortForward: (...args: unknown[]) => startPortForwardMock(...args),
+  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
   GetTargetPorts: (...args: unknown[]) => getTargetPortsMock(...args),
 }));
 
@@ -52,7 +52,7 @@ describe('PortForwardModal', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     vi.clearAllMocks();
-    startPortForwardMock.mockResolvedValue('session-123');
+    runObjectActionMock.mockResolvedValue({ sessionId: 'session-123' });
     getTargetPortsMock.mockResolvedValue([]);
   });
 
@@ -227,8 +227,8 @@ describe('PortForwardModal', () => {
   });
 
   it('consumes Escape without closing while start is loading', async () => {
-    let resolveStart!: (value: string) => void;
-    startPortForwardMock.mockReturnValue(
+    let resolveStart!: (value: { sessionId: string }) => void;
+    runObjectActionMock.mockReturnValue(
       new Promise((resolve) => {
         resolveStart = resolve;
       })
@@ -257,7 +257,7 @@ describe('PortForwardModal', () => {
     expect(event.defaultPrevented).toBe(true);
 
     await act(async () => {
-      resolveStart('session-123');
+      resolveStart({ sessionId: 'session-123' });
       await Promise.resolve();
     });
   });
@@ -325,21 +325,27 @@ describe('PortForwardModal', () => {
       await Promise.resolve();
     });
 
-    expect(startPortForwardMock).toHaveBeenCalledWith('cluster-1', {
-      namespace: 'default',
-      targetKind: 'Deployment',
-      targetGroup: 'apps',
-      targetVersion: 'v1',
-      targetName: 'nginx',
-      containerPort: 80,
-      localPort: 8080,
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'startPortForward',
+      target: {
+        clusterId: 'cluster-1',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'default',
+        name: 'nginx',
+      },
+      portForward: {
+        containerPort: 80,
+        localPort: 8080,
+      },
     });
     expect(mockOnStarted).toHaveBeenCalledWith('session-123');
     expect(mockOnClose).toHaveBeenCalled();
   });
 
   it('shows error message when port forward fails', async () => {
-    startPortForwardMock.mockRejectedValue(new Error('Port already in use'));
+    runObjectActionMock.mockRejectedValue(new Error('Port already in use'));
 
     await renderModal();
 
@@ -357,10 +363,10 @@ describe('PortForwardModal', () => {
 
   it('shows loading state while starting', async () => {
     // Make the start call hang
-    startPortForwardMock.mockImplementation(
+    runObjectActionMock.mockImplementation(
       () =>
         new Promise((resolve) => {
-          setTimeout(() => resolve('session-123'), 5000);
+          setTimeout(() => resolve({ sessionId: 'session-123' }), 5000);
         })
     );
 

@@ -32,7 +32,7 @@ const openWithObjectMock = vi.fn();
 const sortHandlerMock = vi.fn();
 const useTableSortMock = vi.fn();
 const useShortNamesMock = vi.fn();
-const deleteResourceByGVKMock = vi.fn();
+const runObjectActionMock = vi.fn();
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -115,7 +115,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
+  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -158,7 +158,7 @@ describe('NsViewCustom', () => {
     gridTableMock.mockReset();
     openWithObjectMock.mockReset();
     sortHandlerMock.mockReset();
-    deleteResourceByGVKMock.mockReset();
+    runObjectActionMock.mockReset();
     modalProps.current = null;
     useTableSortMock.mockImplementation((data: CustomResourceData[]) => ({
       sortedData: data,
@@ -362,8 +362,8 @@ describe('NsViewCustom', () => {
     expect(callArg.version).toBe('v1alpha1');
   });
 
-  it('confirms deletion and calls DeleteResourceByGVK with resolved data', async () => {
-    deleteResourceByGVKMock.mockResolvedValue(undefined);
+  it('confirms deletion with a full object action target', async () => {
+    runObjectActionMock.mockResolvedValue(undefined);
 
     // Every custom resource row the backend catalog produces carries
     // apiGroup/apiVersion — the delete path is GVK-only after the
@@ -395,13 +395,17 @@ describe('NsViewCustom', () => {
       await modalProps.current.onConfirm();
     });
 
-    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'batch/v1',
-      'CronJob',
-      'ops',
-      'nightly-cleanup'
-    );
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'batch',
+        version: 'v1',
+        kind: 'CronJob',
+        namespace: 'ops',
+        name: 'nightly-cleanup',
+      },
+    });
     await flush();
     expect(modalProps.current?.isOpen).toBe(false);
   });
@@ -409,12 +413,10 @@ describe('NsViewCustom', () => {
   // Regression test for the delete-path leg of the kind-only-objects bug.
   // When the user confirms deletion of a custom
   // resource whose Kind collides with another CRD from a different API
-  // group (e.g. two DBInstance CRDs), handleDeleteConfirm MUST route
-  // through DeleteResourceByGVK so the strict GVR is targeted. The legacy
-  // DeleteResource path uses first-match-wins discovery and could
-  // silently delete the wrong object.
-  it('routes delete through DeleteResourceByGVK when apiGroup/apiVersion are present', async () => {
-    deleteResourceByGVKMock.mockResolvedValue(undefined);
+  // group (e.g. two DBInstance CRDs), handleDeleteConfirm must carry the
+  // strict GVK through the action boundary so the backend targets the exact object.
+  it('routes delete through RunObjectAction when apiGroup/apiVersion are present', async () => {
+    runObjectActionMock.mockResolvedValue(undefined);
 
     const dbInstance: CustomResourceData = {
       kind: 'DBInstance',
@@ -446,16 +448,17 @@ describe('NsViewCustom', () => {
       await modalProps.current.onConfirm();
     });
 
-    // The strict GVK delete must be invoked, with apiVersion built as
-    // "group/version" so the backend's schema.FromAPIVersionAndKind parses
-    // it correctly.
-    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'documentdb.services.k8s.aws/v1alpha1',
-      'DBInstance',
-      'team-a',
-      'db-dc-test-1-v4'
-    );
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'documentdb.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        namespace: 'team-a',
+        name: 'db-dc-test-1-v4',
+      },
+    });
     // The legacy kind-only path has been retired entirely. This assertion
     // used to check that it wasn't hit; now it's gone from the app surface.
 
@@ -491,7 +494,7 @@ describe('NsViewCustom', () => {
       await modalProps.current.onConfirm();
     });
 
-    expect(deleteResourceByGVKMock).not.toHaveBeenCalled();
+    expect(runObjectActionMock).not.toHaveBeenCalled();
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(
       expect.objectContaining({ message: expect.stringContaining('apiVersion missing') }),
       { action: 'delete', kind: 'CronJob', name: 'nightly-cleanup' }
@@ -502,7 +505,7 @@ describe('NsViewCustom', () => {
   });
 
   it('handles delete failure with errorHandler and reverts modal state', async () => {
-    deleteResourceByGVKMock.mockRejectedValue(new Error('failure'));
+    runObjectActionMock.mockRejectedValue(new Error('failure'));
 
     const resourceWithGVK: CustomResourceData = {
       ...baseResource,
@@ -529,7 +532,19 @@ describe('NsViewCustom', () => {
       await modalProps.current.onConfirm();
     });
 
-    expect(deleteResourceByGVKMock).toHaveBeenCalled();
+    expect(runObjectActionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'delete',
+        target: expect.objectContaining({
+          clusterId: 'alpha:ctx',
+          group: 'batch',
+          version: 'v1',
+          kind: 'CronJob',
+          namespace: 'ops',
+          name: 'nightly-cleanup',
+        }),
+      })
+    );
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
       action: 'delete',
       kind: 'CronJob',

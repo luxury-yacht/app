@@ -29,10 +29,6 @@ export function CloseCluster(arg1:string):Promise<void>;
 
 export function CloseShellSession(arg1:string):Promise<void>;
 
-export function CordonNode(arg1:string,arg2:string):Promise<void>;
-
-export function CreateDebugContainer(arg1:string,arg2:types.DebugContainerRequest):Promise<types.DebugContainerResponse>;
-
 export function CreateVersionedEndpoint(arg1:string,arg2:string,arg3:any,arg4:string):Promise<backend.VersionedResponse>;
 
 export function CtxOrBackground():Promise<context.Context>;
@@ -43,19 +39,9 @@ export function DeleteGridTablePersistence(arg1:string):Promise<void>;
 
 export function DeleteGridTablePersistenceEntries(arg1:Array<string>):Promise<void>;
 
-export function DeleteHelmRelease(arg1:string,arg2:string,arg3:string):Promise<void>;
-
-export function DeleteNode(arg1:string,arg2:string):Promise<void>;
-
-export function DeletePod(arg1:string,arg2:string,arg3:string):Promise<void>;
-
-export function DeleteResourceByGVK(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
-
 export function DeleteTheme(arg1:string):Promise<void>;
 
 export function DiscoverNodeLogs(arg1:string,arg2:string):Promise<types.NodeLogDiscoveryResponse>;
-
-export function DrainNode(arg1:string,arg2:string,arg3:types.DrainNodeOptions):Promise<void>;
 
 export function FetchContainerLogs(arg1:string,arg2:types.ContainerLogsFetchRequest):Promise<types.ContainerLogsFetchResponse>;
 
@@ -64,8 +50,6 @@ export function FetchNodeLogs(arg1:string,arg2:string,arg3:types.NodeLogFetchReq
 export function FindCatalogObjectByUID(arg1:string,arg2:string):Promise<objectcatalog.Summary>;
 
 export function FindCatalogObjectMatch(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<objectcatalog.Summary>;
-
-export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;
 
 export function GetAllClusterAuthStates():Promise<Record<string, Record<string, any>>>;
 
@@ -239,19 +223,15 @@ export function ReorderThemes(arg1:Array<string>):Promise<void>;
 
 export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<void>;
 
-export function RestartWorkload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<void>;
-
 export function RetryAuth():Promise<void>;
 
 export function RetryClusterAuth(arg1:string):Promise<void>;
 
-export function RollbackWorkload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:number):Promise<void>;
+export function RunObjectAction(arg1:backend.ObjectActionRequest):Promise<backend.ObjectActionResponse>;
 
 export function SaveTheme(arg1:types.Theme):Promise<void>;
 
 export function SaveWindowSettings():Promise<void>;
-
-export function ScaleWorkload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:number):Promise<void>;
 
 export function SendShellInput(arg1:string,arg2:string):Promise<void>;
 
@@ -319,10 +299,6 @@ export function ShowAbout():Promise<void>;
 
 export function ShowSettings():Promise<void>;
 
-export function StartDrainNode(arg1:string,arg2:string,arg3:types.DrainNodeOptions):Promise<string>;
-
-export function StartPortForward(arg1:string,arg2:backend.PortForwardRequest):Promise<string>;
-
 export function StartShellSession(arg1:string,arg2:types.ShellSessionRequest):Promise<types.ShellSession>;
 
 export function Startup(arg1:context.Context):Promise<void>;
@@ -333,8 +309,6 @@ export function StopClusterShellSessions(arg1:string):Promise<void>;
 
 export function StopPortForward(arg1:string):Promise<void>;
 
-export function SuspendCronJob(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
-
 export function ToggleAppLogsPanel():Promise<void>;
 
 export function ToggleDiagnosticsPanel():Promise<void>;
@@ -342,10 +316,6 @@ export function ToggleDiagnosticsPanel():Promise<void>;
 export function ToggleObjectDiff():Promise<void>;
 
 export function ToggleSidebar():Promise<void>;
-
-export function TriggerCronJob(arg1:string,arg2:string,arg3:string):Promise<string>;
-
-export function UncordonNode(arg1:string,arg2:string):Promise<void>;
 
 export function UpdateAppPreferences(arg1:types.UpdateAppPreferencesRequest):Promise<types.UpdateAppPreferencesResponse>;
 

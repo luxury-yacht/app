@@ -40,7 +40,7 @@ func TestRestartWorkloadRequiresPatchPermission(t *testing.T) {
 		client:            client,
 	})
 
-	err := app.RestartWorkload("cluster-a", "default", "apps", "v1", "Deployment", "demo")
+	err := app.restartWorkload("cluster-a", "default", "apps", "v1", "Deployment", "demo")
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
@@ -66,7 +66,7 @@ func TestDeleteResourceByGVKRequiresDeletePermission(t *testing.T) {
 		dynamicClient:     dynamicClient,
 	})
 
-	err := app.DeleteResourceByGVK("cluster-a", "v1", "Pod", "default", "demo")
+	err := app.deleteResourceByGVK("cluster-a", "v1", "Pod", "default", "demo")
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
@@ -103,7 +103,7 @@ func TestTriggerCronJobRequiresJobCreatePermission(t *testing.T) {
 		client:            client,
 	})
 
-	_, err := app.TriggerCronJob("cluster-a", "default", "backup")
+	_, err := app.triggerCronJob("cluster-a", "default", "backup")
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
@@ -129,7 +129,7 @@ func TestSuspendCronJobRequiresPatchPermission(t *testing.T) {
 		client:            client,
 	})
 
-	err := app.SuspendCronJob("cluster-a", "default", "backup", true)
+	err := app.suspendCronJob("cluster-a", "default", "backup", true)
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}

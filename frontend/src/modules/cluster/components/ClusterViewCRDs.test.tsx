@@ -96,7 +96,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResourceByGVK: vi.fn(),
+  RunObjectAction: vi.fn(),
 }));
 
 vi.mock('@/core/capabilities', () => ({

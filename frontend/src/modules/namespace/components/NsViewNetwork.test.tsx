@@ -29,14 +29,14 @@ const {
   gridTablePropsRef,
   confirmationPropsRef,
   openWithObjectMock,
-  deleteResourceByGVKMock,
+  runObjectActionMock,
   permissionState,
   errorHandlerMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   confirmationPropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
-  deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
+  runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   permissionState: new Map<string, { allowed: boolean; pending: boolean }>(),
   errorHandlerMock: { handle: vi.fn() },
 }));
@@ -116,7 +116,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
+  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -190,8 +190,8 @@ describe('NsViewNetwork', () => {
     gridTablePropsRef.current = null;
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
-    deleteResourceByGVKMock.mockReset();
-    deleteResourceByGVKMock.mockResolvedValue(undefined);
+    runObjectActionMock.mockReset();
+    runObjectActionMock.mockResolvedValue(undefined);
     permissionState.clear();
     errorHandlerMock.handle.mockClear();
   });
@@ -311,14 +311,17 @@ describe('NsViewNetwork', () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
 
-    // Ingress is networking.k8s.io/v1, resolved through formatBuiltinApiVersion.
-    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'networking.k8s.io/v1',
-      'Ingress',
-      'team-a',
-      'web-gateway'
-    );
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'networking.k8s.io',
+        version: 'v1',
+        kind: 'Ingress',
+        namespace: 'team-a',
+        name: 'web-gateway',
+      },
+    });
   });
 
   it('hides delete action while permission is pending', async () => {
@@ -351,7 +354,7 @@ describe('NsViewNetwork', () => {
   });
 
   it('handles delete failure with errorHandler', async () => {
-    deleteResourceByGVKMock.mockRejectedValueOnce(new Error('boom'));
+    runObjectActionMock.mockRejectedValueOnce(new Error('boom'));
     permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
     const entry = baseNetwork();
     const props = await renderNetworkView([entry]);

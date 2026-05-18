@@ -139,7 +139,7 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 			detailKey := objectDetailCacheKey(tc.kind, "default", "demo")
 			app.responseCacheStore(workloadClusterID, detailKey, "stale")
 
-			err := app.RestartWorkload(workloadClusterID, "default", "apps", "v1", tc.kind, "demo")
+			err := app.restartWorkload(workloadClusterID, "default", "apps", "v1", tc.kind, "demo")
 			require.NoError(t, err)
 			_, cached := app.responseCacheLookup(workloadClusterID, detailKey)
 			require.False(t, cached, "expected workload detail cache to be evicted after restart")
@@ -175,7 +175,7 @@ func TestRestartWorkloadErrors(t *testing.T) {
 		},
 	}
 
-	err := app.RestartWorkload(workloadClusterID, "default", "batch", "v1", "Job", "demo")
+	err := app.restartWorkload(workloadClusterID, "default", "batch", "v1", "Job", "demo")
 	require.EqualError(t, err, `restart not supported for workload kind "Job"`)
 
 	appNilClient := &App{}
@@ -186,7 +186,7 @@ func TestRestartWorkloadErrors(t *testing.T) {
 			kubeconfigContext: "ctx",
 		},
 	}
-	err = appNilClient.RestartWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo")
+	err = appNilClient.restartWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo")
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
@@ -194,29 +194,29 @@ func TestWorkloadActionsRequireNamespacedObjectIdentity(t *testing.T) {
 	app := NewApp()
 
 	require.EqualError(t,
-		app.RestartWorkload("", "", "apps", "v1", "Deployment", "demo"),
+		app.restartWorkload("", "", "apps", "v1", "Deployment", "demo"),
 		"namespace is required",
 	)
 	require.EqualError(t,
-		app.RestartWorkload("", "default", "apps", "v1", "Deployment", ""),
+		app.restartWorkload("", "default", "apps", "v1", "Deployment", ""),
 		"name is required",
 	)
 	require.EqualError(t,
-		app.ScaleWorkload("", "", "apps", "v1", "Deployment", "demo", 1),
+		app.scaleWorkload("", "", "apps", "v1", "Deployment", "demo", 1),
 		"namespace is required",
 	)
 	require.EqualError(t,
-		app.ScaleWorkload("", "default", "apps", "v1", "Deployment", "", 1),
+		app.scaleWorkload("", "default", "apps", "v1", "Deployment", "", 1),
 		"name is required",
 	)
 
-	_, err := app.TriggerCronJob("", "", "backup")
+	_, err := app.triggerCronJob("", "", "backup")
 	require.EqualError(t, err, "namespace is required")
-	_, err = app.TriggerCronJob("", "default", "")
+	_, err = app.triggerCronJob("", "default", "")
 	require.EqualError(t, err, "name is required")
 
-	require.EqualError(t, app.SuspendCronJob("", "", "backup", true), "namespace is required")
-	require.EqualError(t, app.SuspendCronJob("", "default", "", true), "name is required")
+	require.EqualError(t, app.suspendCronJob("", "", "backup", true), "namespace is required")
+	require.EqualError(t, app.suspendCronJob("", "default", "", true), "name is required")
 }
 
 func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
@@ -281,7 +281,7 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 			detailKey := objectDetailCacheKey(tc.kind, "default", "demo")
 			app.responseCacheStore(workloadClusterID, detailKey, "stale")
 
-			err := app.ScaleWorkload(workloadClusterID, "default", "apps", "v1", tc.kind, "demo", 3)
+			err := app.scaleWorkload(workloadClusterID, "default", "apps", "v1", tc.kind, "demo", 3)
 			require.NoError(t, err)
 			_, cached := app.responseCacheLookup(workloadClusterID, detailKey)
 			require.False(t, cached, "expected workload detail cache to be evicted after scale")
@@ -310,15 +310,15 @@ func TestScaleWorkloadErrors(t *testing.T) {
 		},
 	}
 
-	err := app.ScaleWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", -1)
+	err := app.scaleWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", -1)
 	require.EqualError(t, err, "replicas must be non-negative")
 
 	if strconv.IntSize > 32 {
-		err = app.ScaleWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", maxScaleReplicas+1)
+		err = app.scaleWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", maxScaleReplicas+1)
 		require.EqualError(t, err, "replicas must be less than or equal to 2147483647")
 	}
 
-	err = app.ScaleWorkload(workloadClusterID, "default", "batch", "v1", "CronJob", "demo", 1)
+	err = app.scaleWorkload(workloadClusterID, "default", "batch", "v1", "CronJob", "demo", 1)
 	require.EqualError(t, err, `scaling not supported for workload kind "CronJob"`)
 
 	appNilClient := &App{}
@@ -329,7 +329,7 @@ func TestScaleWorkloadErrors(t *testing.T) {
 			kubeconfigContext: "ctx",
 		},
 	}
-	err = appNilClient.ScaleWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", 1)
+	err = appNilClient.scaleWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", 1)
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
@@ -379,7 +379,7 @@ func TestTriggerCronJobCreatesJob(t *testing.T) {
 	detailKey := objectDetailCacheKey("CronJob", "default", "backup")
 	app.responseCacheStore(workloadClusterID, detailKey, "stale")
 
-	jobName, err := app.TriggerCronJob(workloadClusterID, "default", "backup")
+	jobName, err := app.triggerCronJob(workloadClusterID, "default", "backup")
 	require.NoError(t, err)
 	_, cached := app.responseCacheLookup(workloadClusterID, detailKey)
 	require.False(t, cached, "expected cronjob detail cache to be evicted after manual trigger")
@@ -421,7 +421,7 @@ func TestTriggerCronJobErrors(t *testing.T) {
 		},
 	}
 
-	_, err := app.TriggerCronJob(workloadClusterID, "default", "nonexistent")
+	_, err := app.triggerCronJob(workloadClusterID, "default", "nonexistent")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get cronjob")
 
@@ -434,7 +434,7 @@ func TestTriggerCronJobErrors(t *testing.T) {
 			kubeconfigContext: "ctx",
 		},
 	}
-	_, err = appNilClient.TriggerCronJob(workloadClusterID, "default", "backup")
+	_, err = appNilClient.triggerCronJob(workloadClusterID, "default", "backup")
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
@@ -493,7 +493,7 @@ func TestSuspendCronJobTogglesSuspendField(t *testing.T) {
 			detailKey := objectDetailCacheKey("CronJob", "default", "backup")
 			app.responseCacheStore(workloadClusterID, detailKey, "stale")
 
-			err := app.SuspendCronJob(workloadClusterID, "default", "backup", tc.setSuspend)
+			err := app.suspendCronJob(workloadClusterID, "default", "backup", tc.setSuspend)
 			require.NoError(t, err)
 			_, cached := app.responseCacheLookup(workloadClusterID, detailKey)
 			require.False(t, cached, "expected cronjob detail cache to be evicted after suspend update")
@@ -525,7 +525,7 @@ func TestSuspendCronJobErrors(t *testing.T) {
 		},
 	}
 
-	err := app.SuspendCronJob(workloadClusterID, "default", "nonexistent", true)
+	err := app.suspendCronJob(workloadClusterID, "default", "nonexistent", true)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to update cronjob")
 
@@ -538,6 +538,6 @@ func TestSuspendCronJobErrors(t *testing.T) {
 			kubeconfigContext: "ctx",
 		},
 	}
-	err = appNilClient.SuspendCronJob(workloadClusterID, "default", "backup", true)
+	err = appNilClient.suspendCronJob(workloadClusterID, "default", "backup", true)
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }

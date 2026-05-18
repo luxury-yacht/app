@@ -44,9 +44,31 @@ func validateAppsV1WorkloadAction(action, group, version, kind string, supported
 	return normalizedKind, nil
 }
 
-// RestartWorkload performs a rollout restart by patching the pod template metadata on the target workload.
+// restartWorkload performs a rollout restart by patching the pod template metadata on the target workload.
 // Supported workload kinds: Deployment, StatefulSet, DaemonSet.
-func (a *App) RestartWorkload(clusterID, namespace, group, version, workloadKind, name string) error {
+func (a *App) restartWorkload(clusterID, namespace, group, version, workloadKind, name string) error {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return err
+	}
+	_, err := a.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionRestart,
+		Target: objectActionTarget(
+			clusterID,
+			group,
+			version,
+			workloadKind,
+			namespace,
+			name,
+		),
+	})
+	return err
+}
+
+func (a *App) restartWorkloadAction(target ObjectActionTargetRef) error {
+	return a.restartWorkloadInternal(target.ClusterID, target.Namespace, target.Group, target.Version, target.Kind, target.Name)
+}
+
+func (a *App) restartWorkloadInternal(clusterID, namespace, group, version, workloadKind, name string) error {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
@@ -150,15 +172,44 @@ func (a *App) RestartWorkload(clusterID, namespace, group, version, workloadKind
 	}
 
 	if deps.Logger != nil {
-		deps.Logger.Info(fmt.Sprintf("Restarted %s %s/%s", workloadKind, namespace, name), "RestartWorkload")
+		deps.Logger.Info(fmt.Sprintf("Restarted %s %s/%s", workloadKind, namespace, name), "restartWorkload")
 	}
 	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
 	return nil
 }
 
-// ScaleWorkload updates the replica count on a scalable workload.
+// scaleWorkload updates the replica count on a scalable workload.
 // Supported workload kinds: Deployment, StatefulSet, ReplicaSet.
-func (a *App) ScaleWorkload(clusterID, namespace, group, version, workloadKind, name string, replicas int) error {
+func (a *App) scaleWorkload(clusterID, namespace, group, version, workloadKind, name string, replicas int) error {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return err
+	}
+	if replicas < 0 {
+		return fmt.Errorf("replicas must be non-negative")
+	}
+	if replicas > maxScaleReplicas {
+		return fmt.Errorf("replicas must be less than or equal to %d", maxScaleReplicas)
+	}
+	_, err := a.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionScale,
+		Target: objectActionTarget(
+			clusterID,
+			group,
+			version,
+			workloadKind,
+			namespace,
+			name,
+		),
+		Replicas: &replicas,
+	})
+	return err
+}
+
+func (a *App) scaleWorkloadAction(target ObjectActionTargetRef, replicas int) error {
+	return a.scaleWorkloadInternal(target.ClusterID, target.Namespace, target.Group, target.Version, target.Kind, target.Name, replicas)
+}
+
+func (a *App) scaleWorkloadInternal(clusterID, namespace, group, version, workloadKind, name string, replicas int) error {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
@@ -265,16 +316,41 @@ func (a *App) ScaleWorkload(clusterID, namespace, group, version, workloadKind, 
 	if deps.Logger != nil {
 		deps.Logger.Info(
 			fmt.Sprintf("Scaled %s %s/%s to %d replicas", workloadKind, namespace, name, replicas),
-			"ScaleWorkload",
+			"scaleWorkload",
 		)
 	}
 	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
 	return nil
 }
 
-// TriggerCronJob creates a Job immediately from a CronJob's jobTemplate spec.
+// triggerCronJob creates a Job immediately from a CronJob's jobTemplate spec.
 // Returns the name of the created Job on success.
-func (a *App) TriggerCronJob(clusterID, namespace, name string) (string, error) {
+func (a *App) triggerCronJob(clusterID, namespace, name string) (string, error) {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return "", err
+	}
+	resp, err := a.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionTrigger,
+		Target: objectActionTarget(
+			clusterID,
+			"batch",
+			"v1",
+			"CronJob",
+			namespace,
+			name,
+		),
+	})
+	return resp.Name, err
+}
+
+func (a *App) triggerCronJobAction(target ObjectActionTargetRef) (string, error) {
+	if target.Group != "batch" || target.Version != "v1" || target.Kind != "CronJob" {
+		return "", errUnsupportedActionTarget(ObjectActionTrigger, target, "batch/v1", "CronJob")
+	}
+	return a.triggerCronJobInternal(target.ClusterID, target.Namespace, target.Name)
+}
+
+func (a *App) triggerCronJobInternal(clusterID, namespace, name string) (string, error) {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return "", err
 	}
@@ -346,15 +422,41 @@ func (a *App) TriggerCronJob(clusterID, namespace, name string) (string, error) 
 	}
 
 	if deps.Logger != nil {
-		deps.Logger.Info(fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", namespace, name, createdJob.Name), "TriggerCronJob")
+		deps.Logger.Info(fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", namespace, name, createdJob.Name), "triggerCronJob")
 	}
 	a.invalidateResponseCache(selectionKey, "CronJob", namespace, name)
 	return createdJob.Name, nil
 }
 
-// SuspendCronJob sets the suspend field on a CronJob.
+// suspendCronJob sets the suspend field on a CronJob.
 // When suspended, the CronJob will not create new Jobs on schedule.
-func (a *App) SuspendCronJob(clusterID, namespace, name string, suspend bool) error {
+func (a *App) suspendCronJob(clusterID, namespace, name string, suspend bool) error {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return err
+	}
+	_, err := a.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionSuspend,
+		Target: objectActionTarget(
+			clusterID,
+			"batch",
+			"v1",
+			"CronJob",
+			namespace,
+			name,
+		),
+		Suspend: &suspend,
+	})
+	return err
+}
+
+func (a *App) suspendCronJobAction(target ObjectActionTargetRef, suspend bool) error {
+	if target.Group != "batch" || target.Version != "v1" || target.Kind != "CronJob" {
+		return errUnsupportedActionTarget(ObjectActionSuspend, target, "batch/v1", "CronJob")
+	}
+	return a.suspendCronJobInternal(target.ClusterID, target.Namespace, target.Name, suspend)
+}
+
+func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend bool) error {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
@@ -407,7 +509,7 @@ func (a *App) SuspendCronJob(clusterID, namespace, name string, suspend bool) er
 		action = "Resumed"
 	}
 	if deps.Logger != nil {
-		deps.Logger.Info(fmt.Sprintf("%s CronJob %s/%s", action, namespace, name), "SuspendCronJob")
+		deps.Logger.Info(fmt.Sprintf("%s CronJob %s/%s", action, namespace, name), "suspendCronJob")
 	}
 	a.invalidateResponseCache(selectionKey, "CronJob", namespace, name)
 	return nil

@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { RollbackWorkload } from '@wailsjs/go/backend/App';
+import { buildObjectActionTarget, runObjectRollback } from '@shared/actions/objectActionClient';
 import { readRevisionHistory, requestData } from '@/core/data-access';
 import type { backend } from '@wailsjs/go/models';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
@@ -215,7 +215,10 @@ const RollbackModal = ({
     setRollbackLoading(true);
     setRollbackError(null);
 
-    RollbackWorkload(clusterId, namespace, group, version, kind, name, selectedRevision)
+    runObjectRollback(
+      buildObjectActionTarget({ clusterId, namespace, group, version, kind, name }, 'rollback'),
+      selectedRevision
+    )
       .then(() => {
         setConfirmOpen(false);
         onClose();

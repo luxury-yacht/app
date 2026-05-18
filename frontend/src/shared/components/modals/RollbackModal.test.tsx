@@ -15,12 +15,12 @@ import { KeyboardProvider } from '@ui/shortcuts/context';
 // Hoisted mock for the Wails backend bindings.
 const backendMocks = vi.hoisted(() => ({
   GetRevisionHistory: vi.fn(),
-  RollbackWorkload: vi.fn(),
+  RunObjectAction: vi.fn(),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetRevisionHistory: backendMocks.GetRevisionHistory,
-  RollbackWorkload: backendMocks.RollbackWorkload,
+  RunObjectAction: backendMocks.RunObjectAction,
 }));
 
 /** Helper to build a RevisionEntry-like object. */
@@ -63,7 +63,7 @@ describe('RollbackModal', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     backendMocks.GetRevisionHistory.mockReset();
-    backendMocks.RollbackWorkload.mockReset();
+    backendMocks.RunObjectAction.mockReset();
     defaultProps.onClose.mockReset();
   });
 

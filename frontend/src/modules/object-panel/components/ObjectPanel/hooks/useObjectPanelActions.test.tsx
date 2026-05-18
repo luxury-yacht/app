@@ -10,19 +10,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { useObjectPanelActions } from './useObjectPanelActions';
 import type { PanelState, PanelObjectData } from '../types';
 
-const restartMock = vi.fn();
-const deletePodMock = vi.fn();
-const deleteHelmMock = vi.fn();
-const deleteResourceMock = vi.fn();
-const scaleMock = vi.fn();
+const runObjectActionMock = vi.fn();
 const errorHandlerMock = vi.fn();
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  RestartWorkload: (...args: unknown[]) => restartMock(...args),
-  DeletePod: (...args: unknown[]) => deletePodMock(...args),
-  DeleteHelmRelease: (...args: unknown[]) => deleteHelmMock(...args),
-  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceMock(...args),
-  ScaleWorkload: (...args: unknown[]) => scaleMock(...args),
+  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -108,11 +100,8 @@ describe('useObjectPanelActions', () => {
     dispatchMock.mockClear();
     closeMock.mockClear();
     fetchDetailsMock.mockClear();
-    restartMock.mockReset();
-    deletePodMock.mockReset();
-    deleteHelmMock.mockReset();
-    deleteResourceMock.mockReset();
-    scaleMock.mockReset();
+    runObjectActionMock.mockReset();
+    runObjectActionMock.mockResolvedValue({});
     errorHandlerMock.mockReset();
   });
 
@@ -141,14 +130,17 @@ describe('useObjectPanelActions', () => {
       type: 'SET_ACTION_ERROR',
       payload: null,
     });
-    expect(restartMock).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'team-a',
-      'apps',
-      'v1',
-      'Deployment',
-      'api'
-    );
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'restart',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
+      },
+    });
     expect(dispatchMock).toHaveBeenLastCalledWith({
       type: 'SET_ACTION_LOADING',
       payload: false,
@@ -167,7 +159,17 @@ describe('useObjectPanelActions', () => {
     const actions = getResult();
     await actions.handleAction('delete', 'showDeleteConfirm');
 
-    expect(deletePodMock).toHaveBeenCalledWith('alpha:ctx', 'team-a', 'api-0');
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'api-0',
+      },
+    });
     expect(closeMock).toHaveBeenCalled();
     expect(dispatchMock).toHaveBeenCalledWith({
       type: 'SET_RESOURCE_DELETED',
@@ -189,8 +191,17 @@ describe('useObjectPanelActions', () => {
 
     await getResult().handleAction('delete', 'showDeleteConfirm');
 
-    expect(deleteHelmMock).toHaveBeenCalledWith('alpha:ctx', 'apps', 'demo');
-    expect(deleteResourceMock).not.toHaveBeenCalled();
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'helm.sh',
+        version: 'v3',
+        kind: 'HelmRelease',
+        namespace: 'apps',
+        name: 'demo',
+      },
+    });
     expect(closeMock).toHaveBeenCalled();
   });
 
@@ -210,14 +221,17 @@ describe('useObjectPanelActions', () => {
 
     await getResult().handleAction('delete', 'showDeleteConfirm');
 
-    expect(deleteHelmMock).not.toHaveBeenCalled();
-    expect(deleteResourceMock).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'helm.toolkit.fluxcd.io/v2',
-      'HelmRelease',
-      'apps',
-      'flux-app'
-    );
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'helm.toolkit.fluxcd.io',
+        version: 'v2',
+        kind: 'HelmRelease',
+        namespace: 'apps',
+        name: 'flux-app',
+      },
+    });
     expect(closeMock).toHaveBeenCalled();
   });
 
@@ -229,15 +243,18 @@ describe('useObjectPanelActions', () => {
 
     await actions.handleAction('scale');
 
-    expect(scaleMock).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'team-a',
-      'apps',
-      'v1',
-      'Deployment',
-      'api',
-      2
-    );
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'scale',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
+      },
+      replicas: 2,
+    });
     expect(dispatchMock).toHaveBeenCalledWith({ type: 'SHOW_SCALE_INPUT', payload: false });
     expect(fetchDetailsMock).toHaveBeenCalledWith('user');
 
@@ -247,15 +264,18 @@ describe('useObjectPanelActions', () => {
     const updatedActions = resultRef.current!;
     await updatedActions.handleAction('scale', undefined, 5);
 
-    expect(scaleMock).toHaveBeenLastCalledWith(
-      'alpha:ctx',
-      'team-a',
-      'apps',
-      'v1',
-      'Deployment',
-      'api',
-      5
-    );
+    expect(runObjectActionMock).toHaveBeenLastCalledWith({
+      action: 'scale',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
+      },
+      replicas: 5,
+    });
   });
 
   it('exposes helpers to manipulate confirmation and scale state', async () => {

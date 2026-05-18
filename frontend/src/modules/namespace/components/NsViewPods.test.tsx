@@ -22,7 +22,7 @@ const {
   namespaceColumnLinkMock,
   useTableSortMock,
   useUserPermissionsMock,
-  deletePodMock,
+  runObjectActionMock,
   errorHandlerMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
@@ -36,7 +36,7 @@ const {
   },
   useTableSortMock: vi.fn(),
   useUserPermissionsMock: vi.fn(),
-  deletePodMock: vi.fn().mockResolvedValue(undefined),
+  runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
 }));
 
@@ -160,7 +160,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeletePod: (...args: unknown[]) => deletePodMock(...(args as [])),
+  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...(args as [])),
 }));
 
 vi.mock('@/core/capabilities', () => ({
@@ -224,7 +224,7 @@ describe('NsViewPods', () => {
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
     navigateToViewMock.mockReset();
-    deletePodMock.mockClear();
+    runObjectActionMock.mockClear();
     useTableSortMock.mockReset();
     useUserPermissionsMock.mockReset();
     errorHandlerMock.handle.mockClear();
@@ -855,11 +855,21 @@ describe('NsViewPods', () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
 
-    expect(deletePodMock).toHaveBeenCalledWith('alpha:ctx', 'team-a', 'api');
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'api',
+      },
+    });
   });
 
   it('handles delete failure with errorHandler and resets confirmation state', async () => {
-    deletePodMock.mockRejectedValueOnce(new Error('boom'));
+    runObjectActionMock.mockRejectedValueOnce(new Error('boom'));
 
     await renderPods();
     openDeleteConfirmation();

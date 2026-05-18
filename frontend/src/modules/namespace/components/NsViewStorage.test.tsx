@@ -29,13 +29,13 @@ const {
   gridTablePropsRef,
   confirmationPropsRef,
   openWithObjectMock,
-  deleteResourceByGVKMock,
+  runObjectActionMock,
   errorHandlerMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   confirmationPropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
-  deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
+  runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
 }));
 
@@ -114,7 +114,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
+  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -183,8 +183,8 @@ describe('NsViewStorage', () => {
     gridTablePropsRef.current = null;
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
-    deleteResourceByGVKMock.mockReset();
-    deleteResourceByGVKMock.mockResolvedValue(undefined);
+    runObjectActionMock.mockReset();
+    runObjectActionMock.mockResolvedValue(undefined);
     errorHandlerMock.handle.mockClear();
   });
 
@@ -304,14 +304,17 @@ describe('NsViewStorage', () => {
     await act(async () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
-    // PersistentVolumeClaim is core/v1, resolved through formatBuiltinApiVersion.
-    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'v1',
-      'PersistentVolumeClaim',
-      'team-a',
-      'pvc-data'
-    );
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'PersistentVolumeClaim',
+        namespace: 'team-a',
+        name: 'pvc-data',
+      },
+    });
   });
 
   it('navigates to storage class when storage column is activated', async () => {
@@ -411,7 +414,7 @@ describe('NsViewStorage', () => {
   });
 
   it('handles delete failure with errorHandler', async () => {
-    deleteResourceByGVKMock.mockRejectedValueOnce(new Error('boom'));
+    runObjectActionMock.mockRejectedValueOnce(new Error('boom'));
     const entry = baseStorage();
     const props = await renderStorageView([entry]);
     const deleteItem = props

@@ -21,13 +21,13 @@ func TestStartPortForward_InvalidCluster(t *testing.T) {
 	app.clusterClients = make(map[string]*clusterClients)
 
 	// Test with empty cluster ID.
-	_, err := app.StartPortForward("", PortForwardRequest{})
+	_, err := app.startPortForward("", PortForwardRequest{})
 	if err == nil {
 		t.Fatal("expected error for empty cluster ID")
 	}
 
 	// Test with nonexistent cluster.
-	_, err = app.StartPortForward("nonexistent", PortForwardRequest{})
+	_, err = app.startPortForward("nonexistent", PortForwardRequest{})
 	if err == nil {
 		t.Fatal("expected error for nonexistent cluster")
 	}
@@ -48,7 +48,7 @@ func TestStartPortForward_MissingClient(t *testing.T) {
 		},
 	}
 
-	_, err := app.StartPortForward(portForwardClusterID, PortForwardRequest{
+	_, err := app.startPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
 		TargetGroup:   "",
@@ -77,7 +77,7 @@ func TestStartPortForward_MissingRestConfig(t *testing.T) {
 		},
 	}
 
-	_, err := app.StartPortForward(portForwardClusterID, PortForwardRequest{
+	_, err := app.startPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
 		TargetGroup:   "",
@@ -108,7 +108,7 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	}
 
 	// Missing namespace.
-	_, err := app.StartPortForward(portForwardClusterID, PortForwardRequest{
+	_, err := app.startPortForward(portForwardClusterID, PortForwardRequest{
 		TargetKind:    "Pod",
 		TargetGroup:   "",
 		TargetVersion: "v1",
@@ -120,7 +120,7 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	}
 
 	// Missing target name.
-	_, err = app.StartPortForward(portForwardClusterID, PortForwardRequest{
+	_, err = app.startPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
 		TargetGroup:   "",
@@ -132,7 +132,7 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	}
 
 	// Invalid container port.
-	_, err = app.StartPortForward(portForwardClusterID, PortForwardRequest{
+	_, err = app.startPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
 		TargetGroup:   "",
@@ -175,7 +175,7 @@ func TestStartPortForwardRequiresPortForwardPermission(t *testing.T) {
 		},
 	}
 
-	_, err := app.StartPortForward(portForwardClusterID, PortForwardRequest{
+	_, err := app.startPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
 		TargetGroup:   "",

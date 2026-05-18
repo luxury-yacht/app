@@ -304,7 +304,7 @@ func marshalPodTemplate(template *corev1.PodTemplateSpec) (string, error) {
 	return string(b), nil
 }
 
-// RollbackWorkload rolls a workload back to a specific historical revision by replacing
+// rollbackWorkload rolls a workload back to a specific historical revision by replacing
 // its pod template spec with the one stored in that revision.
 //
 // The target revision is located by calling GetRevisionHistory. If no entry matches
@@ -312,7 +312,30 @@ func marshalPodTemplate(template *corev1.PodTemplateSpec) (string, error) {
 //
 // Multi-cluster safety: all Kubernetes requests are scoped to the cluster identified
 // by clusterID, preventing cross-cluster data leakage or modification.
-func (a *App) RollbackWorkload(clusterID, namespace, group, version, workloadKind, name string, toRevision int64) error {
+func (a *App) rollbackWorkload(clusterID, namespace, group, version, workloadKind, name string, toRevision int64) error {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return err
+	}
+	_, err := a.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionRollback,
+		Target: objectActionTarget(
+			clusterID,
+			group,
+			version,
+			workloadKind,
+			namespace,
+			name,
+		),
+		Revision: &toRevision,
+	})
+	return err
+}
+
+func (a *App) rollbackWorkloadAction(target ObjectActionTargetRef, toRevision int64) error {
+	return a.rollbackWorkloadInternal(target.ClusterID, target.Namespace, target.Group, target.Version, target.Kind, target.Name, toRevision)
+}
+
+func (a *App) rollbackWorkloadInternal(clusterID, namespace, group, version, workloadKind, name string, toRevision int64) error {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
@@ -405,7 +428,7 @@ func (a *App) RollbackWorkload(clusterID, namespace, group, version, workloadKin
 	if deps.Logger != nil {
 		deps.Logger.Info(
 			fmt.Sprintf("Rolled back %s %s/%s to revision %d", workloadKind, namespace, name, toRevision),
-			"RollbackWorkload",
+			"rollbackWorkload",
 		)
 	}
 	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)

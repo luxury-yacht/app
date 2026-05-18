@@ -75,11 +75,7 @@ const mockErrorHandler = {
 };
 
 const mockApp = {
-  RestartWorkload: vi.fn().mockResolvedValue(undefined),
-  DeletePod: vi.fn().mockResolvedValue(undefined),
-  DeleteHelmRelease: vi.fn().mockResolvedValue(undefined),
-  DeleteResourceByGVK: vi.fn().mockResolvedValue(undefined),
-  ScaleWorkload: vi.fn().mockResolvedValue(undefined),
+  RunObjectAction: vi.fn().mockResolvedValue({}),
 };
 
 const defaultClusterId = 'alpha:ctx';
@@ -290,11 +286,8 @@ describe('ObjectPanel tab availability', () => {
     manifestTabPropsRef.current = null;
     valuesTabPropsRef.current = null;
 
-    mockApp.RestartWorkload.mockClear();
-    mockApp.DeletePod.mockClear();
-    mockApp.DeleteHelmRelease.mockClear();
-    mockApp.DeleteResourceByGVK.mockClear();
-    mockApp.ScaleWorkload.mockClear();
+    mockApp.RunObjectAction.mockReset();
+    mockApp.RunObjectAction.mockResolvedValue({});
 
     mockRefreshOrchestrator.fetchScopedDomain.mockResolvedValue(undefined);
 
@@ -469,7 +462,17 @@ describe('ObjectPanel tab availability', () => {
       await modalProps.onConfirm();
     });
 
-    expect(mockApp.DeletePod).toHaveBeenCalledWith('alpha:ctx', 'team-a', 'api');
+    expect(mockApp.RunObjectAction).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'api',
+      },
+    });
     expect(mockClosePanel).toHaveBeenCalled();
   });
 
@@ -490,15 +493,18 @@ describe('ObjectPanel tab availability', () => {
       await detailsProps.onScaleClick(5);
     });
 
-    expect(mockApp.ScaleWorkload).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'team-a',
-      'apps',
-      'v1',
-      'Deployment',
-      'api',
-      5
-    );
+    expect(mockApp.RunObjectAction).toHaveBeenCalledWith({
+      action: 'scale',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
+      },
+      replicas: 5,
+    });
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
       buildClusterScope(defaultClusterId, 'team-a:apps/v1:deployment:api'),
@@ -530,14 +536,17 @@ describe('ObjectPanel tab availability', () => {
       await modalProps.onConfirm();
     });
 
-    expect(mockApp.RestartWorkload).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'team-a',
-      'apps',
-      'v1',
-      'Deployment',
-      'api'
-    );
+    expect(mockApp.RunObjectAction).toHaveBeenCalledWith({
+      action: 'restart',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
+      },
+    });
   });
 
   it('initialises the scale input based on desired replicas when shown', async () => {
@@ -589,7 +598,7 @@ describe('ObjectPanel tab availability', () => {
   });
 
   it('surfaces restart errors and reports them through the error handler', async () => {
-    mockApp.RestartWorkload.mockRejectedValueOnce(new Error('restart failed'));
+    mockApp.RunObjectAction.mockRejectedValueOnce(new Error('restart failed'));
     const errorSpy = vi.spyOn(mockErrorHandler, 'handle');
 
     await renderObjectPanel({
@@ -630,10 +639,20 @@ describe('ObjectPanel tab availability', () => {
       await deleteModalPropsRef.current.onConfirm();
     });
 
-    expect(mockApp.DeleteHelmRelease).toHaveBeenCalledWith('alpha:ctx', 'helm-ns', 'demo');
+    expect(mockApp.RunObjectAction).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'helm.sh',
+        version: 'v3',
+        kind: 'HelmRelease',
+        namespace: 'helm-ns',
+        name: 'demo',
+      },
+    });
   });
 
-  it('routes generic kind deletes through DeleteResourceByGVK', async () => {
+  it('routes generic kind deletes through RunObjectAction', async () => {
     await renderObjectPanel({
       kind: 'ConfigMap',
       name: 'settings',
@@ -649,17 +668,21 @@ describe('ObjectPanel tab availability', () => {
       await deleteModalPropsRef.current.onConfirm();
     });
 
-    expect(mockApp.DeleteResourceByGVK).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'v1',
-      'ConfigMap',
-      'team-a',
-      'settings'
-    );
+    expect(mockApp.RunObjectAction).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'ConfigMap',
+        namespace: 'team-a',
+        name: 'settings',
+      },
+    });
   });
 
   it('handles scale errors and keeps the scale input visible', async () => {
-    mockApp.ScaleWorkload.mockRejectedValueOnce(new Error('scale failed'));
+    mockApp.RunObjectAction.mockRejectedValueOnce(new Error('scale failed'));
     const errorSpy = vi.spyOn(mockErrorHandler, 'handle');
 
     await renderObjectPanel({
@@ -842,7 +865,7 @@ describe('ObjectPanel tab availability', () => {
       detailsTabPropsRef.current.onScaleClick();
     });
 
-    expect(mockApp.ScaleWorkload).not.toHaveBeenCalled();
+    expect(mockApp.RunObjectAction).not.toHaveBeenCalled();
   });
 
   const detailMappingCases = [

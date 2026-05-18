@@ -28,11 +28,14 @@ import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/t
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import {
   CloseShellSession,
-  CreateDebugContainer,
   ResizeShellSession,
   SendShellInput,
   StartShellSession,
 } from '@wailsjs/go/backend/App';
+import {
+  buildObjectActionTarget,
+  runCreateDebugContainer,
+} from '@shared/actions/objectActionClient';
 import { types } from '@wailsjs/go/models';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
@@ -909,17 +912,32 @@ const ShellTab: React.FC<ShellTabProps> = ({
     setDebugCreating(true);
     setStatusReason(null);
     try {
-      const response = await CreateDebugContainer(resolvedClusterId, {
-        namespace,
-        podName: resourceName,
-        image: resolvedDebugImage,
-        targetContainer: debugTarget || containerOptions[0]?.value || '',
-      });
+      const response = await runCreateDebugContainer(
+        buildObjectActionTarget(
+          {
+            clusterId: resolvedClusterId,
+            group: '',
+            version: 'v1',
+            kind: 'Pod',
+            namespace,
+            name: resourceName,
+          },
+          'create debug container for'
+        ),
+        {
+          image: resolvedDebugImage,
+          targetContainer: debugTarget || containerOptions[0]?.value || '',
+        }
+      );
+      const debugContainer = response.debugContainer as types.DebugContainerResponse | undefined;
+      if (!debugContainer) {
+        throw new Error('Backend did not return debug container details');
+      }
       // Revert to default shell controls, target the new container, and connect.
-      // The backend's CreateDebugContainer already polls until the ephemeral
-      // container is Running, so we can initiate the connection immediately.
+      // The backend debug-container action polls until the ephemeral container
+      // is Running, so we can initiate the connection immediately.
       setStartDebugContainer(false);
-      setContainerOverride(response.containerName);
+      setContainerOverride(debugContainer.containerName);
       void refreshContainers();
       initiateConnection();
     } catch (error) {

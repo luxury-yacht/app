@@ -14,7 +14,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import DrainNodeModal from '@shared/components/modals/DrainNodeModal';
-import { CordonNode, UncordonNode } from '@wailsjs/go/backend/App';
+import {
+  buildObjectActionTarget,
+  runNodeCordon,
+  runNodeUncordon,
+} from '@shared/actions/objectActionClient';
 import { errorHandler } from '@/utils/errorHandler';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { refreshOrchestrator } from '@/core/refresh';
@@ -169,9 +173,9 @@ export const useNodeMaintenanceActions = ({
     const action: 'cordon' | 'uncordon' = target.unschedulable ? 'uncordon' : 'cordon';
     try {
       if (action === 'cordon') {
-        await CordonNode(target.clusterId, target.name);
+        await runNodeCordon(buildObjectActionTarget({ ...target, kind: 'Node' }, action));
       } else {
-        await UncordonNode(target.clusterId, target.name);
+        await runNodeUncordon(buildObjectActionTarget({ ...target, kind: 'Node' }, action));
       }
       onAfterAction?.(action, target);
     } catch (error) {

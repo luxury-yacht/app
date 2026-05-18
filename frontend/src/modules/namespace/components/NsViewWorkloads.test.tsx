@@ -140,15 +140,8 @@ vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => false,
 }));
 
-const mockTriggerCronJob = vi.fn().mockResolvedValue('job-123');
-const mockSuspendCronJob = vi.fn().mockResolvedValue(undefined);
-
 vi.mock('@wailsjs/go/backend/App', () => ({
-  RestartWorkload: vi.fn(),
-  DeleteResourceByGVK: vi.fn(),
-  ScaleWorkload: vi.fn(),
-  TriggerCronJob: (...args: any[]) => mockTriggerCronJob(...args),
-  SuspendCronJob: (...args: any[]) => mockSuspendCronJob(...args),
+  RunObjectAction: vi.fn().mockResolvedValue({ name: 'job-123' }),
 }));
 
 vi.mock('@/core/capabilities', () => ({

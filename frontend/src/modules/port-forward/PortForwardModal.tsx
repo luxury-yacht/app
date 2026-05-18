@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { StartPortForward } from '@wailsjs/go/backend/App';
+import { buildObjectActionTarget, runStartPortForward } from '@shared/actions/objectActionClient';
 import { readTargetPorts, requestData } from '@/core/data-access';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import ModalHeader from '@shared/components/modals/ModalHeader';
@@ -232,15 +232,17 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     setError(null);
 
     try {
-      const sessionId = await StartPortForward(target.clusterId, {
-        namespace: target.namespace,
-        targetKind: target.kind,
-        targetGroup: target.group,
-        targetVersion: target.version,
-        targetName: target.name,
-        containerPort,
-        localPort,
-      });
+      const response = await runStartPortForward(
+        buildObjectActionTarget(target, 'start port-forward for'),
+        {
+          containerPort,
+          localPort,
+        }
+      );
+      const sessionId = response.sessionId;
+      if (!sessionId) {
+        throw new Error('Backend did not return a port-forward session id');
+      }
 
       // Notify parent of success
       onStarted?.(sessionId);

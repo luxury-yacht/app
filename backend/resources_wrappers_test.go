@@ -106,8 +106,8 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 			_, err := app.GetResourceQuota(clusterID, "ns", "rq")
 			return err
 		}},
-		{"DeleteResourceByGVK", func() error {
-			return app.DeleteResourceByGVK(clusterID, "v1", "Pod", "ns", "name")
+		{"deleteResourceByGVK", func() error {
+			return app.deleteResourceByGVK(clusterID, "v1", "Pod", "ns", "name")
 		}},
 		{"HelmReleaseDetails", func() error {
 			_, err := app.GetHelmReleaseDetails(clusterID, "ns", "rel")
@@ -121,7 +121,7 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 			_, err := app.GetHelmValues(clusterID, "ns", "rel")
 			return err
 		}},
-		{"HelmDelete", func() error { return app.DeleteHelmRelease(clusterID, "ns", "rel") }},
+		{"HelmDelete", func() error { return app.deleteHelmRelease(clusterID, "ns", "rel") }},
 		{"Deployment", func() error {
 			_, err := app.GetDeployment(clusterID, "ns", "deploy")
 			return err
@@ -182,11 +182,11 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 			_, err := app.GetNode(clusterID, "node")
 			return err
 		}},
-		{"Cordon", func() error { return app.CordonNode(clusterID, "node") }},
-		{"Uncordon", func() error { return app.UncordonNode(clusterID, "node") }},
-		{"Drain", func() error { return app.DrainNode(clusterID, "node", DrainNodeOptions{}) }},
-		{"DeleteNode", func() error { return app.DeleteNode(clusterID, "node") }},
-		{"ForceDeleteNode", func() error { return app.ForceDeleteNode(clusterID, "node") }},
+		{"Cordon", func() error { return app.cordonNode(clusterID, "node") }},
+		{"Uncordon", func() error { return app.uncordonNode(clusterID, "node") }},
+		{"Drain", func() error { return app.drainNode(clusterID, "node", DrainNodeOptions{}) }},
+		{"deleteNode", func() error { return app.deleteNode(clusterID, "node") }},
+		{"forceDeleteNode", func() error { return app.forceDeleteNode(clusterID, "node") }},
 	}
 
 	for _, tc := range errorCases {
@@ -222,8 +222,8 @@ func TestDeletePodEvictsDetailCache(t *testing.T) {
 	detailKey := objectDetailCacheKey("Pod", "ns", "pod")
 	app.responseCacheStore(clusterID, detailKey, "stale")
 
-	if err := app.DeletePod(clusterID, "ns", "pod"); err != nil {
-		t.Fatalf("DeletePod returned error: %v", err)
+	if err := app.deletePod(clusterID, "ns", "pod"); err != nil {
+		t.Fatalf("deletePod returned error: %v", err)
 	}
 	if _, ok := app.responseCacheLookup(clusterID, detailKey); ok {
 		t.Fatalf("expected pod detail cache to be evicted")
@@ -526,7 +526,7 @@ func TestWrapperGuardPathsRequireClient(t *testing.T) {
 		call func() error
 	}{
 		{"GetPod", func() error { _, err := app.GetPod(clusterID, "ns", "pod", false); return err }},
-		{"DeletePod", func() error { return app.DeletePod(clusterID, "ns", "pod") }},
+		{"deletePod", func() error { return app.deletePod(clusterID, "ns", "pod") }},
 		{"PodContainers", func() error { _, err := app.GetPodContainers(clusterID, "ns", "pod"); return err }},
 		{"PodDisruptionBudget", func() error { _, err := app.GetPodDisruptionBudget(clusterID, "ns", "pdb"); return err }},
 		{"Service", func() error { _, err := app.GetService(clusterID, "ns", "svc"); return err }},
@@ -541,7 +541,7 @@ func TestWrapperGuardPathsRequireClient(t *testing.T) {
 		{"HelmDetails", func() error { _, err := app.GetHelmReleaseDetails(clusterID, "ns", "rel"); return err }},
 		{"HelmManifest", func() error { _, err := app.GetHelmManifest(clusterID, "ns", "rel"); return err }},
 		{"HelmValues", func() error { _, err := app.GetHelmValues(clusterID, "ns", "rel"); return err }},
-		{"HelmDelete", func() error { return app.DeleteHelmRelease(clusterID, "ns", "rel") }},
+		{"HelmDelete", func() error { return app.deleteHelmRelease(clusterID, "ns", "rel") }},
 		{"Deployment", func() error { _, err := app.GetDeployment(clusterID, "ns", "deploy"); return err }},
 		{"ReplicaSet", func() error { _, err := app.GetReplicaSet(clusterID, "ns", "rs"); return err }},
 		{"StatefulSet", func() error { _, err := app.GetStatefulSet(clusterID, "ns", "sts"); return err }},
@@ -579,25 +579,25 @@ func TestActionWrappersRequireTargetIdentity(t *testing.T) {
 		call    func() error
 		wantErr string
 	}{
-		{"DeletePod namespace", func() error { return app.DeletePod("cluster-a", "", "pod") }, "namespace is required"},
-		{"DeletePod name", func() error { return app.DeletePod("cluster-a", "ns", "") }, "pod name is required"},
+		{"deletePod namespace", func() error { return app.deletePod("cluster-a", "", "pod") }, "namespace is required"},
+		{"deletePod name", func() error { return app.deletePod("cluster-a", "ns", "") }, "pod name is required"},
 		{"PodContainers namespace", func() error { _, err := app.GetPodContainers("cluster-a", "", "pod"); return err }, "namespace is required"},
 		{"PodContainers name", func() error { _, err := app.GetPodContainers("cluster-a", "ns", ""); return err }, "pod name is required"},
 		{"Debug namespace", func() error {
-			_, err := app.CreateDebugContainer("cluster-a", DebugContainerRequest{PodName: "pod", Image: "busybox"})
+			_, err := app.createDebugContainer("cluster-a", DebugContainerRequest{PodName: "pod", Image: "busybox"})
 			return err
 		}, "namespace is required"},
 		{"Debug name", func() error {
-			_, err := app.CreateDebugContainer("cluster-a", DebugContainerRequest{Namespace: "ns", Image: "busybox"})
+			_, err := app.createDebugContainer("cluster-a", DebugContainerRequest{Namespace: "ns", Image: "busybox"})
 			return err
 		}, "pod name is required"},
-		{"HelmDelete namespace", func() error { return app.DeleteHelmRelease("cluster-a", "", "release") }, "namespace is required"},
-		{"HelmDelete name", func() error { return app.DeleteHelmRelease("cluster-a", "ns", "") }, "name is required"},
-		{"Cordon name", func() error { return app.CordonNode("cluster-a", "") }, "name is required"},
-		{"Uncordon name", func() error { return app.UncordonNode("cluster-a", "") }, "name is required"},
-		{"Drain name", func() error { return app.DrainNode("cluster-a", "", DrainNodeOptions{}) }, "name is required"},
-		{"DeleteNode name", func() error { return app.DeleteNode("cluster-a", "") }, "name is required"},
-		{"ForceDeleteNode name", func() error { return app.ForceDeleteNode("cluster-a", "") }, "name is required"},
+		{"HelmDelete namespace", func() error { return app.deleteHelmRelease("cluster-a", "", "release") }, "namespace is required"},
+		{"HelmDelete name", func() error { return app.deleteHelmRelease("cluster-a", "ns", "") }, "name is required"},
+		{"Cordon name", func() error { return app.cordonNode("cluster-a", "") }, "name is required"},
+		{"Uncordon name", func() error { return app.uncordonNode("cluster-a", "") }, "name is required"},
+		{"Drain name", func() error { return app.drainNode("cluster-a", "", DrainNodeOptions{}) }, "name is required"},
+		{"deleteNode name", func() error { return app.deleteNode("cluster-a", "") }, "name is required"},
+		{"forceDeleteNode name", func() error { return app.forceDeleteNode("cluster-a", "") }, "name is required"},
 	}
 
 	for _, tc := range errorCases {

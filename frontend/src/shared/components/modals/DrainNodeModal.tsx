@@ -13,7 +13,8 @@ import ModalHeader from './ModalHeader';
 import { useModalFocusTrap } from './useModalFocusTrap';
 import Tooltip from '@shared/components/Tooltip';
 import { DrainIcon } from '@shared/components/icons/SharedIcons';
-import { CancelDrainNodeJob, StartDrainNode } from '@wailsjs/go/backend/App';
+import { CancelDrainNodeJob } from '@wailsjs/go/backend/App';
+import { buildObjectActionTarget, runStartDrain } from '@shared/actions/objectActionClient';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@/utils/errorHandler';
 import { requestRefreshDomain } from '@/core/data-access';
@@ -258,7 +259,10 @@ const DrainNodeModal = ({
       if (drainOptions.timeoutSeconds != null && drainOptions.timeoutSeconds > 0) {
         payload.timeoutSeconds = normalizeTimeoutSeconds(drainOptions.timeoutSeconds);
       }
-      await StartDrainNode(clusterId, nodeName, payload);
+      await runStartDrain(
+        buildObjectActionTarget({ clusterId, kind: 'Node', name: nodeName }, 'drain'),
+        payload
+      );
       await refreshMaintenance();
     } catch (error) {
       const message =

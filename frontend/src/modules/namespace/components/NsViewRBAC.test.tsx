@@ -24,12 +24,12 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 import NsViewRBAC, { type RBACData } from '@modules/namespace/components/NsViewRBAC';
 
-const { gridTablePropsRef, confirmationPropsRef, openWithObjectMock, deleteResourceByGVKMock } =
+const { gridTablePropsRef, confirmationPropsRef, openWithObjectMock, runObjectActionMock } =
   vi.hoisted(() => ({
     gridTablePropsRef: { current: null as any },
     confirmationPropsRef: { current: null as any },
     openWithObjectMock: vi.fn(),
-    deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
+    runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   }));
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
@@ -94,7 +94,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
+  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -160,8 +160,8 @@ describe('NsViewRBAC', () => {
     gridTablePropsRef.current = null;
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
-    deleteResourceByGVKMock.mockReset();
-    deleteResourceByGVKMock.mockResolvedValue(undefined);
+    runObjectActionMock.mockReset();
+    runObjectActionMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -236,14 +236,17 @@ describe('NsViewRBAC', () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
 
-    // Role is rbac.authorization.k8s.io/v1, resolved through formatBuiltinApiVersion.
-    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'rbac.authorization.k8s.io/v1',
-      'Role',
-      'team-a',
-      'view'
-    );
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'rbac.authorization.k8s.io',
+        version: 'v1',
+        kind: 'Role',
+        namespace: 'team-a',
+        name: 'view',
+      },
+    });
   });
 
   it('opens the Map for ServiceAccount rows', async () => {

@@ -35,7 +35,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 
 const gridTablePropsRef: { current: any } = { current: null };
 const openWithObjectMock = vi.fn();
-const deleteResourceByGVKMock = vi.fn();
+const runObjectActionMock = vi.fn();
 const modalProps: { current: any } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -99,7 +99,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
+  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
@@ -157,7 +157,7 @@ describe('ClusterViewCustom', () => {
     gridTablePropsRef.current = null;
     modalProps.current = null;
     openWithObjectMock.mockReset();
-    deleteResourceByGVKMock.mockReset();
+    runObjectActionMock.mockReset();
   });
 
   afterEach(() => {
@@ -273,8 +273,8 @@ describe('ClusterViewCustom', () => {
   // ( "I Should Have Done This Without Having
   // To Be Asked" item 2). Mirrors NsViewCustom's delete guardrail for the
   // cluster-scoped custom view.
-  it('routes delete through DeleteResourceByGVK when apiGroup/apiVersion are present', async () => {
-    deleteResourceByGVKMock.mockResolvedValue(undefined);
+  it('routes delete through RunObjectAction when apiGroup/apiVersion are present', async () => {
+    runObjectActionMock.mockResolvedValue(undefined);
 
     const clusterScopedCR = {
       kind: 'DBCluster',
@@ -310,13 +310,17 @@ describe('ClusterViewCustom', () => {
       await modalProps.current.onConfirm();
     });
 
-    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'postgresql.cnpg.io/v1',
-      'DBCluster',
-      '',
-      'shared-pg'
-    );
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'postgresql.cnpg.io',
+        version: 'v1',
+        kind: 'DBCluster',
+        namespace: '',
+        name: 'shared-pg',
+      },
+    });
   });
 
   // CRD column: each row gets a clickable cell that opens the owning

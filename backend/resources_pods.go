@@ -21,26 +21,49 @@ func (a *App) GetPod(clusterID, namespace, name string, detailed bool) (*PodDeta
 	return pods.GetPod(deps, namespace, name, detailed)
 }
 
-func (a *App) DeletePod(clusterID, namespace, name string) error {
+func (a *App) deletePod(clusterID, namespace, name string) error {
 	if err := requirePodObject(namespace, name); err != nil {
 		return err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	_, err := a.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionDelete,
+		Target: objectActionTarget(
+			clusterID,
+			"",
+			"v1",
+			"Pod",
+			namespace,
+			name,
+		),
+	})
+	return err
+}
+
+func (a *App) deletePodAction(target ObjectActionTargetRef) error {
+	if target.Group != "" || target.Version != "v1" || target.Kind != "Pod" {
+		return errUnsupportedActionTarget(ObjectActionDelete, target, "/v1", "Pod")
+	}
+	if err := requirePodObject(target.Namespace, target.Name); err != nil {
+		return err
+	}
+	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind:      "Pod",
-		Namespace: namespace,
-		Name:      name,
+		Group:     target.Group,
+		Version:   target.Version,
+		Kind:      target.Kind,
+		Namespace: target.Namespace,
+		Name:      target.Name,
 		Verb:      "delete",
 	}); err != nil {
 		return err
 	}
-	if err := pods.DeletePod(deps, namespace, name); err != nil {
+	if err := pods.DeletePod(deps, target.Namespace, target.Name); err != nil {
 		return err
 	}
-	a.invalidateResponseCache(selectionKey, "Pod", namespace, name)
+	a.invalidateResponseCacheForGVK(selectionKey, target.gvk(), target.Namespace, target.Name)
 	return nil
 }
 
@@ -74,29 +97,59 @@ func (a *App) GetContainerLogsScopeContainers(clusterID, scope string) ([]string
 	return service.ContainerLogsScopeContainers(scope)
 }
 
-// CreateDebugContainer adds an ephemeral debug container to a running pod.
-func (a *App) CreateDebugContainer(clusterID string, req DebugContainerRequest) (*DebugContainerResponse, error) {
+// createDebugContainer adds an ephemeral debug container to a running pod.
+func (a *App) createDebugContainer(clusterID string, req DebugContainerRequest) (*DebugContainerResponse, error) {
 	if err := requirePodObject(req.Namespace, req.PodName); err != nil {
 		return nil, err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	resp, err := a.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionCreateDebugContainer,
+		Target: objectActionTarget(
+			clusterID,
+			"",
+			"v1",
+			"Pod",
+			req.Namespace,
+			req.PodName,
+		),
+		DebugContainer: &ObjectActionDebugContainerOptions{
+			Image:           req.Image,
+			TargetContainer: req.TargetContainer,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.DebugContainer, nil
+}
+
+func (a *App) createDebugContainerAction(target ObjectActionTargetRef, options ObjectActionDebugContainerOptions) (*DebugContainerResponse, error) {
+	if target.Group != "" || target.Version != "v1" || target.Kind != "Pod" {
+		return nil, errUnsupportedActionTarget(ObjectActionCreateDebugContainer, target, "/v1", "Pod")
+	}
+	if err := requirePodObject(target.Namespace, target.Name); err != nil {
+		return nil, err
+	}
+	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return nil, err
 	}
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind:        "Pod",
-		Namespace:   req.Namespace,
-		Name:        req.PodName,
+		Group:       target.Group,
+		Version:     target.Version,
+		Kind:        target.Kind,
+		Namespace:   target.Namespace,
+		Name:        target.Name,
 		Verb:        "update",
 		Subresource: "ephemeralcontainers",
 	}); err != nil {
 		return nil, err
 	}
 	service := pods.NewService(deps)
-	response, err := service.CreateDebugContainer(req.Namespace, req.PodName, req.Image, req.TargetContainer)
+	response, err := service.CreateDebugContainer(target.Namespace, target.Name, options.Image, options.TargetContainer)
 	if err != nil {
 		return nil, err
 	}
-	a.invalidateResponseCache(selectionKey, "Pod", req.Namespace, req.PodName)
+	a.invalidateResponseCacheForGVK(selectionKey, target.gvk(), target.Namespace, target.Name)
 	return response, nil
 }

@@ -7,7 +7,11 @@
 
 package backend
 
-import "github.com/luxury-yacht/app/backend/resources/helm"
+import (
+	"strings"
+
+	"github.com/luxury-yacht/app/backend/resources/helm"
+)
 
 func (a *App) GetHelmReleaseDetails(clusterID, namespace, name string) (*HelmReleaseDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
@@ -42,35 +46,56 @@ func (a *App) GetHelmValues(clusterID, namespace, name string) (map[string]inter
 	})
 }
 
-func (a *App) DeleteHelmRelease(clusterID, namespace, name string) error {
+func (a *App) deleteHelmRelease(clusterID, namespace, name string) error {
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	_, err := a.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionDelete,
+		Target: objectActionTarget(
+			clusterID,
+			"helm.sh",
+			"v3",
+			"HelmRelease",
+			namespace,
+			name,
+		),
+	})
+	return err
+}
+
+func (a *App) deleteHelmReleaseAction(target ObjectActionTargetRef) error {
+	if target.Group != "helm.sh" || target.Version != "v3" || !strings.EqualFold(target.Kind, "HelmRelease") {
+		return errUnsupportedActionTarget(ObjectActionDelete, target, "helm.sh/v3", "HelmRelease")
+	}
+	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
+		return err
+	}
+	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
 	if err := a.requireAnyResourcePermission(deps.Context, deps,
 		resourcePermissionCheck{
 			Kind:      "Secret",
-			Namespace: namespace,
+			Namespace: target.Namespace,
 			Verb:      "delete",
 		},
 		resourcePermissionCheck{
 			Kind:      "ConfigMap",
-			Namespace: namespace,
+			Namespace: target.Namespace,
 			Verb:      "delete",
 		},
 	); err != nil {
 		return err
 	}
-	_, err = FetchResourceWithSelection(a, selectionKey, "", "HelmDelete", namespace+"/"+name, func() (struct{}, error) {
+	_, err = FetchResourceWithSelection(a, selectionKey, "", "HelmDelete", target.Namespace+"/"+target.Name, func() (struct{}, error) {
 		service := helm.NewService(helm.Dependencies{Common: deps})
-		return struct{}{}, service.DeleteRelease(namespace, name)
+		return struct{}{}, service.DeleteRelease(target.Namespace, target.Name)
 	})
 	if err != nil {
 		return err
 	}
-	a.invalidateHelmCache(selectionKey, namespace, name)
+	a.invalidateHelmCache(selectionKey, target.Namespace, target.Name)
 	return nil
 }

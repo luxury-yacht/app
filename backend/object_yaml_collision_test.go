@@ -423,18 +423,18 @@ func TestQueryPermissionsDisambiguatesCollidingDBInstances(t *testing.T) {
 }
 
 // TestDeleteResourceByGVKDisambiguatesCollidingDBInstances is the
-// step-5 wrapper acceptance test. It exercises the *App-level
-// DeleteResourceByGVK Wails entry point (not the lower-level
+// step-5 wrapper acceptance test. It exercises the *App-level internal
+// deleteResourceByGVK compatibility wrapper (not the lower-level
 // generic.Service.DeleteByGVK already covered by
 // TestServiceDeleteByGVKDisambiguatesCollidingDBInstances in the
 // generic package).
 //
-// This wrapper is what the Wails-bound frontend actually calls. The
-// test verifies the full path: the apiVersion string is parsed into a
-// GVK, dependencies are resolved for the cluster, and generic.Service's
-// DeleteByGVK is invoked with the right GVK. The net effect is that
-// each colliding DBInstance object can be deleted independently, and
-// deleting one leaves the other untouched.
+// The public Wails path now goes through RunObjectAction; this test keeps the
+// legacy wrapper honest for backend callers. It verifies the full path: the
+// apiVersion string is parsed into a GVK, dependencies are resolved for the
+// cluster, and generic.Service's DeleteByGVK is invoked with the right GVK. The
+// net effect is that each colliding DBInstance object can be deleted
+// independently, and deleting one leaves the other untouched.
 func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 	t.Run("ACK DBInstance", func(t *testing.T) {
 		const clusterID = "collision-delete-ack"
@@ -446,8 +446,8 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		app.responseCacheStore(clusterID, ackCacheKey, "stale-ack")
 		app.responseCacheStore(clusterID, kindaCacheKey, "fresh-kinda")
 
-		if err := app.DeleteResourceByGVK(clusterID, "rds.services.k8s.aws/v1alpha1", "DBInstance", "default", "my-db"); err != nil {
-			t.Fatalf("DeleteResourceByGVK returned error for ACK: %v", err)
+		if err := app.deleteResourceByGVK(clusterID, "rds.services.k8s.aws/v1alpha1", "DBInstance", "default", "my-db"); err != nil {
+			t.Fatalf("deleteResourceByGVK returned error for ACK: %v", err)
 		}
 		if _, ok := app.responseCacheLookup(clusterID, ackCacheKey); ok {
 			t.Fatalf("expected ACK detail cache to be evicted")
@@ -482,8 +482,8 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		app.responseCacheStore(clusterID, ackCacheKey, "fresh-ack")
 		app.responseCacheStore(clusterID, kindaCacheKey, "stale-kinda")
 
-		if err := app.DeleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "my-db"); err != nil {
-			t.Fatalf("DeleteResourceByGVK returned error for kinda.rocks: %v", err)
+		if err := app.deleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "my-db"); err != nil {
+			t.Fatalf("deleteResourceByGVK returned error for kinda.rocks: %v", err)
 		}
 		if _, ok := app.responseCacheLookup(clusterID, kindaCacheKey); ok {
 			t.Fatalf("expected kinda.rocks detail cache to be evicted")
@@ -512,7 +512,7 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		const clusterID = "collision-delete-missing-version"
 		app := newCollidingDBInstanceCluster(t, clusterID)
 
-		err := app.DeleteResourceByGVK(clusterID, "", "DBInstance", "default", "my-db")
+		err := app.deleteResourceByGVK(clusterID, "", "DBInstance", "default", "my-db")
 		if err == nil {
 			t.Fatal("expected error when apiVersion is empty")
 		}
@@ -525,7 +525,7 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		const clusterID = "collision-delete-missing-name"
 		app := newCollidingDBInstanceCluster(t, clusterID)
 
-		err := app.DeleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "")
+		err := app.deleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "")
 		if err == nil {
 			t.Fatal("expected error when name is empty")
 		}

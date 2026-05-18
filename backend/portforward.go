@@ -25,10 +25,38 @@ import (
 	"k8s.io/client-go/transport/spdy"
 )
 
-// StartPortForward initiates a new port forwarding session to a Kubernetes pod.
+// startPortForward initiates a new port forwarding session to a Kubernetes pod.
 // For workloads (Deployment, StatefulSet, DaemonSet) and Services, the session
 // will automatically reconnect if the underlying pod is replaced.
-func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string, error) {
+func (a *App) startPortForward(clusterID string, req PortForwardRequest) (string, error) {
+	resp, err := a.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionStartPortForward,
+		Target: objectActionTarget(
+			clusterID,
+			req.TargetGroup,
+			req.TargetVersion,
+			req.TargetKind,
+			req.Namespace,
+			req.TargetName,
+		),
+		PortForward: &ObjectActionPortForwardOptions{
+			ContainerPort: req.ContainerPort,
+			LocalPort:     req.LocalPort,
+		},
+	})
+	return resp.SessionID, err
+}
+
+func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options ObjectActionPortForwardOptions) (string, error) {
+	req := PortForwardRequest{
+		Namespace:     targetRef.Namespace,
+		TargetKind:    targetRef.Kind,
+		TargetGroup:   targetRef.Group,
+		TargetVersion: targetRef.Version,
+		TargetName:    targetRef.Name,
+		ContainerPort: options.ContainerPort,
+		LocalPort:     options.LocalPort,
+	}
 	target, err := portForwardTargetFromRequest(req)
 	if err != nil {
 		return "", err
@@ -37,7 +65,7 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 		return "", fmt.Errorf("container port must be positive")
 	}
 
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, _, err := a.resolveClusterDependencies(targetRef.ClusterID)
 	if err != nil {
 		return "", err
 	}
@@ -74,7 +102,7 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 	session := &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{
 			ID:            sessionID,
-			ClusterID:     clusterID,
+			ClusterID:     targetRef.ClusterID,
 			ClusterName:   deps.ClusterName,
 			Namespace:     target.Namespace,
 			PodName:       resolved.PodName,

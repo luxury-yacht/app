@@ -16,13 +16,13 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/generic"
 )
 
-// DeleteResourceByGVK removes a Kubernetes object identified by its
+// deleteResourceByGVK removes a Kubernetes object identified by its
 // fully-qualified apiVersion + kind. apiVersion must be in the standard
 // Kubernetes "group/version" form (or just "version" for core resources
 // like "v1"). Unlike DeleteResource, this path resolves the GVR strictly
 // through the shared common.ResolveGVRForGVK helper so two CRDs that
 // share a Kind don't get conflated.
-func (a *App) DeleteResourceByGVK(clusterID, apiVersion, kind, namespace, name string) error {
+func (a *App) deleteResourceByGVK(clusterID, apiVersion, kind, namespace, name string) error {
 	gvk := schema.FromAPIVersionAndKind(strings.TrimSpace(apiVersion), strings.TrimSpace(kind))
 	if gvk.Kind == "" {
 		return fmt.Errorf("kind is required")
@@ -33,24 +33,35 @@ func (a *App) DeleteResourceByGVK(clusterID, apiVersion, kind, namespace, name s
 	if err := requireObjectName(name); err != nil {
 		return err
 	}
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	_, err := a.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionDelete,
+		Target: objectActionTargetFromGVK(clusterID, gvk, namespace, name),
+	})
+	return err
+}
+
+func (a *App) deleteGenericResourceAction(target ObjectActionTargetRef) error {
+	if err := requireObjectName(target.Name); err != nil {
+		return err
+	}
+	deps, selectionKey, err := a.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return err
 	}
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Group:     gvk.Group,
-		Version:   gvk.Version,
-		Kind:      gvk.Kind,
-		Namespace: namespace,
-		Name:      name,
+		Group:     target.Group,
+		Version:   target.Version,
+		Kind:      target.Kind,
+		Namespace: target.Namespace,
+		Name:      target.Name,
 		Verb:      "delete",
 	}); err != nil {
 		return err
 	}
 	service := generic.NewService(deps)
-	if err := service.DeleteByGVK(gvk, namespace, name); err != nil {
+	if err := service.DeleteByGVK(target.gvk(), target.Namespace, target.Name); err != nil {
 		return err
 	}
-	a.invalidateResponseCacheForGVK(selectionKey, gvk, namespace, name)
+	a.invalidateResponseCacheForGVK(selectionKey, target.gvk(), target.Namespace, target.Name)
 	return nil
 }

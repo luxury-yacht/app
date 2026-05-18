@@ -28,14 +28,14 @@ const {
   gridTablePropsRef,
   confirmationPropsRef,
   openWithObjectMock,
-  deleteResourceByGVKMock,
+  runObjectActionMock,
   permissionState,
   errorHandlerMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   confirmationPropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
-  deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
+  runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   permissionState: new Map<
     string,
     { allowed: boolean; pending: boolean; reason?: string; error?: string }
@@ -105,7 +105,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
+  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -170,8 +170,8 @@ describe('NsViewQuotas', () => {
     gridTablePropsRef.current = null;
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
-    deleteResourceByGVKMock.mockReset();
-    deleteResourceByGVKMock.mockResolvedValue(undefined);
+    runObjectActionMock.mockReset();
+    runObjectActionMock.mockResolvedValue(undefined);
     permissionState.clear();
     errorHandlerMock.handle.mockClear();
   });
@@ -280,18 +280,21 @@ describe('NsViewQuotas', () => {
     await act(async () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
-    // ResourceQuota is core/v1, resolved through formatBuiltinApiVersion.
-    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'v1',
-      'ResourceQuota',
-      'team-a',
-      'rq-default'
-    );
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'ResourceQuota',
+        namespace: 'team-a',
+        name: 'rq-default',
+      },
+    });
   });
 
   it('handles delete failure with errorHandler', async () => {
-    deleteResourceByGVKMock.mockRejectedValueOnce(new Error('boom'));
+    runObjectActionMock.mockRejectedValueOnce(new Error('boom'));
     permissionState.set('ResourceQuota:delete:team-a', { allowed: true, pending: false });
 
     const entry = baseQuota();

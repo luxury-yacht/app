@@ -13,7 +13,7 @@ import { KeyboardProvider } from '@ui/shortcuts/context';
 
 const wailsMocks = vi.hoisted(() => ({
   StartShellSession: vi.fn(),
-  CreateDebugContainer: vi.fn(),
+  RunObjectAction: vi.fn(),
   GetPodContainers: vi.fn(),
   GetShellSessionBacklog: vi.fn(),
   ListShellSessions: vi.fn(),
@@ -258,10 +258,12 @@ describe('ShellTab', () => {
       command: ['/bin/sh'],
       containers: ['app'],
     });
-    wailsMocks.CreateDebugContainer.mockResolvedValue({
-      containerName: 'debug-abc12345',
-      namespace: 'team-a',
-      podName: 'pod-1',
+    wailsMocks.RunObjectAction.mockResolvedValue({
+      debugContainer: {
+        containerName: 'debug-abc12345',
+        namespace: 'team-a',
+        podName: 'pod-1',
+      },
     });
     wailsMocks.GetPodContainers.mockResolvedValue([]);
     wailsMocks.GetShellSessionBacklog.mockResolvedValue('');
@@ -650,7 +652,7 @@ describe('ShellTab', () => {
     expect(debugButton?.textContent).toBe('Start');
   });
 
-  it('calls CreateDebugContainer on debug action', async () => {
+  it('calls RunObjectAction on debug action', async () => {
     await renderShellTab({ availableContainers: ['app'] });
     setDebugContainerEnabled(true);
     await flushAsync();
@@ -661,18 +663,25 @@ describe('ShellTab', () => {
       await flushAsync();
     });
 
-    expect(wailsMocks.CreateDebugContainer).toHaveBeenCalledWith('alpha:ctx', {
-      namespace: 'team-a',
-      podName: 'pod-1',
-      image: 'busybox:latest',
-      targetContainer: 'app',
+    expect(wailsMocks.RunObjectAction).toHaveBeenCalledWith({
+      action: 'createDebugContainer',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'pod-1',
+      },
+      debugContainer: {
+        image: 'busybox:latest',
+        targetContainer: 'app',
+      },
     });
   });
 
-  it('shows error when CreateDebugContainer fails', async () => {
-    wailsMocks.CreateDebugContainer.mockRejectedValue(
-      new Error('ephemeral containers not supported')
-    );
+  it('shows error when debug container action fails', async () => {
+    wailsMocks.RunObjectAction.mockRejectedValue(new Error('ephemeral containers not supported'));
     await renderShellTab({ availableContainers: ['app'] });
     setDebugContainerEnabled(true);
     await flushAsync();
@@ -683,7 +692,7 @@ describe('ShellTab', () => {
       await flushAsync();
     });
 
-    expect(wailsMocks.CreateDebugContainer).toHaveBeenCalled();
+    expect(wailsMocks.RunObjectAction).toHaveBeenCalled();
     const terminal = getLatestTerminal();
     expect(terminal?.writeln).toHaveBeenCalledWith(
       expect.stringContaining('Failed to create debug container')
@@ -799,7 +808,7 @@ describe('ShellTab', () => {
       debugBtn.click();
       await flushAsync();
     });
-    expect(wailsMocks.CreateDebugContainer).not.toHaveBeenCalled();
+    expect(wailsMocks.RunObjectAction).not.toHaveBeenCalled();
   });
 
   it('hides controls while a shell session is active', async () => {

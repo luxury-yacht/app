@@ -41,8 +41,8 @@ const permissionMapMock = vi.hoisted(() => ({
   map: new Map<string, { allowed: boolean; pending: boolean }>(),
 }));
 
-const deleteResourceMock = vi.hoisted(() => ({
-  DeleteResourceByGVK: vi.fn(),
+const objectActionMock = vi.hoisted(() => ({
+  RunObjectAction: vi.fn(),
 }));
 
 const errorHandlerMock = vi.hoisted(() => ({
@@ -148,7 +148,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResourceByGVK: deleteResourceMock.DeleteResourceByGVK,
+  RunObjectAction: objectActionMock.RunObjectAction,
 }));
 
 vi.mock('@/core/capabilities', () => ({
@@ -210,7 +210,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
     sortHookMock.handleSort.mockClear();
     shortNamesMock.useShortNames.mockReturnValue(false);
     permissionMapMock.map = new Map();
-    deleteResourceMock.DeleteResourceByGVK.mockReset();
+    objectActionMock.RunObjectAction.mockReset();
     getPermissionKeyMock.getPermissionKey.mockClear();
     gridTablePropsRef.current = null;
     modalPropsRef.current = null;
@@ -224,7 +224,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
     permissionMapMock.map = new Map([
       ['ConfigMap:delete:default', { allowed: true, pending: false }],
     ]);
-    deleteResourceMock.DeleteResourceByGVK.mockResolvedValue(undefined);
+    objectActionMock.RunObjectAction.mockResolvedValue(undefined);
 
     const module = await import('./NsViewConfig');
     const ConfigView = module.default;
@@ -300,15 +300,17 @@ describe('NsViewConfig ConfigViewGrid', () => {
       modalPropsRef.current.onConfirm();
     });
 
-    // ConfigMap is core/v1; formatBuiltinApiVersion returns 'v1' for
-    // empty-group resources (matches schema.FromAPIVersionAndKind).
-    expect(deleteResourceMock.DeleteResourceByGVK).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'v1',
-      'ConfigMap',
-      'default',
-      'app-config'
-    );
+    expect(objectActionMock.RunObjectAction).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'ConfigMap',
+        namespace: 'default',
+        name: 'app-config',
+      },
+    });
 
     onSort('name', 'desc');
 
@@ -340,7 +342,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
     permissionMapMock.map = new Map([
       ['ConfigMap:delete:default', { allowed: true, pending: false }],
     ]);
-    deleteResourceMock.DeleteResourceByGVK.mockResolvedValue(undefined);
+    objectActionMock.RunObjectAction.mockResolvedValue(undefined);
     const { clusterId: _clusterId, ...resourceWithoutCluster } = sampleData[0];
     const defensiveResource = resourceWithoutCluster as unknown as (typeof sampleData)[number];
 
@@ -383,13 +385,17 @@ describe('NsViewConfig ConfigViewGrid', () => {
     await act(async () => {
       modalPropsRef.current.onConfirm();
     });
-    expect(deleteResourceMock.DeleteResourceByGVK).toHaveBeenCalledWith(
-      'cluster-a',
-      'v1',
-      'ConfigMap',
-      'default',
-      'app-config'
-    );
+    expect(objectActionMock.RunObjectAction).toHaveBeenCalledWith({
+      action: 'delete',
+      target: {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'ConfigMap',
+        namespace: 'default',
+        name: 'app-config',
+      },
+    });
 
     await unmount();
   });
@@ -399,7 +405,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
     const permissionMap = new Map<string, { allowed: boolean; pending: boolean }>();
     permissionMap.set('ConfigMap:delete:default', { allowed: false, pending: false });
     permissionMapMock.map = permissionMap;
-    deleteResourceMock.DeleteResourceByGVK.mockRejectedValue(new Error('boom'));
+    objectActionMock.RunObjectAction.mockRejectedValue(new Error('boom'));
     errorHandlerMock.handle.mockClear();
 
     const module = await import('./NsViewConfig');
@@ -426,7 +432,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
       modalPropsRef.current.onConfirm();
     });
 
-    expect(deleteResourceMock.DeleteResourceByGVK).toHaveBeenCalledTimes(1);
+    expect(objectActionMock.RunObjectAction).toHaveBeenCalledTimes(1);
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
       action: 'delete',
       kind: 'ConfigMap',

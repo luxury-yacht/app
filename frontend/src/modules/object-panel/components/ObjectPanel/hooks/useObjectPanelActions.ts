@@ -7,7 +7,12 @@
 import { useCallback, type Dispatch } from 'react';
 
 import type { DataRequestReason } from '@/core/data-access';
-import * as app from '@wailsjs/go/backend/App';
+import {
+  buildObjectActionTarget,
+  runObjectDelete,
+  runObjectRestart,
+  runObjectScale,
+} from '@shared/actions/objectActionClient';
 import { errorHandler } from '@utils/errorHandler';
 
 import type { PanelAction, PanelObjectData, PanelState, ResourceAction } from '../types';
@@ -52,6 +57,19 @@ const getWorkloadKind = (
   }
   return objectKind;
 };
+
+const objectPanelActionTarget = (objectData: PanelObjectData, kind: string, action: string) =>
+  buildObjectActionTarget(
+    {
+      clusterId: objectData.clusterId,
+      group: objectData.group,
+      version: objectData.version,
+      kind,
+      namespace: objectData.namespace,
+      name: objectData.name,
+    },
+    action
+  );
 
 export const useObjectPanelActions = ({
   objectData,
@@ -126,7 +144,6 @@ export const useObjectPanelActions = ({
       dispatch({ type: 'SET_ACTION_LOADING', payload: true });
       dispatch({ type: 'SET_ACTION_ERROR', payload: null });
 
-      const namespace = objectData.namespace || '';
       const name = objectData.name || '';
       // Multi-cluster rule (see AGENTS.md): every backend command must
       // carry a resolved clusterId. Fail loud here rather than letting
@@ -161,41 +178,13 @@ export const useObjectPanelActions = ({
                   `Cannot restart ${workloadKind}/${name}: apiVersion missing on PanelObjectData`
                 );
               }
-              await app.RestartWorkload(
-                clusterId,
-                namespace,
-                objectData.group ?? '',
-                objectData.version,
-                workloadKind,
-                name
-              );
+              await runObjectRestart(objectPanelActionTarget(objectData, workloadKind, 'restart'));
             }
             break;
           }
           case 'delete': {
-            if (objectKind === 'pod') {
-              await app.DeletePod(clusterId, namespace, name);
-            } else if (isHelmRelease) {
-              await app.DeleteHelmRelease(clusterId, namespace, name);
-            } else {
-              const resourceKind = objectData.kind || objectKind;
-              // PanelObjectData always carries a version after the
-              // kind-only-objects fix — every entry point (BrowseView,
-              // NsView*/ClusterView*, CommandPalette, EventsTab,
-              // resolveBuiltinGroupVersion) populates group/version. A
-              // missing version here is a programming bug; fail loud
-              // rather than fall back to the retired kind-only resolver.
-              // See  step 5.
-              if (!objectData.version) {
-                throw new Error(
-                  `Cannot delete ${resourceKind}/${name}: apiVersion missing on PanelObjectData`
-                );
-              }
-              const apiVersion = objectData.group
-                ? `${objectData.group}/${objectData.version}`
-                : objectData.version;
-              await app.DeleteResourceByGVK(clusterId, apiVersion, resourceKind, namespace, name);
-            }
+            const resourceKind = isHelmRelease ? 'HelmRelease' : objectData.kind || objectKind;
+            await runObjectDelete(objectPanelActionTarget(objectData, resourceKind, 'delete'));
             dispatch({ type: 'SET_RESOURCE_DELETED', payload: { deleted: true, name } });
             close();
             break;
@@ -212,13 +201,8 @@ export const useObjectPanelActions = ({
                   `Cannot scale ${workloadKind}/${name}: apiVersion missing on PanelObjectData`
                 );
               }
-              await app.ScaleWorkload(
-                clusterId,
-                namespace,
-                objectData.group ?? '',
-                objectData.version,
-                workloadKind,
-                name,
+              await runObjectScale(
+                objectPanelActionTarget(objectData, workloadKind, 'scale'),
                 replicas
               );
             }

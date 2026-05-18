@@ -77,7 +77,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResourceByGVK: vi.fn(),
+  RunObjectAction: vi.fn(),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
