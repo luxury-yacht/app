@@ -313,6 +313,9 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 	a.shellSessionsMu.Lock()
 	a.shellSessions[sessionID] = sess
 	a.shellSessionsMu.Unlock()
+	a.registerRuntimeOperation(runtimeOperationFromShellSession(sess), func(reason string) error {
+		return a.closeShellSessionForRuntime(sessionID, reason)
+	})
 	a.emitShellList()
 
 	// Start timeout monitor goroutine
@@ -322,6 +325,7 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 		defer func() {
 			sess.Close()
 			if a.removeShellSession(sessionID) != nil {
+				a.unregisterRuntimeOperation(sessionID)
 				a.emitShellList()
 			}
 		}()
@@ -402,6 +406,21 @@ func (a *App) CloseShellSession(sessionID string) error {
 	sess.Close()
 	a.emitShellStatus(sessionID, sess.clusterID, "closed", "terminated")
 	a.emitShellList()
+	a.unregisterRuntimeOperation(sessionID)
+	return nil
+}
+
+func (a *App) closeShellSessionForRuntime(sessionID, reason string) error {
+	sess := a.removeShellSession(sessionID)
+	if sess == nil {
+		return nil
+	}
+	sess.Close()
+	if strings.TrimSpace(reason) == "" {
+		reason = "cluster disconnected"
+	}
+	a.emitShellStatus(sessionID, sess.clusterID, "closed", reason)
+	a.emitShellList()
 	return nil
 }
 
@@ -459,11 +478,32 @@ func (a *App) StopClusterShellSessions(clusterID string) error {
 	for _, sess := range toStop {
 		sess.Close()
 		a.emitShellStatus(sess.id, sess.clusterID, "closed", "cluster disconnected")
+		a.unregisterRuntimeOperation(sess.id)
 	}
 	if len(toStop) > 0 {
 		a.emitShellList()
 	}
 	return nil
+}
+
+func runtimeOperationFromShellSession(sess *shellSession) RuntimeOperation {
+	if sess == nil {
+		return RuntimeOperation{}
+	}
+	return RuntimeOperation{
+		ID:          sess.id,
+		Type:        RuntimeOperationShell,
+		ClusterID:   sess.clusterID,
+		ClusterName: sess.clusterName,
+		Target:      runtimeOperationTarget(sess.clusterID, "", "v1", "Pod", sess.namespace, sess.podName),
+		Status:      "open",
+		StartedAt:   sess.startedAt.Format(time.RFC3339),
+		DisplayName: fmt.Sprintf("Shell %s/%s", sess.namespace, sess.podName),
+		Summary: map[string]string{
+			"container": sess.container,
+			"command":   strings.Join(sess.command, " "),
+		},
+	}
 }
 
 // GetShellSessionBacklog returns buffered shell output for replaying on reattach.

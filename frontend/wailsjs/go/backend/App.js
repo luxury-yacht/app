@@ -38,6 +38,10 @@ export function ClearSSRRCache(arg1) {
   return window['go']['backend']['App']['ClearSSRRCache'](arg1);
 }
 
+export function CloseCluster(arg1) {
+  return window['go']['backend']['App']['CloseCluster'](arg1);
+}
+
 export function CloseShellSession(arg1) {
   return window['go']['backend']['App']['CloseShellSession'](arg1);
 }
@@ -420,6 +424,10 @@ export function IsWorkloadHPAManaged(arg1, arg2, arg3, arg4, arg5, arg6) {
 
 export function ListPortForwards() {
   return window['go']['backend']['App']['ListPortForwards']();
+}
+
+export function ListRuntimeOperations() {
+  return window['go']['backend']['App']['ListRuntimeOperations']();
 }
 
 export function ListShellSessions() {

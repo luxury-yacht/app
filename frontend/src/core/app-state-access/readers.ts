@@ -11,7 +11,7 @@ import {
   GetShellSessionBacklog,
   GetThemes,
   GetZoomLevel,
-  GetClusterPortForwardCount,
+  ListRuntimeOperations,
   ListPortForwards,
   ListShellSessions,
 } from '@wailsjs/go/backend/App';
@@ -28,10 +28,13 @@ export const readAppInfo = () => GetAppInfo();
 export const readAppLogs = () => GetAppLogs();
 export const readAppLogsSince = (sequence: number) => GetAppLogsSince(sequence);
 export const readPortForwardSessions = () => ListPortForwards();
+export const readRuntimeOperations = () => ListRuntimeOperations();
 export const readShellSessions = () => ListShellSessions();
 export const readShellSessionBacklog = (sessionId: string) => GetShellSessionBacklog(sessionId);
-export const readClusterPortForwardCount = (selection: string) =>
-  GetClusterPortForwardCount(selection);
+export const readClusterRuntimeOperationCount = async (clusterId: string) => {
+  const operations = await ListRuntimeOperations();
+  return operations.filter((operation) => operation.clusterId === clusterId).length;
+};
 export const readAllClusterLifecycleStates = async (): Promise<Record<string, string> | null> => {
   const runtimeApp = (window as any)?.go?.backend?.App;
   if (typeof runtimeApp?.GetAllClusterLifecycleStates !== 'function') {

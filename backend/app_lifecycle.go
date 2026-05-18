@@ -214,12 +214,23 @@ func (a *App) Shutdown(ctx context.Context) {
 
 	// Shutdown all per-cluster auth managers to stop any recovery goroutines.
 	a.clusterClientsMu.Lock()
+	clusterIDSet := make(map[string]struct{})
 	for _, clients := range a.clusterClients {
+		if clients != nil && clients.meta.ID != "" {
+			clusterIDSet[clients.meta.ID] = struct{}{}
+		}
 		if clients != nil && clients.authManager != nil {
 			clients.authManager.Shutdown()
 		}
 	}
 	a.clusterClientsMu.Unlock()
+
+	for _, clusterID := range a.runtimeOperationClusterIDs() {
+		clusterIDSet[clusterID] = struct{}{}
+	}
+	for clusterID := range clusterIDSet {
+		a.cleanupClusterRuntimeOperations(clusterID, "app shutdown")
+	}
 
 	// Stop the kubeconfig directory watcher before tearing down cluster state.
 	a.stopKubeconfigWatcher()

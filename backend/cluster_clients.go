@@ -210,15 +210,10 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 	for _, mgr := range removedAuthManagers {
 		mgr.Shutdown()
 	}
-	// Ensure cluster-scoped runtime sessions are torn down whenever selection
+	// Ensure cluster-scoped runtime operations are torn down whenever selection
 	// churn drops a cluster from the active client pool.
 	for _, clusterID := range removedClusterIDs {
-		if err := a.StopClusterShellSessions(clusterID); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for removed cluster %s: %v", clusterID, err), logsources.KubernetesClient)
-		}
-		if err := a.StopClusterPortForwards(clusterID); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for removed cluster %s: %v", clusterID, err), logsources.KubernetesClient)
-		}
+		a.cleanupClusterRuntimeOperations(clusterID, "cluster disconnected")
 	}
 
 	for _, id := range removedClusterIDs {

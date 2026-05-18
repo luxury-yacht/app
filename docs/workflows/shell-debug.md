@@ -46,14 +46,13 @@ The same backend session manager powers both flows.
   - Capability descriptors:
     - shell exec (`create` on `pods/exec`)
     - debug (`update` on `pods/ephemeralcontainers`)
-- `frontend/src/modules/shell-session/ShellSessionsPanel.tsx`
-  - Standalone shell session management panel.
-- `frontend/src/modules/active-session/ActiveSessionsPanel.tsx`
-  - Combined shell + port-forward session panel.
-- `frontend/src/modules/shell-session/hooks/useShellSessionStatus.ts`
-  - Header status counts from `object-shell:list`.
+- `frontend/src/ui/status/SessionsStatus.tsx`
+  - Header runtime operation panel for shell sessions, port forwards, and
+    active node drains. It reads `runtime-operations:list` for global presence
+    and uses workflow lists for shell/port-forward row details.
 - `frontend/src/ui/layout/ClusterTabs.tsx`
-  - Stops cluster-scoped shell sessions when a cluster tab closes.
+  - Calls the backend close-cluster command so runtime operation cleanup and
+    selected-kubeconfig updates happen through one backend lifecycle path.
 
 ## Backend architecture
 
@@ -83,7 +82,9 @@ Backend emits three event streams:
 - `object-shell:list`
   - Payload: full `[]ShellSessionInfo` snapshot
 
-`object-shell:list` is the source of truth for session panels/status summaries.
+`object-shell:list` is the source of truth for shell session row details.
+`runtime-operations:list` is the global status/cleanup view that includes shell
+sessions alongside port forwards and active node drains.
 
 ### 3) Session lifecycle, timeouts, replay
 
@@ -200,7 +201,8 @@ Container discovery/normalization:
 2. Frontend calls `StartShellSession(clusterId, request)`.
 3. Backend starts stream, tracks session, emits `object-shell:list` and `object-shell:status`.
 4. Frontend writes streamed output from `object-shell:output` and forwards input with `SendShellInput`.
-5. Session panels and status indicators update from `object-shell:list`.
+5. Shell row details update from `object-shell:list`; global status presence
+   updates from `runtime-operations:list`.
 
 ### Debug container + connect
 
@@ -215,7 +217,20 @@ Container discovery/normalization:
 - All backend shell/debug methods require `clusterID`.
 - Session records include `clusterId` + `clusterName`.
 - Session panels can attach across clusters by switching active cluster first.
-- Closing a cluster tab stops that cluster's shell sessions via `StopClusterShellSessions(clusterId)`.
+- Closing a cluster tab calls `CloseCluster(selectionOrClusterID)`, which runs
+  backend runtime-operation cleanup before updating selected kubeconfigs.
+
+### Operation lifecycle registry
+
+Shell sessions register with the backend runtime operation registry when they
+start and unregister when they close, error, time out, or are stopped by cluster
+lifecycle cleanup. The registry entry uses a full Pod target reference:
+`clusterId`, empty group, `v1`, `Pod`, namespace, and pod name.
+
+Cluster removal, kubeconfig clearing, explicit cluster-tab close, and app
+shutdown all use the same backend cleanup path. That path is idempotent and also
+cleans up unregistered legacy shell sessions so older in-memory state cannot
+survive a cluster disconnect.
 
 ## Gotchas and maintenance notes
 
@@ -243,13 +258,14 @@ Frontend:
 
 - `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.test.tsx`
 - `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities.test.tsx`
-- `frontend/src/modules/shell-session/ShellSessionsPanel.test.tsx`
-- `frontend/src/modules/active-session/ActiveSessionsPanel.test.tsx`
+- `frontend/src/ui/status/SessionsStatus.test.tsx`
+- `frontend/src/ui/layout/ClusterTabs.test.tsx`
 
 Recommended checks after changes:
 
 1. Shell connect/disconnect on pod containers without regressions.
 2. Reattach without duplicate backlog/live output.
 3. Debug container creation success + error paths.
-4. Cross-cluster attach from session panels.
-5. Cluster-tab close terminates cluster-scoped sessions.
+4. Cross-cluster attach from the runtime status panel.
+5. Cluster-tab close terminates cluster-scoped runtime operations through the
+   backend close-cluster command.

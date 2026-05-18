@@ -21,6 +21,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
 import {
   readPortForwardSessions,
+  readRuntimeOperations,
   readShellSessions,
   requestAppState,
 } from '@/core/app-state-access';
@@ -60,6 +61,23 @@ interface PortForwardStatusEvent {
   statusReason?: string;
   localPort?: number;
   podName?: string;
+}
+
+interface RuntimeOperation {
+  id: string;
+  type: string;
+  clusterId: string;
+  clusterName?: string;
+  target?: {
+    kind: string;
+    namespace?: string;
+    name: string;
+  };
+  status: string;
+  statusReason?: string;
+  startedAt: string;
+  displayName?: string;
+  summary?: Record<string, string>;
 }
 
 function parseTimestamp(value?: string | { time?: string }): number {
@@ -125,6 +143,7 @@ const SessionsStatus: React.FC = () => {
     useKubeconfig();
   const [shellSessions, setShellSessions] = useState<ShellSessionInfo[]>([]);
   const [portForwardSessions, setPortForwardSessions] = useState<PortForwardSession[]>([]);
+  const [runtimeOperations, setRuntimeOperations] = useState<RuntimeOperation[]>([]);
   const [stoppingPortForwardIds, setStoppingPortForwardIds] = useState<Set<string>>(new Set());
   const [jumpingShellSessionId, setJumpingShellSessionId] = useState<string | null>(null);
   const [pendingShellJump, setPendingShellJump] = useState<{
@@ -134,6 +153,16 @@ const SessionsStatus: React.FC = () => {
 
   useEffect(() => {
     const load = async () => {
+      try {
+        const operations = await requestAppState({
+          resource: 'runtime-operations',
+          adapter: 'runtime-read',
+          read: () => readRuntimeOperations(),
+        });
+        setRuntimeOperations(operations || []);
+      } catch {
+        // Ignore initial load errors; runtime events will repopulate.
+      }
       try {
         const shellList = await requestAppState({
           resource: 'shell-sessions',
@@ -259,6 +288,28 @@ const SessionsStatus: React.FC = () => {
       setPortForwardSessions((args[0] as PortForwardSession[]) || [])
     ) as unknown as (() => void) | undefined;
 
+    const cancelRuntimeOperationsList = runtime.EventsOn(
+      'runtime-operations:list',
+      (...args: unknown[]) => {
+        const operations = (args[0] as RuntimeOperation[]) || [];
+        setRuntimeOperations(operations);
+        const activeShellIds = new Set(
+          operations
+            .filter((operation) => operation.type === 'shell')
+            .map((operation) => operation.id)
+        );
+        const activePortForwardIds = new Set(
+          operations
+            .filter((operation) => operation.type === 'port-forward')
+            .map((operation) => operation.id)
+        );
+        setShellSessions((prev) => prev.filter((session) => activeShellIds.has(session.sessionId)));
+        setPortForwardSessions((prev) =>
+          prev.filter((session) => activePortForwardIds.has(session.id))
+        );
+      }
+    ) as unknown as (() => void) | undefined;
+
     const cancelPortForwardStatus = runtime.EventsOn('portforward:status', (...args: unknown[]) => {
       const event = args[0] as PortForwardStatusEvent | undefined;
       if (!event?.sessionId) return;
@@ -280,6 +331,7 @@ const SessionsStatus: React.FC = () => {
     return () => {
       cancelShellList?.();
       cancelPortForwardList?.();
+      cancelRuntimeOperationsList?.();
       cancelPortForwardStatus?.();
     };
   }, []);
@@ -313,39 +365,75 @@ const SessionsStatus: React.FC = () => {
     }
   }, [pendingShellJump, shellSessions]);
 
+  const filteredRuntimeOperations = useMemo(
+    () =>
+      selectedClusterId
+        ? runtimeOperations.filter((operation) => operation.clusterId === selectedClusterId)
+        : runtimeOperations,
+    [runtimeOperations, selectedClusterId]
+  );
+
+  const runtimeShellIds = useMemo(
+    () =>
+      new Set(
+        filteredRuntimeOperations
+          .filter((operation) => operation.type === 'shell')
+          .map((operation) => operation.id)
+      ),
+    [filteredRuntimeOperations]
+  );
+
+  const runtimePortForwardIds = useMemo(
+    () =>
+      new Set(
+        filteredRuntimeOperations
+          .filter((operation) => operation.type === 'port-forward')
+          .map((operation) => operation.id)
+      ),
+    [filteredRuntimeOperations]
+  );
+
   const filteredShellSessions = useMemo(
     () =>
-      (selectedClusterId
-        ? shellSessions.filter((session) => session.clusterId === selectedClusterId)
-        : shellSessions
-      ).sort((a, b) => parseTimestamp(b.startedAt) - parseTimestamp(a.startedAt)),
-    [selectedClusterId, shellSessions]
+      shellSessions
+        .filter((session) => runtimeShellIds.has(session.sessionId))
+        .sort((a, b) => parseTimestamp(b.startedAt) - parseTimestamp(a.startedAt)),
+    [runtimeShellIds, shellSessions]
   );
 
   const filteredPortForwards = useMemo(
     () =>
-      (selectedClusterId
-        ? portForwardSessions.filter((session) => session.clusterId === selectedClusterId)
-        : portForwardSessions
-      ).sort((a, b) => {
-        const priorityA = getPortForwardStatusPriority(a.status);
-        const priorityB = getPortForwardStatusPriority(b.status);
-        if (priorityA !== priorityB) {
-          return priorityA - priorityB;
-        }
-        return parseTimestamp(b.startedAt) - parseTimestamp(a.startedAt);
-      }),
-    [portForwardSessions, selectedClusterId]
+      portForwardSessions
+        .filter((session) => runtimePortForwardIds.has(session.id))
+        .sort((a, b) => {
+          const priorityA = getPortForwardStatusPriority(a.status);
+          const priorityB = getPortForwardStatusPriority(b.status);
+          if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+          }
+          return parseTimestamp(b.startedAt) - parseTimestamp(a.startedAt);
+        }),
+    [portForwardSessions, runtimePortForwardIds]
+  );
+
+  const filteredDrainOperations = useMemo(
+    () =>
+      filteredRuntimeOperations
+        .filter((operation) => operation.type === 'drain')
+        .sort((a, b) => parseTimestamp(b.startedAt) - parseTimestamp(a.startedAt)),
+    [filteredRuntimeOperations]
   );
 
   const shellCount = filteredShellSessions.length;
   const portForwardCount = filteredPortForwards.length;
+  const drainCount = filteredDrainOperations.length;
 
-  const totalCount = shellCount + portForwardCount;
+  const totalCount = filteredRuntimeOperations.length;
   const totalHealthy =
-    shellCount + filteredPortForwards.filter((session) => session.status === 'active').length;
-  const totalUnhealthy =
-    portForwardCount - filteredPortForwards.filter((session) => session.status === 'active').length;
+    shellCount +
+    drainCount +
+    filteredPortForwards.filter((session) => session.status === 'active').length;
+  const totalUnhealthy = Math.max(0, totalCount - totalHealthy);
 
   const status = useMemo<StatusState>(() => {
     if (totalCount === 0) return 'inactive';
@@ -361,7 +449,9 @@ const SessionsStatus: React.FC = () => {
           {totalCount === 0 ? (
             <div className="as-empty sessions-status-empty">
               <span className="as-empty-icon">◎</span>
-              <span className="as-empty-text">No active shell sessions or port forwards</span>
+              <span className="as-empty-text">
+                No active shell sessions, port forwards, or node drains
+              </span>
             </div>
           ) : (
             <>
@@ -514,6 +604,51 @@ const SessionsStatus: React.FC = () => {
                   )}
                 </div>
               </section>
+
+              <section className="as-section">
+                <header className="as-section-header">
+                  <h3 className="as-section-title">Node Drains</h3>
+                  <span className="as-section-count">{drainCount}</span>
+                </header>
+                <div className="as-section-body">
+                  {drainCount === 0 ? (
+                    <div className="as-section-empty">No active node drains</div>
+                  ) : (
+                    filteredDrainOperations.map((operation) => {
+                      const fields = [
+                        {
+                          label: 'cluster',
+                          value: operation.clusterName || operation.clusterId || '-',
+                        },
+                        { label: 'node', value: operation.target?.name || '-' },
+                        { label: 'status', value: operation.status || '-' },
+                      ];
+                      return (
+                        <div key={operation.id} className="ss-session-item as-pf-session">
+                          <div className="ss-session-main">
+                            <div className="ss-session-fields as-pf-fields">
+                              {fields.map((field, index) => (
+                                <div key={field.label} className="ss-field-row as-pf-field-row">
+                                  <span className="as-pf-status-slot" aria-hidden={index !== 0}>
+                                    {index === 0 ? renderPortForwardStatusIcon('active') : null}
+                                  </span>
+                                  <span className="ss-field-label">{field.label}:</span>
+                                  <span className="ss-field-value">{field.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                            {operation.statusReason && (
+                              <div className="pf-session-reason as-pf-reason">
+                                {operation.statusReason}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
             </>
           )}
         </div>
@@ -521,10 +656,12 @@ const SessionsStatus: React.FC = () => {
     ),
     [
       filteredPortForwards,
+      filteredDrainOperations,
       filteredShellSessions,
       handleJumpToShellSession,
       handleStopPortForward,
       jumpingShellSessionId,
+      drainCount,
       portForwardCount,
       shellCount,
       stoppingPortForwardIds,
@@ -533,8 +670,9 @@ const SessionsStatus: React.FC = () => {
   );
 
   const messageAria = useMemo(
-    () => `Shell Sessions: ${shellCount}. Port Forwards: ${portForwardCount}.`,
-    [portForwardCount, shellCount]
+    () =>
+      `Shell Sessions: ${shellCount}. Port Forwards: ${portForwardCount}. Node Drains: ${drainCount}.`,
+    [drainCount, portForwardCount, shellCount]
   );
 
   return (

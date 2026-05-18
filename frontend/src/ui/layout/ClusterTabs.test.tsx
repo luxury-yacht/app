@@ -16,9 +16,8 @@ import {
 import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 
 const backendMocks = vi.hoisted(() => ({
-  GetClusterPortForwardCount: vi.fn().mockResolvedValue(0),
-  StopClusterPortForwards: vi.fn().mockResolvedValue(undefined),
-  StopClusterShellSessions: vi.fn().mockResolvedValue(undefined),
+  CloseCluster: vi.fn().mockResolvedValue(undefined),
+  ListRuntimeOperations: vi.fn().mockResolvedValue([]),
 }));
 
 type MockState = {
@@ -60,9 +59,8 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfig = '';
     mockState.setSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
     mockState.setActiveKubeconfig = vi.fn();
-    backendMocks.GetClusterPortForwardCount.mockResolvedValue(0);
-    backendMocks.StopClusterPortForwards.mockResolvedValue(undefined);
-    backendMocks.StopClusterShellSessions.mockResolvedValue(undefined);
+    backendMocks.CloseCluster.mockResolvedValue(undefined);
+    backendMocks.ListRuntimeOperations.mockResolvedValue([]);
     vi.clearAllMocks();
   });
 
@@ -133,7 +131,7 @@ describe('ClusterTabs', () => {
     expect(mockState.setActiveKubeconfig).toHaveBeenCalledWith('b');
   });
 
-  it('invokes setSelectedKubeconfigs when a tab is closed', async () => {
+  it('invokes CloseCluster when a tab is closed', async () => {
     mockState.selectedKubeconfigs = ['a', 'b'];
     mockState.selectedKubeconfig = 'a';
     await renderTabs();
@@ -149,9 +147,9 @@ describe('ClusterTabs', () => {
       closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(backendMocks.GetClusterPortForwardCount).toHaveBeenCalledWith('b');
-    expect(backendMocks.StopClusterShellSessions).toHaveBeenCalledWith('b');
-    expect(mockState.setSelectedKubeconfigs).toHaveBeenCalledWith(['a']);
+    expect(backendMocks.ListRuntimeOperations).toHaveBeenCalled();
+    expect(backendMocks.CloseCluster).toHaveBeenCalledWith('b');
+    expect(mockState.setSelectedKubeconfigs).not.toHaveBeenCalled();
   });
 
   it('shows filename:context for tabs with name collisions', async () => {

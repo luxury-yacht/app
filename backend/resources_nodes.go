@@ -10,6 +10,7 @@ package backend
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -104,12 +105,19 @@ func (a *App) StartDrainNode(clusterID, nodeName string, options DrainNodeOption
 	if err := a.requireDrainPodPermission(deps, options); err != nil {
 		return "", err
 	}
+	var jobID string
 	job, err := nodes.NewService(deps).StartDrainWithCompletion(nodeName, options, func() {
 		a.clearNodeCaches(selectionKey, nodeName)
+		a.unregisterRuntimeOperation(jobID)
 	})
 	if err != nil {
 		return "", err
 	}
+	jobID = job.ID
+	a.registerRuntimeOperation(runtimeOperationFromDrainJob(job), func(reason string) error {
+		nodemaintenance.GlobalStore().CancelActiveDrainsForClusterLifecycle(deps.ClusterID, reason)
+		return nil
+	})
 	a.clearNodeCaches(selectionKey, nodeName)
 	return job.ID, nil
 }
@@ -167,6 +175,25 @@ func (a *App) CancelDrainNodeJob(clusterID, jobID string) error {
 		return err
 	}
 	return store.CancelDrainForCluster(trimmedJobID, deps.ClusterID)
+}
+
+func runtimeOperationFromDrainJob(job *nodemaintenance.DrainJob) RuntimeOperation {
+	if job == nil {
+		return RuntimeOperation{}
+	}
+	return RuntimeOperation{
+		ID:          job.ID,
+		Type:        RuntimeOperationDrain,
+		ClusterID:   job.ClusterID,
+		ClusterName: job.ClusterName,
+		Target:      runtimeOperationTarget(job.ClusterID, "", "v1", "Node", "", job.NodeName),
+		Status:      string(job.Status),
+		StartedAt:   time.UnixMilli(job.StartedAt).Format(time.RFC3339),
+		DisplayName: fmt.Sprintf("Drain %s", job.NodeName),
+		Summary: map[string]string{
+			"nodeName": job.NodeName,
+		},
+	}
 }
 
 func (a *App) DeleteNode(clusterID, nodeName string) error {

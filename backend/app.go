@@ -93,6 +93,9 @@ type App struct {
 	portForwardSessions   map[string]*portForwardSessionInternal
 	portForwardSessionsMu sync.Mutex
 
+	runtimeOperations   *runtimeOperationRegistry
+	runtimeOperationsMu sync.Mutex
+
 	updateCheckOnce sync.Once
 	updateCheckMu   sync.RWMutex
 	updateInfo      *UpdateInfo
@@ -137,6 +140,7 @@ func NewApp() *App {
 		objectCatalogEntries:     make(map[string]*objectCatalogEntry),
 		shellSessions:            make(map[string]*shellSession),
 		portForwardSessions:      make(map[string]*portForwardSessionInternal),
+		runtimeOperations:        newRuntimeOperationRegistry(),
 		eventEmitter:             func(context.Context, string, ...interface{}) {},
 	}
 	app.kubeClientInitializer = func() error {

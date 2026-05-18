@@ -409,6 +409,44 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 	})
 }
 
+// CloseCluster atomically tears down runtime operations for a selected cluster
+// and removes that cluster from the selected kubeconfig set.
+func (a *App) CloseCluster(selectionOrClusterID string) error {
+	target := strings.TrimSpace(selectionOrClusterID)
+	if target == "" {
+		return fmt.Errorf("cluster selection or ID is required")
+	}
+
+	currentSelections := a.GetSelectedKubeconfigs()
+	remainingSelections := make([]string, 0, len(currentSelections))
+	targetClusterID := target
+	found := false
+	for _, selection := range currentSelections {
+		clusterID := ""
+		if parsed, err := parseKubeconfigSelection(selection); err == nil {
+			if clients := a.clusterClientsForSelection(parsed); clients != nil && clients.meta.ID != "" {
+				clusterID = clients.meta.ID
+			} else {
+				clusterID = a.clusterMetaForSelection(parsed).ID
+			}
+		}
+		if selection == target || clusterID == target {
+			if clusterID != "" {
+				targetClusterID = clusterID
+			}
+			found = true
+			continue
+		}
+		remainingSelections = append(remainingSelections, selection)
+	}
+
+	a.cleanupClusterRuntimeOperations(targetClusterID, "cluster disconnected")
+	if !found {
+		return nil
+	}
+	return a.SetSelectedKubeconfigs(remainingSelections)
+}
+
 // buildSelectionChangeIntent parses and validates a requested selection set.
 func (a *App) buildSelectionChangeIntent(selections []string, generation uint64) (selectionChangeIntent, error) {
 	intent := selectionChangeIntent{generation: generation}
@@ -568,12 +606,7 @@ func (a *App) clearKubeconfigSelection() error {
 		mgr.Shutdown()
 	}
 	for clusterID := range clusterIDs {
-		if err := a.StopClusterShellSessions(clusterID); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for cleared cluster %s: %v", clusterID, err), logsources.KubeconfigManager)
-		}
-		if err := a.StopClusterPortForwards(clusterID); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for cleared cluster %s: %v", clusterID, err), logsources.KubeconfigManager)
-		}
+		a.cleanupClusterRuntimeOperations(clusterID, "cluster disconnected")
 	}
 	a.teardownRefreshSubsystem()
 
@@ -975,12 +1008,7 @@ func (a *App) applySelectionPrune(
 		mgr.Shutdown()
 	}
 	for _, id := range removedClusterIDs {
-		if err := a.StopClusterShellSessions(id); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for deselected cluster %s: %v", id, err), logComponent)
-		}
-		if err := a.StopClusterPortForwards(id); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for deselected cluster %s: %v", id, err), logComponent)
-		}
+		a.cleanupClusterRuntimeOperations(id, "cluster disconnected")
 	}
 
 	a.settingsMu.Lock()

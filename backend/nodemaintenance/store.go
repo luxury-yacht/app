@@ -220,6 +220,55 @@ func (s *Store) CancelDrainForCluster(jobID, clusterID string) error {
 	return nil
 }
 
+// CancelActiveDrainsForClusterLifecycle cancels active drain jobs for a cluster
+// during cluster lifecycle cleanup. It intentionally bypasses RBAC checks; the
+// cluster is already being removed, so cleanup must not depend on a live client.
+func (s *Store) CancelActiveDrainsForClusterLifecycle(clusterID, message string) int {
+	expectedCluster := strings.TrimSpace(clusterID)
+	if expectedCluster == "" {
+		return 0
+	}
+	if strings.TrimSpace(message) == "" {
+		message = "Cluster disconnected"
+	}
+
+	var cancels []context.CancelFunc
+	s.mu.Lock()
+	now := time.Now().UnixMilli()
+	cancelled := 0
+	for _, job := range s.jobs {
+		if job == nil || strings.TrimSpace(job.ClusterID) != expectedCluster || !isActiveStatus(job.Status) {
+			continue
+		}
+		job.Status = DrainStatusCancelled
+		job.Message = message
+		if job.CompletedAt == 0 {
+			job.CompletedAt = now
+		}
+		job.Events = append(job.Events, DrainEvent{
+			ID:        uuid.NewString(),
+			Timestamp: job.CompletedAt,
+			Kind:      EventKindInfo,
+			Phase:     "cancelled",
+			Message:   message,
+		})
+		if cancel := s.cancels[job.ID]; cancel != nil {
+			cancels = append(cancels, cancel)
+			delete(s.cancels, job.ID)
+		}
+		cancelled++
+	}
+	if cancelled > 0 {
+		s.version++
+	}
+	s.mu.Unlock()
+
+	for _, cancel := range cancels {
+		cancel()
+	}
+	return cancelled
+}
+
 // AddInfo records a descriptive event.
 func (j *DrainJob) AddInfo(phase, message string) {
 	j.addEvent(EventKindInfo, phase, message, "", "")
@@ -246,11 +295,12 @@ func (j *DrainJob) Complete(status DrainStatus, message string) {
 	if job == nil {
 		return
 	}
+	if job.CompletedAt != 0 {
+		return
+	}
 	job.Status = status
 	job.Message = message
-	if job.CompletedAt == 0 {
-		job.CompletedAt = time.Now().UnixMilli()
-	}
+	job.CompletedAt = time.Now().UnixMilli()
 	job.Events = append(job.Events, DrainEvent{
 		ID:        uuid.NewString(),
 		Timestamp: job.CompletedAt,

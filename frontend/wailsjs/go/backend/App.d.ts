@@ -25,6 +25,8 @@ export function ClearGridTablePersistence():Promise<number>;
 
 export function ClearSSRRCache(arg1:string):Promise<void>;
 
+export function CloseCluster(arg1:string):Promise<void>;
+
 export function CloseShellSession(arg1:string):Promise<void>;
 
 export function CordonNode(arg1:string,arg2:string):Promise<void>;
@@ -216,6 +218,8 @@ export function IsSidebarVisible():Promise<boolean>;
 export function IsWorkloadHPAManaged(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<boolean>;
 
 export function ListPortForwards():Promise<Array<backend.PortForwardSession>>;
+
+export function ListRuntimeOperations():Promise<Array<backend.RuntimeOperation>>;
 
 export function ListShellSessions():Promise<Array<types.ShellSessionInfo>>;
 

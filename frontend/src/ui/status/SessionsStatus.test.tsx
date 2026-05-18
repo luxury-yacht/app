@@ -6,12 +6,14 @@ import SessionsStatus from './SessionsStatus';
 
 const listShellSessionsMock = vi.hoisted(() => vi.fn());
 const listPortForwardsMock = vi.hoisted(() => vi.fn());
+const listRuntimeOperationsMock = vi.hoisted(() => vi.fn());
 const stopPortForwardMock = vi.hoisted(() => vi.fn());
 const browserOpenURLMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   ListShellSessions: listShellSessionsMock,
   ListPortForwards: listPortForwardsMock,
+  ListRuntimeOperations: listRuntimeOperationsMock,
   StopPortForward: stopPortForwardMock,
 }));
 
@@ -102,6 +104,23 @@ describe('SessionsStatus shell session jump action', () => {
     vi.clearAllMocks();
     listShellSessionsMock.mockResolvedValue([baseShellSession]);
     listPortForwardsMock.mockResolvedValue([]);
+    listRuntimeOperationsMock.mockResolvedValue([
+      {
+        id: baseShellSession.sessionId,
+        type: 'shell',
+        clusterId: baseShellSession.clusterId,
+        clusterName: baseShellSession.clusterName,
+        target: {
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          namespace: baseShellSession.namespace,
+          name: baseShellSession.podName,
+        },
+        status: 'open',
+        startedAt: baseShellSession.startedAt,
+      },
+    ]);
     stopPortForwardMock.mockResolvedValue(undefined);
     kubeconfigState.selectedClusterId = 'cluster-a';
     kubeconfigState.selectedKubeconfigs = ['selection-a', 'selection-b'];
@@ -174,6 +193,23 @@ describe('SessionsStatus shell session jump action', () => {
         sessionId: 'shell-2',
         clusterId: 'cluster-b',
         clusterName: 'cluster-b',
+      },
+    ]);
+    listRuntimeOperationsMock.mockResolvedValue([
+      {
+        id: 'shell-2',
+        type: 'shell',
+        clusterId: 'cluster-b',
+        clusterName: 'cluster-b',
+        target: {
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          namespace: baseShellSession.namespace,
+          name: baseShellSession.podName,
+        },
+        status: 'open',
+        startedAt: baseShellSession.startedAt,
       },
     ]);
 

@@ -18,12 +18,12 @@ import {
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import { StopClusterPortForwards, StopClusterShellSessions } from '@wailsjs/go/backend/App';
+import { CloseCluster } from '@wailsjs/go/backend/App';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import { Tabs, type TabDescriptor } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
-import { readClusterPortForwardCount, requestAppState } from '@/core/app-state-access';
+import { readClusterRuntimeOperationCount, requestAppState } from '@/core/app-state-access';
 import './ClusterTabs.css';
 
 const ordersMatch = (left: string[], right: string[]) =>
@@ -36,22 +36,17 @@ type ClusterTab = {
 };
 
 const ClusterTabs: React.FC = () => {
-  const {
-    selectedKubeconfigs,
-    selectedKubeconfig,
-    setSelectedKubeconfigs,
-    setActiveKubeconfig,
-    getClusterMeta,
-  } = useKubeconfig();
+  const { selectedKubeconfigs, selectedKubeconfig, setActiveKubeconfig, getClusterMeta } =
+    useKubeconfig();
   const [tabOrder, setTabOrder] = useState<string[]>(() => getClusterTabOrder());
   const tabsRef = useRef<HTMLDivElement | null>(null);
-  // State for cluster close confirmation modal when port forwards are active.
+  // State for cluster close confirmation modal when runtime operations are active.
   const [closeConfirm, setCloseConfirm] = useState<{
     show: boolean;
     clusterId: string | null;
     clusterLabel: string;
-    forwardCount: number;
-  }>({ show: false, clusterId: null, clusterLabel: '', forwardCount: 0 });
+    operationCount: number;
+  }>({ show: false, clusterId: null, clusterLabel: '', operationCount: 0 });
 
   useEffect(() => {
     let active = true;
@@ -128,20 +123,21 @@ const ClusterTabs: React.FC = () => {
     [setActiveKubeconfig]
   );
 
-  // Handles closing a cluster tab. Checks for active port forwards first and
-  // prompts for confirmation if any are found.
+  // Handles closing a cluster tab. Checks for active runtime operations first
+  // and prompts for confirmation if any are found.
   const handleCloseTab = useCallback(
     async (selection: string) => {
       // Find the tab label for the cluster being closed.
       const tab = tabs.find((t) => t.selection === selection);
       const label = tab?.label ?? selection;
+      const clusterId = getClusterMeta(selection).id || selection;
 
-      // Check if there are active port forwards for this cluster.
+      // Check if there are active runtime operations for this cluster.
       try {
         const count = await requestAppState({
-          resource: 'cluster-port-forward-count',
+          resource: 'cluster-runtime-operation-count',
           adapter: 'runtime-read',
-          read: () => readClusterPortForwardCount(selection),
+          read: () => readClusterRuntimeOperationCount(clusterId),
         });
         if (count > 0) {
           // Show confirmation modal with the count.
@@ -149,53 +145,36 @@ const ClusterTabs: React.FC = () => {
             show: true,
             clusterId: selection,
             clusterLabel: label,
-            forwardCount: count,
+            operationCount: count,
           });
           return;
         }
       } catch (err) {
-        console.warn('Failed to check cluster port forward count:', err);
+        console.warn('Failed to check cluster runtime operation count:', err);
       }
 
-      // Stop tracked shell sessions for this cluster before closing.
       try {
-        await StopClusterShellSessions(selection);
+        await CloseCluster(selection);
       } catch (err) {
-        console.warn('Failed to stop cluster shell sessions:', err);
+        console.warn('Failed to close cluster:', err);
       }
-
-      // No active port forwards, proceed directly with closing.
-      const nextSelections = selectedKubeconfigs.filter((config) => config !== selection);
-      void setSelectedKubeconfigs(nextSelections);
     },
-    [selectedKubeconfigs, setSelectedKubeconfigs, tabs]
+    [getClusterMeta, tabs]
   );
 
-  // Handles confirmed close when user accepts stopping port forwards.
+  // Handles confirmed close when user accepts stopping runtime operations.
   const handleConfirmClose = useCallback(async () => {
     if (!closeConfirm.clusterId) return;
 
-    // Stop all port forwards for this cluster.
     try {
-      await StopClusterPortForwards(closeConfirm.clusterId);
+      await CloseCluster(closeConfirm.clusterId);
     } catch (err) {
-      console.warn('Failed to stop cluster port forwards:', err);
+      console.warn('Failed to close cluster:', err);
     }
-    try {
-      await StopClusterShellSessions(closeConfirm.clusterId);
-    } catch (err) {
-      console.warn('Failed to stop cluster shell sessions:', err);
-    }
-
-    // Close the tab.
-    const nextSelections = selectedKubeconfigs.filter(
-      (config) => config !== closeConfirm.clusterId
-    );
-    void setSelectedKubeconfigs(nextSelections);
 
     // Reset confirmation state.
-    setCloseConfirm({ show: false, clusterId: null, clusterLabel: '', forwardCount: 0 });
-  }, [closeConfirm.clusterId, selectedKubeconfigs, setSelectedKubeconfigs]);
+    setCloseConfirm({ show: false, clusterId: null, clusterLabel: '', operationCount: 0 });
+  }, [closeConfirm.clusterId]);
 
   // One useContext call for the entire drag coordinator, regardless of how
   // many tabs are rendered. Returned factory is a plain function legal inside
@@ -308,14 +287,14 @@ const ClusterTabs: React.FC = () => {
       </div>
       <ConfirmationModal
         isOpen={closeConfirm.show}
-        title="Active Port Forwards"
-        message={`Cluster "${closeConfirm.clusterLabel}" has ${closeConfirm.forwardCount} active port forward${closeConfirm.forwardCount > 1 ? 's' : ''}. Stop ${closeConfirm.forwardCount > 1 ? 'them' : 'it'} and close?`}
+        title="Active Operations"
+        message={`Cluster "${closeConfirm.clusterLabel}" has ${closeConfirm.operationCount} active operation${closeConfirm.operationCount > 1 ? 's' : ''}. Stop ${closeConfirm.operationCount > 1 ? 'them' : 'it'} and close?`}
         confirmText="Stop & Close"
         cancelText="Cancel"
         confirmButtonClass="danger"
         onConfirm={handleConfirmClose}
         onCancel={() =>
-          setCloseConfirm({ show: false, clusterId: null, clusterLabel: '', forwardCount: 0 })
+          setCloseConfirm({ show: false, clusterId: null, clusterLabel: '', operationCount: 0 })
         }
       />
     </>
