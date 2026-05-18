@@ -28,13 +28,13 @@ const appPreferenceMocks = vi.hoisted(() => ({
             : 100,
     currentValue: 0,
     min: key.includes('DockedRight')
-      ? 240
+      ? 500
       : key.includes('DockedBottom')
-        ? 180
+        ? 200
         : key.includes('FloatingWidth')
-          ? 320
+          ? 450
           : key.includes('FloatingHeight')
-            ? 240
+            ? 200
             : 0,
     max: 9999,
     runtimeSideEffect: false,

@@ -193,10 +193,10 @@ const (
 	defaultObjectPanelFloatingHeight       = 400
 	defaultObjectPanelFloatingX            = 100
 	defaultObjectPanelFloatingY            = 100
-	minObjectPanelDockedRightWidth         = 240
-	minObjectPanelDockedBottomHeight       = 180
-	minObjectPanelFloatingWidth            = 320
-	minObjectPanelFloatingHeight           = 240
+	minObjectPanelDockedRightWidth         = 500
+	minObjectPanelDockedBottomHeight       = 200
+	minObjectPanelFloatingWidth            = 450
+	minObjectPanelFloatingHeight           = 200
 	minObjectPanelFloatingX                = 1
 	minObjectPanelFloatingY                = 1
 	maxObjectPanelLayoutValue              = 9999
