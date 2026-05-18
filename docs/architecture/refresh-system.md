@@ -177,6 +177,16 @@ contains all active clusters or only the active tab cluster. Background refresh
 fans out as separate single-cluster work in each cluster runtime; it does not
 build one multi-cluster refresh scope.
 
+Open cluster tabs are retained workspaces. Only one cluster tab is foregrounded,
+but inactive open tabs still own their last-viewed navigation state and scoped
+refresh snapshots. Switching `active -> background` must preserve scoped state;
+switching `background -> active` should render the retained snapshot immediately
+and then revalidate or reconnect as needed. Clearing scoped state belongs to
+disposal paths such as cluster tab close, cluster removal/disconnect, kubeconfig
+change, auth/runtime reset, permission invalidation, or explicit view reset.
+Disabling background refresh stops background work, but it must not clear the
+last loaded data for open inactive tabs.
+
 Namespace and overview state follow the same rule. `namespaces` and
 `cluster-overview` store per-cluster scoped entries; namespace selection remains
 per cluster tab, and the active namespace list is derived from the active

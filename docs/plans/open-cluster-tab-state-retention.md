@@ -48,85 +48,83 @@ data until the tab or cluster is explicitly disposed.
 
 ### 1. Make backgrounding versus disposal explicit
 
-- [ ] Define `active`, `background-open`, and `disposed` scoped domain
+- [x] Define `active`, `background-open`, and `disposed` scoped domain
       lifecycles in the implementation notes and durable docs after the fix.
-- [ ] Treat `active -> background-open` as state-preserving.
-- [ ] Treat `background-open -> active` as an immediate render from existing
+- [x] Treat `active -> background-open` as state-preserving.
+- [x] Treat `background-open -> active` as an immediate render from existing
       scoped state, followed by normal foreground refresh/reconnect.
-- [ ] Treat cluster tab close, cluster removal/disconnect, kubeconfig changing,
+- [x] Treat cluster tab close, cluster removal/disconnect, kubeconfig changing,
       auth/runtime reset, permission invalidation, and explicit view reset as
       disposal paths.
-- [ ] Stop using generic React effect cleanup as proof that scoped data should
+- [x] Stop using generic React effect cleanup as proof that scoped data should
       be cleared. Cleanup caused by dependency changes or tab backgrounding
       should preserve state unless an explicit disposal signal is present.
-- [ ] Use `preserveState: true` only for backgrounding/inactive-view disables,
+- [x] Use `preserveState: true` only for backgrounding/inactive-view disables,
       not for disposal.
 
 ### 2. Preserve namespace scoped state across tab switches
 
-- [ ] Update `frontend/src/modules/namespace/contexts/NamespaceContext.tsx` so
+- [x] Update `frontend/src/modules/namespace/contexts/NamespaceContext.tsx` so
       selected-cluster tab changes do not rebuild or clean up every namespace
       scope unnecessarily.
-- [ ] Use state-preserving disable behavior for open-tab namespace scope
+- [x] Use state-preserving disable behavior for open-tab namespace scope
       deactivation, where disabling is still needed.
-- [ ] Keep hard namespace resets for kubeconfig changing, no selected
+- [x] Keep hard namespace resets for kubeconfig changing, no selected
       kubeconfig, cluster removal, and explicit reset flows.
-- [ ] Ensure namespace list rendering reads the active cluster's scoped state
+- [x] Ensure namespace list rendering reads the active cluster's scoped state
       instantly when it already exists.
-- [ ] Confirm the namespace provider does not clear warmed `clusterId|`
+- [x] Confirm the namespace provider does not clear warmed `clusterId|`
       namespace snapshots merely because another open cluster tab became active.
 
 ### 3. Warm supporting domains for background namespace tabs
 
-- [ ] Extend `frontend/src/core/refresh/backgroundClusterRefresher.ts` so
+- [x] Extend `frontend/src/core/refresh/backgroundClusterRefresher.ts` so
       background namespace views also refresh the `namespaces` domain for the
       target cluster.
-- [ ] Keep fanout single-cluster by calling `fetchDomainForCluster` with one
+- [x] Keep fanout single-cluster by calling `fetchDomainForCluster` with one
       `clusterId` at a time.
-- [ ] Avoid refreshing namespace-scoped content domains when no selected
+- [x] Avoid refreshing namespace-scoped content domains when no selected
       namespace exists for that background cluster.
-- [ ] Confirm background refresh disabled means "stop refreshing inactive tabs"
+- [x] Confirm background refresh disabled means "stop refreshing inactive tabs"
       rather than "clear inactive tab data."
 
 ### 4. Preserve last-viewed namespace and cluster resource data
 
-- [ ] Audit `frontend/src/modules/namespace/contexts/NsResourcesContext.tsx`
+- [x] Audit `frontend/src/modules/namespace/contexts/NsResourcesContext.tsx`
       cleanup paths and preserve scoped data for open-tab deactivation.
-- [ ] Audit `frontend/src/modules/cluster/contexts/ClusterResourcesContext.tsx`
+- [x] Audit `frontend/src/modules/cluster/contexts/ClusterResourcesContext.tsx`
       cleanup paths and preserve scoped data for open-tab deactivation.
-- [ ] Keep disposal paths clearing state so closed/removed clusters do not leave
+- [x] Keep disposal paths clearing state so closed/removed clusters do not leave
       stale scoped snapshots behind.
-- [ ] Consider a small helper or wrapper for disabling scoped domains with an
-      explicit reason, such as `backgrounding` versus `disposal`, if repeated
-      call sites make the rule easy to get wrong.
-- [ ] If a helper is added, keep the call sites readable: backgrounding
-      preserves state; disposal clears state.
+- [x] Consider a small helper or wrapper for disabling scoped domains with an
+      explicit reason. Kept the fix local because the touched call sites are
+      small and explicit enough after the change.
 
 ### 5. Add regression coverage
 
-- [ ] Add a `NamespaceContext` regression test proving namespace data for an
+- [x] Add a `NamespaceContext` regression test proving namespace data for an
       open inactive cluster survives switching away and back.
-- [ ] Add a regression test proving switching to a warmed open cluster renders
+- [x] Add a regression test proving switching to a warmed open cluster renders
       scoped state immediately without an intermediate empty/loading state.
-- [ ] Add `BackgroundClusterRefresher` coverage proving background namespace
+- [x] Add `BackgroundClusterRefresher` coverage proving background namespace
       tabs refresh both the supporting `namespaces` domain and the active
       namespace content domain with single-cluster scopes.
-- [ ] Add `NsResourcesContext` coverage for preserving last-viewed namespace
+- [x] Add `NsResourcesContext` coverage for preserving last-viewed namespace
       resource state across tab deactivation.
-- [ ] Add `ClusterResourcesContext` coverage for preserving last-viewed cluster
+- [x] Add `ClusterResourcesContext` coverage for preserving last-viewed cluster
       resource state across tab deactivation.
-- [ ] Add or update orchestrator tests around `preserveState` behavior if the
-      fix changes scoped enable/disable semantics.
+- [x] Confirm orchestrator test changes are not required because this fix uses
+      existing `preserveState` behavior without changing orchestrator semantics.
 
 ### 6. Validate
 
-- [ ] Run focused frontend tests:
+- [x] Run focused frontend tests:
 
   ```sh
   npm run test --prefix frontend -- namespace cluster refresh backgroundClusterRefresher
   ```
 
-- [ ] Run full required validation for non-documentation implementation work:
+- [x] Run full required validation for non-documentation implementation work:
 
   ```sh
   mage qc:prerelease

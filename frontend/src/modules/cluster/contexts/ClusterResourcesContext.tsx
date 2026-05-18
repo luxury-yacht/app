@@ -84,6 +84,8 @@ const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>(Object.values(CLUSTER_REFRESHE
 // Domains that use 'cluster' as their domain scope suffix (events need special scope).
 const CLUSTER_EVENTS_DOMAIN: RefreshDomain = 'cluster-events';
 
+const PRESERVE_SCOPED_STATE = { preserveState: true };
+
 const noop = () => {};
 
 // Keep merged multi-cluster payloads scoped to the active tab.
@@ -503,8 +505,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   useEffect(() => {
     const nextRefresher = activeResourceType ? clusterViewToRefresher[activeResourceType] : null;
     const previousRefresher = activeClusterRefresherRef.current;
-    const preserveClusterEventsState = (domain: RefreshDomain) =>
-      domain === CLUSTER_EVENTS_DOMAIN ? { preserveState: true } : undefined;
 
     if (previousRefresher && previousRefresher !== nextRefresher) {
       const previousDomain = CLUSTER_REFRESHER_TO_DOMAIN[previousRefresher];
@@ -514,7 +514,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
           previousDomain,
           scope,
           false,
-          preserveClusterEventsState(previousDomain)
+          PRESERVE_SCOPED_STATE
         );
       }
     }
@@ -527,23 +527,13 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       }
       const scope = getScopeForDomain(nextDomain);
       if (domainPermissionDenied[nextDomain]) {
-        refreshOrchestrator.setScopedDomainEnabled(
-          nextDomain,
-          scope,
-          false,
-          preserveClusterEventsState(nextDomain)
-        );
+        refreshOrchestrator.setScopedDomainEnabled(nextDomain, scope, false, undefined);
         activeClusterRefresherRef.current = null;
         return;
       }
       // Allow fetches even while permissions are pending to avoid delaying the view.
 
-      refreshOrchestrator.setScopedDomainEnabled(
-        nextDomain,
-        scope,
-        true,
-        preserveClusterEventsState(nextDomain)
-      );
+      refreshOrchestrator.setScopedDomainEnabled(nextDomain, scope, true, undefined);
       const state = domainStateRef.current[nextDomain];
       if (state && !state.data && state.status === 'idle') {
         // fetchScopedDomain handles streaming domains internally — it will
@@ -566,12 +556,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     return () => {
       CLUSTER_DOMAIN_SET.forEach((domain) => {
         const scope = domain === CLUSTER_EVENTS_DOMAIN ? eventsScopeForCleanup : scopeForCleanup;
-        refreshOrchestrator.setScopedDomainEnabled(
-          domain,
-          scope,
-          false,
-          domain === CLUSTER_EVENTS_DOMAIN ? { preserveState: true } : undefined
-        );
+        refreshOrchestrator.setScopedDomainEnabled(domain, scope, false, PRESERVE_SCOPED_STATE);
       });
     };
   }, [clusterScope, clusterEventsScope]);

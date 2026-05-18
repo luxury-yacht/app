@@ -97,11 +97,8 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       seen.add(scope);
       scopes.push(scope);
     });
-    if (scopes.length === 0 && namespacesScope) {
-      scopes.push(namespacesScope);
-    }
     return scopes;
-  }, [namespacesScope, selectedClusterIds]);
+  }, [selectedClusterIds]);
 
   const namespaceDomain = useRefreshScopedDomain('namespaces', namespacesScope);
   const { suppressPassiveLoading } = useAutoRefreshLoadingState();
@@ -291,6 +288,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     const activeScopeSet = new Set(namespaceScopes);
     requestedNamespaceScopesRef.current.forEach((scope) => {
       if (!activeScopeSet.has(scope)) {
+        refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, false);
         requestedNamespaceScopesRef.current.delete(scope);
       }
     });
@@ -322,7 +320,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
     return () => {
       namespaceScopes.forEach((scope) => {
-        refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, false);
+        refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, false, {
+          preserveState: true,
+        });
       });
     };
   }, [clearSelection, namespaceScopes, selectedKubeconfig, updateNamespaces]);

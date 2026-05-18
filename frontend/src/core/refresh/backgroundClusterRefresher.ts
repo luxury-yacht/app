@@ -47,6 +47,9 @@ const namespaceViewToDomain = (
   if (!namespaceView) {
     return undefined;
   }
+  if (namespaceView === 'pods') {
+    return 'pods';
+  }
   const refresherName =
     namespaceViewToRefresher[namespaceView as keyof typeof namespaceViewToRefresher];
   if (!refresherName) {
@@ -161,6 +164,8 @@ export class BackgroundClusterRefresher {
     if (viewType === 'cluster') {
       domain = clusterViewToDomain(activeClusterView);
     } else if (viewType === 'namespace') {
+      await refreshOrchestrator.fetchDomainForCluster('namespaces', clusterId);
+
       domain = namespaceViewToDomain(activeNamespaceView);
       // Namespace domains need the selected namespace as scope.
       const ns = this.getNamespace(clusterId);

@@ -202,118 +202,6 @@ export namespace backend {
 	        this.protocol = source["protocol"];
 	    }
 	}
-	export class ObjectActionDebugContainerOptions {
-	    image: string;
-	    targetContainer?: string;
-
-	    static createFrom(source: any = {}) {
-	        return new ObjectActionDebugContainerOptions(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.image = source["image"];
-	        this.targetContainer = source["targetContainer"];
-	    }
-	}
-	export class ObjectActionPortForwardOptions {
-	    containerPort: number;
-	    localPort: number;
-
-	    static createFrom(source: any = {}) {
-	        return new ObjectActionPortForwardOptions(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.containerPort = source["containerPort"];
-	        this.localPort = source["localPort"];
-	    }
-	}
-	export class ObjectActionTargetRef {
-	    clusterId: string;
-	    group: string;
-	    version: string;
-	    kind: string;
-	    namespace?: string;
-	    name: string;
-
-	    static createFrom(source: any = {}) {
-	        return new ObjectActionTargetRef(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.clusterId = source["clusterId"];
-	        this.group = source["group"];
-	        this.version = source["version"];
-	        this.kind = source["kind"];
-	        this.namespace = source["namespace"];
-	        this.name = source["name"];
-	    }
-	}
-	export class ObjectActionRequest {
-	    action: string;
-	    target: ObjectActionTargetRef;
-	    replicas?: number;
-	    suspend?: boolean;
-	    drainOptions?: any;
-	    portForward?: ObjectActionPortForwardOptions;
-	    debugContainer?: ObjectActionDebugContainerOptions;
-	    revision?: number;
-
-	    static createFrom(source: any = {}) {
-	        return new ObjectActionRequest(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.action = source["action"];
-	        this.target = this.convertValues(source["target"], ObjectActionTargetRef);
-	        this.replicas = source["replicas"];
-	        this.suspend = source["suspend"];
-	        this.drainOptions = source["drainOptions"];
-	        this.portForward = this.convertValues(source["portForward"], ObjectActionPortForwardOptions);
-	        this.debugContainer = this.convertValues(source["debugContainer"], ObjectActionDebugContainerOptions);
-	        this.revision = source["revision"];
-	    }
-
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class ObjectActionResponse {
-	    name?: string;
-	    jobId?: string;
-	    sessionId?: string;
-	    debugContainer?: any;
-
-	    static createFrom(source: any = {}) {
-	        return new ObjectActionResponse(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.jobId = source["jobId"];
-	        this.sessionId = source["sessionId"];
-	        this.debugContainer = source["debugContainer"];
-	    }
-	}
 	export class FavoriteTableState {
 	    sortColumn: string;
 	    sortDirection: string;
@@ -468,6 +356,137 @@ export namespace backend {
 	        this.clusterName = source["clusterName"];
 	    }
 	}
+	export class ObjectActionDebugContainerOptions {
+	    image: string;
+	    targetContainer?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ObjectActionDebugContainerOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.image = source["image"];
+	        this.targetContainer = source["targetContainer"];
+	    }
+	}
+	export class ObjectActionPortForwardOptions {
+	    containerPort: number;
+	    localPort: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ObjectActionPortForwardOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.containerPort = source["containerPort"];
+	        this.localPort = source["localPort"];
+	    }
+	}
+	export class ObjectActionTargetRef {
+	    clusterId: string;
+	    group: string;
+	    version: string;
+	    kind: string;
+	    namespace?: string;
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ObjectActionTargetRef(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.clusterId = source["clusterId"];
+	        this.group = source["group"];
+	        this.version = source["version"];
+	        this.kind = source["kind"];
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	    }
+	}
+	export class ObjectActionRequest {
+	    action: string;
+	    target: ObjectActionTargetRef;
+	    replicas?: number;
+	    suspend?: boolean;
+	    drainOptions?: types.DrainNodeOptions;
+	    portForward?: ObjectActionPortForwardOptions;
+	    debugContainer?: ObjectActionDebugContainerOptions;
+	    revision?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ObjectActionRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.action = source["action"];
+	        this.target = this.convertValues(source["target"], ObjectActionTargetRef);
+	        this.replicas = source["replicas"];
+	        this.suspend = source["suspend"];
+	        this.drainOptions = this.convertValues(source["drainOptions"], types.DrainNodeOptions);
+	        this.portForward = this.convertValues(source["portForward"], ObjectActionPortForwardOptions);
+	        this.debugContainer = this.convertValues(source["debugContainer"], ObjectActionDebugContainerOptions);
+	        this.revision = source["revision"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ObjectActionResponse {
+	    name?: string;
+	    jobId?: string;
+	    sessionId?: string;
+	    debugContainer?: types.DebugContainerResponse;
+	
+	    static createFrom(source: any = {}) {
+	        return new ObjectActionResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.jobId = source["jobId"];
+	        this.sessionId = source["sessionId"];
+	        this.debugContainer = this.convertValues(source["debugContainer"], types.DebugContainerResponse);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class ObjectYAMLMutationRequest {
 	    baseYAML: string;
 	    yaml: string;
@@ -544,30 +563,6 @@ export namespace backend {
 	        this.mergedYAML = source["mergedYAML"];
 	        this.currentYAML = source["currentYAML"];
 	        this.resourceVersion = source["resourceVersion"];
-	    }
-	}
-	export class PortForwardRequest {
-	    namespace: string;
-	    targetKind: string;
-	    targetGroup: string;
-	    targetVersion: string;
-	    targetName: string;
-	    containerPort: number;
-	    localPort: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new PortForwardRequest(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.namespace = source["namespace"];
-	        this.targetKind = source["targetKind"];
-	        this.targetGroup = source["targetGroup"];
-	        this.targetVersion = source["targetVersion"];
-	        this.targetName = source["targetName"];
-	        this.containerPort = source["containerPort"];
-	        this.localPort = source["localPort"];
 	    }
 	}
 	export class PortForwardSession {
@@ -2249,24 +2244,6 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
 	        this.name = source["name"];
-	    }
-	}
-	export class DebugContainerRequest {
-	    namespace: string;
-	    podName: string;
-	    image: string;
-	    targetContainer?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new DebugContainerRequest(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.namespace = source["namespace"];
-	        this.podName = source["podName"];
-	        this.image = source["image"];
-	        this.targetContainer = source["targetContainer"];
 	    }
 	}
 	export class DebugContainerResponse {

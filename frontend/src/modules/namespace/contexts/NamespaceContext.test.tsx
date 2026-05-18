@@ -15,18 +15,21 @@ import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
 let mockClusterId = 'cluster-a';
 let mockClusterIds = ['cluster-a'];
 
-const { mockRefreshOrchestrator, namespaceDomainRef } = vi.hoisted(() => {
-  return {
-    mockRefreshOrchestrator: {
-      setDomainEnabled: vi.fn(),
-      resetDomain: vi.fn(),
-      fetchScopedDomain: vi.fn(() => Promise.resolve()),
-      setScopedDomainEnabled: vi.fn(),
-      updateContext: vi.fn(),
-    },
-    namespaceDomainRef: { current: createNamespaceDomain('ready', ['alpha', 'beta']) },
-  };
-});
+const { mockRefreshOrchestrator, namespaceDomainRef, namespaceDomainsByScopeRef } = vi.hoisted(
+  () => {
+    return {
+      mockRefreshOrchestrator: {
+        setDomainEnabled: vi.fn(),
+        resetDomain: vi.fn(),
+        fetchScopedDomain: vi.fn(() => Promise.resolve()),
+        setScopedDomainEnabled: vi.fn(),
+        updateContext: vi.fn(),
+      },
+      namespaceDomainRef: { current: createNamespaceDomain('ready', ['alpha', 'beta']) },
+      namespaceDomainsByScopeRef: { current: {} as Record<string, any> },
+    };
+  }
+);
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
@@ -38,11 +41,11 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: mockRefreshOrchestrator,
-  useRefreshScopedDomain: (domain: string) => {
+  useRefreshScopedDomain: (domain: string, scope: string) => {
     if (domain !== 'namespaces') {
       throw new Error(`Unexpected scoped domain requested in test: ${domain}`);
     }
-    return namespaceDomainRef.current;
+    return namespaceDomainsByScopeRef.current[scope] ?? namespaceDomainRef.current;
   },
 }));
 
@@ -75,6 +78,7 @@ describe('NamespaceProvider selection behaviour', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     namespaceDomainRef.current = createNamespaceDomain('ready', ['alpha', 'beta']);
+    namespaceDomainsByScopeRef.current = {};
     mockClusterId = 'cluster-a';
     mockClusterIds = ['cluster-a', 'cluster-b'];
     namespaceRef.current = null;
@@ -292,6 +296,53 @@ describe('NamespaceProvider selection behaviour', () => {
       vi.runAllTimers();
     });
     expect(getSelected()).toBe('beta');
+    cleanup();
+  });
+
+  it('renders warmed namespace data immediately when switching open cluster tabs', () => {
+    namespaceDomainsByScopeRef.current = {
+      'cluster-a|': createNamespaceDomainWithCluster('ready', ['alpha'], 'cluster-a', 'alpha'),
+      'cluster-b|': createNamespaceDomainWithCluster('ready', ['gamma'], 'cluster-b', 'beta'),
+    };
+
+    const { rerender, cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(namespaceRef.current?.namespaces.map((item) => item.name)).toEqual([
+      ALL_NAMESPACES_DISPLAY_NAME,
+      'alpha',
+    ]);
+
+    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+
+    mockClusterId = 'cluster-b';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(namespaceRef.current?.namespaces.map((item) => item.name)).toEqual([
+      ALL_NAMESPACES_DISPLAY_NAME,
+      'gamma',
+    ]);
+    expect(namespaceRef.current?.namespaceLoading).toBe(false);
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-a|',
+      false,
+      { preserveState: true }
+    );
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      false,
+      { preserveState: true }
+    );
+
     cleanup();
   });
 

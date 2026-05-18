@@ -292,7 +292,8 @@ describe('NamespaceResourcesProvider', () => {
     expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'pods',
       `${testClusterId}|namespace:team-a`,
-      true
+      true,
+      undefined
     );
 
     await act(async () => {
@@ -358,7 +359,8 @@ describe('NamespaceResourcesProvider', () => {
     expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'pods',
       `${testClusterId}|namespace:team-b`,
-      false
+      false,
+      { preserveState: true }
     );
   });
 
@@ -404,6 +406,44 @@ describe('NamespaceResourcesProvider', () => {
 
     const invokedDomains = orchestrator.fetchScopedDomain.mock.calls.map((call) => call[0]);
     expect(invokedDomains).toContain('namespace-config');
+    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespace-workloads',
+      `${testClusterId}|namespace:alpha`,
+      false,
+      { preserveState: true }
+    );
+  });
+
+  it('preserves scoped resource state when the namespace view is backgrounded', async () => {
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="config">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    orchestrator.setScopedDomainEnabled.mockClear();
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+
+    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespace-config',
+      `${testClusterId}|namespace:team-a`,
+      false,
+      { preserveState: true }
+    );
+    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'pods',
+      `${testClusterId}|namespace:team-a`,
+      false,
+      { preserveState: true }
+    );
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
   });
 
   it('cancels pending load timer when namespace changes rapidly', async () => {

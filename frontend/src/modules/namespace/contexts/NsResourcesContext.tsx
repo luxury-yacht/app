@@ -118,6 +118,8 @@ const PERMISSIONS_BY_RESOURCE: Partial<Record<NamespaceViewType, PermissionSpecL
   events: [EVENT_PERMISSIONS],
 };
 
+const PRESERVE_SCOPED_STATE = { preserveState: true };
+
 // Filter merged namespace payloads to the active cluster tab.
 const filterByClusterId = <T extends { clusterId?: string | null }>(
   items: T[] | null | undefined,
@@ -749,14 +751,12 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
 
       const shouldEnable =
         Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === resourceKey;
-      const preserveEventsState =
-        domain === 'namespace-events' ? { preserveState: true } : undefined;
       if (namespaceScope) {
         refreshOrchestrator.setScopedDomainEnabled(
           domain,
           namespaceScope,
           shouldEnable,
-          preserveEventsState
+          shouldEnable ? undefined : PRESERVE_SCOPED_STATE
         );
       }
 
@@ -765,7 +765,12 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       }
     });
     if (namespaceScope) {
-      refreshOrchestrator.setScopedDomainEnabled('pods', namespaceScope, podsEnabled);
+      refreshOrchestrator.setScopedDomainEnabled(
+        'pods',
+        namespaceScope,
+        podsEnabled,
+        podsEnabled ? undefined : PRESERVE_SCOPED_STATE
+      );
     }
   }, [
     activeNamespaceView,
@@ -788,10 +793,15 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
             domain,
             cleanupScope,
             false,
-            domain === 'namespace-events' ? { preserveState: true } : undefined
+            PRESERVE_SCOPED_STATE
           );
         });
-        refreshOrchestrator.setScopedDomainEnabled('pods', cleanupScope, false);
+        refreshOrchestrator.setScopedDomainEnabled(
+          'pods',
+          cleanupScope,
+          false,
+          PRESERVE_SCOPED_STATE
+        );
       }
     };
   }, [currentNamespace, namespaceClusterId]);

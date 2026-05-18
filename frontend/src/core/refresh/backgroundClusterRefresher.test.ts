@@ -51,19 +51,41 @@ describe('BackgroundClusterRefresher', () => {
 
     await (refresher as unknown as { tick: () => Promise<void> }).tick();
 
-    expect(fetchForCluster).toHaveBeenCalledTimes(3);
+    expect(fetchForCluster).toHaveBeenCalledTimes(4);
+    expect(fetchForCluster).toHaveBeenNthCalledWith(1, 'namespaces', 'cluster-b');
     expect(fetchForCluster).toHaveBeenNthCalledWith(
-      1,
+      2,
       'namespace-network',
       'cluster-b',
       'namespace:default'
     );
-    expect(fetchForCluster).toHaveBeenNthCalledWith(2, 'nodes', 'cluster-c', undefined);
-    expect(fetchForCluster).toHaveBeenNthCalledWith(3, 'cluster-overview', 'cluster-d', undefined);
+    expect(fetchForCluster).toHaveBeenNthCalledWith(3, 'nodes', 'cluster-c', undefined);
+    expect(fetchForCluster).toHaveBeenNthCalledWith(4, 'cluster-overview', 'cluster-d', undefined);
     fetchForCluster.mock.calls.forEach(([, clusterId, scope]) => {
       expect(clusterId).not.toBe('cluster-a');
       expect(scope ?? '').not.toContain('clusters=');
       expect(scope ?? '').not.toContain('cluster-b,cluster-c');
     });
+  });
+
+  it('keeps background namespace pod views warm with namespace support data', async () => {
+    const fetchForCluster = vi
+      .spyOn(refreshOrchestrator, 'fetchDomainForCluster')
+      .mockResolvedValue(undefined);
+    const refresher = new BackgroundClusterRefresher(
+      () => ({
+        viewType: 'namespace',
+        previousView: 'overview',
+        activeNamespaceView: 'pods',
+        activeClusterView: 'nodes',
+      }),
+      () => 'team-a'
+    );
+    refresher.updateClusters('cluster-a', ['cluster-a', 'cluster-b']);
+
+    await (refresher as unknown as { tick: () => Promise<void> }).tick();
+
+    expect(fetchForCluster).toHaveBeenCalledWith('namespaces', 'cluster-b');
+    expect(fetchForCluster).toHaveBeenCalledWith('pods', 'cluster-b', 'namespace:team-a');
   });
 });

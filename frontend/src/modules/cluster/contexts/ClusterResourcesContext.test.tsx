@@ -182,4 +182,48 @@ describe('ClusterResourcesProvider', () => {
     ]);
     expect(contextRef.current?.config.meta).toEqual({ kinds: ['StorageClass'] });
   });
+
+  it('preserves scoped cluster resource state when the cluster tab is backgrounded', async () => {
+    await render();
+
+    orchestrator.setScopedDomainEnabled.mockClear();
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+
+    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'cluster-config',
+      testClusterScope,
+      false,
+      { preserveState: true }
+    );
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+  });
+
+  it('preserves the previous cluster view snapshot when switching active cluster views', async () => {
+    await render();
+
+    orchestrator.setScopedDomainEnabled.mockClear();
+
+    await act(async () => {
+      root.render(
+        <ClusterResourcesProvider activeView="nodes">
+          <TestConsumer />
+        </ClusterResourcesProvider>
+      );
+      await Promise.resolve();
+    });
+
+    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'cluster-config',
+      testClusterScope,
+      false,
+      { preserveState: true }
+    );
+  });
 });
