@@ -129,6 +129,7 @@ describe('KubeconfigContext', () => {
       selectedClusterName: 'dev',
       selectedClusterIds: ['alpha:dev'],
       allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
+      backgroundRefreshEnabled: true,
     });
 
     unmount();
@@ -162,6 +163,7 @@ describe('KubeconfigContext', () => {
       selectedClusterName: 'dev',
       selectedClusterIds: ['alpha:dev'],
       allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
+      backgroundRefreshEnabled: false,
     });
 
     unmount();
@@ -359,6 +361,7 @@ describe('KubeconfigContext', () => {
       selectedClusterName: 'minikube',
       selectedClusterIds: ['default:minikube'],
       allConnectedClusterIds: ['default:minikube'],
+      backgroundRefreshEnabled: true,
     });
 
     unmount();

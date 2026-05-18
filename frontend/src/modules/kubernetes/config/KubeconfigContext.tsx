@@ -25,7 +25,7 @@ import {
   runGridTableGC,
 } from '@shared/components/tables/persistence/gridTablePersistenceGC';
 import { eventBus, useEventBus } from '@/core/events';
-import { refreshOrchestrator } from '@/core/refresh';
+import { refreshOrchestrator, useBackgroundRefresh } from '@/core/refresh';
 
 interface KubeconfigContextType {
   kubeconfigs: types.KubeconfigInfo[];
@@ -92,6 +92,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const [selectedKubeconfigs, setSelectedKubeconfigsState] = useState<string[]>([]);
   const [selectedKubeconfig, setSelectedKubeconfigState] = useState<string>('');
   const [kubeconfigsLoading, setKubeconfigsLoading] = useState(false);
+  const { enabled: backgroundRefreshEnabled } = useBackgroundRefresh();
   const kubeconfigsRef = useRef<types.KubeconfigInfo[]>([]);
   const selectedKubeconfigsRef = useRef<string[]>([]);
   const selectedKubeconfigRef = useRef<string>('');
@@ -198,9 +199,10 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         // useBackgroundClusterRefresh, so disabling background refresh must not
         // make inactive open tabs look disconnected.
         allConnectedClusterIds: clusterIds,
+        backgroundRefreshEnabled,
       });
     },
-    []
+    [backgroundRefreshEnabled]
   );
 
   // Keep refresh context aligned with the active kubeconfig selection.

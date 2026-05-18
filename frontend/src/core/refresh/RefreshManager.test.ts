@@ -912,22 +912,46 @@ describe('RefreshManager guard paths and helpers', () => {
     expect(manualTargets).toEqual([]);
   });
 
-  it('skips cluster manual targets when background refresh has multi-cluster scope', () => {
+  it('skips cluster manual targets when background refresh covers open tabs', () => {
     const previous: RefreshContext = {
       currentView: 'cluster',
       activeClusterView: 'config',
       selectedClusterId: 'cluster-a',
-      selectedClusterIds: ['cluster-a', 'cluster-b'],
+      selectedClusterIds: ['cluster-a'],
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
+      backgroundRefreshEnabled: true,
       objectPanel: { isOpen: false },
     };
     const current: RefreshContext = {
       ...previous,
       selectedClusterId: 'cluster-b',
+      selectedClusterIds: ['cluster-b'],
     };
 
     const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
 
     expect(manualTargets).toEqual([]);
+  });
+
+  it('refreshes cluster manual targets on tab switch when background refresh is disabled', () => {
+    const previous: RefreshContext = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
+      backgroundRefreshEnabled: false,
+      objectPanel: { isOpen: false },
+    };
+    const current: RefreshContext = {
+      ...previous,
+      selectedClusterId: 'cluster-b',
+      selectedClusterIds: ['cluster-b'],
+    };
+
+    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+
+    expect(manualTargets).toEqual(['cluster-config']);
   });
 
   it('refreshes the active cluster view when the selected cluster set changes', () => {
@@ -940,8 +964,8 @@ describe('RefreshManager guard paths and helpers', () => {
     };
     const current: RefreshContext = {
       ...previous,
-      // Keep the active cluster the same but expand the selected set.
-      selectedClusterIds: ['cluster-a', 'cluster-b'],
+      // Keep the active cluster the same but expand the connected set.
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
     };
 
     const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
@@ -977,17 +1001,18 @@ describe('RefreshManager guard paths and helpers', () => {
     });
   });
 
-  it('refreshes the active cluster view when the cluster selection list changes', () => {
+  it('refreshes the active cluster view when the connected cluster list changes', () => {
     const previous: RefreshContext = {
       currentView: 'cluster',
       activeClusterView: 'config',
       selectedClusterId: 'cluster-a',
       selectedClusterIds: ['cluster-a'],
+      allConnectedClusterIds: ['cluster-a'],
       objectPanel: { isOpen: false },
     };
     const current: RefreshContext = {
       ...previous,
-      selectedClusterIds: ['cluster-a', 'cluster-b'],
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
     };
 
     const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);

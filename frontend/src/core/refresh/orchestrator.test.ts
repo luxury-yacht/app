@@ -2044,6 +2044,51 @@ describe('refreshOrchestrator', () => {
     expect(orchestratorInternals.coordinatorRuntime.scopedEnabledState.get('pods')).toBeUndefined();
   });
 
+  it('updates disabled retained scopes during background refresh without clearing cached state', async () => {
+    registerPodsDomain();
+    const scope = buildClusterScope('cluster-b', 'namespace:default');
+
+    refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
+    setScopedDomainState('pods', scope, (previous) => ({
+      ...previous,
+      status: 'ready',
+      data: {
+        clusterId: 'cluster-b',
+        pods: [makePodRow({ clusterId: 'cluster-b', name: 'cached-pod' })],
+      },
+      scope,
+    }));
+    refreshOrchestrator.setScopedDomainEnabled('pods', scope, false, {
+      preserveState: true,
+    });
+
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope,
+        version: 2,
+        checksum: 'etag-retained',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: {
+          clusterId: 'cluster-b',
+          pods: [makePodRow({ clusterId: 'cluster-b', name: 'fresh-pod' })],
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      etag: 'etag-retained',
+      notModified: false,
+    });
+
+    await refreshOrchestrator.fetchDomainForCluster('pods', 'cluster-b', 'namespace:default');
+
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
+      'pods',
+      expect.objectContaining({ scope })
+    );
+    expect(getScopedDomainState('pods', scope).data?.pods?.[0]?.name).toBe('fresh-pod');
+  });
+
   it('removes runtime state for disconnected background clusters', () => {
     registerStreamingClusterConfigDomain();
     refreshOrchestrator.updateContext({

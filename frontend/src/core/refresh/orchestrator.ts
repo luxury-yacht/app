@@ -70,6 +70,7 @@ type DomainFetchOptions = {
   isManual: boolean;
   signal?: AbortSignal;
   metricsOnly?: boolean;
+  allowDisabledRetainedScope?: boolean;
 };
 
 type InFlightRequest = {
@@ -788,7 +789,10 @@ class RefreshOrchestrator {
     // Route background work through the target cluster runtime, then perform a direct snapshot fetch.
     this.getClusterRuntime(clusterId);
     const clusterScope = buildClusterScope(clusterId, scope ?? '');
-    await this.performFetch(domain, clusterScope, { isManual: false });
+    await this.performFetch(domain, clusterScope, {
+      isManual: false,
+      allowDisabledRetainedScope: true,
+    });
   }
 
   isStreamingDomain(domain: RefreshDomain): boolean {
@@ -1463,7 +1467,10 @@ class RefreshOrchestrator {
       throw new Error(`Scoped domain "${domain}" requires a valid scope`);
     }
 
-    if (!this.isScopedDomainEnabledInternal(domain, normalizedScope)) {
+    if (
+      !options.allowDisabledRetainedScope &&
+      !this.isScopedDomainEnabledInternal(domain, normalizedScope)
+    ) {
       resetScopedDomainState(domain, normalizedScope);
       return;
     }
@@ -1537,7 +1544,10 @@ class RefreshOrchestrator {
       }
 
       if (notModified || !snapshot) {
-        if (!this.isScopedDomainEnabledInternal(domain, normalizedScope)) {
+        if (
+          !options.allowDisabledRetainedScope &&
+          !this.isScopedDomainEnabledInternal(domain, normalizedScope)
+        ) {
           return;
         }
         setScopedDomainState(domain, normalizedScope, (prev) => ({
@@ -1562,10 +1572,24 @@ class RefreshOrchestrator {
           normalizedScope
         );
         if (!applied) {
-          this.applySnapshot(domain, snapshot, etag, options.isManual, normalizedScope);
+          this.applySnapshot(
+            domain,
+            snapshot,
+            etag,
+            options.isManual,
+            normalizedScope,
+            options.allowDisabledRetainedScope
+          );
         }
       } else {
-        this.applySnapshot(domain, snapshot, etag, options.isManual, normalizedScope);
+        this.applySnapshot(
+          domain,
+          snapshot,
+          etag,
+          options.isManual,
+          normalizedScope,
+          options.allowDisabledRetainedScope
+        );
       }
       if (metricsOnly && !options.isManual) {
         runtime.recordMetricsRefresh(domain, normalizedScope);
@@ -1613,7 +1637,8 @@ class RefreshOrchestrator {
     snapshot: Snapshot<DomainPayloadMap[K]>,
     etag: string | undefined,
     isManual: boolean,
-    scope?: string
+    scope?: string,
+    allowDisabledRetainedScope = false
   ): void {
     const inFlightKey = makeInFlightKey(domain, scope);
     const tracked = this.getRuntimeForScope(domain, scope).inFlight.get(inFlightKey);
@@ -1624,7 +1649,10 @@ class RefreshOrchestrator {
     const resolvedScope = scope ?? snapshot.scope ?? '';
 
     if (resolvedScope) {
-      if (!this.isScopedDomainEnabledInternal(domain, resolvedScope)) {
+      if (
+        !allowDisabledRetainedScope &&
+        !this.isScopedDomainEnabledInternal(domain, resolvedScope)
+      ) {
         return;
       }
       setScopedDomainState(domain, resolvedScope, (prev) => ({

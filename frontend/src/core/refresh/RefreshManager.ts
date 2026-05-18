@@ -30,8 +30,9 @@ export interface RefreshContext {
   selectedClusterIds?: string[];
   selectedClusterId?: string;
   selectedClusterName?: string;
-  // All connected cluster IDs when background refresh is enabled (system domains + background refresher).
+  // All open/connected cluster IDs; backgroundRefreshEnabled controls whether inactive tabs do work.
   allConnectedClusterIds?: string[];
+  backgroundRefreshEnabled?: boolean;
   objectPanel: {
     isOpen: boolean;
     objectKind?: string;
@@ -499,10 +500,15 @@ class RefreshManager {
     };
     // Switching active clusters should refresh the active view even if the view type is unchanged.
     const clusterChanged = previous.selectedClusterId !== current.selectedClusterId;
-    const clusterSelectionChanged = !hasSameClusterSelection(
-      previous.selectedClusterIds,
-      current.selectedClusterIds
+    const connectedClusterSelectionChanged = !hasSameClusterSelection(
+      previous.allConnectedClusterIds ?? previous.selectedClusterIds,
+      current.allConnectedClusterIds ?? current.selectedClusterIds
     );
+    const connectedClusterIds = normalizeClusterIds(
+      current.allConnectedClusterIds ?? current.selectedClusterIds
+    );
+    const backgroundRefreshCoversTabs =
+      Boolean(current.backgroundRefreshEnabled) && connectedClusterIds.length > 1;
 
     // Namespace scope changes include the cluster identity tied to the selection.
     const namespaceChanged =
@@ -529,10 +535,8 @@ class RefreshManager {
       }
     }
 
-    // Avoid forced refreshes on cluster switches when background refresh already covers all tabs.
-    const hasMultiClusterScope = (current.selectedClusterIds ?? []).length > 1;
-
-    if (clusterChanged && current.currentView === 'cluster' && !hasMultiClusterScope) {
+    // Avoid forced refreshes on cluster switches when background refresh already covers open tabs.
+    if (clusterChanged && current.currentView === 'cluster' && !backgroundRefreshCoversTabs) {
       const clusterRefresher = current.activeClusterView
         ? clusterViewToRefresher[current.activeClusterView]
         : null;
@@ -541,7 +545,7 @@ class RefreshManager {
       }
     }
 
-    if (clusterSelectionChanged && current.currentView === 'cluster') {
+    if (connectedClusterSelectionChanged && current.currentView === 'cluster') {
       const clusterRefresher = current.activeClusterView
         ? clusterViewToRefresher[current.activeClusterView]
         : null;
@@ -550,7 +554,7 @@ class RefreshManager {
       }
     }
 
-    if (clusterChanged && current.currentView === 'overview') {
+    if (clusterChanged && current.currentView === 'overview' && !backgroundRefreshCoversTabs) {
       targets.add(SYSTEM_REFRESHERS.clusterOverview);
     }
 
