@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
@@ -130,7 +131,7 @@ func (a *App) startObjectCatalog() {
 	for _, target := range targets {
 		if err := a.startObjectCatalogForTarget(target); err != nil {
 			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", target.meta.ID, err), logsources.ObjectCatalog)
+				a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", target.meta.ID, err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 			}
 			continue
 		}
@@ -162,7 +163,7 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 
 	deps := objectcatalog.Dependencies{
 		Common:                       commonDeps,
-		Logger:                       a.logger,
+		Logger:                       applog.ClusterScoped(a.logger, target.meta.ID, target.meta.Name),
 		Telemetry:                    telemetryRecorder,
 		InformerFactory:              subsystem.InformerFactory.SharedInformerFactory(),
 		APIExtensionsInformerFactory: subsystem.InformerFactory.APIExtensionsInformerFactory(),
@@ -200,14 +201,14 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 		defer close(done)
 		if err := a.waitForCatalogInformerCaches(ctx, subsystem.InformerFactory); err != nil {
 			if !errors.Is(err, context.Canceled) && a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Object catalog waiting for informer caches failed: %v", err), logsources.ObjectCatalog)
+				a.logger.Warn(fmt.Sprintf("Object catalog waiting for informer caches failed: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 			}
 			if ctx.Err() != nil {
 				return
 			}
 		}
 		if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			a.logger.Warn(fmt.Sprintf("Object catalog terminated unexpectedly: %v", err), logsources.ObjectCatalog)
+			a.logger.Warn(fmt.Sprintf("Object catalog terminated unexpectedly: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 		}
 	}()
 

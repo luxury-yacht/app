@@ -410,6 +410,10 @@ export function LogAppLogsFromFrontend(arg1, arg2, arg3) {
   return window['go']['backend']['App']['LogAppLogsFromFrontend'](arg1, arg2, arg3);
 }
 
+export function LogAppLogsFromFrontendWithCluster(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['backend']['App']['LogAppLogsFromFrontendWithCluster'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function MatchThemeForCluster(arg1) {
   return window['go']['backend']['App']['MatchThemeForCluster'](arg1);
 }

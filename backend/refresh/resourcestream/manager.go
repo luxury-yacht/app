@@ -289,6 +289,20 @@ func (m *Manager) Stop() {
 	}
 }
 
+func (m *Manager) logWarn(message string) {
+	if m == nil || m.logger == nil {
+		return
+	}
+	m.logger.Warn(message, logsources.ResourceStream, m.clusterMeta.ClusterID, m.clusterMeta.ClusterName)
+}
+
+func (m *Manager) logInfo(message string) {
+	if m == nil || m.logger == nil {
+		return
+	}
+	m.logger.Info(message, logsources.ResourceStream, m.clusterMeta.ClusterID, m.clusterMeta.ClusterName)
+}
+
 // SetCustomResourceCacheInvalidator registers a cache eviction callback for custom resources.
 func (m *Manager) SetCustomResourceCacheInvalidator(invalidator func(kind, namespace, name string)) {
 	if m == nil {
@@ -545,7 +559,7 @@ func (m *Manager) Subscribe(domain, scope string) (*Subscription, error) {
 	if len(subs) >= config.ResourceStreamMaxSubscribersPerScope {
 		m.mu.Unlock()
 		err := fmt.Errorf("resource stream subscriber limit reached for %s/%s", domain, normalized)
-		m.logger.Warn(err.Error(), logsources.ResourceStream)
+		m.logWarn(err.Error())
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -782,10 +796,7 @@ func (m *Manager) handleService(obj interface{}, updateType MessageType) {
 
 	slices, err := m.listEndpointSlicesForService(service.Namespace, service.Name)
 	if err != nil {
-		m.logger.Warn(
-			fmt.Sprintf("resource stream: list endpoint slices for service %s/%s failed: %v", service.Namespace, service.Name, err),
-			"ResourceStream",
-		)
+		m.logWarn(fmt.Sprintf("resource stream: list endpoint slices for service %s/%s failed: %v", service.Namespace, service.Name, err))
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -831,10 +842,7 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 	}
 	slices, err := m.listEndpointSlicesForService(slice.Namespace, serviceName)
 	if err != nil {
-		m.logger.Warn(
-			fmt.Sprintf("resource stream: list endpoint slices for service %s/%s failed: %v", slice.Namespace, serviceName, err),
-			"ResourceStream",
-		)
+		m.logWarn(fmt.Sprintf("resource stream: list endpoint slices for service %s/%s failed: %v", slice.Namespace, serviceName, err))
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1094,7 +1102,7 @@ func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
 	}
 	pods, err := m.podsForNode(node.Name)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: list pods for node %s failed: %v", node.Name, err), logsources.ResourceStream)
+		m.logWarn(fmt.Sprintf("resource stream: list pods for node %s failed: %v", node.Name, err))
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1103,7 +1111,7 @@ func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
 
 	summary, err := snapshot.BuildNodeSummary(m.clusterMeta, node, pods, m.metrics)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err), logsources.ResourceStream)
+		m.logWarn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err))
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1138,7 +1146,7 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 	ownerKey := snapshot.WorkloadOwnerKey(kind, namespace, workload.GetName())
 	pods, err := m.podsForWorkload(namespace, ownerKey)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err), logsources.ResourceStream)
+		m.logWarn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err))
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1148,7 +1156,7 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 	podUsage := m.podMetricsSnapshot()
 	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, podUsage)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err), logsources.ResourceStream)
+		m.logWarn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err))
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1199,7 +1207,7 @@ func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType,
 
 	pods, err := m.podsForWorkload(namespace, ownerKey)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err), logsources.ResourceStream)
+		m.logWarn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err))
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1208,7 +1216,7 @@ func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType,
 
 	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, usage)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err), logsources.ResourceStream)
+		m.logWarn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err))
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1268,7 +1276,7 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 	node, err := m.nodeLister.Get(pod.Spec.NodeName)
 	if err != nil || node == nil {
 		if err != nil {
-			m.logger.Warn(fmt.Sprintf("resource stream: resolve node %s failed: %v", pod.Spec.NodeName, err), logsources.ResourceStream)
+			m.logWarn(fmt.Sprintf("resource stream: resolve node %s failed: %v", pod.Spec.NodeName, err))
 			if m.telemetry != nil {
 				m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 			}
@@ -1279,7 +1287,7 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 	// Pod changes affect node summaries (pod counts, restarts, and metrics usage).
 	pods, err := m.podsForNode(node.Name)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: list pods for node %s failed: %v", node.Name, err), logsources.ResourceStream)
+		m.logWarn(fmt.Sprintf("resource stream: list pods for node %s failed: %v", node.Name, err))
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1287,7 +1295,7 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 	}
 	summary, err := snapshot.BuildNodeSummary(m.clusterMeta, node, pods, m.metrics)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err), logsources.ResourceStream)
+		m.logWarn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err))
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1368,7 +1376,7 @@ func (m *Manager) broadcast(domain string, scopes []string, update Update) {
 			}
 		}
 		if closedCount > 0 {
-			m.logger.Info(fmt.Sprintf("resource stream: cleaned up %d closed subscribers for %s/%s", closedCount, domain, scope), logsources.ResourceStream)
+			m.logInfo(fmt.Sprintf("resource stream: cleaned up %d closed subscribers for %s/%s", closedCount, domain, scope))
 		}
 	}
 }

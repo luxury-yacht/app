@@ -8,6 +8,7 @@ import {
 } from './appLogsClient';
 
 const logAppLogsFromFrontendMock = vi.fn();
+const logAppLogsFromFrontendWithClusterMock = vi.fn();
 
 const setBackendLogApi = (api: unknown) => {
   (window as any).go = {
@@ -20,8 +21,10 @@ const setBackendLogApi = (api: unknown) => {
 describe('appLogsClient', () => {
   beforeEach(() => {
     logAppLogsFromFrontendMock.mockReset();
+    logAppLogsFromFrontendWithClusterMock.mockReset();
     setBackendLogApi({
       LogAppLogsFromFrontend: logAppLogsFromFrontendMock,
+      LogAppLogsFromFrontendWithCluster: logAppLogsFromFrontendWithClusterMock,
     });
     delete (window as any).runtime;
   });
@@ -69,6 +72,22 @@ describe('appLogsClient', () => {
 
     expect(logAppLogsFromFrontendMock).toHaveBeenCalledTimes(1);
     expect(logAppLogsFromFrontendMock).toHaveBeenCalledWith('info', 'visible message', 'Frontend');
+  });
+
+  it('sends frontend logs with structured cluster metadata when available', () => {
+    logAppLogsWarn(' cluster warning ', ' CatalogStream ', {
+      clusterId: ' cluster-a ',
+      clusterName: ' Alpha ',
+    });
+
+    expect(logAppLogsFromFrontendWithClusterMock).toHaveBeenCalledWith(
+      'warn',
+      'cluster warning',
+      'CatalogStream',
+      'cluster-a',
+      'Alpha'
+    );
+    expect(logAppLogsFromFrontendMock).not.toHaveBeenCalled();
   });
 
   it('ignores unavailable or failing backend logging APIs', () => {

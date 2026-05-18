@@ -176,9 +176,7 @@ func (s *Service) Run(ctx context.Context) error {
 			close(s.doneCh)
 			return
 		}
-		if s.deps.Logger != nil {
-			s.deps.Logger.Info("Object catalog service starting", componentName)
-		}
+		s.logInfo("Object catalog service starting")
 		runErr = s.runLoop(ctx)
 	})
 	return runErr

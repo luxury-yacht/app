@@ -10,7 +10,12 @@ import type { PermissionDeniedStatus } from '../types';
 import { stripClusterScope } from '../clusterScope';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus, type AppEvents } from '@/core/events';
-import { APP_LOG_SOURCES, logAppLogsInfo, logAppLogsWarn } from '@/core/logging/appLogsClient';
+import {
+  APP_LOG_SOURCES,
+  logAppLogsInfo,
+  logAppLogsWarn,
+  type AppLogsClusterMeta,
+} from '@/core/logging/appLogsClient';
 import { resolvePermissionDeniedMessage } from '../permissionErrors';
 import {
   getResourceStreamDomainDescriptor,
@@ -48,12 +53,12 @@ const STREAM_UNSUBSCRIBE_DEBOUNCE_MS = 500;
 // Cap queued updates to avoid unbounded memory growth under bursty streams.
 const MAX_UPDATE_QUEUE = 1000;
 
-const logInfo = (message: string): void => {
-  logAppLogsInfo(message, APP_LOG_SOURCES.ResourceStream);
+const logInfo = (message: string, cluster?: AppLogsClusterMeta): void => {
+  logAppLogsInfo(message, APP_LOG_SOURCES.ResourceStream, cluster);
 };
 
-const logWarning = (message: string): void => {
-  logAppLogsWarn(message, APP_LOG_SOURCES.ResourceStream);
+const logWarning = (message: string, cluster?: AppLogsClusterMeta): void => {
+  logAppLogsWarn(message, APP_LOG_SOURCES.ResourceStream, cluster);
 };
 
 const MESSAGE_TYPES = {
@@ -407,7 +412,10 @@ export class ResourceStreamManager {
   handleConnectionOpen(clusterId: string): void {
     const targetClusterId = clusterId.trim();
     // Log when the websocket is connected so it is clear streaming is active.
-    logInfo(`[resource-stream] connection open clusterId=${targetClusterId || 'all'}`);
+    logInfo(
+      `[resource-stream] connection open clusterId=${targetClusterId || 'all'}`,
+      targetClusterId ? { clusterId: targetClusterId } : undefined
+    );
     this.markConnectionOpen();
     if (targetClusterId) {
       this.clearStreamError(targetClusterId);
@@ -992,7 +1000,8 @@ export class ResourceStreamManager {
     });
 
     logWarning(
-      `[resource-stream] drift detected domain=${subscription.domain} scope=${subscription.reportScope} reason=${details.reason} streamCount=${details.streamCount} snapshotCount=${details.snapshotCount} missingKeys=${details.missingKeys} extraKeys=${details.extraKeys}`
+      `[resource-stream] drift detected domain=${subscription.domain} scope=${subscription.reportScope} reason=${details.reason} streamCount=${details.streamCount} snapshotCount=${details.snapshotCount} missingKeys=${details.missingKeys} extraKeys=${details.extraKeys}`,
+      { clusterId: subscription.clusterId }
     );
   }
 

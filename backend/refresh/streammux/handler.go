@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -76,6 +77,7 @@ func NewHandler(cfg Config) (*Handler, error) {
 	if cfg.Logger == nil {
 		cfg.Logger = noopLogger{}
 	}
+	cfg.Logger = applog.ClusterScoped(cfg.Logger, cfg.ClusterID, cfg.ClusterName)
 	if cfg.StreamName == "" {
 		return nil, errors.New("stream name is required")
 	}
@@ -404,7 +406,7 @@ func (s *session) enqueue(msg ServerMessage) {
 
 func (s *session) handleBackpressure(msg ServerMessage) {
 	if msg.Type == MessageTypeHeartbeat {
-		s.logger.Warn("stream mux: outgoing buffer full, dropping heartbeat", logsources.StreamMux)
+		s.logger.Warn("stream mux: outgoing buffer full, dropping heartbeat", logsources.StreamMux, s.clusterID, s.clusterName)
 		return
 	}
 
@@ -418,7 +420,7 @@ func (s *session) handleBackpressure(msg ServerMessage) {
 	}
 
 	if msg.Domain == "" || msg.Scope == "" {
-		s.logger.Warn("stream mux: outgoing buffer full, dropping message", logsources.StreamMux)
+		s.logger.Warn("stream mux: outgoing buffer full, dropping message", logsources.StreamMux, s.clusterID, s.clusterName)
 		return
 	}
 
@@ -439,9 +441,9 @@ func (s *session) handleBackpressure(msg ServerMessage) {
 	}
 	select {
 	case s.outgoing <- reset:
-		s.logger.Warn(fmt.Sprintf("stream mux: outgoing buffer full, issued reset for %s/%s", msg.Domain, msg.Scope), logsources.StreamMux)
+		s.logger.Warn(fmt.Sprintf("stream mux: outgoing buffer full, issued reset for %s/%s", msg.Domain, msg.Scope), logsources.StreamMux, clusterID, clusterName)
 	default:
-		s.logger.Warn("stream mux: outgoing buffer full, dropping message", logsources.StreamMux)
+		s.logger.Warn("stream mux: outgoing buffer full, dropping message", logsources.StreamMux, clusterID, clusterName)
 	}
 }
 

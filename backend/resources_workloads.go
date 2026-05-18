@@ -10,6 +10,7 @@ package backend
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/workloads"
@@ -99,6 +100,7 @@ func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, cl
 	}
 
 	if clients == nil {
+		deps.Logger = applog.ClusterScoped(deps.Logger, deps.ClusterID, deps.ClusterName)
 		return deps
 	}
 
@@ -106,6 +108,7 @@ func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, cl
 	if clients.meta.Name != "" {
 		deps.ClusterName = clients.meta.Name
 	}
+	deps.Logger = applog.ClusterScoped(deps.Logger, deps.ClusterID, deps.ClusterName)
 
 	deps.KubernetesClient = clients.client
 	deps.GatewayClient = clients.gatewayClient
@@ -116,8 +119,8 @@ func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, cl
 	deps.RestConfig = clients.restConfig
 	deps.EnsureClient = func(resourceKind string) error {
 		if deps.KubernetesClient == nil {
-			if a.logger != nil {
-				a.logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
+			if deps.Logger != nil {
+				deps.Logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
 			}
 			return fmt.Errorf("kubernetes client not initialized")
 		}
@@ -125,8 +128,8 @@ func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, cl
 	}
 	deps.EnsureAPIExtensions = func(resourceKind string) error {
 		if deps.APIExtensionsClient == nil {
-			if a.logger != nil {
-				a.logger.Error(fmt.Sprintf("API extensions client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
+			if deps.Logger != nil {
+				deps.Logger.Error(fmt.Sprintf("API extensions client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
 			}
 			return fmt.Errorf("apiextensions client not initialized")
 		}

@@ -396,6 +396,53 @@ describe('AppLogsPanel', () => {
     cleanup();
   });
 
+  it('renders and filters app-global logs with an explicit scope', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      {
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Settings loaded',
+        source: 'Settings',
+      },
+      {
+        timestamp: '2024-01-01T00:00:01.000Z',
+        level: 'info',
+        message: 'Cluster A ready',
+        source: 'Auth',
+        clusterId: 'kube-alpha:alpha',
+        clusterName: 'alpha',
+      },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+
+    const clusters = Array.from(container.querySelectorAll('.log-cluster')).map(
+      (entry) => entry.textContent
+    );
+    expect(clusters).toEqual(['[Global]', '[alpha]']);
+
+    const clustersDropdown = latestDropdown('Clusters');
+    expect(clustersDropdown?.options.map((option: any) => option.label)).toEqual([
+      'Global',
+      'kube-alpha:alpha',
+    ]);
+
+    await act(async () => {
+      clustersDropdown?.onChange(['__app_global__']);
+      await Promise.resolve();
+    });
+
+    const entries = Array.from(container.querySelectorAll('.log-entry'));
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.textContent).toContain('[Global]');
+    expect(entries[0]?.textContent).toContain('Settings loaded');
+
+    cleanup();
+  });
+
   it('uses shared dropdown bulk actions instead of custom select-all options', async () => {
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([

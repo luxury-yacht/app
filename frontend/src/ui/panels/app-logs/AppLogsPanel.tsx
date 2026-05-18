@@ -38,6 +38,8 @@ const LOG_LEVEL_BASE_OPTIONS = [
 ];
 const ALL_LEVEL_VALUES = LOG_LEVEL_BASE_OPTIONS.map((option) => option.value);
 const DEFAULT_LOG_LEVELS = ALL_LEVEL_VALUES;
+const GLOBAL_LOG_SCOPE_VALUE = '__app_global__';
+const GLOBAL_LOG_SCOPE_LABEL = 'Global';
 
 const findLatestSequence = (entries: LogEntry[], fallback = 0) =>
   entries.reduce(
@@ -46,14 +48,19 @@ const findLatestSequence = (entries: LogEntry[], fallback = 0) =>
     fallback
   );
 
+const getLogScopeValue = (log: LogEntry) => {
+  const clusterId = log.clusterId?.trim() ?? '';
+  const clusterName = log.clusterName?.trim() ?? '';
+  return clusterId || clusterName || GLOBAL_LOG_SCOPE_VALUE;
+};
+
+const getLogScopeLabel = (log: LogEntry) =>
+  log.clusterName?.trim() || log.clusterId?.trim() || GLOBAL_LOG_SCOPE_LABEL;
+
 const buildClusterOption = (log: LogEntry) => {
   const clusterId = log.clusterId?.trim() ?? '';
   const clusterName = log.clusterName?.trim() ?? '';
-  const value = clusterId || clusterName;
-
-  if (!value) {
-    return null;
-  }
+  const value = getLogScopeValue(log);
 
   let fileName = '';
   let context = '';
@@ -79,7 +86,7 @@ const buildClusterOption = (log: LogEntry) => {
     context = clusterName || clusterId;
   }
 
-  const label = fileName && context ? `${fileName}:${context}` : context || value;
+  const label = fileName && context ? `${fileName}:${context}` : context || GLOBAL_LOG_SCOPE_LABEL;
 
   return {
     value,
@@ -183,7 +190,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
         0
       );
     }
-  }, [logs, logLevelFilter, componentFilter, textFilter, isAutoScroll]);
+  }, [logs, logLevelFilter, componentFilter, clusterFilter, textFilter, isAutoScroll]);
 
   useEffect(() => {
     if (!isAutoScroll) {
@@ -321,16 +328,24 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
 
   const clusterOptions = useMemo(() => {
     const seen = new Set<string>();
-    const options: Array<NonNullable<ReturnType<typeof buildClusterOption>>> = [];
+    const options: Array<ReturnType<typeof buildClusterOption>> = [];
     logs.forEach((log) => {
       const option = buildClusterOption(log);
-      if (!option || seen.has(option.value)) {
+      if (seen.has(option.value)) {
         return;
       }
       seen.add(option.value);
       options.push(option);
     });
-    options.sort((left, right) => left.label.localeCompare(right.label));
+    options.sort((left, right) => {
+      if (left.value === GLOBAL_LOG_SCOPE_VALUE) {
+        return -1;
+      }
+      if (right.value === GLOBAL_LOG_SCOPE_VALUE) {
+        return 1;
+      }
+      return left.label.localeCompare(right.label);
+    });
     return options;
   }, [logs]);
 
@@ -485,7 +500,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
           return false;
         }
         // Filter by cluster
-        const clusterValue = log.clusterId || log.clusterName || '';
+        const clusterValue = getLogScopeValue(log);
         if (clusterFilter.length > 0 && !clusterFilter.includes(clusterValue)) {
           return false;
         }
@@ -496,7 +511,16 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
           const matchesSource = log.source?.toLowerCase().includes(searchText) || false;
           const matchesClusterId = log.clusterId?.toLowerCase().includes(searchText) || false;
           const matchesClusterName = log.clusterName?.toLowerCase().includes(searchText) || false;
-          if (!matchesMessage && !matchesSource && !matchesClusterId && !matchesClusterName) {
+          const matchesScope =
+            clusterValue === GLOBAL_LOG_SCOPE_VALUE &&
+            GLOBAL_LOG_SCOPE_LABEL.toLowerCase().includes(searchText);
+          if (
+            !matchesMessage &&
+            !matchesSource &&
+            !matchesClusterId &&
+            !matchesClusterName &&
+            !matchesScope
+          ) {
             return false;
           }
         }
@@ -574,8 +598,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
         const timestamp = formatTimestamp(log.timestamp);
         const level = log.level.toUpperCase().padEnd(5);
         const source = log.source ? `[${log.source}] ` : '';
-        const cluster = log.clusterName || log.clusterId;
-        const clusterPart = cluster ? `[${cluster}] ` : '';
+        const clusterPart = `[${getLogScopeLabel(log)}] `;
         return `${timestamp} ${level} ${source}${clusterPart}${log.message}`;
       })
       .join('\n');
@@ -787,9 +810,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
               <span className="log-timestamp">{formatTimestamp(log.timestamp)}</span>
               <span className={`log-level ${log.level.toUpperCase()}`}>{log.level}</span>
               {log.source && <span className="log-source">[{log.source}]</span>}
-              {(log.clusterName || log.clusterId) && (
-                <span className="log-cluster">[{log.clusterName || log.clusterId}]</span>
-              )}
+              <span className="log-cluster">[{getLogScopeLabel(log)}]</span>
               <span className="log-message">{log.message}</span>
             </div>
           ))

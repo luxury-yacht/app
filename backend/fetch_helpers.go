@@ -65,7 +65,7 @@ func FetchResourceWithSelection[T any](
 
 	result, err := executeWithRetry(ctx, a, selectionKey, resourceKind, identifier, fetchFunc)
 	if err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to fetch %s %s: %v", resourceKind, identifier, err), logsources.ResourceLoader)
+		a.logger.Error(fmt.Sprintf("Failed to fetch %s %s: %v", resourceKind, identifier, err), logsources.ResourceLoader, selectionKey, a.clusterNameForID(selectionKey))
 		// Include clusterId in error payload so frontend can identify which cluster
 		// the error belongs to. selectionKey is the clusterID when set by callers
 		// like FetchNamespacedResource and FetchClusterResource.
@@ -109,7 +109,7 @@ func FetchResourceList[T any](
 
 	result, err := executeWithRetry(ctx, a, clusterID, resourceKind, scope, fetchFunc)
 	if err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), logsources.ResourceLoader)
+		a.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), logsources.ResourceLoader, clusterID, a.clusterNameForID(clusterID))
 		// Include clusterId in error payload so frontend can identify which cluster
 		// the error belongs to.
 		a.emitEvent("backend-error", map[string]any{
@@ -171,8 +171,10 @@ func FetchClusterResource[T any](
 // ensureDependenciesInitialized checks the cluster-scoped dependencies before fetching.
 func ensureDependenciesInitialized(a *App, deps common.Dependencies, resourceKind string) error {
 	if deps.KubernetesClient == nil {
-		if a != nil && a.logger != nil {
-			a.logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
+		if deps.Logger != nil {
+			deps.Logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
+		} else if a != nil && a.logger != nil {
+			a.logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), logsources.ResourceLoader, deps.ClusterID, deps.ClusterName)
 		}
 		return fmt.Errorf("kubernetes client not initialized")
 	}
@@ -220,7 +222,7 @@ func executeWithRetry[T any](ctx context.Context, a *App, clusterID, resourceKin
 			}
 			if a != nil {
 				if a.logger != nil {
-					a.logger.Warn(fmt.Sprintf("Retrying %s %s due to %s (attempt %d/%d)", resourceKind, target, reason, attempt+1, config.ResourceFetchMaxAttempts-1), logsources.ResourceLoader)
+					a.logger.Warn(fmt.Sprintf("Retrying %s %s due to %s (attempt %d/%d)", resourceKind, target, reason, attempt+1, config.ResourceFetchMaxAttempts-1), logsources.ResourceLoader, clusterID, a.clusterNameForID(clusterID))
 				}
 				if a.telemetryRecorder != nil {
 					a.telemetryRecorder.RecordRetryAttempt(err)

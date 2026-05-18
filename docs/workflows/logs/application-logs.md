@@ -46,8 +46,10 @@ The Wails-exposed backend API is in `backend/app_logs.go`:
 - `GetAppLogsSince(sequence)` returns retained entries newer than the provided
   sequence.
 - `ClearAppLogs()` clears the logger; after clear, the backend buffer is empty.
-- `LogAppLogsFromFrontend(level, message, source)` lets frontend code append entries into
-  the backend Application Logs buffer.
+- `LogAppLogsFromFrontend(level, message, source)` lets frontend code append
+  app-global entries into the backend Application Logs buffer.
+- `LogAppLogsFromFrontendWithCluster(level, message, source, clusterId, clusterName)`
+  lets frontend code append entries with structured cluster metadata.
 
 ### Backend Ingestion Sources
 
@@ -151,8 +153,8 @@ The panel provides:
 
 ### Frontend Log Producers
 
-`frontend/src/core/logging/appLogsClient.ts` wraps `window.go.backend.App.LogAppLogsFromFrontend`
-and exports:
+`frontend/src/core/logging/appLogsClient.ts` wraps the Wails backend logging
+methods and exports:
 
 - `logAppLogsDebug`
 - `logAppLogsInfo`
@@ -247,10 +249,14 @@ This matters because the app is multi-cluster. A global log panel is fine, but
 object-specific messages should also be filterable without relying on free-form
 text.
 
+Application Logs always render an explicit scope. Entries with `clusterId` or
+`clusterName` render that cluster; entries without cluster metadata render as
+`Global`.
+
 ### Source Names Are Still Not Enforced
 
-The `source` field is still an arbitrary string. `LogAppLogsFromFrontend` also
-accepts a source string from callers. That keeps the API simple, but custom or
+The `source` field is still an arbitrary string. The frontend logging APIs also
+accept source strings from callers. That keeps the API simple, but custom or
 one-off sources can still appear.
 
 If stricter filtering becomes important, make `source` an enum-like type for

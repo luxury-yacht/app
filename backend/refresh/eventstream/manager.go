@@ -207,6 +207,13 @@ func (m *Manager) Resume(scope string, since uint64) ([]StreamEvent, bool) {
 	return events, true
 }
 
+func (m *Manager) logWarn(message string) {
+	if m == nil || m.logger == nil {
+		return
+	}
+	m.logger.Warn(message, logsources.EventStream, m.clusterID)
+}
+
 // NextSequence reserves a sequence for non-event payloads (for example, initial snapshots).
 func (m *Manager) NextSequence(scope string) uint64 {
 	m.mu.Lock()
@@ -222,14 +229,11 @@ func (m *Manager) addSubscriberLocked(scope string) (uint64, *subscription, bool
 
 	// Check subscriber limit before adding.
 	if len(m.subscribers[scope]) >= config.EventStreamMaxSubscribersPerScope {
-		m.logger.Warn(
-			fmt.Sprintf(
-				"eventstream: subscriber limit (%d) reached for scope %s",
-				config.EventStreamMaxSubscribersPerScope,
-				scope,
-			),
-			"EventStream",
-		)
+		m.logWarn(fmt.Sprintf(
+			"eventstream: subscriber limit (%d) reached for scope %s",
+			config.EventStreamMaxSubscribersPerScope,
+			scope,
+		))
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(
 				telemetry.StreamEvents,
@@ -335,7 +339,7 @@ func (m *Manager) broadcast(scope string, entry Entry) {
 			}
 			continue
 		}
-		m.logger.Warn("eventstream: subscriber channel full after drop attempt; closing", logsources.EventStream)
+		m.logWarn("eventstream: subscriber channel full after drop attempt; closing")
 		go m.dropSubscriber(scope, item.id, sub)
 	}
 	m.recordDelivery(delivered, backlogDrops)

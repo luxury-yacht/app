@@ -40,6 +40,15 @@ func (a *App) ClearAppLogs() error {
 
 // LogAppLogsFromFrontend appends a log entry originating from the frontend to the application log store.
 func (a *App) LogAppLogsFromFrontend(level string, message string, source string) error {
+	return a.logAppLogsFromFrontend(level, message, source, "", "")
+}
+
+// LogAppLogsFromFrontendWithCluster appends a frontend log entry with structured cluster metadata.
+func (a *App) LogAppLogsFromFrontendWithCluster(level string, message string, source string, clusterID string, clusterName string) error {
+	return a.logAppLogsFromFrontend(level, message, source, clusterID, clusterName)
+}
+
+func (a *App) logAppLogsFromFrontend(level string, message string, source string, clusterID string, clusterName string) error {
 	if a.logger == nil {
 		return fmt.Errorf("logger not initialized")
 	}
@@ -51,16 +60,17 @@ func (a *App) LogAppLogsFromFrontend(level string, message string, source string
 	if origin == "" {
 		origin = "Frontend"
 	}
+	clusterMeta := []string{origin, strings.TrimSpace(clusterID), strings.TrimSpace(clusterName)}
 
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "debug":
-		a.logger.Debug(trimmed, origin)
+		a.logger.Debug(trimmed, clusterMeta...)
 	case "warn", "warning":
-		a.logger.Warn(trimmed, origin)
+		a.logger.Warn(trimmed, clusterMeta...)
 	case "error":
-		a.logger.Error(trimmed, origin)
+		a.logger.Error(trimmed, clusterMeta...)
 	default:
-		a.logger.Info(trimmed, origin)
+		a.logger.Info(trimmed, clusterMeta...)
 	}
 
 	return nil

@@ -118,3 +118,18 @@ func TestLogAppLogsFromFrontendNormalizesLevelAndSource(t *testing.T) {
 	require.Equal(t, "frontend warning", logs[0].Message)
 	require.Equal(t, "UI", logs[0].Source)
 }
+
+func TestLogAppLogsFromFrontendWithClusterAddsMetadata(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+
+	err := app.LogAppLogsFromFrontendWithCluster("error", " cluster issue ", " RefreshOrchestrator ", " cluster-a ", " Alpha ")
+	require.NoError(t, err)
+
+	logs := app.GetAppLogs()
+	require.Len(t, logs, 1)
+	require.Equal(t, "ERROR", logs[0].Level)
+	require.Equal(t, "cluster issue", logs[0].Message)
+	require.Equal(t, "RefreshOrchestrator", logs[0].Source)
+	require.Equal(t, "cluster-a", logs[0].ClusterID)
+	require.Equal(t, "Alpha", logs[0].ClusterName)
+}

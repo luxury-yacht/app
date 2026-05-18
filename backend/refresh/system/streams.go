@@ -3,6 +3,7 @@ package system
 import (
 	"net/http"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
@@ -25,9 +26,10 @@ type streamDeps struct {
 
 // registerStreamHandlers wires stream endpoints and returns stream managers.
 func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.Manager, *resourcestream.Manager, error) {
+	logger := applog.ClusterScoped(deps.cfg.Logger, deps.clusterMeta.ClusterID, deps.clusterMeta.ClusterName)
 	logHandler, err := containerlogsstream.NewHandler(
 		deps.cfg.KubernetesClient,
-		deps.cfg.Logger,
+		logger,
 		deps.telemetry,
 		deps.cfg.ContainerLogsTargetLimiter,
 	)
@@ -38,11 +40,11 @@ func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.M
 
 	eventManager := eventstream.NewManager(
 		deps.informerFactory.SharedInformerFactory().Core().V1().Events(),
-		deps.cfg.Logger,
+		logger,
 		deps.telemetry,
 		deps.clusterMeta.ClusterID,
 	)
-	eventHandler, err := eventstream.NewHandler(deps.snapshotService, eventManager, deps.cfg.Logger)
+	eventHandler, err := eventstream.NewHandler(deps.snapshotService, eventManager, logger)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -51,19 +53,19 @@ func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.M
 	resourceManager := resourcestream.NewManager(
 		deps.informerFactory,
 		deps.metricsProvider,
-		deps.cfg.Logger,
+		logger,
 		deps.telemetry,
 		deps.clusterMeta,
 		deps.cfg.DynamicClient,
 	)
-	resourceHandler, err := resourcestream.NewHandler(resourceManager, deps.cfg.Logger, deps.telemetry, deps.clusterMeta)
+	resourceHandler, err := resourcestream.NewHandler(resourceManager, logger, deps.telemetry, deps.clusterMeta)
 	if err != nil {
 		return nil, nil, err
 	}
 	mux.Handle("/api/v2/stream/resources", resourceHandler)
 
 	if deps.cfg.ObjectCatalogService != nil {
-		catalogHandler := snapshot.NewCatalogStreamHandler(deps.cfg.ObjectCatalogService, deps.cfg.Logger, deps.telemetry, deps.clusterMeta)
+		catalogHandler := snapshot.NewCatalogStreamHandler(deps.cfg.ObjectCatalogService, logger, deps.telemetry, deps.clusterMeta)
 		mux.Handle("/api/v2/stream/catalog", catalogHandler)
 	}
 

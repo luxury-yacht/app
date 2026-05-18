@@ -6,6 +6,11 @@
 
 type AppLogsLevel = 'debug' | 'info' | 'warn' | 'error';
 
+export interface AppLogsClusterMeta {
+  clusterId?: string;
+  clusterName?: string;
+}
+
 export const APP_LOG_SOURCES = {
   BackgroundClusterRefresher: 'BackgroundClusterRefresher',
   CatalogDiagnostics: 'CatalogDiagnostics',
@@ -28,7 +33,12 @@ const normalizeLevel = (level: AppLogsLevel): AppLogsLevel => {
   return level;
 };
 
-const logToAppLogs = (level: AppLogsLevel, message: string, source?: string): void => {
+const logToAppLogs = (
+  level: AppLogsLevel,
+  message: string,
+  source?: string,
+  cluster?: AppLogsClusterMeta
+): void => {
   if (typeof window === 'undefined') {
     return;
   }
@@ -41,27 +51,55 @@ const logToAppLogs = (level: AppLogsLevel, message: string, source?: string): vo
     return;
   }
   const safeSource = (source ?? '').trim() || APP_LOG_SOURCES.Frontend;
+  const clusterId = cluster?.clusterId?.trim() ?? '';
+  const clusterName = cluster?.clusterName?.trim() ?? '';
   try {
+    if ((clusterId || clusterName) && typeof api.LogAppLogsFromFrontendWithCluster === 'function') {
+      void api.LogAppLogsFromFrontendWithCluster(
+        normalizeLevel(level),
+        trimmed,
+        safeSource,
+        clusterId,
+        clusterName
+      );
+      return;
+    }
     void api.LogAppLogsFromFrontend(normalizeLevel(level), trimmed, safeSource);
   } catch (_err) {
     // Ignore logging failures to avoid cascading errors.
   }
 };
 
-export const logAppLogsDebug = (message: string, source?: string): void => {
-  logToAppLogs('debug', message, source);
+export const logAppLogsDebug = (
+  message: string,
+  source?: string,
+  cluster?: AppLogsClusterMeta
+): void => {
+  logToAppLogs('debug', message, source, cluster);
 };
 
-export const logAppLogsInfo = (message: string, source?: string): void => {
-  logToAppLogs('info', message, source);
+export const logAppLogsInfo = (
+  message: string,
+  source?: string,
+  cluster?: AppLogsClusterMeta
+): void => {
+  logToAppLogs('info', message, source, cluster);
 };
 
-export const logAppLogsWarn = (message: string, source?: string): void => {
-  logToAppLogs('warn', message, source);
+export const logAppLogsWarn = (
+  message: string,
+  source?: string,
+  cluster?: AppLogsClusterMeta
+): void => {
+  logToAppLogs('warn', message, source, cluster);
 };
 
-export const logAppLogsError = (message: string, source?: string): void => {
-  logToAppLogs('error', message, source);
+export const logAppLogsError = (
+  message: string,
+  source?: string,
+  cluster?: AppLogsClusterMeta
+): void => {
+  logToAppLogs('error', message, source, cluster);
 };
 
 export const subscribeAppLogsAdded = (handler: AppLogsAddedHandler): (() => void) => {

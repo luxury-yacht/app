@@ -108,7 +108,7 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 			meta:      metaByID[id],
 		}
 		if err := a.startObjectCatalogForTarget(target); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", id, err), logsources.ObjectCatalog)
+			a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", id, err), logsources.ObjectCatalog, id, metaByID[id].Name)
 		}
 	}
 
@@ -141,6 +141,6 @@ func (a *App) stopRefreshSubsystem(subsystem *system.Subsystem) {
 	ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 	defer cancel()
 	if err := subsystem.Manager.Shutdown(ctx); err != nil && a.logger != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh)
+		a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh, subsystem.ClusterMeta.ClusterID, subsystem.ClusterMeta.ClusterName)
 	}
 }

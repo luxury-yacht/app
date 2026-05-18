@@ -41,7 +41,12 @@ import { eventStreamManager } from './streaming/eventStreamManager';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
 import { catalogStreamManager } from './streaming/catalogStreamManager';
 import { errorHandler } from '@utils/errorHandler';
-import { APP_LOG_SOURCES, logAppLogsInfo, logAppLogsWarn } from '@/core/logging/appLogsClient';
+import {
+  APP_LOG_SOURCES,
+  logAppLogsInfo,
+  logAppLogsWarn,
+  type AppLogsClusterMeta,
+} from '@/core/logging/appLogsClient';
 import { getAutoRefreshEnabled, getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
 import { buildClusterScope, parseClusterScope, parseClusterScopeList } from './clusterScope';
 
@@ -162,12 +167,12 @@ const noopStreamingCleanup = () => {};
 // Keep streaming metrics refreshes aligned with the configurable metrics cadence.
 const getStreamingMetricsMinIntervalMs = (): number => getMetricsRefreshIntervalMs();
 
-const logInfo = (message: string): void => {
-  logAppLogsInfo(message, APP_LOG_SOURCES.RefreshOrchestrator);
+const logInfo = (message: string, cluster?: AppLogsClusterMeta): void => {
+  logAppLogsInfo(message, APP_LOG_SOURCES.RefreshOrchestrator, cluster);
 };
 
-const logWarning = (message: string): void => {
-  logAppLogsWarn(message, APP_LOG_SOURCES.RefreshOrchestrator);
+const logWarning = (message: string, cluster?: AppLogsClusterMeta): void => {
+  logAppLogsWarn(message, APP_LOG_SOURCES.RefreshOrchestrator, cluster);
 };
 
 // Most domains should only keep one enabled scope per cluster runtime. These
@@ -1999,7 +2004,8 @@ class RefreshOrchestrator {
     }
 
     logWarning(
-      `[refresh] resource stream drift detected domain=${domain} scope=${scope} reason=${payload.reason}`
+      `[refresh] resource stream drift detected domain=${domain} scope=${scope} reason=${payload.reason}`,
+      { clusterId: parseClusterScope(scope).clusterId }
     );
   };
 
@@ -2024,7 +2030,7 @@ class RefreshOrchestrator {
     }
     // Pause all refresh activity — the refresh subsystem is unavailable while auth is invalid.
     this.authPaused = true;
-    logInfo('[refresh] pausing — cluster auth failed');
+    logInfo('[refresh] pausing — cluster auth failed', { clusterId: payload.clusterId });
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
     this.stopAllStreaming(false);
@@ -2044,7 +2050,7 @@ class RefreshOrchestrator {
       return;
     }
     this.authPaused = false;
-    logInfo('[refresh] resuming — cluster auth recovered');
+    logInfo('[refresh] resuming — cluster auth recovered', { clusterId: payload.clusterId });
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
     // Suppress transient errors while the backend refresh subsystem reinitialises.

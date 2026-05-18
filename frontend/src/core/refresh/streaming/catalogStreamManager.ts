@@ -6,6 +6,7 @@
  */
 
 import { ensureRefreshBaseURL } from '../client';
+import { parseClusterScope } from '../clusterScope';
 import { refreshManager } from '../RefreshManager';
 import { CLUSTER_REFRESHERS } from '../refresherTypes';
 import { resetScopedDomainState, setScopedDomainState } from '../store';
@@ -361,7 +362,8 @@ class CatalogStreamManager {
     void refreshManager.triggerManualRefresh(CLUSTER_REFRESHERS.browse);
     logAppLogsWarn(
       `Catalog stream fallback (${reason}): dropped=${result.droppedEvents}, seq=${result.sequence}`,
-      APP_LOG_SOURCES.CatalogStream
+      APP_LOG_SOURCES.CatalogStream,
+      { clusterId: parseClusterScope(this.scope).clusterId }
     );
   }
 
