@@ -56,6 +56,10 @@ Applies to Go code under `backend/`.
 - Persisted app preferences and runtime-enforced settings are backend-owned.
   Keep defaults, normalization, schema metadata, validation, Wails DTOs, and
   runtime side effects aligned in `backend/app_settings.go`.
+- `GetAppSettingsSchema` is the source of truth for backend-owned preference
+  defaults, current values, bounds, enum values, validation hints, and
+  runtime-side-effect flags. Keep schema coverage tests aligned with every
+  preference accepted by `UpdateAppPreferences`.
 - `UpdateAppPreferences` is the common mutation path for app preferences. It
   validates the whole batch before mutating in-memory settings, persists the
   normalized settings file before applying runtime side effects, and rejects the
@@ -65,6 +69,8 @@ Applies to Go code under `backend/`.
   separate workflow needs a distinct command contract.
 - Defaults for persisted object panel position and layout belong in the backend
   settings contract, not frontend-only hydration fallbacks.
+- Regenerate Wails bindings when settings DTOs, schema fields, or response
+  shapes change.
 
 ## HTTP Server (Refresh API)
 

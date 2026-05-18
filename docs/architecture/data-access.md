@@ -110,6 +110,11 @@ module, not through section-local constants. The module may keep fallback
 metadata for first paint, Wails-unavailable tests, or schema-load failure, but
 those fallbacks are not a second contract.
 
+Settings components should not fetch the backend schema directly. If a UI
+surface needs preference metadata, add or reuse a typed helper in
+`frontend/src/core/settings/appPreferences.ts` and keep schema loading behind
+`appStateAccess`.
+
 The ownership boundary is:
 
 - backend-owned: values persisted in `settings.json`, values validated or
@@ -131,6 +136,8 @@ Settings mutations use `UpdateAppPreferences` as an atomic batch command:
 - persist normalized settings before applying runtime side effects
 - apply runtime side effects only after persistence succeeds
 - fail the whole batch when any key is invalid or persistence fails
+- return normalized settings and changed keys; keep schema refresh separate
+  unless a response-shape change is truly needed
 
 The frontend may still keep local-only state, such as the last active Settings
 tab, and first-paint appearance bootstrap values in localStorage. Appearance
@@ -148,11 +155,14 @@ When adding or changing a preference:
    local-only state, or a derived frontend cache.
 2. For backend-owned preferences, update backend defaults, normalization,
    schema metadata, validation, Wails DTOs, and tests together.
-3. Route frontend reads through `appStateAccess` and the settings schema.
-4. Route frontend persistence through `UpdateAppPreferences` and preserve
+3. Keep backend schema coverage aligned with every preference accepted by
+   `UpdateAppPreferences`, without adding non-preference state such as selected
+   kubeconfigs or saved themes to the preference schema.
+4. Route frontend reads through `appStateAccess` and the settings schema.
+5. Route frontend persistence through `UpdateAppPreferences` and preserve
    optimistic rollback behavior.
-5. Regenerate Wails bindings when DTO/schema fields or response shapes change.
-6. Keep compatibility setters only when external Wails callers still need them.
+6. Regenerate Wails bindings when DTO/schema fields or response shapes change.
+7. Keep compatibility setters only when external Wails callers still need them.
 
 ## Refresh Domains
 
