@@ -134,7 +134,7 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
-  it('scopes refresh context to the active cluster when background refresh is disabled', async () => {
+  it('keeps open cluster IDs in refresh context when background refresh is disabled', async () => {
     mocks.backgroundRefreshState.enabled = false;
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
@@ -161,7 +161,7 @@ describe('KubeconfigContext', () => {
       selectedClusterId: 'alpha:dev',
       selectedClusterName: 'dev',
       selectedClusterIds: ['alpha:dev'],
-      allConnectedClusterIds: ['alpha:dev'],
+      allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
     });
 
     unmount();
