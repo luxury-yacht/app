@@ -64,4 +64,22 @@ describe('navigateToFavorite', () => {
     expect(setActiveKubeconfig).toHaveBeenCalledWith('/kube/beta:prod');
     expect(setSelectedKubeconfigs).not.toHaveBeenCalled();
   });
+
+  it('does not issue a delayed activation after opening a favorite cluster', async () => {
+    const setSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
+    const setActiveKubeconfig = vi.fn();
+    const setPendingFavorite = vi.fn();
+
+    navigateToFavorite(makeFavorite(), {
+      selectedKubeconfigs: ['/kube/beta:prod'],
+      selectedClusterId: 'beta:prod',
+      setSelectedKubeconfigs,
+      setActiveKubeconfig,
+      setPendingFavorite,
+    });
+
+    expect(setSelectedKubeconfigs).toHaveBeenCalledWith(['/kube/beta:prod', '/kube/alpha:dev']);
+    await Promise.resolve();
+    expect(setActiveKubeconfig).not.toHaveBeenCalled();
+  });
 });

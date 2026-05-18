@@ -64,9 +64,7 @@ export function navigateToFavorite(
     const alreadyOpen = selectedKubeconfigs.includes(clusterSelection);
     if (!alreadyOpen) {
       const updated = [...selectedKubeconfigs, clusterSelection];
-      void setSelectedKubeconfigs(updated).then(() => {
-        setActiveKubeconfig(clusterSelection);
-      });
+      void setSelectedKubeconfigs(updated);
     } else if (!alreadyActive) {
       setActiveKubeconfig(clusterSelection);
     }
