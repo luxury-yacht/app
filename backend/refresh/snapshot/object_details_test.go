@@ -128,7 +128,7 @@ func TestObjectDetailsBuilderPropagatesProviderErrors(t *testing.T) {
 		provider: provider,
 	}
 
-	_, err := builder.Build(context.Background(), "default:Pod:demo")
+	_, err := builder.Build(context.Background(), "default:/v1:Pod:demo")
 	if err == nil {
 		t.Fatal("expected error from provider, got nil")
 	}
@@ -138,7 +138,7 @@ func TestObjectDetailsBuilderPropagatesProviderErrors(t *testing.T) {
 }
 
 func TestParseObjectScopeValidClusterScope(t *testing.T) {
-	identity, err := parseObjectScope("__cluster__:Node:n1")
+	identity, err := parseObjectScope("__cluster__:/v1:Node:n1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -146,14 +146,20 @@ func TestParseObjectScopeValidClusterScope(t *testing.T) {
 	if identity.Namespace != "" || identity.GVK.Kind != "Node" || identity.Name != "n1" {
 		t.Fatalf("unexpected scope output: ns=%q kind=%q name=%q", identity.Namespace, identity.GVK.Kind, identity.Name)
 	}
-	if identity.GVK.Group != "" || identity.GVK.Version != "" {
-		t.Fatalf("legacy scope should not populate group/version, got group=%q version=%q", identity.GVK.Group, identity.GVK.Version)
+	if identity.GVK.Group != "" || identity.GVK.Version != "v1" {
+		t.Fatalf("expected core/v1 Node GVK, got group=%q version=%q", identity.GVK.Group, identity.GVK.Version)
 	}
 }
 
 func TestParseObjectScopeRejectsEmptyKind(t *testing.T) {
-	if _, err := parseObjectScope("default::pod-1"); err == nil {
+	if _, err := parseObjectScope("default:/v1::pod-1"); err == nil {
 		t.Fatal("expected error for empty kind")
+	}
+}
+
+func TestParseObjectScopeRejectsKindOnlyScope(t *testing.T) {
+	if _, err := parseObjectScope("default:Pod:demo"); err == nil {
+		t.Fatal("expected kind-only object scope to be rejected")
 	}
 }
 
@@ -230,7 +236,7 @@ func TestRegisterObjectDetailsDomainRegistersBuilder(t *testing.T) {
 		t.Fatal("object-details domain not registered")
 	}
 
-	snap, err := cfg.BuildSnapshot(context.Background(), "default:Pod:demo")
+	snap, err := cfg.BuildSnapshot(context.Background(), "default:/v1:Pod:demo")
 	if err != nil {
 		t.Fatalf("BuildSnapshot failed: %v", err)
 	}

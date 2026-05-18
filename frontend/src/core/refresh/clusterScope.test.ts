@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildObjectScope,
   buildClusterScope,
   parseClusterScopeList,
   parseClusterScope,
@@ -107,5 +108,39 @@ describe('clusterScope helpers', () => {
       scope: 'namespace:default',
       isMultiCluster: false,
     });
+  });
+
+  it('builds object scopes with full GVK identity', () => {
+    expect(
+      buildObjectScope({
+        namespace: 'team-a',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        name: 'api',
+      })
+    ).toBe('team-a:/v1:Pod:api');
+  });
+
+  it('rejects object scopes missing apiVersion', () => {
+    expect(() =>
+      buildObjectScope({
+        namespace: 'team-a',
+        group: '',
+        kind: 'Pod',
+        name: 'api',
+      })
+    ).toThrow(/missing apiVersion/);
+  });
+
+  it('rejects object scopes missing apiGroup', () => {
+    expect(() =>
+      buildObjectScope({
+        namespace: 'team-a',
+        version: 'v1',
+        kind: 'Pod',
+        name: 'api',
+      })
+    ).toThrow(/missing apiGroup/);
   });
 });

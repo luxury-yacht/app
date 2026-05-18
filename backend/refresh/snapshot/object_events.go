@@ -95,10 +95,8 @@ func (b *ObjectEventsBuilder) Build(ctx context.Context, scope string) (*refresh
 	kind := identity.GVK.Kind
 	name := identity.Name
 	// apiVersion is the wire-form "group/version" (or just "version" for
-	// core resources). When the scope omits Group/Version (legacy callers),
-	// this is the empty string and the disambiguation filter below is a
-	// no-op — preserving pre-fix behavior. When the scope is in the new
-	// GVK form, two CRDs sharing a Kind get distinct event lists.
+	// core resources). ParseObjectScope requires GVK-form scopes, so two CRDs
+	// sharing a Kind get distinct event lists.
 	apiVersion := identity.GVK.GroupVersion().String()
 	meta := ClusterMetaFromContext(ctx)
 
@@ -151,9 +149,7 @@ func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, namespace, 
 		selectors = append(selectors, fields.OneTermEqualSelector("involvedObject.namespace", namespace))
 	}
 	// Disambiguate two CRDs sharing a Kind+namespace+name by also filtering
-	// on involvedObject.apiVersion (a supported Event field selector). Only
-	// applied when the scope carried a GVK; legacy kind-only scopes leave
-	// this empty and behave as before.
+	// on involvedObject.apiVersion (a supported Event field selector).
 	if strings.TrimSpace(apiVersion) != "" {
 		selectors = append(selectors, fields.OneTermEqualSelector("involvedObject.apiVersion", apiVersion))
 	}
@@ -185,10 +181,8 @@ func (b *ObjectEventsBuilder) listEventsByIndex(namespace, apiVersion, kind, nam
 		return nil, nil
 	}
 	// The index is keyed by namespace|kind|name (apiVersion-agnostic) so
-	// existing index entries are reused unchanged. When the caller supplies
-	// an apiVersion (new GVK-form scopes), we post-filter the index hit to
-	// drop events for sibling CRDs that share kind/name in the same
-	// namespace. apiVersion-less callers see the legacy superset.
+	// existing index entries are reused unchanged. The apiVersion post-filter
+	// drops events for sibling CRDs that share kind/name in the same namespace.
 	key := buildObjectEventIndexKey(namespace, kind, name)
 	items, err := b.eventIndexer.ByIndex(objectEventIndexName, key)
 	if err != nil {
@@ -236,10 +230,8 @@ func (b *ObjectEventsBuilder) listEventsByScan(namespace, apiVersion, kind, name
 }
 
 // involvedObjectMatchesAPIVersion returns true when the event's
-// InvolvedObject.APIVersion matches the requested apiVersion. An empty
-// requested apiVersion is a wildcard (legacy kind-only callers): in that
-// case all events match. API group and version names are case-sensitive
-// per RFC 1123.
+// InvolvedObject.APIVersion matches the requested apiVersion. API group and
+// version names are case-sensitive per RFC 1123.
 func involvedObjectMatchesAPIVersion(evt *corev1.Event, apiVersion string) bool {
 	if strings.TrimSpace(apiVersion) == "" {
 		return true

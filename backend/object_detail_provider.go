@@ -295,21 +295,27 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 }
 
 // lookupObjectDetailFetcher returns the configured fetcher for the supplied
-// GVK. Legacy kind-only calls are still accepted, but GVK-aware callers must
-// match the concrete built-in resource the fetcher knows how to retrieve.
+// complete GVK. Built-ins must match the concrete resource the fetcher knows
+// how to retrieve; HelmRelease uses the app's synthetic helm.sh/v3 identity.
 func lookupObjectDetailFetcher(gvk schema.GroupVersionKind) (objectDetailFetcher, bool) {
 	normalized := strings.ToLower(strings.TrimSpace(gvk.Kind))
 	fetcher, ok := objectDetailFetchers[normalized]
 	if !ok {
 		return objectDetailFetcher{}, false
 	}
-	if strings.TrimSpace(gvk.Version) == "" {
+	if isHelmReleaseGVK(gvk) {
 		return fetcher, true
 	}
 	if _, ok := lookupBuiltinResourceByGVK(gvk.Group, gvk.Version, gvk.Kind); !ok {
 		return objectDetailFetcher{}, false
 	}
 	return fetcher, true
+}
+
+func isHelmReleaseGVK(gvk schema.GroupVersionKind) bool {
+	return strings.TrimSpace(gvk.Group) == "helm.sh" &&
+		strings.TrimSpace(gvk.Version) == "v3" &&
+		strings.EqualFold(strings.TrimSpace(gvk.Kind), "HelmRelease")
 }
 
 // FetchObjectDetails retrieves the details of a Kubernetes object.

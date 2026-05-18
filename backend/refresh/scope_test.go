@@ -54,7 +54,7 @@ func TestParseObjectScopeSupportsGVK(t *testing.T) {
 }
 
 func TestParseObjectScopeHandlesClusterToken(t *testing.T) {
-	identity, err := ParseObjectScope("__cluster__:Node:n1")
+	identity, err := ParseObjectScope("__cluster__:/v1:Node:n1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -63,6 +63,15 @@ func TestParseObjectScopeHandlesClusterToken(t *testing.T) {
 	}
 	if identity.GVK.Kind != "Node" {
 		t.Fatalf("expected kind Node, got %q", identity.GVK.Kind)
+	}
+	if identity.GVK.Group != "" || identity.GVK.Version != "v1" {
+		t.Fatalf("expected core/v1 Node GVK, got %#v", identity.GVK)
+	}
+}
+
+func TestParseObjectScopeRejectsKindOnlyScope(t *testing.T) {
+	if _, err := ParseObjectScope("default:Pod:web"); err == nil {
+		t.Fatal("expected kind-only object scope to be rejected")
 	}
 }
 

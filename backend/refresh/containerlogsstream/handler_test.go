@@ -110,7 +110,7 @@ func TestParseOptions(t *testing.T) {
 		},
 		{
 			name:        "empty kind",
-			query:       url.Values{"scope": []string{"default::nginx"}},
+			query:       url.Values{"scope": []string{"default:/v1::nginx"}},
 			expectError: true,
 		},
 		{
@@ -125,7 +125,7 @@ func TestParseOptions(t *testing.T) {
 		},
 		{
 			name:        "cluster-scoped object invalid",
-			query:       url.Values{"scope": []string{"__cluster__:Node:n1"}},
+			query:       url.Values{"scope": []string{"__cluster__:/v1:Node:n1"}},
 			expectError: true,
 		},
 	}

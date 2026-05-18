@@ -55,7 +55,7 @@ func TestObjectEventsBuilderUsesCacheWhenSynced(t *testing.T) {
 		t.Fatalf("failed to seed event indexer: %v", err)
 	}
 
-	snap, err := builder.Build(context.Background(), "default:Pod:demo")
+	snap, err := builder.Build(context.Background(), "default:/v1:Pod:demo")
 	if err != nil {
 		t.Fatalf("Build returned error: %v", err)
 	}
@@ -85,9 +85,10 @@ func TestObjectEventsBuilderAPIFallbackFiltersKind(t *testing.T) {
 			ResourceVersion: "10",
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Name:      "demo",
-			Namespace: "default",
-			Kind:      "Pod",
+			Name:       "demo",
+			Namespace:  "default",
+			Kind:       "Pod",
+			APIVersion: "v1",
 		},
 	}
 	deployEvent := &corev1.Event{
@@ -97,9 +98,10 @@ func TestObjectEventsBuilderAPIFallbackFiltersKind(t *testing.T) {
 			ResourceVersion: "11",
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Name:      "demo",
-			Namespace: "default",
-			Kind:      "Deployment",
+			Name:       "demo",
+			Namespace:  "default",
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
 		},
 	}
 
@@ -117,9 +119,10 @@ func TestObjectEventsBuilderAPIFallbackFiltersKind(t *testing.T) {
 		list := &corev1.EventList{}
 		for _, evt := range events {
 			match := selector.Matches(fields.Set{
-				"involvedObject.name":      evt.InvolvedObject.Name,
-				"involvedObject.namespace": evt.InvolvedObject.Namespace,
-				"involvedObject.kind":      evt.InvolvedObject.Kind,
+				"involvedObject.name":       evt.InvolvedObject.Name,
+				"involvedObject.namespace":  evt.InvolvedObject.Namespace,
+				"involvedObject.kind":       evt.InvolvedObject.Kind,
+				"involvedObject.apiVersion": evt.InvolvedObject.APIVersion,
 			})
 			if match {
 				list.Items = append(list.Items, *evt)
@@ -134,7 +137,7 @@ func TestObjectEventsBuilderAPIFallbackFiltersKind(t *testing.T) {
 		eventIndexer: nil,
 	}
 
-	snap, err := builder.Build(context.Background(), "default:Pod:demo")
+	snap, err := builder.Build(context.Background(), "default:/v1:Pod:demo")
 	if err != nil {
 		t.Fatalf("Build returned error: %v", err)
 	}
@@ -301,42 +304,16 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 		}
 	})
 
-	t.Run("legacy kind-only scope returns superset", func(t *testing.T) {
-		// Legacy callers (pre-fix scope format "namespace:kind:name") get
-		// no apiVersion filter and see all matching events. This preserves
-		// backwards compat for any path that hasn't migrated.
+	t.Run("legacy kind-only scope is rejected", func(t *testing.T) {
 		client := fake.NewClientset()
-		events := []*corev1.Event{ackEvent, kindaEvent}
 		client.PrependReactor("list", "events", func(action cgotesting.Action) (bool, runtime.Object, error) {
-			listAction := action.(cgotesting.ListAction)
-			selector := listAction.GetListRestrictions().Fields
-			if selector == nil {
-				selector = fields.Everything()
-			}
-			list := &corev1.EventList{}
-			for _, evt := range events {
-				match := selector.Matches(fields.Set{
-					"involvedObject.name":       evt.InvolvedObject.Name,
-					"involvedObject.namespace":  evt.InvolvedObject.Namespace,
-					"involvedObject.kind":       evt.InvolvedObject.Kind,
-					"involvedObject.apiVersion": evt.InvolvedObject.APIVersion,
-				})
-				if match {
-					list.Items = append(list.Items, *evt)
-				}
-			}
-			return true, list, nil
+			return true, nil, fmt.Errorf("unexpected API list call for invalid scope: %T", action)
 		})
 
 		builder := &ObjectEventsBuilder{client: client, eventSynced: func() bool { return false }}
 
-		snap, err := builder.Build(context.Background(), "default:DBInstance:primary")
-		if err != nil {
-			t.Fatalf("Build returned error: %v", err)
-		}
-		payload := snap.Payload.(ObjectEventsSnapshotPayload)
-		if len(payload.Events) != 2 {
-			t.Fatalf("expected legacy superset of 2 events, got %d", len(payload.Events))
+		if _, err := builder.Build(context.Background(), "default:DBInstance:primary"); err == nil {
+			t.Fatal("expected kind-only scope to be rejected")
 		}
 	})
 }

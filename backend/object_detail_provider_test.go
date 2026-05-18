@@ -60,21 +60,22 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 	})
 
 	tests := []struct {
-		kind, namespace, name string
+		gvk             schema.GroupVersionKind
+		namespace, name string
 	}{
-		{"Deployment", "default", "demo-deploy"},
-		{"ConfigMap", "default", "demo-cm"},
-		{"ClusterRole", "", "demo-cr"},
-		{"Namespace", "", "demo-ns"},
+		{schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}, "default", "demo-deploy"},
+		{schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}, "default", "demo-cm"},
+		{schema.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}, "", "demo-cr"},
+		{schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}, "", "demo-ns"},
 	}
 
 	for _, tt := range tests {
-		detail, _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Kind: tt.kind}, tt.namespace, tt.name)
+		detail, _, err := provider.FetchObjectDetails(ctx, tt.gvk, tt.namespace, tt.name)
 		if err != nil {
-			t.Fatalf("FetchObjectDetails(%s) returned error: %v", tt.kind, err)
+			t.Fatalf("FetchObjectDetails(%s) returned error: %v", tt.gvk.Kind, err)
 		}
 		if detail == nil {
-			t.Fatalf("FetchObjectDetails(%s) returned nil detail", tt.kind)
+			t.Fatalf("FetchObjectDetails(%s) returned nil detail", tt.gvk.Kind)
 		}
 	}
 }
@@ -89,6 +90,16 @@ func TestObjectDetailProviderUnknownKind(t *testing.T) {
 	}
 	if err != snapshot.ErrObjectDetailNotImplemented {
 		t.Fatalf("expected ErrObjectDetailNotImplemented, got %v", err)
+	}
+}
+
+func TestObjectDetailProviderRejectsKnownKindWithoutGVK(t *testing.T) {
+	app := NewApp()
+	provider := app.objectDetailProvider()
+
+	_, _, err := provider.FetchObjectDetails(context.Background(), schema.GroupVersionKind{Kind: "Pod"}, "default", "api")
+	if err != snapshot.ErrObjectDetailNotImplemented {
+		t.Fatalf("expected kind-only known resource to be rejected as not implemented, got %v", err)
 	}
 }
 
@@ -175,7 +186,7 @@ func TestObjectDetailProviderUsesClusterContext(t *testing.T) {
 		ClusterName: "ctx-b",
 	})
 
-	detail, _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Kind: "Node"}, "", "node-b")
+	detail, _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Version: "v1", Kind: "Node"}, "", "node-b")
 	if err != nil {
 		t.Fatalf("FetchObjectDetails returned error: %v", err)
 	}
@@ -183,7 +194,7 @@ func TestObjectDetailProviderUsesClusterContext(t *testing.T) {
 		t.Fatal("FetchObjectDetails returned nil detail")
 	}
 
-	if _, _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Kind: "Node"}, "", "node-a"); err == nil {
+	if _, _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Version: "v1", Kind: "Node"}, "", "node-a"); err == nil {
 		t.Fatal("expected error when fetching node from another cluster")
 	}
 }
@@ -314,10 +325,37 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 	}
 
 	for _, tt := range kinds {
-		_, _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Kind: tt.kind}, tt.ns, tt.name)
+		_, _, err := provider.FetchObjectDetails(ctx, testObjectDetailGVK(tt.kind), tt.ns, tt.name)
 		if err != nil {
 			t.Fatalf("FetchObjectDetails(%s) returned error: %v", tt.kind, err)
 		}
+	}
+}
+
+func testObjectDetailGVK(kind string) schema.GroupVersionKind {
+	switch strings.ToLower(kind) {
+	case "service", "persistentvolumeclaim", "persistentvolume", "serviceaccount", "resourcequota", "limitrange", "namespace":
+		return schema.GroupVersionKind{Version: "v1", Kind: kind}
+	case "ingress", "ingressclass", "networkpolicy":
+		return schema.GroupVersionKind{Group: "networking.k8s.io", Version: "v1", Kind: kind}
+	case "endpointslice":
+		return schema.GroupVersionKind{Group: "discovery.k8s.io", Version: "v1", Kind: kind}
+	case "storageclass":
+		return schema.GroupVersionKind{Group: "storage.k8s.io", Version: "v1", Kind: kind}
+	case "role", "rolebinding", "clusterrolebinding":
+		return schema.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: kind}
+	case "horizontalpodautoscaler":
+		return schema.GroupVersionKind{Group: "autoscaling", Version: "v2", Kind: kind}
+	case "poddisruptionbudget":
+		return schema.GroupVersionKind{Group: "policy", Version: "v1", Kind: kind}
+	case "cronjob", "job":
+		return schema.GroupVersionKind{Group: "batch", Version: "v1", Kind: kind}
+	case "replicaset":
+		return schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: kind}
+	case "customresourcedefinition":
+		return schema.GroupVersionKind{Group: "apiextensions.k8s.io", Version: "v1", Kind: kind}
+	default:
+		return schema.GroupVersionKind{Kind: kind}
 	}
 }
 

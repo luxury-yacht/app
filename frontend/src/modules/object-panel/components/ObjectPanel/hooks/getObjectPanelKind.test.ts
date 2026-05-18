@@ -15,7 +15,7 @@ describe('getObjectPanelKind', () => {
     });
 
     expect(result.objectKind).toBe('pod');
-    expect(result.detailScope).toBe('team-a:pod:api');
+    expect(result.detailScope).toBe('team-a:/v1:pod:api');
     expect(result.helmScope).toBeNull();
     expect(result.isHelmRelease).toBe(false);
     expect(result.isEvent).toBe(false);
@@ -32,7 +32,7 @@ describe('getObjectPanelKind', () => {
     );
 
     expect(result.objectKind).toBe('helmrelease');
-    expect(result.detailScope).toBe('__cluster__:helmrelease:shopping-cart');
+    expect(result.detailScope).toBe('__cluster__:helm.sh/v3:helmrelease:shopping-cart');
     expect(result.helmScope).toBe('__cluster__:shopping-cart');
     expect(result.isHelmRelease).toBe(true);
   });
@@ -45,7 +45,7 @@ describe('getObjectPanelKind', () => {
     });
 
     expect(result.isEvent).toBe(true);
-    expect(result.detailScope).toBe('default:event:warning-123');
+    expect(result.detailScope).toBe('default:/v1:event:warning-123');
   });
 
   it('emits the GVK scope form when PanelObjectData carries group and version', () => {
@@ -94,8 +94,8 @@ describe('getObjectPanelKind', () => {
     });
 
     // detailScope is lowercase; eventsScope keeps the original case.
-    expect(result.detailScope).toBe('cluster-1|team-a:deployment:api');
-    expect(result.eventsScope).toBe('cluster-1|team-a:Deployment:api');
+    expect(result.detailScope).toBe('cluster-1|team-a:apps/v1:deployment:api');
+    expect(result.eventsScope).toBe('cluster-1|team-a:apps/v1:Deployment:api');
   });
 
   it('threads group/version into eventsScope when PanelObjectData carries them', () => {
@@ -133,7 +133,7 @@ describe('getObjectPanelKind', () => {
       clusterId: 'cluster-1',
     });
 
-    expect(result.containerLogsScope).toBe('cluster-1|team-a:deployment:api');
+    expect(result.containerLogsScope).toBe('cluster-1|team-a:apps/v1:deployment:api');
   });
 
   it('threads group/version into containerLogsScope when PanelObjectData carries them', () => {
@@ -180,6 +180,14 @@ describe('getObjectPanelKind', () => {
     expect(getObjectPanelKind(null).containerLogsScope).toBeNull();
     expect(getObjectPanelKind({ kind: 'Pod' }).containerLogsScope).toBeNull();
     expect(getObjectPanelKind({ name: 'api' }).containerLogsScope).toBeNull();
+    expect(
+      getObjectPanelKind({
+        kind: 'DBInstance',
+        name: 'orders',
+        namespace: 'team-a',
+        clusterId: 'cluster-1',
+      }).containerLogsScope
+    ).toBeNull();
   });
 
   it('builds mapScope using the original-case kind so it matches the backend object-map parser', () => {

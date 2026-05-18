@@ -406,7 +406,7 @@ describe('ObjectPanel tab availability', () => {
       scopedDomain: { data: { details: {} }, status: 'idle', error: null },
     });
 
-    const detailScope = buildClusterScope(defaultClusterId, 'team-a:pod:api');
+    const detailScope = buildClusterScope(defaultClusterId, 'team-a:/v1:pod:api');
 
     expect(mockRefreshManager.register).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'object-pod', interval: 2000 })
@@ -762,7 +762,7 @@ describe('ObjectPanel tab availability', () => {
     });
 
     expect(yamlTabPropsRef.current).toMatchObject({
-      scope: buildClusterScope(defaultClusterId, 'team-a:deployment:api'),
+      scope: buildClusterScope(defaultClusterId, 'team-a:apps/v1:deployment:api'),
       canEdit: false,
       editDisabledReason: 'forbidden',
       isActive: true,

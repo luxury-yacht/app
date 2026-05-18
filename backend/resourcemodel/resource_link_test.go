@@ -43,3 +43,13 @@ func TestValidateResourceLinkRejectsAmbiguousAndIncompleteLinks(t *testing.T) {
 		t.Fatal("expected display ref without clusterId to fail validation")
 	}
 }
+
+func TestValidateResourceRefRejectsMissingGroupForNonCoreResource(t *testing.T) {
+	if err := ValidateResourceRef(NewResourceRef("cluster-a", "", "v1", "Deployment", "deployments", "default", "api", "")); err == nil {
+		t.Fatal("expected non-core ref without group to fail validation")
+	}
+
+	if err := ValidateResourceRef(NewResourceRef("cluster-a", "", "v1", "EndpointSlice", "endpointslices", "default", "api", "")); err == nil {
+		t.Fatal("expected EndpointSlice without discovery group to fail validation")
+	}
+}

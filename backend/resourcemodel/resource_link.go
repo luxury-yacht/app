@@ -54,10 +54,37 @@ func ValidateResourceRef(ref ResourceRef) error {
 	if strings.TrimSpace(ref.Kind) == "" {
 		return fmt.Errorf("resource ref is missing kind")
 	}
+	if strings.TrimSpace(ref.Group) == "" && !isCoreV1ResourceRef(ref) {
+		return fmt.Errorf("resource ref for %s/%s is missing group", ref.Kind, ref.Name)
+	}
 	if strings.TrimSpace(ref.Name) == "" {
 		return fmt.Errorf("resource ref for kind %s is missing name", ref.Kind)
 	}
 	return nil
+}
+
+func isCoreV1ResourceRef(ref ResourceRef) bool {
+	if strings.TrimSpace(ref.Version) != "v1" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(ref.Kind)) {
+	case "configmap",
+		"endpoints",
+		"event",
+		"limitrange",
+		"namespace",
+		"node",
+		"persistentvolume",
+		"persistentvolumeclaim",
+		"pod",
+		"resourcequota",
+		"secret",
+		"service",
+		"serviceaccount":
+		return true
+	default:
+		return false
+	}
 }
 
 func ValidateDisplayRef(ref DisplayRef) error {

@@ -20,11 +20,8 @@ const (
 )
 
 // ObjectYAMLProvider supplies rendered YAML for an object scope. The
-// GroupVersionKind carries the caller-requested identity. For
-// backwards-compatible legacy scopes (namespace:kind:name) the GVK will
-// have only Kind set; for new-format scopes the GVK is fully populated
-// and the concrete provider must honor the group/version to disambiguate
-// colliding kinds.
+// GroupVersionKind carries the caller-requested identity and must include
+// group/version so colliding kinds stay disambiguated.
 type ObjectYAMLProvider interface {
 	FetchObjectYAML(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (string, error)
 }

@@ -16,9 +16,9 @@ type ObjectScopeIdentity struct {
 	Name      string
 }
 
-// ParseObjectScope parses a refresh-domain scope string into an object identity.
-// It accepts both legacy "namespace:kind:name" scopes and the newer
-// "namespace:group/version:kind:name" form.
+// ParseObjectScope parses a refresh-domain scope string into a complete object
+// identity. Object scopes must use "namespace:group/version:kind:name"; core
+// resources encode the empty group as "/v1".
 func ParseObjectScope(scope string) (ObjectScopeIdentity, error) {
 	if strings.TrimSpace(scope) == "" {
 		return ObjectScopeIdentity{}, fmt.Errorf("object scope is required")
@@ -37,27 +37,24 @@ func ParseObjectScope(scope string) (ObjectScopeIdentity, error) {
 		name      string
 	)
 
-	if len(peek) == 4 && strings.Contains(peek[1], "/") {
-		namespace = peek[0]
-		groupVersion := peek[1]
-		gv, err := schema.ParseGroupVersion(groupVersion)
-		if err != nil {
-			return ObjectScopeIdentity{}, fmt.Errorf("invalid group/version %q in scope %q: %w", groupVersion, scope, err)
-		}
-		gvk = gv.WithKind(strings.TrimSpace(peek[2]))
-		name = peek[3]
-	} else {
-		parts := strings.SplitN(trimmed, ":", 3)
-		if len(parts) != 3 {
-			return ObjectScopeIdentity{}, fmt.Errorf("invalid object scope %q", trimmed)
-		}
-		namespace = parts[0]
-		gvk = schema.GroupVersionKind{Kind: strings.TrimSpace(parts[1])}
-		name = parts[2]
+	if len(peek) != 4 || !strings.Contains(peek[1], "/") {
+		return ObjectScopeIdentity{}, fmt.Errorf("object scope %q must include apiVersion", trimmed)
 	}
+
+	namespace = peek[0]
+	groupVersion := peek[1]
+	gv, err := schema.ParseGroupVersion(groupVersion)
+	if err != nil {
+		return ObjectScopeIdentity{}, fmt.Errorf("invalid group/version %q in scope %q: %w", groupVersion, scope, err)
+	}
+	gvk = gv.WithKind(strings.TrimSpace(peek[2]))
+	name = peek[3]
 
 	if namespace == ObjectClusterScopeToken {
 		namespace = ""
+	}
+	if gvk.Version == "" {
+		return ObjectScopeIdentity{}, fmt.Errorf("object apiVersion missing in scope %q", scope)
 	}
 	if gvk.Kind == "" {
 		return ObjectScopeIdentity{}, fmt.Errorf("object kind missing in scope %q", scope)
