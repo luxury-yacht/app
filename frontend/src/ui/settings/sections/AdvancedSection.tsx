@@ -9,23 +9,13 @@ import { errorHandler } from '@utils/errorHandler';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import {
+  getIntegerPreferenceMetadata,
   hydrateAppPreferences,
   getKubernetesClientBurst,
   getKubernetesClientQPS,
   getMaxTableRows,
   getPermissionSSRRFetchConcurrency,
-  KUBERNETES_CLIENT_BURST_DEFAULT,
-  KUBERNETES_CLIENT_BURST_MAX,
-  KUBERNETES_CLIENT_BURST_MIN,
-  KUBERNETES_CLIENT_QPS_DEFAULT,
-  KUBERNETES_CLIENT_QPS_MAX,
-  KUBERNETES_CLIENT_QPS_MIN,
-  MAX_TABLE_ROWS_DEFAULT,
-  MAX_TABLE_ROWS_MAX,
-  MAX_TABLE_ROWS_MIN,
-  PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT,
-  PERMISSION_SSRR_FETCH_CONCURRENCY_MAX,
-  PERMISSION_SSRR_FETCH_CONCURRENCY_MIN,
+  normalizeIntegerPreferenceValue,
   setKubernetesClientBurst,
   setKubernetesClientQPS,
   setMaxTableRows,
@@ -61,6 +51,12 @@ function AdvancedSection() {
   );
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
+  const maxTableRowsMetadata = getIntegerPreferenceMetadata('maxTableRows');
+  const kubernetesClientQPSMetadata = getIntegerPreferenceMetadata('kubernetesClientQPS');
+  const kubernetesClientBurstMetadata = getIntegerPreferenceMetadata('kubernetesClientBurst');
+  const permissionSSRRFetchConcurrencyMetadata = getIntegerPreferenceMetadata(
+    'permissionSSRRFetchConcurrency'
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -68,18 +64,10 @@ function AdvancedSection() {
       try {
         const prefs = await hydrateAppPreferences({ force: true });
         if (!cancelled) {
-          setMaxTableRowsInput(String(prefs.maxTableRows ?? MAX_TABLE_ROWS_DEFAULT));
-          setKubernetesClientQPSInput(
-            String(prefs.kubernetesClientQPS ?? KUBERNETES_CLIENT_QPS_DEFAULT)
-          );
-          setKubernetesClientBurstInput(
-            String(prefs.kubernetesClientBurst ?? KUBERNETES_CLIENT_BURST_DEFAULT)
-          );
-          setPermissionSSRRFetchConcurrencyInput(
-            String(
-              prefs.permissionSSRRFetchConcurrency ?? PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT
-            )
-          );
+          setMaxTableRowsInput(String(prefs.maxTableRows));
+          setKubernetesClientQPSInput(String(prefs.kubernetesClientQPS));
+          setKubernetesClientBurstInput(String(prefs.kubernetesClientBurst));
+          setPermissionSSRRFetchConcurrencyInput(String(prefs.permissionSSRRFetchConcurrency));
           setPersistenceMode(getGridTablePersistenceMode());
         }
       } catch (error) {
@@ -101,43 +89,36 @@ function AdvancedSection() {
 
   const commitMaxTableRows = (raw: string) => {
     const parsed = parseInt(raw, 10);
-    const normalized =
-      Number.isNaN(parsed) || parsed <= 0
-        ? MAX_TABLE_ROWS_DEFAULT
-        : Math.max(MAX_TABLE_ROWS_MIN, Math.min(MAX_TABLE_ROWS_MAX, parsed));
+    const normalized = normalizeIntegerPreferenceValue('maxTableRows', parsed, {
+      defaultOnNonPositive: true,
+    });
     setMaxTableRowsInput(String(normalized));
     setMaxTableRows(normalized);
   };
 
   const commitKubernetesClientQPS = (raw: string) => {
     const parsed = parseInt(raw, 10);
-    const normalized =
-      Number.isNaN(parsed) || parsed <= 0
-        ? KUBERNETES_CLIENT_QPS_DEFAULT
-        : Math.max(KUBERNETES_CLIENT_QPS_MIN, Math.min(KUBERNETES_CLIENT_QPS_MAX, parsed));
+    const normalized = normalizeIntegerPreferenceValue('kubernetesClientQPS', parsed, {
+      defaultOnNonPositive: true,
+    });
     setKubernetesClientQPSInput(String(normalized));
     setKubernetesClientQPS(normalized);
   };
 
   const commitKubernetesClientBurst = (raw: string) => {
     const parsed = parseInt(raw, 10);
-    const normalized =
-      Number.isNaN(parsed) || parsed <= 0
-        ? KUBERNETES_CLIENT_BURST_DEFAULT
-        : Math.max(KUBERNETES_CLIENT_BURST_MIN, Math.min(KUBERNETES_CLIENT_BURST_MAX, parsed));
+    const normalized = normalizeIntegerPreferenceValue('kubernetesClientBurst', parsed, {
+      defaultOnNonPositive: true,
+    });
     setKubernetesClientBurstInput(String(normalized));
     setKubernetesClientBurst(normalized);
   };
 
   const commitPermissionSSRRFetchConcurrency = (raw: string) => {
     const parsed = parseInt(raw, 10);
-    const normalized =
-      Number.isNaN(parsed) || parsed <= 0
-        ? PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT
-        : Math.max(
-            PERMISSION_SSRR_FETCH_CONCURRENCY_MIN,
-            Math.min(PERMISSION_SSRR_FETCH_CONCURRENCY_MAX, parsed)
-          );
+    const normalized = normalizeIntegerPreferenceValue('permissionSSRRFetchConcurrency', parsed, {
+      defaultOnNonPositive: true,
+    });
     setPermissionSSRRFetchConcurrencyInput(String(normalized));
     setPermissionSSRRFetchConcurrency(normalized);
   };
@@ -241,8 +222,8 @@ function AdvancedSection() {
             <input
               type="number"
               id="settings-max-table-rows"
-              min={MAX_TABLE_ROWS_MIN}
-              max={MAX_TABLE_ROWS_MAX}
+              min={maxTableRowsMetadata.min}
+              max={maxTableRowsMetadata.max}
               step={100}
               value={maxTableRowsInput}
               onChange={(e) => setMaxTableRowsInput(e.target.value)}
@@ -274,8 +255,8 @@ function AdvancedSection() {
             <input
               type="number"
               id="settings-kubernetes-client-qps"
-              min={KUBERNETES_CLIENT_QPS_MIN}
-              max={KUBERNETES_CLIENT_QPS_MAX}
+              min={kubernetesClientQPSMetadata.min}
+              max={kubernetesClientQPSMetadata.max}
               step={10}
               value={kubernetesClientQPSInput}
               onChange={(e) => setKubernetesClientQPSInput(e.target.value)}
@@ -304,8 +285,8 @@ function AdvancedSection() {
             <input
               type="number"
               id="settings-kubernetes-client-burst"
-              min={KUBERNETES_CLIENT_BURST_MIN}
-              max={KUBERNETES_CLIENT_BURST_MAX}
+              min={kubernetesClientBurstMetadata.min}
+              max={kubernetesClientBurstMetadata.max}
               step={10}
               value={kubernetesClientBurstInput}
               onChange={(e) => setKubernetesClientBurstInput(e.target.value)}
@@ -334,8 +315,8 @@ function AdvancedSection() {
             <input
               type="number"
               id="settings-permission-ssrr-concurrency"
-              min={PERMISSION_SSRR_FETCH_CONCURRENCY_MIN}
-              max={PERMISSION_SSRR_FETCH_CONCURRENCY_MAX}
+              min={permissionSSRRFetchConcurrencyMetadata.min}
+              max={permissionSSRRFetchConcurrencyMetadata.max}
               step={1}
               value={permissionSSRRFetchConcurrencyInput}
               onChange={(e) => setPermissionSSRRFetchConcurrencyInput(e.target.value)}

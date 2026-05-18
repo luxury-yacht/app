@@ -37,6 +37,11 @@ Applies to React/TypeScript code under `frontend/`.
 - Keep typed frontend getters/setters in `frontend/src/core/settings`, but route
   persistence through the common optimistic update path instead of importing
   preference-specific generated Wails setters in UI components.
+- `frontend/src/core/settings/appPreferences.ts` owns schema metadata caching,
+  fallback metadata, and typed metadata helpers. Settings UI sections should
+  consume backend-owned defaults, bounds, enum options, validation hints, and
+  runtime flags through those helpers instead of fetching schema directly or
+  duplicating constants locally.
 - On failed preference persistence, rollback every frontend-owned optimistic
   side effect: preference cache values, preference change events, appearance
   mode localStorage, and appearance bootstrap localStorage.

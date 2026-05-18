@@ -193,6 +193,13 @@ const (
 	defaultObjectPanelFloatingHeight       = 400
 	defaultObjectPanelFloatingX            = 100
 	defaultObjectPanelFloatingY            = 100
+	minObjectPanelDockedRightWidth         = 500
+	minObjectPanelDockedBottomHeight       = 200
+	minObjectPanelFloatingWidth            = 450
+	minObjectPanelFloatingHeight           = 200
+	minObjectPanelFloatingX                = 1
+	minObjectPanelFloatingY                = 1
+	maxObjectPanelLayoutValue              = 9999
 	minPaletteHue                          = 0
 	maxPaletteHue                          = 360
 	minPaletteSaturation                   = 0
@@ -409,21 +416,33 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.ObjectPanelDockedRightWidth <= 0 {
 		settings.Preferences.ObjectPanelDockedRightWidth = defaultObjectPanelDockedRightWidth
+	} else {
+		settings.Preferences.ObjectPanelDockedRightWidth = clampInt(settings.Preferences.ObjectPanelDockedRightWidth, minObjectPanelDockedRightWidth, maxObjectPanelLayoutValue)
 	}
 	if settings.Preferences.ObjectPanelDockedBottomHeight <= 0 {
 		settings.Preferences.ObjectPanelDockedBottomHeight = defaultObjectPanelDockedBottomHeight
+	} else {
+		settings.Preferences.ObjectPanelDockedBottomHeight = clampInt(settings.Preferences.ObjectPanelDockedBottomHeight, minObjectPanelDockedBottomHeight, maxObjectPanelLayoutValue)
 	}
 	if settings.Preferences.ObjectPanelFloatingWidth <= 0 {
 		settings.Preferences.ObjectPanelFloatingWidth = defaultObjectPanelFloatingWidth
+	} else {
+		settings.Preferences.ObjectPanelFloatingWidth = clampInt(settings.Preferences.ObjectPanelFloatingWidth, minObjectPanelFloatingWidth, maxObjectPanelLayoutValue)
 	}
 	if settings.Preferences.ObjectPanelFloatingHeight <= 0 {
 		settings.Preferences.ObjectPanelFloatingHeight = defaultObjectPanelFloatingHeight
+	} else {
+		settings.Preferences.ObjectPanelFloatingHeight = clampInt(settings.Preferences.ObjectPanelFloatingHeight, minObjectPanelFloatingHeight, maxObjectPanelLayoutValue)
 	}
 	if settings.Preferences.ObjectPanelFloatingX <= 0 {
 		settings.Preferences.ObjectPanelFloatingX = defaultObjectPanelFloatingX
+	} else {
+		settings.Preferences.ObjectPanelFloatingX = clampInt(settings.Preferences.ObjectPanelFloatingX, minObjectPanelFloatingX, maxObjectPanelLayoutValue)
 	}
 	if settings.Preferences.ObjectPanelFloatingY <= 0 {
 		settings.Preferences.ObjectPanelFloatingY = defaultObjectPanelFloatingY
+	} else {
+		settings.Preferences.ObjectPanelFloatingY = clampInt(settings.Preferences.ObjectPanelFloatingY, minObjectPanelFloatingY, maxObjectPanelLayoutValue)
 	}
 	// Migrate old single-value palette fields to per-mode fields.
 	prefs := &settings.Preferences
@@ -939,12 +958,12 @@ func buildAppSettingsSchema(settings *AppSettings) *AppSettingsSchema {
 		appPreferenceSchema(appPreferenceObjPanelLogsTargetGlobalLimit, "integer", defaultObjPanelLogsTargetGlobalLimit, settings.ObjPanelLogsTargetGlobalLimit, intPtr(minObjPanelLogsTargetGlobalLimit), intPtr(maxObjPanelLogsTargetGlobalLimit), nil, "", true),
 		appPreferenceSchema(appPreferenceGridTablePersistenceMode, "enum", "shared", settings.GridTablePersistenceMode, nil, nil, []string{"shared", "namespaced"}, "", false),
 		appPreferenceSchema(appPreferenceDefaultObjectPanelPosition, "enum", defaultObjectPanelPosition, settings.DefaultObjectPanelPosition, nil, nil, []string{"right", "bottom", "floating"}, "", false),
-		appPreferenceSchema(appPreferenceObjectPanelDockedRightWidth, "integer", defaultObjectPanelDockedRightWidth, settings.ObjectPanelDockedRightWidth, intPtr(1), nil, nil, "", false),
-		appPreferenceSchema(appPreferenceObjectPanelDockedBottomHeight, "integer", defaultObjectPanelDockedBottomHeight, settings.ObjectPanelDockedBottomHeight, intPtr(1), nil, nil, "", false),
-		appPreferenceSchema(appPreferenceObjectPanelFloatingWidth, "integer", defaultObjectPanelFloatingWidth, settings.ObjectPanelFloatingWidth, intPtr(1), nil, nil, "", false),
-		appPreferenceSchema(appPreferenceObjectPanelFloatingHeight, "integer", defaultObjectPanelFloatingHeight, settings.ObjectPanelFloatingHeight, intPtr(1), nil, nil, "", false),
-		appPreferenceSchema(appPreferenceObjectPanelFloatingX, "integer", defaultObjectPanelFloatingX, settings.ObjectPanelFloatingX, intPtr(1), nil, nil, "", false),
-		appPreferenceSchema(appPreferenceObjectPanelFloatingY, "integer", defaultObjectPanelFloatingY, settings.ObjectPanelFloatingY, intPtr(1), nil, nil, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelDockedRightWidth, "integer", defaultObjectPanelDockedRightWidth, settings.ObjectPanelDockedRightWidth, intPtr(minObjectPanelDockedRightWidth), intPtr(maxObjectPanelLayoutValue), nil, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelDockedBottomHeight, "integer", defaultObjectPanelDockedBottomHeight, settings.ObjectPanelDockedBottomHeight, intPtr(minObjectPanelDockedBottomHeight), intPtr(maxObjectPanelLayoutValue), nil, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelFloatingWidth, "integer", defaultObjectPanelFloatingWidth, settings.ObjectPanelFloatingWidth, intPtr(minObjectPanelFloatingWidth), intPtr(maxObjectPanelLayoutValue), nil, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelFloatingHeight, "integer", defaultObjectPanelFloatingHeight, settings.ObjectPanelFloatingHeight, intPtr(minObjectPanelFloatingHeight), intPtr(maxObjectPanelLayoutValue), nil, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelFloatingX, "integer", defaultObjectPanelFloatingX, settings.ObjectPanelFloatingX, intPtr(minObjectPanelFloatingX), intPtr(maxObjectPanelLayoutValue), nil, "", false),
+		appPreferenceSchema(appPreferenceObjectPanelFloatingY, "integer", defaultObjectPanelFloatingY, settings.ObjectPanelFloatingY, intPtr(minObjectPanelFloatingY), intPtr(maxObjectPanelLayoutValue), nil, "", false),
 		appPreferenceSchema(appPreferencePaletteHueLight, "integer", 0, settings.PaletteHueLight, intPtr(minPaletteHue), intPtr(maxPaletteHue), nil, "", false),
 		appPreferenceSchema(appPreferencePaletteSaturationLight, "integer", 0, settings.PaletteSaturationLight, intPtr(minPaletteSaturation), intPtr(maxPaletteSaturation), nil, "", false),
 		appPreferenceSchema(appPreferencePaletteBrightnessLight, "integer", 0, settings.PaletteBrightnessLight, intPtr(minPaletteBrightness), intPtr(maxPaletteBrightness), nil, "", false),
@@ -1159,36 +1178,28 @@ func applyAppPreferenceChange(settings *AppSettings, change AppPreferenceChange,
 		if err != nil {
 			return fmt.Errorf("%s: %w", change.Key, err)
 		}
-		if value <= 0 {
-			value = defaultObjectPanelDockedRightWidth
-		}
+		value = clampInt(value, minObjectPanelDockedRightWidth, maxObjectPanelLayoutValue)
 		settings.ObjectPanelDockedRightWidth = value
 	case appPreferenceObjectPanelDockedBottomHeight:
 		value, err := intPreferenceValue(change.Value)
 		if err != nil {
 			return fmt.Errorf("%s: %w", change.Key, err)
 		}
-		if value <= 0 {
-			value = defaultObjectPanelDockedBottomHeight
-		}
+		value = clampInt(value, minObjectPanelDockedBottomHeight, maxObjectPanelLayoutValue)
 		settings.ObjectPanelDockedBottomHeight = value
 	case appPreferenceObjectPanelFloatingWidth:
 		value, err := intPreferenceValue(change.Value)
 		if err != nil {
 			return fmt.Errorf("%s: %w", change.Key, err)
 		}
-		if value <= 0 {
-			value = defaultObjectPanelFloatingWidth
-		}
+		value = clampInt(value, minObjectPanelFloatingWidth, maxObjectPanelLayoutValue)
 		settings.ObjectPanelFloatingWidth = value
 	case appPreferenceObjectPanelFloatingHeight:
 		value, err := intPreferenceValue(change.Value)
 		if err != nil {
 			return fmt.Errorf("%s: %w", change.Key, err)
 		}
-		if value <= 0 {
-			value = defaultObjectPanelFloatingHeight
-		}
+		value = clampInt(value, minObjectPanelFloatingHeight, maxObjectPanelLayoutValue)
 		settings.ObjectPanelFloatingHeight = value
 	case appPreferenceObjectPanelFloatingX:
 		value, err := intPreferenceValue(change.Value)
@@ -1198,6 +1209,7 @@ func applyAppPreferenceChange(settings *AppSettings, change AppPreferenceChange,
 		if value <= 0 {
 			value = defaultObjectPanelFloatingX
 		}
+		value = clampInt(value, minObjectPanelFloatingX, maxObjectPanelLayoutValue)
 		settings.ObjectPanelFloatingX = value
 	case appPreferenceObjectPanelFloatingY:
 		value, err := intPreferenceValue(change.Value)
@@ -1207,6 +1219,7 @@ func applyAppPreferenceChange(settings *AppSettings, change AppPreferenceChange,
 		if value <= 0 {
 			value = defaultObjectPanelFloatingY
 		}
+		value = clampInt(value, minObjectPanelFloatingY, maxObjectPanelLayoutValue)
 		settings.ObjectPanelFloatingY = value
 	case appPreferencePaletteHueLight:
 		value, err := intPreferenceValue(change.Value)
@@ -1276,6 +1289,45 @@ func clampInt(value, minValue, maxValue int) int {
 		return maxValue
 	}
 	return value
+}
+
+func appPreferenceKeys() []string {
+	return []string{
+		appPreferenceAppearanceMode,
+		appPreferenceUseShortResourceNames,
+		appPreferenceDimInactiveNamespaces,
+		appPreferenceExclusiveNamespaces,
+		appPreferenceAutoRefreshEnabled,
+		appPreferenceRefreshBackgroundClustersEnabled,
+		appPreferenceMetricsRefreshIntervalMs,
+		appPreferenceMaxTableRows,
+		appPreferenceKubernetesClientQPS,
+		appPreferenceKubernetesClientBurst,
+		appPreferencePermissionSSRRFetchConcurrency,
+		appPreferenceObjPanelLogsBufferMaxSize,
+		appPreferenceObjPanelLogsAPITimestampFormat,
+		appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone,
+		appPreferenceObjPanelLogsTargetPerScopeLimit,
+		appPreferenceObjPanelLogsTargetGlobalLimit,
+		appPreferenceGridTablePersistenceMode,
+		appPreferenceDefaultObjectPanelPosition,
+		appPreferenceObjectPanelDockedRightWidth,
+		appPreferenceObjectPanelDockedBottomHeight,
+		appPreferenceObjectPanelFloatingWidth,
+		appPreferenceObjectPanelFloatingHeight,
+		appPreferenceObjectPanelFloatingX,
+		appPreferenceObjectPanelFloatingY,
+		appPreferencePaletteHueLight,
+		appPreferencePaletteSaturationLight,
+		appPreferencePaletteBrightnessLight,
+		appPreferencePaletteHueDark,
+		appPreferencePaletteSaturationDark,
+		appPreferencePaletteBrightnessDark,
+		appPreferenceAccentColorLight,
+		appPreferenceAccentColorDark,
+		appPreferenceLinkColorLight,
+		appPreferenceLinkColorDark,
+	}
 }
 
 func logPreferenceChange(logger *Logger, key string, value any) {

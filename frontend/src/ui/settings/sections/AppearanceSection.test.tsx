@@ -15,6 +15,30 @@ const appPreferenceMocks = vi.hoisted(() => ({
   saveTheme: vi.fn(),
   validateThemeClusterPattern: vi.fn(),
   getPaletteTint: vi.fn(),
+  getPreferenceMetadata: vi.fn((key: string) => ({
+    key,
+    type: key === 'appearanceMode' ? 'enum' : 'integer',
+    defaultValue: key === 'appearanceMode' ? 'system' : 0,
+    currentValue: key === 'appearanceMode' ? 'light' : 0,
+    min: key.includes('Brightness') ? -50 : 0,
+    max: key.includes('Hue') ? 360 : 100,
+    enumOptions: key === 'appearanceMode' ? ['light', 'dark', 'system'] : undefined,
+    runtimeSideEffect: key === 'appearanceMode',
+  })),
+  getIntegerPreferenceMetadata: vi.fn((key: string) => ({
+    key,
+    type: 'integer',
+    defaultValue: 0,
+    currentValue: 0,
+    min: key.includes('Brightness') ? -50 : 0,
+    max: key.includes('Hue') ? 360 : 100,
+    runtimeSideEffect: false,
+  })),
+  normalizeIntegerPreferenceValue: vi.fn((key: string, value: number) => {
+    const min = key.includes('Brightness') ? -50 : 0;
+    const max = key.includes('Hue') ? 360 : 100;
+    return Math.max(min, Math.min(max, Math.floor(value)));
+  }),
   setPaletteTint: vi.fn(),
   getAccentColor: vi.fn(),
   setAccentColor: vi.fn(),
@@ -36,6 +60,11 @@ vi.mock('@/core/contexts/AppearanceModeContext', () => ({
 
 vi.mock('@/core/settings/appPreferences', () => ({
   hydrateAppPreferences: vi.fn().mockResolvedValue({}),
+  getPreferenceMetadata: (key: string) => appPreferenceMocks.getPreferenceMetadata(key),
+  getIntegerPreferenceMetadata: (key: string) =>
+    appPreferenceMocks.getIntegerPreferenceMetadata(key),
+  normalizeIntegerPreferenceValue: (key: string, value: number) =>
+    appPreferenceMocks.normalizeIntegerPreferenceValue(key, value),
   getPaletteTint: (...args: unknown[]) => appPreferenceMocks.getPaletteTint(...args),
   setPaletteTint: (...args: unknown[]) => appPreferenceMocks.setPaletteTint(...args),
   getAccentColor: (...args: unknown[]) => appPreferenceMocks.getAccentColor(...args),

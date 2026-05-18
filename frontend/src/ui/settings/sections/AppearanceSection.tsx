@@ -18,7 +18,10 @@ import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
 import {
+  getIntegerPreferenceMetadata,
+  getPreferenceMetadata,
   hydrateAppPreferences,
+  normalizeIntegerPreferenceValue,
   setPaletteTint as persistPaletteTint,
   getPaletteTint,
   getAccentColor,
@@ -71,9 +74,11 @@ const buildPaletteSliderStyle = (thumbColor: string, background?: string): Palet
 
 function AppearanceModeSelector({
   mode,
+  options,
   onChange,
 }: {
   mode: string;
+  options: ReadonlyArray<(typeof appearanceModeOptions)[number]>;
   onChange: (mode: string) => void;
 }) {
   return (
@@ -86,7 +91,7 @@ function AppearanceModeSelector({
       </div>
       <div className="settings-row-control">
         <div className="settings-choice-buttons" role="group" aria-label="Appearance mode">
-          {appearanceModeOptions.map((option) => {
+          {options.map((option) => {
             const Icon = option.icon;
             const isSelected = mode === option.value;
             return (
@@ -115,6 +120,7 @@ function PaletteControls({
   hueSliderStyle,
   saturationSliderStyle,
   brightnessSliderStyle,
+  paletteBounds,
   renderEditableValue,
   onHueChange,
   onSaturationChange,
@@ -129,6 +135,11 @@ function PaletteControls({
   hueSliderStyle: PaletteSliderStyle;
   saturationSliderStyle: PaletteSliderStyle;
   brightnessSliderStyle: PaletteSliderStyle;
+  paletteBounds: {
+    hue: { min: number; max?: number };
+    saturation: { min: number; max?: number };
+    brightness: { min: number; max?: number };
+  };
   renderEditableValue: (
     field: 'hue' | 'saturation' | 'brightness',
     value: number,
@@ -157,8 +168,8 @@ function PaletteControls({
             type="range"
             id="palette-hue"
             className="palette-slider palette-slider-hue"
-            min={0}
-            max={360}
+            min={paletteBounds.hue.min}
+            max={paletteBounds.hue.max}
             value={paletteHue}
             onChange={(e) => onHueChange(Number(e.target.value))}
             style={hueSliderStyle}
@@ -179,8 +190,8 @@ function PaletteControls({
             type="range"
             id="palette-saturation"
             className="palette-slider palette-slider-saturation"
-            min={0}
-            max={100}
+            min={paletteBounds.saturation.min}
+            max={paletteBounds.saturation.max}
             value={paletteSaturation}
             onChange={(e) => onSaturationChange(Number(e.target.value))}
             style={saturationSliderStyle}
@@ -201,8 +212,8 @@ function PaletteControls({
             type="range"
             id="palette-brightness"
             className="palette-slider palette-slider-brightness"
-            min={-50}
-            max={50}
+            min={paletteBounds.brightness.min}
+            max={paletteBounds.brightness.max}
             value={paletteBrightness}
             onChange={(e) => onBrightnessChange(Number(e.target.value))}
             style={brightnessSliderStyle}
@@ -355,6 +366,29 @@ function AppearanceSection() {
   const [deleteConfirmThemeId, setDeleteConfirmThemeId] = useState<string | null>(null);
   const [hasUnsavedDefaultThemeChanges, setHasUnsavedDefaultThemeChanges] = useState(false);
   const [themePatternError, setThemePatternError] = useState<string | null>(null);
+  const appearanceModeMetadata = getPreferenceMetadata('appearanceMode');
+  const enabledAppearanceModeOptions = appearanceModeOptions.filter(
+    (option) =>
+      !appearanceModeMetadata.enumOptions ||
+      appearanceModeMetadata.enumOptions.includes(option.value)
+  );
+  const palettePreferenceKeys =
+    resolvedMode === 'light'
+      ? {
+          hue: 'paletteHueLight' as const,
+          saturation: 'paletteSaturationLight' as const,
+          brightness: 'paletteBrightnessLight' as const,
+        }
+      : {
+          hue: 'paletteHueDark' as const,
+          saturation: 'paletteSaturationDark' as const,
+          brightness: 'paletteBrightnessDark' as const,
+        };
+  const paletteBounds = {
+    hue: getIntegerPreferenceMetadata(palettePreferenceKeys.hue),
+    saturation: getIntegerPreferenceMetadata(palettePreferenceKeys.saturation),
+    brightness: getIntegerPreferenceMetadata(palettePreferenceKeys.brightness),
+  };
 
   // Reload slider/accent/link values when the resolved appearance mode changes.
   useEffect(() => {
@@ -412,45 +446,55 @@ function AppearanceSection() {
   );
 
   const handlePaletteHueChange = (value: number) => {
+    const normalized = normalizeIntegerPreferenceValue(palettePreferenceKeys.hue, value);
     flagUnsavedDefaultThemeChange();
-    setPaletteHue(value);
-    applyTintedPalette(value, paletteSaturation, paletteBrightness);
-    debouncePalettePersist(value, paletteSaturation, paletteBrightness);
+    setPaletteHue(normalized);
+    applyTintedPalette(normalized, paletteSaturation, paletteBrightness);
+    debouncePalettePersist(normalized, paletteSaturation, paletteBrightness);
   };
 
   const handlePaletteSaturationChange = (value: number) => {
+    const normalized = normalizeIntegerPreferenceValue(palettePreferenceKeys.saturation, value);
     flagUnsavedDefaultThemeChange();
-    setPaletteSaturation(value);
-    applyTintedPalette(paletteHue, value, paletteBrightness);
-    debouncePalettePersist(paletteHue, value, paletteBrightness);
+    setPaletteSaturation(normalized);
+    applyTintedPalette(paletteHue, normalized, paletteBrightness);
+    debouncePalettePersist(paletteHue, normalized, paletteBrightness);
   };
 
   const handlePaletteBrightnessChange = (value: number) => {
+    const normalized = normalizeIntegerPreferenceValue(palettePreferenceKeys.brightness, value);
     flagUnsavedDefaultThemeChange();
-    setPaletteBrightness(value);
-    applyTintedPalette(paletteHue, paletteSaturation, value);
-    debouncePalettePersist(paletteHue, paletteSaturation, value);
+    setPaletteBrightness(normalized);
+    applyTintedPalette(paletteHue, paletteSaturation, normalized);
+    debouncePalettePersist(paletteHue, paletteSaturation, normalized);
   };
 
   const handleHueReset = () => {
+    const defaultValue = Number(getPreferenceMetadata(palettePreferenceKeys.hue).defaultValue);
     flagUnsavedDefaultThemeChange();
-    setPaletteHue(0);
-    applyTintedPalette(0, paletteSaturation, paletteBrightness);
-    debouncePalettePersist(0, paletteSaturation, paletteBrightness);
+    setPaletteHue(defaultValue);
+    applyTintedPalette(defaultValue, paletteSaturation, paletteBrightness);
+    debouncePalettePersist(defaultValue, paletteSaturation, paletteBrightness);
   };
 
   const handleSaturationReset = () => {
+    const defaultValue = Number(
+      getPreferenceMetadata(palettePreferenceKeys.saturation).defaultValue
+    );
     flagUnsavedDefaultThemeChange();
-    setPaletteSaturation(0);
-    applyTintedPalette(paletteHue, 0, paletteBrightness);
-    debouncePalettePersist(paletteHue, 0, paletteBrightness);
+    setPaletteSaturation(defaultValue);
+    applyTintedPalette(paletteHue, defaultValue, paletteBrightness);
+    debouncePalettePersist(paletteHue, defaultValue, paletteBrightness);
   };
 
   const handleBrightnessReset = () => {
+    const defaultValue = Number(
+      getPreferenceMetadata(palettePreferenceKeys.brightness).defaultValue
+    );
     flagUnsavedDefaultThemeChange();
-    setPaletteBrightness(0);
-    applyTintedPalette(paletteHue, paletteSaturation, 0);
-    debouncePalettePersist(paletteHue, paletteSaturation, 0);
+    setPaletteBrightness(defaultValue);
+    applyTintedPalette(paletteHue, paletteSaturation, defaultValue);
+    debouncePalettePersist(paletteHue, paletteSaturation, defaultValue);
   };
 
   const debounceAccentPersist = useCallback(
@@ -577,11 +621,11 @@ function AppearanceSection() {
       return;
     }
     if (editingPaletteField === 'hue') {
-      handlePaletteHueChange(Math.max(0, Math.min(360, parsed)));
+      handlePaletteHueChange(parsed);
     } else if (editingPaletteField === 'saturation') {
-      handlePaletteSaturationChange(Math.max(0, Math.min(100, parsed)));
+      handlePaletteSaturationChange(parsed);
     } else if (editingPaletteField === 'brightness') {
-      handlePaletteBrightnessChange(Math.max(-50, Math.min(50, parsed)));
+      handlePaletteBrightnessChange(parsed);
     }
     setEditingPaletteField(null);
   };
@@ -928,7 +972,11 @@ function AppearanceSection() {
       <div className="settings-subgroup-label">Mode</div>
       <hr className="settings-subgroup-divider" />
 
-      <AppearanceModeSelector mode={mode} onChange={handleAppearanceModeChange} />
+      <AppearanceModeSelector
+        mode={mode}
+        options={enabledAppearanceModeOptions}
+        onChange={handleAppearanceModeChange}
+      />
 
       <div className="settings-subgroup-label">Theme</div>
       <hr className="settings-subgroup-divider" />
@@ -946,6 +994,7 @@ function AppearanceSection() {
         hueSliderStyle={hueSliderStyle}
         saturationSliderStyle={saturationSliderStyle}
         brightnessSliderStyle={brightnessSliderStyle}
+        paletteBounds={paletteBounds}
         renderEditableValue={renderEditableValue}
         onHueChange={handlePaletteHueChange}
         onSaturationChange={handlePaletteSaturationChange}

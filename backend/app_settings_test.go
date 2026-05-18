@@ -639,6 +639,30 @@ func TestAppGetAppSettingsSchemaIncludesBackendOwnedDefaults(t *testing.T) {
 	require.Equal(t, defaultKubernetesClientQPS, byKey[appPreferenceKubernetesClientQPS].DefaultValue)
 	require.Equal(t, minKubernetesClientQPS, *byKey[appPreferenceKubernetesClientQPS].Min)
 	require.Equal(t, maxKubernetesClientQPS, *byKey[appPreferenceKubernetesClientQPS].Max)
+	require.Equal(t, minObjectPanelDockedRightWidth, *byKey[appPreferenceObjectPanelDockedRightWidth].Min)
+	require.Equal(t, maxObjectPanelLayoutValue, *byKey[appPreferenceObjectPanelDockedRightWidth].Max)
+	require.Equal(t, minObjectPanelFloatingX, *byKey[appPreferenceObjectPanelFloatingX].Min)
+	require.Equal(t, maxObjectPanelLayoutValue, *byKey[appPreferenceObjectPanelFloatingX].Max)
+}
+
+func TestAppSettingsSchemaCoversUpdateAppPreferenceKeys(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	schema, err := app.GetAppSettingsSchema()
+	require.NoError(t, err)
+
+	schemaKeys := make([]string, 0, len(schema.Preferences))
+	seen := make(map[string]struct{}, len(schema.Preferences))
+	for _, pref := range schema.Preferences {
+		require.NotEmpty(t, pref.Key)
+		require.NotEmpty(t, pref.Type)
+		require.NotContains(t, seen, pref.Key, "duplicate schema key %q", pref.Key)
+		seen[pref.Key] = struct{}{}
+		schemaKeys = append(schemaKeys, pref.Key)
+	}
+
+	require.ElementsMatch(t, appPreferenceKeys(), schemaKeys)
 }
 
 func TestAppUpdateAppPreferencesAppliesAtomicBatch(t *testing.T) {

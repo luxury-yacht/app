@@ -26,9 +26,23 @@ Settings-specific contract:
 
 - Persisted app preferences and runtime-enforced settings are backend-owned and
   described by `readAppSettingsSchema`.
+- `frontend/src/core/settings/appPreferences.ts` owns the frontend schema
+  metadata cache and typed metadata helpers. Settings UI sections should consume
+  defaults, bounds, enum values, validation hints, and runtime flags through
+  those helpers instead of duplicating backend constants.
+- Fallback metadata belongs only inside `appPreferences.ts` for first paint,
+  Wails-unavailable tests, or schema-load failure; it is not a second settings
+  contract.
+- Settings components should not fetch backend schema directly. Add or reuse a
+  typed helper in `core/settings` when UI needs preference metadata.
 - Frontend preference setters should use the shared optimistic update path that
   calls `UpdateAppPreferences`, then roll back cache, emitted events, and any
   appearance localStorage mirrors on failure.
+- `UpdateAppPreferences` returns normalized settings and changed keys. Do not
+  change that response shape unless a workflow genuinely needs schema metadata
+  in the mutation response.
+- Runtime-effect flags are metadata for diagnostics and future UI decisions.
+  Do not add user-facing runtime-effect copy unless the workflow calls for it.
 - Frontend-only or bootstrap state stays local when it is transient or needed
   before Wails is available. Do not move local UI state into the backend just
   because it appears in Settings.
@@ -59,6 +73,14 @@ Settings-specific contract:
       namespace identity when the state is cluster data.
 - [ ] Persisted preferences hydrate from backend schema metadata instead of
       duplicating defaults and bounds in UI code.
+- [ ] Backend-owned Settings controls read min/max/default/current values from
+      schema metadata helpers in `core/settings`; keep fallback constants local
+      to the metadata layer only.
+- [ ] Backend schema coverage includes every preference accepted by
+      `UpdateAppPreferences`, without adding non-preference settings like
+      selected kubeconfigs or saved themes to the preference schema.
+- [ ] Regenerate Wails bindings when backend settings DTOs, schema fields, or
+      response shapes change.
 - [ ] Preference mutations use `UpdateAppPreferences` semantics: atomic
       validation, persistence before runtime side effects, and rollback on
       failure.

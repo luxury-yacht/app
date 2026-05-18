@@ -14,6 +14,34 @@ const appPreferenceMocks = vi.hoisted(() => ({
     floatingX: 60,
     floatingY: 60,
   })),
+  getIntegerPreferenceMetadata: vi.fn((key: string) => ({
+    key,
+    type: 'integer',
+    defaultValue: key.includes('DockedRight')
+      ? 600
+      : key.includes('DockedBottom')
+        ? 400
+        : key.includes('FloatingWidth')
+          ? 500
+          : key.includes('FloatingHeight')
+            ? 400
+            : 100,
+    currentValue: 0,
+    min: key.includes('DockedRight')
+      ? 500
+      : key.includes('DockedBottom')
+        ? 200
+        : key.includes('FloatingWidth')
+          ? 450
+          : key.includes('FloatingHeight')
+            ? 200
+            : 0,
+    max: 9999,
+    runtimeSideEffect: false,
+  })),
+  normalizeIntegerPreferenceValue: vi.fn((_key: string, value: number) =>
+    Math.max(0, Math.min(9999, Math.floor(value)))
+  ),
   setObjectPanelLayoutDefaults: vi.fn(),
 }));
 
@@ -23,9 +51,13 @@ const dockableMocks = vi.hoisted(() => ({
 
 vi.mock('@core/settings/appPreferences', () => ({
   getDefaultObjectPanelPosition: () => appPreferenceMocks.getDefaultObjectPanelPosition(),
+  getIntegerPreferenceMetadata: (key: string) =>
+    appPreferenceMocks.getIntegerPreferenceMetadata(key),
   setDefaultObjectPanelPosition: (...args: unknown[]) =>
     appPreferenceMocks.setDefaultObjectPanelPosition(...args),
   getObjectPanelLayoutDefaults: () => appPreferenceMocks.getObjectPanelLayoutDefaults(),
+  normalizeIntegerPreferenceValue: (key: string, value: number) =>
+    appPreferenceMocks.normalizeIntegerPreferenceValue(key, value),
   setObjectPanelLayoutDefaults: (...args: unknown[]) =>
     appPreferenceMocks.setObjectPanelLayoutDefaults(...args),
 }));
@@ -38,12 +70,6 @@ vi.mock('@ui/dockable', () => ({
 
 vi.mock('@ui/dockable/dockablePanelLayout', () => ({
   getContentBounds: () => ({ width: 1200, height: 900 }),
-  PANEL_DEFAULTS: {
-    RIGHT_MIN_WIDTH: 240,
-    BOTTOM_MIN_HEIGHT: 180,
-    FLOATING_MIN_WIDTH: 320,
-    FLOATING_MIN_HEIGHT: 240,
-  },
 }));
 
 describe('ObjectPanelSection', () => {
