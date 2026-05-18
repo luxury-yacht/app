@@ -64,6 +64,12 @@ Frontend domain registrations live in
 `backend/refresh/system/registrations.go`; stream routes are registered in
 `backend/refresh/system/streams.go`.
 
+Backend and frontend domain parity is guarded by
+`backend/refresh/system/testdata/refresh-domain-manifest.json` and the backend
+and frontend refresh-domain tests. When adding or changing a domain, keep
+backend registration kind, frontend orchestrator kind, resource-stream coverage,
+runtime permission policy, and diagnostics stream mapping aligned.
+
 Current frontend domains are fully scoped and single-cluster by contract. The
 orchestrator normalizes every scope with `buildClusterScope` from
 `frontend/src/core/refresh/clusterScope.ts` before a network request or store

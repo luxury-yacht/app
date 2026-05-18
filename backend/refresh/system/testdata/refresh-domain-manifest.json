@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "domains": [
+    {
+      "domain": "namespaces",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "frontend": { "orchestrator": "snapshot", "diagnosticsStream": null, "metricsInterval": false }
+    },
+    {
+      "domain": "cluster-overview",
+      "category": "system",
+      "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": false },
+      "frontend": { "orchestrator": "snapshot", "diagnosticsStream": null, "metricsInterval": false }
+    },
+    {
+      "domain": "catalog",
+      "category": "cluster",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": { "orchestrator": "catalog-stream", "diagnosticsStream": "catalog", "metricsInterval": false }
+    },
+    {
+      "domain": "catalog-diff",
+      "category": "cluster",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": { "orchestrator": "snapshot", "diagnosticsStream": null, "metricsInterval": false }
+    },
+    {
+      "domain": "nodes",
+      "category": "cluster",
+      "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": true }
+    },
+    {
+      "domain": "cluster-config",
+      "category": "cluster",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "cluster-crds",
+      "category": "cluster",
+      "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "cluster-custom",
+      "category": "cluster",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "cluster-events",
+      "category": "cluster",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "frontend": { "orchestrator": "event-stream", "diagnosticsStream": "events", "metricsInterval": false }
+    },
+    {
+      "domain": "cluster-rbac",
+      "category": "cluster",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "cluster-storage",
+      "category": "cluster",
+      "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "namespace-workloads",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": true }
+    },
+    {
+      "domain": "namespace-autoscaling",
+      "category": "namespace",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "namespace-config",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "namespace-custom",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "namespace-events",
+      "category": "namespace",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "frontend": { "orchestrator": "event-stream", "diagnosticsStream": "events", "metricsInterval": false }
+    },
+    {
+      "domain": "namespace-helm",
+      "category": "namespace",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "namespace-network",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "namespace-quotas",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "namespace-rbac",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "namespace-storage",
+      "category": "namespace",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": false }
+    },
+    {
+      "domain": "pods",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
+      "frontend": { "orchestrator": "resource-stream", "diagnosticsStream": "resources", "metricsInterval": true }
+    },
+    {
+      "domain": "object-details",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": { "orchestrator": "snapshot", "diagnosticsStream": null, "metricsInterval": false }
+    },
+    {
+      "domain": "object-yaml",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": { "orchestrator": "snapshot", "diagnosticsStream": null, "metricsInterval": false }
+    },
+    {
+      "domain": "object-helm-manifest",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": { "orchestrator": "snapshot", "diagnosticsStream": null, "metricsInterval": false }
+    },
+    {
+      "domain": "object-helm-values",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": { "orchestrator": "snapshot", "diagnosticsStream": null, "metricsInterval": false }
+    },
+    {
+      "domain": "object-events",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "frontend": { "orchestrator": "snapshot", "diagnosticsStream": null, "metricsInterval": false }
+    },
+    {
+      "domain": "object-map",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "frontend": { "orchestrator": "snapshot", "diagnosticsStream": null, "metricsInterval": false }
+    },
+    {
+      "domain": "object-maintenance",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": { "orchestrator": "snapshot", "diagnosticsStream": null, "metricsInterval": false }
+    },
+    {
+      "domain": "container-logs",
+      "category": "system",
+      "backend": { "registration": "streamOnly", "permission": "stream-specific", "resourceStream": false },
+      "frontend": { "orchestrator": "container-logs-stream", "diagnosticsStream": "container-logs", "metricsInterval": false }
+    }
+  ]
+}
