@@ -119,6 +119,77 @@
   -webkit-user-select: text !important;
 }
 
+.app-logs-header {
+  display: grid;
+  grid-template-columns:
+    var(--app-log-timestamp-width, 90px) var(--app-log-level-width, 60px)
+    var(--app-log-source-width, 120px) var(--app-log-cluster-width, 140px) minmax(0, 1fr);
+  flex-shrink: 0;
+  padding: 5px 10px;
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.app-logs-header-cell {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-logs-header-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-logs-column-resizer {
+  position: absolute;
+  top: -5px;
+  right: -4px;
+  bottom: -5px;
+  z-index: 1;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.app-logs-column-resizer::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 3px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--color-border);
+  opacity: 0;
+}
+
+.app-logs-column-resizer:hover::after,
+.app-logs-column-resizer:focus-visible::after {
+  opacity: 1;
+}
+
+.app-logs-column-resizer:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: -1px;
+}
+
+.app-logs-header .log-timestamp,
+.app-logs-header .log-level,
+.app-logs-header .log-source,
+.app-logs-header .log-cluster,
+.app-logs-header .log-message {
+  color: inherit;
+  opacity: 1;
+}
+
 .app-logs-container.empty {
   display: flex;
   align-items: center;
@@ -128,7 +199,10 @@
 
 /* Log entries */
 .log-entry {
-  display: flex;
+  display: grid;
+  grid-template-columns:
+    var(--app-log-timestamp-width, 90px) var(--app-log-level-width, 60px)
+    var(--app-log-source-width, 120px) var(--app-log-cluster-width, 140px) minmax(0, 1fr);
   padding: 2px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -139,16 +213,18 @@
 
 .log-timestamp {
   color: var(--color-text-tertiary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  width: 90px;
-  flex-shrink: 0;
 }
 
 .log-level {
   font-weight: 600;
   text-transform: uppercase;
-  width: 60px;
-  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .log-level.DEBUG {
@@ -170,8 +246,7 @@
 .log-source {
   color: var(--color-text-secondary);
   opacity: 0.7;
-  width: 120px;
-  flex-shrink: 0;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -180,15 +255,14 @@
 .log-cluster {
   color: var(--color-text-secondary);
   opacity: 0.85;
-  width: 140px;
-  flex-shrink: 0;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .log-message {
-  flex: 1;
+  min-width: 0;
   color: var(--color-text);
   word-wrap: break-word;
   white-space: pre-wrap;

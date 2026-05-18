@@ -185,6 +185,66 @@ describe('AppLogsPanel', () => {
     cleanup();
   });
 
+  it('renders a header row for log columns', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      {
+        sequence: 1,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Ready',
+        source: 'core',
+      },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+
+    const header = container.querySelector('.app-logs-header');
+    expect(header).not.toBeNull();
+    expect(
+      Array.from(header!.querySelectorAll('[role="columnheader"]')).map((cell) => cell.textContent)
+    ).toEqual(['Time', 'Level', 'Source', 'Cluster', 'Message']);
+
+    cleanup();
+  });
+
+  it('resizes log columns from the header row', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      {
+        sequence: 1,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Ready',
+        source: 'core',
+      },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+
+    const header = container.querySelector<HTMLElement>('.app-logs-header');
+    const clusterResizer = container.querySelector<HTMLElement>(
+      '[aria-label="Resize Cluster column"]'
+    );
+    expect(header?.style.getPropertyValue('--app-log-cluster-width')).toBe('140px');
+    expect(clusterResizer).not.toBeNull();
+
+    await act(async () => {
+      clusterResizer!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(header?.style.getPropertyValue('--app-log-cluster-width')).toBe('150px');
+
+    cleanup();
+  });
+
   it('appends new logs from app-logs events using delta reads and listener disposers', async () => {
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([
@@ -366,7 +426,9 @@ describe('AppLogsPanel', () => {
 
     await flushInitialLoad();
 
-    expect(container.querySelector('.log-cluster')?.textContent).toBe('[alpha]');
+    expect(container.querySelector('.app-logs-container .log-cluster')?.textContent).toBe(
+      '[alpha]'
+    );
 
     const clustersDropdown = latestDropdown('Clusters');
     expect(clustersDropdown).toBeTruthy();
@@ -419,7 +481,7 @@ describe('AppLogsPanel', () => {
 
     await flushInitialLoad();
 
-    const clusters = Array.from(container.querySelectorAll('.log-cluster')).map(
+    const clusters = Array.from(container.querySelectorAll('.app-logs-container .log-cluster')).map(
       (entry) => entry.textContent
     );
     expect(clusters).toEqual(['[Global]', '[alpha]']);
