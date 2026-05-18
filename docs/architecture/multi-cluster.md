@@ -168,6 +168,24 @@ When no clusters are selected:
 - Views only show data for the active tab cluster
 - Object panel actions must always be scoped to the originating cluster
 
+Open cluster tabs are retained workspaces, not disposable views. Switching from
+one open cluster tab to another must preserve the inactive tab's last-viewed
+navigation state and scoped refresh data so switching back can render
+immediately. Foreground activation may revalidate or reconnect after rendering
+cached state, but it must not blank the view first.
+
+Inactive open tabs are backgrounded, not disposed:
+
+- Active to background-open transitions preserve scoped state.
+- Background-open to active transitions render retained state immediately.
+- Background refresh, when enabled, updates inactive open tabs through separate
+  single-cluster scopes.
+- Disabling background refresh stops inactive-tab work but does not clear the
+  last loaded data.
+- Closing a cluster tab, removing/disconnecting a cluster, kubeconfig changes,
+  auth/runtime resets, permission invalidation, and explicit view resets are
+  disposal paths and may clear scoped state.
+
 ## Per-Cluster State Tracking
 
 ### Auth State
