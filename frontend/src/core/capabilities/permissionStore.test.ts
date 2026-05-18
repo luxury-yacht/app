@@ -29,6 +29,7 @@ import {
 } from './permissionStore';
 import { eventBus } from '@/core/events';
 import { POD_PERMISSIONS, WORKLOAD_PERMISSIONS } from './permissionSpecs';
+import { PERMISSION_FEATURES } from './permissionFeatures';
 import type { PermissionEntry } from './permissionTypes';
 
 afterEach(() => {
@@ -182,7 +183,7 @@ describe('makePermissionStatus', () => {
         namespace: 'default',
         subresource: null,
       },
-      feature: 'workloads',
+      feature: PERMISSION_FEATURES.namespaceWorkloads,
     };
 
     const status = makePermissionStatus('cluster-1|deployment|get|default|', entry);

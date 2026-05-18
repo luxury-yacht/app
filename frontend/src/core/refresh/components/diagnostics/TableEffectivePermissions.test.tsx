@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { EffectivePermissionsTable } from './TableEffectivePermissions';
 import type { PermissionRow } from './diagnosticsPanelTypes';
+import { PERMISSION_FEATURES } from '@/core/capabilities';
 
 const setSearchValue = (input: HTMLInputElement, value: string): void => {
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -87,6 +88,32 @@ describe('EffectivePermissionsTable', () => {
     expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
     expect(host.textContent).toContain('1 OF 300 CHECKS');
     expect(host.textContent).toContain('namespace-299');
+
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+
+  it('renders display labels while keeping stable feature keys in row data', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = ReactDOM.createRoot(host);
+    const rows = [
+      {
+        ...createPermissionRow(1),
+        feature: PERMISSION_FEATURES.namespaceWorkloads,
+        featureLabel: 'Namespace workloads',
+      },
+    ];
+
+    await act(async () => {
+      root.render(<EffectivePermissionsTable rows={rows} />);
+      await Promise.resolve();
+    });
+
+    expect(host.textContent).toContain('Namespace workloads');
+    expect(host.textContent).not.toContain(PERMISSION_FEATURES.namespaceWorkloads);
 
     await act(async () => {
       root.unmount();

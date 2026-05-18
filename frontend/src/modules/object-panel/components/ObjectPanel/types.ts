@@ -82,6 +82,8 @@ export type CapabilityIdMap = {
   delete?: string;
   restart?: string;
   scale?: string;
+  trigger?: string;
+  suspend?: string;
   shell?: string;
   shellExecGet?: string;
   shellExecCreate?: string;
@@ -102,6 +104,8 @@ export type CapabilityStates = {
   delete: CapabilityState;
   restart: CapabilityState;
   scale: CapabilityState;
+  trigger: CapabilityState;
+  suspend: CapabilityState;
   shell: CapabilityState;
   debug: CapabilityState;
 };
@@ -113,6 +117,8 @@ export type CapabilityReasons = {
   delete?: string;
   restart?: string;
   scale?: string;
+  trigger?: string;
+  suspend?: string;
   editYaml?: string;
   shell?: string;
   debug?: string;

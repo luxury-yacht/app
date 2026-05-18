@@ -40,6 +40,9 @@ import { stripClusterScope, parseClusterScopeList } from '@/core/refresh/cluster
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import {
   getPermissionKey,
+  PERMISSION_FEATURES,
+  permissionFeatureLabel,
+  type PermissionFeatureKey,
   useCapabilityDiagnostics,
   useUserPermissions,
 } from '@/core/capabilities';
@@ -1648,7 +1651,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const totalChecks =
           entry.totalChecks && entry.totalChecks > 0 ? entry.totalChecks : descriptorCount;
         // Group descriptors by feature for a combined summary.
-        const featureDescriptors = new Map<string, Map<string, string[]>>();
+        const featureDescriptors = new Map<PermissionFeatureKey, Map<string, string[]>>();
         entry.lastDescriptors.forEach((descriptor) => {
           const key = getPermissionKey(
             descriptor.resourceKind,
@@ -1658,7 +1661,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             entry.clusterId ?? null
           );
           const status = permissionMap.get(key);
-          const feature = status?.feature ?? 'Other';
+          const feature = status?.feature ?? PERMISSION_FEATURES.other;
 
           let resources = featureDescriptors.get(feature);
           if (!resources) {
@@ -1699,7 +1702,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           });
         });
 
-        // Build structured summary: feature name + resource lines.
+        // Build structured summary: feature label + resource lines.
         const descriptorsByFeature =
           featureDescriptors.size > 0
             ? Array.from(featureDescriptors.entries()).map(([feature, resources]) => ({
@@ -1787,6 +1790,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         reason,
         id: status.id,
         feature: status.feature,
+        featureLabel: permissionFeatureLabel(status.feature) ?? undefined,
         descriptorNamespace: status.descriptor.namespace ?? null,
         pendingCount: activity?.pendingCount ?? null,
         inFlightCount: activity?.inFlightCount ?? null,

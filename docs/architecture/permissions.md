@@ -4,13 +4,29 @@ This document explains how Luxury Yacht checks Kubernetes RBAC permissions, how 
 
 ## Overview
 
-There are two independent permission systems:
+Luxury Yacht has one permission and capability contract with separate runtime
+evaluators:
 
-1. **Refresh subsystem permissions (backend)** -- Gates which refresh domains are active. Uses SSAR (SelfSubjectAccessReview) via `permissions.Checker`. Determines whether the backend should watch/list a resource type at all. Operates at startup (registration) and runtime (per-snapshot). Unchanged from the original architecture.
+1. **Refresh-domain permission evaluation (backend)** -- Gates which refresh
+   domains are active. Uses SSAR (SelfSubjectAccessReview) via
+   `permissions.Checker`. Determines whether the backend should list/watch a
+   resource type at all. Operates at startup registration and again at runtime
+   before snapshot builds.
 
-2. **UI permission map (frontend ↔ backend)** -- Gates context menu actions (Delete, Restart, Scale, Rollback, Port Forward) in the UI. Uses SSRR (SelfSubjectRulesReview) for namespace-scoped resources and SSAR for cluster-scoped resources, via the `QueryPermissions` Wails endpoint. One SSRR call per namespace returns all rules; the backend matches permissions locally against cached rules.
+2. **UI permission and capability evaluation (frontend + backend)** -- Gates
+   context menu actions, object-panel workflow controls, and diagnostics. Uses
+   SSRR (SelfSubjectRulesReview) for namespace-scoped resources and SSAR for
+   cluster-scoped resources, via the `QueryPermissions` Wails endpoint. One SSRR
+   call per namespace returns all rules; the backend matches permissions locally
+   against cached rules.
 
-These systems are independent. The refresh subsystem's `permissions.Checker` and the UI's `QueryPermissions` endpoint have separate caches, separate TTLs, and separate code paths. Changing one does not affect the other.
+3. **Backend mutation permission checks** -- Remain the final authority before
+   any write or imperative operation changes cluster state.
+
+These evaluators are intentionally separate because their cache shapes, failure
+handling, and diagnostics differ. The shared contract is enforced by descriptor
+catalogs and parity tests rather than by merging the refresh SSAR checker with
+the UI SSRR/SSAR permission store.
 
 ---
 
@@ -22,12 +38,14 @@ This section covers the backend refresh subsystem's permission checking, which g
 
 | File                                            | Role                                                                                  |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `backend/refresh/permissions/resource_requirement.go` | Shared group/resource/verb descriptor helpers for refresh permission contracts |
 | `backend/refresh/permissions/checker.go`        | Issues SSAR calls, caches decisions, stale-while-revalidate logic                     |
 | `backend/refresh/snapshot/permission_checks.go` | Defines per-domain permission requirements (`requireAll` / `requireAny`)              |
 | `backend/refresh/snapshot/permission.go`        | Registers permission-denied placeholder domains                                       |
 | `backend/refresh/snapshot/service.go`           | `ensurePermissions()` -- runtime permission gate before every snapshot build          |
 | `backend/refresh/system/permission_gate.go`     | Startup permission gate for list / list+watch registration                            |
 | `backend/refresh/system/registrations.go`       | Domain registration table -- maps domains to permission checks and register functions |
+| `backend/refresh/resourcestream/permission_contract.go` | Resource-stream domain resource contract checked against snapshot permissions |
 | `backend/internal/config/config.go`             | Timing constants (`PermissionCacheTTL`, `PermissionCacheStaleGracePeriod`, etc.)      |
 | `backend/refresh/types.go`                      | `DomainConfig` struct including the `PermissionDenied` flag                           |
 
@@ -76,7 +94,7 @@ At runtime, `ensurePermissions()` checks this flag and **short-circuits** -- it 
 
 The function `defaultPermissionChecks()` in `permission_checks.go` is the single source of truth for which permissions each domain requires. It maps domain names to `permissionCheck` structs that specify:
 
-- A list of `permissionRequirement` entries (group, resource, verb)
+- A list of `permissions.ResourceRequirement` entries (group, resource, verb)
 - A mode: `requireAll` or `requireAny`
 
 #### `requireAll` vs `requireAny`
@@ -162,8 +180,9 @@ if b.roleLister != nil {
 3. Guard every lister call in `Build()` with a nil check.
 4. In `registrations.go`, use `listRegistration` with `allowAny: true` and pass the `allowed` map to the permissions struct.
 5. In `permission_checks.go`, add a `requireAny` entry for the domain.
-6. Add the domain's resources to `preflightRequests` (usually automatic from the registration checks).
-7. Update `TestDomainRegistrationOrder` in `registrations_test.go` if the domain is new.
+6. If the domain is resource-streamed, add its resource list to `resourcestream.PermissionRequirementsByDomain()` so the stream contract remains aligned with snapshot runtime permissions.
+7. Add the domain's resources to `preflightRequests` (usually automatic from the registration checks).
+8. Update `TestDomainRegistrationOrder` in `registrations_test.go` if the domain is new.
 
 #### Adding A New Single-Resource Domain
 
@@ -180,6 +199,8 @@ Use `requireAll` in `permission_checks.go` and `directRegistration` in `registra
 #### Testing
 
 - **`registrations_test.go`** -- `TestDomainRegistrationOrder` must list every domain in the exact registration order. Update it when adding or reordering domains.
+- **`registrations_test.go`** -- `TestDomainRegistrationsHaveRuntimePermissionPolicyOrExemption` requires every registered refresh domain to have a runtime permission contract or a documented exemption.
+- **`registrations_test.go`** -- `TestResourceStreamPermissionRequirementsStayAlignedWithSnapshotRuntime` requires every resource-streamed domain to include the corresponding snapshot runtime resources.
 - **`service_test.go`** -- Tests the runtime permission gate. `TestServiceBuildBlocksPermissionDenied` must deny ALL resources for `requireAny` domains. `TestServiceBuildAllowsPartialPermissions` verifies that partial access works. `TestServiceBuildSkipsEnsureForPermissionDeniedDomain` verifies the SSAR skip optimization.
 - **`checker_test.go`** -- Tests cache behavior including stale-while-revalidate. `TestCheckerStaleWhileRevalidate` verifies stale returns + background refresh. `TestCheckerStaleGracePeriodExpired` verifies blocking fetch beyond grace.
 
@@ -197,7 +218,11 @@ Use `requireAll` in `permission_checks.go` and `directRegistration` in `registra
 
 ## UI Action Permissions
 
-This section covers the frontend permission system that gates context menu actions. It is completely independent of the refresh subsystem permissions above.
+This section covers the frontend/backend evaluator that gates context menu
+actions, object-panel controls, and permission diagnostics. It is a separate
+runtime path from refresh-domain permission evaluation, but it shares the same
+contract rule: concrete checks must carry explicit cluster, group, version,
+kind, namespace, name, verb, and subresource where applicable.
 
 ### Architecture
 
@@ -216,10 +241,12 @@ Cluster-scoped resources (Nodes, PVs, StorageClasses, ClusterRoles, etc.) are ro
 | `backend/resources/common/discover.go`                  | `DiscoverGVRByKind` — a kind-only walker retained only for the mutation path's partial-discovery safety net. Explicitly documented as non-deterministic.      |
 | `backend/internal/config/config.go`                     | `SSRRFetchTimeout` constant                                                                                                                                   |
 | `frontend/src/core/capabilities/permissionStore.ts`     | Frontend permission store — calls `QueryPermissions`, caches results, periodic refresh. Owns the GVK-aware permission key format.                             |
+| `frontend/src/core/capabilities/permissionFeatures.ts`   | Stable feature keys and display labels used by permission specs, diagnostics, and capability catalogs                                                        |
 | `frontend/src/core/capabilities/permissionSpecs.ts`     | Static permission spec lists (`ALL_NAMESPACE_PERMISSIONS`, `CLUSTER_PERMISSIONS`)                                                                             |
 | `frontend/src/core/capabilities/permissionTypes.ts`     | `PermissionSpec`, `PermissionEntry`, `PermissionStatus`, `PermissionQueryDiagnostics`                                                                         |
 | `frontend/src/core/capabilities/hooks.ts`               | `useCapabilities()` hook (ad-hoc queries), `useCapabilityDiagnostics()` hook                                                                                  |
 | `frontend/src/core/capabilities/bootstrap.ts`           | Thin delegation layer — `initializeUserPermissionsBootstrap`, `useUserPermissions`, `getPermissionKey`                                                        |
+| `frontend/src/shared/actions/objectActionPermissionMatrix.ts` | UI-visible mutating action matrix mapping action ids to frontend permission descriptors, Wails methods, backend checks, and denied reasons |
 | `frontend/src/shared/constants/builtinGroupVersions.ts` | `resolveBuiltinGroupVersion(kind)` — single source of truth for built-in K8s Kind → GroupVersion. Plus `parseApiVersion` / `formatBuiltinApiVersion` helpers. |
 
 ### How `QueryPermissions` works
@@ -277,15 +304,16 @@ Namespace SSRR responses include rules from namespace RoleBindings that referenc
 
 **All Namespaces** — An effect collects distinct `(clusterId, namespace)` pairs from loaded domain data and calls `queryNamespacePermissions` for each. `queryNamespacePermissions` skips namespaces that already have fresh results within TTL, so only genuinely new namespaces trigger backend calls.
 
-**CRD custom resources** — Lazy-loaded on first context menu open via `queryKindPermissions(kind, namespace, clusterId, group, version)`. **Callers MUST supply explicit `group` and `version`** for colliding-Kind CRDs — without them, the backend's strict resolver hard-errors. `NsViewCustom`/`ClusterViewCustom` pass `resource.apiGroup` and `resource.apiVersion` from the catalog row; `BrowseView`'s context menu reads `row.item.group`/`row.item.version`. Queries delete/patch permissions for the specific CRD GVK. Results are cached per-GVK (two DBInstance CRDs from different groups get distinct cache entries). Feature tagged as `'Namespace custom'` or `'Cluster custom'` for diagnostics filtering.
+**CRD custom resources** — Lazy-loaded on first context menu open via `queryKindPermissions(kind, namespace, clusterId, group, version)`. **Callers MUST supply explicit `group` and `version`** for colliding-Kind CRDs — without them, the backend's strict resolver hard-errors. `NsViewCustom`/`ClusterViewCustom` pass `resource.apiGroup` and `resource.apiVersion` from the catalog row; `BrowseView`'s context menu reads `row.item.group`/`row.item.version`. Queries delete/patch permissions for the specific CRD GVK. Results are cached per-GVK (two DBInstance CRDs from different groups get distinct cache entries). Diagnostics use the stable `namespace.custom` or `cluster.custom` feature keys and render their user-facing labels separately.
 
 **Periodic refresh** — A 2-minute `setInterval` re-queries any `(clusterId, namespace)` pair whose last query is older than the interval. Namespace refreshes are staggered by 500ms to avoid thundering herd.
 
 ### Frontend types
 
-- `PermissionSpec` — Static descriptor: `{ kind, verb, subresource?, group?, version? }`. Built-in specs omit `group`/`version` (they're auto-resolved from `resolveBuiltinGroupVersion(kind)` at key-build time); CRD specs MUST supply them explicitly. Grouped into `PermissionSpecList` with a `feature` string for diagnostics filtering.
+- `PermissionSpec` — Static descriptor: `{ kind, verb, subresource?, group?, version? }`. Built-in specs omit `group`/`version` (they're auto-resolved from `resolveBuiltinGroupVersion(kind)` at key-build time); CRD specs MUST supply them explicitly. Grouped into `PermissionSpecList` with a stable `PermissionFeatureKey` for diagnostics filtering.
 - `PermissionEntry` — Stored result from the backend: `{ allowed, source, reason, descriptor, feature }`. The `descriptor` carries `group`/`version` alongside `resourceKind`.
 - `PermissionStatus` — Public type from `useUserPermissions()`: `{ id, allowed, pending, reason, error, source, descriptor, feature, entry: { status } }`. The `entry.status` field (`'loading' | 'ready' | 'error'`) is used by `ClusterResourcesContext` and `ClusterResourcesManager` to distinguish definitive denials from transient errors.
+- `PermissionFeatureKey` — Stable feature identity from `permissionFeatures.ts`. Display text comes from `PERMISSION_FEATURE_LABELS`, so copy changes do not change diagnostics filtering.
 
 ### Permission key format
 
@@ -313,6 +341,29 @@ The Diagnostics panel has two permission-related tabs:
 
 Both tabs filter to the active cluster only — permissions from other clusters are never shown.
 
+Diagnostics filtering uses stable feature keys from `PERMISSION_FEATURES`, not
+display labels. When adding a permission feature, update
+`PERMISSION_FEATURE_LABELS` and the scoped feature maps in
+`diagnosticsPanelConfig.ts`; `permissionFeatures.test.ts` verifies specs,
+capability definitions, and diagnostics filters all resolve to known labels.
+
+### Action and capability parity
+
+UI-visible mutating actions must be represented in
+`OBJECT_ACTION_PERMISSION_MATRIX`. Each entry names the action id, frontend
+permission descriptor, Wails method, backend permission check, and the
+denied/pending reason source shown by the UI.
+
+The matrix is a contract test surface; it does not replace backend enforcement.
+Every backend mutation path still checks RBAC immediately before mutating
+cluster state. For example:
+
+- `TriggerCronJob` requires `batch/v1` `Job create`.
+- `SuspendCronJob` and resume require `batch/v1` `CronJob patch`.
+- `RollbackWorkload` requires `update` on the target workload.
+- `ScaleWorkload` requires `update` on the target workload `scale` subresource.
+- Port-forward requires `create` on `Pod/portforward`.
+
 ### Timing constants
 
 | Constant                                    | Default | Purpose                                                               |
@@ -331,6 +382,8 @@ Both tabs filter to the active cluster only — permissions from other clusters 
 
 **Adding a new view that needs permissions** — If the view uses `useUserPermissions()` and `getPermissionKey()` for built-in kinds, no changes are needed beyond adding the permission specs. For CRD kind permissions, call `queryKindPermissions` with the CRD's apiGroup/apiVersion threaded through from the row data — never let `group`/`version` be `undefined`.
 
-**Feature strings for diagnostics** — The `feature` field on each `PermissionSpecList` must match the corresponding entry in `diagnosticsPanelConfig.ts` (`CLUSTER_FEATURE_MAP` / `NAMESPACE_FEATURE_MAP`). Mismatches cause the Effective Permissions tab to show empty for that view.
+**Feature keys for diagnostics** — The `feature` field on each `PermissionSpecList` must use `PERMISSION_FEATURES`. Add a display label in `PERMISSION_FEATURE_LABELS` and, when it should appear in a scoped diagnostics view, add the key to `CLUSTER_FEATURE_MAP` or `NAMESPACE_FEATURE_MAP`. Do not use user-facing copy as the filter key.
+
+**Adding a UI-visible mutating action** — Add the shared object action descriptor, wire the frontend capability state, keep the backend Wails method's `resourcePermissionCheck`, and update `OBJECT_ACTION_PERMISSION_MATRIX`. Add or update tests for denied and pending UI states.
 
 **Named-resource checks** — `useCapabilities()` supports `name` on descriptors for per-object permission checks (e.g., `NodeMaintenanceTab` checking if a specific node can be cordoned). Named results are stored in a hook-local `namedResults` map and do not overwrite name-free results in the public permission map.

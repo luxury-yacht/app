@@ -56,6 +56,8 @@ const createDefaultCapabilityStates = (): CapabilityStates => ({
   delete: createCapabilityState(),
   restart: createCapabilityState(),
   scale: createCapabilityState(),
+  trigger: createCapabilityState(),
+  suspend: createCapabilityState(),
   shell: createCapabilityState(),
   debug: createCapabilityState(),
 });
@@ -186,6 +188,35 @@ const computeCapabilityDescriptors = (
         subresource: 'scale',
       },
       'scale'
+    );
+  }
+
+  if (featureSupport.trigger) {
+    add(
+      {
+        id: 'trigger',
+        verb: 'create',
+        group: 'batch',
+        version: 'v1',
+        resourceKind: 'Job',
+        namespace,
+      },
+      'trigger'
+    );
+  }
+
+  if (featureSupport.suspend) {
+    add(
+      {
+        id: 'suspend',
+        verb: 'patch',
+        group: 'batch',
+        version: 'v1',
+        resourceKind: 'CronJob',
+        namespace,
+        name: resourceName,
+      },
+      'suspend'
     );
   }
 
@@ -369,6 +400,8 @@ export const useObjectPanelCapabilities = ({
       delete: getCapabilityState(capabilityDescriptorInfo.idMap.delete),
       restart: getCapabilityState(capabilityDescriptorInfo.idMap.restart),
       scale: getCapabilityState(capabilityDescriptorInfo.idMap.scale),
+      trigger: getCapabilityState(capabilityDescriptorInfo.idMap.trigger),
+      suspend: getCapabilityState(capabilityDescriptorInfo.idMap.suspend),
       shell: createCapabilityState({
         allowed: shellAllowed,
         pending: shellPending,
@@ -474,8 +507,8 @@ export const useObjectPanelCapabilities = ({
       canRestart: featureSupport.restart && capabilityStates.restart.allowed,
       canScale: featureSupport.scale && capabilityStates.scale.allowed,
       canEditYaml: featureSupport.edit && capabilityStates.editYaml.allowed,
-      canTrigger: featureSupport.trigger,
-      canSuspend: featureSupport.suspend,
+      canTrigger: featureSupport.trigger && capabilityStates.trigger.allowed,
+      canSuspend: featureSupport.suspend && capabilityStates.suspend.allowed,
     };
   }, [
     capabilityStates,
@@ -491,6 +524,8 @@ export const useObjectPanelCapabilities = ({
       delete: capabilityStates.delete.allowed ? undefined : capabilityStates.delete.reason,
       restart: capabilityStates.restart.allowed ? undefined : capabilityStates.restart.reason,
       scale: capabilityStates.scale.allowed ? undefined : capabilityStates.scale.reason,
+      trigger: capabilityStates.trigger.allowed ? undefined : capabilityStates.trigger.reason,
+      suspend: capabilityStates.suspend.allowed ? undefined : capabilityStates.suspend.reason,
       editYaml: capabilityStates.editYaml.allowed ? undefined : capabilityStates.editYaml.reason,
       shell: capabilityStates.shell.allowed ? undefined : capabilityStates.shell.reason,
       debug: capabilityStates.debug.allowed ? undefined : capabilityStates.debug.reason,
@@ -508,6 +543,10 @@ export const useObjectPanelCapabilities = ({
       capabilityStates.scale.reason,
       capabilityStates.shell.allowed,
       capabilityStates.shell.reason,
+      capabilityStates.suspend.allowed,
+      capabilityStates.suspend.reason,
+      capabilityStates.trigger.allowed,
+      capabilityStates.trigger.reason,
       nodeLogsCapabilityState.allowed,
       nodeLogsCapabilityState.reason,
     ]

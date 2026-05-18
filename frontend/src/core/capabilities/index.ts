@@ -62,4 +62,11 @@ export {
   type PermissionSpecList,
 } from './permissionSpecs';
 
+export {
+  PERMISSION_FEATURES,
+  PERMISSION_FEATURE_LABELS,
+  permissionFeatureLabel,
+  type PermissionFeatureKey,
+} from './permissionFeatures';
+
 export { CLUSTER_CAPABILITIES } from './catalog';

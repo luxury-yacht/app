@@ -7,6 +7,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
+import { permissionFeatureLabel } from '@/core/capabilities';
 
 interface CapabilityChecksTableProps {
   currentRows: CapabilityBatchRow[];
@@ -23,7 +24,10 @@ const matchesSearch = (row: CapabilityBatchRow, query: string): boolean => {
   }
   const descriptorText =
     row.descriptorsByFeature
-      ?.flatMap(({ feature, resources }) => [feature, ...resources])
+      ?.flatMap(({ feature, resources }) => [
+        permissionFeatureLabel(feature) ?? feature,
+        ...resources,
+      ])
       .join(' ') ?? '';
   return [
     row.scope,
@@ -79,7 +83,9 @@ const CapabilityRow: React.FC<{
                 <div key={feature} className="diagnostics-checks-group">
                   {resources.map((r, i) => (
                     <div key={r} className="diagnostics-checks-row">
-                      <span className="diagnostics-checks-feature">{i === 0 ? feature : ''}</span>
+                      <span className="diagnostics-checks-feature">
+                        {i === 0 ? (permissionFeatureLabel(feature) ?? feature) : ''}
+                      </span>
                       <span className="diagnostics-checks-resource">{r}</span>
                     </div>
                   ))}

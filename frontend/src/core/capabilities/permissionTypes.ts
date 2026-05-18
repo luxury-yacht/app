@@ -2,6 +2,8 @@
  * Types for the SSRR permission system.
  */
 
+import type { PermissionFeatureKey } from './permissionFeatures';
+
 /** A lightweight permission check descriptor. Static data — no store state.
  *
  * `group` and `version` are optional and identify the API group/version
@@ -37,7 +39,7 @@ export interface PermissionEntry {
     subresource: string | null;
   };
   /** Which permission list produced this query (e.g., "workloads", "cluster") */
-  feature?: string;
+  feature?: PermissionFeatureKey;
 }
 
 /** The public permission status exposed via useUserPermissions(). */
@@ -57,7 +59,7 @@ export interface PermissionStatus {
     namespace: string | null;
     subresource: string | null;
   };
-  feature?: string;
+  feature?: PermissionFeatureKey;
   entry: {
     status: 'loading' | 'ready' | 'error';
   };

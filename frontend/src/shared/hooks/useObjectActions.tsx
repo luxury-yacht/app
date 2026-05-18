@@ -141,6 +141,8 @@ export interface BuildObjectActionsOptions {
     restart?: PermissionStatus | null;
     rollback?: PermissionStatus | null;
     scale?: PermissionStatus | null;
+    trigger?: PermissionStatus | null;
+    suspend?: PermissionStatus | null;
     delete?: PermissionStatus | null;
     portForward?: PermissionStatus | null;
     cordon?: PermissionStatus | null;
@@ -220,6 +222,8 @@ export function buildObjectActionItems({
     restart: restartStatus,
     rollback: rollbackStatus,
     scale: scaleStatus,
+    trigger: triggerStatus,
+    suspend: suspendStatus,
     delete: deleteStatus,
     portForward: portForwardStatus,
     cordon: cordonStatus,
@@ -290,6 +294,8 @@ export function buildObjectActionItems({
     restartStatus?.pending ||
     rollbackStatus?.pending ||
     scaleStatus?.pending ||
+    triggerStatus?.pending ||
+    suspendStatus?.pending ||
     deleteStatus?.pending ||
     portForwardStatus?.pending;
 
@@ -316,7 +322,7 @@ export function buildObjectActionItems({
   if (normalizedKind === 'CronJob') {
     const isSuspended = object.status === 'Suspended';
 
-    if (handlers.onTrigger) {
+    if (handlers.onTrigger && triggerStatus?.allowed && !triggerStatus.pending) {
       menuItems.push({
         actionId: OBJECT_ACTION_IDS.triggerNow,
         label: objectActionLabel(OBJECT_ACTION_IDS.triggerNow),
@@ -326,7 +332,7 @@ export function buildObjectActionItems({
       });
     }
 
-    if (handlers.onSuspendToggle) {
+    if (handlers.onSuspendToggle && suspendStatus?.allowed && !suspendStatus.pending) {
       const suspendActionId = isSuspended ? OBJECT_ACTION_IDS.resume : OBJECT_ACTION_IDS.suspend;
       menuItems.push({
         actionId: suspendActionId,

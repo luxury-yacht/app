@@ -7,6 +7,7 @@
  */
 
 import type { CapabilityDescriptor } from './types';
+import { PERMISSION_FEATURES, type PermissionFeatureKey } from './permissionFeatures';
 
 export type CapabilityScope = 'cluster' | 'namespace' | 'object';
 
@@ -14,14 +15,14 @@ export interface CapabilityDefinition {
   id: string;
   descriptor: CapabilityDescriptor;
   scope: CapabilityScope;
-  feature?: string;
+  feature?: PermissionFeatureKey;
 }
 
 const clusterCapability = (
   id: string,
   resourceKind: string,
   verb: string,
-  feature: string,
+  feature: PermissionFeatureKey,
   subresource?: string
 ): CapabilityDefinition => ({
   id,
@@ -36,99 +37,205 @@ const clusterCapability = (
 });
 
 export const CLUSTER_CAPABILITIES: CapabilityDefinition[] = [
-  clusterCapability('cluster:namespaces:list', 'Namespace', 'list', 'Cluster overview'),
-  clusterCapability('cluster:namespaces:update', 'Namespace', 'update', 'Cluster overview'),
-  clusterCapability('cluster:namespaces:create', 'Namespace', 'create', 'Cluster overview'),
-  clusterCapability('cluster:namespaces:delete', 'Namespace', 'delete', 'Cluster overview'),
-  clusterCapability('cluster:nodes:list', 'Node', 'list', 'Nodes table'),
-  clusterCapability('cluster:nodes:get', 'Node', 'get', 'Nodes table'),
-  clusterCapability('cluster:nodes:update', 'Node', 'update', 'Node actions'),
-  clusterCapability('cluster:nodes:action-get', 'Node', 'get', 'Node actions'),
-  clusterCapability('cluster:nodes:patch', 'Node', 'patch', 'Node actions (cordon/drain)'),
-  clusterCapability('cluster:nodes:delete', 'Node', 'delete', 'Node actions'),
-  clusterCapability('cluster:pods:eviction:create', 'Pod', 'create', 'Node actions', 'eviction'),
-  clusterCapability('cluster:pods:delete', 'Pod', 'delete', 'Node actions'),
-  clusterCapability('cluster:persistentvolumes:list', 'PersistentVolume', 'list', 'Storage view'),
+  clusterCapability(
+    'cluster:namespaces:list',
+    'Namespace',
+    'list',
+    PERMISSION_FEATURES.clusterOverview
+  ),
+  clusterCapability(
+    'cluster:namespaces:update',
+    'Namespace',
+    'update',
+    PERMISSION_FEATURES.clusterOverview
+  ),
+  clusterCapability(
+    'cluster:namespaces:create',
+    'Namespace',
+    'create',
+    PERMISSION_FEATURES.clusterOverview
+  ),
+  clusterCapability(
+    'cluster:namespaces:delete',
+    'Namespace',
+    'delete',
+    PERMISSION_FEATURES.clusterOverview
+  ),
+  clusterCapability('cluster:nodes:list', 'Node', 'list', PERMISSION_FEATURES.clusterNodes),
+  clusterCapability('cluster:nodes:get', 'Node', 'get', PERMISSION_FEATURES.clusterNodes),
+  clusterCapability('cluster:nodes:update', 'Node', 'update', PERMISSION_FEATURES.nodeActions),
+  clusterCapability('cluster:nodes:action-get', 'Node', 'get', PERMISSION_FEATURES.nodeActions),
+  clusterCapability('cluster:nodes:patch', 'Node', 'patch', PERMISSION_FEATURES.nodeActions),
+  clusterCapability('cluster:nodes:delete', 'Node', 'delete', PERMISSION_FEATURES.nodeActions),
+  clusterCapability(
+    'cluster:pods:eviction:create',
+    'Pod',
+    'create',
+    PERMISSION_FEATURES.nodeActions,
+    'eviction'
+  ),
+  clusterCapability('cluster:pods:delete', 'Pod', 'delete', PERMISSION_FEATURES.nodeActions),
+  clusterCapability(
+    'cluster:persistentvolumes:list',
+    'PersistentVolume',
+    'list',
+    PERMISSION_FEATURES.storageView
+  ),
   clusterCapability(
     'cluster:persistentvolumes:update',
     'PersistentVolume',
     'update',
-    'Storage view'
+    PERMISSION_FEATURES.storageView
   ),
   clusterCapability(
     'cluster:persistentvolumes:delete',
     'PersistentVolume',
     'delete',
-    'Storage actions'
+    PERMISSION_FEATURES.storageActions
   ),
-  clusterCapability('cluster:storageclasses:list', 'StorageClass', 'list', 'Cluster config'),
-  clusterCapability('cluster:storageclasses:update', 'StorageClass', 'update', 'Cluster config'),
-  clusterCapability('cluster:storageclasses:delete', 'StorageClass', 'delete', 'Cluster config'),
-  clusterCapability('cluster:ingressclasses:list', 'IngressClass', 'list', 'Cluster config'),
-  clusterCapability('cluster:ingressclasses:update', 'IngressClass', 'update', 'Cluster config'),
-  clusterCapability('cluster:ingressclasses:delete', 'IngressClass', 'delete', 'Cluster config'),
-  clusterCapability('cluster:gatewayclasses:list', 'GatewayClass', 'list', 'Cluster config'),
-  clusterCapability('cluster:gatewayclasses:update', 'GatewayClass', 'update', 'Cluster config'),
-  clusterCapability('cluster:gatewayclasses:delete', 'GatewayClass', 'delete', 'Cluster config'),
+  clusterCapability(
+    'cluster:storageclasses:list',
+    'StorageClass',
+    'list',
+    PERMISSION_FEATURES.clusterConfig
+  ),
+  clusterCapability(
+    'cluster:storageclasses:update',
+    'StorageClass',
+    'update',
+    PERMISSION_FEATURES.clusterConfig
+  ),
+  clusterCapability(
+    'cluster:storageclasses:delete',
+    'StorageClass',
+    'delete',
+    PERMISSION_FEATURES.clusterConfig
+  ),
+  clusterCapability(
+    'cluster:ingressclasses:list',
+    'IngressClass',
+    'list',
+    PERMISSION_FEATURES.clusterConfig
+  ),
+  clusterCapability(
+    'cluster:ingressclasses:update',
+    'IngressClass',
+    'update',
+    PERMISSION_FEATURES.clusterConfig
+  ),
+  clusterCapability(
+    'cluster:ingressclasses:delete',
+    'IngressClass',
+    'delete',
+    PERMISSION_FEATURES.clusterConfig
+  ),
+  clusterCapability(
+    'cluster:gatewayclasses:list',
+    'GatewayClass',
+    'list',
+    PERMISSION_FEATURES.clusterConfig
+  ),
+  clusterCapability(
+    'cluster:gatewayclasses:update',
+    'GatewayClass',
+    'update',
+    PERMISSION_FEATURES.clusterConfig
+  ),
+  clusterCapability(
+    'cluster:gatewayclasses:delete',
+    'GatewayClass',
+    'delete',
+    PERMISSION_FEATURES.clusterConfig
+  ),
   clusterCapability(
     'cluster:mutatingwebhookconfigurations:list',
     'MutatingWebhookConfiguration',
     'list',
-    'Cluster config'
+    PERMISSION_FEATURES.clusterConfig
   ),
   clusterCapability(
     'cluster:mutatingwebhookconfigurations:update',
     'MutatingWebhookConfiguration',
     'update',
-    'Cluster config'
+    PERMISSION_FEATURES.clusterConfig
   ),
   clusterCapability(
     'cluster:mutatingwebhookconfigurations:delete',
     'MutatingWebhookConfiguration',
     'delete',
-    'Cluster config'
+    PERMISSION_FEATURES.clusterConfig
   ),
   clusterCapability(
     'cluster:validatingwebhookconfigurations:list',
     'ValidatingWebhookConfiguration',
     'list',
-    'Cluster config'
+    PERMISSION_FEATURES.clusterConfig
   ),
   clusterCapability(
     'cluster:validatingwebhookconfigurations:update',
     'ValidatingWebhookConfiguration',
     'update',
-    'Cluster config'
+    PERMISSION_FEATURES.clusterConfig
   ),
   clusterCapability(
     'cluster:validatingwebhookconfigurations:delete',
     'ValidatingWebhookConfiguration',
     'delete',
-    'Cluster config'
+    PERMISSION_FEATURES.clusterConfig
   ),
-  clusterCapability('cluster:clusterroles:list', 'ClusterRole', 'list', 'Cluster RBAC'),
-  clusterCapability('cluster:clusterroles:update', 'ClusterRole', 'update', 'Cluster RBAC'),
-  clusterCapability('cluster:clusterroles:delete', 'ClusterRole', 'delete', 'Cluster RBAC'),
+  clusterCapability(
+    'cluster:clusterroles:list',
+    'ClusterRole',
+    'list',
+    PERMISSION_FEATURES.clusterRBAC
+  ),
+  clusterCapability(
+    'cluster:clusterroles:update',
+    'ClusterRole',
+    'update',
+    PERMISSION_FEATURES.clusterRBAC
+  ),
+  clusterCapability(
+    'cluster:clusterroles:delete',
+    'ClusterRole',
+    'delete',
+    PERMISSION_FEATURES.clusterRBAC
+  ),
   clusterCapability(
     'cluster:clusterrolebindings:list',
     'ClusterRoleBinding',
     'list',
-    'Cluster RBAC'
+    PERMISSION_FEATURES.clusterRBAC
   ),
   clusterCapability(
     'cluster:clusterrolebindings:update',
     'ClusterRoleBinding',
     'update',
-    'Cluster RBAC'
+    PERMISSION_FEATURES.clusterRBAC
   ),
   clusterCapability(
     'cluster:clusterrolebindings:delete',
     'ClusterRoleBinding',
     'delete',
-    'Cluster RBAC'
+    PERMISSION_FEATURES.clusterRBAC
   ),
-  clusterCapability('cluster:crds:list', 'CustomResourceDefinition', 'list', 'Cluster CRDs'),
-  clusterCapability('cluster:crds:update', 'CustomResourceDefinition', 'update', 'Cluster CRDs'),
-  clusterCapability('cluster:crds:delete', 'CustomResourceDefinition', 'delete', 'Cluster CRDs'),
-  clusterCapability('cluster:events:list', 'Event', 'list', 'Cluster events'),
+  clusterCapability(
+    'cluster:crds:list',
+    'CustomResourceDefinition',
+    'list',
+    PERMISSION_FEATURES.clusterCRDs
+  ),
+  clusterCapability(
+    'cluster:crds:update',
+    'CustomResourceDefinition',
+    'update',
+    PERMISSION_FEATURES.clusterCRDs
+  ),
+  clusterCapability(
+    'cluster:crds:delete',
+    'CustomResourceDefinition',
+    'delete',
+    PERMISSION_FEATURES.clusterCRDs
+  ),
+  clusterCapability('cluster:events:list', 'Event', 'list', PERMISSION_FEATURES.clusterEvents),
 ];

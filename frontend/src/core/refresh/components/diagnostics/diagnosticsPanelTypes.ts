@@ -7,6 +7,7 @@
 
 import type { RefreshDomain } from '../../types';
 import type { DomainStatus } from '../../store';
+import type { PermissionFeatureKey } from '@/core/capabilities/permissionFeatures';
 
 export interface DiagnosticsPanelProps {
   onClose: () => void;
@@ -127,7 +128,7 @@ export interface CapabilityBatchRow {
   lastError: string | null;
   totalChecks: number;
   consecutiveFailureCount: number;
-  descriptorsByFeature: Array<{ feature: string; resources: string[] }> | null;
+  descriptorsByFeature: Array<{ feature: PermissionFeatureKey; resources: string[] }> | null;
   method: string | null;
   ssrrIncomplete: boolean | null;
   ssrrRuleCount: number | null;
@@ -144,7 +145,8 @@ export interface PermissionRow {
   isDenied: boolean;
   reason?: string;
   id: string;
-  feature?: string;
+  feature?: PermissionFeatureKey;
+  featureLabel?: string;
   descriptorNamespace: string | null;
   pendingCount: number | null;
   inFlightCount: number | null;

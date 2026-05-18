@@ -1,15 +1,15 @@
 /**
  * Static permission spec lists for the SSRR permission system.
  *
- * Feature strings are kept in sync with the diagnostics panel config
- * (diagnosticsPanelConfig.ts NAMESPACE_FEATURE_MAP / CLUSTER_FEATURE_MAP)
- * and the capability catalog (catalog.ts CLUSTER_CAPABILITIES).
+ * Feature keys are kept in sync with the diagnostics panel config
+ * and the capability catalog.
  */
 
 import type { PermissionSpec } from './permissionTypes';
+import { PERMISSION_FEATURES, type PermissionFeatureKey } from './permissionFeatures';
 
 export interface PermissionSpecList {
-  feature: string;
+  feature: PermissionFeatureKey;
   specs: PermissionSpec[];
 }
 
@@ -18,29 +18,34 @@ export interface PermissionSpecList {
 // ---------------------------------------------------------------------------
 
 export const WORKLOAD_PERMISSIONS: PermissionSpecList = {
-  feature: 'Namespace workloads',
+  feature: PERMISSION_FEATURES.namespaceWorkloads,
   specs: [
     { kind: 'Deployment', verb: 'list' },
     { kind: 'Deployment', verb: 'patch' },
+    { kind: 'Deployment', verb: 'update' },
     { kind: 'Deployment', verb: 'delete' },
     { kind: 'Deployment', verb: 'update', subresource: 'scale' },
     { kind: 'StatefulSet', verb: 'list' },
     { kind: 'StatefulSet', verb: 'patch' },
+    { kind: 'StatefulSet', verb: 'update' },
     { kind: 'StatefulSet', verb: 'delete' },
     { kind: 'StatefulSet', verb: 'update', subresource: 'scale' },
     { kind: 'ReplicaSet', verb: 'update', subresource: 'scale' },
     { kind: 'DaemonSet', verb: 'list' },
     { kind: 'DaemonSet', verb: 'patch' },
+    { kind: 'DaemonSet', verb: 'update' },
     { kind: 'DaemonSet', verb: 'delete' },
     { kind: 'Job', verb: 'list' },
+    { kind: 'Job', verb: 'create' },
     { kind: 'Job', verb: 'delete' },
     { kind: 'CronJob', verb: 'list' },
+    { kind: 'CronJob', verb: 'patch' },
     { kind: 'CronJob', verb: 'delete' },
   ],
 };
 
 export const POD_PERMISSIONS: PermissionSpecList = {
-  feature: 'Namespace pods',
+  feature: PERMISSION_FEATURES.namespacePods,
   specs: [
     { kind: 'Pod', verb: 'list' },
     { kind: 'Pod', verb: 'delete' },
@@ -50,7 +55,7 @@ export const POD_PERMISSIONS: PermissionSpecList = {
 };
 
 export const CONFIG_PERMISSIONS: PermissionSpecList = {
-  feature: 'Namespace config',
+  feature: PERMISSION_FEATURES.namespaceConfig,
   specs: [
     { kind: 'ConfigMap', verb: 'list' },
     { kind: 'ConfigMap', verb: 'delete' },
@@ -60,7 +65,7 @@ export const CONFIG_PERMISSIONS: PermissionSpecList = {
 };
 
 export const NETWORK_PERMISSIONS: PermissionSpecList = {
-  feature: 'Namespace network',
+  feature: PERMISSION_FEATURES.namespaceNetwork,
   specs: [
     { kind: 'Service', verb: 'list' },
     { kind: 'Service', verb: 'delete' },
@@ -88,7 +93,7 @@ export const NETWORK_PERMISSIONS: PermissionSpecList = {
 };
 
 export const RBAC_PERMISSIONS: PermissionSpecList = {
-  feature: 'Namespace RBAC',
+  feature: PERMISSION_FEATURES.namespaceRBAC,
   specs: [
     { kind: 'Role', verb: 'list' },
     { kind: 'Role', verb: 'delete' },
@@ -100,7 +105,7 @@ export const RBAC_PERMISSIONS: PermissionSpecList = {
 };
 
 export const STORAGE_PERMISSIONS: PermissionSpecList = {
-  feature: 'Namespace storage',
+  feature: PERMISSION_FEATURES.namespaceStorage,
   specs: [
     { kind: 'PersistentVolumeClaim', verb: 'list' },
     { kind: 'PersistentVolumeClaim', verb: 'delete' },
@@ -108,7 +113,7 @@ export const STORAGE_PERMISSIONS: PermissionSpecList = {
 };
 
 export const AUTOSCALING_PERMISSIONS: PermissionSpecList = {
-  feature: 'Namespace autoscaling',
+  feature: PERMISSION_FEATURES.namespaceAutoscaling,
   specs: [
     { kind: 'HorizontalPodAutoscaler', verb: 'list' },
     { kind: 'HorizontalPodAutoscaler', verb: 'delete' },
@@ -116,7 +121,7 @@ export const AUTOSCALING_PERMISSIONS: PermissionSpecList = {
 };
 
 export const QUOTA_PERMISSIONS: PermissionSpecList = {
-  feature: 'Namespace quotas',
+  feature: PERMISSION_FEATURES.namespaceQuotas,
   specs: [
     { kind: 'ResourceQuota', verb: 'list' },
     { kind: 'ResourceQuota', verb: 'delete' },
@@ -128,7 +133,7 @@ export const QUOTA_PERMISSIONS: PermissionSpecList = {
 };
 
 export const EVENT_PERMISSIONS: PermissionSpecList = {
-  feature: 'Namespace events',
+  feature: PERMISSION_FEATURES.namespaceEvents,
   specs: [{ kind: 'Event', verb: 'list' }],
 };
 
@@ -151,11 +156,11 @@ export const ALL_NAMESPACE_PERMISSIONS: PermissionSpecList[] = [
 
 /**
  * Cluster permissions mirror the verbs from CLUSTER_CAPABILITIES in catalog.ts.
- * Feature strings match CLUSTER_FEATURE_MAP in diagnosticsPanelConfig.ts.
+ * Feature keys match CLUSTER_FEATURE_MAP in diagnosticsPanelConfig.ts.
  */
 export const CLUSTER_PERMISSIONS: PermissionSpecList[] = [
   {
-    feature: 'Cluster overview',
+    feature: PERMISSION_FEATURES.clusterOverview,
     specs: [
       { kind: 'Namespace', verb: 'list' },
       { kind: 'Namespace', verb: 'update' },
@@ -164,14 +169,14 @@ export const CLUSTER_PERMISSIONS: PermissionSpecList[] = [
     ],
   },
   {
-    feature: 'Nodes table',
+    feature: PERMISSION_FEATURES.clusterNodes,
     specs: [
       { kind: 'Node', verb: 'list' },
       { kind: 'Node', verb: 'get' },
     ],
   },
   {
-    feature: 'Node actions',
+    feature: PERMISSION_FEATURES.nodeActions,
     specs: [
       { kind: 'Node', verb: 'update' },
       { kind: 'Node', verb: 'delete' },
@@ -182,18 +187,18 @@ export const CLUSTER_PERMISSIONS: PermissionSpecList[] = [
     ],
   },
   {
-    feature: 'Storage view',
+    feature: PERMISSION_FEATURES.storageView,
     specs: [
       { kind: 'PersistentVolume', verb: 'list' },
       { kind: 'PersistentVolume', verb: 'update' },
     ],
   },
   {
-    feature: 'Storage actions',
+    feature: PERMISSION_FEATURES.storageActions,
     specs: [{ kind: 'PersistentVolume', verb: 'delete' }],
   },
   {
-    feature: 'Cluster config',
+    feature: PERMISSION_FEATURES.clusterConfig,
     specs: [
       { kind: 'StorageClass', verb: 'list' },
       { kind: 'StorageClass', verb: 'update' },
@@ -213,7 +218,7 @@ export const CLUSTER_PERMISSIONS: PermissionSpecList[] = [
     ],
   },
   {
-    feature: 'Cluster RBAC',
+    feature: PERMISSION_FEATURES.clusterRBAC,
     specs: [
       { kind: 'ClusterRole', verb: 'list' },
       { kind: 'ClusterRole', verb: 'update' },
@@ -224,7 +229,7 @@ export const CLUSTER_PERMISSIONS: PermissionSpecList[] = [
     ],
   },
   {
-    feature: 'Cluster CRDs',
+    feature: PERMISSION_FEATURES.clusterCRDs,
     specs: [
       { kind: 'CustomResourceDefinition', verb: 'list' },
       { kind: 'CustomResourceDefinition', verb: 'update' },
@@ -232,7 +237,7 @@ export const CLUSTER_PERMISSIONS: PermissionSpecList[] = [
     ],
   },
   {
-    feature: 'Cluster events',
+    feature: PERMISSION_FEATURES.clusterEvents,
     specs: [{ kind: 'Event', verb: 'list' }],
   },
 ];

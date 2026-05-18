@@ -441,4 +441,82 @@ describe('buildObjectActionItems', () => {
       )
     ).toMatchObject({ actionId: OBJECT_ACTION_IDS.drain });
   });
+
+  it('requires Job create permission before showing CronJob trigger', () => {
+    const base = {
+      object: {
+        kind: 'CronJob',
+        name: 'backup',
+        namespace: 'default',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable' as const,
+      handlers: {
+        onTrigger: () => undefined,
+      },
+    };
+
+    expect(
+      findAction(
+        buildObjectActionItems({
+          ...base,
+          permissions: {
+            trigger: { allowed: false, pending: false },
+          },
+        }),
+        OBJECT_ACTION_IDS.triggerNow
+      )
+    ).toBeUndefined();
+
+    expect(
+      findAction(
+        buildObjectActionItems({
+          ...base,
+          permissions: {
+            trigger: { allowed: true, pending: false },
+          },
+        }),
+        OBJECT_ACTION_IDS.triggerNow
+      )
+    ).toMatchObject({ actionId: OBJECT_ACTION_IDS.triggerNow });
+  });
+
+  it('requires CronJob patch permission before showing suspend or resume', () => {
+    const base = {
+      object: {
+        kind: 'CronJob',
+        name: 'backup',
+        namespace: 'default',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable' as const,
+      handlers: {
+        onSuspendToggle: () => undefined,
+      },
+    };
+
+    expect(
+      findAction(
+        buildObjectActionItems({
+          ...base,
+          permissions: {
+            suspend: { allowed: false, pending: false },
+          },
+        }),
+        OBJECT_ACTION_IDS.suspend
+      )
+    ).toBeUndefined();
+
+    expect(
+      findAction(
+        buildObjectActionItems({
+          ...base,
+          permissions: {
+            suspend: { allowed: true, pending: false },
+          },
+        }),
+        OBJECT_ACTION_IDS.suspend
+      )
+    ).toMatchObject({ actionId: OBJECT_ACTION_IDS.suspend });
+  });
 });

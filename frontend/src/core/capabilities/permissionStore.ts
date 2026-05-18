@@ -17,6 +17,7 @@ import type {
   PermissionStatus,
   PermissionQueryDiagnostics,
 } from './permissionTypes';
+import { PERMISSION_FEATURES, type PermissionFeatureKey } from './permissionFeatures';
 import {
   ALL_NAMESPACE_PERMISSIONS,
   CLUSTER_PERMISSIONS,
@@ -176,7 +177,7 @@ type Listener = () => void;
 
 interface PendingSpecItem {
   spec: PermissionSpec;
-  feature: string;
+  feature: PermissionFeatureKey;
   clusterId: string;
   namespace: string | null;
 }
@@ -262,7 +263,7 @@ export const makePermissionStatus = (
 const makePendingStatus = (
   key: PermissionKey,
   descriptor: PermissionEntry['descriptor'],
-  feature: string | null
+  feature: PermissionFeatureKey | null
 ): PermissionStatus => ({
   id: key,
   allowed: false,
@@ -370,7 +371,7 @@ interface QueryBatchItem {
   namespace: string;
   subresource: string;
   name: string;
-  feature: string;
+  feature: PermissionFeatureKey;
 }
 
 interface NamespaceQueryTarget {
@@ -433,7 +434,7 @@ const splitNamespaceTargets = (targets: NamespaceQueryTarget[]): NamespaceQueryT
 
 /**
  * Expands permission spec lists into individual query batch items.
- * The feature string is carried from the list onto each item. Specs
+ * The stable feature key is carried from the list onto each item. Specs
  * for built-in kinds typically leave group/version undefined; CRD specs
  * (or lazy queryKindPermissions calls) populate them so the backend can
  * disambiguate colliding kinds.
@@ -482,7 +483,7 @@ const buildBatch = (
  * Maps backend response results into the permissionResults map.
  */
 const applyResults = (results: QueryResponseResult[], batchItems: QueryBatchItem[]): void => {
-  const featureByKey = new Map<string, string>();
+  const featureByKey = new Map<string, PermissionFeatureKey>();
   for (const item of batchItems) {
     featureByKey.set(item.id, item.feature);
   }
@@ -855,7 +856,9 @@ export const queryKindPermissions = (
     name: '',
   }));
 
-  const feature = namespace ? 'Namespace custom' : 'Cluster custom';
+  const feature = namespace
+    ? PERMISSION_FEATURES.namespaceCustom
+    : PERMISSION_FEATURES.clusterCustom;
 
   // Register pending specs so the permission map immediately contains
   // pending entries. This lets the context menu show "Awaiting permissions"

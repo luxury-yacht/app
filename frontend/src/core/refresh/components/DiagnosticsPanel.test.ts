@@ -20,6 +20,7 @@ import type {
 import type { DomainSnapshotState } from '../store';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { PERMISSION_FEATURES } from '@/core/capabilities';
 
 const fetchTelemetrySummaryMock = vi.hoisted(() =>
   vi.fn<() => Promise<TelemetrySummary>>(async () => {
@@ -1418,7 +1419,7 @@ describe('DiagnosticsPanel component', () => {
         source: 'denied',
         descriptor: toDescriptor(descriptorDefault),
         entry: { status: 'ready' },
-        feature: 'Namespace workloads',
+        feature: PERMISSION_FEATURES.namespaceWorkloads,
       },
       {
         id: 'perm-exec',
@@ -1429,7 +1430,7 @@ describe('DiagnosticsPanel component', () => {
         source: null,
         descriptor: toDescriptor(descriptorExec),
         entry: { status: 'loading' },
-        feature: 'Namespace workloads',
+        feature: PERMISSION_FEATURES.namespaceWorkloads,
       },
       {
         id: 'perm-cluster',
@@ -1440,7 +1441,7 @@ describe('DiagnosticsPanel component', () => {
         source: 'ssrr',
         descriptor: toDescriptor(descriptorCluster),
         entry: { status: 'ready' },
-        feature: 'Cluster RBAC',
+        feature: PERMISSION_FEATURES.clusterRBAC,
       },
       {
         id: 'perm-other',
@@ -1451,7 +1452,7 @@ describe('DiagnosticsPanel component', () => {
         source: 'ssrr',
         descriptor: toDescriptor(descriptorOther),
         entry: { status: 'ready' },
-        feature: 'Namespace workloads',
+        feature: PERMISSION_FEATURES.namespaceWorkloads,
       },
     ];
 

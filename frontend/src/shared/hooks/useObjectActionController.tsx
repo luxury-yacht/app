@@ -166,6 +166,10 @@ export const useObjectActionController = ({
         permissionMap.get(
           getPermissionKey(normalizedKind, 'patch', namespace, null, clusterId, group, version)
         ) ?? null;
+      const rollbackStatus =
+        permissionMap.get(
+          getPermissionKey(normalizedKind, 'update', namespace, null, clusterId, group, version)
+        ) ?? null;
       const deleteStatus =
         permissionMap.get(
           getPermissionKey(object.kind, 'delete', namespace, null, clusterId, group, version)
@@ -174,6 +178,18 @@ export const useObjectActionController = ({
         permissionMap.get(
           getPermissionKey(normalizedKind, 'update', namespace, 'scale', clusterId, group, version)
         ) ?? null;
+      const triggerStatus =
+        normalizedKind === 'CronJob'
+          ? (permissionMap.get(
+              getPermissionKey('Job', 'create', namespace, null, clusterId, 'batch', 'v1')
+            ) ?? null)
+          : null;
+      const suspendStatus =
+        normalizedKind === 'CronJob'
+          ? (permissionMap.get(
+              getPermissionKey('CronJob', 'patch', namespace, null, clusterId, 'batch', 'v1')
+            ) ?? null)
+          : null;
       const portForwardStatus =
         permissionMap.get(
           getPermissionKey('Pod', 'create', namespace, 'portforward', clusterId, '', 'v1')
@@ -297,8 +313,10 @@ export const useObjectActionController = ({
         },
         permissions: {
           restart: restartStatus,
-          rollback: restartStatus,
+          rollback: rollbackStatus,
           scale: scaleStatus,
+          trigger: triggerStatus,
+          suspend: suspendStatus,
           delete: deleteStatus,
           portForward: portForwardStatus,
           cordon: nodeActionPermissions.cordon,

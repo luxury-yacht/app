@@ -2,18 +2,13 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
 
 // Per-request permission checks prevent cached snapshots from outliving RBAC changes.
-type permissionRequirement struct {
-	group    string
-	resource string
-	verb     string
-}
+type permissionRequirement = permissions.ResourceRequirement
 
 type permissionCheckMode int
 
@@ -29,11 +24,7 @@ type permissionCheck struct {
 }
 
 func listPermission(group, resource string) permissionRequirement {
-	return permissionRequirement{
-		group:    group,
-		resource: resource,
-		verb:     "list",
-	}
+	return permissions.ListRequirement(group, resource)
 }
 
 func requireAll(reqs ...permissionRequirement) permissionCheck {
@@ -63,7 +54,7 @@ func (p permissionCheck) allows(ctx context.Context, checker *permissions.Checke
 	}
 	if p.mode == permissionCheckAny {
 		for _, req := range p.requirements {
-			decision, err := checker.Can(ctx, req.group, req.resource, req.verb)
+			decision, err := checker.Can(ctx, req.Group, req.Resource, req.Verb)
 			if err != nil {
 				return false, err
 			}
@@ -74,7 +65,7 @@ func (p permissionCheck) allows(ctx context.Context, checker *permissions.Checke
 		return false, nil
 	}
 	for _, req := range p.requirements {
-		decision, err := checker.Can(ctx, req.group, req.resource, req.verb)
+		decision, err := checker.Can(ctx, req.Group, req.Resource, req.Verb)
 		if err != nil {
 			return false, err
 		}
@@ -91,7 +82,7 @@ func permissionResourceList(reqs []permissionRequirement) string {
 	}
 	parts := make([]string, 0, len(reqs))
 	for _, req := range reqs {
-		if req.resource == "" {
+		if req.Resource == "" {
 			continue
 		}
 		parts = append(parts, permissionResourceLabel(req))
@@ -100,11 +91,7 @@ func permissionResourceList(reqs []permissionRequirement) string {
 }
 
 func permissionResourceLabel(req permissionRequirement) string {
-	group := strings.TrimSpace(req.group)
-	if group == "" {
-		group = "core"
-	}
-	return fmt.Sprintf("%s/%s", group, req.resource)
+	return permissions.ResourceKey(req.Group, req.Resource)
 }
 
 // PreflightRequirement describes a single permission to prime during startup.
@@ -112,6 +99,14 @@ type PreflightRequirement struct {
 	Group    string
 	Resource string
 	Verb     string
+}
+
+// DomainPermissionRequirement describes the runtime permission contract for a
+// refresh domain.
+type DomainPermissionRequirement struct {
+	Domain       string
+	Mode         string
+	Requirements []permissions.ResourceRequirement
 }
 
 // CheckDomainPermission checks whether the runtime permission requirements for the given
@@ -143,19 +138,40 @@ func RuntimePreflightRequirements() []PreflightRequirement {
 	seen := make(map[string]struct{})
 	for _, check := range checks {
 		for _, req := range check.requirements {
-			key := fmt.Sprintf("%s/%s/%s", req.group, req.resource, req.verb)
+			key := permissions.RequirementKey(req)
 			if _, ok := seen[key]; ok {
 				continue
 			}
 			seen[key] = struct{}{}
 			reqs = append(reqs, PreflightRequirement{
-				Group:    req.group,
-				Resource: req.resource,
-				Verb:     req.verb,
+				Group:    req.Group,
+				Resource: req.Resource,
+				Verb:     req.Verb,
 			})
 		}
 	}
 	return reqs
+}
+
+// RuntimePermissionRequirements returns the runtime permission contract keyed
+// by refresh domain. The returned slices are copies so tests and callers cannot
+// mutate the package-level contract.
+func RuntimePermissionRequirements() map[string]DomainPermissionRequirement {
+	checks := defaultPermissionChecks()
+	result := make(map[string]DomainPermissionRequirement, len(checks))
+	for domain, check := range checks {
+		requirements := append([]permissions.ResourceRequirement(nil), check.requirements...)
+		mode := "all"
+		if check.mode == permissionCheckAny {
+			mode = "any"
+		}
+		result[domain] = DomainPermissionRequirement{
+			Domain:       domain,
+			Mode:         mode,
+			Requirements: requirements,
+		}
+	}
+	return result
 }
 
 // defaultPermissionChecks maps snapshot domains to list permissions for per-request SSAR gating.

@@ -22,6 +22,7 @@ const matchesSearch = (row: PermissionRow, query: string): boolean => {
   return [
     row.scope,
     row.descriptorLabel,
+    row.featureLabel,
     row.feature,
     row.resource,
     row.verb,
@@ -141,7 +142,7 @@ export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({ row
                   <td>{row.descriptorLabel}</td>
                   <td>
                     <span className="diagnostics-table-feature" title={row.feature ?? undefined}>
-                      {row.feature ?? '—'}
+                      {row.featureLabel ?? row.feature ?? '—'}
                     </span>
                   </td>
                   <td>{row.inFlightCount ? row.inFlightCount : '—'}</td>

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { CapabilityChecksTable } from './TableCapabilitesChecks';
 import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
+import { PERMISSION_FEATURES } from '@/core/capabilities';
 
 const setSearchValue = (input: HTMLInputElement, value: string): void => {
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -90,6 +91,42 @@ describe('CapabilityChecksTable', () => {
     expect(host.textContent).toContain('1 MATCHES');
     expect(host.textContent).toContain('namespace-299');
     expect(host.textContent).not.toContain('Show 50 More');
+
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+
+  it('renders feature display labels for keyed descriptor groups', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = ReactDOM.createRoot(host);
+    const row = {
+      ...createBatchRow(1),
+      descriptorsByFeature: [
+        {
+          feature: PERMISSION_FEATURES.namespaceWorkloads,
+          resources: ['Deployment (list)'],
+        },
+      ],
+    };
+
+    await act(async () => {
+      root.render(
+        <CapabilityChecksTable currentRows={[row]} previousRows={[]} summary="1 BATCH" />
+      );
+      await Promise.resolve();
+    });
+
+    const dataRows = host.querySelectorAll('tbody tr');
+    await act(async () => {
+      dataRows[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(host.textContent).toContain('Namespace workloads');
+    expect(host.textContent).not.toContain(PERMISSION_FEATURES.namespaceWorkloads);
 
     await act(async () => {
       root.unmount();

@@ -8,6 +8,7 @@ import (
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	appsv1 "k8s.io/api/apps/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -71,6 +72,71 @@ func TestDeleteResourceByGVKRequiresDeletePermission(t *testing.T) {
 	}
 	if actions := dynamicClient.Actions(); len(actions) != 0 {
 		t.Fatalf("dynamic client should not be called after permission denial: %#v", actions)
+	}
+}
+
+func TestTriggerCronJobRequiresJobCreatePermission(t *testing.T) {
+	client := cgofake.NewClientset(&batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "backup", Namespace: "default"},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 * * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers:    []corev1.Container{{Name: "backup", Image: "busybox"}},
+							RestartPolicy: corev1.RestartPolicyNever,
+						},
+					},
+				},
+			},
+		},
+	})
+	denySelfSubjectAccessReviews(client, "no create jobs")
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
+		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+		client:            client,
+	})
+
+	_, err := app.TriggerCronJob("cluster-a", "default", "backup")
+	if err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("expected permission denial, got %v", err)
+	}
+	for _, action := range client.Actions() {
+		if action.Matches("create", "jobs") {
+			t.Fatalf("job create should not run after permission denial: %#v", action)
+		}
+	}
+}
+
+func TestSuspendCronJobRequiresPatchPermission(t *testing.T) {
+	client := cgofake.NewClientset(&batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "backup", Namespace: "default"},
+	})
+	denySelfSubjectAccessReviews(client, "no patch cronjobs")
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
+		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+		client:            client,
+	})
+
+	err := app.SuspendCronJob("cluster-a", "default", "backup", true)
+	if err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("expected permission denial, got %v", err)
+	}
+	for _, action := range client.Actions() {
+		if action.Matches("patch", "cronjobs") {
+			t.Fatalf("cronjob patch should not run after permission denial: %#v", action)
+		}
 	}
 }
 
