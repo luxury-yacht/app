@@ -10,7 +10,8 @@ import type { FeatureSupport, ResourceCapability } from '../types';
 
 export const useObjectPanelFeatureSupport = (
   objectKind: string | null,
-  resourceCapabilities: Record<string, ResourceCapability>
+  resourceCapabilities: Record<string, ResourceCapability>,
+  isHelmRelease = false
 ): FeatureSupport => {
   return useMemo<FeatureSupport>(() => {
     if (!objectKind) {
@@ -31,7 +32,6 @@ export const useObjectPanelFeatureSupport = (
     }
 
     const definition = resourceCapabilities[objectKind];
-    const isHelmRelease = objectKind === 'helmrelease';
 
     if (!definition) {
       return {
@@ -64,5 +64,5 @@ export const useObjectPanelFeatureSupport = (
       trigger: Boolean(definition.trigger),
       suspend: Boolean(definition.suspend),
     };
-  }, [objectKind, resourceCapabilities]);
+  }, [isHelmRelease, objectKind, resourceCapabilities]);
 };

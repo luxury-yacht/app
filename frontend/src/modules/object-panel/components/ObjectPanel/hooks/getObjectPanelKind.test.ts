@@ -37,6 +37,27 @@ describe('getObjectPanelKind', () => {
     expect(result.isHelmRelease).toBe(true);
   });
 
+  it('keeps real HelmRelease custom resources on their supplied GVK', () => {
+    const result = getObjectPanelKind({
+      kind: 'HelmRelease',
+      name: 'flux-app',
+      namespace: 'apps',
+      group: 'helm.toolkit.fluxcd.io',
+      version: 'v2',
+      clusterId: 'cluster-1',
+    });
+
+    expect(result.objectKind).toBe('helmrelease');
+    expect(result.detailScope).toBe(
+      'cluster-1|apps:helm.toolkit.fluxcd.io/v2:helmrelease:flux-app'
+    );
+    expect(result.eventsScope).toBe(
+      'cluster-1|apps:helm.toolkit.fluxcd.io/v2:HelmRelease:flux-app'
+    );
+    expect(result.helmScope).toBeNull();
+    expect(result.isHelmRelease).toBe(false);
+  });
+
   it('marks event resources with event-specific flag', () => {
     const result = getObjectPanelKind({
       kind: 'Event',

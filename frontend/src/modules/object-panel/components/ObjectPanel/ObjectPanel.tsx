@@ -264,7 +264,11 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     queryNamespacePermissions(namespace, objectData?.clusterId ?? null);
   }, [objectData?.clusterId, objectData?.namespace]);
 
-  const featureSupport = useObjectPanelFeatureSupport(objectKind, RESOURCE_CAPABILITIES);
+  const featureSupport = useObjectPanelFeatureSupport(
+    objectKind,
+    RESOURCE_CAPABILITIES,
+    isHelmRelease
+  );
 
   const { capabilities, capabilityReasons, nodeLogsState, nodeLogSources } =
     useObjectPanelCapabilities({
@@ -376,6 +380,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   } = useObjectPanelActions({
     objectData,
     objectKind,
+    isHelmRelease,
     state,
     dispatch,
     close,

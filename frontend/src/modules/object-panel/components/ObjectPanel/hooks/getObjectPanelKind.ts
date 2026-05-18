@@ -59,13 +59,28 @@ const resolveScopeGVK = (
   if (!normalizedKind) {
     return null;
   }
-  if (normalizedKind.toLowerCase() === 'helmrelease') {
-    return HELM_RELEASE_GVK;
-  }
 
   const suppliedVersion = normalizeOptional(version);
   const groupWasCarried = group !== undefined && group !== null;
   const suppliedGroup = groupWasCarried ? (group ?? '').trim() : undefined;
+  const isHelmReleaseKind = normalizedKind.toLowerCase() === 'helmrelease';
+  if (isHelmReleaseKind) {
+    if (!suppliedVersion) {
+      return HELM_RELEASE_GVK;
+    }
+    if (
+      groupWasCarried &&
+      suppliedGroup === HELM_RELEASE_GVK.group &&
+      suppliedVersion === HELM_RELEASE_GVK.version
+    ) {
+      return HELM_RELEASE_GVK;
+    }
+    if (!groupWasCarried || !suppliedGroup) {
+      return null;
+    }
+    return { group: suppliedGroup, version: suppliedVersion };
+  }
+
   const builtin = resolveBuiltinGroupVersion(normalizedKind);
   const builtinGVK =
     builtin.version !== undefined && builtin.group !== undefined
@@ -90,6 +105,27 @@ const resolveScopeGVK = (
     return builtinGVK;
   }
   return null;
+};
+
+const isSyntheticHelmRelease = (
+  kind: string | null | undefined,
+  group: string | null | undefined,
+  version: string | null | undefined
+): boolean => {
+  const normalizedKind = kind?.trim().toLowerCase() ?? '';
+  if (normalizedKind !== 'helmrelease') {
+    return false;
+  }
+  const suppliedVersion = normalizeOptional(version);
+  if (!suppliedVersion) {
+    return true;
+  }
+  const groupWasCarried = group !== undefined && group !== null;
+  return (
+    groupWasCarried &&
+    (group ?? '').trim() === HELM_RELEASE_GVK.group &&
+    suppliedVersion === HELM_RELEASE_GVK.version
+  );
 };
 
 const buildRequiredObjectScope = (args: {
@@ -129,6 +165,11 @@ export const getObjectPanelKind = (
 
   const objectKind = objectData?.kind ? objectData.kind.toLowerCase() : null;
   const scopeGVK = resolveScopeGVK(objectData?.kind, objectData?.group, objectData?.version);
+  const isHelmRelease = isSyntheticHelmRelease(
+    objectData?.kind,
+    objectData?.group,
+    objectData?.version
+  );
 
   const scopeNamespace =
     !objectData?.namespace || objectData.namespace.length === 0
@@ -199,11 +240,10 @@ export const getObjectPanelKind = (
       );
 
   const helmScope =
-    objectKind !== 'helmrelease' || !objectData?.name
+    !isHelmRelease || !objectData?.name
       ? null
       : buildClusterScope(clusterId, `${scopeNamespace}:${objectData.name}`);
 
-  const isHelmRelease = objectKind === 'helmrelease';
   const isEvent = objectKind === 'event';
 
   return {

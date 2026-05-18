@@ -23,9 +23,9 @@ describe('useObjectPanelFeatureSupport', () => {
     helmrelease: { delete: true },
   };
 
-  const renderHook = async (objectKind: string | null) => {
+  const renderHook = async (objectKind: string | null, isHelmRelease = false) => {
     const HookHarness: React.FC = () => {
-      resultRef.current = useObjectPanelFeatureSupport(objectKind, capabilities);
+      resultRef.current = useObjectPanelFeatureSupport(objectKind, capabilities, isHelmRelease);
       return null;
     };
 
@@ -94,7 +94,7 @@ describe('useObjectPanelFeatureSupport', () => {
   });
 
   it('enables manifest and values for Helm releases', async () => {
-    const result = await renderHook('helmrelease');
+    const result = await renderHook('helmrelease', true);
 
     expect(result).toEqual({
       objPanelLogs: false,
@@ -109,6 +109,17 @@ describe('useObjectPanelFeatureSupport', () => {
       debug: false,
       trigger: false,
       suspend: false,
+    });
+  });
+
+  it('does not enable Helm CLI tabs for real HelmRelease custom resources', async () => {
+    const result = await renderHook('helmrelease', false);
+
+    expect(result).toMatchObject({
+      manifest: false,
+      values: false,
+      delete: true,
+      edit: true,
     });
   });
 

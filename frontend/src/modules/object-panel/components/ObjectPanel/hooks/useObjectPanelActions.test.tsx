@@ -65,6 +65,7 @@ describe('useObjectPanelActions', () => {
       current: {
         objectData,
         objectKind: 'deployment',
+        isHelmRelease: false,
         state: baseState(),
         dispatch: dispatchMock,
         close: closeMock,
@@ -172,6 +173,52 @@ describe('useObjectPanelActions', () => {
       type: 'SET_RESOURCE_DELETED',
       payload: { deleted: true, name: 'api-0' },
     });
+  });
+
+  it('deletes synthetic Helm releases through the Helm command', async () => {
+    const { getResult } = await renderHook({
+      objectData: {
+        kind: 'HelmRelease',
+        name: 'demo',
+        namespace: 'apps',
+        clusterId: 'alpha:ctx',
+      },
+      objectKind: 'helmrelease',
+      isHelmRelease: true,
+    });
+
+    await getResult().handleAction('delete', 'showDeleteConfirm');
+
+    expect(deleteHelmMock).toHaveBeenCalledWith('alpha:ctx', 'apps', 'demo');
+    expect(deleteResourceMock).not.toHaveBeenCalled();
+    expect(closeMock).toHaveBeenCalled();
+  });
+
+  it('deletes real HelmRelease custom resources through the generic GVK command', async () => {
+    const { getResult } = await renderHook({
+      objectData: {
+        kind: 'HelmRelease',
+        name: 'flux-app',
+        namespace: 'apps',
+        clusterId: 'alpha:ctx',
+        group: 'helm.toolkit.fluxcd.io',
+        version: 'v2',
+      },
+      objectKind: 'helmrelease',
+      isHelmRelease: false,
+    });
+
+    await getResult().handleAction('delete', 'showDeleteConfirm');
+
+    expect(deleteHelmMock).not.toHaveBeenCalled();
+    expect(deleteResourceMock).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'helm.toolkit.fluxcd.io/v2',
+      'HelmRelease',
+      'apps',
+      'flux-app'
+    );
+    expect(closeMock).toHaveBeenCalled();
   });
 
   it('scales workloads, hides the scale input, and refreshes details', async () => {

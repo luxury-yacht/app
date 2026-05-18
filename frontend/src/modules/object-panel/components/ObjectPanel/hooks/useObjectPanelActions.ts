@@ -15,6 +15,7 @@ import type { PanelAction, PanelObjectData, PanelState, ResourceAction } from '.
 interface UseObjectPanelActionsArgs {
   objectData: PanelObjectData | null;
   objectKind: string | null;
+  isHelmRelease: boolean;
   state: PanelState;
   dispatch: Dispatch<PanelAction>;
   close: () => void;
@@ -55,6 +56,7 @@ const getWorkloadKind = (
 export const useObjectPanelActions = ({
   objectData,
   objectKind,
+  isHelmRelease,
   state,
   dispatch,
   close,
@@ -173,7 +175,7 @@ export const useObjectPanelActions = ({
           case 'delete': {
             if (objectKind === 'pod') {
               await app.DeletePod(clusterId, namespace, name);
-            } else if (objectKind === 'helmrelease') {
+            } else if (isHelmRelease) {
               await app.DeleteHelmRelease(clusterId, namespace, name);
             } else {
               const resourceKind = objectData.kind || objectKind;
@@ -238,6 +240,7 @@ export const useObjectPanelActions = ({
     [
       objectData,
       objectKind,
+      isHelmRelease,
       dispatch,
       hideDeleteConfirm,
       hideRestartConfirm,
