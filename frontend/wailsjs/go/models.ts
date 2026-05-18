@@ -523,11 +523,11 @@ export namespace backend {
 	    kind: string;
 	    namespace?: string;
 	    name: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RuntimeOperationTargetRef(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.clusterId = source["clusterId"];
@@ -549,11 +549,11 @@ export namespace backend {
 	    startedAt: string;
 	    displayName?: string;
 	    summary?: Record<string, string>;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RuntimeOperation(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -567,7 +567,7 @@ export namespace backend {
 	        this.displayName = source["displayName"];
 	        this.summary = source["summary"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -586,7 +586,7 @@ export namespace backend {
 		    return a;
 		}
 	}
-
+	
 	export class SelectionDiagnostics {
 	    activeQueueDepth: number;
 	    maxQueueDepth: number;

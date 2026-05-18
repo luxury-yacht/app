@@ -7,7 +7,6 @@ import (
 	goruntime "runtime"
 
 	"github.com/luxury-yacht/app/backend"
-	"github.com/luxury-yacht/app/backend/sigstack"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -34,13 +33,6 @@ func main() {
 	// Custom startup that sets up menu updates
 	onStartup := func(ctx context.Context) {
 		app.Startup(ctx)
-
-		if goruntime.GOOS == "linux" {
-			// WebKitGTK installs a SIGSEGV handler without SA_ONSTACK on some distros
-			// (Ubuntu 24.04 / WebKit 2.48) which triggers Go's fatal signal check.
-			// Reapply SA_ONSTACK to keep Go happy.
-			sigstack.StartPatchLoop()
-		}
 
 		// Listen for menu update events
 		runtime.EventsOn(ctx, "update-menu", func(optionalData ...any) {
