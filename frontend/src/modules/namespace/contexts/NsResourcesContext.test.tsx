@@ -232,7 +232,7 @@ describe('NamespaceResourcesProvider', () => {
       'namespace-config',
       `${testClusterId}|namespace:team-a`,
       true,
-      undefined
+      { preserveState: true }
     );
     expect(orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespace-config',
@@ -293,7 +293,7 @@ describe('NamespaceResourcesProvider', () => {
       'pods',
       `${testClusterId}|namespace:team-a`,
       true,
-      undefined
+      { preserveState: true }
     );
 
     await act(async () => {
@@ -305,7 +305,7 @@ describe('NamespaceResourcesProvider', () => {
       'namespace-network',
       `${testClusterId}|namespace:team-a`,
       true,
-      undefined
+      { preserveState: true }
     );
   });
 

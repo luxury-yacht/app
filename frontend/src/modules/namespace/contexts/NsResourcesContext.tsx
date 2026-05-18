@@ -756,7 +756,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           domain,
           namespaceScope,
           shouldEnable,
-          shouldEnable ? undefined : PRESERVE_SCOPED_STATE
+          PRESERVE_SCOPED_STATE
         );
       }
 
@@ -769,7 +769,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
         'pods',
         namespaceScope,
         podsEnabled,
-        podsEnabled ? undefined : PRESERVE_SCOPED_STATE
+        PRESERVE_SCOPED_STATE
       );
     }
   }, [

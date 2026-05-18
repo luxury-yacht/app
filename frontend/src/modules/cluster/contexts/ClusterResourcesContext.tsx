@@ -533,7 +533,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       }
       // Allow fetches even while permissions are pending to avoid delaying the view.
 
-      refreshOrchestrator.setScopedDomainEnabled(nextDomain, scope, true, undefined);
+      refreshOrchestrator.setScopedDomainEnabled(nextDomain, scope, true, PRESERVE_SCOPED_STATE);
       const state = domainStateRef.current[nextDomain];
       if (state && !state.data && state.status === 'idle') {
         // fetchScopedDomain handles streaming domains internally — it will

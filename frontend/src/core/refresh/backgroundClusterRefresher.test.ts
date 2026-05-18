@@ -88,4 +88,25 @@ describe('BackgroundClusterRefresher', () => {
     expect(fetchForCluster).toHaveBeenCalledWith('namespaces', 'cluster-b');
     expect(fetchForCluster).toHaveBeenCalledWith('pods', 'cluster-b', 'namespace:team-a');
   });
+
+  it('does not refresh namespace content without a selected background namespace', async () => {
+    const fetchForCluster = vi
+      .spyOn(refreshOrchestrator, 'fetchDomainForCluster')
+      .mockResolvedValue(undefined);
+    const refresher = new BackgroundClusterRefresher(
+      () => ({
+        viewType: 'namespace',
+        previousView: 'overview',
+        activeNamespaceView: 'network',
+        activeClusterView: 'nodes',
+      }),
+      () => undefined
+    );
+    refresher.updateClusters('cluster-a', ['cluster-a', 'cluster-b']);
+
+    await (refresher as unknown as { tick: () => Promise<void> }).tick();
+
+    expect(fetchForCluster).toHaveBeenCalledTimes(1);
+    expect(fetchForCluster).toHaveBeenCalledWith('namespaces', 'cluster-b');
+  });
 });

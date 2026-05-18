@@ -138,7 +138,7 @@ describe('ClusterResourcesProvider', () => {
       'cluster-config',
       testClusterScope,
       true,
-      undefined
+      { preserveState: true }
     );
     expect(dataAccessMocks.requestRefreshDomain).toHaveBeenCalledWith({
       domain: 'cluster-config',

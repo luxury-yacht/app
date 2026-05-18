@@ -169,6 +169,9 @@ export class BackgroundClusterRefresher {
       domain = namespaceViewToDomain(activeNamespaceView);
       // Namespace domains need the selected namespace as scope.
       const ns = this.getNamespace(clusterId);
+      if (domain && !ns) {
+        return;
+      }
       if (ns) {
         scope = ns.startsWith('namespace:') ? ns : `namespace:${ns}`;
       }
