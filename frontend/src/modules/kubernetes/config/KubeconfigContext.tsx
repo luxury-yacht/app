@@ -15,7 +15,7 @@ import React, {
   useRef,
   ReactNode,
 } from 'react';
-import { SetSelectedKubeconfigs } from '@wailsjs/go/backend/App';
+import { CloseCluster, SetSelectedKubeconfigs } from '@wailsjs/go/backend/App';
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import { errorHandler } from '@utils/errorHandler';
 import { types } from '@wailsjs/go/models';
@@ -37,6 +37,7 @@ interface KubeconfigContextType {
   kubeconfigsLoading: boolean;
   setSelectedKubeconfigs: (configs: string[]) => Promise<void>;
   setSelectedKubeconfig: (config: string) => Promise<void>;
+  closeKubeconfig: (selectionOrClusterId: string) => Promise<void>;
   setActiveKubeconfig: (config: string) => void;
   getClusterMeta: (config: string) => { id: string; name: string };
   loadKubeconfigs: () => Promise<void>;
@@ -381,6 +382,111 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     [setSelectedKubeconfigs]
   );
 
+  const closeKubeconfig = useCallback(
+    async (selectionOrClusterId: string) => {
+      const target = selectionOrClusterId.trim();
+      if (!target) {
+        return;
+      }
+
+      const requestId = latestSelectionRequestIdRef.current + 1;
+      latestSelectionRequestIdRef.current = requestId;
+
+      const previousSelections = selectedKubeconfigsRef.current;
+      const previousActive = selectedKubeconfigRef.current;
+      const matchesTarget = (selection: string) => {
+        if (selection === target) {
+          return true;
+        }
+        return resolveClusterMeta(selection, kubeconfigsRef.current).id === target;
+      };
+      const normalizedSelections = normalizeSelections(
+        previousSelections.filter((selection) => !matchesTarget(selection))
+      );
+      const removedActive = Boolean(previousActive && matchesTarget(previousActive));
+      const nextActive = removedActive ? normalizedSelections[0] || '' : previousActive;
+      const willBeEmpty = normalizedSelections.length === 0;
+      const selectionChanged =
+        normalizedSelections.length !== previousSelections.length ||
+        normalizedSelections.some((selection, index) => selection !== previousSelections[index]);
+      const nextMeta = resolveClusterMeta(nextActive, kubeconfigsRef.current);
+      const nextClusterIds = new Set<string>();
+      normalizedSelections.forEach((selection) => {
+        const meta = resolveClusterMeta(selection, kubeconfigsRef.current);
+        if (meta.id) {
+          nextClusterIds.add(meta.id);
+        }
+      });
+
+      try {
+        selectionPendingRef.current = true;
+        selectedKubeconfigsRef.current = normalizedSelections;
+        selectedKubeconfigRef.current = nextActive;
+        setSelectedKubeconfigsState(normalizedSelections);
+        setSelectedKubeconfigState(nextActive);
+
+        if (selectionChanged && willBeEmpty) {
+          eventBus.emit('kubeconfig:changing', '');
+        }
+        updateRefreshContext(nextMeta, Array.from(nextClusterIds));
+
+        await CloseCluster(target);
+
+        if (requestId !== latestSelectionRequestIdRef.current) {
+          return;
+        }
+
+        if (selectionChanged && !willBeEmpty) {
+          eventBus.emit('kubeconfig:selection-changed');
+        }
+        selectionPendingRef.current = false;
+        updateRefreshContext(nextMeta, Array.from(nextClusterIds));
+        committedSelectionsRef.current = normalizedSelections;
+        committedActiveRef.current = nextActive;
+      } catch (error) {
+        if (requestId !== latestSelectionRequestIdRef.current) {
+          return;
+        }
+        selectionPendingRef.current = false;
+
+        let rollbackSelections = committedSelectionsRef.current;
+        let rollbackActive = committedActiveRef.current;
+        try {
+          const confirmed = normalizeSelections(
+            (await requestAppState({
+              resource: 'selected-kubeconfigs',
+              read: () => readSelectedKubeconfigs(),
+            })) || []
+          );
+          rollbackSelections = confirmed;
+          rollbackActive =
+            rollbackActive && confirmed.includes(rollbackActive)
+              ? rollbackActive
+              : confirmed[0] || '';
+          committedSelectionsRef.current = rollbackSelections;
+          committedActiveRef.current = rollbackActive;
+        } catch {
+          // Keep last committed in-memory snapshot when backend confirmation fails.
+        }
+
+        selectedKubeconfigsRef.current = rollbackSelections;
+        selectedKubeconfigRef.current = rollbackActive;
+        setSelectedKubeconfigsState(rollbackSelections);
+        setSelectedKubeconfigState(rollbackActive);
+        errorHandler.handle(
+          error,
+          {
+            context: 'closeKubeconfig',
+            selectionOrClusterId: target,
+          },
+          'Failed to close cluster'
+        );
+        throw error;
+      }
+    },
+    [normalizeSelections, resolveClusterMeta, updateRefreshContext]
+  );
+
   const setActiveKubeconfig = useCallback(
     (config: string) => {
       if (!config || config === selectedKubeconfig) {
@@ -453,6 +559,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       kubeconfigsLoading,
       setSelectedKubeconfigs,
       setSelectedKubeconfig,
+      closeKubeconfig,
       setActiveKubeconfig,
       getClusterMeta,
       loadKubeconfigs,
@@ -467,6 +574,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       kubeconfigsLoading,
       setSelectedKubeconfigs,
       setSelectedKubeconfig,
+      closeKubeconfig,
       setActiveKubeconfig,
       getClusterMeta,
       loadKubeconfigs,

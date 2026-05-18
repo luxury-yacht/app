@@ -16,7 +16,6 @@ import { resetClusterTabOrderCacheForTesting } from '@core/persistence/clusterTa
 // Capture event handlers registered via EventsOn so tests can invoke them.
 const wailsEventHandlers: Record<string, (...args: any[]) => void> = {};
 const QuitMock = vi.fn();
-const CloseClusterMock = vi.fn();
 
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOnMultiple: () => undefined,
@@ -27,10 +26,6 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
     wailsEventHandlers[eventName] = handler;
   },
   Quit: (...args: any[]) => QuitMock(...args),
-}));
-
-vi.mock('@wailsjs/go/backend/App', () => ({
-  CloseCluster: (...args: unknown[]) => CloseClusterMock(...args),
 }));
 
 let latestHelpProps: { isOpen: boolean; onClose: () => void } | null = null;
@@ -44,6 +39,7 @@ const isMacPlatformMock = vi.fn(() => true);
 const setSelectedKubeconfigsMock = vi.fn();
 const setActiveKubeconfigMock = vi.fn();
 const loadKubeconfigsMock = vi.fn();
+const closeKubeconfigMock = vi.fn();
 const kubeconfigState = {
   selectedKubeconfig: 'cluster-1',
   selectedKubeconfigs: ['cluster-1', 'cluster-2'],
@@ -75,6 +71,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
     kubeconfigsLoading: false,
     setSelectedKubeconfigs: setSelectedKubeconfigsMock,
     setSelectedKubeconfig: vi.fn(),
+    closeKubeconfig: closeKubeconfigMock,
     setActiveKubeconfig: setActiveKubeconfigMock,
     getClusterMeta: (selection: string) => ({ id: selection, name: selection }),
     loadKubeconfigs: loadKubeconfigsMock,
@@ -152,9 +149,9 @@ describe('GlobalShortcuts', () => {
     setActiveKubeconfigMock.mockClear();
     loadKubeconfigsMock.mockClear();
     loadKubeconfigsMock.mockResolvedValue(undefined);
+    closeKubeconfigMock.mockClear();
+    closeKubeconfigMock.mockResolvedValue(undefined);
     QuitMock.mockClear();
-    CloseClusterMock.mockClear();
-    CloseClusterMock.mockResolvedValue(undefined);
     // Clear captured Wails event handlers
     for (const key of Object.keys(wailsEventHandlers)) {
       delete wailsEventHandlers[key];
@@ -393,8 +390,8 @@ describe('GlobalShortcuts', () => {
       await Promise.resolve();
     });
 
-    expect(CloseClusterMock).toHaveBeenCalledWith('cluster-2');
-    expect(loadKubeconfigsMock).toHaveBeenCalledTimes(1);
+    expect(closeKubeconfigMock).toHaveBeenCalledWith('cluster-2');
+    expect(loadKubeconfigsMock).not.toHaveBeenCalled();
     expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
     expect(QuitMock).not.toHaveBeenCalled();
   });

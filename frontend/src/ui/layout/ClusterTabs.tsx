@@ -18,7 +18,6 @@ import {
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import { CloseCluster } from '@wailsjs/go/backend/App';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import { Tabs, type TabDescriptor } from '@shared/components/tabs';
@@ -58,7 +57,7 @@ const ClusterTabs: React.FC = () => {
     selectedKubeconfig,
     setActiveKubeconfig,
     getClusterMeta,
-    loadKubeconfigs,
+    closeKubeconfig,
   } = useKubeconfig();
   const [tabOrder, setTabOrder] = useState<string[]>(() => getClusterTabOrder());
   const tabsRef = useRef<HTMLDivElement | null>(null);
@@ -148,10 +147,9 @@ const ClusterTabs: React.FC = () => {
 
   const closeClusterSelection = useCallback(
     async (selection: string) => {
-      await CloseCluster(selection);
-      await loadKubeconfigs();
+      await closeKubeconfig(selection);
     },
-    [loadKubeconfigs]
+    [closeKubeconfig]
   );
 
   // Handles closing a cluster tab. Checks for active runtime operations first

@@ -12,23 +12,30 @@ import { KubeconfigProvider, useKubeconfig } from './KubeconfigContext';
 import type { types } from '@wailsjs/go/models';
 import { eventBus } from '@/core/events';
 
-const { getKubeconfigsMock, getSelectedKubeconfigsMock, setSelectedKubeconfigsMock, mocks } =
-  vi.hoisted(() => ({
-    getKubeconfigsMock: vi.fn(),
-    getSelectedKubeconfigsMock: vi.fn(),
-    setSelectedKubeconfigsMock: vi.fn(),
-    mocks: {
-      refreshOrchestrator: {
-        updateContext: vi.fn(),
-      },
-      backgroundRefreshState: { enabled: true },
+const {
+  getKubeconfigsMock,
+  getSelectedKubeconfigsMock,
+  setSelectedKubeconfigsMock,
+  closeClusterMock,
+  mocks,
+} = vi.hoisted(() => ({
+  getKubeconfigsMock: vi.fn(),
+  getSelectedKubeconfigsMock: vi.fn(),
+  setSelectedKubeconfigsMock: vi.fn(),
+  closeClusterMock: vi.fn(),
+  mocks: {
+    refreshOrchestrator: {
+      updateContext: vi.fn(),
     },
-  }));
+    backgroundRefreshState: { enabled: true },
+  },
+}));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetKubeconfigs: () => getKubeconfigsMock(),
   GetSelectedKubeconfigs: () => getSelectedKubeconfigsMock(),
   SetSelectedKubeconfigs: (configs: string[]) => setSelectedKubeconfigsMock(configs),
+  CloseCluster: (selectionOrClusterId: string) => closeClusterMock(selectionOrClusterId),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -95,6 +102,8 @@ describe('KubeconfigContext', () => {
     getKubeconfigsMock.mockReset();
     getSelectedKubeconfigsMock.mockReset();
     setSelectedKubeconfigsMock.mockReset();
+    closeClusterMock.mockReset();
+    closeClusterMock.mockResolvedValue(undefined);
     mocks.backgroundRefreshState.enabled = true;
   });
 
@@ -334,6 +343,82 @@ describe('KubeconfigContext', () => {
     });
 
     resolveFirst();
+
+    unmount();
+  });
+
+  it('keeps a close request authoritative when cluster initialization is still pending', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'beta',
+        path: '/kube/beta',
+        context: 'prod',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'gamma',
+        path: '/kube/gamma',
+        context: 'staging',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
+
+    let resolveSelection!: () => void;
+    const pendingSelection = new Promise<void>((resolve) => {
+      resolveSelection = resolve;
+    });
+    setSelectedKubeconfigsMock.mockReturnValueOnce(pendingSelection);
+
+    const { getContext, unmount } = await renderProvider();
+
+    await act(async () => {
+      void getContext().setSelectedKubeconfigs([
+        '/kube/alpha:dev',
+        '/kube/beta:prod',
+        '/kube/gamma:staging',
+      ]);
+      await flushPromises();
+    });
+
+    expect(getContext().selectedKubeconfigs).toEqual([
+      '/kube/alpha:dev',
+      '/kube/beta:prod',
+      '/kube/gamma:staging',
+    ]);
+
+    act(() => {
+      getContext().setActiveKubeconfig('/kube/alpha:dev');
+    });
+    expect(getContext().selectedKubeconfig).toBe('/kube/alpha:dev');
+
+    await act(async () => {
+      await getContext().closeKubeconfig('/kube/alpha:dev');
+      await flushPromises();
+    });
+
+    expect(closeClusterMock).toHaveBeenCalledWith('/kube/alpha:dev');
+    expect(getContext().selectedKubeconfigs).toEqual(['/kube/beta:prod', '/kube/gamma:staging']);
+    expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
+
+    await act(async () => {
+      resolveSelection();
+      await pendingSelection;
+      await flushPromises();
+    });
+
+    expect(getContext().selectedKubeconfigs).toEqual(['/kube/beta:prod', '/kube/gamma:staging']);
+    expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
 
     unmount();
   });

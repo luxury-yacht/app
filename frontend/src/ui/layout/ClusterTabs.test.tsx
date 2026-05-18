@@ -24,6 +24,7 @@ type MockState = {
   selectedKubeconfigs: string[];
   selectedKubeconfig: string;
   setSelectedKubeconfigs: (next: string[]) => Promise<void>;
+  closeKubeconfig: (selectionOrClusterId: string) => Promise<void>;
   setActiveKubeconfig: (config: string) => void;
   getClusterMeta: (config: string) => { id: string; name: string };
   loadKubeconfigs: () => Promise<void>;
@@ -33,6 +34,7 @@ const mockState: MockState = {
   selectedKubeconfigs: [],
   selectedKubeconfig: '',
   setSelectedKubeconfigs: vi.fn().mockResolvedValue(undefined),
+  closeKubeconfig: vi.fn().mockResolvedValue(undefined),
   setActiveKubeconfig: vi.fn(),
   getClusterMeta: (config: string) => ({ id: config, name: config }),
   loadKubeconfigs: vi.fn().mockResolvedValue(undefined),
@@ -60,6 +62,7 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfigs = [];
     mockState.selectedKubeconfig = '';
     mockState.setSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
+    mockState.closeKubeconfig = vi.fn().mockResolvedValue(undefined);
     mockState.setActiveKubeconfig = vi.fn();
     mockState.loadKubeconfigs = vi.fn().mockResolvedValue(undefined);
     backendMocks.CloseCluster.mockResolvedValue(undefined);
@@ -134,7 +137,7 @@ describe('ClusterTabs', () => {
     expect(mockState.setActiveKubeconfig).toHaveBeenCalledWith('b');
   });
 
-  it('invokes CloseCluster when a tab is closed', async () => {
+  it('invokes closeKubeconfig when a tab is closed', async () => {
     mockState.selectedKubeconfigs = ['a', 'b'];
     mockState.selectedKubeconfig = 'a';
     await renderTabs();
@@ -151,8 +154,8 @@ describe('ClusterTabs', () => {
     });
 
     expect(backendMocks.ListRuntimeOperations).toHaveBeenCalled();
-    expect(backendMocks.CloseCluster).toHaveBeenCalledWith('b');
-    expect(mockState.loadKubeconfigs).toHaveBeenCalledTimes(1);
+    expect(mockState.closeKubeconfig).toHaveBeenCalledWith('b');
+    expect(mockState.loadKubeconfigs).not.toHaveBeenCalled();
     expect(mockState.setSelectedKubeconfigs).not.toHaveBeenCalled();
   });
 
@@ -202,8 +205,8 @@ describe('ClusterTabs', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(backendMocks.CloseCluster).toHaveBeenCalledWith('b');
-    expect(mockState.loadKubeconfigs).toHaveBeenCalledTimes(1);
+    expect(mockState.closeKubeconfig).toHaveBeenCalledWith('b');
+    expect(mockState.loadKubeconfigs).not.toHaveBeenCalled();
   });
 
   it('shows filename:context for tabs with name collisions', async () => {
