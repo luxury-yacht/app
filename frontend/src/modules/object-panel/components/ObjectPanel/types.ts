@@ -4,30 +4,14 @@
  * Type definitions for types.
  * Defines shared interfaces and payload shapes for the object panel feature.
  */
+import type { ResourceRef } from '@core/refresh/types';
 
-export type PanelObjectData = {
-  kind?: string | null;
+type NullableResourceRefFields = {
+  [K in keyof ResourceRef]?: ResourceRef[K] | null;
+};
+
+export type PanelObjectData = NullableResourceRefFields & {
   kindAlias?: string | null;
-  /**
-   * API group for the object's kind (e.g. "apps", "rds.services.k8s.aws").
-   * Empty string for core/v1 kinds. Real Kubernetes objects must carry
-   * group/version before entering the panel; synthetic objects such as
-   * HelmRelease intentionally omit them.
-   */
-  group?: string | null;
-  /**
-   * API version for the object's kind (e.g. "v1", "v1alpha1").
-   */
-  version?: string | null;
-  /**
-   * Plural resource name (e.g. "deployments", "dbinstances"). Carried
-   * alongside group/version from the catalog so the frontend doesn't have
-   * to pluralize on its own.
-   */
-  resource?: string | null;
-  name?: string | null;
-  namespace?: string | null;
-  clusterId?: string | null;
   clusterName?: string | null;
 };
 

@@ -7,7 +7,10 @@
 
 package types
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
 
 // KubeconfigInfo represents information about a kubeconfig context
 type KubeconfigInfo struct {
@@ -768,26 +771,12 @@ type IngressTLSDetails struct {
 	SecretName string   `json:"secretName,omitempty"`
 }
 
-// ObjectRef carries the cluster ID + GVK + namespace/name required to open
-// an object without ambiguous kind-only resolution.
-type ObjectRef struct {
-	ClusterID string `json:"clusterId"`
-	Group     string `json:"group"`
-	Version   string `json:"version"`
-	Kind      string `json:"kind"`
-	Namespace string `json:"namespace,omitempty"`
-	Name      string `json:"name"`
-}
+// ObjectRef is the shared openable Kubernetes object identity.
+type ObjectRef = resourcemodel.ResourceRef
 
 // DisplayRef preserves unresolved cross-references that cannot be opened safely
 // because the source object did not provide a full GVK.
-type DisplayRef struct {
-	ClusterID string `json:"clusterId"`
-	Group     string `json:"group,omitempty"`
-	Kind      string `json:"kind"`
-	Namespace string `json:"namespace,omitempty"`
-	Name      string `json:"name"`
-}
+type DisplayRef = resourcemodel.DisplayRef
 
 type RefOrDisplay struct {
 	Ref     *ObjectRef  `json:"ref,omitempty"`

@@ -26,14 +26,7 @@ const (
 
 // ObjectActionTargetRef is the canonical object identity for state-changing
 // app actions. Core resources use group="" with version="v1".
-type ObjectActionTargetRef struct {
-	ClusterID string `json:"clusterId"`
-	Group     string `json:"group"`
-	Version   string `json:"version"`
-	Kind      string `json:"kind"`
-	Namespace string `json:"namespace,omitempty"`
-	Name      string `json:"name"`
-}
+type ObjectActionTargetRef = resourcemodel.ResourceRef
 
 type ObjectActionPortForwardOptions struct {
 	ContainerPort int `json:"containerPort"`
@@ -64,21 +57,14 @@ type ObjectActionResponse struct {
 }
 
 func objectActionTarget(clusterID, group, version, kind, namespace, name string) ObjectActionTargetRef {
-	return ObjectActionTargetRef{
-		ClusterID: strings.TrimSpace(clusterID),
-		Group:     strings.TrimSpace(group),
-		Version:   strings.TrimSpace(version),
-		Kind:      strings.TrimSpace(kind),
-		Namespace: strings.TrimSpace(namespace),
-		Name:      strings.TrimSpace(name),
-	}
+	return resourcemodel.NewResourceRef(clusterID, group, version, kind, "", namespace, name, "")
 }
 
 func objectActionTargetFromGVK(clusterID string, gvk schema.GroupVersionKind, namespace, name string) ObjectActionTargetRef {
 	return objectActionTarget(clusterID, gvk.Group, gvk.Version, gvk.Kind, namespace, name)
 }
 
-func (t ObjectActionTargetRef) gvk() schema.GroupVersionKind {
+func objectActionTargetGVK(t ObjectActionTargetRef) schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   strings.TrimSpace(t.Group),
 		Version: strings.TrimSpace(t.Version),
@@ -86,22 +72,13 @@ func (t ObjectActionTargetRef) gvk() schema.GroupVersionKind {
 	}
 }
 
-func (t ObjectActionTargetRef) normalized() ObjectActionTargetRef {
+func normalizeObjectActionTarget(t ObjectActionTargetRef) ObjectActionTargetRef {
 	return objectActionTarget(t.ClusterID, t.Group, t.Version, t.Kind, t.Namespace, t.Name)
 }
 
 func validateObjectActionTarget(target ObjectActionTargetRef) (ObjectActionTargetRef, error) {
-	normalized := target.normalized()
-	if err := resourcemodel.ValidateResourceRef(resourcemodel.NewResourceRef(
-		normalized.ClusterID,
-		normalized.Group,
-		normalized.Version,
-		normalized.Kind,
-		"",
-		normalized.Namespace,
-		normalized.Name,
-		"",
-	)); err != nil {
+	normalized := normalizeObjectActionTarget(target)
+	if err := resourcemodel.ValidateResourceRef(normalized); err != nil {
 		return ObjectActionTargetRef{}, err
 	}
 	return normalized, nil
@@ -123,7 +100,7 @@ func requireObjectActionOption[T any](value *T, name, action string) (T, error) 
 }
 
 func errUnsupportedActionTarget(action string, target ObjectActionTargetRef, apiVersion, kind string) error {
-	return fmt.Errorf("%s requires %s %s target, got %s %s", action, apiVersion, kind, target.gvk().GroupVersion().String(), target.Kind)
+	return fmt.Errorf("%s requires %s %s target, got %s %s", action, apiVersion, kind, objectActionTargetGVK(target).GroupVersion().String(), target.Kind)
 }
 
 func (a *App) deleteObjectAction(target ObjectActionTargetRef, force bool) error {

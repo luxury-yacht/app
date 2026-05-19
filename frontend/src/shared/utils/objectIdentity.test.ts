@@ -213,7 +213,7 @@ describe('objectIdentity', () => {
     );
   });
 
-  it('builds synthetic references without forcing a fake GVK', () => {
+  it('builds Helm synthetic references with canonical identity', () => {
     expect(
       buildSyntheticObjectReference(
         {
@@ -225,14 +225,15 @@ describe('objectIdentity', () => {
         { status: 'deployed' }
       )
     ).toEqual({
+      group: 'helm.sh',
+      version: 'v3',
       kind: 'HelmRelease',
-      kindAlias: undefined,
+      resource: undefined,
       name: 'demo',
+      uid: undefined,
       namespace: 'default',
       clusterId: 'alpha:ctx',
       clusterName: undefined,
-      resource: undefined,
-      uid: undefined,
       status: 'deployed',
     });
   });

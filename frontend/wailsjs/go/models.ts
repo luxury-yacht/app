@@ -389,8 +389,10 @@ export namespace backend {
 	    group: string;
 	    version: string;
 	    kind: string;
+	    resource?: string;
 	    namespace?: string;
 	    name: string;
+	    uid?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ObjectActionTargetRef(source);
@@ -402,8 +404,10 @@ export namespace backend {
 	        this.group = source["group"];
 	        this.version = source["version"];
 	        this.kind = source["kind"];
+	        this.resource = source["resource"];
 	        this.namespace = source["namespace"];
 	        this.name = source["name"];
+	        this.uid = source["uid"];
 	    }
 	}
 	export class ObjectActionRequest {
@@ -628,8 +632,10 @@ export namespace backend {
 	    group: string;
 	    version: string;
 	    kind: string;
+	    resource?: string;
 	    namespace?: string;
 	    name: string;
+	    uid?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new RuntimeOperationTargetRef(source);
@@ -641,8 +647,10 @@ export namespace backend {
 	        this.group = source["group"];
 	        this.version = source["version"];
 	        this.kind = source["kind"];
+	        this.resource = source["resource"];
 	        this.namespace = source["namespace"];
 	        this.name = source["name"];
+	        this.uid = source["uid"];
 	    }
 	}
 	export class RuntimeOperation {
@@ -1241,9 +1249,12 @@ export namespace types {
 	export class DisplayRef {
 	    clusterId: string;
 	    group?: string;
+	    version?: string;
 	    kind: string;
+	    resource?: string;
 	    namespace?: string;
 	    name: string;
+	    uid?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new DisplayRef(source);
@@ -1253,9 +1264,12 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.clusterId = source["clusterId"];
 	        this.group = source["group"];
+	        this.version = source["version"];
 	        this.kind = source["kind"];
+	        this.resource = source["resource"];
 	        this.namespace = source["namespace"];
 	        this.name = source["name"];
+	        this.uid = source["uid"];
 	    }
 	}
 	export class ObjectRef {
@@ -1263,8 +1277,10 @@ export namespace types {
 	    group: string;
 	    version: string;
 	    kind: string;
+	    resource?: string;
 	    namespace?: string;
 	    name: string;
+	    uid?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ObjectRef(source);
@@ -1276,8 +1292,10 @@ export namespace types {
 	        this.group = source["group"];
 	        this.version = source["version"];
 	        this.kind = source["kind"];
+	        this.resource = source["resource"];
 	        this.namespace = source["namespace"];
 	        this.name = source["name"];
+	        this.uid = source["uid"];
 	    }
 	}
 	export class RefOrDisplay {

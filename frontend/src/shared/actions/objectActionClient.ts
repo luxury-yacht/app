@@ -1,5 +1,6 @@
 import { RunObjectAction } from '@wailsjs/go/backend/App';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import type { ResourceRef } from '@core/refresh/types';
 
 export const OBJECT_ACTIONS = {
   delete: 'delete',
@@ -17,14 +18,7 @@ export const OBJECT_ACTIONS = {
 
 export type ObjectActionName = (typeof OBJECT_ACTIONS)[keyof typeof OBJECT_ACTIONS];
 
-export interface ObjectActionTargetRef {
-  clusterId: string;
-  group: string;
-  version: string;
-  kind: string;
-  namespace?: string;
-  name: string;
-}
+export type ObjectActionTargetRef = Omit<ResourceRef, 'name'> & { name: string };
 
 export interface ObjectActionIdentitySource {
   clusterId?: string | null;

@@ -70,9 +70,7 @@ export function useNavigateToView(): NavigateToViewResult {
       }
 
       // 5. Emit focus request so the target GridTable highlights the row.
-      //    Use the same canonical identity backbone as object opening where
-      //    possible. Synthetic/non-GVK refs still fall back to legacy
-      //    name/namespace matching via buildGridTableFocusRequest().
+      //    Use the same canonical identity backbone as object opening.
       const focusRequest = buildGridTableFocusRequest(objectRef);
       if (focusRequest) {
         setPendingFocusRequest(focusRequest);

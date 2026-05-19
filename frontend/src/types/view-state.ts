@@ -5,6 +5,11 @@
  * and navigation history.
  */
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import type { ResourceRef } from '@core/refresh/types';
+
+type NullableResourceRefFields = {
+  [K in keyof ResourceRef]?: ResourceRef[K] | null;
+};
 
 /**
  * Standard Kubernetes object metadata structure.
@@ -29,26 +34,9 @@ export interface KubernetesMetadata {
  * ViewStateContext handles both formats by checking:
  * `obj?.metadata?.kind || obj?.kind`
  */
-export interface KubernetesObjectReference {
-  // Flattened properties (may be present at top level)
-  kind?: string | null;
+export interface KubernetesObjectReference extends NullableResourceRefFields {
   kindAlias?: string | null;
-  name?: string | null;
-  namespace?: string | null;
-  clusterId?: string | null;
   clusterName?: string | null;
-
-  /**
-   * API group for the object's kind (e.g. "apps", "rds.services.k8s.aws").
-   * Empty string for core/v1 kinds. Callers that build refs from the
-   * catalog should populate this so downstream code can disambiguate
-   * colliding CRDs.
-   */
-  group?: string | null;
-  /** API version for the object's kind (e.g. "v1", "v1alpha1"). */
-  version?: string | null;
-  /** Plural resource name (e.g. "dbinstances"), propagated from the catalog. */
-  resource?: string | null;
 
   // Raw Kubernetes API format (metadata object)
   metadata?: KubernetesMetadata;
@@ -58,21 +46,6 @@ export interface KubernetesObjectReference {
   // fields above.
   [key: string]: unknown;
 }
-
-/**
- * Synthetic kinds that don't correspond to a real Kubernetes GVK and
- * therefore have no apiVersion. The runtime ref validator skips the
- * group/version requirement for these.
- *
- * Kept in lockstep with the openWithObjectAudit.test.ts ALLOWED_LEGACY_FILES
- * exemption set: any kind here implies the file using it is also exempted
- * in the audit, and vice versa.
- *
- * Add an entry ONLY if the kind genuinely never resolves through
- * Kubernetes discovery (e.g. Helm releases, which are managed by the
- * Helm CLI, not the Kubernetes API).
- */
-const SYNTHETIC_OBJECT_KINDS = new Set<string>(['helmrelease']);
 
 const normalizeIdentityField = (value: string | null | undefined): string => value?.trim() ?? '';
 
@@ -104,10 +77,6 @@ export function assertObjectRefHasRequiredIdentity(ref: KubernetesObjectReferenc
   if (!name) {
     throw new Error(`KubernetesObjectReference for kind=${kind} is missing required field "name"`);
   }
-  if (SYNTHETIC_OBJECT_KINDS.has(kind.toLowerCase())) {
-    return;
-  }
-
   const version = normalizeIdentityField(ref.version);
   if (!version) {
     throw new Error(

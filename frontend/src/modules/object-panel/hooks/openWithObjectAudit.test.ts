@@ -37,19 +37,6 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-// Files where literal openWithObject call sites use a synthetic kind
-// that does NOT correspond to a real Kubernetes GVK and therefore has
-// no meaningful group/version. Document the reason next to each entry.
-const ALLOWED_LEGACY_FILES = new Map<string, string>([
-  [
-    // HelmRelease is the panel's synthetic name for a Helm CLI release
-    // (managed by helm/v3, not the Kubernetes API). It is never resolved
-    // through discovery, so group/version are intentionally absent.
-    'src/modules/namespace/components/NsViewHelm.tsx',
-    'HelmRelease is a synthetic Helm CLI kind, not a Kubernetes GVK',
-  ],
-]);
-
 interface CallSite {
   file: string;
   line: number;
@@ -254,11 +241,8 @@ function gatherViolations(config: AuditConfig): CallSite[] {
     if (literals.length === 0) continue;
 
     const relative = path.relative(path.resolve(frontendSrc, '..'), file);
-    const allowed = ALLOWED_LEGACY_FILES.has(relative);
-
     for (const literal of literals) {
       if (literalSatisfiesInvariant(literal.body)) continue;
-      if (allowed) continue;
       violations.push({
         file: relative,
         line: lineNumberAtOffset(source, literal.start),

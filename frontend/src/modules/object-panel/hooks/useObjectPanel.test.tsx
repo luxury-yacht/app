@@ -290,12 +290,11 @@ describe('useObjectPanel', () => {
       expect(hookResult.openPanels.size).toBe(0);
     });
 
-    it('exempts synthetic kinds (HelmRelease) that have no real GVK', () => {
-      // HelmRelease is the panel's synthetic name for a Helm CLI release.
-      // It is not a Kubernetes resource and never resolves through
-      // discovery. The guard must not block it.
+    it('requires synthetic HelmRelease refs to use canonical identity', () => {
       const helmRelease = {
         kind: 'HelmRelease',
+        group: 'helm.sh',
+        version: 'v3',
         name: 'demo',
         namespace: 'default',
         clusterId: 'test-cluster',

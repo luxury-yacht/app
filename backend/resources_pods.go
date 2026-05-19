@@ -63,7 +63,7 @@ func (a *App) deletePodAction(target ObjectActionTargetRef) error {
 	if err := pods.DeletePod(deps, target.Namespace, target.Name); err != nil {
 		return err
 	}
-	a.invalidateResponseCacheForGVK(selectionKey, target.gvk(), target.Namespace, target.Name)
+	a.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return nil
 }
 
@@ -150,6 +150,6 @@ func (a *App) createDebugContainerAction(target ObjectActionTargetRef, options O
 	if err != nil {
 		return nil, err
 	}
-	a.invalidateResponseCacheForGVK(selectionKey, target.gvk(), target.Namespace, target.Name)
+	a.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return response, nil
 }

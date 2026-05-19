@@ -4,6 +4,7 @@ import {
   resolveBuiltinGroupVersion,
 } from '@shared/constants/builtinGroupVersions';
 import type { KubernetesObjectReference } from '@/types/view-state';
+import type { ResourceRef } from '@core/refresh/types';
 
 export interface ObjectIdentityInput {
   kind?: string | null;
@@ -31,15 +32,9 @@ export interface ResolvedObjectReference extends KubernetesObjectReference {
   uid?: string;
 }
 
-export interface ResolvedSyntheticObjectReference {
-  kind: string;
+export interface ResolvedSyntheticObjectReference extends Omit<ResourceRef, 'name'> {
   name: string;
-  kindAlias?: string;
-  namespace?: string;
-  clusterId?: string;
   clusterName?: string;
-  resource?: string;
-  uid?: string;
 }
 
 export interface RelatedObjectReferenceInput extends ObjectIdentityInput {
@@ -171,15 +166,28 @@ export const buildSyntheticObjectReference = <TExtras extends object = {}>(
   input: ObjectIdentityInput,
   extras?: TExtras
 ): ResolvedSyntheticObjectReference & TExtras => {
+  const kind = normalizeRequired(input.kind, 'kind');
+  const name = normalizeRequired(input.name, 'name');
+  const normalizedKind = kind.toLowerCase();
+  const syntheticGVK =
+    normalizedKind === 'helmrelease'
+      ? { group: 'helm.sh', version: 'v3', kind: 'HelmRelease' }
+      : {
+          group: normalizeRequired(input.group, 'group'),
+          version: normalizeRequired(input.version, 'version'),
+          kind,
+        };
+
   return {
-    kind: normalizeRequired(input.kind, 'kind'),
-    kindAlias: normalizeOptional(input.kindAlias),
-    name: normalizeRequired(input.name, 'name'),
-    namespace: normalizeOptional(input.namespace),
-    clusterId: normalizeOptional(input.clusterId),
-    clusterName: normalizeOptional(input.clusterName),
+    group: syntheticGVK.group,
+    version: syntheticGVK.version,
+    kind: syntheticGVK.kind,
     resource: normalizeOptional(input.resource),
+    namespace: normalizeOptional(input.namespace),
+    name,
     uid: normalizeOptional(input.uid),
+    clusterId: normalizeRequired(input.clusterId, 'clusterId'),
+    clusterName: normalizeOptional(input.clusterName),
     ...extras,
   } as ResolvedSyntheticObjectReference & TExtras;
 };

@@ -3,24 +3,11 @@ package types
 import "github.com/luxury-yacht/app/backend/resourcemodel"
 
 func ObjectRefFromResourceRef(ref resourcemodel.ResourceRef) ObjectRef {
-	return ObjectRef{
-		ClusterID: ref.ClusterID,
-		Group:     ref.Group,
-		Version:   ref.Version,
-		Kind:      ref.Kind,
-		Namespace: ref.Namespace,
-		Name:      ref.Name,
-	}
+	return ref
 }
 
 func DisplayRefFromResourceDisplay(ref resourcemodel.DisplayRef) DisplayRef {
-	return DisplayRef{
-		ClusterID: ref.ClusterID,
-		Group:     ref.Group,
-		Kind:      ref.Kind,
-		Namespace: ref.Namespace,
-		Name:      ref.Name,
-	}
+	return ref
 }
 
 func RefOrDisplayFromResourceLink(link resourcemodel.ResourceLink) RefOrDisplay {

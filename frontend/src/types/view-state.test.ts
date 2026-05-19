@@ -61,10 +61,21 @@ describe('assertObjectRefHasRequiredIdentity', () => {
     ).toThrow(/name/);
   });
 
-  it('allows synthetic refs without forcing a Kubernetes GVK', () => {
+  it('requires synthetic refs to carry canonical group/version identity', () => {
     expect(() =>
       assertObjectRefHasRequiredIdentity({
         clusterId: 'cluster-a',
+        kind: 'HelmRelease',
+        namespace: 'default',
+        name: 'demo',
+      })
+    ).toThrow(/missing apiVersion/);
+
+    expect(() =>
+      assertObjectRefHasRequiredIdentity({
+        clusterId: 'cluster-a',
+        group: 'helm.sh',
+        version: 'v3',
         kind: 'HelmRelease',
         namespace: 'default',
         name: 'demo',

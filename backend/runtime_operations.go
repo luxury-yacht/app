@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const runtimeOperationsListEventName = "runtime-operations:list"
@@ -20,14 +21,7 @@ const (
 	RuntimeOperationDrain       RuntimeOperationType = "drain"
 )
 
-type RuntimeOperationTargetRef struct {
-	ClusterID string `json:"clusterId"`
-	Group     string `json:"group"`
-	Version   string `json:"version"`
-	Kind      string `json:"kind"`
-	Namespace string `json:"namespace,omitempty"`
-	Name      string `json:"name"`
-}
+type RuntimeOperationTargetRef = resourcemodel.ResourceRef
 
 type RuntimeOperation struct {
 	ID           string                     `json:"id"`
@@ -232,12 +226,6 @@ func (a *App) runtimeOperationClusterIDs() []string {
 }
 
 func runtimeOperationTarget(clusterID, group, version, kind, namespace, name string) *RuntimeOperationTargetRef {
-	return &RuntimeOperationTargetRef{
-		ClusterID: strings.TrimSpace(clusterID),
-		Group:     strings.TrimSpace(group),
-		Version:   strings.TrimSpace(version),
-		Kind:      strings.TrimSpace(kind),
-		Namespace: strings.TrimSpace(namespace),
-		Name:      strings.TrimSpace(name),
-	}
+	ref := resourcemodel.NewResourceRef(clusterID, group, version, kind, "", namespace, name, "")
+	return &ref
 }

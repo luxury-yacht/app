@@ -59,9 +59,9 @@ func (a *App) deleteGenericResourceAction(target ObjectActionTargetRef) error {
 		return err
 	}
 	service := generic.NewService(deps)
-	if err := service.DeleteByGVK(target.gvk(), target.Namespace, target.Name); err != nil {
+	if err := service.DeleteByGVK(objectActionTargetGVK(target), target.Namespace, target.Name); err != nil {
 		return err
 	}
-	a.invalidateResponseCacheForGVK(selectionKey, target.gvk(), target.Namespace, target.Name)
+	a.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return nil
 }
