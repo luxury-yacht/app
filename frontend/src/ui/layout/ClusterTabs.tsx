@@ -15,18 +15,13 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   getClusterTabOrder,
   hydrateClusterTabOrder,
+  mergeClusterTabOrder,
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import { Tabs, type TabDescriptor } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
-import {
-  readClusterRuntimeOperationSummary,
-  requestAppState,
-  type ClusterRuntimeOperationSummary,
-} from '@/core/app-state-access';
 import './ClusterTabs.css';
 
 const ordersMatch = (left: string[], right: string[]) =>
@@ -38,19 +33,6 @@ type ClusterTab = {
   selection: string;
 };
 
-const formatOperationSummaryPart = (count: number, singular: string, plural = `${singular}s`) =>
-  count > 0 ? `${count} ${count === 1 ? singular : plural}` : null;
-
-const formatOperationSummary = (summary: ClusterRuntimeOperationSummary) =>
-  [
-    formatOperationSummaryPart(summary.shells, 'shell session'),
-    formatOperationSummaryPart(summary.portForwards, 'port-forward'),
-    formatOperationSummaryPart(summary.drains, 'node drain'),
-    formatOperationSummaryPart(summary.other, 'other operation'),
-  ]
-    .filter((part): part is string => Boolean(part))
-    .join(', ');
-
 const ClusterTabs: React.FC = () => {
   const {
     selectedKubeconfigs,
@@ -61,14 +43,6 @@ const ClusterTabs: React.FC = () => {
   } = useKubeconfig();
   const [tabOrder, setTabOrder] = useState<string[]>(() => getClusterTabOrder());
   const tabsRef = useRef<HTMLDivElement | null>(null);
-  // State for cluster close confirmation modal when runtime operations are active.
-  const [closeConfirm, setCloseConfirm] = useState<{
-    show: boolean;
-    clusterId: string | null;
-    clusterLabel: string;
-    operationCount: number;
-    operationSummary: string;
-  }>({ show: false, clusterId: null, clusterLabel: '', operationCount: 0, operationSummary: '' });
 
   useEffect(() => {
     let active = true;
@@ -110,9 +84,7 @@ const ClusterTabs: React.FC = () => {
 
   const mergedOrder = useMemo(() => {
     // Prefer persisted drag order, then append any newly opened tabs by selection order.
-    const persisted = tabOrder.filter((id) => selectionOrderIds.includes(id));
-    const missing = selectionOrderIds.filter((id) => !persisted.includes(id));
-    return [...persisted, ...missing];
+    return mergeClusterTabOrder(selectionOrderIds, tabOrder);
   }, [selectionOrderIds, tabOrder]);
 
   useEffect(() => {
@@ -146,71 +118,13 @@ const ClusterTabs: React.FC = () => {
   );
 
   const closeClusterSelection = useCallback(
-    async (selection: string) => {
-      await closeKubeconfig(selection);
+    (selection: string) => {
+      void closeKubeconfig(selection).catch((err) => {
+        console.warn('Failed to close cluster:', err);
+      });
     },
     [closeKubeconfig]
   );
-
-  // Handles closing a cluster tab. Checks for active runtime operations first
-  // and prompts for confirmation if any are found.
-  const handleCloseTab = useCallback(
-    async (selection: string) => {
-      // Find the tab label for the cluster being closed.
-      const tab = tabs.find((t) => t.selection === selection);
-      const label = tab?.label ?? selection;
-      const clusterId = getClusterMeta(selection).id || selection;
-
-      // Check if there are active runtime operations for this cluster.
-      try {
-        const summary = await requestAppState({
-          resource: 'cluster-runtime-operation-summary',
-          adapter: 'runtime-read',
-          read: () => readClusterRuntimeOperationSummary(clusterId),
-        });
-        if (summary.total > 0) {
-          // Show confirmation modal with the count.
-          setCloseConfirm({
-            show: true,
-            clusterId: selection,
-            clusterLabel: label,
-            operationCount: summary.total,
-            operationSummary: formatOperationSummary(summary),
-          });
-          return;
-        }
-      } catch (err) {
-        console.warn('Failed to check cluster runtime operation count:', err);
-      }
-
-      try {
-        await closeClusterSelection(selection);
-      } catch (err) {
-        console.warn('Failed to close cluster:', err);
-      }
-    },
-    [closeClusterSelection, getClusterMeta, tabs]
-  );
-
-  // Handles confirmed close when user accepts stopping runtime operations.
-  const handleConfirmClose = useCallback(async () => {
-    if (!closeConfirm.clusterId) return;
-
-    try {
-      await closeClusterSelection(closeConfirm.clusterId);
-    } catch (err) {
-      console.warn('Failed to close cluster:', err);
-    }
-
-    // Reset confirmation state.
-    setCloseConfirm({
-      show: false,
-      clusterId: null,
-      clusterLabel: '',
-      operationCount: 0,
-      operationSummary: '',
-    });
-  }, [closeClusterSelection, closeConfirm.clusterId]);
 
   // One useContext call for the entire drag coordinator, regardless of how
   // many tabs are rendered. Returned factory is a plain function legal inside
@@ -298,7 +212,7 @@ const ClusterTabs: React.FC = () => {
     closeIcon: <CloseIcon width={10} height={10} />,
     closeAriaLabel: `Close ${tab.label}`,
     onClose: () => {
-      void handleCloseTab(tab.selection);
+      closeClusterSelection(tab.selection);
     },
     extraProps: {
       title: tab.label, // tooltip for full text when truncated
@@ -307,39 +221,19 @@ const ClusterTabs: React.FC = () => {
   }));
 
   return (
-    <>
-      <div ref={assignRootRef} className="cluster-tabs-wrapper">
-        <Tabs
-          aria-label="Cluster Tabs"
-          tabs={tabDescriptors}
-          activeId={activeTabId}
-          onActivate={(id) => {
-            const tab = tabsById.get(id);
-            if (tab) handleTabClick(tab.selection);
-          }}
-          dropInsertIndex={dropInsertIndex}
-          className="cluster-tabs"
-        />
-      </div>
-      <ConfirmationModal
-        isOpen={closeConfirm.show}
-        title="Active Operations"
-        message={`Cluster "${closeConfirm.clusterLabel}" has ${closeConfirm.operationCount} active operation${closeConfirm.operationCount > 1 ? 's' : ''}${closeConfirm.operationSummary ? ` (${closeConfirm.operationSummary})` : ''}. Stop ${closeConfirm.operationCount > 1 ? 'them' : 'it'} and close?`}
-        confirmText="Stop & Close"
-        cancelText="Cancel"
-        confirmButtonClass="danger"
-        onConfirm={handleConfirmClose}
-        onCancel={() =>
-          setCloseConfirm({
-            show: false,
-            clusterId: null,
-            clusterLabel: '',
-            operationCount: 0,
-            operationSummary: '',
-          })
-        }
+    <div ref={assignRootRef} className="cluster-tabs-wrapper">
+      <Tabs
+        aria-label="Cluster Tabs"
+        tabs={tabDescriptors}
+        activeId={activeTabId}
+        onActivate={(id) => {
+          const tab = tabsById.get(id);
+          if (tab) handleTabClick(tab.selection);
+        }}
+        dropInsertIndex={dropInsertIndex}
+        className="cluster-tabs"
       />
-    </>
+    </div>
   );
 };
 

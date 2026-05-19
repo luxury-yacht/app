@@ -15,7 +15,7 @@ import React, {
   useRef,
   ReactNode,
 } from 'react';
-import { CloseCluster, SetSelectedKubeconfigs } from '@wailsjs/go/backend/App';
+import { SetSelectedKubeconfigs } from '@wailsjs/go/backend/App';
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import { errorHandler } from '@utils/errorHandler';
 import { types } from '@wailsjs/go/models';
@@ -26,6 +26,10 @@ import {
 } from '@shared/components/tables/persistence/gridTablePersistenceGC';
 import { eventBus, useEventBus } from '@/core/events';
 import { refreshOrchestrator, useBackgroundRefresh } from '@/core/refresh';
+import {
+  getClusterTabOrder,
+  getNextClusterTabSelectionAfterClose,
+} from '@core/persistence/clusterTabOrder';
 
 interface KubeconfigContextType {
   kubeconfigs: types.KubeconfigInfo[];
@@ -404,7 +408,14 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         previousSelections.filter((selection) => !matchesTarget(selection))
       );
       const removedActive = Boolean(previousActive && matchesTarget(previousActive));
-      const nextActive = removedActive ? normalizedSelections[0] || '' : previousActive;
+      const nextActive = removedActive
+        ? getNextClusterTabSelectionAfterClose(
+            previousSelections,
+            previousActive,
+            previousActive,
+            getClusterTabOrder()
+          )
+        : previousActive;
       const willBeEmpty = normalizedSelections.length === 0;
       const selectionChanged =
         normalizedSelections.length !== previousSelections.length ||
@@ -430,7 +441,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         }
         updateRefreshContext(nextMeta, Array.from(nextClusterIds));
 
-        await CloseCluster(target);
+        await SetSelectedKubeconfigs(normalizedSelections);
 
         if (requestId !== latestSelectionRequestIdRef.current) {
           return;

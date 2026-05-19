@@ -11,31 +11,28 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { KubeconfigProvider, useKubeconfig } from './KubeconfigContext';
 import type { types } from '@wailsjs/go/models';
 import { eventBus } from '@/core/events';
+import {
+  resetClusterTabOrderCacheForTesting,
+  setClusterTabOrder,
+} from '@core/persistence/clusterTabOrder';
 
-const {
-  getKubeconfigsMock,
-  getSelectedKubeconfigsMock,
-  setSelectedKubeconfigsMock,
-  closeClusterMock,
-  mocks,
-} = vi.hoisted(() => ({
-  getKubeconfigsMock: vi.fn(),
-  getSelectedKubeconfigsMock: vi.fn(),
-  setSelectedKubeconfigsMock: vi.fn(),
-  closeClusterMock: vi.fn(),
-  mocks: {
-    refreshOrchestrator: {
-      updateContext: vi.fn(),
+const { getKubeconfigsMock, getSelectedKubeconfigsMock, setSelectedKubeconfigsMock, mocks } =
+  vi.hoisted(() => ({
+    getKubeconfigsMock: vi.fn(),
+    getSelectedKubeconfigsMock: vi.fn(),
+    setSelectedKubeconfigsMock: vi.fn(),
+    mocks: {
+      refreshOrchestrator: {
+        updateContext: vi.fn(),
+      },
+      backgroundRefreshState: { enabled: true },
     },
-    backgroundRefreshState: { enabled: true },
-  },
-}));
+  }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetKubeconfigs: () => getKubeconfigsMock(),
   GetSelectedKubeconfigs: () => getSelectedKubeconfigsMock(),
   SetSelectedKubeconfigs: (configs: string[]) => setSelectedKubeconfigsMock(configs),
-  CloseCluster: (selectionOrClusterId: string) => closeClusterMock(selectionOrClusterId),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -102,9 +99,9 @@ describe('KubeconfigContext', () => {
     getKubeconfigsMock.mockReset();
     getSelectedKubeconfigsMock.mockReset();
     setSelectedKubeconfigsMock.mockReset();
-    closeClusterMock.mockReset();
-    closeClusterMock.mockResolvedValue(undefined);
+    setSelectedKubeconfigsMock.mockResolvedValue(undefined);
     mocks.backgroundRefreshState.enabled = true;
+    resetClusterTabOrderCacheForTesting();
   });
 
   afterEach(() => {
@@ -407,7 +404,10 @@ describe('KubeconfigContext', () => {
       await flushPromises();
     });
 
-    expect(closeClusterMock).toHaveBeenCalledWith('/kube/alpha:dev');
+    expect(setSelectedKubeconfigsMock).toHaveBeenLastCalledWith([
+      '/kube/beta:prod',
+      '/kube/gamma:staging',
+    ]);
     expect(getContext().selectedKubeconfigs).toEqual(['/kube/beta:prod', '/kube/gamma:staging']);
     expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
 
@@ -419,6 +419,174 @@ describe('KubeconfigContext', () => {
 
     expect(getContext().selectedKubeconfigs).toEqual(['/kube/beta:prod', '/kube/gamma:staging']);
     expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
+
+    unmount();
+  });
+
+  it('activates the right-adjacent cluster when closing the active middle tab', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'beta',
+        path: '/kube/beta',
+        context: 'prod',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'gamma',
+        path: '/kube/gamma',
+        context: 'staging',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getSelectedKubeconfigsMock.mockResolvedValue([
+      '/kube/alpha:dev',
+      '/kube/beta:prod',
+      '/kube/gamma:staging',
+    ]);
+
+    const { getContext, unmount } = await renderProvider();
+
+    act(() => {
+      getContext().setActiveKubeconfig('/kube/beta:prod');
+    });
+
+    await act(async () => {
+      await getContext().closeKubeconfig('/kube/beta:prod');
+      await flushPromises();
+    });
+
+    expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev', '/kube/gamma:staging']);
+    expect(getContext().selectedKubeconfig).toBe('/kube/gamma:staging');
+
+    unmount();
+  });
+
+  it('uses persisted cluster tab order when activating the next cluster after close', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'beta',
+        path: '/kube/beta',
+        context: 'prod',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'gamma',
+        path: '/kube/gamma',
+        context: 'staging',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getSelectedKubeconfigsMock.mockResolvedValue([
+      '/kube/alpha:dev',
+      '/kube/beta:prod',
+      '/kube/gamma:staging',
+    ]);
+    setClusterTabOrder(['/kube/gamma:staging', '/kube/beta:prod', '/kube/alpha:dev']);
+
+    const { getContext, unmount } = await renderProvider();
+
+    act(() => {
+      getContext().setActiveKubeconfig('/kube/beta:prod');
+    });
+
+    await act(async () => {
+      await getContext().closeKubeconfig('/kube/beta:prod');
+      await flushPromises();
+    });
+
+    expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev', '/kube/gamma:staging']);
+    expect(getContext().selectedKubeconfig).toBe('/kube/alpha:dev');
+
+    unmount();
+  });
+
+  it('sends the latest remaining cluster set when close requests overlap', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'beta',
+        path: '/kube/beta',
+        context: 'prod',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'gamma',
+        path: '/kube/gamma',
+        context: 'staging',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getSelectedKubeconfigsMock.mockResolvedValue([
+      '/kube/alpha:dev',
+      '/kube/beta:prod',
+      '/kube/gamma:staging',
+    ]);
+
+    let resolveFirstClose!: () => void;
+    const firstClose = new Promise<void>((resolve) => {
+      resolveFirstClose = resolve;
+    });
+    setSelectedKubeconfigsMock.mockReturnValueOnce(firstClose).mockResolvedValue(undefined);
+
+    const { getContext, unmount } = await renderProvider();
+
+    await act(async () => {
+      void getContext().closeKubeconfig('/kube/beta:prod');
+      await flushPromises();
+    });
+
+    expect(setSelectedKubeconfigsMock).toHaveBeenNthCalledWith(1, [
+      '/kube/alpha:dev',
+      '/kube/gamma:staging',
+    ]);
+    expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev', '/kube/gamma:staging']);
+
+    await act(async () => {
+      await getContext().closeKubeconfig('/kube/gamma:staging');
+      await flushPromises();
+    });
+
+    expect(setSelectedKubeconfigsMock).toHaveBeenNthCalledWith(2, ['/kube/alpha:dev']);
+    expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev']);
+    expect(getContext().selectedKubeconfig).toBe('/kube/alpha:dev');
+
+    await act(async () => {
+      resolveFirstClose();
+      await firstClose;
+      await flushPromises();
+    });
+
+    expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev']);
+    expect(getContext().selectedKubeconfig).toBe('/kube/alpha:dev');
 
     unmount();
   });

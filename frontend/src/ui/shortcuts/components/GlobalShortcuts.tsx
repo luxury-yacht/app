@@ -15,6 +15,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   getClusterTabOrder,
   hydrateClusterTabOrder,
+  mergeClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
 import { EventsOn, EventsOff, Quit } from '@wailsjs/runtime/runtime';
@@ -123,18 +124,7 @@ export function GlobalShortcuts({
 
   const orderedClusterSelections = useMemo(() => {
     // Follow the persisted tab order to mirror the visible cluster tabs.
-    const tabEntries = selectedKubeconfigs.map((selection) => ({
-      selection,
-      id: selection,
-    }));
-    const selectionOrderIds = tabEntries.map((entry) => entry.id);
-    const persisted = clusterTabOrder.filter((id) => selectionOrderIds.includes(id));
-    const missing = selectionOrderIds.filter((id) => !persisted.includes(id));
-    const mergedOrder = [...persisted, ...missing];
-    const selectionById = new Map(tabEntries.map((entry) => [entry.id, entry.selection]));
-    return mergedOrder
-      .map((id) => selectionById.get(id))
-      .filter((selection): selection is string => Boolean(selection));
+    return mergeClusterTabOrder(selectedKubeconfigs, clusterTabOrder);
   }, [clusterTabOrder, selectedKubeconfigs]);
 
   const handleSwitchClusterTab = useCallback(

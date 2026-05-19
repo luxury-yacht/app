@@ -634,12 +634,18 @@ func (a *App) SaveWindowSettings() error {
 
 	a.windowSettings = &WindowSettings{X: x, Y: y, Width: width, Height: height, Maximized: maximized}
 
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
 	settings, err := a.loadSettingsFile()
 	if err != nil {
 		return err
 	}
 
 	settings.UI.Window = *a.windowSettings
+	if a.appSettings != nil {
+		settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
+	}
 	return a.saveSettingsFile(settings)
 }
 

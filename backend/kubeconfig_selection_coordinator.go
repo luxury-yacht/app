@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -34,6 +35,8 @@ func (a *App) runSelectionMutation(reason string, fn func(*selectionMutation) er
 	if fn == nil {
 		return fmt.Errorf("selection mutation callback is nil")
 	}
+	finishDrain := a.beginSelectionMutationDrain()
+	defer finishDrain()
 
 	requestStarted := time.Now()
 	a.selectionDiagnosticsEnqueue()
@@ -140,6 +143,62 @@ func (a *App) runSelectionMutationAsync(reason string, fn func(*selectionMutatio
 			)
 		}
 	}()
+}
+
+func (a *App) selectionMutationDrainCondLocked() *sync.Cond {
+	if a.selectionMutationDrainCond == nil {
+		a.selectionMutationDrainCond = sync.NewCond(&a.selectionMutationDrainMu)
+	}
+	return a.selectionMutationDrainCond
+}
+
+func (a *App) beginSelectionMutationDrain() func() {
+	a.selectionMutationDrainMu.Lock()
+	a.selectionMutationPending++
+	a.selectionMutationDrainCondLocked()
+	a.selectionMutationDrainMu.Unlock()
+
+	return func() {
+		a.selectionMutationDrainMu.Lock()
+		if a.selectionMutationPending > 0 {
+			a.selectionMutationPending--
+		}
+		if a.selectionMutationPending == 0 {
+			a.selectionMutationDrainCondLocked().Broadcast()
+		}
+		a.selectionMutationDrainMu.Unlock()
+	}
+}
+
+func (a *App) waitForSelectionMutationIdle(timeout time.Duration) bool {
+	if a == nil {
+		return true
+	}
+
+	done := make(chan struct{})
+	go func() {
+		a.selectionMutationDrainMu.Lock()
+		cond := a.selectionMutationDrainCondLocked()
+		for a.selectionMutationPending > 0 {
+			cond.Wait()
+		}
+		a.selectionMutationDrainMu.Unlock()
+		close(done)
+	}()
+
+	if timeout <= 0 {
+		<-done
+		return true
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 // isSelectionGenerationCurrent reports whether expected generation is still current.

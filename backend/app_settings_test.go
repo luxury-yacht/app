@@ -70,6 +70,41 @@ func TestAppLoadWindowSettingsReadsExistingFile(t *testing.T) {
 	require.Equal(t, want, app.windowSettings)
 }
 
+func TestAppSaveWindowSettingsPreservesInMemoryKubeconfigSelection(t *testing.T) {
+	origGetPos := runtimeWindowGetPosition
+	origGetSize := runtimeWindowGetSize
+	origIsMax := runtimeWindowIsMaximised
+	t.Cleanup(func() {
+		runtimeWindowGetPosition = origGetPos
+		runtimeWindowGetSize = origGetSize
+		runtimeWindowIsMaximised = origIsMax
+	})
+
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+	app.appSettings = getDefaultAppSettings()
+	app.appSettings.SelectedKubeconfigs = []string{"/new/config:ctx-new"}
+
+	settings := defaultSettingsFile()
+	settings.Kubeconfig.Selected = []string{"/old/config:ctx-old"}
+	require.NoError(t, app.saveSettingsFile(settings))
+
+	runtimeWindowGetPosition = func(context.Context) (int, int) { return 10, 20 }
+	runtimeWindowGetSize = func(context.Context) (int, int) { return 900, 600 }
+	runtimeWindowIsMaximised = func(context.Context) bool { return false }
+
+	require.NoError(t, app.SaveWindowSettings())
+
+	saved, err := app.loadSettingsFile()
+	require.NoError(t, err)
+	require.Equal(t, []string{"/new/config:ctx-new"}, saved.Kubeconfig.Selected)
+	require.Equal(t, 10, saved.UI.Window.X)
+	require.Equal(t, 20, saved.UI.Window.Y)
+	require.Equal(t, 900, saved.UI.Window.Width)
+	require.Equal(t, 600, saved.UI.Window.Height)
+}
+
 func TestAppGetAppSettingsReturnsDefaultWhenMissing(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)

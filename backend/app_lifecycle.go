@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logclassify"
@@ -29,6 +30,8 @@ var (
 	runtimeWindowMaximise = runtime.WindowMaximise
 	runtimeWindowShow     = runtime.WindowShow
 )
+
+const beforeCloseSelectionFlushTimeout = 2 * time.Second
 
 // Startup is called when the app starts. The context passed is stored for later use.
 func (a *App) Startup(ctx context.Context) {
@@ -197,6 +200,10 @@ func (b *stdLogBridge) Write(p []byte) (int, error) {
 func NewBeforeCloseHandler(app *App) func(context.Context) bool {
 	return func(ctx context.Context) bool {
 		app.logger.Info("Application close requested", logsources.App)
+
+		if !app.waitForSelectionMutationIdle(beforeCloseSelectionFlushTimeout) {
+			app.logger.Warn("Timed out waiting for cluster selection persistence before close", logsources.App)
+		}
 
 		if err := app.SaveWindowSettings(); err != nil {
 			app.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)

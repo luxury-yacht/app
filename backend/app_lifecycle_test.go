@@ -354,6 +354,79 @@ func TestBeforeClosePersistsWindowSettings(t *testing.T) {
 	require.True(t, settings.Maximized)
 }
 
+func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testing.T) {
+	origGetPos := runtimeWindowGetPosition
+	origGetSize := runtimeWindowGetSize
+	origIsMax := runtimeWindowIsMaximised
+	t.Cleanup(func() {
+		runtimeWindowGetPosition = origGetPos
+		runtimeWindowGetSize = origGetSize
+		runtimeWindowIsMaximised = origIsMax
+	})
+
+	t.Setenv("HOME", t.TempDir())
+	app := newTestAppWithDefaults(t)
+	ctx := context.Background()
+	app.Ctx = ctx
+
+	saveStarted := make(chan struct{})
+	var saveStartedOnce sync.Once
+	runtimeWindowGetPosition = func(context.Context) (int, int) {
+		saveStartedOnce.Do(func() { close(saveStarted) })
+		return 11, 22
+	}
+	runtimeWindowGetSize = func(context.Context) (int, int) { return 800, 600 }
+	runtimeWindowIsMaximised = func(context.Context) bool { return false }
+
+	app.selectionMutationMu.Lock()
+	mutationStarted := make(chan struct{})
+	mutationRelease := make(chan struct{})
+	mutationDone := make(chan error, 1)
+	go func() {
+		mutationDone <- app.runSelectionMutation("queued-before-close", func(*selectionMutation) error {
+			close(mutationStarted)
+			<-mutationRelease
+			return nil
+		})
+	}()
+
+	require.Eventually(t, func() bool {
+		app.selectionMutationDrainMu.Lock()
+		defer app.selectionMutationDrainMu.Unlock()
+		return app.selectionMutationPending == 1
+	}, time.Second, 10*time.Millisecond)
+
+	beforeClose := NewBeforeCloseHandler(app)
+	done := make(chan bool)
+	go func() {
+		done <- beforeClose(ctx)
+	}()
+
+	select {
+	case <-saveStarted:
+		t.Fatal("window settings save started before selection mutation completed")
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	app.selectionMutationMu.Unlock()
+	<-mutationStarted
+	close(mutationRelease)
+	require.NoError(t, <-mutationDone)
+
+	select {
+	case prevent := <-done:
+		require.False(t, prevent, "expected the window close to proceed")
+	case <-time.After(time.Second):
+		t.Fatal("before close did not finish after selection mutation completed")
+	}
+
+	select {
+	case <-saveStarted:
+	default:
+		t.Fatal("window settings save did not start")
+	}
+}
+
 func TestStartupBetaExpiryShowsDialogAndQuits(t *testing.T) {
 	origEvents := runtimeEventsEmit
 	origMsg := runtimeMessageDialog

@@ -64,6 +64,11 @@ type App struct {
 	// This preserves sequential behavior while allowing kubeconfigChangeMu to stay
 	// narrowly scoped to short state-transition sections.
 	selectionMutationMu sync.Mutex
+	// selectionMutationDrain tracks queued and active selection mutations so app
+	// shutdown can wait for durable selection writes, not just active runtime work.
+	selectionMutationDrainMu   sync.Mutex
+	selectionMutationDrainCond *sync.Cond
+	selectionMutationPending   int
 	// kubeconfigChangeMu serializes runtime cluster/subsystem mutation paths.
 	// Lock ordering for runtime cluster mutation paths:
 	//   1) selectionMutationMu

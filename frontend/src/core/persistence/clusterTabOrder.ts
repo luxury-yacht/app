@@ -88,6 +88,45 @@ export const hydrateClusterTabOrder = async (options?: { force?: boolean }): Pro
 
 export const getClusterTabOrder = (): string[] => cachedOrder;
 
+export type ClusterTabActivationPreference = 'left' | 'right';
+
+export const mergeClusterTabOrder = (selectionOrder: string[], tabOrder: string[]): string[] => {
+  const normalizedSelections = normalizeOrder(selectionOrder);
+  const persisted = normalizeOrder(tabOrder).filter((id) => normalizedSelections.includes(id));
+  const missing = normalizedSelections.filter((id) => !persisted.includes(id));
+  return [...persisted, ...missing];
+};
+
+export const getNextClusterTabSelectionAfterClose = (
+  selectionOrder: string[],
+  closingSelection: string,
+  activeSelection: string,
+  tabOrder: string[] = cachedOrder,
+  activationPreference: ClusterTabActivationPreference = 'right'
+): string => {
+  const active = activeSelection.trim();
+  const closing = closingSelection.trim();
+  const orderedSelections = mergeClusterTabOrder(selectionOrder, tabOrder);
+
+  if (!active || active !== closing) {
+    return orderedSelections.includes(active) ? active : '';
+  }
+
+  const removedIndex = orderedSelections.indexOf(closing);
+  if (removedIndex < 0) {
+    return '';
+  }
+
+  const remainingSelections = orderedSelections.filter((selection) => selection !== closing);
+  const rightNeighbor = remainingSelections[removedIndex] ?? '';
+  const leftNeighbor = remainingSelections[removedIndex - 1] ?? '';
+
+  if (activationPreference === 'left') {
+    return leftNeighbor || rightNeighbor;
+  }
+  return rightNeighbor || leftNeighbor;
+};
+
 export const setClusterTabOrder = (order: string[]): void => {
   updateOrderCache(order);
   hydrated = true;
