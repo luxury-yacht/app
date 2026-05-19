@@ -36,6 +36,14 @@ func requireUpdateObjectMetadata(t *testing.T, update Update, resourceVersion, u
 	require.Equal(t, name, update.Name)
 	require.Equal(t, namespace, update.Namespace)
 	require.Equal(t, kind, update.Kind)
+	require.NotNil(t, update.Ref)
+	require.Equal(t, update.ClusterID, update.Ref.ClusterID)
+	require.Equal(t, update.APIGroup, update.Ref.Group)
+	require.Equal(t, update.APIVersion, update.Ref.Version)
+	require.Equal(t, update.Kind, update.Ref.Kind)
+	require.Equal(t, update.Namespace, update.Ref.Namespace)
+	require.Equal(t, update.Name, update.Ref.Name)
+	require.Equal(t, update.UID, update.Ref.UID)
 }
 
 func requireNextUpdate(t *testing.T, sub *Subscription) Update {

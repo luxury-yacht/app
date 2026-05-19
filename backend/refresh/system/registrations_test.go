@@ -18,7 +18,16 @@ import (
 // These tests guard the registration table ordering and dependency checks.
 
 type refreshDomainContract struct {
-	Version int                   `json:"version"`
+	Version        int `json:"version"`
+	ResourceStream struct {
+		UpdateIdentity struct {
+			RowUpdates                  string   `json:"rowUpdates"`
+			RowDeletes                  string   `json:"rowDeletes"`
+			LegacyFieldsDuringMigration []string `json:"legacyFieldsDuringMigration"`
+			CompleteSemantics           string   `json:"completeSemantics"`
+			CompleteIdentity            string   `json:"completeIdentity"`
+		} `json:"updateIdentity"`
+	} `json:"resourceStream"`
 	Domains []refreshDomainRecord `json:"domains"`
 }
 
@@ -108,6 +117,16 @@ func TestResourceStreamDomainsMatchAuthoredContract(t *testing.T) {
 	for _, domainName := range contractDomains {
 		require.Containsf(t, streamRequirements, domainName, "resource stream domain %q must declare permission requirements", domainName)
 	}
+}
+
+func TestResourceStreamIdentityContractIsAuthored(t *testing.T) {
+	contract := loadRefreshDomainContract(t)
+	identity := contract.ResourceStream.UpdateIdentity
+	require.Equal(t, "ref", identity.RowUpdates)
+	require.Equal(t, "ref", identity.RowDeletes)
+	require.ElementsMatch(t, []string{"clusterId", "apiGroup", "apiVersion", "kind", "namespace", "name"}, identity.LegacyFieldsDuringMigration)
+	require.Equal(t, "scope-level-resync", identity.CompleteSemantics)
+	require.Equal(t, "diagnostic-only", identity.CompleteIdentity)
 }
 
 func TestResourceStreamPermissionRequirementsStayAlignedWithSnapshotRuntime(t *testing.T) {

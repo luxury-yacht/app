@@ -43,6 +43,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const podNodeIndexName = "pods:node"
@@ -412,7 +413,6 @@ func (m *Manager) broadcastCustomDomainComplete(domain, resourceVersion string) 
 			return
 		}
 	}
-	apiGroup, apiVersion := apiGroupVersionForStreamKind("CustomResourceDefinition")
 	update := Update{
 		Type:            MessageTypeComplete,
 		Domain:          domain,
@@ -420,8 +420,8 @@ func (m *Manager) broadcastCustomDomainComplete(domain, resourceVersion string) 
 		ClusterName:     m.clusterMeta.ClusterName,
 		ResourceVersion: resourceVersion,
 		Kind:            "CustomResourceDefinition",
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
+		APIGroup:        "apiextensions.k8s.io",
+		APIVersion:      "v1",
 	}
 	m.broadcast(domain, scopes, update)
 }
@@ -535,33 +535,23 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		m.invalidateCustomResourceCache(kind, resource.GetNamespace(), resource.GetName())
 	}
 
-	update := Update{
-		Type:            updateType,
-		Domain:          domain,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: resource.GetResourceVersion(),
-		UID:             string(resource.GetUID()),
-		Name:            resource.GetName(),
-		Namespace:       resource.GetNamespace(),
-		Kind:            kind,
-		APIGroup:        info.gvr.Group,
-		APIVersion:      info.gvr.Version,
-	}
+	ref := m.resourceRefForObject(resource, info.gvr.Group, info.gvr.Version, kind, info.gvr.Resource)
+	var row interface{}
 	if updateType != MessageTypeDeleted {
 		// The CRD name is the canonical Kubernetes form `<plural>.<group>`,
 		// computable from the GVR we're already watching. Same derivation
 		// for both the cluster-scoped and namespace-scoped paths.
 		crdName := info.gvr.Resource + "." + info.gvr.Group
 		if domain == domainClusterCustom {
-			update.Row = snapshot.BuildClusterCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName)
+			row = snapshot.BuildClusterCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName)
 		} else {
 			// The streaming path has no parent scope concept — fall back
 			// to the resource's own namespace (which is almost always
 			// set for anything that reaches an informer).
-			update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName, resource.GetNamespace())
+			row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName, resource.GetNamespace())
 		}
 	}
+	update := m.newObjectRowUpdate(updateType, domain, resource, ref, row)
 
 	if domain == domainClusterCustom {
 		m.broadcast(domain, scopesForCluster(), update)
@@ -577,24 +567,8 @@ func (m *Manager) handleClusterCRD(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	summary := snapshot.BuildClusterCRDSummary(m.clusterMeta, crd)
-	apiGroup, apiVersion := apiGroupVersionForStreamKind("CustomResourceDefinition")
-	update := Update{
-		Type:            updateType,
-		Domain:          domainClusterCRDs,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: crd.ResourceVersion,
-		UID:             string(crd.UID),
-		Name:            crd.Name,
-		Namespace:       crd.Namespace,
-		Kind:            "CustomResourceDefinition",
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	ref := m.resourceRefForObject(crd, "apiextensions.k8s.io", "v1", "CustomResourceDefinition", "customresourcedefinitions")
+	update := m.newObjectRowUpdate(updateType, domainClusterCRDs, crd, ref, snapshot.BuildClusterCRDSummary(m.clusterMeta, crd))
 
 	m.broadcast(domainClusterCRDs, scopesForCluster(), update)
 }
@@ -759,23 +733,8 @@ func (m *Manager) broadcastPodRow(
 		return
 	}
 	summary := snapshot.BuildPodSummary(m.clusterMeta, pod, podUsage, m.rsLister)
-	apiGroup, apiVersion := apiGroupVersionForStreamKind("Pod")
-	update := Update{
-		Type:            updateType,
-		Domain:          domainPods,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: pod.ResourceVersion,
-		UID:             string(pod.UID),
-		Name:            pod.Name,
-		Namespace:       pod.Namespace,
-		Kind:            "Pod",
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	ref := m.resourceRefForObject(pod, "", "v1", "Pod", "pods")
+	update := m.newObjectRowUpdate(updateType, domainPods, pod, ref, summary)
 	if len(scopes) == 0 {
 		scopes = scopesForPod(summary)
 	}
@@ -870,7 +829,8 @@ func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildConfigMapSummary(m.clusterMeta, cm)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, cm, "ConfigMap", summary)
+	ref := m.resourceRefForObject(cm, "", "v1", "ConfigMap", "configmaps")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, cm, ref, summary)
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(cm.Namespace), update)
 	m.maybeBroadcastHelmRefreshFromConfigMap(cm, updateType)
@@ -902,7 +862,8 @@ func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildSecretSummary(m.clusterMeta, secret)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, secret, "Secret", summary)
+	ref := m.resourceRefForObject(secret, "", "v1", "Secret", "secrets")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, secret, ref, summary)
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(secret.Namespace), update)
 	m.maybeBroadcastHelmRefresh(secret, updateType)
@@ -971,6 +932,7 @@ func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, 
 	}
 
 	releaseName := helmReleaseName(name)
+	ref := m.helmReleaseRef(namespace, releaseName)
 	update := Update{
 		Type:            MessageTypeComplete,
 		Domain:          domainNamespaceHelm,
@@ -980,6 +942,9 @@ func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, 
 		Name:            releaseName,
 		Namespace:       namespace,
 		Kind:            "HelmRelease",
+		APIGroup:        ref.Group,
+		APIVersion:      ref.Version,
+		Ref:             &ref,
 		Error:           reason,
 	}
 	m.broadcast(domainNamespaceHelm, scopesForNamespace(namespace), update)
@@ -992,7 +957,8 @@ func (m *Manager) handleRole(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildRoleSummary(m.clusterMeta, role)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, role, "Role", summary)
+	ref := m.resourceRefForObject(role, "rbac.authorization.k8s.io", "v1", "Role", "roles")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, role, ref, summary)
 
 	m.broadcast(domainNamespaceRBAC, scopesForNamespace(role.Namespace), update)
 }
@@ -1004,7 +970,8 @@ func (m *Manager) handleRoleBinding(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildRoleBindingSummary(m.clusterMeta, binding)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, binding, "RoleBinding", summary)
+	ref := m.resourceRefForObject(binding, "rbac.authorization.k8s.io", "v1", "RoleBinding", "rolebindings")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, binding, ref, summary)
 
 	m.broadcast(domainNamespaceRBAC, scopesForNamespace(binding.Namespace), update)
 }
@@ -1016,7 +983,8 @@ func (m *Manager) handleServiceAccount(obj interface{}, updateType MessageType) 
 	}
 
 	summary := snapshot.BuildServiceAccountSummary(m.clusterMeta, serviceAccount)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, serviceAccount, "ServiceAccount", summary)
+	ref := m.resourceRefForObject(serviceAccount, "", "v1", "ServiceAccount", "serviceaccounts")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, serviceAccount, ref, summary)
 
 	m.broadcast(domainNamespaceRBAC, scopesForNamespace(serviceAccount.Namespace), update)
 }
@@ -1029,7 +997,8 @@ func (m *Manager) handleClusterRole(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildClusterRoleSummary(m.clusterMeta, role)
-	update := m.newObjectRowUpdate(updateType, domainClusterRBAC, role, "ClusterRole", summary)
+	ref := m.resourceRefForObject(role, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles")
+	update := m.newObjectRowUpdate(updateType, domainClusterRBAC, role, ref, summary)
 
 	m.broadcast(domainClusterRBAC, scopesForCluster(), update)
 }
@@ -1041,7 +1010,8 @@ func (m *Manager) handleClusterRoleBinding(obj interface{}, updateType MessageTy
 	}
 
 	summary := snapshot.BuildClusterRoleBindingSummary(m.clusterMeta, binding)
-	update := m.newObjectRowUpdate(updateType, domainClusterRBAC, binding, "ClusterRoleBinding", summary)
+	ref := m.resourceRefForObject(binding, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings")
+	update := m.newObjectRowUpdate(updateType, domainClusterRBAC, binding, ref, summary)
 
 	m.broadcast(domainClusterRBAC, scopesForCluster(), update)
 }
@@ -1061,10 +1031,8 @@ func (m *Manager) handleService(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	update := m.newObjectUpdate(updateType, domainNamespaceNetwork, service, "Service")
-	if updateType != MessageTypeDeleted {
-		update.Row = snapshot.BuildServiceNetworkSummary(m.clusterMeta, service, slices)
-	}
+	ref := m.resourceRefForObject(service, "", "v1", "Service", "services")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, service, ref, snapshot.BuildServiceNetworkSummary(m.clusterMeta, service, slices))
 
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), update)
 }
@@ -1076,23 +1044,8 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 	}
 	serviceName := endpointSliceServiceName(slice)
 
-	apiGroup, apiVersion := apiGroupVersionForStreamKind("EndpointSlice")
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaceNetwork,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: slice.ResourceVersion,
-		UID:             string(slice.UID),
-		Name:            slice.Name,
-		Namespace:       slice.Namespace,
-		Kind:            "EndpointSlice",
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = snapshot.BuildEndpointSliceSummary(m.clusterMeta, slice)
-	}
+	ref := m.resourceRefForObject(slice, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, slice, ref, snapshot.BuildEndpointSliceSummary(m.clusterMeta, slice))
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
 
 	m.broadcastServiceFromEndpointSlice(slice, serviceName)
@@ -1142,21 +1095,9 @@ func (m *Manager) broadcastServiceFromEndpointSlice(slice *discoveryv1.EndpointS
 		return
 	}
 	serviceSummary := snapshot.BuildServiceNetworkSummary(m.clusterMeta, service, slices)
-	apiGroup, apiVersion := apiGroupVersionForStreamKind("Service")
-	serviceUpdate := Update{
-		Type:            MessageTypeModified,
-		Domain:          domainNamespaceNetwork,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: slice.ResourceVersion,
-		UID:             string(service.UID),
-		Name:            service.Name,
-		Namespace:       service.Namespace,
-		Kind:            "Service",
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
-		Row:             serviceSummary,
-	}
+	ref := m.resourceRefForObject(service, "", "v1", "Service", "services")
+	serviceUpdate := m.newObjectRowUpdate(MessageTypeModified, domainNamespaceNetwork, service, ref, serviceSummary)
+	serviceUpdate.ResourceVersion = slice.ResourceVersion
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), serviceUpdate)
 }
 
@@ -1166,10 +1107,8 @@ func (m *Manager) handleIngress(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	update := m.newObjectUpdate(updateType, domainNamespaceNetwork, ingress, "Ingress")
-	if updateType != MessageTypeDeleted {
-		update.Row = snapshot.BuildIngressNetworkSummary(m.clusterMeta, ingress)
-	}
+	ref := m.resourceRefForObject(ingress, "networking.k8s.io", "v1", "Ingress", "ingresses")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, ingress, ref, snapshot.BuildIngressNetworkSummary(m.clusterMeta, ingress))
 
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(ingress.Namespace), update)
 }
@@ -1180,10 +1119,8 @@ func (m *Manager) handleNetworkPolicy(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	update := m.newObjectUpdate(updateType, domainNamespaceNetwork, policy, "NetworkPolicy")
-	if updateType != MessageTypeDeleted {
-		update.Row = snapshot.BuildNetworkPolicySummary(m.clusterMeta, policy)
-	}
+	ref := m.resourceRefForObject(policy, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, policy, ref, snapshot.BuildNetworkPolicySummary(m.clusterMeta, policy))
 
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(policy.Namespace), update)
 }
@@ -1193,7 +1130,7 @@ func (m *Manager) handleGateway(obj interface{}, updateType MessageType) {
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "Gateway", snapshot.BuildGatewayNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "Gateway", "gateways", snapshot.BuildGatewayNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleHTTPRoute(obj interface{}, updateType MessageType) {
@@ -1201,7 +1138,7 @@ func (m *Manager) handleHTTPRoute(obj interface{}, updateType MessageType) {
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "HTTPRoute", snapshot.BuildHTTPRouteNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "HTTPRoute", "httproutes", snapshot.BuildHTTPRouteNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleGRPCRoute(obj interface{}, updateType MessageType) {
@@ -1209,7 +1146,7 @@ func (m *Manager) handleGRPCRoute(obj interface{}, updateType MessageType) {
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "GRPCRoute", snapshot.BuildGRPCRouteNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "GRPCRoute", "grpcroutes", snapshot.BuildGRPCRouteNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleTLSRoute(obj interface{}, updateType MessageType) {
@@ -1217,7 +1154,7 @@ func (m *Manager) handleTLSRoute(obj interface{}, updateType MessageType) {
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "TLSRoute", snapshot.BuildTLSRouteNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "TLSRoute", "tlsroutes", snapshot.BuildTLSRouteNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleListenerSet(obj interface{}, updateType MessageType) {
@@ -1225,7 +1162,7 @@ func (m *Manager) handleListenerSet(obj interface{}, updateType MessageType) {
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "ListenerSet", snapshot.BuildListenerSetNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "ListenerSet", "listenersets", snapshot.BuildListenerSetNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleReferenceGrant(obj interface{}, updateType MessageType) {
@@ -1233,7 +1170,7 @@ func (m *Manager) handleReferenceGrant(obj interface{}, updateType MessageType) 
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "ReferenceGrant", snapshot.BuildReferenceGrantNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "ReferenceGrant", "referencegrants", snapshot.BuildReferenceGrantNetworkSummary(m.clusterMeta, item))
 }
 
 func (m *Manager) handleBackendTLSPolicy(obj interface{}, updateType MessageType) {
@@ -1241,11 +1178,12 @@ func (m *Manager) handleBackendTLSPolicy(obj interface{}, updateType MessageType
 	if item == nil {
 		return
 	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "BackendTLSPolicy", snapshot.BuildBackendTLSPolicyNetworkSummary(m.clusterMeta, item))
+	m.broadcastGatewayNetworkUpdate(updateType, item, "BackendTLSPolicy", "backendtlspolicies", snapshot.BuildBackendTLSPolicyNetworkSummary(m.clusterMeta, item))
 }
 
-func (m *Manager) broadcastGatewayNetworkUpdate(updateType MessageType, obj metav1.Object, kind string, row snapshot.NetworkSummary) {
-	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, obj, kind, row)
+func (m *Manager) broadcastGatewayNetworkUpdate(updateType MessageType, obj metav1.Object, kind, resource string, row snapshot.NetworkSummary) {
+	ref := m.resourceRefForObject(obj, "gateway.networking.k8s.io", "v1", kind, resource)
+	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, obj, ref, row)
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(obj.GetNamespace()), update)
 }
 
@@ -1257,7 +1195,8 @@ func (m *Manager) handleStorageClass(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildClusterStorageClassSummary(m.clusterMeta, storageClass)
-	update := m.newObjectRowUpdate(updateType, domainClusterConfig, storageClass, "StorageClass", summary)
+	ref := m.resourceRefForObject(storageClass, "storage.k8s.io", "v1", "StorageClass", "storageclasses")
+	update := m.newObjectRowUpdate(updateType, domainClusterConfig, storageClass, ref, summary)
 
 	m.broadcast(domainClusterConfig, scopesForCluster(), update)
 }
@@ -1269,7 +1208,8 @@ func (m *Manager) handleIngressClass(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildClusterIngressClassSummary(m.clusterMeta, ingressClass)
-	update := m.newObjectRowUpdate(updateType, domainClusterConfig, ingressClass, "IngressClass", summary)
+	ref := m.resourceRefForObject(ingressClass, "networking.k8s.io", "v1", "IngressClass", "ingressclasses")
+	update := m.newObjectRowUpdate(updateType, domainClusterConfig, ingressClass, ref, summary)
 
 	m.broadcast(domainClusterConfig, scopesForCluster(), update)
 }
@@ -1281,7 +1221,8 @@ func (m *Manager) handleGatewayClass(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildClusterGatewayClassSummary(m.clusterMeta, gatewayClass)
-	update := m.newObjectRowUpdate(updateType, domainClusterConfig, gatewayClass, "GatewayClass", summary)
+	ref := m.resourceRefForObject(gatewayClass, "gateway.networking.k8s.io", "v1", "GatewayClass", "gatewayclasses")
+	update := m.newObjectRowUpdate(updateType, domainClusterConfig, gatewayClass, ref, summary)
 
 	m.broadcast(domainClusterConfig, scopesForCluster(), update)
 }
@@ -1293,7 +1234,8 @@ func (m *Manager) handleValidatingWebhook(obj interface{}, updateType MessageTyp
 	}
 
 	summary := snapshot.BuildClusterValidatingWebhookSummary(m.clusterMeta, webhook)
-	update := m.newObjectRowUpdate(updateType, domainClusterConfig, webhook, "ValidatingWebhookConfiguration", summary)
+	ref := m.resourceRefForObject(webhook, "admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations")
+	update := m.newObjectRowUpdate(updateType, domainClusterConfig, webhook, ref, summary)
 
 	m.broadcast(domainClusterConfig, scopesForCluster(), update)
 }
@@ -1305,7 +1247,8 @@ func (m *Manager) handleMutatingWebhook(obj interface{}, updateType MessageType)
 	}
 
 	summary := snapshot.BuildClusterMutatingWebhookSummary(m.clusterMeta, webhook)
-	update := m.newObjectRowUpdate(updateType, domainClusterConfig, webhook, "MutatingWebhookConfiguration", summary)
+	ref := m.resourceRefForObject(webhook, "admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations")
+	update := m.newObjectRowUpdate(updateType, domainClusterConfig, webhook, ref, summary)
 
 	m.broadcast(domainClusterConfig, scopesForCluster(), update)
 }
@@ -1316,10 +1259,8 @@ func (m *Manager) handlePersistentVolumeClaim(obj interface{}, updateType Messag
 		return
 	}
 
-	update := m.newObjectUpdate(updateType, domainNamespaceStorage, pvc, "PersistentVolumeClaim")
-	if updateType != MessageTypeDeleted {
-		update.Row = snapshot.BuildPVCStorageSummary(m.clusterMeta, pvc)
-	}
+	ref := m.resourceRefForObject(pvc, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceStorage, pvc, ref, snapshot.BuildPVCStorageSummary(m.clusterMeta, pvc))
 
 	m.broadcast(domainNamespaceStorage, scopesForNamespace(pvc.Namespace), update)
 }
@@ -1332,7 +1273,8 @@ func (m *Manager) handlePersistentVolume(obj interface{}, updateType MessageType
 	}
 
 	summary := snapshot.BuildClusterStorageSummary(m.clusterMeta, pv)
-	update := m.newObjectRowUpdate(updateType, domainClusterStorage, pv, "PersistentVolume", summary)
+	ref := m.resourceRefForObject(pv, "", "v1", "PersistentVolume", "persistentvolumes")
+	update := m.newObjectRowUpdate(updateType, domainClusterStorage, pv, ref, summary)
 
 	m.broadcast(domainClusterStorage, scopesForCluster(), update)
 }
@@ -1343,10 +1285,8 @@ func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	update := m.newObjectUpdate(updateType, domainNamespaceAutoscaling, hpa, "HorizontalPodAutoscaler")
-	if updateType != MessageTypeDeleted {
-		update.Row = snapshot.BuildHPASummary(m.clusterMeta, hpa)
-	}
+	ref := m.resourceRefForObject(hpa, "autoscaling", "v1", "HorizontalPodAutoscaler", "horizontalpodautoscalers")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceAutoscaling, hpa, ref, snapshot.BuildHPASummary(m.clusterMeta, hpa))
 
 	m.broadcast(domainNamespaceAutoscaling, scopesForNamespace(hpa.Namespace), update)
 	m.handleWorkloadFromHPA(hpa, updateType)
@@ -1420,7 +1360,8 @@ func (m *Manager) handleResourceQuota(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildResourceQuotaSummary(m.clusterMeta, quota)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, quota, "ResourceQuota", summary)
+	ref := m.resourceRefForObject(quota, "", "v1", "ResourceQuota", "resourcequotas")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, quota, ref, summary)
 
 	m.broadcast(domainNamespaceQuotas, scopesForNamespace(quota.Namespace), update)
 }
@@ -1432,7 +1373,8 @@ func (m *Manager) handleLimitRange(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildLimitRangeSummary(m.clusterMeta, limit)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, limit, "LimitRange", summary)
+	ref := m.resourceRefForObject(limit, "", "v1", "LimitRange", "limitranges")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, limit, ref, summary)
 
 	m.broadcast(domainNamespaceQuotas, scopesForNamespace(limit.Namespace), update)
 }
@@ -1444,7 +1386,8 @@ func (m *Manager) handlePodDisruptionBudget(obj interface{}, updateType MessageT
 	}
 
 	summary := snapshot.BuildPodDisruptionBudgetSummary(m.clusterMeta, pdb)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, pdb, "PodDisruptionBudget", summary)
+	ref := m.resourceRefForObject(pdb, "policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets")
+	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, pdb, ref, summary)
 
 	m.broadcast(domainNamespaceQuotas, scopesForNamespace(pdb.Namespace), update)
 }
@@ -1472,23 +1415,8 @@ func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	apiGroup, apiVersion := apiGroupVersionForStreamKind("Node")
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNodes,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: node.ResourceVersion,
-		UID:             string(node.UID),
-		Name:            node.Name,
-		Namespace:       node.Namespace,
-		Kind:            "Node",
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	ref := m.resourceRefForObject(node, "", "v1", "Node", "nodes")
+	update := m.newObjectRowUpdate(updateType, domainNodes, node, ref, summary)
 
 	m.broadcast(domainNodes, []string{""}, update)
 }
@@ -1521,25 +1449,27 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	apiGroup, apiVersion := apiGroupVersionForStreamKind(kind)
-	update := Update{
-		Type:            updateType,
-		Domain:          domainWorkloads,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: workload.GetResourceVersion(),
-		UID:             string(workload.GetUID()),
-		Name:            workload.GetName(),
-		Namespace:       namespace,
-		Kind:            kind,
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	ref := m.workloadRef(workload, kind)
+	update := m.newObjectRowUpdate(updateType, domainWorkloads, workload, ref, summary)
 
 	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
+}
+
+func (m *Manager) workloadRef(workload metav1.Object, kind string) resourcemodel.ResourceRef {
+	switch workload.(type) {
+	case *appsv1.Deployment:
+		return m.resourceRefForObject(workload, "apps", "v1", "Deployment", "deployments")
+	case *appsv1.StatefulSet:
+		return m.resourceRefForObject(workload, "apps", "v1", "StatefulSet", "statefulsets")
+	case *appsv1.DaemonSet:
+		return m.resourceRefForObject(workload, "apps", "v1", "DaemonSet", "daemonsets")
+	case *batchv1.Job:
+		return m.resourceRefForObject(workload, "batch", "v1", "Job", "jobs")
+	case *batchv1.CronJob:
+		return m.resourceRefForObject(workload, "batch", "v1", "CronJob", "cronjobs")
+	default:
+		return m.resourceRefForObject(workload, "", "", kind, "")
+	}
 }
 
 func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType, usage map[string]metrics.PodUsage) {
@@ -1585,21 +1515,9 @@ func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType,
 		return
 	}
 
-	apiGroup, apiVersion := apiGroupVersionForStreamKind(kind)
-	update := Update{
-		Type:            MessageTypeModified,
-		Domain:          domainWorkloads,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: pod.ResourceVersion,
-		UID:             string(workload.GetUID()),
-		Name:            workload.GetName(),
-		Namespace:       namespace,
-		Kind:            kind,
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
-		Row:             summary,
-	}
+	ref := m.workloadRef(workload, kind)
+	update := m.newObjectRowUpdate(MessageTypeModified, domainWorkloads, workload, ref, summary)
+	update.ResourceVersion = pod.ResourceVersion
 	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
 }
 
@@ -1625,21 +1543,9 @@ func (m *Manager) broadcastWorkloadRow(kind, namespace, name, resourceVersion st
 		}
 		return
 	}
-	apiGroup, apiVersion := apiGroupVersionForStreamKind(kind)
-	update := Update{
-		Type:            MessageTypeModified,
-		Domain:          domainWorkloads,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: resourceVersion,
-		UID:             string(workload.GetUID()),
-		Name:            workload.GetName(),
-		Namespace:       namespace,
-		Kind:            kind,
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
-		Row:             summary,
-	}
+	ref := m.workloadRef(workload, kind)
+	update := m.newObjectRowUpdate(MessageTypeModified, domainWorkloads, workload, ref, summary)
+	update.ResourceVersion = resourceVersion
 	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
 }
 
@@ -1652,21 +1558,9 @@ func (m *Manager) broadcastStandalonePodWorkloadRow(namespace, name, resourceVer
 		return
 	}
 	summary := snapshot.BuildStandalonePodWorkloadSummary(m.clusterMeta, pod, m.podMetricsSnapshot(), hpas...)
-	apiGroup, apiVersion := apiGroupVersionForStreamKind("Pod")
-	update := Update{
-		Type:            MessageTypeModified,
-		Domain:          domainWorkloads,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: resourceVersion,
-		UID:             string(pod.UID),
-		Name:            pod.Name,
-		Namespace:       namespace,
-		Kind:            "Pod",
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
-		Row:             summary,
-	}
+	ref := m.resourceRefForObject(pod, "", "v1", "Pod", "pods")
+	update := m.newObjectRowUpdate(MessageTypeModified, domainWorkloads, pod, ref, summary)
+	update.ResourceVersion = resourceVersion
 	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
 }
 
@@ -1680,23 +1574,8 @@ func (m *Manager) handleStandalonePodWorkload(pod *corev1.Pod, updateType Messag
 
 	hpas := m.hpasForWorkloadContext(pod.Namespace, nil, updateType)
 	summary := snapshot.BuildStandalonePodWorkloadSummary(m.clusterMeta, pod, usage, hpas...)
-	apiGroup, apiVersion := apiGroupVersionForStreamKind("Pod")
-	update := Update{
-		Type:            updateType,
-		Domain:          domainWorkloads,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: pod.ResourceVersion,
-		UID:             string(pod.UID),
-		Name:            pod.Name,
-		Namespace:       pod.Namespace,
-		Kind:            "Pod",
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
-	}
-	if updateType != MessageTypeDeleted {
-		update.Row = summary
-	}
+	ref := m.resourceRefForObject(pod, "", "v1", "Pod", "pods")
+	update := m.newObjectRowUpdate(updateType, domainWorkloads, pod, ref, summary)
 
 	m.broadcast(domainWorkloads, scopesForNamespace(pod.Namespace), update)
 }
@@ -1738,21 +1617,8 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 		return
 	}
 
-	apiGroup, apiVersion := apiGroupVersionForStreamKind("Node")
-	update := Update{
-		Type:            MessageTypeModified,
-		Domain:          domainNodes,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: node.ResourceVersion,
-		UID:             string(node.UID),
-		Name:            node.Name,
-		Namespace:       node.Namespace,
-		Kind:            "Node",
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
-		Row:             summary,
-	}
+	ref := m.resourceRefForObject(node, "", "v1", "Node", "nodes")
+	update := m.newObjectRowUpdate(MessageTypeModified, domainNodes, node, ref, summary)
 	m.broadcast(domainNodes, []string{""}, update)
 }
 

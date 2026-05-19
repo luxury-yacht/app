@@ -49,6 +49,15 @@ export interface RefreshDomainContractEntry<D extends RefreshDomain = RefreshDom
 
 export interface RefreshDomainContract {
   version: 2;
+  resourceStream: {
+    updateIdentity: {
+      rowUpdates: 'ref';
+      rowDeletes: 'ref';
+      legacyFieldsDuringMigration: string[];
+      completeSemantics: 'scope-level-resync';
+      completeIdentity: 'diagnostic-only';
+    };
+  };
   domains: RefreshDomainContractEntry[];
 }
 

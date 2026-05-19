@@ -134,6 +134,20 @@ describe('refresh domain contract', () => {
     ]);
 
     expect(refreshDomainContract.version).toBe(2);
+    expect(refreshDomainContract.resourceStream.updateIdentity).toEqual({
+      rowUpdates: 'ref',
+      rowDeletes: 'ref',
+      legacyFieldsDuringMigration: [
+        'clusterId',
+        'apiGroup',
+        'apiVersion',
+        'kind',
+        'namespace',
+        'name',
+      ],
+      completeSemantics: 'scope-level-resync',
+      completeIdentity: 'diagnostic-only',
+    });
     expect(refreshDomainContract.domains.length).toBeGreaterThan(0);
 
     for (const entry of refreshDomainContract.domains as ContractDomain[]) {

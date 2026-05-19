@@ -1,5 +1,14 @@
 {
   "version": 2,
+  "resourceStream": {
+    "updateIdentity": {
+      "rowUpdates": "ref",
+      "rowDeletes": "ref",
+      "legacyFieldsDuringMigration": ["clusterId", "apiGroup", "apiVersion", "kind", "namespace", "name"],
+      "completeSemantics": "scope-level-resync",
+      "completeIdentity": "diagnostic-only"
+    }
+  },
   "domains": [
     {
       "domain": "namespaces",

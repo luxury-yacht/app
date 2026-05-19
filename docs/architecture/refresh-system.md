@@ -277,6 +277,14 @@ Resource stream safety rules:
 - Descriptors in `resourceStreamDomains.ts` describe row behavior only: scope
   kind, row collection access, row identity, drift keys, sorting, and metrics
   preservation. They must not encode multi-cluster capability flags.
+- Row updates and row deletes carry a top-level `ref` with the full
+  `resourcemodel.ResourceRef` identity. During the migration window the backend
+  also populates legacy top-level identity fields (`clusterId`, `apiGroup`,
+  `apiVersion`, `kind`, `namespace`, and `name`) from that same ref; frontend
+  update keys prefer `ref` and use legacy fields only as compatibility fallback.
+- `COMPLETE` remains a scope-level control message that triggers a full
+  subscription resync. Any identity carried on `COMPLETE` is diagnostic context,
+  not a targeted row invalidation contract.
 - Keep implementation ownership split: `resourceStreamRows.ts` owns pure row
   math; `ResourceStreamManager` owns store mutation, resync, drift, health,
   telemetry, and fallback decisions; `ResourceStreamConnection` owns WebSocket
@@ -345,6 +353,13 @@ scale target apiVersion drops on status update" happen.
 Regression guards live in
 `backend/refresh/snapshot/streaming_helpers_test.go`. When adding a field, add or
 extend the matching `TestBuild*SummaryPopulatesAllFields` assertion.
+
+Resource stream handlers must not construct row payloads by assigning `Row`
+directly. The backend guardrail in
+`backend/refresh/resourcestream/update_guardrail_test.go` allows row assignment
+only inside shared update/projection helpers, so stream handlers resolve changed
+objects and call the canonical snapshot projection helper instead of building a
+parallel DTO.
 
 Exceptions still have one constructor path:
 

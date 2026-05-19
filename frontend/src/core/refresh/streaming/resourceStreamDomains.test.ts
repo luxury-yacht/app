@@ -252,12 +252,20 @@ describe('resource stream domain descriptors', () => {
     expect(
       namespaceDescriptor.collection.buildUpdateKey(
         {
-          clusterId: 'cluster-a',
-          namespace: 'default',
-          apiGroup: 'beta.example.com',
-          apiVersion: 'v1',
-          kind: 'Widget',
-          name: 'shared',
+          clusterId: 'wrong-cluster',
+          namespace: 'wrong',
+          apiGroup: 'wrong.example.com',
+          apiVersion: 'v9',
+          kind: 'Wrong',
+          name: 'wrong',
+          ref: {
+            clusterId: 'cluster-a',
+            group: 'beta.example.com',
+            version: 'v1',
+            kind: 'Widget',
+            namespace: 'default',
+            name: 'shared',
+          },
         },
         'fallback-cluster'
       )

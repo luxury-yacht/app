@@ -100,6 +100,16 @@ type ServerMessage = {
   kind?: string;
   apiGroup?: string;
   apiVersion?: string;
+  ref?: {
+    clusterId: string;
+    group: string;
+    version: string;
+    kind: string;
+    resource?: string;
+    namespace?: string;
+    name?: string;
+    uid?: string;
+  };
   row?: unknown;
   error?: string;
   errorDetails?: PermissionDeniedStatus;

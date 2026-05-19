@@ -1,59 +1,66 @@
 package resourcestream
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	"strings"
 
-func (m *Manager) newObjectUpdate(updateType MessageType, domain string, obj metav1.Object, kind string) Update {
-	apiGroup, apiVersion := apiGroupVersionForStreamKind(kind)
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+)
+
+func (m *Manager) resourceRefForObject(obj metav1.Object, group, version, kind, resource string) resourcemodel.ResourceRef {
+	if obj == nil {
+		return resourcemodel.NewResourceRef(m.clusterMeta.ClusterID, group, version, kind, resource, "", "", "")
+	}
+	return resourcemodel.NewResourceRef(
+		m.clusterMeta.ClusterID,
+		group,
+		version,
+		kind,
+		resource,
+		obj.GetNamespace(),
+		obj.GetName(),
+		string(obj.GetUID()),
+	)
+}
+
+func (m *Manager) helmReleaseRef(namespace, name string) resourcemodel.ResourceRef {
+	return resourcemodel.NewResourceRef(
+		m.clusterMeta.ClusterID,
+		"helm.sh",
+		"v3",
+		"HelmRelease",
+		"releases",
+		namespace,
+		name,
+		"",
+	)
+}
+
+func (m *Manager) newObjectUpdate(updateType MessageType, domain string, obj metav1.Object, ref resourcemodel.ResourceRef) Update {
+	if strings.TrimSpace(ref.ClusterID) == "" {
+		ref.ClusterID = m.clusterMeta.ClusterID
+	}
 	return Update{
 		Type:            updateType,
 		Domain:          domain,
 		ClusterID:       m.clusterMeta.ClusterID,
 		ClusterName:     m.clusterMeta.ClusterName,
 		ResourceVersion: obj.GetResourceVersion(),
-		UID:             string(obj.GetUID()),
-		Name:            obj.GetName(),
-		Namespace:       obj.GetNamespace(),
-		Kind:            kind,
-		APIGroup:        apiGroup,
-		APIVersion:      apiVersion,
+		UID:             ref.UID,
+		Name:            ref.Name,
+		Namespace:       ref.Namespace,
+		Kind:            ref.Kind,
+		APIGroup:        ref.Group,
+		APIVersion:      ref.Version,
+		Ref:             &ref,
 	}
 }
 
-func (m *Manager) newObjectRowUpdate(updateType MessageType, domain string, obj metav1.Object, kind string, row interface{}) Update {
-	update := m.newObjectUpdate(updateType, domain, obj, kind)
+func (m *Manager) newObjectRowUpdate(updateType MessageType, domain string, obj metav1.Object, ref resourcemodel.ResourceRef, row interface{}) Update {
+	update := m.newObjectUpdate(updateType, domain, obj, ref)
 	if updateType != MessageTypeDeleted {
 		update.Row = row
 	}
 	return update
-}
-
-func apiGroupVersionForStreamKind(kind string) (string, string) {
-	switch kind {
-	case "Pod", "Node", "ConfigMap", "Secret", "Service", "ServiceAccount", "PersistentVolumeClaim", "PersistentVolume", "ResourceQuota", "LimitRange":
-		return "", "v1"
-	case "Deployment", "StatefulSet", "DaemonSet", "ReplicaSet":
-		return "apps", "v1"
-	case "Job", "CronJob":
-		return "batch", "v1"
-	case "HorizontalPodAutoscaler":
-		return "autoscaling", "v1"
-	case "PodDisruptionBudget":
-		return "policy", "v1"
-	case "Role", "RoleBinding", "ClusterRole", "ClusterRoleBinding":
-		return "rbac.authorization.k8s.io", "v1"
-	case "EndpointSlice":
-		return "discovery.k8s.io", "v1"
-	case "Ingress", "IngressClass", "NetworkPolicy":
-		return "networking.k8s.io", "v1"
-	case "Gateway", "HTTPRoute", "GRPCRoute", "TLSRoute", "ListenerSet", "ReferenceGrant", "BackendTLSPolicy", "GatewayClass":
-		return "gateway.networking.k8s.io", "v1"
-	case "StorageClass":
-		return "storage.k8s.io", "v1"
-	case "ValidatingWebhookConfiguration", "MutatingWebhookConfiguration":
-		return "admissionregistration.k8s.io", "v1"
-	case "CustomResourceDefinition":
-		return "apiextensions.k8s.io", "v1"
-	default:
-		return "", ""
-	}
 }

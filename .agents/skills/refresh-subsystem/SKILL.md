@@ -134,6 +134,12 @@ Keep connection lifecycle in `ResourceStreamConnection`, subscription mechanics
 in `ResourceStreamSubscriptionStore`, and pure row math in
 `resourceStreamRows.ts`.
 
+Resource stream row updates and deletes must carry a top-level
+`resourcemodel.ResourceRef` as `ref`. Legacy top-level identity fields are
+migration compatibility only and must be populated from the same ref. Frontend
+row keys prefer `ref`; do not add new key logic that guesses GVK from kind/name.
+`COMPLETE` is scope-level resync, not targeted row invalidation.
+
 ## Snapshot Building
 
 **File:** `backend/refresh/snapshot/service.go`
@@ -197,6 +203,8 @@ Keep permission checks before lazy informer creation. Do not replace these files
 Ordinary object updates may use shared `newObjectUpdate`/`newObjectRowUpdate`
 helpers, but keep pods, endpoint slices, workloads, custom resources,
 node-derived updates, and Helm resync signals explicit.
+Do not assign `Update.Row` in stream handlers; add or reuse projection helpers
+so snapshot and stream rows are built by the same canonical constructor path.
 
 ## Known Fragility Points
 

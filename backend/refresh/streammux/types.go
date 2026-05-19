@@ -1,6 +1,9 @@
 package streammux
 
-import "github.com/luxury-yacht/app/backend/refresh"
+import (
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+)
 
 // MessageType represents the message type used for stream requests and updates.
 type MessageType string
@@ -51,6 +54,7 @@ type ServerMessage struct {
 	Kind            string                          `json:"kind,omitempty"`
 	APIGroup        string                          `json:"apiGroup,omitempty"`
 	APIVersion      string                          `json:"apiVersion,omitempty"`
+	Ref             *resourcemodel.ResourceRef      `json:"ref,omitempty"`
 	Row             interface{}                     `json:"row,omitempty"`
 	Error           string                          `json:"error,omitempty"`
 	ErrorDetails    *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`

@@ -10,6 +10,17 @@ import type {
   PodSnapshotEntry,
 } from '../types';
 
+export type ResourceRef = {
+  clusterId: string;
+  group: string;
+  version: string;
+  kind: string;
+  resource?: string;
+  namespace?: string;
+  name?: string;
+  uid?: string;
+};
+
 export type ResourceStreamRowUpdate = {
   type?: string;
   clusterId?: string;
@@ -18,6 +29,7 @@ export type ResourceStreamRowUpdate = {
   name?: string;
   apiGroup?: string;
   apiVersion?: string;
+  ref?: ResourceRef;
   row?: unknown;
 };
 
