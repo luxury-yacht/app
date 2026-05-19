@@ -21,7 +21,7 @@ export const RESOURCE_CAPABILITIES: Record<string, ResourceCapability> = {
   statefulset: { objPanelLogs: true, restart: true, scale: true, delete: true },
   job: { objPanelLogs: true, delete: true },
   cronjob: { objPanelLogs: true, delete: true, trigger: true, suspend: true },
-  replicaset: { objPanelLogs: true, delete: true },
+  replicaset: { objPanelLogs: true, scale: true, delete: true },
 
   // Configuration
   configmap: { delete: true },

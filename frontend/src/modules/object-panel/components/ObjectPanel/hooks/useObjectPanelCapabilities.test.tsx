@@ -125,6 +125,13 @@ describe('useObjectPanelCapabilities', () => {
     expect(descriptorIds).toEqual(
       expect.arrayContaining(['view-yaml', 'edit-yaml', 'view-logs', 'delete', 'restart', 'scale'])
     );
+    expect(descriptors).toContainEqual(
+      expect.objectContaining({
+        id: 'scale',
+        verb: 'update',
+        subresource: 'scale',
+      })
+    );
 
     expect(result.capabilities.canDelete).toBe(true);
     expect(result.capabilities.canScale).toBe(false);

@@ -140,6 +140,12 @@ const Overview: React.FC<OverviewProps> = (props) => {
         })
     : undefined;
 
+  const currentScaleReplicas =
+    parseDesiredReplicaCount(props.desiredReplicas) ??
+    parseDesiredReplicaCount(props.replicas) ??
+    parseDesiredReplicaCount(props.ready) ??
+    0;
+
   // Build object data for ActionsMenu. Group/version come from the panel's
   // objectData (the source of truth) so CRD permission lookups in
   // the shared action controller key off the same GVK as the spec-emit side;
@@ -155,6 +161,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
       version: objectVersion || undefined,
       status: props.suspend ? 'Suspended' : props.status,
       ready: props.ready !== undefined && props.ready !== null ? String(props.ready) : undefined,
+      desiredReplicas: currentScaleReplicas,
       unschedulable: props.unschedulable,
       portForwardAvailable: props.portForwardAvailable,
     }),
@@ -171,14 +178,9 @@ const Overview: React.FC<OverviewProps> = (props) => {
       clusterName,
       objectGroup,
       objectVersion,
+      currentScaleReplicas,
     ]
   );
-
-  const currentScaleReplicas =
-    parseDesiredReplicaCount(props.desiredReplicas) ??
-    parseDesiredReplicaCount(props.replicas) ??
-    parseDesiredReplicaCount(props.ready) ??
-    0;
 
   return (
     <div className="object-panel-section">

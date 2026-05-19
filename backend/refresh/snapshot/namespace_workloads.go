@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	autoscalinglisters "k8s.io/client-go/listers/autoscaling/v1"
@@ -232,7 +233,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		podUsage = b.metrics.LatestPodUsage()
 	}
 
-	// Build a set of HPA-managed workloads keyed by "Kind/Namespace/Name".
+	// Build a set of HPA-managed workloads keyed by full target GVK + namespace/name.
 	hpaTargets := buildHPATargetSet(hpas)
 
 	podsByOwner := make(map[string][]*corev1.Pod)
@@ -252,9 +253,9 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 
 	appendSummary := func(summary WorkloadSummary, obj metav1.Object) {
 		summary.ClusterMeta = meta
-		// Mark as HPA-managed if a HorizontalPodAutoscaler targets this workload.
-		hpaKey := fmt.Sprintf("%s/%s/%s", summary.Kind, summary.Namespace, summary.Name)
-		if _, ok := hpaTargets[hpaKey]; ok {
+		// Mark as HPA-managed only when the HPA target carries the same full
+		// GVK. Kind/name-only matching can collide with custom resources.
+		if _, ok := hpaTargets[workloadHPATargetKey(summary)]; ok {
 			summary.HPAManaged = true
 		}
 		items = append(items, summary)
@@ -770,8 +771,8 @@ func (b *NamespaceWorkloadsBuilder) listHPAs(namespace string) ([]*autoscalingv1
 	return b.hpaLister.HorizontalPodAutoscalers(namespace).List(labels.Everything())
 }
 
-// buildHPATargetSet returns a set of keys ("Kind/Namespace/Name") for workloads
-// that are targeted by a HorizontalPodAutoscaler.
+// buildHPATargetSet returns a set of full GVK + namespace/name keys for
+// workloads targeted by a HorizontalPodAutoscaler.
 func buildHPATargetSet(hpas []*autoscalingv1.HorizontalPodAutoscaler) map[string]struct{} {
 	targets := make(map[string]struct{}, len(hpas))
 	for _, hpa := range hpas {
@@ -779,11 +780,32 @@ func buildHPATargetSet(hpas []*autoscalingv1.HorizontalPodAutoscaler) map[string
 			continue
 		}
 		ref := hpa.Spec.ScaleTargetRef
-		key := fmt.Sprintf("%s/%s/%s", ref.Kind, hpa.Namespace, ref.Name)
-		targets[key] = struct{}{}
+		gvk := schema.FromAPIVersionAndKind(ref.APIVersion, ref.Kind)
+		if gvk.Empty() || strings.TrimSpace(ref.Name) == "" {
+			continue
+		}
+		targets[hpaTargetKey(gvk.Group, gvk.Version, gvk.Kind, hpa.Namespace, ref.Name)] = struct{}{}
 	}
 	return targets
 }
+
+func workloadHPATargetKey(summary WorkloadSummary) string {
+	switch summary.Kind {
+	case "Deployment", "StatefulSet", "DaemonSet":
+		return hpaTargetKey("apps", "v1", summary.Kind, summary.Namespace, summary.Name)
+	case "Job", "CronJob":
+		return hpaTargetKey("batch", "v1", summary.Kind, summary.Namespace, summary.Name)
+	case "Pod":
+		return hpaTargetKey("", "v1", summary.Kind, summary.Namespace, summary.Name)
+	default:
+		return hpaTargetKey("", "", summary.Kind, summary.Namespace, summary.Name)
+	}
+}
+
+func hpaTargetKey(group, version, kind, namespace, name string) string {
+	return fmt.Sprintf("%s/%s/%s/%s/%s", group, version, kind, namespace, name)
+}
+
 func formatWorkloadCPUMilli(value int64) string {
 	if value <= 0 {
 		return "-"

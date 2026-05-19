@@ -241,6 +241,38 @@ export const useObjectActionController = ({
                     error: null,
                   })
               : undefined),
+          onScaleToZero:
+            handlerOverrides?.onScaleToZero ??
+            (useDefaultHandlers
+              ? async () => {
+                  try {
+                    await runObjectScale(actionTargetFor(object, 'scale'), 0);
+                    onAfterAction?.(object, 'scale');
+                  } catch (error) {
+                    errorHandler.handle(error, {
+                      action: 'scale',
+                      kind: object.kind,
+                      name: object.name,
+                    });
+                  }
+                }
+              : undefined),
+          onResumeFromZero:
+            handlerOverrides?.onResumeFromZero ??
+            (useDefaultHandlers
+              ? async () => {
+                  try {
+                    await runObjectScale(actionTargetFor(object, 'scale'), 1);
+                    onAfterAction?.(object, 'scale');
+                  } catch (error) {
+                    errorHandler.handle(error, {
+                      action: 'scale',
+                      kind: object.kind,
+                      name: object.name,
+                    });
+                  }
+                }
+              : undefined),
           onDelete:
             handlerOverrides?.onDelete ??
             (useDefaultHandlers ? () => setDeleteTarget(object) : undefined),
@@ -361,20 +393,27 @@ export const useObjectActionController = ({
     }
   }, [onAfterAction, triggerTarget]);
 
+  const applyScaleValue = useCallback(
+    async (replicas: number) => {
+      const object = scaleState.object;
+      if (!object) return;
+      setScaleState((previous) => ({ ...previous, loading: true, error: null }));
+      try {
+        await runObjectScale(actionTargetFor(object, 'scale'), replicas);
+        onAfterAction?.(object, 'scale');
+        setScaleState({ object: null, value: 1, loading: false, error: null });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setScaleState((previous) => ({ ...previous, loading: false, error: message }));
+        errorHandler.handle(error, { action: 'scale', kind: object.kind, name: object.name });
+      }
+    },
+    [onAfterAction, scaleState.object]
+  );
+
   const confirmScale = useCallback(async () => {
-    const object = scaleState.object;
-    if (!object) return;
-    setScaleState((previous) => ({ ...previous, loading: true, error: null }));
-    try {
-      await runObjectScale(actionTargetFor(object, 'scale'), scaleState.value);
-      onAfterAction?.(object, 'scale');
-      setScaleState({ object: null, value: 1, loading: false, error: null });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setScaleState((previous) => ({ ...previous, loading: false, error: message }));
-      errorHandler.handle(error, { action: 'scale', kind: object.kind, name: object.name });
-    }
-  }, [onAfterAction, scaleState.object, scaleState.value]);
+    await applyScaleValue(scaleState.value);
+  }, [applyScaleValue, scaleState.value]);
 
   const confirmation = useMemo(() => {
     if (restartTarget) {
@@ -439,6 +478,7 @@ export const useObjectActionController = ({
           error={scaleState.error}
           onCancel={closeScale}
           onApply={confirmScale}
+          onScaleToZero={() => applyScaleValue(0)}
           onValueChange={(value) =>
             setScaleState((previous) => ({ ...previous, value: clampReplicas(value) }))
           }
@@ -459,6 +499,7 @@ export const useObjectActionController = ({
       </>
     ),
     [
+      applyScaleValue,
       closeScale,
       confirmation,
       confirmScale,

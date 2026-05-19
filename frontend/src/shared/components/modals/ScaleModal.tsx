@@ -22,6 +22,7 @@ interface ScaleModalProps {
   error?: string | null;
   onCancel: () => void;
   onApply: () => void;
+  onScaleToZero?: () => void;
   onValueChange: (value: number) => void;
 }
 
@@ -35,6 +36,7 @@ const ScaleModal = ({
   error,
   onCancel,
   onApply,
+  onScaleToZero,
   onValueChange,
 }: ScaleModalProps) => {
   // Local string state so the user can clear the field while typing.
@@ -144,6 +146,15 @@ const ScaleModal = ({
         <button className="button cancel" onClick={onCancel} disabled={loading}>
           Cancel
         </button>
+        {onScaleToZero && (
+          <button
+            className="button generic"
+            onClick={onScaleToZero}
+            disabled={loading || value === 0}
+          >
+            Scale to 0
+          </button>
+        )}
         <button className="button warning" onClick={onApply} disabled={loading || unchanged}>
           {loading ? 'Scaling…' : 'Scale'}
         </button>

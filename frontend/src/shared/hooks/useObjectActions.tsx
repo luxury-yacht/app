@@ -70,9 +70,10 @@ export interface ObjectActionData {
   // For workload-specific actions
   status?: string;
   ready?: string;
+  desiredReplicas?: number;
   // Whether the target exposes any forwardable TCP ports.
   portForwardAvailable?: boolean;
-  // Whether a HorizontalPodAutoscaler targets this workload (disables manual scaling)
+  // Whether a HorizontalPodAutoscaler targets this workload.
   hpaManaged?: boolean;
   // Node-only: when true the cordon action toggles to "Uncordon".
   unschedulable?: boolean;
@@ -87,6 +88,8 @@ export interface ObjectActionHandlers {
   onRestart?: () => void;
   onRollback?: () => void;
   onScale?: () => void;
+  onScaleToZero?: () => void;
+  onResumeFromZero?: () => void;
   onDelete?: () => void;
   onPortForward?: () => void;
   // Node-only: cordon/uncordon share a single handler — the menu picks the
@@ -200,6 +203,17 @@ function getPortForwardAvailability(
     label: objectActionLabel(OBJECT_ACTION_IDS.portForward),
   };
 }
+
+const extractDesiredReplicas = (object: ObjectActionData): number => {
+  if (typeof object.desiredReplicas === 'number' && Number.isFinite(object.desiredReplicas)) {
+    return Math.max(0, object.desiredReplicas);
+  }
+  const ready = object.ready?.trim();
+  if (!ready) return 0;
+  const segments = ready.split('/');
+  const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
+  return Number.isFinite(candidate) ? Math.max(0, candidate) : 0;
+};
 
 /**
  * Build menu items for an object. Production callers should go through
@@ -376,14 +390,20 @@ export function buildObjectActionItems({
     });
   }
 
-  // Scale – disabled with explanation when managed by an HPA
+  // Scale
   if (SCALABLE_KINDS.includes(normalizedKind) && scaleStatus?.allowed && !scaleStatus.pending) {
     if (object.hpaManaged) {
+      const desiredReplicas = extractDesiredReplicas(object);
+      const hpaScaleActionId =
+        desiredReplicas === 0 ? OBJECT_ACTION_IDS.resumeFromZero : OBJECT_ACTION_IDS.scaleToZero;
+      const hpaScaleHandler =
+        desiredReplicas === 0 ? handlers.onResumeFromZero : handlers.onScaleToZero;
       menuItems.push({
-        actionId: OBJECT_ACTION_IDS.scaleHpaManaged,
-        label: objectActionLabel(OBJECT_ACTION_IDS.scaleHpaManaged),
+        actionId: hpaScaleActionId,
+        label: objectActionLabel(hpaScaleActionId),
         icon: <ScaleIcon />,
-        disabled: true,
+        onClick: hpaScaleHandler,
+        disabled: actionLoading || !hpaScaleHandler,
       });
     } else if (handlers.onScale) {
       menuItems.push({

@@ -280,6 +280,89 @@ describe('buildObjectActionItems', () => {
     ]);
   });
 
+  it('shows Scale to 0 for HPA-managed workloads above zero and invokes the zero handler', () => {
+    let invoked = false;
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+        ready: '2/3',
+        hpaManaged: true,
+      },
+      context: 'gridtable',
+      handlers: {
+        onScaleToZero: () => {
+          invoked = true;
+        },
+      },
+      permissions: {
+        scale: { allowed: true, pending: false },
+      },
+    });
+
+    const item = findAction(items, OBJECT_ACTION_IDS.scaleToZero);
+    expect(item).toMatchObject({
+      label: objectActionLabel(OBJECT_ACTION_IDS.scaleToZero),
+      disabled: false,
+    });
+    item?.onClick?.();
+    expect(invoked).toBe(true);
+    expect(findAction(items, OBJECT_ACTION_IDS.scale)).toBeUndefined();
+  });
+
+  it('shows Resume from 0 for HPA-managed workloads at zero', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+        ready: '0/0',
+        hpaManaged: true,
+      },
+      context: 'gridtable',
+      handlers: {
+        onResumeFromZero: () => undefined,
+      },
+      permissions: {
+        scale: { allowed: true, pending: false },
+      },
+    });
+
+    const item = findAction(items, OBJECT_ACTION_IDS.resumeFromZero);
+    expect(item).toMatchObject({
+      label: objectActionLabel(OBJECT_ACTION_IDS.resumeFromZero),
+      disabled: false,
+    });
+    expect(findAction(items, OBJECT_ACTION_IDS.scale)).toBeUndefined();
+  });
+
+  it('uses explicit desired replicas when choosing the HPA-managed scale action', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+        desiredReplicas: 3,
+        hpaManaged: true,
+      },
+      context: 'object-panel',
+      handlers: {
+        onScaleToZero: () => undefined,
+        onResumeFromZero: () => undefined,
+      },
+      permissions: {
+        scale: { allowed: true, pending: false },
+      },
+    });
+
+    expect(findAction(items, OBJECT_ACTION_IDS.scaleToZero)).toBeDefined();
+    expect(findAction(items, OBJECT_ACTION_IDS.resumeFromZero)).toBeUndefined();
+  });
+
   it('does not leave a trailing divider when Delete is unavailable', () => {
     const items = buildObjectActionItems({
       object: {

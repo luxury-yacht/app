@@ -30,7 +30,7 @@ interface ActionsMenuProps {
   object: ObjectActionData | null;
   currentReplicas?: number;
   actionLoading?: boolean;
-  // Whether a HorizontalPodAutoscaler manages this workload (disables Scale)
+  // Whether a HorizontalPodAutoscaler manages this workload.
   hpaManaged?: boolean;
   onRestart?: () => void;
   onRollback?: () => void;
@@ -95,6 +95,18 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
               setShowScaleModal(true);
             }
           : undefined,
+        onScaleToZero: onScale
+          ? () => {
+              setIsOpen(false);
+              onScale(0);
+            }
+          : undefined,
+        onResumeFromZero: onScale
+          ? () => {
+              setIsOpen(false);
+              onScale(1);
+            }
+          : undefined,
         onDelete: onDelete
           ? () => {
               setIsOpen(false);
@@ -145,8 +157,15 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
 
     // Merge hpaManaged flag into the object data for the actions hook.
     const actionObject = useMemo(
-      () => (object ? { ...object, hpaManaged: hpaManaged || object.hpaManaged } : null),
-      [object, hpaManaged]
+      () =>
+        object
+          ? {
+              ...object,
+              desiredReplicas: resolvedCurrentReplicas,
+              hpaManaged: hpaManaged || object.hpaManaged,
+            }
+          : null,
+      [object, hpaManaged, resolvedCurrentReplicas]
     );
 
     const objectActions = useObjectActionController({
@@ -232,6 +251,11 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       onScale?.(scaleValue);
     };
 
+    const handleScaleToZero = () => {
+      setShowScaleModal(false);
+      onScale?.(0);
+    };
+
     const handleTriggerConfirm = () => {
       setShowTriggerConfirm(false);
       onTrigger?.();
@@ -306,6 +330,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
           loading={actionLoading}
           onCancel={() => setShowScaleModal(false)}
           onApply={handleScaleApply}
+          onScaleToZero={handleScaleToZero}
           onValueChange={setScaleValue}
         />
 

@@ -354,6 +354,13 @@ UI-visible mutating actions must be represented in
 permission descriptor, Wails method, backend permission check, and the
 denied/pending reason source shown by the UI.
 
+Derived UI actions that reuse the same backend operation still get their own
+matrix entries. For example, regular `Scale`, HPA-managed `Scale to 0`, and
+HPA-managed `Resume from 0` all call `RunObjectAction(scale)` and require
+`update` on the target workload `scale` subresource, but each label is a
+separate action id so tests can keep visible behavior and permission gating in
+sync.
+
 The matrix is a contract test surface; it does not replace backend enforcement.
 Every backend mutation path still checks RBAC immediately before mutating
 cluster state. For example:
@@ -361,7 +368,8 @@ cluster state. For example:
 - `TriggerCronJob` requires `batch/v1` `Job create`.
 - `SuspendCronJob` and resume require `batch/v1` `CronJob patch`.
 - `RollbackWorkload` requires `update` on the target workload.
-- `ScaleWorkload` requires `update` on the target workload `scale` subresource.
+- `ScaleWorkload`, including `Scale to 0` and `Resume from 0`, requires
+  `update` on the target workload `scale` subresource.
 - Port-forward requires `create` on `Pod/portforward`.
 
 ### Timing constants

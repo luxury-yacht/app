@@ -278,6 +278,36 @@ describe('useObjectPanelActions', () => {
     });
   });
 
+  it('scales replicasets from the object panel action path', async () => {
+    const replicaSet: PanelObjectData = {
+      kind: 'ReplicaSet',
+      name: 'api-rs',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+      group: 'apps',
+      version: 'v1',
+    };
+    const { getResult } = await renderHook({
+      objectData: replicaSet,
+      objectKind: 'replicaset',
+    });
+
+    await getResult().handleAction('scale', undefined, 0);
+
+    expect(runObjectActionMock).toHaveBeenCalledWith({
+      action: 'scale',
+      target: {
+        clusterId: 'alpha:ctx',
+        group: 'apps',
+        version: 'v1',
+        kind: 'ReplicaSet',
+        namespace: 'team-a',
+        name: 'api-rs',
+      },
+      replicas: 0,
+    });
+  });
+
   it('exposes helpers to manipulate confirmation and scale state', async () => {
     const { getResult } = await renderHook();
     const actions = getResult();

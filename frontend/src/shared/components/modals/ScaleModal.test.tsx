@@ -18,6 +18,7 @@ describe('ScaleModal', () => {
     error: null as string | null,
     onCancel: vi.fn(),
     onApply: vi.fn(),
+    onScaleToZero: vi.fn(),
     onValueChange: vi.fn(),
   };
 
@@ -33,6 +34,7 @@ describe('ScaleModal', () => {
     root = ReactDOM.createRoot(container);
     defaultProps.onCancel.mockReset();
     defaultProps.onApply.mockReset();
+    defaultProps.onScaleToZero.mockReset();
     defaultProps.onValueChange.mockReset();
   });
 
@@ -93,6 +95,32 @@ describe('ScaleModal', () => {
     });
 
     expect(defaultProps.onApply).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies scale to zero from the secondary action', async () => {
+    await renderModal();
+
+    const zeroButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'Scale to 0'
+    );
+    expect(zeroButton).toBeTruthy();
+
+    act(() => {
+      zeroButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(defaultProps.onScaleToZero).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onApply).not.toHaveBeenCalled();
+  });
+
+  it('disables scale to zero when already at zero', async () => {
+    await renderModal({ value: 0 });
+
+    const zeroButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'Scale to 0'
+    );
+
+    expect(zeroButton?.disabled).toBe(true);
   });
 
   it('cancels on Escape through the keyboard surface manager', async () => {

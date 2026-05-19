@@ -384,35 +384,9 @@ export namespace backend {
 	        this.localPort = source["localPort"];
 	    }
 	}
-	export class ObjectActionTargetRef {
-	    clusterId: string;
-	    group: string;
-	    version: string;
-	    kind: string;
-	    resource?: string;
-	    namespace?: string;
-	    name: string;
-	    uid?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ObjectActionTargetRef(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.clusterId = source["clusterId"];
-	        this.group = source["group"];
-	        this.version = source["version"];
-	        this.kind = source["kind"];
-	        this.resource = source["resource"];
-	        this.namespace = source["namespace"];
-	        this.name = source["name"];
-	        this.uid = source["uid"];
-	    }
-	}
 	export class ObjectActionRequest {
 	    action: string;
-	    target: ObjectActionTargetRef;
+	    target: resourcemodel.ResourceRef;
 	    replicas?: number;
 	    suspend?: boolean;
 	    drainOptions?: types.DrainNodeOptions;
@@ -427,7 +401,7 @@ export namespace backend {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.action = source["action"];
-	        this.target = this.convertValues(source["target"], ObjectActionTargetRef);
+	        this.target = this.convertValues(source["target"], resourcemodel.ResourceRef);
 	        this.replicas = source["replicas"];
 	        this.suspend = source["suspend"];
 	        this.drainOptions = this.convertValues(source["drainOptions"], types.DrainNodeOptions);
@@ -490,7 +464,6 @@ export namespace backend {
 		    return a;
 		}
 	}
-	
 	export class ObjectYAMLMutationRequest {
 	    baseYAML: string;
 	    yaml: string;
@@ -627,38 +600,12 @@ export namespace backend {
 	        this.podTemplate = source["podTemplate"];
 	    }
 	}
-	export class RuntimeOperationTargetRef {
-	    clusterId: string;
-	    group: string;
-	    version: string;
-	    kind: string;
-	    resource?: string;
-	    namespace?: string;
-	    name: string;
-	    uid?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new RuntimeOperationTargetRef(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.clusterId = source["clusterId"];
-	        this.group = source["group"];
-	        this.version = source["version"];
-	        this.kind = source["kind"];
-	        this.resource = source["resource"];
-	        this.namespace = source["namespace"];
-	        this.name = source["name"];
-	        this.uid = source["uid"];
-	    }
-	}
 	export class RuntimeOperation {
 	    id: string;
 	    type: string;
 	    clusterId: string;
 	    clusterName?: string;
-	    target?: RuntimeOperationTargetRef;
+	    target?: resourcemodel.ResourceRef;
 	    status: string;
 	    statusReason?: string;
 	    startedAt: string;
@@ -675,7 +622,7 @@ export namespace backend {
 	        this.type = source["type"];
 	        this.clusterId = source["clusterId"];
 	        this.clusterName = source["clusterName"];
-	        this.target = this.convertValues(source["target"], RuntimeOperationTargetRef);
+	        this.target = this.convertValues(source["target"], resourcemodel.ResourceRef);
 	        this.status = source["status"];
 	        this.statusReason = source["statusReason"];
 	        this.startedAt = source["startedAt"];
@@ -701,7 +648,6 @@ export namespace backend {
 		    return a;
 		}
 	}
-	
 	export class SelectionDiagnostics {
 	    activeQueueDepth: number;
 	    maxQueueDepth: number;
@@ -949,6 +895,63 @@ export namespace objectcatalog {
 	        this.creationTimestamp = source["creationTimestamp"];
 	        this.scope = source["scope"];
 	        this.labelsDigest = source["labelsDigest"];
+	    }
+	}
+
+}
+
+export namespace resourcemodel {
+
+	export class DisplayRef {
+	    clusterId: string;
+	    group?: string;
+	    version?: string;
+	    kind: string;
+	    resource?: string;
+	    namespace?: string;
+	    name?: string;
+	    uid?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new DisplayRef(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.clusterId = source["clusterId"];
+	        this.group = source["group"];
+	        this.version = source["version"];
+	        this.kind = source["kind"];
+	        this.resource = source["resource"];
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	        this.uid = source["uid"];
+	    }
+	}
+	export class ResourceRef {
+	    clusterId: string;
+	    group: string;
+	    version: string;
+	    kind: string;
+	    resource?: string;
+	    namespace?: string;
+	    name?: string;
+	    uid?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ResourceRef(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.clusterId = source["clusterId"];
+	        this.group = source["group"];
+	        this.version = source["version"];
+	        this.kind = source["kind"];
+	        this.resource = source["resource"];
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	        this.uid = source["uid"];
 	    }
 	}
 
@@ -1246,61 +1249,9 @@ export namespace types {
 	        this.lastTransitionTime = source["lastTransitionTime"];
 	    }
 	}
-	export class DisplayRef {
-	    clusterId: string;
-	    group?: string;
-	    version?: string;
-	    kind: string;
-	    resource?: string;
-	    namespace?: string;
-	    name: string;
-	    uid?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new DisplayRef(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.clusterId = source["clusterId"];
-	        this.group = source["group"];
-	        this.version = source["version"];
-	        this.kind = source["kind"];
-	        this.resource = source["resource"];
-	        this.namespace = source["namespace"];
-	        this.name = source["name"];
-	        this.uid = source["uid"];
-	    }
-	}
-	export class ObjectRef {
-	    clusterId: string;
-	    group: string;
-	    version: string;
-	    kind: string;
-	    resource?: string;
-	    namespace?: string;
-	    name: string;
-	    uid?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ObjectRef(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.clusterId = source["clusterId"];
-	        this.group = source["group"];
-	        this.version = source["version"];
-	        this.kind = source["kind"];
-	        this.resource = source["resource"];
-	        this.namespace = source["namespace"];
-	        this.name = source["name"];
-	        this.uid = source["uid"];
-	    }
-	}
 	export class RefOrDisplay {
-	    ref?: ObjectRef;
-	    display?: DisplayRef;
+	    ref?: resourcemodel.ResourceRef;
+	    display?: resourcemodel.DisplayRef;
 	
 	    static createFrom(source: any = {}) {
 	        return new RefOrDisplay(source);
@@ -1308,8 +1259,8 @@ export namespace types {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.ref = this.convertValues(source["ref"], ObjectRef);
-	        this.display = this.convertValues(source["display"], DisplayRef);
+	        this.ref = this.convertValues(source["ref"], resourcemodel.ResourceRef);
+	        this.display = this.convertValues(source["display"], resourcemodel.DisplayRef);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2422,7 +2373,6 @@ export namespace types {
 		    return a;
 		}
 	}
-	
 	export class DrainNodeOptions {
 	    gracePeriodSeconds?: number;
 	    timeoutSeconds?: number;
@@ -2543,7 +2493,7 @@ export namespace types {
 	    conditions?: ConditionState[];
 	    summary: ConditionsSummary;
 	    parameters?: RefOrDisplay;
-	    usedBy?: ObjectRef[];
+	    usedBy?: resourcemodel.ResourceRef[];
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
 	
@@ -2561,7 +2511,7 @@ export namespace types {
 	        this.conditions = this.convertValues(source["conditions"], ConditionState);
 	        this.summary = this.convertValues(source["summary"], ConditionsSummary);
 	        this.parameters = this.convertValues(source["parameters"], RefOrDisplay);
-	        this.usedBy = this.convertValues(source["usedBy"], ObjectRef);
+	        this.usedBy = this.convertValues(source["usedBy"], resourcemodel.ResourceRef);
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
 	    }
@@ -2630,7 +2580,7 @@ export namespace types {
 	    namespace: string;
 	    age: string;
 	    details: string;
-	    gatewayClassRef: ObjectRef;
+	    gatewayClassRef: resourcemodel.ResourceRef;
 	    addresses?: string[];
 	    listeners?: GatewayListenerDetails[];
 	    conditions?: ConditionState[];
@@ -2649,7 +2599,7 @@ export namespace types {
 	        this.namespace = source["namespace"];
 	        this.age = source["age"];
 	        this.details = source["details"];
-	        this.gatewayClassRef = this.convertValues(source["gatewayClassRef"], ObjectRef);
+	        this.gatewayClassRef = this.convertValues(source["gatewayClassRef"], resourcemodel.ResourceRef);
 	        this.addresses = source["addresses"];
 	        this.listeners = this.convertValues(source["listeners"], GatewayListenerDetails);
 	        this.conditions = this.convertValues(source["conditions"], ConditionState);
@@ -4048,7 +3998,6 @@ export namespace types {
 		    return a;
 		}
 	}
-	
 	
 	
 	export class PersistentVolumeClaimDetails {
@@ -5485,4 +5434,3 @@ export namespace v1 {
 	}
 
 }
-

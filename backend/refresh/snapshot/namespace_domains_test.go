@@ -1131,6 +1131,65 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 
 }
 
+func TestNamespaceWorkloadsBuilderMarksHPAManagedByFullGVK(t *testing.T) {
+	now := time.Now()
+	replicas := int32(1)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "web",
+			Namespace:         "default",
+			ResourceVersion:   "10",
+			CreationTimestamp: metav1.NewTime(now.Add(-1 * time.Hour)),
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
+		},
+	}
+	customTargetHPA := &autoscalingv1.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom-web", Namespace: "default"},
+		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "example.com/v1",
+				Kind:       "Deployment",
+				Name:       "web",
+			},
+		},
+	}
+	appsTargetHPA := &autoscalingv1.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: "apps-web", Namespace: "default"},
+		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       "web",
+			},
+		},
+	}
+
+	builder := &NamespaceWorkloadsBuilder{
+		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
+		statefulLister:   testsupport.NewStatefulSetLister(t),
+		daemonLister:     testsupport.NewDaemonSetLister(t),
+		jobLister:        testsupport.NewJobLister(t),
+		cronJobLister:    testsupport.NewCronJobLister(t),
+		hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t, customTargetHPA),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:default")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
+	require.Len(t, payload.Workloads, 1)
+	require.False(t, payload.Workloads[0].HPAManaged)
+
+	builder.hpaLister = testsupport.NewHorizontalPodAutoscalerLister(t, customTargetHPA, appsTargetHPA)
+	snapshot, err = builder.Build(context.Background(), "namespace:default")
+	require.NoError(t, err)
+	payload = snapshot.Payload.(NamespaceWorkloadsSnapshot)
+	require.Len(t, payload.Workloads, 1)
+	require.True(t, payload.Workloads[0].HPAManaged)
+}
+
 func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {
 	now := time.Now()
 	replicas := int32(2)

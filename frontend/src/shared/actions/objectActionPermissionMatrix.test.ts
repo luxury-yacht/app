@@ -12,6 +12,8 @@ describe('object action permission matrix', () => {
         OBJECT_ACTION_IDS.restart,
         OBJECT_ACTION_IDS.rollback,
         OBJECT_ACTION_IDS.scale,
+        OBJECT_ACTION_IDS.scaleToZero,
+        OBJECT_ACTION_IDS.resumeFromZero,
         OBJECT_ACTION_IDS.triggerNow,
         OBJECT_ACTION_IDS.suspend,
         OBJECT_ACTION_IDS.resume,

@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { types } from '@wailsjs/go/models';
+import { resourcemodel, types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
@@ -28,26 +28,29 @@ const conditionVariant = (status: string): StatusChipVariant => {
   return 'warning';
 };
 
-const objectRefLabel = (ref: types.ObjectRef): string =>
-  `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name}`;
+type ObjectRef = resourcemodel.ResourceRef;
+type DisplayRef = resourcemodel.DisplayRef;
 
-const displayRefLabel = (ref: types.DisplayRef): string =>
+const objectRefLabel = (ref: ObjectRef): string =>
+  `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name ?? '*'}`;
+
+const displayRefLabel = (ref: DisplayRef): string =>
   `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name || '*'}`;
 
 const formatAttachedRoutes = (count: number): string =>
   `${count} ${count === 1 ? 'route' : 'routes'}`;
 
-const hasObjectRefFields = (value: unknown): value is types.ObjectRef => {
+const hasObjectRefFields = (value: unknown): value is ObjectRef => {
   if (!value || typeof value !== 'object') {
     return false;
   }
-  const ref = value as Partial<types.ObjectRef>;
+  const ref = value as Partial<ObjectRef>;
   return Boolean(ref.clusterId && ref.group !== undefined && ref.version && ref.kind && ref.name);
 };
 
 const getRefParts = (
-  value?: types.ObjectRef | types.RefOrDisplay | null
-): { ref?: types.ObjectRef; display?: types.DisplayRef } => {
+  value?: ObjectRef | types.RefOrDisplay | null
+): { ref?: ObjectRef; display?: DisplayRef } => {
   if (!value) {
     return {};
   }
@@ -61,7 +64,7 @@ const getRefParts = (
 };
 
 const RefLink: React.FC<{
-  value?: types.ObjectRef | types.RefOrDisplay | null;
+  value?: ObjectRef | types.RefOrDisplay | null;
   clusterName?: string;
   /** Render as `Kind/name` (no namespace) when the surrounding context
    *  already shows the namespace — e.g., inside a per-namespace card. */
@@ -70,6 +73,9 @@ const RefLink: React.FC<{
   const { ref, display } = getRefParts(value);
 
   if (ref) {
+    if (!ref.name) {
+      return null;
+    }
     const label = omitNamespace ? `${ref.kind}/${ref.name}` : objectRefLabel(ref);
     return (
       <ObjectPanelLink
@@ -162,7 +168,7 @@ const ListenerList: React.FC<{ listeners?: types.GatewayListenerDetails[] | null
 };
 
 const RefList: React.FC<{
-  refs?: Array<types.ObjectRef | types.RefOrDisplay> | null;
+  refs?: Array<ObjectRef | types.RefOrDisplay> | null;
   clusterName?: string;
 }> = ({ refs, clusterName }) => {
   if (!refs || refs.length === 0) {
@@ -241,13 +247,13 @@ const groupFromByNamespace = (
 };
 
 const groupRefsByNamespace = (
-  refs?: Array<types.ObjectRef | types.RefOrDisplay> | null
-): Array<{ namespace: string; refs: Array<types.ObjectRef | types.RefOrDisplay> }> => {
+  refs?: Array<ObjectRef | types.RefOrDisplay> | null
+): Array<{ namespace: string; refs: Array<ObjectRef | types.RefOrDisplay> }> => {
   if (!refs || refs.length === 0) {
     return [];
   }
   const order: string[] = [];
-  const map = new Map<string, Array<types.ObjectRef | types.RefOrDisplay>>();
+  const map = new Map<string, Array<ObjectRef | types.RefOrDisplay>>();
   for (const ref of refs) {
     const parts = getRefParts(ref);
     const ns = parts.ref?.namespace ?? parts.display?.namespace ?? '';
@@ -262,7 +268,7 @@ const groupRefsByNamespace = (
 
 const ReferenceGrantDiagram: React.FC<{
   from?: types.ReferenceGrantFromInfo[] | null;
-  to?: Array<types.ObjectRef | types.RefOrDisplay> | null;
+  to?: Array<ObjectRef | types.RefOrDisplay> | null;
   clusterName?: string;
 }> = ({ from, to, clusterName }) => {
   const fromGroups = groupFromByNamespace(from);

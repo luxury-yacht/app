@@ -29,6 +29,7 @@ describe('ObjectPanel constants', () => {
       debug: true,
     });
     expect(RESOURCE_CAPABILITIES.deployment).toMatchObject({ scale: true, restart: true });
+    expect(RESOURCE_CAPABILITIES.replicaset).toMatchObject({ scale: true });
     expect(RESOURCE_CAPABILITIES.secret).toMatchObject({ delete: true });
   });
 

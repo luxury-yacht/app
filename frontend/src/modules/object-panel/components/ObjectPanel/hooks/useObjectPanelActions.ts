@@ -190,7 +190,11 @@ export const useObjectPanelActions = ({
             break;
           }
           case 'scale': {
-            if (objectKind === 'deployment' || objectKind === 'statefulset') {
+            if (
+              objectKind === 'deployment' ||
+              objectKind === 'statefulset' ||
+              objectKind === 'replicaset'
+            ) {
               const replicas = scaleOverride ?? state.scaleReplicas;
               const workloadKind = getWorkloadKind(objectKind, objectData);
               if (!workloadKind) {

@@ -253,6 +253,63 @@ describe('ActionsMenu', () => {
     expect(input?.value).toBe('6');
   });
 
+  it('scales HPA-managed workloads to zero from the menu without opening the scale modal', async () => {
+    const onScale = vi.fn();
+
+    await renderMenu({
+      object: makeObject('Deployment', { ready: '2/4', hpaManaged: true }),
+      onScale,
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const scaleToZeroItem = items.find((item) => item.textContent?.includes('Scale to 0'));
+    expect(scaleToZeroItem).toBeTruthy();
+
+    act(() => {
+      scaleToZeroItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onScale).toHaveBeenCalledWith(0);
+    expect(document.querySelector('.scale-modal')).toBeNull();
+  });
+
+  it('resumes HPA-managed workloads from zero from the menu', async () => {
+    const onScale = vi.fn();
+
+    await renderMenu({
+      object: makeObject('Deployment', { ready: '0/0', hpaManaged: true }),
+      onScale,
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const resumeItem = items.find((item) => item.textContent?.includes('Resume from 0'));
+    expect(resumeItem).toBeTruthy();
+
+    act(() => {
+      resumeItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onScale).toHaveBeenCalledWith(1);
+  });
+
+  it('uses currentReplicas when choosing HPA-managed menu labels', async () => {
+    const onScale = vi.fn();
+
+    await renderMenu({
+      object: makeObject('Deployment', { hpaManaged: true }),
+      currentReplicas: 4,
+      onScale,
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+
+    expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(true);
+    expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
+  });
+
   it('closes the menu when clicking outside', async () => {
     await renderMenu({
       object: makeObject('Deployment'),

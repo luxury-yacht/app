@@ -179,7 +179,7 @@ const computeCapabilityDescriptors = (
     add(
       {
         id: 'scale',
-        verb: 'patch',
+        verb: 'update',
         group: objectGroup,
         version: objectVersion,
         resourceKind,

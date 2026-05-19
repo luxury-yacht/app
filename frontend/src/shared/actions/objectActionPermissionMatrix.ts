@@ -31,6 +31,20 @@ export const OBJECT_ACTION_PERMISSION_MATRIX: ObjectActionPermissionMatrixEntry[
     deniedReason: 'scale permission state',
   },
   {
+    actionId: OBJECT_ACTION_IDS.scaleToZero,
+    frontendPermission: 'target workload scale update',
+    wailsMethod: 'RunObjectAction(scale, replicas=0)',
+    backendPermission: 'resourcePermissionCheck(target workload/scale, update)',
+    deniedReason: 'scale permission state',
+  },
+  {
+    actionId: OBJECT_ACTION_IDS.resumeFromZero,
+    frontendPermission: 'target workload scale update',
+    wailsMethod: 'RunObjectAction(scale, replicas=1)',
+    backendPermission: 'resourcePermissionCheck(target workload/scale, update)',
+    deniedReason: 'scale permission state',
+  },
+  {
     actionId: OBJECT_ACTION_IDS.triggerNow,
     frontendPermission: 'batch/v1 Job create',
     wailsMethod: 'RunObjectAction(trigger)',

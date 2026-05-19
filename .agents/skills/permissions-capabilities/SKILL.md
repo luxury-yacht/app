@@ -58,6 +58,8 @@ gating, delete/scale/restart/trigger/suspend actions, or restricted-RBAC tests.
       denied/pending reasons.
 - [ ] UI-visible mutating actions are represented in
       `OBJECT_ACTION_PERMISSION_MATRIX`.
+      Include derived action ids that reuse the same backend mutation, such as
+      fixed-replica scale variants.
 - [ ] Permission-denied refresh domains remain visible in diagnostics.
 - [ ] Restricted-RBAC behavior degrades visibly instead of silently hiding
       broken domains or actions.
