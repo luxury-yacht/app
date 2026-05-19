@@ -103,11 +103,8 @@ func TestParseStreamSelectorRejectsInvalid(t *testing.T) {
 	}
 }
 
-// TestNormalizeScopeAgreesWithTypedSelector ensures the legacy scope
-// string normalizer (still used at the WebSocket boundary) emits the
-// same canonical form as the typed StreamSelector. The two
-// representations must stay aligned until normalizeScopeForDomain is
-// retired in favor of selector-aware routing.
+// TestNormalizeScopeUsesTypedSelector keeps the WebSocket boundary
+// normalizer on the same typed parser used by selector-aware routing.
 func TestNormalizeScopeAgreesWithTypedSelector(t *testing.T) {
 	cases := []struct {
 		domain string

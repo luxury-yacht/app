@@ -8,10 +8,10 @@ import (
 )
 
 // StreamScopeKind enumerates the typed selector shapes that resource
-// streams accept. Scope strings are a transport-only encoding; routing
-// and projector code should operate on StreamSelector values so the
-// loose `namespace/kind/name` triples that previously flowed through
-// internal helpers cannot leak across module boundaries.
+// streams accept. Scope strings are a transport-only encoding; parse
+// them to StreamSelector before canonicalizing the subscription key so
+// loose `namespace/kind/name` triples cannot leak across module
+// boundaries.
 type StreamScopeKind string
 
 const (
@@ -66,8 +66,7 @@ func (w WorkloadSelector) AsResourceRef(clusterID, resource string) resourcemode
 // into a typed StreamSelector. The wire format remains the existing
 // `namespace:X`, `node:X`, `workload:ns:group:version:kind:name`, and
 // empty-string (cluster) encodings. This parser is the single place
-// where transport strings should be decoded; downstream code should
-// pass the typed selector instead of re-parsing.
+// where transport strings should be decoded.
 func ParseStreamSelector(clusterID, domain, scope string) (StreamSelector, error) {
 	scope = strings.TrimSpace(scope)
 	selector := StreamSelector{

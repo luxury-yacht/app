@@ -17,6 +17,7 @@ func PermissionRequirementsByDomain() map[string][]permissions.ResourceRequireme
 			listWatch("apps", "daemonsets"),
 			listWatch("batch", "jobs"),
 			listWatch("batch", "cronjobs"),
+			listWatch("autoscaling", "horizontalpodautoscalers"),
 		},
 		domainNamespaceConfig: {
 			listWatch("", "configmaps"),

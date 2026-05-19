@@ -142,10 +142,11 @@ routing metadata. Do not add new key logic that guesses GVK from kind/name.
 `COMPLETE` is scope-level resync, not targeted row invalidation — any `ref` on
 COMPLETE is diagnostic context only.
 
-Stream selectors are typed (`resourcestream.StreamSelector`). Parse transport
-scope strings once at the WebSocket boundary via `ParseStreamSelector`; pass
-the typed selector through internal routing and convert to a concrete
-`ResourceRef` only when resolving a specific affected row.
+Stream selectors are typed (`resourcestream.StreamSelector`). Validate and
+canonicalize transport scope strings at the WebSocket boundary via
+`ParseStreamSelector`; the canonical selector string remains the subscription
+key. Convert selectors to concrete `ResourceRef` values only when resolving a
+specific affected row.
 
 Snapshot vs stream row parity is enforced by
 `backend/refresh/snapshot/parity_test.go`. When you add a streamed domain you

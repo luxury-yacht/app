@@ -3,6 +3,9 @@ package snapshot
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"testing"
 
@@ -52,18 +55,18 @@ func TestSnapshotStreamRowParity(t *testing.T) {
 
 	cases := []parityCase{
 		// Drift-prone canaries first — these are the domains that motivated the plan.
-		parityWorkloadsCase(meta, /*withHPA=*/ true),
-		parityWorkloadsCase(meta, /*withHPA=*/ false),
-		parityServiceCase(meta, /*withEndpoints=*/ true),
-		parityServiceCase(meta, /*withEndpoints=*/ false),
+		parityWorkloadsCase(meta, true),
+		parityWorkloadsCase(meta, false),
+		parityServiceCase(meta, true),
+		parityServiceCase(meta, false),
 		parityNamespaceCustomCollisionCase(meta),
 		parityClusterCustomCollisionCase(meta),
 
 		// Metric-bearing rows: present and absent fixtures.
-		parityPodsCase(meta, /*withMetrics=*/ true),
-		parityPodsCase(meta, /*withMetrics=*/ false),
-		parityNodesCase(meta, /*withMetrics=*/ true),
-		parityNodesCase(meta, /*withMetrics=*/ false),
+		parityPodsCase(meta, true),
+		parityPodsCase(meta, false),
+		parityNodesCase(meta, true),
+		parityNodesCase(meta, false),
 
 		// Pure-object namespace domains.
 		parityNamespaceConfigCase(meta),
@@ -118,27 +121,7 @@ func TestSnapshotStreamRowParityCoversAllSupportedDomains(t *testing.T) {
 		"namespace-helm": "scope-level COMPLETE contract, not per-row projection (Phase 5 plan decision)",
 	}
 
-	// Local list to avoid a test-only import cycle with the resourcestream
-	// package (which itself depends on snapshot). Kept in sync via the
-	// resource-stream domain contract test in domains_test.go.
-	supported := []string{
-		"pods",
-		"namespace-workloads",
-		"namespace-config",
-		"namespace-network",
-		"namespace-rbac",
-		"namespace-custom",
-		"namespace-helm",
-		"namespace-autoscaling",
-		"namespace-quotas",
-		"namespace-storage",
-		"cluster-rbac",
-		"cluster-storage",
-		"cluster-config",
-		"cluster-crds",
-		"cluster-custom",
-		"nodes",
-	}
+	supported := resourceStreamContractDomains(t)
 
 	for _, domain := range supported {
 		if _, ok := covered[domain]; ok {
@@ -149,6 +132,27 @@ func TestSnapshotStreamRowParityCoversAllSupportedDomains(t *testing.T) {
 		}
 		t.Errorf("resource stream domain %q has no parity case and no documented exclusion; add a parity*Case or excluded entry", domain)
 	}
+}
+
+func resourceStreamContractDomains(t *testing.T) []string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	require.True(t, ok, "resolve parity test path")
+	path := filepath.Join(filepath.Dir(file), "..", "domain", "refresh-domain-contract.json")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var contract struct {
+		ResourceStream struct {
+			Domains map[string]json.RawMessage `json:"domains"`
+		} `json:"resourceStream"`
+	}
+	require.NoError(t, json.Unmarshal(data, &contract))
+	domains := make([]string, 0, len(contract.ResourceStream.Domains))
+	for domain := range contract.ResourceStream.Domains {
+		domains = append(domains, domain)
+	}
+	sort.Strings(domains)
+	return domains
 }
 
 type parityCase struct {
@@ -263,7 +267,7 @@ func parityPodsCase(meta ClusterMeta, withMetrics bool) parityCase {
 			usage := map[string]metrics.PodUsage{}
 			if withMetrics {
 				usage = map[string]metrics.PodUsage{
-					"default/web-abc-1": {CPUUsageMilli:250, MemoryUsageBytes:64 * 1024 * 1024},
+					"default/web-abc-1": {CPUUsageMilli: 250, MemoryUsageBytes: 64 * 1024 * 1024},
 				}
 			}
 			provider := &staticPodMetrics{pods: usage}
@@ -901,7 +905,7 @@ func parityNodesCase(meta ClusterMeta, withMetrics bool) parityCase {
 			usage := map[string]metrics.PodUsage{}
 			if withMetrics {
 				usage = map[string]metrics.PodUsage{
-					"default/p1": {CPUUsageMilli:100, MemoryUsageBytes:32 * 1024 * 1024},
+					"default/p1": {CPUUsageMilli: 100, MemoryUsageBytes: 32 * 1024 * 1024},
 				}
 			}
 			provider := &staticPodMetrics{pods: usage}

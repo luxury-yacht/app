@@ -262,7 +262,9 @@ func NewManager(
 	if shared == nil {
 		return mgr
 	}
-	mgr.hpaLister = shared.Autoscaling().V1().HorizontalPodAutoscalers().Lister()
+	if mgr.canListWatch("autoscaling", "horizontalpodautoscalers") {
+		mgr.hpaLister = shared.Autoscaling().V1().HorizontalPodAutoscalers().Lister()
+	}
 
 	mgr.registerPodStreams(factory)
 	mgr.registerConfigStreams(factory)

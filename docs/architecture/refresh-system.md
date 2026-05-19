@@ -291,9 +291,10 @@ Resource stream safety rules:
 - Stream selectors are typed: `resourcestream.StreamSelector` carries
   `ClusterID`, `Domain`, `ScopeKind` and the scope-kind-specific fields
   (`Namespace`, `Node`, or full-GVK `Workload`). Transport scope strings are
-  parsed once at the WebSocket boundary via `ParseStreamSelector`; downstream
-  routing and projection code uses the typed selector. Selectors become a
-  concrete `ResourceRef` only when resolving a specific affected row.
+  validated and canonicalized at the WebSocket boundary via
+  `ParseStreamSelector`; the canonical selector string remains the subscription
+  key. Selectors become a concrete `ResourceRef` only when resolving a specific
+  affected row.
 - Snapshot vs stream row parity is enforced by
   `backend/refresh/snapshot/parity_test.go`. For every domain returned by
   `resourcestream.SupportedDomains()` the harness runs the canonical snapshot
