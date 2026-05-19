@@ -1,0 +1,371 @@
+{
+  "version": 2,
+  "domains": [
+    {
+      "domain": "namespaces",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "frontend": {
+        "refresherName": "namespaces",
+        "orchestrator": "snapshot",
+        "diagnosticsStream": null,
+        "metricsInterval": false,
+        "timing": { "interval": 2000, "cooldown": 1000, "timeout": 10 },
+        "priority": 0
+      }
+    },
+    {
+      "domain": "cluster-overview",
+      "category": "system",
+      "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": false },
+      "frontend": {
+        "refresherName": "cluster-overview",
+        "orchestrator": "snapshot",
+        "diagnosticsStream": null,
+        "metricsInterval": false,
+        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 },
+        "priority": 3
+      }
+    },
+    {
+      "domain": "catalog",
+      "category": "cluster",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": {
+        "refresherName": "catalog",
+        "orchestrator": "catalog-stream",
+        "diagnosticsStream": "catalog",
+        "metricsInterval": false,
+        "timing": { "interval": 15000, "cooldown": 1500, "timeout": 30 },
+        "priority": 4
+      }
+    },
+    {
+      "domain": "catalog-diff",
+      "category": "cluster",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": {
+        "refresherName": "catalog-diff",
+        "orchestrator": "snapshot",
+        "diagnosticsStream": null,
+        "metricsInterval": false,
+        "timing": { "interval": 15000, "cooldown": 1500, "timeout": 30 }
+      }
+    },
+    {
+      "domain": "nodes",
+      "category": "cluster",
+      "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "cluster-nodes",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": true,
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 },
+        "priority": 1
+      }
+    },
+    {
+      "domain": "cluster-config",
+      "category": "cluster",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "cluster-config",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "cluster-crds",
+      "category": "cluster",
+      "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "cluster-crds",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 15000, "cooldown": 1000, "timeout": 60 }
+      }
+    },
+    {
+      "domain": "cluster-custom",
+      "category": "cluster",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "cluster-custom",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 15000, "cooldown": 1000, "timeout": 60 }
+      }
+    },
+    {
+      "domain": "cluster-events",
+      "category": "cluster",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "frontend": {
+        "refresherName": "cluster-events",
+        "orchestrator": "event-stream",
+        "diagnosticsStream": "events",
+        "metricsInterval": false,
+        "timing": { "interval": 3000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "cluster-rbac",
+      "category": "cluster",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "cluster-rbac",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "cluster-storage",
+      "category": "cluster",
+      "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "cluster-storage",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "namespace-workloads",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "workloads",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": true,
+        "timing": { "interval": 5000, "cooldown": 500, "timeout": 10 },
+        "priority": 5
+      }
+    },
+    {
+      "domain": "namespace-autoscaling",
+      "category": "namespace",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "autoscaling",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "namespace-config",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "config",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "namespace-custom",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "custom",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 60 }
+      }
+    },
+    {
+      "domain": "namespace-events",
+      "category": "namespace",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "frontend": {
+        "refresherName": "events",
+        "orchestrator": "event-stream",
+        "diagnosticsStream": "events",
+        "metricsInterval": false,
+        "timing": { "interval": 3000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "namespace-helm",
+      "category": "namespace",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "helm",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "namespace-network",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "network",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "namespace-quotas",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "quotas",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "namespace-rbac",
+      "category": "namespace",
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "rbac",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "namespace-storage",
+      "category": "namespace",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "storage",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": false,
+        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "pods",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
+      "frontend": {
+        "refresherName": "unified-pods",
+        "orchestrator": "resource-stream",
+        "diagnosticsStream": "resources",
+        "metricsInterval": true,
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 30 }
+      }
+    },
+    {
+      "domain": "object-details",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": {
+        "refresherName": "object-details",
+        "orchestrator": "snapshot",
+        "diagnosticsStream": null,
+        "metricsInterval": false,
+        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "object-yaml",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": {
+        "refresherName": "object-yaml",
+        "orchestrator": "snapshot",
+        "diagnosticsStream": null,
+        "metricsInterval": false,
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "object-helm-manifest",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": {
+        "refresherName": "object-helm-manifest",
+        "orchestrator": "snapshot",
+        "diagnosticsStream": null,
+        "metricsInterval": false,
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "object-helm-values",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": {
+        "refresherName": "object-helm-values",
+        "orchestrator": "snapshot",
+        "diagnosticsStream": null,
+        "metricsInterval": false,
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "object-events",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "frontend": {
+        "refresherName": "object-events",
+        "orchestrator": "snapshot",
+        "diagnosticsStream": null,
+        "metricsInterval": false,
+        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "object-map",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "frontend": {
+        "refresherName": "object-map",
+        "orchestrator": "snapshot",
+        "diagnosticsStream": null,
+        "metricsInterval": false,
+        "timing": { "interval": 2000, "cooldown": 1000, "timeout": 10 }
+      }
+    },
+    {
+      "domain": "object-maintenance",
+      "category": "system",
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": {
+        "refresherName": "object-maintenance",
+        "orchestrator": "snapshot",
+        "diagnosticsStream": null,
+        "metricsInterval": false,
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 },
+        "priority": 2
+      }
+    },
+    {
+      "domain": "container-logs",
+      "category": "system",
+      "backend": { "registration": "streamOnly", "permission": "stream-specific", "resourceStream": false },
+      "frontend": {
+        "refresherName": "container-logs",
+        "orchestrator": "container-logs-stream",
+        "diagnosticsStream": "container-logs",
+        "metricsInterval": false,
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
+      }
+    }
+  ]
+}

@@ -1,13 +1,12 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-
 import { describe, expect, it, vi } from 'vitest';
 
 import {
   DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
   METRICS_INTERVAL_REFRESHERS,
+  REFRESH_DOMAIN_DESCRIPTORS,
   getRefreshDomainDescriptor,
+  refreshDomainContract,
   refreshDomainDescriptors,
 } from './domainRegistry';
 import { refreshOrchestrator } from './orchestrator';
@@ -87,19 +86,21 @@ type OrchestratorKind =
   | 'catalog-stream'
   | 'container-logs-stream';
 
-type ManifestDomain = {
+type ContractDomain = {
   domain: RefreshDomain;
   category: DomainCategory;
   frontend: {
+    refresherName: string;
     orchestrator: OrchestratorKind;
     diagnosticsStream: DiagnosticsStream | null;
     metricsInterval: boolean;
+    timing: {
+      interval: number;
+      cooldown: number;
+      timeout: number;
+    };
+    priority?: number;
   };
-};
-
-type Manifest = {
-  version: number;
-  domains: ManifestDomain[];
 };
 
 type RegisteredDomain = {
@@ -110,44 +111,72 @@ type RegisteredDomain = {
   };
 };
 
-const loadManifest = (): Manifest => {
-  const candidates = [
-    resolve(process.cwd(), '../backend/refresh/system/testdata/refresh-domain-manifest.json'),
-    resolve(process.cwd(), 'backend/refresh/system/testdata/refresh-domain-manifest.json'),
-  ];
-  const manifestPath = candidates.find((candidate) => existsSync(candidate));
-  expect(manifestPath).toBeDefined();
-  const data = readFileSync(manifestPath!, 'utf8');
-  return JSON.parse(data) as Manifest;
-};
-
 const registeredDomains = (): Map<RefreshDomain, RegisteredDomain> =>
   (refreshOrchestrator as unknown as { configs: Map<RefreshDomain, RegisteredDomain> }).configs;
 
 const EVENT_STREAM_DOMAINS = new Set<RefreshDomain>(['cluster-events', 'namespace-events']);
 
-describe('refresh domain manifest', () => {
-  it('covers frontend descriptors, orchestrator registrations, streams, and diagnostics', () => {
-    const manifest = loadManifest();
-    expect(manifest.version).toBe(1);
+describe('refresh domain contract', () => {
+  it('keeps the authored contract within supported frontend values', () => {
+    const categories = new Set<DomainCategory>(['system', 'cluster', 'namespace']);
+    const orchestrators = new Set<OrchestratorKind>([
+      'snapshot',
+      'resource-stream',
+      'event-stream',
+      'catalog-stream',
+      'container-logs-stream',
+    ]);
+    const diagnosticsStreams = new Set<DiagnosticsStream>([
+      'resources',
+      'events',
+      'catalog',
+      'container-logs',
+    ]);
 
-    const manifestDomains = manifest.domains.map((entry) => entry.domain);
-    expect(new Set(manifestDomains).size).toBe(manifestDomains.length);
+    expect(refreshDomainContract.version).toBe(2);
+    expect(refreshDomainContract.domains.length).toBeGreaterThan(0);
+
+    for (const entry of refreshDomainContract.domains as ContractDomain[]) {
+      expect(categories.has(entry.category)).toBe(true);
+      expect(orchestrators.has(entry.frontend.orchestrator)).toBe(true);
+      if (entry.frontend.diagnosticsStream !== null) {
+        expect(diagnosticsStreams.has(entry.frontend.diagnosticsStream)).toBe(true);
+      }
+      expect(entry.frontend.refresherName).toEqual(expect.any(String));
+      expect(entry.frontend.metricsInterval).toEqual(expect.any(Boolean));
+      expect(entry.frontend.timing.interval).toBeGreaterThan(0);
+      expect(entry.frontend.timing.cooldown).toBeGreaterThan(0);
+      expect(entry.frontend.timing.timeout).toBeGreaterThan(0);
+    }
+  });
+
+  it('covers frontend descriptors, orchestrator registrations, streams, and diagnostics', () => {
+    const contract = refreshDomainContract;
+    expect(contract.version).toBe(2);
+
+    const contractDomains = contract.domains.map((entry) => entry.domain);
+    expect(new Set(contractDomains).size).toBe(contractDomains.length);
     expect(new Set(refreshDomainDescriptors.map((descriptor) => descriptor.domain))).toEqual(
-      new Set(manifestDomains)
+      new Set(contractDomains)
     );
-    expect(new Set(registeredDomains().keys())).toEqual(new Set(manifestDomains));
+    expect(new Set(Object.keys(REFRESH_DOMAIN_DESCRIPTORS))).toEqual(new Set(contractDomains));
+    expect(new Set(registeredDomains().keys())).toEqual(new Set(contractDomains));
 
     const resourceStreamDomains = new Set<RefreshDomain>(RESOURCE_STREAM_DOMAINS);
 
-    for (const entry of manifest.domains) {
+    for (const entry of contract.domains) {
       const descriptor = getRefreshDomainDescriptor(entry.domain);
       const registration = registeredDomains().get(entry.domain);
       expect(registration).toBeDefined();
       expect(descriptor.category).toBe(entry.category);
       expect(registration?.category).toBe(entry.category);
-      expect(registration?.refresherName).toBe(DOMAIN_REFRESHER_MAP[entry.domain]);
+      expect(descriptor.refresherName).toBe(entry.frontend.refresherName);
+      expect(registration?.refresherName).toBe(entry.frontend.refresherName);
+      expect(DOMAIN_REFRESHER_MAP[entry.domain]).toBe(entry.frontend.refresherName);
       expect(DOMAIN_STREAM_MAP[entry.domain]).toBe(entry.frontend.diagnosticsStream ?? undefined);
+      expect(descriptor.diagnosticsStream).toBe(entry.frontend.diagnosticsStream ?? undefined);
+      expect(descriptor.timing).toEqual(entry.frontend.timing);
+      expect(descriptor.priority).toBe(entry.frontend.priority);
       expect(METRICS_INTERVAL_REFRESHERS.has(descriptor.refresherName)).toBe(
         entry.frontend.metricsInterval
       );

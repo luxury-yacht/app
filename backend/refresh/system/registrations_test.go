@@ -17,7 +17,7 @@ import (
 
 // These tests guard the registration table ordering and dependency checks.
 
-type refreshDomainManifest struct {
+type refreshDomainContract struct {
 	Version int                   `json:"version"`
 	Domains []refreshDomainRecord `json:"domains"`
 }
@@ -32,7 +32,7 @@ type refreshDomainRecord struct {
 }
 
 func TestDomainRegistrationOrder(t *testing.T) {
-	expected := manifestSnapshotDomains(t)
+	expected := contractSnapshotDomains(t)
 
 	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
 	actual := make([]string, 0, len(registrations))
@@ -43,19 +43,19 @@ func TestDomainRegistrationOrder(t *testing.T) {
 	require.Equal(t, expected, actual)
 }
 
-func TestDomainRegistrationsMatchManifestContract(t *testing.T) {
-	manifest := loadRefreshDomainManifest(t)
+func TestDomainRegistrationsMatchAuthoredContract(t *testing.T) {
+	contract := loadRefreshDomainContract(t)
 	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
 	registered := make(map[string]domainRegistration, len(registrations))
 	for _, registration := range registrations {
 		registered[registration.name] = registration
 	}
 
-	manifestDomains := make(map[string]struct{}, len(manifest.Domains))
-	for _, domain := range manifest.Domains {
+	contractDomains := make(map[string]struct{}, len(contract.Domains))
+	for _, domain := range contract.Domains {
 		require.NotEmpty(t, domain.Domain)
-		require.NotContains(t, manifestDomains, domain.Domain)
-		manifestDomains[domain.Domain] = struct{}{}
+		require.NotContains(t, contractDomains, domain.Domain)
+		contractDomains[domain.Domain] = struct{}{}
 
 		if domain.Backend.Registration == "streamOnly" {
 			require.NotContains(t, registered, domain.Domain)
@@ -68,7 +68,7 @@ func TestDomainRegistrationsMatchManifestContract(t *testing.T) {
 	}
 
 	for _, registration := range registrations {
-		require.Containsf(t, manifestDomains, registration.name, "backend domain %q is missing from refresh-domain-manifest.json", registration.name)
+		require.Containsf(t, contractDomains, registration.name, "backend domain %q is missing from refresh-domain-contract.json", registration.name)
 	}
 }
 
@@ -86,12 +86,12 @@ func TestResourceStreamDomainsAreRegisteredRefreshDomains(t *testing.T) {
 
 func TestDomainRegistrationsHaveRuntimePermissionPolicyOrExemption(t *testing.T) {
 	runtimePolicies := snapshot.RuntimePermissionRequirements()
-	for _, domain := range loadRefreshDomainManifest(t).Domains {
+	for _, domain := range loadRefreshDomainContract(t).Domains {
 		switch domain.Backend.Permission {
 		case "runtime":
 			require.Containsf(t, runtimePolicies, domain.Domain, "domain %q must have a runtime permission policy", domain.Domain)
 		case "exempt":
-			require.NotContainsf(t, runtimePolicies, domain.Domain, "domain %q is manifest-exempt and should not have a broad runtime policy", domain.Domain)
+			require.NotContainsf(t, runtimePolicies, domain.Domain, "domain %q is contract-exempt and should not have a broad runtime policy", domain.Domain)
 		case "stream-specific":
 			require.Equal(t, "streamOnly", domain.Backend.Registration)
 		default:
@@ -100,12 +100,12 @@ func TestDomainRegistrationsHaveRuntimePermissionPolicyOrExemption(t *testing.T)
 	}
 }
 
-func TestResourceStreamDomainsMatchManifestContract(t *testing.T) {
-	manifestDomains := manifestResourceStreamDomains(t)
-	require.ElementsMatch(t, manifestDomains, resourcestream.SupportedDomains())
+func TestResourceStreamDomainsMatchAuthoredContract(t *testing.T) {
+	contractDomains := contractResourceStreamDomains(t)
+	require.ElementsMatch(t, contractDomains, resourcestream.SupportedDomains())
 
 	streamRequirements := resourcestream.PermissionRequirementsByDomain()
-	for _, domainName := range manifestDomains {
+	for _, domainName := range contractDomains {
 		require.Containsf(t, streamRequirements, domainName, "resource stream domain %q must declare permission requirements", domainName)
 	}
 }
@@ -181,26 +181,26 @@ func requirementKeys(reqs []permissions.ResourceRequirement) map[string]struct{}
 	return keys
 }
 
-func loadRefreshDomainManifest(t *testing.T) refreshDomainManifest {
+func loadRefreshDomainContract(t *testing.T) refreshDomainContract {
 	t.Helper()
 	_, filename, _, ok := goruntime.Caller(0)
 	require.True(t, ok)
-	manifestPath := filepath.Join(filepath.Dir(filename), "testdata/refresh-domain-manifest.json")
-	data, err := os.ReadFile(manifestPath)
+	contractPath := filepath.Join(filepath.Dir(filename), "..", "domain", "refresh-domain-contract.json")
+	data, err := os.ReadFile(contractPath)
 	require.NoError(t, err)
 
-	var manifest refreshDomainManifest
-	require.NoError(t, json.Unmarshal(data, &manifest))
-	require.Equal(t, 1, manifest.Version)
-	require.NotEmpty(t, manifest.Domains)
-	return manifest
+	var contract refreshDomainContract
+	require.NoError(t, json.Unmarshal(data, &contract))
+	require.Equal(t, 2, contract.Version)
+	require.NotEmpty(t, contract.Domains)
+	return contract
 }
 
-func manifestSnapshotDomains(t *testing.T) []string {
+func contractSnapshotDomains(t *testing.T) []string {
 	t.Helper()
-	manifest := loadRefreshDomainManifest(t)
-	result := make([]string, 0, len(manifest.Domains))
-	for _, domain := range manifest.Domains {
+	contract := loadRefreshDomainContract(t)
+	result := make([]string, 0, len(contract.Domains))
+	for _, domain := range contract.Domains {
 		if domain.Backend.Registration != "streamOnly" {
 			result = append(result, domain.Domain)
 		}
@@ -208,11 +208,11 @@ func manifestSnapshotDomains(t *testing.T) []string {
 	return result
 }
 
-func manifestResourceStreamDomains(t *testing.T) []string {
+func contractResourceStreamDomains(t *testing.T) []string {
 	t.Helper()
-	manifest := loadRefreshDomainManifest(t)
-	result := make([]string, 0, len(manifest.Domains))
-	for _, domain := range manifest.Domains {
+	contract := loadRefreshDomainContract(t)
+	result := make([]string, 0, len(contract.Domains))
+	for _, domain := range contract.Domains {
 		if domain.Backend.ResourceStream {
 			result = append(result, domain.Domain)
 		}

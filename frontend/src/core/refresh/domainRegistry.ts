@@ -1,9 +1,5 @@
-import {
-  CLUSTER_REFRESHERS,
-  NAMESPACE_REFRESHERS,
-  SYSTEM_REFRESHERS,
-  type StaticRefresherName,
-} from './refresherTypes';
+import refreshDomainContractJson from '../../../../backend/refresh/domain/refresh-domain-contract.json';
+import type { StaticRefresherName } from './refresherTypes';
 import type { RefreshDomain } from './types';
 
 export type DomainCategory = 'system' | 'cluster' | 'namespace';
@@ -26,217 +22,58 @@ export interface RefreshDomainDescriptor<D extends RefreshDomain = RefreshDomain
   priority?: number;
 }
 
-export const REFRESH_DOMAIN_DESCRIPTORS = {
-  namespaces: {
-    domain: 'namespaces',
-    refresherName: SYSTEM_REFRESHERS.namespaces,
-    category: 'system',
-    timing: { interval: 2000, cooldown: 1000, timeout: 10 },
-    priority: 0,
-  },
-  'cluster-overview': {
-    domain: 'cluster-overview',
-    refresherName: SYSTEM_REFRESHERS.clusterOverview,
-    category: 'system',
-    timing: { interval: 10000, cooldown: 1000, timeout: 10 },
-    priority: 3,
-  },
-  nodes: {
-    domain: 'nodes',
-    refresherName: CLUSTER_REFRESHERS.nodes,
-    category: 'cluster',
-    timing: { interval: 5000, cooldown: 1000, timeout: 10 },
-    metricsInterval: true,
-    diagnosticsStream: 'resources',
-    priority: 1,
-  },
-  'object-maintenance': {
-    domain: 'object-maintenance',
-    refresherName: SYSTEM_REFRESHERS.objectMaintenance,
-    category: 'system',
-    timing: { interval: 5000, cooldown: 1000, timeout: 10 },
-    priority: 2,
-  },
-  pods: {
-    domain: 'pods',
-    refresherName: SYSTEM_REFRESHERS.unifiedPods,
-    category: 'system',
-    timing: { interval: 5000, cooldown: 1000, timeout: 30 },
-    metricsInterval: true,
-    diagnosticsStream: 'resources',
-  },
-  'object-details': {
-    domain: 'object-details',
-    refresherName: SYSTEM_REFRESHERS.objectDetails,
-    category: 'system',
-    timing: { interval: 10000, cooldown: 1000, timeout: 10 },
-  },
-  'object-events': {
-    domain: 'object-events',
-    refresherName: SYSTEM_REFRESHERS.objectEvents,
-    category: 'system',
-    timing: { interval: 10000, cooldown: 1000, timeout: 10 },
-  },
-  'object-map': {
-    domain: 'object-map',
-    refresherName: SYSTEM_REFRESHERS.objectMap,
-    category: 'system',
-    timing: { interval: 2000, cooldown: 1000, timeout: 10 },
-  },
-  'object-yaml': {
-    domain: 'object-yaml',
-    refresherName: SYSTEM_REFRESHERS.objectYaml,
-    category: 'system',
-    timing: { interval: 5000, cooldown: 1000, timeout: 10 },
-  },
-  'object-helm-manifest': {
-    domain: 'object-helm-manifest',
-    refresherName: SYSTEM_REFRESHERS.objectHelmManifest,
-    category: 'system',
-    timing: { interval: 5000, cooldown: 1000, timeout: 10 },
-  },
-  'object-helm-values': {
-    domain: 'object-helm-values',
-    refresherName: SYSTEM_REFRESHERS.objectHelmValues,
-    category: 'system',
-    timing: { interval: 5000, cooldown: 1000, timeout: 10 },
-  },
-  'container-logs': {
-    domain: 'container-logs',
-    refresherName: SYSTEM_REFRESHERS.containerLogs,
-    category: 'system',
-    timing: { interval: 5000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'container-logs',
-  },
-  'cluster-rbac': {
-    domain: 'cluster-rbac',
-    refresherName: CLUSTER_REFRESHERS.rbac,
-    category: 'cluster',
-    timing: { interval: 10000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'resources',
-  },
-  'cluster-storage': {
-    domain: 'cluster-storage',
-    refresherName: CLUSTER_REFRESHERS.storage,
-    category: 'cluster',
-    timing: { interval: 10000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'resources',
-  },
-  'cluster-config': {
-    domain: 'cluster-config',
-    refresherName: CLUSTER_REFRESHERS.config,
-    category: 'cluster',
-    timing: { interval: 10000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'resources',
-  },
-  'cluster-crds': {
-    domain: 'cluster-crds',
-    refresherName: CLUSTER_REFRESHERS.crds,
-    category: 'cluster',
-    timing: { interval: 15000, cooldown: 1000, timeout: 60 },
-    diagnosticsStream: 'resources',
-  },
-  'cluster-custom': {
-    domain: 'cluster-custom',
-    refresherName: CLUSTER_REFRESHERS.custom,
-    category: 'cluster',
-    timing: { interval: 15000, cooldown: 1000, timeout: 60 },
-    diagnosticsStream: 'resources',
-  },
-  'cluster-events': {
-    domain: 'cluster-events',
-    refresherName: CLUSTER_REFRESHERS.events,
-    category: 'cluster',
-    timing: { interval: 3000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'events',
-  },
-  catalog: {
-    domain: 'catalog',
-    refresherName: CLUSTER_REFRESHERS.browse,
-    category: 'cluster',
-    timing: { interval: 15000, cooldown: 1500, timeout: 30 },
-    diagnosticsStream: 'catalog',
-    priority: 4,
-  },
-  'catalog-diff': {
-    domain: 'catalog-diff',
-    refresherName: CLUSTER_REFRESHERS.catalogDiff,
-    category: 'cluster',
-    timing: { interval: 15000, cooldown: 1500, timeout: 30 },
-  },
-  'namespace-workloads': {
-    domain: 'namespace-workloads',
-    refresherName: NAMESPACE_REFRESHERS.workloads,
-    category: 'namespace',
-    timing: { interval: 5000, cooldown: 500, timeout: 10 },
-    metricsInterval: true,
-    diagnosticsStream: 'resources',
-    priority: 5,
-  },
-  'namespace-config': {
-    domain: 'namespace-config',
-    refresherName: NAMESPACE_REFRESHERS.config,
-    category: 'namespace',
-    timing: { interval: 5000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'resources',
-  },
-  'namespace-network': {
-    domain: 'namespace-network',
-    refresherName: NAMESPACE_REFRESHERS.network,
-    category: 'namespace',
-    timing: { interval: 5000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'resources',
-  },
-  'namespace-rbac': {
-    domain: 'namespace-rbac',
-    refresherName: NAMESPACE_REFRESHERS.rbac,
-    category: 'namespace',
-    timing: { interval: 10000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'resources',
-  },
-  'namespace-storage': {
-    domain: 'namespace-storage',
-    refresherName: NAMESPACE_REFRESHERS.storage,
-    category: 'namespace',
-    timing: { interval: 10000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'resources',
-  },
-  'namespace-autoscaling': {
-    domain: 'namespace-autoscaling',
-    refresherName: NAMESPACE_REFRESHERS.autoscaling,
-    category: 'namespace',
-    timing: { interval: 5000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'resources',
-  },
-  'namespace-quotas': {
-    domain: 'namespace-quotas',
-    refresherName: NAMESPACE_REFRESHERS.quotas,
-    category: 'namespace',
-    timing: { interval: 10000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'resources',
-  },
-  'namespace-events': {
-    domain: 'namespace-events',
-    refresherName: NAMESPACE_REFRESHERS.events,
-    category: 'namespace',
-    timing: { interval: 3000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'events',
-  },
-  'namespace-custom': {
-    domain: 'namespace-custom',
-    refresherName: NAMESPACE_REFRESHERS.custom,
-    category: 'namespace',
-    timing: { interval: 10000, cooldown: 1000, timeout: 60 },
-    diagnosticsStream: 'resources',
-  },
-  'namespace-helm': {
-    domain: 'namespace-helm',
-    refresherName: NAMESPACE_REFRESHERS.helm,
-    category: 'namespace',
-    timing: { interval: 10000, cooldown: 1000, timeout: 10 },
-    diagnosticsStream: 'resources',
-  },
-} as const satisfies { [D in RefreshDomain]: RefreshDomainDescriptor<D> };
+export type RefreshOrchestratorKind =
+  | 'snapshot'
+  | 'resource-stream'
+  | 'event-stream'
+  | 'catalog-stream'
+  | 'container-logs-stream';
+
+export interface RefreshDomainContractEntry<D extends RefreshDomain = RefreshDomain> {
+  domain: D;
+  category: DomainCategory;
+  backend: {
+    registration: 'direct' | 'list' | 'listWatch' | 'streamOnly';
+    permission: 'runtime' | 'exempt' | 'stream-specific';
+    resourceStream: boolean;
+  };
+  frontend: {
+    refresherName: StaticRefresherName;
+    orchestrator: RefreshOrchestratorKind;
+    diagnosticsStream: StreamTelemetryName | null;
+    metricsInterval: boolean;
+    timing: RefresherTiming;
+    priority?: number;
+  };
+}
+
+export interface RefreshDomainContract {
+  version: 2;
+  domains: RefreshDomainContractEntry[];
+}
+
+export const refreshDomainContract = refreshDomainContractJson as RefreshDomainContract;
+
+export const REFRESH_DOMAIN_DESCRIPTORS = Object.fromEntries(
+  refreshDomainContract.domains.map((entry) => {
+    const descriptor: RefreshDomainDescriptor = {
+      domain: entry.domain,
+      refresherName: entry.frontend.refresherName,
+      category: entry.category,
+      timing: entry.frontend.timing,
+    };
+    if (entry.frontend.metricsInterval) {
+      descriptor.metricsInterval = true;
+    }
+    if (entry.frontend.diagnosticsStream) {
+      descriptor.diagnosticsStream = entry.frontend.diagnosticsStream;
+    }
+    if (entry.frontend.priority !== undefined) {
+      descriptor.priority = entry.frontend.priority;
+    }
+    return [entry.domain, descriptor];
+  })
+) as { [D in RefreshDomain]: RefreshDomainDescriptor<D> };
 
 export const refreshDomainDescriptors = Object.values(
   REFRESH_DOMAIN_DESCRIPTORS

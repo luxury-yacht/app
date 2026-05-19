@@ -55,20 +55,24 @@ Backend resource responsibilities are intentionally split:
 
 Refresh domain names and payload contracts live in:
 
+- `backend/refresh/domain/refresh-domain-contract.json`
 - `frontend/src/core/refresh/types.ts`
 - `frontend/src/core/refresh/refresherTypes.ts`
 - `frontend/src/core/refresh/domainRegistry.ts`
 
 Frontend domain registrations live in
+`frontend/src/core/refresh/domainRegistrations.ts` and are applied by
 `frontend/src/core/refresh/orchestrator.ts`. Backend registrations live in
 `backend/refresh/system/registrations.go`; stream routes are registered in
 `backend/refresh/system/streams.go`.
 
-Backend and frontend domain parity is guarded by
-`backend/refresh/system/testdata/refresh-domain-manifest.json` and the backend
-and frontend refresh-domain tests. When adding or changing a domain, keep
-backend registration kind, frontend orchestrator kind, resource-stream coverage,
-runtime permission policy, and diagnostics stream mapping aligned.
+`backend/refresh/domain/refresh-domain-contract.json` is the authored metadata
+contract for domain category, frontend refresher name, timing, diagnostics
+stream, orchestrator kind, backend registration kind, runtime permission policy,
+and resource-stream participation. `frontend/src/core/refresh/domainRegistry.ts`
+imports that contract directly and derives the frontend descriptor maps from it.
+Backend and frontend refresh-domain tests validate that explicit registration
+and behavior code still matches the contract.
 
 Current frontend domains are fully scoped and single-cluster by contract. The
 orchestrator normalizes every scope with `buildClusterScope` from
@@ -374,10 +378,11 @@ Domain changes must keep these surfaces synchronized:
 
 | Surface           | Required updates                                                                                      |
 | ----------------- | ----------------------------------------------------------------------------------------------------- |
-| Frontend domain   | `types.ts`, `DomainPayloadMap`, refresher name, and `domainRegistry.ts` metadata                     |
-| Backend domain    | Snapshot builder, `backend/refresh/system/registrations.go`, permission checks, tests                |
+| Contract metadata | `backend/refresh/domain/refresh-domain-contract.json`                                                 |
+| Frontend domain   | `types.ts`, `DomainPayloadMap`, `refresherTypes.ts`, and explicit orchestrator registration           |
+| Backend domain    | Snapshot builder, `backend/refresh/system/registrations.go`, permission checks, tests                 |
 | Streaming domain  | `streams.go`, frontend stream manager wiring, SSE handler or resource-stream registration/descriptors |
-| Table row payload | Shared Go row helper, matching `TestBuild*SummaryPopulatesAllFields`, TypeScript type, UI mapping    |
+| Table row payload | Shared Go row helper, matching `TestBuild*SummaryPopulatesAllFields`, TypeScript type, UI mapping     |
 
 For resource-stream domains, also prove row identity, update identity, sorting,
 drift keys, empty payloads, single-cluster subscription rejection, and background

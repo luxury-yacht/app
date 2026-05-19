@@ -85,19 +85,32 @@ To register a new domain, add it to `domainRegistrations()` in `registrations.go
 - Does it need informers? Register them in `backend/refresh/informer/factory.go`
 - What order? Place it after any domains it depends on
 
+### Shared Domain Contract
+
+Domain metadata is authored in
+`backend/refresh/domain/refresh-domain-contract.json`. It owns domain category,
+frontend refresher name, timing, diagnostics stream, orchestrator kind, backend
+registration kind, permission policy, and resource-stream participation.
+
+Keep behavior explicit in backend registration functions and frontend stream
+managers. `frontend/src/core/refresh/domainRegistry.ts` imports the contract
+directly and derives metadata maps from it; the contract removes duplicate
+metadata, not real behavior.
+
 ### Frontend
 
 Every backend domain has a frontend counterpart:
 
-| File                                                                         | What to update                                    |
-| ---------------------------------------------------------------------------- | ------------------------------------------------- |
-| `frontend/src/core/refresh/types.ts`                                         | Add to `RefreshDomain` union + `DomainPayloadMap` |
-| `frontend/src/core/refresh/refresherTypes.ts`                                | Add refresher name + map view to refresher        |
-| `frontend/src/core/refresh/refresherConfig.ts`                               | Add interval/cooldown/timeout config              |
-| `frontend/src/core/refresh/orchestrator.ts`                                  | Register domain with orchestrator                 |
-| `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts` | Add domain→refresher and domain→stream mappings   |
+| File                                                | What to update                                    |
+| --------------------------------------------------- | ------------------------------------------------- |
+| `frontend/src/core/refresh/types.ts`                | Add to `RefreshDomain` union + `DomainPayloadMap` |
+| `frontend/src/core/refresh/refresherTypes.ts`       | Add refresher name + map view to refresher        |
+| `frontend/src/core/refresh/domainRegistrations.ts`  | Register the explicit orchestrator/stream wiring  |
+| `backend/refresh/domain/refresh-domain-contract.json` | Add shared metadata consumed by backend tests and frontend registry |
 
-**These must stay synchronized.** A backend domain without a frontend mapping breaks diagnostics. A frontend refresher without a backend domain gets empty snapshots.
+**These must stay synchronized through the contract tests.** A backend domain
+without a frontend mapping breaks diagnostics. A frontend refresher without a
+backend domain gets empty snapshots.
 
 Resource WebSocket domains also require:
 
