@@ -30,6 +30,12 @@ func TestCleanupClusterRuntimeOperationsStopsSessionsAndCancelsActiveDrains(t *t
 			stopChan:           make(chan struct{}),
 		},
 	}
+	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["shell-a"]), func(reason string) error {
+		return app.closeShellSessionForRuntime("shell-a", reason)
+	})
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-a"]), func(reason string) error {
+		return app.stopPortForwardForRuntime("pf-a", reason)
+	})
 
 	store := nodemaintenance.GlobalStore()
 	activeDrain, err := store.StartDrainForClusterIfIdle("node-a-"+t.Name(), types.DrainNodeOptions{}, clusterID, "Cluster A")
@@ -38,6 +44,10 @@ func TestCleanupClusterRuntimeOperationsStopsSessionsAndCancelsActiveDrains(t *t
 	store.RegisterCancel(activeDrain.ID, func() { cancelled = true })
 	completedDrain := store.StartDrainForCluster("node-b-"+t.Name(), types.DrainNodeOptions{}, clusterID, "Cluster A")
 	completedDrain.Complete(nodemaintenance.DrainStatusSucceeded, "done")
+	app.registerRuntimeOperation(runtimeOperationFromDrainJob(activeDrain), func(reason string) error {
+		store.CancelDrainForClusterLifecycle(activeDrain.ID, clusterID, reason)
+		return nil
+	})
 
 	app.cleanupClusterRuntimeOperations(clusterID, "cluster disconnected")
 
@@ -73,9 +83,19 @@ func TestShutdownCleansRuntimeOperationsForActiveClusters(t *testing.T) {
 			stopChan:           make(chan struct{}),
 		},
 	}
+	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["shell-a"]), func(reason string) error {
+		return app.closeShellSessionForRuntime("shell-a", reason)
+	})
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-a"]), func(reason string) error {
+		return app.stopPortForwardForRuntime("pf-a", reason)
+	})
 	store := nodemaintenance.GlobalStore()
 	activeDrain, err := store.StartDrainForClusterIfIdle("node-a-"+t.Name(), types.DrainNodeOptions{}, clusterID, "Cluster")
 	require.NoError(t, err)
+	app.registerRuntimeOperation(runtimeOperationFromDrainJob(activeDrain), func(reason string) error {
+		store.CancelDrainForClusterLifecycle(activeDrain.ID, clusterID, reason)
+		return nil
+	})
 
 	app.Shutdown(context.Background())
 
@@ -115,6 +135,12 @@ func TestCloseClusterCleansRuntimeOperationsAndUpdatesSelection(t *testing.T) {
 			stopChan:           make(chan struct{}),
 		},
 	}
+	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["shell-a"]), func(reason string) error {
+		return app.closeShellSessionForRuntime("shell-a", reason)
+	})
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-a"]), func(reason string) error {
+		return app.stopPortForwardForRuntime("pf-a", reason)
+	})
 
 	require.NoError(t, app.CloseCluster(selection.String()))
 

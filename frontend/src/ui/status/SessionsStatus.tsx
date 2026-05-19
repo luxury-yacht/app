@@ -22,86 +22,11 @@ import {
   getRequestedObjectPanelTab,
   requestObjectPanelTab,
 } from '@modules/object-panel/objectPanelTabRequests';
-import {
-  readPortForwardSessions,
-  readRuntimeOperations,
-  readShellSessions,
-  requestAppState,
-} from '@/core/app-state-access';
 import { objectPanelId } from '@/core/contexts/ObjectPanelStateContext';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { useRuntimeOperationStatus, type ShellSessionInfo } from './runtimeOperationStatus';
 import '@modules/port-forward/PortForwardsPanel.css';
 import './SessionsStatus.css';
-
-interface ShellSessionInfo {
-  sessionId: string;
-  clusterId: string;
-  clusterName: string;
-  namespace: string;
-  podName: string;
-  container: string;
-  command?: string[];
-  status?: string;
-  startedAt?: string | { time?: string };
-}
-
-interface PortForwardSession {
-  id: string;
-  clusterId: string;
-  clusterName: string;
-  namespace: string;
-  podName: string;
-  containerPort: number;
-  localPort: number;
-  status: string;
-  statusReason?: string;
-  startedAt: string;
-}
-
-interface PortForwardStatusEvent {
-  sessionId: string;
-  status: string;
-  statusReason?: string;
-  localPort?: number;
-  podName?: string;
-}
-
-interface RuntimeOperation {
-  id: string;
-  type: string;
-  clusterId: string;
-  clusterName?: string;
-  status: string;
-  startedAt: string;
-}
-
-function parseTimestamp(value?: string | { time?: string }): number {
-  if (!value) return 0;
-  if (typeof value === 'string') {
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  }
-  if (typeof value.time === 'string') {
-    const parsed = Date.parse(value.time);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  }
-  return 0;
-}
-
-function getPortForwardStatusPriority(status: string): number {
-  switch (status) {
-    case 'active':
-      return 0;
-    case 'reconnecting':
-      return 1;
-    case 'error':
-      return 2;
-    case 'stopped':
-      return 3;
-    default:
-      return 4;
-  }
-}
 
 function renderPortForwardStatusIcon(status: string) {
   switch (status) {
@@ -136,9 +61,8 @@ const SessionsStatus: React.FC = () => {
   const { openWithObject } = useObjectPanel();
   const { selectedClusterId, selectedKubeconfigs, getClusterMeta, setActiveKubeconfig } =
     useKubeconfig();
-  const [shellSessions, setShellSessions] = useState<ShellSessionInfo[]>([]);
-  const [portForwardSessions, setPortForwardSessions] = useState<PortForwardSession[]>([]);
-  const [runtimeOperations, setRuntimeOperations] = useState<RuntimeOperation[]>([]);
+  const { shellSessions: filteredShellSessions, portForwardSessions: filteredPortForwards } =
+    useRuntimeOperationStatus(selectedClusterId);
   const [stoppingPortForwardIds, setStoppingPortForwardIds] = useState<Set<string>>(new Set());
   const [jumpingShellSessionId, setJumpingShellSessionId] = useState<string | null>(null);
   const [pendingShellJump, setPendingShellJump] = useState<{
@@ -146,42 +70,6 @@ const SessionsStatus: React.FC = () => {
     targetClusterId: string;
   } | null>(null);
   const [statusPopoverCloseSignal, setStatusPopoverCloseSignal] = useState(0);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const operations = await requestAppState({
-          resource: 'runtime-operations',
-          adapter: 'runtime-read',
-          read: () => readRuntimeOperations(),
-        });
-        setRuntimeOperations(operations || []);
-      } catch {
-        // Ignore initial load errors; runtime events will repopulate.
-      }
-      try {
-        const shellList = await requestAppState({
-          resource: 'shell-sessions',
-          adapter: 'runtime-read',
-          read: () => readShellSessions(),
-        });
-        setShellSessions(shellList || []);
-      } catch {
-        // Ignore initial load errors; runtime events will repopulate.
-      }
-      try {
-        const portForwardList = await requestAppState({
-          resource: 'port-forward-sessions',
-          adapter: 'runtime-read',
-          read: () => readPortForwardSessions(),
-        });
-        setPortForwardSessions(portForwardList || []);
-      } catch {
-        // Ignore initial load errors; runtime events will repopulate.
-      }
-    };
-    void load();
-  }, []);
 
   const handleStopPortForward = useCallback(async (sessionId: string) => {
     setStoppingPortForwardIds((prev) => new Set(prev).add(sessionId));
@@ -291,68 +179,6 @@ const SessionsStatus: React.FC = () => {
   );
 
   useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
-    }
-
-    const cancelShellList = runtime.EventsOn('object-shell:list', (...args: unknown[]) =>
-      setShellSessions((args[0] as ShellSessionInfo[]) || [])
-    ) as unknown as (() => void) | undefined;
-
-    const cancelPortForwardList = runtime.EventsOn('portforward:list', (...args: unknown[]) =>
-      setPortForwardSessions((args[0] as PortForwardSession[]) || [])
-    ) as unknown as (() => void) | undefined;
-
-    const cancelRuntimeOperationsList = runtime.EventsOn(
-      'runtime-operations:list',
-      (...args: unknown[]) => {
-        const operations = (args[0] as RuntimeOperation[]) || [];
-        setRuntimeOperations(operations);
-        const activeShellIds = new Set(
-          operations
-            .filter((operation) => operation.type === 'shell')
-            .map((operation) => operation.id)
-        );
-        const activePortForwardIds = new Set(
-          operations
-            .filter((operation) => operation.type === 'port-forward')
-            .map((operation) => operation.id)
-        );
-        setShellSessions((prev) => prev.filter((session) => activeShellIds.has(session.sessionId)));
-        setPortForwardSessions((prev) =>
-          prev.filter((session) => activePortForwardIds.has(session.id))
-        );
-      }
-    ) as unknown as (() => void) | undefined;
-
-    const cancelPortForwardStatus = runtime.EventsOn('portforward:status', (...args: unknown[]) => {
-      const event = args[0] as PortForwardStatusEvent | undefined;
-      if (!event?.sessionId) return;
-      setPortForwardSessions((prev) =>
-        prev.map((session) =>
-          session.id === event.sessionId
-            ? {
-                ...session,
-                status: event.status,
-                statusReason: event.statusReason,
-                ...(event.localPort !== undefined && { localPort: event.localPort }),
-                ...(event.podName !== undefined && { podName: event.podName }),
-              }
-            : session
-        )
-      );
-    }) as unknown as (() => void) | undefined;
-
-    return () => {
-      cancelShellList?.();
-      cancelPortForwardList?.();
-      cancelRuntimeOperationsList?.();
-      cancelPortForwardStatus?.();
-    };
-  }, []);
-
-  useEffect(() => {
     if (!pendingShellJump) {
       return;
     }
@@ -383,65 +209,14 @@ const SessionsStatus: React.FC = () => {
     if (!pendingShellJump) {
       return;
     }
-    const stillExists = shellSessions.some(
+    const stillExists = filteredShellSessions.some(
       (session) => session.sessionId === pendingShellJump.session.sessionId
     );
     if (!stillExists) {
       setPendingShellJump(null);
       setJumpingShellSessionId(null);
     }
-  }, [pendingShellJump, shellSessions]);
-
-  const filteredRuntimeOperations = useMemo(
-    () =>
-      selectedClusterId
-        ? runtimeOperations.filter((operation) => operation.clusterId === selectedClusterId)
-        : runtimeOperations,
-    [runtimeOperations, selectedClusterId]
-  );
-
-  const runtimeShellIds = useMemo(
-    () =>
-      new Set(
-        filteredRuntimeOperations
-          .filter((operation) => operation.type === 'shell')
-          .map((operation) => operation.id)
-      ),
-    [filteredRuntimeOperations]
-  );
-
-  const runtimePortForwardIds = useMemo(
-    () =>
-      new Set(
-        filteredRuntimeOperations
-          .filter((operation) => operation.type === 'port-forward')
-          .map((operation) => operation.id)
-      ),
-    [filteredRuntimeOperations]
-  );
-
-  const filteredShellSessions = useMemo(
-    () =>
-      shellSessions
-        .filter((session) => runtimeShellIds.has(session.sessionId))
-        .sort((a, b) => parseTimestamp(b.startedAt) - parseTimestamp(a.startedAt)),
-    [runtimeShellIds, shellSessions]
-  );
-
-  const filteredPortForwards = useMemo(
-    () =>
-      portForwardSessions
-        .filter((session) => runtimePortForwardIds.has(session.id))
-        .sort((a, b) => {
-          const priorityA = getPortForwardStatusPriority(a.status);
-          const priorityB = getPortForwardStatusPriority(b.status);
-          if (priorityA !== priorityB) {
-            return priorityA - priorityB;
-          }
-          return parseTimestamp(b.startedAt) - parseTimestamp(a.startedAt);
-        }),
-    [portForwardSessions, runtimePortForwardIds]
-  );
+  }, [filteredShellSessions, pendingShellJump]);
 
   const shellCount = filteredShellSessions.length;
   const portForwardCount = filteredPortForwards.length;

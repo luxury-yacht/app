@@ -282,9 +282,8 @@ func TestSyncClusterClientPool_CancelledContextSkipsCreation(t *testing.T) {
 }
 
 // TestSyncClusterClientPool_RemovalCleansUpShellAndPortForward verifies that
-// removing a stale cluster from the pool also calls StopClusterShellSessions
-// and StopClusterPortForwards. We verify this indirectly by pre-populating
-// sessions and confirming they are removed after sync.
+// removing a stale cluster from the pool cleans up registered runtime
+// operations through their workflow cleanup hooks.
 func TestSyncClusterClientPool_RemovalCleansUpShellAndPortForward(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
@@ -305,8 +304,12 @@ func TestSyncClusterClientPool_RemovalCleansUpShellAndPortForward(t *testing.T) 
 	app.portForwardSessionsMu.Lock()
 	app.portForwardSessions["pf-1"] = &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{ID: "pf-1", ClusterID: clusterID},
+		stopChan:           make(chan struct{}),
 	}
 	app.portForwardSessionsMu.Unlock()
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-1"]), func(reason string) error {
+		return app.stopPortForwardForRuntime("pf-1", reason)
+	})
 
 	// Sync with empty selections to remove the cluster.
 	err := app.syncClusterClientPoolWithContext(context.Background(), nil)

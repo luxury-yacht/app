@@ -390,6 +390,18 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 			stopChan: make(chan struct{}),
 		},
 	}
+	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["shell-a"]), func(reason string) error {
+		return app.closeShellSessionForRuntime("shell-a", reason)
+	})
+	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["shell-b"]), func(reason string) error {
+		return app.closeShellSessionForRuntime("shell-b", reason)
+	})
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-a"]), func(reason string) error {
+		return app.stopPortForwardForRuntime("pf-a", reason)
+	})
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-b"]), func(reason string) error {
+		return app.stopPortForwardForRuntime("pf-b", reason)
+	})
 
 	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionB.String()}))
 

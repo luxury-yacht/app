@@ -170,6 +170,38 @@ func TestCancelDrainForClusterMarksJobAndCallsCancel(t *testing.T) {
 	}
 }
 
+func TestCancelDrainForClusterLifecycleCancelsOnlyRequestedJob(t *testing.T) {
+	store := NewStore(5)
+	jobA := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	jobB := store.StartDrainForCluster("worker-2", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	jobOtherCluster := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-b", "Cluster B")
+	ctx, cancel := context.WithCancel(context.Background())
+	store.RegisterCancel(jobA.ID, cancel)
+
+	if !store.CancelDrainForClusterLifecycle(jobA.ID, "cluster-a", "cluster disconnected") {
+		t.Fatalf("expected lifecycle cancellation to succeed")
+	}
+	if ctx.Err() == nil {
+		t.Fatalf("expected cancel function to be invoked")
+	}
+
+	cancelled, ok := store.JobForCluster(jobA.ID, "cluster-a")
+	if !ok {
+		t.Fatalf("expected cancelled job")
+	}
+	if cancelled.Status != DrainStatusCancelled {
+		t.Fatalf("expected cancelled status, got %s", cancelled.Status)
+	}
+	stillRunning, ok := store.JobForCluster(jobB.ID, "cluster-a")
+	if !ok || stillRunning.Status != DrainStatusRunning {
+		t.Fatalf("expected same-cluster peer job to remain running, got %+v", stillRunning)
+	}
+	otherCluster, ok := store.JobForCluster(jobOtherCluster.ID, "cluster-b")
+	if !ok || otherCluster.Status != DrainStatusRunning {
+		t.Fatalf("expected other-cluster job to remain running, got %+v", otherCluster)
+	}
+}
+
 func TestParseScope(t *testing.T) {
 	tests := []struct {
 		scope string

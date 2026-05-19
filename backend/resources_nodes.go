@@ -147,7 +147,7 @@ func (a *App) startDrainNodeAction(target ObjectActionTargetRef, options DrainNo
 		return "", err
 	}
 	a.registerRuntimeOperation(runtimeOperationFromDrainJob(job), func(reason string) error {
-		nodemaintenance.GlobalStore().CancelActiveDrainsForClusterLifecycle(deps.ClusterID, reason)
+		nodemaintenance.GlobalStore().CancelDrainForClusterLifecycle(job.ID, deps.ClusterID, reason)
 		return nil
 	})
 	a.clearNodeCaches(selectionKey, target.Name)

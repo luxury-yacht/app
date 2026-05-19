@@ -15,6 +15,10 @@ Current runtime operation types:
   `runtime-operations:list` event.
 - `ListRuntimeOperations()` is the Wails runtime-read command for the current
   operation list.
+- Cluster lifecycle cleanup uses the registry as the active-operation envelope:
+  it removes registered operations for the cluster and invokes their cleanup
+  hooks. It does not separately scan workflow detail stores to discover active
+  shell sessions, port forwards, or drains.
 - Every concrete Kubernetes target must include the full object reference:
   `clusterId`, `group`, `version`, `kind`, `namespace` when namespaced, and
   `name`.
@@ -78,6 +82,11 @@ Cleanup behavior:
 - `frontend/src/ui/status/SessionsStatus.tsx` reads
   `runtime-operations:list` for shell and port-forward presence plus
   removed-cluster cleanup. It does not render drain detail rows.
+- `frontend/src/ui/status/runtimeOperationStatus.ts` reduces
+  `runtime-operations:list`, `object-shell:list`, `portforward:list`, and
+  `portforward:status` events into the shell/port-forward rows shown by the
+  status UI. Runtime operations decide presence; workflow events only add
+  details.
 - Shell and port-forward rows may still use workflow-specific list events for
   details such as container, command, pod name, local port, and status reason.
 - Active drains stay visible to lifecycle cleanup and cluster-close warnings,
