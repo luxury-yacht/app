@@ -124,12 +124,46 @@ Cluster activation can come from:
 - Startup persistence (previously selected clusters)
 - Kubeconfig dropdown
 - Command palette
+- Favorites and other saved navigation
 
 Cluster deactivation can come from:
 
 - Kubeconfig dropdown
 - Cluster tab close button
 - `Ctrl+W` / `Cmd+W` keyboard shortcut
+- Command palette
+
+### Unified Selection Transitions
+
+`frontend/src/modules/kubernetes/config/KubeconfigContext.tsx` owns the
+frontend transition for opening, closing, replacing, and clearing cluster tabs.
+Every user-invoked way to open or close a cluster must enter that same context
+transition path:
+
+- Open a selected-but-inactive cluster by calling `setActiveKubeconfig`.
+- Open or activate a cluster tab from another surface by calling
+  `openKubeconfig`.
+- Close one cluster tab by calling `closeKubeconfig`.
+- Replace or clear the selected set, such as from the kubeconfig selector, by
+  calling `setSelectedKubeconfigs`.
+
+Those public context methods all delegate to the same internal selection
+transition. Consumers must not locally splice `selectedKubeconfigs`, call
+generated backend selection methods directly, or call backend `CloseCluster`
+for frontend tab UX. If a new close/open affordance is added, wire only the
+intent into the context method so next-active-tab selection, optimistic UI,
+backend persistence, refresh context updates, event emission, and rollback
+behavior stay identical across all surfaces.
+
+The backend still owns the durable selection mutation. The unified frontend
+transition persists the normalized selection through the backend selection API,
+and backend selection cleanup tears down removed-cluster clients, refresh
+subsystems, catalog state, and runtime operations.
+
+Tests for cluster-tab lifecycle changes should cover both explicit
+open/close actions and replacement/removal through the selector path. They must
+assert the user-visible behavior, not just the individual caller, because the
+invariant is that all paths share the same transition semantics.
 
 ### Selection Events
 

@@ -55,6 +55,11 @@ add/remove behavior.
       diagnostics consistently.
 - [ ] Closing/removing a cluster cleans up streams, sessions, stale scopes, and
       catalog state for that cluster.
+- [ ] Every frontend cluster-tab open/close affordance routes through
+      `KubeconfigContext`'s unified selection transition (`openKubeconfig`,
+      `closeKubeconfig`, or `setSelectedKubeconfigs`); do not splice selected
+      clusters locally or call generated backend selection/close commands from
+      UI surfaces.
 - [ ] Tests cover at least one multi-cluster or auth-failure transition.
 - [ ] Non-doc changes pass `mage qc:prerelease`.
 

@@ -55,8 +55,10 @@ older in-flight empty snapshot that started before the drain job was recorded.
 ## Cleanup Contract
 
 Cluster removal, kubeconfig clearing, explicit cluster-tab close, client-pool
-teardown, and app shutdown all go through the backend cluster runtime cleanup
-path.
+teardown, and app shutdown all go through backend cluster runtime cleanup.
+Frontend-initiated cluster tab opens, closes, replacements, and clears must
+first go through the unified kubeconfig selection transition described in
+[`docs/architecture/multi-cluster.md#unified-selection-transitions`](../architecture/multi-cluster.md#unified-selection-transitions).
 
 Cleanup behavior:
 
@@ -78,11 +80,12 @@ Cleanup behavior:
   removed-cluster cleanup. It does not render drain detail rows.
 - Shell and port-forward rows may still use workflow-specific list events for
   details such as container, command, pod name, local port, and status reason.
-- Active drains stay visible to lifecycle cleanup and close-cluster warnings,
+- Active drains stay visible to lifecycle cleanup and cluster-close warnings,
   but drain progress, history, and detail presentation remain owned by the node
   maintenance workflow.
-- `frontend/src/ui/layout/ClusterTabs.tsx` calls `CloseCluster(...)` instead of
-  directly stopping shell sessions or port forwards.
+- `frontend/src/ui/layout/ClusterTabs.tsx` delegates close intent to
+  `closeKubeconfig(...)` instead of directly stopping shell sessions, port
+  forwards, drains, or calling generated backend commands.
 - Cluster close confirmation may use the runtime operation list for total
   active-operation counts and type breakdowns, including active drain jobs.
 

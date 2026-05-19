@@ -54,12 +54,12 @@ Composition — no class inheritance.
                                 for cluster-tab    for dockable-tab
                                 reorder;           reorder, cross-strip
                                 persisted order;   moves; static custom
-                                port-forward       drag preview via
-                                confirmation       setDragImage; kind
-                                modal;             color indicators;
-                                auto-hide < 2      empty-space drop
-                                clusters.          target mounted on
-                                                   AppLayout's <main>.
+                                delegates close    drag preview via
+                                lifecycle to       setDragImage; kind
+                                kubeconfig         color indicators;
+                                context;           empty-space drop
+                                auto-hide < 2      target mounted on
+                                clusters.          AppLayout's <main>.
 ```
 
 The **drag coordinator** adds two hooks (`useTabDragSource` /
@@ -685,8 +685,7 @@ First drag-capable wrapper. Owns:
   `frontend/src/core/persistence/clusterTabOrder.ts`.
 - Label-collision fallback — when two kubeconfigs share a display name,
   the second one's label falls back to its `path:context` id.
-- Close button with a port-forward confirmation modal (via
-  `ConfirmationModal` from `@shared/components/modals`).
+- Close button wiring that delegates close intent to `KubeconfigContext`.
 - `ResizeObserver` that publishes `--cluster-tabs-height` on `<html>`
   so dockable panels can offset correctly.
 - Auto-hide: if `orderedTabs.length < 2` the component returns `null`.
@@ -724,28 +723,31 @@ const assignRootRef = useCallback(
 ```
 
 ```tsx
-<>
-  <div ref={assignRootRef} className="cluster-tabs-wrapper">
-    <Tabs
-      aria-label="Cluster Tabs"
-      tabs={tabDescriptors}
-      activeId={activeTabId}
-      onActivate={(id) => {
-        const tab = tabsById.get(id);
-        if (tab) handleTabClick(tab.selection);
-      }}
-      dropInsertIndex={dropInsertIndex}
-      className="cluster-tabs"
-    />
-  </div>
-  <ConfirmationModal ... />
-</>
+<div ref={assignRootRef} className="cluster-tabs-wrapper">
+  <Tabs
+    aria-label="Cluster Tabs"
+    tabs={tabDescriptors}
+    activeId={activeTabId}
+    onActivate={(id) => {
+      const tab = tabsById.get(id);
+      if (tab) handleTabClick(tab.selection);
+    }}
+    dropInsertIndex={dropInsertIndex}
+    className="cluster-tabs"
+  />
+</div>
 ```
 
 Each tab descriptor carries `title` (tooltip for truncated labels),
 `closeIcon: <CloseIcon width={10} height={10} />`,
 `closeAriaLabel: \`Close ${tab.label}\``, `onClose`, and the drag source
 props spread into `extraProps`.
+
+`ClusterTabs` must not own cluster lifecycle semantics. Its `onClose`
+handler only delegates to `closeKubeconfig`; the shared `<Tabs>` component
+only emits the close intent. The authoritative contract for cluster tab
+open/close routing lives in
+[`docs/architecture/multi-cluster.md#unified-selection-transitions`](../architecture/multi-cluster.md#unified-selection-transitions).
 
 **Important**: `makeDragSource` has a new identity on every render. Do
 NOT wrap `tabDescriptors.map()` in `useMemo` with `makeDragSource` as a

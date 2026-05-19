@@ -63,13 +63,14 @@ Read:
 - [ ] Streams, sessions, and long-running operations clean up on close,
       disconnect, cluster removal, auth failure, and app shutdown.
 - [ ] Cancellation/stop paths are idempotent.
-- [ ] Cluster-tab close uses the backend close-cluster lifecycle path instead
-      of directly orchestrating per-workflow cleanup from the frontend.
+- [ ] Frontend cluster-tab close delegates to `KubeconfigContext`'s unified
+      selection transition; backend selection cleanup handles removed-cluster
+      runtime operations instead of per-workflow cleanup in UI surfaces.
 - [ ] Shell backlog, port-forward details, and drain history remain owned by
       their workflow stores; the runtime registry only owns global presence and
       cleanup.
 - [ ] Sessions status renders shell sessions and port forwards only; active
-      drains may appear in close-cluster warnings but not as Sessions panel
+      drains may appear in cluster-close warnings but not as Sessions panel
       detail rows.
 - [ ] `object-maintenance` keeps aggregate and node-specific scopes active
       concurrently so node drain indicators and an open drain modal do not reset

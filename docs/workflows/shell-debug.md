@@ -51,8 +51,9 @@ The same backend session manager powers both flows.
     reads `runtime-operations:list` for shell/port-forward presence and uses
     workflow lists for shell/port-forward row details.
 - `frontend/src/ui/layout/ClusterTabs.tsx`
-  - Calls the backend close-cluster command so runtime operation cleanup and
-    selected-kubeconfig updates happen through one backend lifecycle path.
+  - Delegates close intent to `KubeconfigContext`; the shared frontend
+    selection transition persists the new selected set, and backend selection
+    cleanup stops removed-cluster runtime operations.
 
 ## Backend architecture
 
@@ -219,8 +220,9 @@ Container discovery/normalization:
 - All backend shell/debug methods require `clusterID`.
 - Session records include `clusterId` + `clusterName`.
 - Session panels can attach across clusters by switching active cluster first.
-- Closing a cluster tab calls `CloseCluster(selectionOrClusterID)`, which runs
-  backend runtime-operation cleanup before updating selected kubeconfigs.
+- Closing or removing a cluster tab flows through the shared frontend
+  kubeconfig selection transition. Backend selection cleanup then stops
+  runtime operations for clusters that left the selected set.
 
 ### Operation lifecycle registry
 
@@ -269,5 +271,6 @@ Recommended checks after changes:
 2. Reattach without duplicate backlog/live output.
 3. Debug container creation success + error paths.
 4. Cross-cluster attach from the runtime status panel.
-5. Cluster-tab close terminates cluster-scoped runtime operations through the
-   backend close-cluster command.
+5. Cluster-tab close and selector removal terminate cluster-scoped runtime
+   operations through the same kubeconfig selection transition and backend
+   cleanup path.
