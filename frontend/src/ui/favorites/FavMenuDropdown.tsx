@@ -113,7 +113,7 @@ const FavMenuDropdown: React.FC = () => {
         {
           selectedKubeconfigs: kubeconfigCtx.selectedKubeconfigs,
           selectedClusterId: kubeconfigCtx.selectedClusterId,
-          setSelectedKubeconfigs: kubeconfigCtx.setSelectedKubeconfigs,
+          openKubeconfig: kubeconfigCtx.openKubeconfig,
           setActiveKubeconfig: kubeconfigCtx.setActiveKubeconfig,
           getClusterMeta: kubeconfigCtx.getClusterMeta,
           setPendingFavorite,

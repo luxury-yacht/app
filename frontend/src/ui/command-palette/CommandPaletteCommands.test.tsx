@@ -24,6 +24,7 @@ const { mocks } = vi.hoisted(() => ({
       selectedKubeconfig: '',
       selectedClusterId: '',
       setSelectedKubeconfigs: vi.fn(),
+      openKubeconfig: vi.fn(),
       closeKubeconfig: vi.fn(),
       setActiveKubeconfig: vi.fn(),
       getClusterMeta: vi.fn(() => ({ id: '', name: '' })),
@@ -164,6 +165,8 @@ describe('CommandPaletteCommands', () => {
     mocks.kubeconfig.selectedKubeconfig = '';
     mocks.kubeconfig.setActiveKubeconfig.mockReset();
     mocks.kubeconfig.setSelectedKubeconfigs.mockReset();
+    mocks.kubeconfig.openKubeconfig.mockReset();
+    mocks.kubeconfig.openKubeconfig.mockResolvedValue(undefined);
     mocks.kubeconfig.closeKubeconfig.mockReset();
     mocks.kubeconfig.closeKubeconfig.mockResolvedValue(undefined);
     mocks.kubeconfig.loadKubeconfigs.mockReset();
@@ -202,7 +205,8 @@ describe('CommandPaletteCommands', () => {
     command?.action();
 
     expect(mocks.kubeconfig.setActiveKubeconfig).not.toHaveBeenCalled();
-    expect(mocks.kubeconfig.setSelectedKubeconfigs).toHaveBeenCalledWith(['/kube/alpha:dev']);
+    expect(mocks.kubeconfig.openKubeconfig).toHaveBeenCalledWith('/kube/alpha:dev');
+    expect(mocks.kubeconfig.setSelectedKubeconfigs).not.toHaveBeenCalled();
 
     unmount();
   });

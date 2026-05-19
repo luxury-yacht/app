@@ -33,6 +33,7 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
 }));
 
 const mockSetSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
+const mockOpenKubeconfig = vi.fn().mockResolvedValue(undefined);
 const mockSetActiveKubeconfig = vi.fn();
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -44,6 +45,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
     selectedClusterIds: ['cluster-a:ctx'],
     kubeconfigsLoading: false,
     setSelectedKubeconfigs: mockSetSelectedKubeconfigs,
+    openKubeconfig: mockOpenKubeconfig,
     setActiveKubeconfig: mockSetActiveKubeconfig,
     setSelectedKubeconfig: vi.fn().mockResolvedValue(undefined),
     getClusterMeta: vi.fn(() => ({ id: '', name: '' })),

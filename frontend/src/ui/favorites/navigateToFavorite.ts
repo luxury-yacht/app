@@ -13,7 +13,7 @@ import type { Favorite } from '@/core/persistence/favorites';
 export interface NavigationContexts {
   selectedKubeconfigs: string[];
   selectedClusterId?: string;
-  setSelectedKubeconfigs: (configs: string[]) => Promise<void>;
+  openKubeconfig: (selection: string) => Promise<void>;
   setActiveKubeconfig: (config: string) => void;
   getClusterMeta?: (config: string) => { id: string; name: string };
   /** Set the pending favorite so FavoritesContext can restore navigation + filter state. */
@@ -37,7 +37,7 @@ export function navigateToFavorite(
   const {
     selectedKubeconfigs,
     selectedClusterId,
-    setSelectedKubeconfigs,
+    openKubeconfig,
     setActiveKubeconfig,
     getClusterMeta,
     setPendingFavorite,
@@ -63,8 +63,7 @@ export function navigateToFavorite(
       favoriteClusterId && selectedClusterId ? selectedClusterId === favoriteClusterId : false;
     const alreadyOpen = selectedKubeconfigs.includes(clusterSelection);
     if (!alreadyOpen) {
-      const updated = [...selectedKubeconfigs, clusterSelection];
-      void setSelectedKubeconfigs(updated);
+      void openKubeconfig(clusterSelection);
     } else if (!alreadyActive) {
       setActiveKubeconfig(clusterSelection);
     }

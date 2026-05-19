@@ -19,7 +19,7 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
 
 describe('navigateToFavorite', () => {
   it('uses clusterId to avoid reactivating an already active favorite cluster', () => {
-    const setSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
+    const openKubeconfig = vi.fn().mockResolvedValue(undefined);
     const setActiveKubeconfig = vi.fn();
     const setPendingFavorite = vi.fn();
 
@@ -31,18 +31,18 @@ describe('navigateToFavorite', () => {
     navigateToFavorite(favorite, {
       selectedKubeconfigs: ['/different/path:dev'],
       selectedClusterId: 'alpha:dev',
-      setSelectedKubeconfigs,
+      openKubeconfig,
       setActiveKubeconfig,
       setPendingFavorite,
     });
 
     expect(setPendingFavorite).toHaveBeenCalledWith(favorite);
-    expect(setSelectedKubeconfigs).not.toHaveBeenCalled();
+    expect(openKubeconfig).not.toHaveBeenCalled();
     expect(setActiveKubeconfig).not.toHaveBeenCalled();
   });
 
   it('can resolve an open cluster selection from a persisted clusterId', () => {
-    const setSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
+    const openKubeconfig = vi.fn().mockResolvedValue(undefined);
     const setActiveKubeconfig = vi.fn();
     const setPendingFavorite = vi.fn();
 
@@ -54,7 +54,7 @@ describe('navigateToFavorite', () => {
     navigateToFavorite(favorite, {
       selectedKubeconfigs: ['/kube/alpha:dev', '/kube/beta:prod'],
       selectedClusterId: 'alpha:dev',
-      setSelectedKubeconfigs,
+      openKubeconfig,
       setActiveKubeconfig,
       getClusterMeta: (selection) =>
         selection === '/kube/beta:prod' ? { id: 'beta:prod', name: 'prod' } : { id: '', name: '' },
@@ -62,23 +62,23 @@ describe('navigateToFavorite', () => {
     });
 
     expect(setActiveKubeconfig).toHaveBeenCalledWith('/kube/beta:prod');
-    expect(setSelectedKubeconfigs).not.toHaveBeenCalled();
+    expect(openKubeconfig).not.toHaveBeenCalled();
   });
 
   it('does not issue a delayed activation after opening a favorite cluster', async () => {
-    const setSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
+    const openKubeconfig = vi.fn().mockResolvedValue(undefined);
     const setActiveKubeconfig = vi.fn();
     const setPendingFavorite = vi.fn();
 
     navigateToFavorite(makeFavorite(), {
       selectedKubeconfigs: ['/kube/beta:prod'],
       selectedClusterId: 'beta:prod',
-      setSelectedKubeconfigs,
+      openKubeconfig,
       setActiveKubeconfig,
       setPendingFavorite,
     });
 
-    expect(setSelectedKubeconfigs).toHaveBeenCalledWith(['/kube/beta:prod', '/kube/alpha:dev']);
+    expect(openKubeconfig).toHaveBeenCalledWith('/kube/alpha:dev');
     await Promise.resolve();
     expect(setActiveKubeconfig).not.toHaveBeenCalled();
   });
