@@ -17,7 +17,7 @@ func (m *Manager) registerNetworkStreams(factory *informer.Factory) {
 		if m.canListWatch("discovery.k8s.io", "endpointslices") {
 			sliceInformer := shared.Discovery().V1().EndpointSlices()
 			m.sliceLister = sliceInformer.Lister()
-			m.addResourceEventHandler(sliceInformer.Informer(), (*Manager).handleEndpointSlice)
+			m.addRelatedResourceEventHandler(sliceInformer.Informer(), (*Manager).handleEndpointSliceEvent)
 		}
 		if m.canListWatch("networking.k8s.io", "ingresses") {
 			ingressInformer := shared.Networking().V1().Ingresses()

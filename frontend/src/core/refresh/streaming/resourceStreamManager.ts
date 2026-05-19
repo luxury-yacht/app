@@ -98,6 +98,8 @@ type ServerMessage = {
   name?: string;
   namespace?: string;
   kind?: string;
+  apiGroup?: string;
+  apiVersion?: string;
   row?: unknown;
   error?: string;
   errorDetails?: PermissionDeniedStatus;

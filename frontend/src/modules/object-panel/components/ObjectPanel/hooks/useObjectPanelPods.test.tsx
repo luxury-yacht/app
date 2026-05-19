@@ -110,12 +110,12 @@ describe('useObjectPanelPods', () => {
 
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'pods',
-      'alpha|workload:team-a:Deployment:api',
+      'alpha|workload:team-a:apps:v1:Deployment:api',
       true
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'pods',
-      'alpha|workload:team-a:Deployment:api',
+      'alpha|workload:team-a:apps:v1:Deployment:api',
       { isManual: false }
     );
   });

@@ -16,6 +16,8 @@ export type ResourceStreamRowUpdate = {
   namespace?: string;
   kind?: string;
   name?: string;
+  apiGroup?: string;
+  apiVersion?: string;
   row?: unknown;
 };
 

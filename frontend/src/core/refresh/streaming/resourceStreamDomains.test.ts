@@ -63,7 +63,16 @@ const samplePayloads: Record<ResourceDomain, unknown> = {
     resources: [{ clusterId: 'cluster-a', namespace: 'default', kind: 'Role', name: 'role-a' }],
   },
   'namespace-custom': {
-    resources: [{ clusterId: 'cluster-a', namespace: 'default', kind: 'Widget', name: 'widget-a' }],
+    resources: [
+      {
+        clusterId: 'cluster-a',
+        namespace: 'default',
+        apiGroup: 'example.com',
+        apiVersion: 'v1',
+        kind: 'Widget',
+        name: 'widget-a',
+      },
+    ],
   },
   'namespace-helm': {
     releases: [{ clusterId: 'cluster-a', namespace: 'default', name: 'release-a' }],
@@ -106,7 +115,15 @@ const samplePayloads: Record<ResourceDomain, unknown> = {
     definitions: [{ clusterId: 'cluster-a', name: 'widgets.example.com' }],
   },
   'cluster-custom': {
-    resources: [{ clusterId: 'cluster-a', kind: 'ClusterWidget', name: 'widget-a' }],
+    resources: [
+      {
+        clusterId: 'cluster-a',
+        apiGroup: 'example.com',
+        apiVersion: 'v1',
+        kind: 'ClusterWidget',
+        name: 'widget-a',
+      },
+    ],
   },
   nodes: {
     nodes: [{ clusterId: 'cluster-a', name: 'node-a' }],
@@ -119,7 +136,7 @@ const expectedSnapshotKeys: Record<ResourceDomain, string[]> = {
   'namespace-config': ['cluster-a::default::ConfigMap::config-a'],
   'namespace-network': ['cluster-a::default::Service::svc-a'],
   'namespace-rbac': ['cluster-a::default::Role::role-a'],
-  'namespace-custom': ['cluster-a::default::Widget::widget-a'],
+  'namespace-custom': ['cluster-a::default::example.com::v1::Widget::widget-a'],
   'namespace-helm': ['cluster-a::default::release-a'],
   'namespace-autoscaling': ['cluster-a::default::HorizontalPodAutoscaler::hpa-a'],
   'namespace-quotas': ['cluster-a::default::ResourceQuota::quota-a'],
@@ -128,7 +145,7 @@ const expectedSnapshotKeys: Record<ResourceDomain, string[]> = {
   'cluster-storage': ['cluster-a::pv-a'],
   'cluster-config': ['cluster-a::StorageClass::standard'],
   'cluster-crds': ['cluster-a::widgets.example.com'],
-  'cluster-custom': ['cluster-a::ClusterWidget::widget-a'],
+  'cluster-custom': ['cluster-a::example.com::v1::ClusterWidget::widget-a'],
   nodes: ['cluster-a::node-a'],
 };
 
@@ -156,8 +173,8 @@ describe('resource stream domain descriptors', () => {
   it('normalizes scopes through descriptor scope kinds', () => {
     expect(normalizeResourceScope('pods', 'namespace:*')).toBe('namespace:all');
     expect(normalizeResourceScope('pods', 'node:node-a')).toBe('node:node-a');
-    expect(normalizeResourceScope('pods', 'workload:default:Deployment:web')).toBe(
-      'workload:default:Deployment:web'
+    expect(normalizeResourceScope('pods', 'workload:default:apps:v1:Deployment:web')).toBe(
+      'workload:default:apps:v1:Deployment:web'
     );
 
     resourceStreamDomainDescriptors
@@ -201,6 +218,77 @@ describe('resource stream domain descriptors', () => {
       const emptyPayload = descriptor.collection.emptyPayload('empty-cluster');
       expect(descriptor.buildSnapshotKeys(emptyPayload, 'empty-cluster')).toEqual(new Set());
     });
+  });
+
+  it('keys custom resources by full GVK so same-kind resources do not collide', () => {
+    const namespaceDescriptor = getResourceStreamDomainDescriptor('namespace-custom');
+    const namespacePayload = {
+      clusterId: 'cluster-a',
+      resources: [
+        {
+          clusterId: 'cluster-a',
+          namespace: 'default',
+          apiGroup: 'alpha.example.com',
+          apiVersion: 'v1',
+          kind: 'Widget',
+          name: 'shared',
+        },
+        {
+          clusterId: 'cluster-a',
+          namespace: 'default',
+          apiGroup: 'beta.example.com',
+          apiVersion: 'v1',
+          kind: 'Widget',
+          name: 'shared',
+        },
+      ],
+    };
+    expect(
+      Array.from(namespaceDescriptor.buildSnapshotKeys(namespacePayload, 'cluster-a')).sort()
+    ).toEqual([
+      'cluster-a::default::alpha.example.com::v1::Widget::shared',
+      'cluster-a::default::beta.example.com::v1::Widget::shared',
+    ]);
+    expect(
+      namespaceDescriptor.collection.buildUpdateKey(
+        {
+          clusterId: 'cluster-a',
+          namespace: 'default',
+          apiGroup: 'beta.example.com',
+          apiVersion: 'v1',
+          kind: 'Widget',
+          name: 'shared',
+        },
+        'fallback-cluster'
+      )
+    ).toBe('cluster-a::default::beta.example.com::v1::Widget::shared');
+
+    const clusterDescriptor = getResourceStreamDomainDescriptor('cluster-custom');
+    const clusterPayload = {
+      clusterId: 'cluster-a',
+      resources: [
+        {
+          clusterId: 'cluster-a',
+          apiGroup: 'alpha.example.com',
+          apiVersion: 'v1',
+          kind: 'ClusterWidget',
+          name: 'shared',
+        },
+        {
+          clusterId: 'cluster-a',
+          apiGroup: 'beta.example.com',
+          apiVersion: 'v1',
+          kind: 'ClusterWidget',
+          name: 'shared',
+        },
+      ],
+    };
+    expect(
+      Array.from(clusterDescriptor.buildSnapshotKeys(clusterPayload, 'cluster-a')).sort()
+    ).toEqual([
+      'cluster-a::alpha.example.com::v1::ClusterWidget::shared',
+      'cluster-a::beta.example.com::v1::ClusterWidget::shared',
+    ]);
   });
 
   it('exposes domain guards from the descriptor table', () => {

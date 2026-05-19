@@ -61,9 +61,17 @@ interface ScaleState {
   error: string | null;
 }
 
+interface ScaleConfirmationState {
+  object: ObjectActionData;
+  replicas: number;
+}
+
 const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
 
 const extractDesiredReplicas = (object: ObjectActionData): number => {
+  if (typeof object.desiredReplicas === 'number' && Number.isFinite(object.desiredReplicas)) {
+    return clampReplicas(object.desiredReplicas);
+  }
   const ready = object.ready?.trim();
   if (!ready) return 0;
   const segments = ready.split('/');
@@ -121,6 +129,7 @@ export const useObjectActionController = ({
   const [triggerTarget, setTriggerTarget] = useState<ObjectActionData | null>(null);
   const [rollbackTarget, setRollbackTarget] = useState<ObjectActionData | null>(null);
   const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
+  const [scaleConfirmation, setScaleConfirmation] = useState<ScaleConfirmationState | null>(null);
   const [scaleState, setScaleState] = useState<ScaleState>({
     object: null,
     value: 1,
@@ -243,20 +252,7 @@ export const useObjectActionController = ({
               : undefined),
           onScaleToZero:
             handlerOverrides?.onScaleToZero ??
-            (useDefaultHandlers
-              ? async () => {
-                  try {
-                    await runObjectScale(actionTargetFor(object, 'scale'), 0);
-                    onAfterAction?.(object, 'scale');
-                  } catch (error) {
-                    errorHandler.handle(error, {
-                      action: 'scale',
-                      kind: object.kind,
-                      name: object.name,
-                    });
-                  }
-                }
-              : undefined),
+            (useDefaultHandlers ? () => setScaleConfirmation({ object, replicas: 0 }) : undefined),
           onResumeFromZero:
             handlerOverrides?.onResumeFromZero ??
             (useDefaultHandlers
@@ -415,6 +411,20 @@ export const useObjectActionController = ({
     await applyScaleValue(scaleState.value);
   }, [applyScaleValue, scaleState.value]);
 
+  const confirmScaleToZero = useCallback(async () => {
+    const confirmation = scaleConfirmation;
+    if (!confirmation) return;
+    const { object, replicas } = confirmation;
+    try {
+      await runObjectScale(actionTargetFor(object, 'scale'), replicas);
+      onAfterAction?.(object, 'scale');
+    } catch (error) {
+      errorHandler.handle(error, { action: 'scale', kind: object.kind, name: object.name });
+    } finally {
+      setScaleConfirmation(null);
+    }
+  }, [onAfterAction, scaleConfirmation]);
+
   const confirmation = useMemo(() => {
     if (restartTarget) {
       return {
@@ -451,8 +461,29 @@ export const useObjectActionController = ({
         onCancel: () => setTriggerTarget(null),
       };
     }
+    if (scaleConfirmation) {
+      const object = scaleConfirmation.object;
+      return {
+        title: 'Scale to 0',
+        message: `Scale ${object.kind.toLowerCase()} "${object.name}" to 0 replicas?`,
+        warning: 'This will stop currently running pods for this workload.',
+        confirmText: 'Scale to 0',
+        confirmButtonClass: 'danger',
+        onConfirm: confirmScaleToZero,
+        onCancel: () => setScaleConfirmation(null),
+      };
+    }
     return null;
-  }, [confirmDelete, confirmRestart, confirmTrigger, deleteTarget, restartTarget, triggerTarget]);
+  }, [
+    confirmDelete,
+    confirmRestart,
+    confirmScaleToZero,
+    confirmTrigger,
+    deleteTarget,
+    restartTarget,
+    scaleConfirmation,
+    triggerTarget,
+  ]);
 
   const modals = useMemo(
     () => (
@@ -478,7 +509,11 @@ export const useObjectActionController = ({
           error={scaleState.error}
           onCancel={closeScale}
           onApply={confirmScale}
-          onScaleToZero={() => applyScaleValue(0)}
+          onScaleToZero={() => {
+            if (!scaleState.object) return;
+            setScaleConfirmation({ object: scaleState.object, replicas: 0 });
+            setScaleState({ object: null, value: 1, loading: false, error: null });
+          }}
           onValueChange={(value) =>
             setScaleState((previous) => ({ ...previous, value: clampReplicas(value) }))
           }
@@ -499,7 +534,6 @@ export const useObjectActionController = ({
       </>
     ),
     [
-      applyScaleValue,
       closeScale,
       confirmation,
       confirmScale,

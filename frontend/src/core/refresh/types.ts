@@ -635,6 +635,7 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
   restarts: number;
   age: string;
   portForwardAvailable?: boolean;
+  hpaManaged?: boolean;
   cpuUsage?: string;
   cpuRequest?: string;
   cpuLimit?: string;

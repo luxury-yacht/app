@@ -15,7 +15,7 @@ func (m *Manager) registerPodStreams(factory *informer.Factory) {
 		podInformer := shared.Core().V1().Pods()
 		m.podLister = podInformer.Lister()
 		m.podIndexer = podInformer.Informer().GetIndexer()
-		m.addResourceEventHandler(podInformer.Informer(), (*Manager).handlePod)
+		m.addRelatedResourceEventHandler(podInformer.Informer(), (*Manager).handlePodEvent)
 	}
 }
 
@@ -39,6 +39,7 @@ func (m *Manager) registerWorkloadStreams(factory *informer.Factory) {
 	if m.canListWatch("apps", "replicasets") {
 		rsInformer := shared.Apps().V1().ReplicaSets()
 		m.rsLister = rsInformer.Lister()
+		m.addRelatedResourceEventHandler(rsInformer.Informer(), (*Manager).handleReplicaSetEvent)
 	}
 	if m.canListWatch("apps", "deployments") {
 		deploymentInformer := shared.Apps().V1().Deployments()

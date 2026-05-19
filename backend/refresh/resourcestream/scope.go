@@ -69,16 +69,18 @@ func normalizePodScope(scope string) (string, error) {
 	if strings.HasPrefix(scope, "workload:") {
 		value := strings.TrimSpace(strings.TrimLeft(strings.TrimPrefix(scope, "workload:"), ":"))
 		parts := strings.Split(value, ":")
-		if len(parts) != 3 {
-			return "", fmt.Errorf("pods workload scope requires namespace:kind:name")
+		if len(parts) != 5 {
+			return "", fmt.Errorf("pods workload scope requires namespace:group:version:kind:name")
 		}
 		namespace := strings.TrimSpace(parts[0])
-		kind := strings.TrimSpace(parts[1])
-		name := strings.TrimSpace(parts[2])
-		if namespace == "" || kind == "" || name == "" {
-			return "", fmt.Errorf("pods workload scope requires namespace:kind:name")
+		group := strings.TrimSpace(parts[1])
+		version := strings.TrimSpace(parts[2])
+		kind := strings.TrimSpace(parts[3])
+		name := strings.TrimSpace(parts[4])
+		if namespace == "" || version == "" || kind == "" || name == "" {
+			return "", fmt.Errorf("pods workload scope requires namespace:group:version:kind:name")
 		}
-		return fmt.Sprintf("workload:%s:%s:%s", namespace, kind, name), nil
+		return fmt.Sprintf("workload:%s:%s:%s:%s:%s", namespace, group, version, kind, name), nil
 	}
 	return "", fmt.Errorf("unsupported pods scope %q", scope)
 }

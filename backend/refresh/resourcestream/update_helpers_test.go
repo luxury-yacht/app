@@ -35,6 +35,8 @@ func TestManagerNewObjectUpdateCopiesClusterAndObjectMetadata(t *testing.T) {
 	require.Equal(t, "cfg", update.Name)
 	require.Equal(t, "default", update.Namespace)
 	require.Equal(t, "ConfigMap", update.Kind)
+	require.Equal(t, "", update.APIGroup)
+	require.Equal(t, "v1", update.APIVersion)
 	require.Nil(t, update.Row)
 }
 
@@ -70,36 +72,38 @@ func TestManagerNewObjectRowUpdateCarriesMetadataForStreamedBuiltInKinds(t *test
 		domain    string
 		kind      string
 		namespace string
+		group     string
+		version   string
 	}{
-		{name: "configmaps", domain: domainNamespaceConfig, kind: "ConfigMap", namespace: "default"},
-		{name: "secrets", domain: domainNamespaceConfig, kind: "Secret", namespace: "default"},
-		{name: "services", domain: domainNamespaceNetwork, kind: "Service", namespace: "default"},
-		{name: "endpoint slices", domain: domainNamespaceNetwork, kind: "EndpointSlice", namespace: "default"},
-		{name: "ingresses", domain: domainNamespaceNetwork, kind: "Ingress", namespace: "default"},
-		{name: "network policies", domain: domainNamespaceNetwork, kind: "NetworkPolicy", namespace: "default"},
-		{name: "gateways", domain: domainNamespaceNetwork, kind: "Gateway", namespace: "default"},
-		{name: "http routes", domain: domainNamespaceNetwork, kind: "HTTPRoute", namespace: "default"},
-		{name: "grpc routes", domain: domainNamespaceNetwork, kind: "GRPCRoute", namespace: "default"},
-		{name: "tls routes", domain: domainNamespaceNetwork, kind: "TLSRoute", namespace: "default"},
-		{name: "listener sets", domain: domainNamespaceNetwork, kind: "ListenerSet", namespace: "default"},
-		{name: "reference grants", domain: domainNamespaceNetwork, kind: "ReferenceGrant", namespace: "default"},
-		{name: "backend tls policies", domain: domainNamespaceNetwork, kind: "BackendTLSPolicy", namespace: "default"},
-		{name: "persistent volume claims", domain: domainNamespaceStorage, kind: "PersistentVolumeClaim", namespace: "default"},
-		{name: "horizontal pod autoscalers", domain: domainNamespaceAutoscaling, kind: "HorizontalPodAutoscaler", namespace: "default"},
-		{name: "resource quotas", domain: domainNamespaceQuotas, kind: "ResourceQuota", namespace: "default"},
-		{name: "limit ranges", domain: domainNamespaceQuotas, kind: "LimitRange", namespace: "default"},
-		{name: "pod disruption budgets", domain: domainNamespaceQuotas, kind: "PodDisruptionBudget", namespace: "default"},
-		{name: "roles", domain: domainNamespaceRBAC, kind: "Role", namespace: "default"},
-		{name: "role bindings", domain: domainNamespaceRBAC, kind: "RoleBinding", namespace: "default"},
-		{name: "service accounts", domain: domainNamespaceRBAC, kind: "ServiceAccount", namespace: "default"},
-		{name: "persistent volumes", domain: domainClusterStorage, kind: "PersistentVolume"},
-		{name: "storage classes", domain: domainClusterConfig, kind: "StorageClass"},
-		{name: "ingress classes", domain: domainClusterConfig, kind: "IngressClass"},
-		{name: "gateway classes", domain: domainClusterConfig, kind: "GatewayClass"},
-		{name: "validating webhooks", domain: domainClusterConfig, kind: "ValidatingWebhookConfiguration"},
-		{name: "mutating webhooks", domain: domainClusterConfig, kind: "MutatingWebhookConfiguration"},
-		{name: "cluster roles", domain: domainClusterRBAC, kind: "ClusterRole"},
-		{name: "cluster role bindings", domain: domainClusterRBAC, kind: "ClusterRoleBinding"},
+		{name: "configmaps", domain: domainNamespaceConfig, kind: "ConfigMap", namespace: "default", version: "v1"},
+		{name: "secrets", domain: domainNamespaceConfig, kind: "Secret", namespace: "default", version: "v1"},
+		{name: "services", domain: domainNamespaceNetwork, kind: "Service", namespace: "default", version: "v1"},
+		{name: "endpoint slices", domain: domainNamespaceNetwork, kind: "EndpointSlice", namespace: "default", group: "discovery.k8s.io", version: "v1"},
+		{name: "ingresses", domain: domainNamespaceNetwork, kind: "Ingress", namespace: "default", group: "networking.k8s.io", version: "v1"},
+		{name: "network policies", domain: domainNamespaceNetwork, kind: "NetworkPolicy", namespace: "default", group: "networking.k8s.io", version: "v1"},
+		{name: "gateways", domain: domainNamespaceNetwork, kind: "Gateway", namespace: "default", group: "gateway.networking.k8s.io", version: "v1"},
+		{name: "http routes", domain: domainNamespaceNetwork, kind: "HTTPRoute", namespace: "default", group: "gateway.networking.k8s.io", version: "v1"},
+		{name: "grpc routes", domain: domainNamespaceNetwork, kind: "GRPCRoute", namespace: "default", group: "gateway.networking.k8s.io", version: "v1"},
+		{name: "tls routes", domain: domainNamespaceNetwork, kind: "TLSRoute", namespace: "default", group: "gateway.networking.k8s.io", version: "v1"},
+		{name: "listener sets", domain: domainNamespaceNetwork, kind: "ListenerSet", namespace: "default", group: "gateway.networking.k8s.io", version: "v1"},
+		{name: "reference grants", domain: domainNamespaceNetwork, kind: "ReferenceGrant", namespace: "default", group: "gateway.networking.k8s.io", version: "v1"},
+		{name: "backend tls policies", domain: domainNamespaceNetwork, kind: "BackendTLSPolicy", namespace: "default", group: "gateway.networking.k8s.io", version: "v1"},
+		{name: "persistent volume claims", domain: domainNamespaceStorage, kind: "PersistentVolumeClaim", namespace: "default", version: "v1"},
+		{name: "horizontal pod autoscalers", domain: domainNamespaceAutoscaling, kind: "HorizontalPodAutoscaler", namespace: "default", group: "autoscaling", version: "v1"},
+		{name: "resource quotas", domain: domainNamespaceQuotas, kind: "ResourceQuota", namespace: "default", version: "v1"},
+		{name: "limit ranges", domain: domainNamespaceQuotas, kind: "LimitRange", namespace: "default", version: "v1"},
+		{name: "pod disruption budgets", domain: domainNamespaceQuotas, kind: "PodDisruptionBudget", namespace: "default", group: "policy", version: "v1"},
+		{name: "roles", domain: domainNamespaceRBAC, kind: "Role", namespace: "default", group: "rbac.authorization.k8s.io", version: "v1"},
+		{name: "role bindings", domain: domainNamespaceRBAC, kind: "RoleBinding", namespace: "default", group: "rbac.authorization.k8s.io", version: "v1"},
+		{name: "service accounts", domain: domainNamespaceRBAC, kind: "ServiceAccount", namespace: "default", version: "v1"},
+		{name: "persistent volumes", domain: domainClusterStorage, kind: "PersistentVolume", version: "v1"},
+		{name: "storage classes", domain: domainClusterConfig, kind: "StorageClass", group: "storage.k8s.io", version: "v1"},
+		{name: "ingress classes", domain: domainClusterConfig, kind: "IngressClass", group: "networking.k8s.io", version: "v1"},
+		{name: "gateway classes", domain: domainClusterConfig, kind: "GatewayClass", group: "gateway.networking.k8s.io", version: "v1"},
+		{name: "validating webhooks", domain: domainClusterConfig, kind: "ValidatingWebhookConfiguration", group: "admissionregistration.k8s.io", version: "v1"},
+		{name: "mutating webhooks", domain: domainClusterConfig, kind: "MutatingWebhookConfiguration", group: "admissionregistration.k8s.io", version: "v1"},
+		{name: "cluster roles", domain: domainClusterRBAC, kind: "ClusterRole", group: "rbac.authorization.k8s.io", version: "v1"},
+		{name: "cluster role bindings", domain: domainClusterRBAC, kind: "ClusterRoleBinding", group: "rbac.authorization.k8s.io", version: "v1"},
 	}
 
 	for _, tt := range tests {
@@ -129,6 +133,8 @@ func TestManagerNewObjectRowUpdateCarriesMetadataForStreamedBuiltInKinds(t *test
 			require.Equal(t, "resource-name", update.Name)
 			require.Equal(t, tt.namespace, update.Namespace)
 			require.Equal(t, tt.kind, update.Kind)
+			require.Equal(t, tt.group, update.APIGroup)
+			require.Equal(t, tt.version, update.APIVersion)
 			require.Equal(t, row, update.Row)
 		})
 	}

@@ -253,7 +253,7 @@ describe('ActionsMenu', () => {
     expect(input?.value).toBe('6');
   });
 
-  it('scales HPA-managed workloads to zero from the menu without opening the scale modal', async () => {
+  it('confirms before scaling HPA-managed workloads to zero from the menu', async () => {
     const onScale = vi.fn();
 
     await renderMenu({
@@ -265,13 +265,78 @@ describe('ActionsMenu', () => {
     const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
     const scaleToZeroItem = items.find((item) => item.textContent?.includes('Scale to 0'));
     expect(scaleToZeroItem).toBeTruthy();
+    expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
 
     act(() => {
       scaleToZeroItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(onScale).toHaveBeenCalledWith(0);
+    expect(onScale).not.toHaveBeenCalled();
     expect(document.querySelector('.scale-modal')).toBeNull();
+    const confirmation = document.querySelector<HTMLElement>('.confirmation-modal');
+    expect(confirmation?.textContent).toContain('Scale to 0');
+
+    const confirmButton = Array.from(
+      confirmation?.querySelectorAll<HTMLButtonElement>('button') ?? []
+    ).find((button) => button.textContent === 'Scale to 0');
+
+    act(() => {
+      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onScale).toHaveBeenCalledWith(0);
+  });
+
+  it('shows only Scale to 0 for HPA-managed workloads above zero', async () => {
+    await renderMenu({
+      object: makeObject('Deployment', { ready: '2/4', hpaManaged: true }),
+      onScale: vi.fn(),
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+
+    expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(true);
+    expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
+  });
+
+  it('confirms before scaling a regular workload to zero from the scale modal', async () => {
+    const onScale = vi.fn();
+
+    await renderMenu({
+      object: makeObject('Deployment', { ready: '2/4' }),
+      onScale,
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const scaleItem = items.find((item) => item.textContent?.includes('Scale'));
+
+    act(() => {
+      scaleItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const scaleToZeroButton = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('button')
+    ).find((button) => button.textContent === 'Scale to 0');
+
+    act(() => {
+      scaleToZeroButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onScale).not.toHaveBeenCalled();
+    const confirmation = document.querySelector<HTMLElement>('.confirmation-modal');
+    expect(confirmation?.textContent).toContain('Scale to 0');
+
+    const confirmButton = Array.from(
+      confirmation?.querySelectorAll<HTMLButtonElement>('button') ?? []
+    ).find((button) => button.textContent === 'Scale to 0');
+
+    act(() => {
+      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onScale).toHaveBeenCalledWith(0);
   });
 
   it('resumes HPA-managed workloads from zero from the menu', async () => {
@@ -286,6 +351,7 @@ describe('ActionsMenu', () => {
     const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
     const resumeItem = items.find((item) => item.textContent?.includes('Resume from 0'));
     expect(resumeItem).toBeTruthy();
+    expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(false);
 
     act(() => {
       resumeItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -294,7 +360,7 @@ describe('ActionsMenu', () => {
     expect(onScale).toHaveBeenCalledWith(1);
   });
 
-  it('uses currentReplicas when choosing HPA-managed menu labels', async () => {
+  it('uses currentReplicas when choosing the HPA-managed menu action', async () => {
     const onScale = vi.fn();
 
     await renderMenu({
@@ -308,6 +374,22 @@ describe('ActionsMenu', () => {
 
     expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(true);
     expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
+  });
+
+  it('shows Resume from 0 when currentReplicas is zero', async () => {
+    const onScale = vi.fn();
+
+    await renderMenu({
+      object: makeObject('Deployment', { ready: '0/4', hpaManaged: true }),
+      currentReplicas: 0,
+      onScale,
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+
+    expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(true);
+    expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(false);
   });
 
   it('closes the menu when clicking outside', async () => {

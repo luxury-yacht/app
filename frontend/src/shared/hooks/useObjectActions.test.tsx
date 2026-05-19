@@ -280,8 +280,8 @@ describe('buildObjectActionItems', () => {
     ]);
   });
 
-  it('shows Scale to 0 for HPA-managed workloads above zero and invokes the zero handler', () => {
-    let invoked = false;
+  it('shows only Scale to 0 for HPA-managed workloads above zero', () => {
+    let scaledToZero = false;
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
@@ -294,25 +294,27 @@ describe('buildObjectActionItems', () => {
       context: 'gridtable',
       handlers: {
         onScaleToZero: () => {
-          invoked = true;
+          scaledToZero = true;
         },
+        onResumeFromZero: () => undefined,
       },
       permissions: {
         scale: { allowed: true, pending: false },
       },
     });
 
-    const item = findAction(items, OBJECT_ACTION_IDS.scaleToZero);
-    expect(item).toMatchObject({
+    const scaleToZeroItem = findAction(items, OBJECT_ACTION_IDS.scaleToZero);
+    expect(scaleToZeroItem).toMatchObject({
       label: objectActionLabel(OBJECT_ACTION_IDS.scaleToZero),
       disabled: false,
     });
-    item?.onClick?.();
-    expect(invoked).toBe(true);
+    scaleToZeroItem?.onClick?.();
+    expect(scaledToZero).toBe(true);
+    expect(findAction(items, OBJECT_ACTION_IDS.resumeFromZero)).toBeUndefined();
     expect(findAction(items, OBJECT_ACTION_IDS.scale)).toBeUndefined();
   });
 
-  it('shows Resume from 0 for HPA-managed workloads at zero', () => {
+  it('shows only Resume from 0 for HPA-managed workloads at zero', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
@@ -324,6 +326,7 @@ describe('buildObjectActionItems', () => {
       },
       context: 'gridtable',
       handlers: {
+        onScaleToZero: () => undefined,
         onResumeFromZero: () => undefined,
       },
       permissions: {
@@ -336,6 +339,7 @@ describe('buildObjectActionItems', () => {
       label: objectActionLabel(OBJECT_ACTION_IDS.resumeFromZero),
       disabled: false,
     });
+    expect(findAction(items, OBJECT_ACTION_IDS.scaleToZero)).toBeUndefined();
     expect(findAction(items, OBJECT_ACTION_IDS.scale)).toBeUndefined();
   });
 
@@ -361,6 +365,31 @@ describe('buildObjectActionItems', () => {
 
     expect(findAction(items, OBJECT_ACTION_IDS.scaleToZero)).toBeDefined();
     expect(findAction(items, OBJECT_ACTION_IDS.resumeFromZero)).toBeUndefined();
+  });
+
+  it('uses explicit zero desired replicas when choosing the HPA-managed resume action', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+        desiredReplicas: 0,
+        ready: '0/3',
+        hpaManaged: true,
+      },
+      context: 'object-panel',
+      handlers: {
+        onScaleToZero: () => undefined,
+        onResumeFromZero: () => undefined,
+      },
+      permissions: {
+        scale: { allowed: true, pending: false },
+      },
+    });
+
+    expect(findAction(items, OBJECT_ACTION_IDS.resumeFromZero)).toBeDefined();
+    expect(findAction(items, OBJECT_ACTION_IDS.scaleToZero)).toBeUndefined();
   });
 
   it('does not leave a trailing divider when Delete is unavailable', () => {

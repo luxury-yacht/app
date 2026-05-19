@@ -134,8 +134,8 @@ describe('resourceStreamManager helpers', () => {
     expect(normalizeResourceScope('pods', 'namespace:default')).toBe('namespace:default');
     expect(normalizeResourceScope('pods', 'namespace:*')).toBe('namespace:all');
     expect(normalizeResourceScope('pods', 'node:node-a')).toBe('node:node-a');
-    expect(normalizeResourceScope('pods', 'workload:default:Deployment:web')).toBe(
-      'workload:default:Deployment:web'
+    expect(normalizeResourceScope('pods', 'workload:default:apps:v1:Deployment:web')).toBe(
+      'workload:default:apps:v1:Deployment:web'
     );
   });
 
@@ -240,6 +240,39 @@ describe('resourceStreamManager helpers', () => {
     const merged = mergeWorkloadMetricsRow(existing, incoming, true);
     expect(merged.cpuUsage).toBe('60m');
     expect(merged.memUsage).toBe('40Mi');
+  });
+
+  it('uses incoming HPA-managed workload state when preserving metrics', () => {
+    const existing = {
+      clusterId: 'test-cluster',
+      kind: 'Deployment',
+      name: 'web',
+      namespace: 'default',
+      ready: '2/3',
+      status: 'Healthy',
+      restarts: 0,
+      age: '1m',
+      cpuUsage: '60m',
+      memUsage: '40Mi',
+      hpaManaged: true,
+    };
+    const incoming = {
+      clusterId: existing.clusterId,
+      kind: existing.kind,
+      name: existing.name,
+      namespace: existing.namespace,
+      ready: '3/3',
+      status: existing.status,
+      restarts: existing.restarts,
+      age: existing.age,
+      cpuUsage: '5m',
+      memUsage: '8Mi',
+      hpaManaged: false,
+    };
+    const merged = mergeWorkloadMetricsRow(existing, incoming, true);
+
+    expect(merged.ready).toBe('3/3');
+    expect(merged.hpaManaged).toBe(false);
   });
 
   it('reuses the existing workload row when an incoming update is unchanged', () => {
@@ -787,6 +820,81 @@ describe('ResourceStreamManager', () => {
 
     const state = getScopedDomainState('namespace-custom', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('widget-a');
+  });
+
+  test('keeps same-kind namespace custom resources from different API groups distinct', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-custom', storeScope);
+
+    setScopedDomainState('namespace-custom', storeScope, () => ({
+      status: 'ready',
+      data: { resources: [], clusterId: 'cluster-a' },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    const common = {
+      type: 'ADDED',
+      domain: 'namespace-custom',
+      scope: 'namespace:default',
+      namespace: 'default',
+      kind: 'Widget',
+      name: 'shared',
+    };
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        ...common,
+        resourceVersion: '4',
+        apiGroup: 'alpha.example.com',
+        apiVersion: 'v1',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          namespace: 'default',
+          apiGroup: 'alpha.example.com',
+          apiVersion: 'v1',
+          kind: 'Widget',
+          name: 'shared',
+          age: '1m',
+        },
+      })
+    );
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        ...common,
+        resourceVersion: '5',
+        apiGroup: 'beta.example.com',
+        apiVersion: 'v1',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          namespace: 'default',
+          apiGroup: 'beta.example.com',
+          apiVersion: 'v1',
+          kind: 'Widget',
+          name: 'shared',
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const rows = getScopedDomainState('namespace-custom', storeScope).data?.resources ?? [];
+    expect(rows.map((row) => row.apiGroup).sort()).toEqual([
+      'alpha.example.com',
+      'beta.example.com',
+    ]);
   });
 
   test('reuses namespace custom rows when an unchanged update is applied', async () => {

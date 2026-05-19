@@ -119,14 +119,15 @@ const normalizePodScope = (scope: string): string => {
       .replace(/^workload:/, '')
       .replace(/^:/, '')
       .trim();
-    const parts = value
-      .split(':')
-      .map((part) => part.trim())
-      .filter(Boolean);
-    if (parts.length !== 3) {
-      throw new Error('pods workload scope requires namespace:kind:name');
+    const parts = value.split(':').map((part) => part.trim());
+    if (parts.length !== 5) {
+      throw new Error('pods workload scope requires namespace:group:version:kind:name');
     }
-    return `workload:${parts[0]}:${parts[1]}:${parts[2]}`;
+    const [namespace, group, version, kind, name] = parts;
+    if (!namespace || !version || !kind || !name) {
+      throw new Error('pods workload scope requires namespace:group:version:kind:name');
+    }
+    return `workload:${namespace}:${group}:${version}:${kind}:${name}`;
   }
   throw new Error(`unsupported pods scope ${scope}`);
 };
@@ -334,8 +335,14 @@ const buildNetworkKey = (
   name: string
 ): string => `${clusterId}::${namespace}::${kind}::${name}`;
 
-const buildCustomKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
-  `${clusterId}::${namespace}::${kind}::${name}`;
+const buildCustomKey = (
+  clusterId: string,
+  namespace: string,
+  apiGroup: string,
+  apiVersion: string,
+  kind: string,
+  name: string
+): string => `${clusterId}::${namespace}::${apiGroup}::${apiVersion}::${kind}::${name}`;
 
 const buildHelmKey = (clusterId: string, namespace: string, name: string): string =>
   `${clusterId}::${namespace}::${name}`;
@@ -367,8 +374,13 @@ const buildClusterConfigKey = (clusterId: string, kind: string, name: string): s
 
 const buildClusterCRDKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
 
-const buildClusterCustomKey = (clusterId: string, kind: string, name: string): string =>
-  `${clusterId}::${kind}::${name}`;
+const buildClusterCustomKey = (
+  clusterId: string,
+  apiGroup: string,
+  apiVersion: string,
+  kind: string,
+  name: string
+): string => `${clusterId}::${apiGroup}::${apiVersion}::${kind}::${name}`;
 
 const buildNodeKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
 
@@ -449,7 +461,16 @@ const buildCustomKeySet = (
   const rows = payload?.resources ?? [];
   const keys = new Set<string>();
   rows.forEach((row) => {
-    keys.add(buildCustomKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
+    keys.add(
+      buildCustomKey(
+        row.clusterId ?? fallbackClusterId,
+        row.namespace,
+        row.apiGroup,
+        row.apiVersion,
+        row.kind,
+        row.name
+      )
+    );
   });
   return keys;
 };
@@ -561,7 +582,15 @@ const buildClusterCustomKeySet = (
   const rows = payload?.resources ?? [];
   const keys = new Set<string>();
   rows.forEach((row) => {
-    keys.add(buildClusterCustomKey(row.clusterId ?? fallbackClusterId, row.kind, row.name));
+    keys.add(
+      buildClusterCustomKey(
+        row.clusterId ?? fallbackClusterId,
+        row.apiGroup,
+        row.apiVersion,
+        row.kind,
+        row.name
+      )
+    );
   });
   return keys;
 };
@@ -717,12 +746,21 @@ const namespaceCustomCollection = {
     clusterId,
   }),
   buildRowKey: (row: NamespaceCustomSummary, fallbackClusterId: string) =>
-    buildCustomKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name),
+    buildCustomKey(
+      row.clusterId ?? fallbackClusterId,
+      row.namespace,
+      row.apiGroup,
+      row.apiVersion,
+      row.kind,
+      row.name
+    ),
   buildUpdateKey: (update: ResourceStreamRowUpdate, fallbackClusterId: string) => {
     const row = updateRow<NamespaceCustomSummary>(update);
     return buildCustomKey(
       updateClusterId(update, fallbackClusterId),
       update.namespace ?? row?.namespace ?? '',
+      update.apiGroup ?? row?.apiGroup ?? '',
+      update.apiVersion ?? row?.apiVersion ?? '',
       update.kind ?? row?.kind ?? '',
       update.name ?? row?.name ?? ''
     );
@@ -932,11 +970,19 @@ const clusterCustomCollection = {
     clusterId,
   }),
   buildRowKey: (row: ClusterCustomEntry, fallbackClusterId: string) =>
-    buildClusterCustomKey(row.clusterId ?? fallbackClusterId, row.kind, row.name),
+    buildClusterCustomKey(
+      row.clusterId ?? fallbackClusterId,
+      row.apiGroup,
+      row.apiVersion,
+      row.kind,
+      row.name
+    ),
   buildUpdateKey: (update: ResourceStreamRowUpdate, fallbackClusterId: string) => {
     const row = updateRow<ClusterCustomEntry>(update);
     return buildClusterCustomKey(
       updateClusterId(update, fallbackClusterId),
+      update.apiGroup ?? row?.apiGroup ?? '',
+      update.apiVersion ?? row?.apiVersion ?? '',
       update.kind ?? row?.kind ?? '',
       update.name ?? row?.name ?? ''
     );

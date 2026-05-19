@@ -348,9 +348,9 @@ describe('resolveDomainNamespace', () => {
 
   test('returns workload namespace for pod scopes', async () => {
     const module = await import('./DiagnosticsPanel');
-    expect(module.resolveDomainNamespace('pods', 'alpha|workload:default:deployment:web')).toBe(
-      'default'
-    );
+    expect(
+      module.resolveDomainNamespace('pods', 'alpha|workload:default:apps:v1:Deployment:web')
+    ).toBe('default');
   });
 
   test('returns namespace for namespace-scoped pod scopes', async () => {

@@ -62,6 +62,9 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     const [showScaleModal, setShowScaleModal] = useState(false);
     const [showTriggerConfirm, setShowTriggerConfirm] = useState(false);
     const [showPortForwardModal, setShowPortForwardModal] = useState(false);
+    const [pendingScaleConfirmation, setPendingScaleConfirmation] = useState<{
+      replicas: number;
+    } | null>(null);
     const [scaleValue, setScaleValue] = useState(0);
     const menuRef = useRef<HTMLDivElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -98,7 +101,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
         onScaleToZero: onScale
           ? () => {
               setIsOpen(false);
-              onScale(0);
+              setPendingScaleConfirmation({ replicas: 0 });
             }
           : undefined,
         onResumeFromZero: onScale
@@ -253,7 +256,15 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
 
     const handleScaleToZero = () => {
       setShowScaleModal(false);
-      onScale?.(0);
+      setPendingScaleConfirmation({ replicas: 0 });
+    };
+
+    const handleScaleConfirmation = () => {
+      const confirmation = pendingScaleConfirmation;
+      setPendingScaleConfirmation(null);
+      if (confirmation) {
+        onScale?.(confirmation.replicas);
+      }
     };
 
     const handleTriggerConfirm = () => {
@@ -343,6 +354,18 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
           cancelText="Cancel"
           onConfirm={handleTriggerConfirm}
           onCancel={() => setShowTriggerConfirm(false)}
+        />
+
+        <ConfirmationModal
+          isOpen={Boolean(pendingScaleConfirmation)}
+          title="Scale to 0"
+          message={`Scale ${object?.kind?.toLowerCase() || 'workload'} "${object?.name}" to 0 replicas?`}
+          warning="This will stop currently running pods for this workload."
+          confirmText="Scale to 0"
+          cancelText="Cancel"
+          confirmButtonClass="danger"
+          onConfirm={handleScaleConfirmation}
+          onCancel={() => setPendingScaleConfirmation(null)}
         />
 
         {/* Port Forward Modal */}

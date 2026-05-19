@@ -49,6 +49,8 @@ type ServerMessage struct {
 	Name            string                          `json:"name,omitempty"`
 	Namespace       string                          `json:"namespace,omitempty"`
 	Kind            string                          `json:"kind,omitempty"`
+	APIGroup        string                          `json:"apiGroup,omitempty"`
+	APIVersion      string                          `json:"apiVersion,omitempty"`
 	Row             interface{}                     `json:"row,omitempty"`
 	Error           string                          `json:"error,omitempty"`
 	ErrorDetails    *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`

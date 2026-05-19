@@ -196,7 +196,7 @@ func TestPodBuilderWorkloadScope(t *testing.T) {
 		metrics:   fakePodMetricsProvider{},
 	}
 
-	snapshot, err := builder.Build(context.Background(), "workload:prod:Deployment:orders")
+	snapshot, err := builder.Build(context.Background(), "workload:prod:apps:v1:Deployment:orders")
 	require.NoError(t, err)
 	require.Equal(t, uint64(7), snapshot.Version)
 

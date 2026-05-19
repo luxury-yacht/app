@@ -12,10 +12,10 @@ func (m *Manager) registerConfigStreams(factory *informer.Factory) {
 		return
 	}
 	if m.canListWatch("", "configmaps") {
-		m.addResourceEventHandler(shared.Core().V1().ConfigMaps().Informer(), (*Manager).handleConfigMap)
+		m.addRelatedResourceEventHandler(shared.Core().V1().ConfigMaps().Informer(), (*Manager).handleConfigMapEvent)
 	}
 	if m.canListWatch("", "secrets") {
-		m.addResourceEventHandler(shared.Core().V1().Secrets().Informer(), (*Manager).handleSecret)
+		m.addRelatedResourceEventHandler(shared.Core().V1().Secrets().Informer(), (*Manager).handleSecretEvent)
 	}
 }
 
@@ -38,7 +38,7 @@ func (m *Manager) registerAutoscalingStreams(factory *informer.Factory) {
 		return
 	}
 	if m.canListWatch("autoscaling", "horizontalpodautoscalers") {
-		m.addResourceEventHandler(shared.Autoscaling().V1().HorizontalPodAutoscalers().Informer(), (*Manager).handleHPA)
+		m.addRelatedResourceEventHandler(shared.Autoscaling().V1().HorizontalPodAutoscalers().Informer(), (*Manager).handleHPAEvent)
 	}
 }
 

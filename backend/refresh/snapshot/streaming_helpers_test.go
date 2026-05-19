@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"context"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -17,6 +18,8 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 func TestBuildPodSummaryResolvesDeploymentOwner(t *testing.T) {
@@ -118,6 +121,51 @@ func TestBuildWorkloadSummaryDeployment(t *testing.T) {
 	require.Equal(t, "2/3", summary.StatusState)
 	require.Equal(t, "warning", summary.StatusPresentation)
 	require.True(t, summary.PortForwardAvailable)
+}
+
+func TestBuildWorkloadSummaryMatchesSnapshotHPAContext(t *testing.T) {
+	replicas := int32(3)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+			},
+		},
+	}
+	hpa := &autoscalingv1.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-hpa", Namespace: "default"},
+		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
+			MaxReplicas: 5,
+			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       "web",
+			},
+		},
+	}
+	builder := &NamespaceWorkloadsBuilder{
+		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
+		statefulLister:   testsupport.NewStatefulSetLister(t),
+		daemonLister:     testsupport.NewDaemonSetLister(t),
+		jobLister:        testsupport.NewJobLister(t),
+		cronJobLister:    testsupport.NewCronJobLister(t),
+		hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t, hpa),
+	}
+
+	snap, err := builder.Build(context.Background(), "namespace:default")
+	require.NoError(t, err)
+	payload := snap.Payload.(NamespaceWorkloadsSnapshot)
+	require.Len(t, payload.Workloads, 1)
+
+	streamRow, err := BuildWorkloadSummary(ClusterMeta{}, deployment, nil, nil, hpa)
+	require.NoError(t, err)
+	require.Equal(t, payload.Workloads[0], streamRow)
+	require.True(t, streamRow.HPAManaged)
 }
 
 func TestBuildWorkloadSummaryDeploymentReadyUsesOwnedPods(t *testing.T) {

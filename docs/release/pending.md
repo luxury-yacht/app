@@ -4,10 +4,11 @@
 
 ### Changed
 
-- HPA-managed workloads now show explicit `Scale to 0` and `Resume from 0`
-  actions instead of a disabled scale placeholder, while regular workloads keep
-  the existing `Scale` action.
-- The workload scale modal now includes a direct `Scale to 0` action.
+- HPA-managed workloads now show state-appropriate `Scale to 0` or
+  `Resume from 0` actions instead of a disabled scale placeholder, while regular
+  workloads keep the existing `Scale` action.
+- The workload scale modal now includes a direct `Scale to 0` action with
+  confirmation before applying the change.
 - Resource refresh and streaming are now more consistently scoped per cluster.
   - Background refresh fans out as separate per-cluster work instead of relying on aggregate refresh scopes.
   - Resource streams now resume, resync, and fall back to snapshots more predictably when connections reset or data drift is detected.

@@ -27,6 +27,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	dynamicinformer "k8s.io/client-go/dynamic/dynamicinformer"
 	appslisters "k8s.io/client-go/listers/apps/v1"
+	autoscalinglisters "k8s.io/client-go/listers/autoscaling/v1"
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	discoverylisters "k8s.io/client-go/listers/discovery/v1"
@@ -210,6 +211,7 @@ type Manager struct {
 	daemonLister     appslisters.DaemonSetLister
 	jobLister        batchlisters.JobLister
 	cronJobLister    batchlisters.CronJobLister
+	hpaLister        autoscalinglisters.HorizontalPodAutoscalerLister
 	ingressLister    networklisters.IngressLister
 	policyLister     networklisters.NetworkPolicyLister
 
@@ -259,6 +261,7 @@ func NewManager(
 	if shared == nil {
 		return mgr
 	}
+	mgr.hpaLister = shared.Autoscaling().V1().HorizontalPodAutoscalers().Lister()
 
 	mgr.registerPodStreams(factory)
 	mgr.registerConfigStreams(factory)
@@ -337,10 +340,32 @@ func (m *Manager) initCustomResourceInformers(factory *informer.Factory) {
 	}
 	crdInformer := apiextFactory.Apiextensions().V1().CustomResourceDefinitions()
 	crdInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { m.handleCustomResourceDefinition(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { m.handleCustomResourceDefinition(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { m.handleCustomResourceDefinition(obj, MessageTypeDeleted) },
+		AddFunc: func(obj interface{}) { m.handleCustomResourceDefinitionEvent(nil, obj, MessageTypeAdded) },
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			m.handleCustomResourceDefinitionEvent(oldObj, newObj, MessageTypeModified)
+		},
+		DeleteFunc: func(obj interface{}) { m.handleCustomResourceDefinitionEvent(obj, nil, MessageTypeDeleted) },
 	})
+}
+
+func (m *Manager) handleCustomResourceDefinitionEvent(oldObj interface{}, newObj interface{}, updateType MessageType) {
+	switch updateType {
+	case MessageTypeAdded:
+		newCRD := customResourceDefinitionFromObject(newObj)
+		m.handleCustomResourceDefinition(newObj, updateType)
+		m.broadcastCustomDomainCompletes(nil, newCRD)
+	case MessageTypeDeleted:
+		oldCRD := customResourceDefinitionFromObject(oldObj)
+		m.handleCustomResourceDefinition(oldObj, updateType)
+		m.broadcastCustomDomainCompletes(oldCRD, nil)
+	case MessageTypeModified:
+		oldCRD := customResourceDefinitionFromObject(oldObj)
+		newCRD := customResourceDefinitionFromObject(newObj)
+		m.handleCustomResourceDefinition(newObj, updateType)
+		if customCRDStreamSignature(oldCRD) != customCRDStreamSignature(newCRD) {
+			m.broadcastCustomDomainCompletes(oldCRD, newCRD)
+		}
+	}
 }
 
 func (m *Manager) handleCustomResourceDefinition(obj interface{}, updateType MessageType) {
@@ -359,6 +384,57 @@ func (m *Manager) handleCustomResourceDefinition(obj interface{}, updateType Mes
 		return
 	}
 	m.ensureCustomInformer(crd)
+}
+
+func (m *Manager) broadcastCustomDomainCompletes(oldCRD *apiextensionsv1.CustomResourceDefinition, newCRD *apiextensionsv1.CustomResourceDefinition) {
+	targets := make(map[string]string, 2)
+	for _, crd := range []*apiextensionsv1.CustomResourceDefinition{oldCRD, newCRD} {
+		domain := customCRDDomain(crd)
+		if domain == "" {
+			continue
+		}
+		targets[domain] = crd.ResourceVersion
+	}
+	for domain, resourceVersion := range targets {
+		m.broadcastCustomDomainComplete(domain, resourceVersion)
+	}
+}
+
+func (m *Manager) broadcastCustomDomainComplete(domain, resourceVersion string) {
+	scopes := m.activeScopesForDomain(domain)
+	if len(scopes) == 0 {
+		switch domain {
+		case domainClusterCustom:
+			scopes = scopesForCluster()
+		case domainNamespaceCustom:
+			scopes = []string{"namespace:all"}
+		default:
+			return
+		}
+	}
+	apiGroup, apiVersion := apiGroupVersionForStreamKind("CustomResourceDefinition")
+	update := Update{
+		Type:            MessageTypeComplete,
+		Domain:          domain,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: resourceVersion,
+		Kind:            "CustomResourceDefinition",
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
+	}
+	m.broadcast(domain, scopes, update)
+}
+
+func (m *Manager) activeScopesForDomain(domain string) []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	domainSubs := m.subscribers[domain]
+	scopes := make([]string, 0, len(domainSubs))
+	for scope := range domainSubs {
+		scopes = append(scopes, scope)
+	}
+	return scopes
 }
 
 func (m *Manager) ensureCustomInformer(crd *apiextensionsv1.CustomResourceDefinition) {
@@ -469,6 +545,8 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		Name:            resource.GetName(),
 		Namespace:       resource.GetNamespace(),
 		Kind:            kind,
+		APIGroup:        info.gvr.Group,
+		APIVersion:      info.gvr.Version,
 	}
 	if updateType != MessageTypeDeleted {
 		// The CRD name is the canonical Kubernetes form `<plural>.<group>`,
@@ -500,6 +578,7 @@ func (m *Manager) handleClusterCRD(obj interface{}, updateType MessageType) {
 	}
 
 	summary := snapshot.BuildClusterCRDSummary(m.clusterMeta, crd)
+	apiGroup, apiVersion := apiGroupVersionForStreamKind("CustomResourceDefinition")
 	update := Update{
 		Type:            updateType,
 		Domain:          domainClusterCRDs,
@@ -510,6 +589,8 @@ func (m *Manager) handleClusterCRD(obj interface{}, updateType MessageType) {
 		Name:            crd.Name,
 		Namespace:       crd.Namespace,
 		Kind:            "CustomResourceDefinition",
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
 	}
 	if updateType != MessageTypeDeleted {
 		update.Row = summary
@@ -531,6 +612,33 @@ func preferredCustomCRDVersion(crd *apiextensionsv1.CustomResourceDefinition) st
 		return crd.Spec.Versions[0].Name
 	}
 	return ""
+}
+
+func customCRDStreamSignature(crd *apiextensionsv1.CustomResourceDefinition) string {
+	if crd == nil {
+		return ""
+	}
+	return strings.Join([]string{
+		customCRDDomain(crd),
+		crd.Spec.Group,
+		preferredCustomCRDVersion(crd),
+		crd.Spec.Names.Plural,
+		crd.Spec.Names.Kind,
+	}, "/")
+}
+
+func customCRDDomain(crd *apiextensionsv1.CustomResourceDefinition) string {
+	if crd == nil || snapshot.IsFirstClassCustomResourceDefinition(crd) {
+		return ""
+	}
+	switch crd.Spec.Scope {
+	case apiextensionsv1.NamespaceScoped:
+		return domainNamespaceCustom
+	case apiextensionsv1.ClusterScoped:
+		return domainClusterCustom
+	default:
+		return ""
+	}
 }
 
 // Subscribe registers a new subscriber for the supplied domain/scope.
@@ -635,7 +743,23 @@ func (m *Manager) handlePod(obj interface{}, updateType MessageType) {
 	}
 
 	podUsage := m.podMetricsSnapshot()
+	m.broadcastPodRow(pod, updateType, nil, podUsage)
+
+	m.handleWorkloadFromPod(pod, updateType, podUsage)
+	m.handleNodeFromPod(pod)
+}
+
+func (m *Manager) broadcastPodRow(
+	pod *corev1.Pod,
+	updateType MessageType,
+	scopes []string,
+	podUsage map[string]metrics.PodUsage,
+) {
+	if pod == nil {
+		return
+	}
 	summary := snapshot.BuildPodSummary(m.clusterMeta, pod, podUsage, m.rsLister)
+	apiGroup, apiVersion := apiGroupVersionForStreamKind("Pod")
 	update := Update{
 		Type:            updateType,
 		Domain:          domainPods,
@@ -646,15 +770,97 @@ func (m *Manager) handlePod(obj interface{}, updateType MessageType) {
 		Name:            pod.Name,
 		Namespace:       pod.Namespace,
 		Kind:            "Pod",
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
 	}
 	if updateType != MessageTypeDeleted {
 		update.Row = summary
 	}
+	if len(scopes) == 0 {
+		scopes = scopesForPod(summary)
+	}
 
-	m.broadcast(domainPods, scopesForPod(summary), update)
+	m.broadcast(domainPods, scopes, update)
+}
 
-	m.handleWorkloadFromPod(pod, updateType, podUsage)
-	m.handleNodeFromPod(pod)
+func (m *Manager) handlePodEvent(oldObj interface{}, newObj interface{}, updateType MessageType) {
+	switch updateType {
+	case MessageTypeAdded:
+		m.handlePod(newObj, updateType)
+	case MessageTypeDeleted:
+		m.handlePod(oldObj, updateType)
+	case MessageTypeModified:
+		m.handlePod(newObj, updateType)
+		oldPod := podFromObject(oldObj)
+		newPod := podFromObject(newObj)
+		if oldPod == nil || newPod == nil {
+			return
+		}
+		podUsage := m.podMetricsSnapshot()
+		oldSummary := snapshot.BuildPodSummary(m.clusterMeta, oldPod, podUsage, m.rsLister)
+		newSummary := snapshot.BuildPodSummary(m.clusterMeta, newPod, podUsage, m.rsLister)
+		if staleScopes := stalePodScopes(oldSummary, newSummary); len(staleScopes) > 0 {
+			m.broadcastPodRow(oldPod, MessageTypeDeleted, staleScopes, podUsage)
+		}
+		if snapshot.WorkloadOwnerKeyForPod(oldPod) != snapshot.WorkloadOwnerKeyForPod(newPod) {
+			m.handleWorkloadFromPod(oldPod, MessageTypeModified, podUsage)
+		}
+		if oldPod.Spec.NodeName != "" && oldPod.Spec.NodeName != newPod.Spec.NodeName {
+			m.handleNodeFromPod(oldPod)
+		}
+	}
+}
+
+func (m *Manager) handleReplicaSetEvent(oldObj interface{}, newObj interface{}, updateType MessageType) {
+	switch updateType {
+	case MessageTypeAdded:
+		newRS := replicaSetFromObject(newObj)
+		m.refreshPodsForReplicaSet(newRS, replicaSetStaleWorkloadScopes(nil, newRS))
+	case MessageTypeDeleted:
+		oldRS := replicaSetFromObject(oldObj)
+		m.refreshPodsForReplicaSet(oldRS, replicaSetStaleWorkloadScopes(oldRS, nil))
+	case MessageTypeModified:
+		oldRS := replicaSetFromObject(oldObj)
+		newRS := replicaSetFromObject(newObj)
+		staleScopes := replicaSetStaleWorkloadScopes(oldRS, newRS)
+		seen := make(map[string]struct{})
+		m.refreshPodsForReplicaSetOnce(oldRS, staleScopes, seen)
+		m.refreshPodsForReplicaSetOnce(newRS, staleScopes, seen)
+	}
+}
+
+func (m *Manager) refreshPodsForReplicaSet(rs *appsv1.ReplicaSet, staleScopes []string) {
+	m.refreshPodsForReplicaSetOnce(rs, staleScopes, make(map[string]struct{}))
+}
+
+func (m *Manager) refreshPodsForReplicaSetOnce(
+	rs *appsv1.ReplicaSet,
+	staleScopes []string,
+	seen map[string]struct{},
+) {
+	if rs == nil || m.podLister == nil {
+		return
+	}
+	pods, err := m.podLister.Pods(rs.Namespace).List(labels.Everything())
+	if err != nil {
+		m.logWarn(fmt.Sprintf("resource stream: list pods for replicaset %s/%s failed: %v", rs.Namespace, rs.Name, err))
+		return
+	}
+	podUsage := m.podMetricsSnapshot()
+	for _, pod := range pods {
+		if !podOwnedByReplicaSet(pod, rs) {
+			continue
+		}
+		key := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		if len(staleScopes) > 0 {
+			m.broadcastPodRow(pod, MessageTypeDeleted, staleScopes, podUsage)
+		}
+		m.broadcastPodRow(pod, MessageTypeModified, nil, podUsage)
+	}
 }
 
 func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
@@ -670,6 +876,25 @@ func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
 	m.maybeBroadcastHelmRefreshFromConfigMap(cm, updateType)
 }
 
+func (m *Manager) handleConfigMapEvent(oldObj interface{}, newObj interface{}, updateType MessageType) {
+	switch updateType {
+	case MessageTypeAdded:
+		m.handleConfigMap(newObj, updateType)
+	case MessageTypeDeleted:
+		m.handleConfigMap(oldObj, updateType)
+	case MessageTypeModified:
+		m.handleConfigMap(newObj, updateType)
+		oldCM := configMapFromObject(oldObj)
+		newCM := configMapFromObject(newObj)
+		if oldCM == nil || newCM == nil {
+			return
+		}
+		if helmReleaseKeyForConfigMap(oldCM) != helmReleaseKeyForConfigMap(newCM) {
+			m.maybeBroadcastHelmRefreshFromConfigMap(oldCM, MessageTypeDeleted)
+		}
+	}
+}
+
 func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
 	secret := secretFromObject(obj)
 	if secret == nil {
@@ -681,6 +906,25 @@ func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(secret.Namespace), update)
 	m.maybeBroadcastHelmRefresh(secret, updateType)
+}
+
+func (m *Manager) handleSecretEvent(oldObj interface{}, newObj interface{}, updateType MessageType) {
+	switch updateType {
+	case MessageTypeAdded:
+		m.handleSecret(newObj, updateType)
+	case MessageTypeDeleted:
+		m.handleSecret(oldObj, updateType)
+	case MessageTypeModified:
+		m.handleSecret(newObj, updateType)
+		oldSecret := secretFromObject(oldObj)
+		newSecret := secretFromObject(newObj)
+		if oldSecret == nil || newSecret == nil {
+			return
+		}
+		if helmReleaseKeyForSecret(oldSecret) != helmReleaseKeyForSecret(newSecret) {
+			m.maybeBroadcastHelmRefresh(oldSecret, MessageTypeDeleted)
+		}
+	}
 }
 
 // Helm release updates are streamed as COMPLETE signals to trigger a snapshot resync.
@@ -699,6 +943,20 @@ func (m *Manager) maybeBroadcastHelmRefreshFromConfigMap(cm *corev1.ConfigMap, u
 		return
 	}
 	m.broadcastHelmRefresh(cm.Name, cm.Namespace, cm.ResourceVersion, updateType)
+}
+
+func helmReleaseKeyForConfigMap(cm *corev1.ConfigMap) string {
+	if cm == nil || !isHelmReleaseObject(cm.Name, cm.Labels, "") {
+		return ""
+	}
+	return cm.Namespace + "/" + helmReleaseName(cm.Name)
+}
+
+func helmReleaseKeyForSecret(secret *corev1.Secret) string {
+	if secret == nil || !isHelmReleaseObject(secret.Name, secret.Labels, string(secret.Type)) {
+		return ""
+	}
+	return secret.Namespace + "/" + helmReleaseName(secret.Name)
 }
 
 func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, updateType MessageType) {
@@ -816,11 +1074,9 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 	if slice == nil {
 		return
 	}
-	serviceName := ""
-	if slice.Labels != nil {
-		serviceName = strings.TrimSpace(slice.Labels[discoveryv1.LabelServiceName])
-	}
+	serviceName := endpointSliceServiceName(slice)
 
+	apiGroup, apiVersion := apiGroupVersionForStreamKind("EndpointSlice")
 	update := Update{
 		Type:            updateType,
 		Domain:          domainNamespaceNetwork,
@@ -831,12 +1087,45 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 		Name:            slice.Name,
 		Namespace:       slice.Namespace,
 		Kind:            "EndpointSlice",
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
 	}
 	if updateType != MessageTypeDeleted {
 		update.Row = snapshot.BuildEndpointSliceSummary(m.clusterMeta, slice)
 	}
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
 
+	m.broadcastServiceFromEndpointSlice(slice, serviceName)
+}
+
+func (m *Manager) handleEndpointSliceEvent(oldObj interface{}, newObj interface{}, updateType MessageType) {
+	switch updateType {
+	case MessageTypeAdded:
+		m.handleEndpointSlice(newObj, updateType)
+	case MessageTypeDeleted:
+		m.handleEndpointSlice(oldObj, updateType)
+	case MessageTypeModified:
+		m.handleEndpointSlice(newObj, updateType)
+		oldSlice := endpointSliceFromObject(oldObj)
+		newSlice := endpointSliceFromObject(newObj)
+		if oldSlice == nil || newSlice == nil {
+			return
+		}
+		oldService := endpointSliceServiceName(oldSlice)
+		if oldSlice.Namespace != newSlice.Namespace || oldService != endpointSliceServiceName(newSlice) {
+			m.broadcastServiceFromEndpointSlice(oldSlice, oldService)
+		}
+	}
+}
+
+func endpointSliceServiceName(slice *discoveryv1.EndpointSlice) string {
+	if slice == nil || slice.Labels == nil {
+		return ""
+	}
+	return strings.TrimSpace(slice.Labels[discoveryv1.LabelServiceName])
+}
+
+func (m *Manager) broadcastServiceFromEndpointSlice(slice *discoveryv1.EndpointSlice, serviceName string) {
 	if m.serviceLister == nil || serviceName == "" {
 		return
 	}
@@ -853,6 +1142,7 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 		return
 	}
 	serviceSummary := snapshot.BuildServiceNetworkSummary(m.clusterMeta, service, slices)
+	apiGroup, apiVersion := apiGroupVersionForStreamKind("Service")
 	serviceUpdate := Update{
 		Type:            MessageTypeModified,
 		Domain:          domainNamespaceNetwork,
@@ -863,6 +1153,8 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 		Name:            service.Name,
 		Namespace:       service.Namespace,
 		Kind:            "Service",
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
 		Row:             serviceSummary,
 	}
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), serviceUpdate)
@@ -1057,6 +1349,68 @@ func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
 	}
 
 	m.broadcast(domainNamespaceAutoscaling, scopesForNamespace(hpa.Namespace), update)
+	m.handleWorkloadFromHPA(hpa, updateType)
+}
+
+func (m *Manager) handleHPAEvent(oldObj interface{}, newObj interface{}, updateType MessageType) {
+	switch updateType {
+	case MessageTypeAdded:
+		m.handleHPA(newObj, updateType)
+	case MessageTypeDeleted:
+		m.handleHPA(oldObj, updateType)
+	case MessageTypeModified:
+		m.handleHPA(newObj, updateType)
+		oldHPA := hpaFromObject(oldObj)
+		newHPA := hpaFromObject(newObj)
+		if oldHPA == nil || newHPA == nil {
+			return
+		}
+		if hpaWorkloadKey(oldHPA) != hpaWorkloadKey(newHPA) {
+			m.handleWorkloadFromHPA(oldHPA, MessageTypeDeleted)
+		}
+	}
+}
+
+func (m *Manager) handleWorkloadFromHPA(hpa *autoscalingv1.HorizontalPodAutoscaler, updateType MessageType) {
+	namespace, kind, name, ok := hpaWorkloadTarget(hpa)
+	if !ok {
+		return
+	}
+	hpas := m.hpasForWorkloadContext(namespace, hpa, updateType)
+	if kind == "Pod" {
+		m.broadcastStandalonePodWorkloadRow(namespace, name, hpa.ResourceVersion, hpas)
+		return
+	}
+	m.broadcastWorkloadRow(kind, namespace, name, hpa.ResourceVersion, hpas)
+}
+
+func hpaWorkloadTarget(hpa *autoscalingv1.HorizontalPodAutoscaler) (namespace, kind, name string, ok bool) {
+	if hpa == nil {
+		return "", "", "", false
+	}
+	ref := hpa.Spec.ScaleTargetRef
+	gvk := schema.FromAPIVersionAndKind(ref.APIVersion, ref.Kind)
+	if gvk.Empty() || strings.TrimSpace(ref.Name) == "" {
+		return "", "", "", false
+	}
+	switch {
+	case gvk.Group == "apps" && gvk.Version == "v1" && (gvk.Kind == "Deployment" || gvk.Kind == "StatefulSet" || gvk.Kind == "DaemonSet"):
+		return hpa.Namespace, gvk.Kind, ref.Name, true
+	case gvk.Group == "batch" && gvk.Version == "v1" && (gvk.Kind == "Job" || gvk.Kind == "CronJob"):
+		return hpa.Namespace, gvk.Kind, ref.Name, true
+	case gvk.Group == "" && gvk.Version == "v1" && gvk.Kind == "Pod":
+		return hpa.Namespace, gvk.Kind, ref.Name, true
+	default:
+		return "", "", "", false
+	}
+}
+
+func hpaWorkloadKey(hpa *autoscalingv1.HorizontalPodAutoscaler) string {
+	namespace, kind, name, ok := hpaWorkloadTarget(hpa)
+	if !ok {
+		return ""
+	}
+	return snapshot.WorkloadOwnerKey(kind, namespace, name)
 }
 
 func (m *Manager) handleResourceQuota(obj interface{}, updateType MessageType) {
@@ -1118,6 +1472,7 @@ func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
 		return
 	}
 
+	apiGroup, apiVersion := apiGroupVersionForStreamKind("Node")
 	update := Update{
 		Type:            updateType,
 		Domain:          domainNodes,
@@ -1128,6 +1483,8 @@ func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
 		Name:            node.Name,
 		Namespace:       node.Namespace,
 		Kind:            "Node",
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
 	}
 	if updateType != MessageTypeDeleted {
 		update.Row = summary
@@ -1154,7 +1511,8 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 	}
 
 	podUsage := m.podMetricsSnapshot()
-	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, podUsage)
+	hpas := m.hpasForWorkloadContext(namespace, nil, updateType)
+	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, podUsage, hpas...)
 	if err != nil {
 		m.logWarn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err))
 		if m.telemetry != nil {
@@ -1163,6 +1521,7 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 		return
 	}
 
+	apiGroup, apiVersion := apiGroupVersionForStreamKind(kind)
 	update := Update{
 		Type:            updateType,
 		Domain:          domainWorkloads,
@@ -1173,6 +1532,8 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 		Name:            workload.GetName(),
 		Namespace:       namespace,
 		Kind:            kind,
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
 	}
 	if updateType != MessageTypeDeleted {
 		update.Row = summary
@@ -1214,7 +1575,8 @@ func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType,
 		return
 	}
 
-	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, usage)
+	hpas := m.hpasForWorkloadContext(namespace, nil, updateType)
+	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, usage, hpas...)
 	if err != nil {
 		m.logWarn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err))
 		if m.telemetry != nil {
@@ -1223,6 +1585,7 @@ func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType,
 		return
 	}
 
+	apiGroup, apiVersion := apiGroupVersionForStreamKind(kind)
 	update := Update{
 		Type:            MessageTypeModified,
 		Domain:          domainWorkloads,
@@ -1233,6 +1596,75 @@ func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType,
 		Name:            workload.GetName(),
 		Namespace:       namespace,
 		Kind:            kind,
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
+		Row:             summary,
+	}
+	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
+}
+
+func (m *Manager) broadcastWorkloadRow(kind, namespace, name, resourceVersion string, hpas []*autoscalingv1.HorizontalPodAutoscaler) {
+	workload, err := m.lookupWorkload(kind, namespace, name)
+	if err != nil || workload == nil {
+		return
+	}
+	ownerKey := snapshot.WorkloadOwnerKey(kind, namespace, name)
+	pods, err := m.podsForWorkload(namespace, ownerKey)
+	if err != nil {
+		m.logWarn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err))
+		if m.telemetry != nil {
+			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
+		}
+		return
+	}
+	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, m.podMetricsSnapshot(), hpas...)
+	if err != nil {
+		m.logWarn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err))
+		if m.telemetry != nil {
+			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
+		}
+		return
+	}
+	apiGroup, apiVersion := apiGroupVersionForStreamKind(kind)
+	update := Update{
+		Type:            MessageTypeModified,
+		Domain:          domainWorkloads,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: resourceVersion,
+		UID:             string(workload.GetUID()),
+		Name:            workload.GetName(),
+		Namespace:       namespace,
+		Kind:            kind,
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
+		Row:             summary,
+	}
+	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
+}
+
+func (m *Manager) broadcastStandalonePodWorkloadRow(namespace, name, resourceVersion string, hpas []*autoscalingv1.HorizontalPodAutoscaler) {
+	if m.podLister == nil {
+		return
+	}
+	pod, err := m.podLister.Pods(namespace).Get(name)
+	if err != nil || pod == nil {
+		return
+	}
+	summary := snapshot.BuildStandalonePodWorkloadSummary(m.clusterMeta, pod, m.podMetricsSnapshot(), hpas...)
+	apiGroup, apiVersion := apiGroupVersionForStreamKind("Pod")
+	update := Update{
+		Type:            MessageTypeModified,
+		Domain:          domainWorkloads,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: resourceVersion,
+		UID:             string(pod.UID),
+		Name:            pod.Name,
+		Namespace:       namespace,
+		Kind:            "Pod",
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
 		Row:             summary,
 	}
 	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
@@ -1246,7 +1678,9 @@ func (m *Manager) handleStandalonePodWorkload(pod *corev1.Pod, updateType Messag
 		updateType = MessageTypeDeleted
 	}
 
-	summary := snapshot.BuildStandalonePodWorkloadSummary(m.clusterMeta, pod, usage)
+	hpas := m.hpasForWorkloadContext(pod.Namespace, nil, updateType)
+	summary := snapshot.BuildStandalonePodWorkloadSummary(m.clusterMeta, pod, usage, hpas...)
+	apiGroup, apiVersion := apiGroupVersionForStreamKind("Pod")
 	update := Update{
 		Type:            updateType,
 		Domain:          domainWorkloads,
@@ -1257,6 +1691,8 @@ func (m *Manager) handleStandalonePodWorkload(pod *corev1.Pod, updateType Messag
 		Name:            pod.Name,
 		Namespace:       pod.Namespace,
 		Kind:            "Pod",
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
 	}
 	if updateType != MessageTypeDeleted {
 		update.Row = summary
@@ -1302,6 +1738,7 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 		return
 	}
 
+	apiGroup, apiVersion := apiGroupVersionForStreamKind("Node")
 	update := Update{
 		Type:            MessageTypeModified,
 		Domain:          domainNodes,
@@ -1312,6 +1749,8 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 		Name:            node.Name,
 		Namespace:       node.Namespace,
 		Kind:            "Node",
+		APIGroup:        apiGroup,
+		APIVersion:      apiVersion,
 		Row:             summary,
 	}
 	m.broadcast(domainNodes, []string{""}, update)
@@ -1579,6 +2018,54 @@ func (m *Manager) listPods(namespace string) ([]*corev1.Pod, error) {
 	return m.podLister.Pods(namespace).List(labels.Everything())
 }
 
+func (m *Manager) listHPAs(namespace string) ([]*autoscalingv1.HorizontalPodAutoscaler, error) {
+	if m.hpaLister == nil {
+		return nil, nil
+	}
+	if namespace == "" {
+		return m.hpaLister.List(labels.Everything())
+	}
+	return m.hpaLister.HorizontalPodAutoscalers(namespace).List(labels.Everything())
+}
+
+func (m *Manager) hpasForWorkloadContext(
+	namespace string,
+	eventHPA *autoscalingv1.HorizontalPodAutoscaler,
+	eventType MessageType,
+) []*autoscalingv1.HorizontalPodAutoscaler {
+	hpas, err := m.listHPAs(namespace)
+	if err != nil {
+		m.logWarn(fmt.Sprintf("resource stream: list hpas for namespace %s failed: %v", namespace, err))
+		if m.telemetry != nil {
+			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
+		}
+		hpas = nil
+	}
+	if eventHPA == nil {
+		return hpas
+	}
+
+	filtered := make([]*autoscalingv1.HorizontalPodAutoscaler, 0, len(hpas)+1)
+	found := false
+	for _, hpa := range hpas {
+		if hpa == nil {
+			continue
+		}
+		same := hpa.UID == eventHPA.UID || (hpa.Namespace == eventHPA.Namespace && hpa.Name == eventHPA.Name)
+		if same {
+			found = true
+			if eventType == MessageTypeDeleted {
+				continue
+			}
+		}
+		filtered = append(filtered, hpa)
+	}
+	if eventType != MessageTypeDeleted && !found {
+		filtered = append(filtered, eventHPA)
+	}
+	return filtered
+}
+
 func (m *Manager) listEndpointSlicesForService(namespace, service string) ([]*discoveryv1.EndpointSlice, error) {
 	if m.sliceLister == nil {
 		return []*discoveryv1.EndpointSlice{}, nil
@@ -1640,6 +2127,17 @@ func workloadFromObject(obj interface{}) (metav1.Object, string) {
 		return workloadFromObject(typed.Obj)
 	default:
 		return nil, ""
+	}
+}
+
+func replicaSetFromObject(obj interface{}) *appsv1.ReplicaSet {
+	switch typed := obj.(type) {
+	case *appsv1.ReplicaSet:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return replicaSetFromObject(typed.Obj)
+	default:
+		return nil
 	}
 }
 
@@ -2020,6 +2518,62 @@ func parseWorkloadOwnerKey(key string) (namespace, kind, name string, ok bool) {
 	return namespace, kind, name, true
 }
 
+func podOwnedByReplicaSet(pod *corev1.Pod, rs *appsv1.ReplicaSet) bool {
+	if pod == nil || rs == nil || pod.Namespace != rs.Namespace || rs.Name == "" {
+		return false
+	}
+	for _, owner := range pod.OwnerReferences {
+		if owner.Controller != nil && *owner.Controller && owner.Kind == "ReplicaSet" && owner.Name == rs.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func replicaSetStaleWorkloadScopes(oldRS *appsv1.ReplicaSet, newRS *appsv1.ReplicaSet) []string {
+	oldScope := replicaSetWorkloadScope(oldRS)
+	newScope := replicaSetWorkloadScope(newRS)
+	if oldRS == nil && newRS != nil {
+		oldScope = replicaSetFallbackWorkloadScope(newRS)
+	}
+	if oldRS != nil && newRS == nil {
+		newScope = replicaSetFallbackWorkloadScope(oldRS)
+	}
+	if oldScope == "" || oldScope == newScope {
+		return nil
+	}
+	return uniqueScopes([]string{oldScope})
+}
+
+func replicaSetWorkloadScope(rs *appsv1.ReplicaSet) string {
+	if rs == nil {
+		return ""
+	}
+	if ownerName := replicaSetDeploymentOwnerName(rs); ownerName != "" {
+		return fmt.Sprintf("workload:%s:apps:v1:Deployment:%s", rs.Namespace, ownerName)
+	}
+	return replicaSetFallbackWorkloadScope(rs)
+}
+
+func replicaSetFallbackWorkloadScope(rs *appsv1.ReplicaSet) string {
+	if rs == nil || rs.Name == "" {
+		return ""
+	}
+	return fmt.Sprintf("workload:%s:apps:v1:ReplicaSet:%s", rs.Namespace, rs.Name)
+}
+
+func replicaSetDeploymentOwnerName(rs *appsv1.ReplicaSet) string {
+	if rs == nil {
+		return ""
+	}
+	for _, owner := range rs.OwnerReferences {
+		if owner.Controller != nil && *owner.Controller && owner.Kind == "Deployment" && owner.Name != "" {
+			return owner.Name
+		}
+	}
+	return ""
+}
+
 func scopesForPod(summary snapshot.PodSummary) []string {
 	scopes := make([]string, 0, 4)
 	if summary.Namespace != "" {
@@ -2029,9 +2583,36 @@ func scopesForPod(summary snapshot.PodSummary) []string {
 		scopes = append(scopes, fmt.Sprintf("node:%s", summary.Node))
 	}
 	if summary.OwnerKind != "" && summary.OwnerKind != "None" && summary.OwnerName != "" && summary.OwnerName != "None" {
-		scopes = append(scopes, fmt.Sprintf("workload:%s:%s:%s", summary.Namespace, summary.OwnerKind, summary.OwnerName))
+		if scope := workloadScopeForOwner(summary.Namespace, summary.OwnerAPIVersion, summary.OwnerKind, summary.OwnerName); scope != "" {
+			scopes = append(scopes, scope)
+		}
 	}
 	return scopes
+}
+
+func workloadScopeForOwner(namespace, apiVersion, kind, name string) string {
+	if namespace == "" || apiVersion == "" || kind == "" || name == "" {
+		return ""
+	}
+	gv, err := schema.ParseGroupVersion(apiVersion)
+	if err != nil || gv.Version == "" {
+		return ""
+	}
+	return fmt.Sprintf("workload:%s:%s:%s:%s:%s", namespace, gv.Group, gv.Version, kind, name)
+}
+
+func stalePodScopes(oldSummary snapshot.PodSummary, newSummary snapshot.PodSummary) []string {
+	newScopes := make(map[string]struct{})
+	for _, scope := range scopesForPod(newSummary) {
+		newScopes[scope] = struct{}{}
+	}
+	stale := make([]string, 0)
+	for _, scope := range scopesForPod(oldSummary) {
+		if _, ok := newScopes[scope]; !ok {
+			stale = append(stale, scope)
+		}
+	}
+	return uniqueScopes(stale)
 }
 
 // Cluster-scoped domains always use the empty scope key.

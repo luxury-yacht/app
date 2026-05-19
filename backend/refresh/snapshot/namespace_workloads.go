@@ -84,7 +84,7 @@ type WorkloadSummary struct {
 	MemLimit             string `json:"memLimit,omitempty"`
 	PortForwardAvailable bool   `json:"portForwardAvailable"`
 	// HPAManaged indicates whether a HorizontalPodAutoscaler targets this workload.
-	HPAManaged bool `json:"hpaManaged,omitempty"`
+	HPAManaged bool `json:"hpaManaged"`
 }
 
 func parseNamespaceScope(scope string) (string, error) {

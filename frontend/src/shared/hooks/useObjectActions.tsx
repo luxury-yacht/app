@@ -394,17 +394,23 @@ export function buildObjectActionItems({
   if (SCALABLE_KINDS.includes(normalizedKind) && scaleStatus?.allowed && !scaleStatus.pending) {
     if (object.hpaManaged) {
       const desiredReplicas = extractDesiredReplicas(object);
-      const hpaScaleActionId =
-        desiredReplicas === 0 ? OBJECT_ACTION_IDS.resumeFromZero : OBJECT_ACTION_IDS.scaleToZero;
-      const hpaScaleHandler =
-        desiredReplicas === 0 ? handlers.onResumeFromZero : handlers.onScaleToZero;
-      menuItems.push({
-        actionId: hpaScaleActionId,
-        label: objectActionLabel(hpaScaleActionId),
-        icon: <ScaleIcon />,
-        onClick: hpaScaleHandler,
-        disabled: actionLoading || !hpaScaleHandler,
-      });
+      if (desiredReplicas === 0) {
+        menuItems.push({
+          actionId: OBJECT_ACTION_IDS.resumeFromZero,
+          label: objectActionLabel(OBJECT_ACTION_IDS.resumeFromZero),
+          icon: <ScaleIcon />,
+          onClick: handlers.onResumeFromZero,
+          disabled: actionLoading || !handlers.onResumeFromZero,
+        });
+      } else {
+        menuItems.push({
+          actionId: OBJECT_ACTION_IDS.scaleToZero,
+          label: objectActionLabel(OBJECT_ACTION_IDS.scaleToZero),
+          icon: <ScaleIcon />,
+          onClick: handlers.onScaleToZero,
+          disabled: actionLoading || !handlers.onScaleToZero,
+        });
+      }
     } else if (handlers.onScale) {
       menuItems.push({
         actionId: OBJECT_ACTION_IDS.scale,

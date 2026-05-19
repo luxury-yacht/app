@@ -21,6 +21,14 @@ type PodsScope =
   | { scope: string; kind: 'workload'; namespace: string }
   | null;
 
+const WORKLOAD_SCOPE_GVK: Record<string, { group: string; version: string; kind: string }> = {
+  deployment: { group: 'apps', version: 'v1', kind: 'Deployment' },
+  daemonset: { group: 'apps', version: 'v1', kind: 'DaemonSet' },
+  statefulset: { group: 'apps', version: 'v1', kind: 'StatefulSet' },
+  job: { group: 'batch', version: 'v1', kind: 'Job' },
+  replicaset: { group: 'apps', version: 'v1', kind: 'ReplicaSet' },
+};
+
 export interface ObjectPanelPodsState {
   pods: PodSnapshotEntry[];
   metrics: PodMetricsInfo | null;
@@ -57,17 +65,29 @@ export function useObjectPanelPods({
     // lowercased objectKind only if the data source didn't provide one.
     // Previously routed through WORKLOAD_KIND_API_NAMES as a casing safety
     // net; that map is retired.
-    const workloadKindSegment = objectData.kind ?? normalizedKind;
-    const workloadKinds = ['deployment', 'daemonset', 'statefulset', 'job', 'replicaset'];
-    if (workloadNamespace && workloadKinds.includes(normalizedKind)) {
+    const fallbackGVK = WORKLOAD_SCOPE_GVK[normalizedKind];
+    if (workloadNamespace && fallbackGVK) {
+      const workloadKindSegment = objectData.kind ?? fallbackGVK.kind;
+      const workloadGroup = objectData.group ?? fallbackGVK.group;
+      const workloadVersion = objectData.version ?? fallbackGVK.version;
+      if (!workloadVersion || !workloadKindSegment) {
+        return null;
+      }
       return {
-        scope: `workload:${workloadNamespace}:${workloadKindSegment}:${objectData.name}`,
+        scope: `workload:${workloadNamespace}:${workloadGroup}:${workloadVersion}:${workloadKindSegment}:${objectData.name}`,
         kind: 'workload',
         namespace: workloadNamespace,
       };
     }
     return null;
-  }, [normalizedKind, objectData?.name, objectData?.namespace, objectData?.kind]);
+  }, [
+    normalizedKind,
+    objectData?.name,
+    objectData?.namespace,
+    objectData?.kind,
+    objectData?.group,
+    objectData?.version,
+  ]);
 
   const refreshScope = useMemo(() => {
     if (!podsScope?.scope) {

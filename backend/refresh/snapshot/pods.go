@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
@@ -213,20 +214,24 @@ func (b *PodBuilder) collectPods(scope string) ([]*corev1.Pod, error) {
 }
 
 type workloadScope struct {
-	namespace string
-	kind      string
-	name      string
+	namespace  string
+	apiGroup   string
+	apiVersion string
+	kind       string
+	name       string
 }
 
 func parseWorkloadScope(value string) (workloadScope, error) {
 	parts := strings.Split(value, ":")
-	if len(parts) != 3 {
+	if len(parts) != 5 {
 		return workloadScope{}, fmt.Errorf("invalid workload scope: %s", value)
 	}
 	return workloadScope{
-		namespace: parts[0],
-		kind:      parts[1],
-		name:      parts[2],
+		namespace:  parts[0],
+		apiGroup:   parts[1],
+		apiVersion: parts[2],
+		kind:       parts[3],
+		name:       parts[4],
 	}, nil
 }
 
@@ -235,7 +240,7 @@ func matchesWorkload(pod *corev1.Pod, scope workloadScope, rsLister appslisters.
 		if owner.Controller == nil || !*owner.Controller {
 			continue
 		}
-		if owner.Kind == scope.kind && owner.Name == scope.name {
+		if ownerMatchesWorkloadScope(owner.APIVersion, owner.Kind, owner.Name, scope) {
 			return true
 		}
 		if owner.Kind == "ReplicaSet" && scope.kind == "Deployment" && rsLister != nil {
@@ -244,13 +249,24 @@ func matchesWorkload(pod *corev1.Pod, scope workloadScope, rsLister appslisters.
 				continue
 			}
 			for _, rsOwner := range rs.OwnerReferences {
-				if rsOwner.Controller != nil && *rsOwner.Controller && rsOwner.Kind == "Deployment" && rsOwner.Name == scope.name {
+				if rsOwner.Controller != nil && *rsOwner.Controller && ownerMatchesWorkloadScope(rsOwner.APIVersion, rsOwner.Kind, rsOwner.Name, scope) {
 					return true
 				}
 			}
 		}
 	}
 	return false
+}
+
+func ownerMatchesWorkloadScope(apiVersion, kind, name string, scope workloadScope) bool {
+	gv, err := schema.ParseGroupVersion(apiVersion)
+	if err != nil {
+		return false
+	}
+	return gv.Group == scope.apiGroup &&
+		gv.Version == scope.apiVersion &&
+		kind == scope.kind &&
+		name == scope.name
 }
 
 func (b *PodBuilder) replicasetDeploymentMap(pods []*corev1.Pod) (map[string]string, error) {

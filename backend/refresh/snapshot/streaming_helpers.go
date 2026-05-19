@@ -744,7 +744,13 @@ func BuildPodDisruptionBudgetSummary(meta ClusterMeta, pdb *policyv1.PodDisrupti
 }
 
 // BuildWorkloadSummary builds a workload row payload for a single workload object.
-func BuildWorkloadSummary(meta ClusterMeta, obj interface{}, pods []*corev1.Pod, usage map[string]metrics.PodUsage) (WorkloadSummary, error) {
+func BuildWorkloadSummary(
+	meta ClusterMeta,
+	obj interface{},
+	pods []*corev1.Pod,
+	usage map[string]metrics.PodUsage,
+	hpas ...*autoscalingv1.HorizontalPodAutoscaler,
+) (WorkloadSummary, error) {
 	podsByOwner := make(map[string][]*corev1.Pod)
 	for _, pod := range pods {
 		if pod == nil {
@@ -774,13 +780,24 @@ func BuildWorkloadSummary(meta ClusterMeta, obj interface{}, pods []*corev1.Pod,
 	}
 
 	summary.ClusterMeta = meta
+	if _, ok := buildHPATargetSet(hpas)[workloadHPATargetKey(summary)]; ok {
+		summary.HPAManaged = true
+	}
 	return summary, nil
 }
 
 // BuildStandalonePodWorkloadSummary builds a workload row payload for a standalone pod entry.
-func BuildStandalonePodWorkloadSummary(meta ClusterMeta, pod *corev1.Pod, usage map[string]metrics.PodUsage) WorkloadSummary {
+func BuildStandalonePodWorkloadSummary(
+	meta ClusterMeta,
+	pod *corev1.Pod,
+	usage map[string]metrics.PodUsage,
+	hpas ...*autoscalingv1.HorizontalPodAutoscaler,
+) WorkloadSummary {
 	summary := buildStandalonePodSummary(meta.ClusterID, pod, usage)
 	summary.ClusterMeta = meta
+	if _, ok := buildHPATargetSet(hpas)[workloadHPATargetKey(summary)]; ok {
+		summary.HPAManaged = true
+	}
 	return summary
 }
 
