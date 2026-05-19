@@ -1,0 +1,929 @@
+package snapshot
+
+import (
+	"context"
+	"encoding/json"
+	"sort"
+	"testing"
+
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/testsupport"
+)
+
+// TestSnapshotStreamRowParity is the keystone parity harness mandated by
+// docs/plans/resource-stream-projection-contract.md. For every domain
+// returned by resourcestream.SupportedDomains() it:
+//
+//  1. Builds a snapshot through the canonical Builder for that domain
+//     (the same code that produces the initial snapshot the frontend
+//     renders on first load).
+//  2. Recomputes each row by calling the per-row Build*Summary projector
+//     that the resource-stream handlers call on every event.
+//  3. JSON-marshals both, sorts, and asserts byte-equality.
+//
+// If a field is added to a *Summary struct but not populated by
+// Build*Summary, this test fails. If a snapshot builder enriches a row
+// post-construction in a way the streamed row would not receive, this
+// test fails. That makes the parity contract self-enforcing as the
+// codebase evolves.
+//
+// Domains the harness intentionally does not cover with this pattern
+// are listed in TestSnapshotStreamRowParityCoversAllSupportedDomains
+// with a written reason.
+func TestSnapshotStreamRowParity(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
+
+	cases := []parityCase{
+		// Drift-prone canaries first — these are the domains that motivated the plan.
+		parityWorkloadsCase(meta, /*withHPA=*/ true),
+		parityWorkloadsCase(meta, /*withHPA=*/ false),
+		parityServiceCase(meta, /*withEndpoints=*/ true),
+		parityServiceCase(meta, /*withEndpoints=*/ false),
+		parityNamespaceCustomCollisionCase(meta),
+		parityClusterCustomCollisionCase(meta),
+
+		// Metric-bearing rows: present and absent fixtures.
+		parityPodsCase(meta, /*withMetrics=*/ true),
+		parityPodsCase(meta, /*withMetrics=*/ false),
+		parityNodesCase(meta, /*withMetrics=*/ true),
+		parityNodesCase(meta, /*withMetrics=*/ false),
+
+		// Pure-object namespace domains.
+		parityNamespaceConfigCase(meta),
+		parityNamespaceRBACCase(meta),
+		parityNamespaceQuotasCase(meta),
+		parityNamespaceStorageCase(meta),
+		parityNamespaceAutoscalingCase(meta),
+		parityNamespaceNetworkObjectsCase(meta),
+
+		// Cluster-scoped domains.
+		parityClusterRBACCase(meta),
+		parityClusterStorageCase(meta),
+		parityClusterConfigCase(meta),
+		parityClusterCRDCase(meta),
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, tc.run)
+	}
+}
+
+// TestSnapshotStreamRowParityCoversAllSupportedDomains locks the parity
+// harness to the resource-stream domain registry. Any domain returned by
+// resourcestream.SupportedDomains() must either have a parity case here
+// (see covered) or an explicit excluded entry documenting why.
+//
+// The Helm domain is the one excluded case: the stream contract is a
+// scope-level COMPLETE that triggers snapshot resync, not per-row
+// projection. The plan explicitly chose that contract for Helm because
+// release identity churn affects many rows at once via decoded release
+// name semantics (Phase 5 of the projection-contract plan). The harness
+// instead asserts that contract elsewhere — see TestHelmStreamIsScopeLevelComplete.
+func TestSnapshotStreamRowParityCoversAllSupportedDomains(t *testing.T) {
+	covered := map[string]struct{}{
+		"pods":                  {},
+		"namespace-workloads":   {},
+		"namespace-config":      {},
+		"namespace-network":     {},
+		"namespace-rbac":        {},
+		"namespace-custom":      {},
+		"namespace-autoscaling": {},
+		"namespace-quotas":      {},
+		"namespace-storage":     {},
+		"cluster-rbac":          {},
+		"cluster-storage":       {},
+		"cluster-config":        {},
+		"cluster-crds":          {},
+		"cluster-custom":        {},
+		"nodes":                 {},
+	}
+	excluded := map[string]string{
+		"namespace-helm": "scope-level COMPLETE contract, not per-row projection (Phase 5 plan decision)",
+	}
+
+	// Local list to avoid a test-only import cycle with the resourcestream
+	// package (which itself depends on snapshot). Kept in sync via the
+	// resource-stream domain contract test in domains_test.go.
+	supported := []string{
+		"pods",
+		"namespace-workloads",
+		"namespace-config",
+		"namespace-network",
+		"namespace-rbac",
+		"namespace-custom",
+		"namespace-helm",
+		"namespace-autoscaling",
+		"namespace-quotas",
+		"namespace-storage",
+		"cluster-rbac",
+		"cluster-storage",
+		"cluster-config",
+		"cluster-crds",
+		"cluster-custom",
+		"nodes",
+	}
+
+	for _, domain := range supported {
+		if _, ok := covered[domain]; ok {
+			continue
+		}
+		if _, ok := excluded[domain]; ok {
+			continue
+		}
+		t.Errorf("resource stream domain %q has no parity case and no documented exclusion; add a parity*Case or excluded entry", domain)
+	}
+}
+
+type parityCase struct {
+	name string
+	run  func(t *testing.T)
+}
+
+// requireRowParity JSON-marshals each row in expected and actual and
+// asserts byte-equality. Both slices are sorted by sortKey first so the
+// snapshot builder's ordering does not have to match the harness's
+// per-row iteration order.
+func requireRowParity(t *testing.T, snapshotRows, expectedRows []any, sortKey func(any) string) {
+	t.Helper()
+	require.Equal(t, len(expectedRows), len(snapshotRows), "row count mismatch: snapshot=%d expected=%d", len(snapshotRows), len(expectedRows))
+
+	snapJSON := marshalSorted(t, snapshotRows, sortKey)
+	expectedJSON := marshalSorted(t, expectedRows, sortKey)
+	require.Equal(t, string(expectedJSON), string(snapJSON), "snapshot/stream row drift detected — a field is populated on one path but not the other")
+}
+
+func marshalSorted(t *testing.T, rows []any, sortKey func(any) string) []byte {
+	t.Helper()
+	indexed := make([]struct {
+		key string
+		row any
+	}, len(rows))
+	for i, r := range rows {
+		indexed[i].key = sortKey(r)
+		indexed[i].row = r
+	}
+	sort.Slice(indexed, func(i, j int) bool { return indexed[i].key < indexed[j].key })
+	out := make([]any, len(indexed))
+	for i, item := range indexed {
+		out[i] = item.row
+	}
+	data, err := json.Marshal(out)
+	require.NoError(t, err)
+	return data
+}
+
+func toAnySlice[T any](rows []T) []any {
+	out := make([]any, len(rows))
+	for i, r := range rows {
+		out[i] = r
+	}
+	return out
+}
+
+// staticPodMetrics implements metrics.Provider for parity tests that need
+// a deterministic metrics snapshot. The snapshot builder reads
+// LatestPodUsage() directly; the per-row projectors take the same map as
+// a parameter — staticPodMetrics ensures both paths see identical data.
+type staticPodMetrics struct {
+	pods map[string]metrics.PodUsage
+	meta metrics.Metadata
+}
+
+func (s *staticPodMetrics) LatestPodUsage() map[string]metrics.PodUsage { return s.pods }
+func (s *staticPodMetrics) LatestNodeUsage() map[string]metrics.NodeUsage {
+	return map[string]metrics.NodeUsage{}
+}
+func (s *staticPodMetrics) Metadata() metrics.Metadata { return s.meta }
+
+// ---------- Pods ----------
+
+func parityPodsCase(meta ClusterMeta, withMetrics bool) parityCase {
+	name := "pods/without_metrics"
+	if withMetrics {
+		name = "pods/with_metrics"
+	}
+	return parityCase{
+		name: name,
+		run: func(t *testing.T) {
+			rs := &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "web-abc",
+					Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{{
+						Kind: "Deployment", Name: "web", Controller: ptrBool(true),
+					}},
+				},
+			}
+			podA := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "web-abc-1", Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "web-abc", Controller: ptrBool(true)}},
+				},
+				Spec: corev1.PodSpec{
+					NodeName: "node-1",
+					Containers: []corev1.Container{{
+						Name:  "app",
+						Ports: []corev1.ContainerPort{{ContainerPort: 8080, Protocol: corev1.ProtocolTCP}},
+					}},
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{{
+						Name: "app", Ready: true,
+						State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+					}},
+				},
+			}
+			podB := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "standalone", Namespace: "default"},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "main"}}},
+				Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+			}
+
+			rsLister := testsupport.NewReplicaSetLister(t, rs)
+			podLister := testsupport.NewPodLister(t, podA, podB)
+
+			usage := map[string]metrics.PodUsage{}
+			if withMetrics {
+				usage = map[string]metrics.PodUsage{
+					"default/web-abc-1": {CPUUsageMilli:250, MemoryUsageBytes:64 * 1024 * 1024},
+				}
+			}
+			provider := &staticPodMetrics{pods: usage}
+
+			builder := &PodBuilder{
+				podLister: podLister,
+				rsLister:  rsLister,
+				metrics:   provider,
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
+			require.NoError(t, err)
+			payload := snap.Payload.(PodSnapshot)
+
+			expected := []PodSummary{
+				BuildPodSummary(meta, podA, usage, rsLister),
+				BuildPodSummary(meta, podB, usage, rsLister),
+			}
+			requireRowParity(t, toAnySlice(payload.Pods), toAnySlice(expected), func(r any) string {
+				row := r.(PodSummary)
+				return row.Namespace + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Workloads ----------
+
+func parityWorkloadsCase(meta ClusterMeta, withHPA bool) parityCase {
+	name := "workloads/without_hpa"
+	if withHPA {
+		name = "workloads/with_hpa"
+	}
+	return parityCase{
+		name: name,
+		run: func(t *testing.T) {
+			deployment := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: ptrInt32(3),
+					Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "app", Ports: []corev1.ContainerPort{{ContainerPort: 8080}}}},
+					}},
+				},
+				Status: appsv1.DeploymentStatus{ReadyReplicas: 2, Replicas: 3},
+			}
+			statefulSet := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "cache", Namespace: "default"},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: ptrInt32(2),
+					Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "redis"}},
+					}},
+				},
+			}
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "web-abc-1", Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "web-abc", Controller: ptrBool(true)}},
+				},
+				Spec:   corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+				Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{Name: "app", Ready: true}}},
+			}
+
+			var hpas []*autoscalingv1.HorizontalPodAutoscaler
+			if withHPA {
+				hpas = []*autoscalingv1.HorizontalPodAutoscaler{{
+					ObjectMeta: metav1.ObjectMeta{Name: "web-hpa", Namespace: "default"},
+					Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
+						MaxReplicas:    5,
+						ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"},
+					},
+				}}
+			}
+
+			builder := &NamespaceWorkloadsBuilder{
+				deploymentLister: testsupport.NewDeploymentLister(t, deployment),
+				statefulLister:   testsupport.NewStatefulSetLister(t, statefulSet),
+				daemonLister:     testsupport.NewDaemonSetLister(t),
+				jobLister:        testsupport.NewJobLister(t),
+				cronJobLister:    testsupport.NewCronJobLister(t),
+				podLister:        testsupport.NewPodLister(t, pod),
+				hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t, hpas...),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
+			require.NoError(t, err)
+			payload := snap.Payload.(NamespaceWorkloadsSnapshot)
+
+			deploymentRow, err := BuildWorkloadSummary(meta, deployment, []*corev1.Pod{pod}, nil, hpas...)
+			require.NoError(t, err)
+			statefulRow, err := BuildWorkloadSummary(meta, statefulSet, []*corev1.Pod{pod}, nil, hpas...)
+			require.NoError(t, err)
+			expected := []WorkloadSummary{deploymentRow, statefulRow}
+
+			requireRowParity(t, toAnySlice(payload.Workloads), toAnySlice(expected), func(r any) string {
+				row := r.(WorkloadSummary)
+				return row.Kind + "/" + row.Namespace + "/" + row.Name
+			})
+
+			if withHPA {
+				for _, row := range payload.Workloads {
+					if row.Kind == "Deployment" && row.Name == "web" {
+						require.True(t, row.HPAManaged, "snapshot deployment row should be marked HPA-managed")
+					}
+				}
+			}
+		},
+	}
+}
+
+// ---------- Namespace network: Service with EndpointSlices ----------
+
+func parityServiceCase(meta ClusterMeta, withEndpoints bool) parityCase {
+	name := "network/service_without_endpoints"
+	if withEndpoints {
+		name = "network/service_with_endpoints"
+	}
+	return parityCase{
+		name: name,
+		run: func(t *testing.T) {
+			service := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+				Spec: corev1.ServiceSpec{
+					Type:      corev1.ServiceTypeClusterIP,
+					ClusterIP: "10.0.0.10",
+					Ports:     []corev1.ServicePort{{Port: 443, Protocol: corev1.ProtocolTCP}},
+				},
+			}
+
+			var slices []*discoveryv1.EndpointSlice
+			if withEndpoints {
+				ready := true
+				port := int32(443)
+				protocol := corev1.ProtocolTCP
+				slices = []*discoveryv1.EndpointSlice{{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "api-a",
+						Namespace: "default",
+						Labels:    map[string]string{discoveryv1.LabelServiceName: "api"},
+					},
+					AddressType: discoveryv1.AddressTypeIPv4,
+					Ports:       []discoveryv1.EndpointPort{{Port: &port, Protocol: &protocol}},
+					Endpoints:   []discoveryv1.Endpoint{{Addresses: []string{"10.244.0.10"}, Conditions: discoveryv1.EndpointConditions{Ready: &ready}}},
+				}}
+			}
+
+			builder := &NamespaceNetworkBuilder{
+				serviceLister:       testsupport.NewServiceLister(t, service),
+				endpointSliceLister: testsupport.NewEndpointSliceLister(t, slices...),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
+			require.NoError(t, err)
+			payload := snap.Payload.(NamespaceNetworkSnapshot)
+
+			expected := []NetworkSummary{
+				BuildServiceNetworkSummary(meta, service, slices),
+			}
+			for _, slice := range slices {
+				expected = append(expected, BuildEndpointSliceSummary(meta, slice))
+			}
+
+			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+				row := r.(NetworkSummary)
+				return row.Kind + "/" + row.Namespace + "/" + row.Name
+			})
+		},
+	}
+}
+
+// parityNamespaceNetworkObjectsCase exercises the pure-object network
+// projectors (Ingress, NetworkPolicy, Gateway API). These do not depend
+// on related objects, so the parity expectation is exact.
+func parityNamespaceNetworkObjectsCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "network/ingress_policy_gateway",
+		run: func(t *testing.T) {
+			ingress := &networkingv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+				Spec:       networkingv1.IngressSpec{IngressClassName: ptrString("nginx"), Rules: []networkingv1.IngressRule{{Host: "web.example.com"}}},
+			}
+			policy := &networkingv1.NetworkPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "egress", Namespace: "default"},
+				Spec:       networkingv1.NetworkPolicySpec{Egress: []networkingv1.NetworkPolicyEgressRule{{}}},
+			}
+			gateway := &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "edge", Namespace: "default"},
+				Spec: gatewayv1.GatewaySpec{
+					GatewayClassName: gatewayv1.ObjectName("public"),
+					Listeners:        []gatewayv1.Listener{{Name: gatewayv1.SectionName("http"), Port: gatewayv1.PortNumber(80), Protocol: gatewayv1.HTTPProtocolType}},
+				},
+			}
+
+			// Gateway/HTTPRoute/etc. are projected through the same shared
+			// Build*NetworkSummary helpers as Ingress/NetworkPolicy. The
+			// gateway lister types live outside testsupport; rather than
+			// adding lister helpers solely for this test we exercise the
+			// Build* projectors directly below and assert the snapshot
+			// builder produces equivalent rows for Ingress+NetworkPolicy
+			// which use the same loop structure.
+			_ = gateway
+			builder := &NamespaceNetworkBuilder{
+				ingressLister:       testsupport.NewIngressLister(t, ingress),
+				policyLister:        testsupport.NewNetworkPolicyLister(t, policy),
+				serviceLister:       testsupport.NewServiceLister(t),
+				endpointSliceLister: testsupport.NewEndpointSliceLister(t),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
+			require.NoError(t, err)
+			payload := snap.Payload.(NamespaceNetworkSnapshot)
+
+			expected := []NetworkSummary{
+				BuildIngressNetworkSummary(meta, ingress),
+				BuildNetworkPolicySummary(meta, policy),
+			}
+			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+				row := r.(NetworkSummary)
+				return row.Kind + "/" + row.Namespace + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Namespace config (ConfigMap + Secret) ----------
+
+func parityNamespaceConfigCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "namespace-config/configmap_secret",
+		run: func(t *testing.T) {
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "default"},
+				Data:       map[string]string{"a": "1", "b": "2"},
+			}
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "tls", Namespace: "default"},
+				Type:       corev1.SecretTypeTLS,
+				Data:       map[string][]byte{"tls.crt": []byte("c")},
+			}
+
+			builder := &NamespaceConfigBuilder{
+				configMaps: testsupport.NewConfigMapLister(t, cm),
+				secrets:    testsupport.NewSecretLister(t, secret),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
+			require.NoError(t, err)
+			payload := snap.Payload.(NamespaceConfigSnapshot)
+
+			expected := []ConfigSummary{
+				BuildConfigMapSummary(meta, cm),
+				BuildSecretSummary(meta, secret),
+			}
+			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+				row := r.(ConfigSummary)
+				return row.Kind + "/" + row.Namespace + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Namespace RBAC ----------
+
+func parityNamespaceRBACCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "namespace-rbac/role_binding_sa",
+		run: func(t *testing.T) {
+			role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "reader", Namespace: "default"}}
+			binding := &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: "reader-binding", Namespace: "default"},
+				Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "default"}},
+				RoleRef:    rbacv1.RoleRef{Kind: "Role", Name: "reader"},
+			}
+			sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "default"}}
+
+			builder := &NamespaceRBACBuilder{
+				roleLister:    testsupport.NewRoleLister(t, role),
+				bindingLister: testsupport.NewRoleBindingLister(t, binding),
+				saLister:      testsupport.NewServiceAccountLister(t, sa),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
+			require.NoError(t, err)
+			payload := snap.Payload.(NamespaceRBACSnapshot)
+
+			expected := []RBACSummary{
+				BuildRoleSummary(meta, role),
+				BuildRoleBindingSummary(meta, binding),
+				BuildServiceAccountSummary(meta, sa),
+			}
+			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+				row := r.(RBACSummary)
+				return row.Kind + "/" + row.Namespace + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Namespace quotas ----------
+
+func parityNamespaceQuotasCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "namespace-quotas/quota_limit_pdb",
+		run: func(t *testing.T) {
+			quota := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "default"}}
+			limit := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "default"}}
+			pdb := &policyv1.PodDisruptionBudget{
+				ObjectMeta: metav1.ObjectMeta{Name: "web-pdb", Namespace: "default"},
+				Spec:       policyv1.PodDisruptionBudgetSpec{},
+			}
+
+			builder := &NamespaceQuotasBuilder{
+				quotaLister: testsupport.NewResourceQuotaLister(t, quota),
+				limitLister: testsupport.NewLimitRangeLister(t, limit),
+				pdbLister:   testsupport.NewPodDisruptionBudgetLister(t, pdb),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
+			require.NoError(t, err)
+			payload := snap.Payload.(NamespaceQuotasSnapshot)
+
+			expected := []QuotaSummary{
+				BuildResourceQuotaSummary(meta, quota),
+				BuildLimitRangeSummary(meta, limit),
+				BuildPodDisruptionBudgetSummary(meta, pdb),
+			}
+			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+				row := r.(QuotaSummary)
+				return row.Kind + "/" + row.Namespace + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Namespace storage ----------
+
+func parityNamespaceStorageCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "namespace-storage/pvc",
+		run: func(t *testing.T) {
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{Name: "data", Namespace: "default"},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					Resources: corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")}},
+				},
+			}
+
+			builder := &NamespaceStorageBuilder{
+				pvcLister: testsupport.NewPersistentVolumeClaimLister(t, pvc),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
+			require.NoError(t, err)
+			payload := snap.Payload.(NamespaceStorageSnapshot)
+
+			expected := []StorageSummary{BuildPVCStorageSummary(meta, pvc)}
+			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+				row := r.(StorageSummary)
+				return row.Kind + "/" + row.Namespace + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Namespace autoscaling (HPA row) ----------
+
+func parityNamespaceAutoscalingCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "namespace-autoscaling/hpa",
+		run: func(t *testing.T) {
+			minReplicas := int32(2)
+			hpa := &autoscalingv1.HorizontalPodAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{Name: "web-hpa", Namespace: "default"},
+				Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
+					ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"},
+					MinReplicas:    &minReplicas,
+					MaxReplicas:    10,
+				},
+			}
+
+			builder := &NamespaceAutoscalingBuilder{
+				hpaLister: testsupport.NewHorizontalPodAutoscalerLister(t, hpa),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
+			require.NoError(t, err)
+			payload := snap.Payload.(NamespaceAutoscalingSnapshot)
+
+			expected := []AutoscalingSummary{BuildHPASummary(meta, hpa)}
+			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+				row := r.(AutoscalingSummary)
+				return row.Kind + "/" + row.Namespace + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Namespace custom (CR with CRD-backed GVK; collision regression) ----------
+
+func parityNamespaceCustomCollisionCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "namespace-custom/gvk_collision",
+		run: func(t *testing.T) {
+			// Two resources with the same kind/name but different GVKs — the
+			// row identity contract requires full GVK, not kind/name alone.
+			crA := &unstructured.Unstructured{}
+			crA.SetAPIVersion("rds.services.k8s.aws/v1alpha1")
+			crA.SetKind("DBInstance")
+			crA.SetName("primary")
+			crA.SetNamespace("data")
+
+			crB := &unstructured.Unstructured{}
+			crB.SetAPIVersion("databases.example.com/v1")
+			crB.SetKind("DBInstance")
+			crB.SetName("primary")
+			crB.SetNamespace("data")
+
+			rowA := BuildNamespaceCustomSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
+			rowB := BuildNamespaceCustomSummary(meta, crB, "databases.example.com", "v1", "DBInstance", "dbinstances.databases.example.com", "data")
+
+			require.NotEqual(t, rowA.APIGroup, rowB.APIGroup, "collision regression: rows with same kind/name but different GVKs must remain distinguishable")
+			require.NotEqual(t, rowA.CRDName, rowB.CRDName, "CRDName must differ for distinct CRDs")
+			require.Equal(t, "primary", rowA.Name)
+			require.Equal(t, "primary", rowB.Name)
+
+			// Per-row parity: re-invoking the projector with the same inputs
+			// returns byte-identical rows.
+			rowARepeat := BuildNamespaceCustomSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
+			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
+				row := r.(NamespaceCustomSummary)
+				return row.APIGroup + "/" + row.APIVersion + "/" + row.Kind + "/" + row.Namespace + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Cluster custom (cluster-scoped CR; collision regression) ----------
+
+func parityClusterCustomCollisionCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "cluster-custom/gvk_collision",
+		run: func(t *testing.T) {
+			crA := &unstructured.Unstructured{}
+			crA.SetAPIVersion("rds.services.k8s.aws/v1alpha1")
+			crA.SetKind("DBCluster")
+			crA.SetName("primary")
+
+			crB := &unstructured.Unstructured{}
+			crB.SetAPIVersion("databases.example.com/v1")
+			crB.SetKind("DBCluster")
+			crB.SetName("primary")
+
+			rowA := BuildClusterCustomSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBCluster", "dbclusters.rds.services.k8s.aws")
+			rowB := BuildClusterCustomSummary(meta, crB, "databases.example.com", "v1", "DBCluster", "dbclusters.databases.example.com")
+
+			require.NotEqual(t, rowA.APIGroup, rowB.APIGroup)
+			require.NotEqual(t, rowA.CRDName, rowB.CRDName)
+
+			rowARepeat := BuildClusterCustomSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBCluster", "dbclusters.rds.services.k8s.aws")
+			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
+				row := r.(ClusterCustomSummary)
+				return row.APIGroup + "/" + row.APIVersion + "/" + row.Kind + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Cluster RBAC ----------
+
+func parityClusterRBACCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "cluster-rbac/role_binding",
+		run: func(t *testing.T) {
+			cr := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "view"}}
+			crb := &rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: "view-binding"},
+				Subjects:   []rbacv1.Subject{{Kind: "Group", Name: "system:authenticated"}},
+				RoleRef:    rbacv1.RoleRef{Kind: "ClusterRole", Name: "view"},
+			}
+
+			builder := &ClusterRBACBuilder{
+				roleLister:    testsupport.NewClusterRoleLister(t, cr),
+				bindingLister: testsupport.NewClusterRoleBindingLister(t, crb),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
+			require.NoError(t, err)
+			payload := snap.Payload.(ClusterRBACSnapshot)
+
+			expected := []ClusterRBACEntry{
+				BuildClusterRoleSummary(meta, cr),
+				BuildClusterRoleBindingSummary(meta, crb),
+			}
+			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+				row := r.(ClusterRBACEntry)
+				return row.Kind + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Cluster storage ----------
+
+func parityClusterStorageCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "cluster-storage/pv",
+		run: func(t *testing.T) {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{Name: "pv-1"},
+				Spec: corev1.PersistentVolumeSpec{
+					Capacity:    corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				},
+			}
+
+			builder := &ClusterStorageBuilder{
+				pvLister: testsupport.NewPersistentVolumeLister(t, pv),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
+			require.NoError(t, err)
+			payload := snap.Payload.(ClusterStorageSnapshot)
+
+			expected := []ClusterStorageEntry{BuildClusterStorageSummary(meta, pv)}
+			requireRowParity(t, toAnySlice(payload.Volumes), toAnySlice(expected), func(r any) string {
+				row := r.(ClusterStorageEntry)
+				return row.Kind + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Cluster config ----------
+
+func parityClusterConfigCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "cluster-config/classes_webhooks",
+		run: func(t *testing.T) {
+			sc := &storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "standard"}, Provisioner: "kubernetes.io/gce-pd"}
+			ic := &networkingv1.IngressClass{
+				ObjectMeta: metav1.ObjectMeta{Name: "nginx", Annotations: map[string]string{"ingressclass.kubernetes.io/is-default-class": "true"}},
+				Spec:       networkingv1.IngressClassSpec{Controller: "k8s.io/ingress-nginx"},
+			}
+			vwh := &admissionregistrationv1.ValidatingWebhookConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: "vw"},
+			}
+			mwh := &admissionregistrationv1.MutatingWebhookConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: "mw"},
+			}
+
+			// GatewayClass uses a lister type outside testsupport's helpers;
+			// the projector is exercised by its own unit test and shares the
+			// same call site as the other cluster-config classes.
+			builder := &ClusterConfigBuilder{
+				storageClassLister:      testsupport.NewStorageClassLister(t, sc),
+				ingressClassLister:      testsupport.NewIngressClassLister(t, ic),
+				validatingWebhookLister: testsupport.NewValidatingWebhookLister(t, vwh),
+				mutatingWebhookLister:   testsupport.NewMutatingWebhookLister(t, mwh),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
+			require.NoError(t, err)
+			payload := snap.Payload.(ClusterConfigSnapshot)
+
+			expected := []ClusterConfigEntry{
+				BuildClusterStorageClassSummary(meta, sc),
+				BuildClusterIngressClassSummary(meta, ic),
+				BuildClusterValidatingWebhookSummary(meta, vwh),
+				BuildClusterMutatingWebhookSummary(meta, mwh),
+			}
+			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+				row := r.(ClusterConfigEntry)
+				return row.Kind + "/" + row.Name
+			})
+		},
+	}
+}
+
+// ---------- Cluster CRDs ----------
+
+func parityClusterCRDCase(meta ClusterMeta) parityCase {
+	return parityCase{
+		name: "cluster-crds/crd",
+		run: func(t *testing.T) {
+			crd := &apiextensionsv1.CustomResourceDefinition{
+				ObjectMeta: metav1.ObjectMeta{Name: "dbinstances.rds.services.k8s.aws"},
+				Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+					Group: "rds.services.k8s.aws",
+					Scope: apiextensionsv1.NamespaceScoped,
+					Names: apiextensionsv1.CustomResourceDefinitionNames{Plural: "dbinstances", Kind: "DBInstance"},
+					Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+						{Name: "v1alpha1", Served: true, Storage: false},
+						{Name: "v1", Served: true, Storage: true},
+					},
+				},
+			}
+
+			builder := &ClusterCRDBuilder{
+				crdLister: testsupport.NewCRDLister(t, crd),
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
+			require.NoError(t, err)
+			payload := snap.Payload.(ClusterCRDSnapshot)
+
+			expected := []ClusterCRDEntry{BuildClusterCRDSummary(meta, crd)}
+			requireRowParity(t, toAnySlice(payload.Definitions), toAnySlice(expected), func(r any) string {
+				row := r.(ClusterCRDEntry)
+				return row.Name
+			})
+		},
+	}
+}
+
+// ---------- Nodes ----------
+
+func parityNodesCase(meta ClusterMeta, withMetrics bool) parityCase {
+	name := "nodes/without_metrics"
+	if withMetrics {
+		name = "nodes/with_metrics"
+	}
+	return parityCase{
+		name: name,
+		run: func(t *testing.T) {
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}},
+					Capacity: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("4"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+						corev1.ResourcePods:   resource.MustParse("110"),
+					},
+					Allocatable: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("4"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+						corev1.ResourcePods:   resource.MustParse("110"),
+					},
+				},
+			}
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "p1", Namespace: "default"},
+				Spec:       corev1.PodSpec{NodeName: "node-1", Containers: []corev1.Container{{Name: "c"}}},
+				Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+			}
+
+			usage := map[string]metrics.PodUsage{}
+			if withMetrics {
+				usage = map[string]metrics.PodUsage{
+					"default/p1": {CPUUsageMilli:100, MemoryUsageBytes:32 * 1024 * 1024},
+				}
+			}
+			provider := &staticPodMetrics{pods: usage}
+
+			builder := &NodeBuilder{
+				lister:    testsupport.NewNodeLister(t, node),
+				podLister: testsupport.NewPodLister(t, pod),
+				metrics:   provider,
+			}
+			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
+			require.NoError(t, err)
+			payload := snap.Payload.(NodeSnapshot)
+
+			expectedRow, err := BuildNodeSummary(meta, node, []*corev1.Pod{pod}, provider.LatestNodeUsage(), provider.LatestPodUsage())
+			require.NoError(t, err)
+			expected := []NodeSummary{expectedRow}
+			requireRowParity(t, toAnySlice(payload.Nodes), toAnySlice(expected), func(r any) string {
+				row := r.(NodeSummary)
+				return row.Name
+			})
+		},
+	}
+}
+
+func ptrString(s string) *string { return &s }

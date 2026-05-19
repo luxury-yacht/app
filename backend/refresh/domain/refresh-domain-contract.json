@@ -4,9 +4,190 @@
     "updateIdentity": {
       "rowUpdates": "ref",
       "rowDeletes": "ref",
-      "legacyFieldsDuringMigration": ["clusterId", "apiGroup", "apiVersion", "kind", "namespace", "name"],
+      "legacyFieldsDuringMigration": [],
       "completeSemantics": "scope-level-resync",
       "completeIdentity": "diagnostic-only"
+    },
+    "domains": {
+      "pods": {
+        "scopeKind": "pod",
+        "metricsDependency": true,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [{"group": "", "version": "v1", "kind": "Pod", "resource": "pods"}],
+        "relatedResources": [{"group": "apps", "version": "v1", "kind": "ReplicaSet", "resource": "replicasets"}]
+      },
+      "namespace-workloads": {
+        "scopeKind": "namespace",
+        "metricsDependency": true,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [
+          {"group": "apps", "version": "v1", "kind": "Deployment", "resource": "deployments"},
+          {"group": "apps", "version": "v1", "kind": "StatefulSet", "resource": "statefulsets"},
+          {"group": "apps", "version": "v1", "kind": "DaemonSet", "resource": "daemonsets"},
+          {"group": "batch", "version": "v1", "kind": "Job", "resource": "jobs"},
+          {"group": "batch", "version": "v1", "kind": "CronJob", "resource": "cronjobs"},
+          {"group": "", "version": "v1", "kind": "Pod", "resource": "pods"}
+        ],
+        "relatedResources": [
+          {"group": "", "version": "v1", "kind": "Pod", "resource": "pods"},
+          {"group": "apps", "version": "v1", "kind": "ReplicaSet", "resource": "replicasets"},
+          {"group": "autoscaling", "version": "v1", "kind": "HorizontalPodAutoscaler", "resource": "horizontalpodautoscalers"}
+        ]
+      },
+      "namespace-config": {
+        "scopeKind": "namespace",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [
+          {"group": "", "version": "v1", "kind": "ConfigMap", "resource": "configmaps"},
+          {"group": "", "version": "v1", "kind": "Secret", "resource": "secrets"}
+        ],
+        "relatedResources": []
+      },
+      "namespace-network": {
+        "scopeKind": "namespace",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [
+          {"group": "", "version": "v1", "kind": "Service", "resource": "services"},
+          {"group": "discovery.k8s.io", "version": "v1", "kind": "EndpointSlice", "resource": "endpointslices"},
+          {"group": "networking.k8s.io", "version": "v1", "kind": "Ingress", "resource": "ingresses"},
+          {"group": "networking.k8s.io", "version": "v1", "kind": "NetworkPolicy", "resource": "networkpolicies"},
+          {"group": "gateway.networking.k8s.io", "version": "v1", "kind": "Gateway", "resource": "gateways"},
+          {"group": "gateway.networking.k8s.io", "version": "v1", "kind": "HTTPRoute", "resource": "httproutes"},
+          {"group": "gateway.networking.k8s.io", "version": "v1", "kind": "GRPCRoute", "resource": "grpcroutes"},
+          {"group": "gateway.networking.k8s.io", "version": "v1", "kind": "TLSRoute", "resource": "tlsroutes"},
+          {"group": "gateway.networking.k8s.io", "version": "v1", "kind": "ListenerSet", "resource": "listenersets"},
+          {"group": "gateway.networking.k8s.io", "version": "v1", "kind": "ReferenceGrant", "resource": "referencegrants"},
+          {"group": "gateway.networking.k8s.io", "version": "v1", "kind": "BackendTLSPolicy", "resource": "backendtlspolicies"}
+        ],
+        "relatedResources": [{"group": "discovery.k8s.io", "version": "v1", "kind": "EndpointSlice", "resource": "endpointslices"}]
+      },
+      "namespace-rbac": {
+        "scopeKind": "namespace",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [
+          {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "Role", "resource": "roles"},
+          {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "RoleBinding", "resource": "rolebindings"},
+          {"group": "", "version": "v1", "kind": "ServiceAccount", "resource": "serviceaccounts"}
+        ],
+        "relatedResources": []
+      },
+      "namespace-custom": {
+        "scopeKind": "namespace",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [],
+        "relatedResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}]
+      },
+      "namespace-helm": {
+        "scopeKind": "namespace",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "rowProjection": "scope-level-complete-only",
+        "primaryResources": [
+          {"group": "", "version": "v1", "kind": "Secret", "resource": "secrets"},
+          {"group": "", "version": "v1", "kind": "ConfigMap", "resource": "configmaps"}
+        ],
+        "relatedResources": [
+          {"group": "", "version": "v1", "kind": "Secret", "resource": "secrets"},
+          {"group": "", "version": "v1", "kind": "ConfigMap", "resource": "configmaps"}
+        ],
+        "syntheticRowKind": {"group": "helm.sh", "version": "v3", "kind": "HelmRelease", "resource": "releases"}
+      },
+      "namespace-autoscaling": {
+        "scopeKind": "namespace",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [{"group": "autoscaling", "version": "v1", "kind": "HorizontalPodAutoscaler", "resource": "horizontalpodautoscalers"}],
+        "relatedResources": []
+      },
+      "namespace-quotas": {
+        "scopeKind": "namespace",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [
+          {"group": "", "version": "v1", "kind": "ResourceQuota", "resource": "resourcequotas"},
+          {"group": "", "version": "v1", "kind": "LimitRange", "resource": "limitranges"},
+          {"group": "policy", "version": "v1", "kind": "PodDisruptionBudget", "resource": "poddisruptionbudgets"}
+        ],
+        "relatedResources": []
+      },
+      "namespace-storage": {
+        "scopeKind": "namespace",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [{"group": "", "version": "v1", "kind": "PersistentVolumeClaim", "resource": "persistentvolumeclaims"}],
+        "relatedResources": []
+      },
+      "cluster-rbac": {
+        "scopeKind": "cluster",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [
+          {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "ClusterRole", "resource": "clusterroles"},
+          {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "ClusterRoleBinding", "resource": "clusterrolebindings"}
+        ],
+        "relatedResources": []
+      },
+      "cluster-storage": {
+        "scopeKind": "cluster",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [{"group": "", "version": "v1", "kind": "PersistentVolume", "resource": "persistentvolumes"}],
+        "relatedResources": []
+      },
+      "cluster-config": {
+        "scopeKind": "cluster",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [
+          {"group": "storage.k8s.io", "version": "v1", "kind": "StorageClass", "resource": "storageclasses"},
+          {"group": "networking.k8s.io", "version": "v1", "kind": "IngressClass", "resource": "ingressclasses"},
+          {"group": "gateway.networking.k8s.io", "version": "v1", "kind": "GatewayClass", "resource": "gatewayclasses"},
+          {"group": "admissionregistration.k8s.io", "version": "v1", "kind": "ValidatingWebhookConfiguration", "resource": "validatingwebhookconfigurations"},
+          {"group": "admissionregistration.k8s.io", "version": "v1", "kind": "MutatingWebhookConfiguration", "resource": "mutatingwebhookconfigurations"}
+        ],
+        "relatedResources": []
+      },
+      "cluster-crds": {
+        "scopeKind": "cluster",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}],
+        "relatedResources": []
+      },
+      "cluster-custom": {
+        "scopeKind": "cluster",
+        "metricsDependency": false,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [],
+        "relatedResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}]
+      },
+      "nodes": {
+        "scopeKind": "cluster",
+        "metricsDependency": true,
+        "completeIsScopeLevel": true,
+        "legacyIdentityFallback": false,
+        "primaryResources": [{"group": "", "version": "v1", "kind": "Node", "resource": "nodes"}],
+        "relatedResources": [{"group": "", "version": "v1", "kind": "Pod", "resource": "pods"}]
+      }
     }
   },
   "domains": [

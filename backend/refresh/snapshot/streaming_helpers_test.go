@@ -466,7 +466,7 @@ func TestBuildNodeSummary(t *testing.T) {
 		},
 	}
 
-	summary, err := BuildNodeSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, node, nil, nil)
+	summary, err := BuildNodeSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, node, nil, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, "node-1", summary.Name)
 	require.Equal(t, "c1", summary.ClusterID)

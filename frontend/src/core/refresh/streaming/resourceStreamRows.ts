@@ -21,14 +21,14 @@ export type ResourceRef = {
   uid?: string;
 };
 
+// ResourceStreamRowUpdate is the wire envelope for one stream event.
+// Identity flows through `ref`. The previous top-level identity fields
+// (namespace/kind/name/apiGroup/apiVersion) were removed as part of
+// the resource-stream projection contract plan; only routing metadata
+// (clusterId) and the row payload remain on the envelope alongside ref.
 export type ResourceStreamRowUpdate = {
   type?: string;
   clusterId?: string;
-  namespace?: string;
-  kind?: string;
-  name?: string;
-  apiGroup?: string;
-  apiVersion?: string;
   ref?: ResourceRef;
   row?: unknown;
 };

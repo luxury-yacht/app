@@ -47,12 +47,6 @@ func (m *Manager) newObjectUpdate(updateType MessageType, domain string, obj met
 		ClusterID:       m.clusterMeta.ClusterID,
 		ClusterName:     m.clusterMeta.ClusterName,
 		ResourceVersion: obj.GetResourceVersion(),
-		UID:             ref.UID,
-		Name:            ref.Name,
-		Namespace:       ref.Namespace,
-		Kind:            ref.Kind,
-		APIGroup:        ref.Group,
-		APIVersion:      ref.Version,
 		Ref:             &ref,
 	}
 }

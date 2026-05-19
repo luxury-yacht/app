@@ -94,12 +94,6 @@ type ServerMessage = {
   scope?: string;
   resourceVersion?: string;
   sequence?: string;
-  uid?: string;
-  name?: string;
-  namespace?: string;
-  kind?: string;
-  apiGroup?: string;
-  apiVersion?: string;
   ref?: {
     clusterId: string;
     group: string;

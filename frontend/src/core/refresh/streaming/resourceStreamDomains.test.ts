@@ -252,12 +252,10 @@ describe('resource stream domain descriptors', () => {
     expect(
       namespaceDescriptor.collection.buildUpdateKey(
         {
+          // Envelope clusterId disagrees with ref to prove that ref wins:
+          // ref is the authoritative identity now that the legacy
+          // top-level identity fields are no longer on the wire.
           clusterId: 'wrong-cluster',
-          namespace: 'wrong',
-          apiGroup: 'wrong.example.com',
-          apiVersion: 'v9',
-          kind: 'Wrong',
-          name: 'wrong',
           ref: {
             clusterId: 'cluster-a',
             group: 'beta.example.com',
@@ -305,5 +303,32 @@ describe('resource stream domain descriptors', () => {
       expect(isClusterScopedDomain(domain)).toBe(CLUSTER_SCOPED_DOMAINS.has(domain));
     });
     expect(isSupportedDomain('not-a-domain')).toBe(false);
+  });
+
+  // Locks the frontend descriptor table to the backend-authored projection
+  // contract. The same JSON file (refresh-domain-contract.json) is the
+  // source of truth for both: this test ensures scopeKind and
+  // preserveMetrics on the frontend match the backend descriptor's
+  // ScopeKind and MetricsDependency. Drift here means the frontend would
+  // build snapshot keys / preserve-metrics-state for a stream domain in a
+  // way the backend wouldn't expect.
+  it('matches the backend-authored projection contract', async () => {
+    const { refreshDomainContract } = await import('@/core/refresh/domainRegistry');
+    const contractDomains = refreshDomainContract.resourceStream.domains;
+    expect(Object.keys(contractDomains).sort()).toEqual([...EXPECTED_DOMAINS].sort());
+
+    for (const descriptor of resourceStreamDomainDescriptors) {
+      const entry = contractDomains[descriptor.domain];
+      expect(entry, `contract missing entry for ${descriptor.domain}`).toBeDefined();
+      expect(entry.scopeKind, `${descriptor.domain} scopeKind`).toBe(descriptor.scopeKind);
+      expect(entry.metricsDependency, `${descriptor.domain} metricsDependency`).toBe(
+        descriptor.preserveMetrics
+      );
+      expect(entry.completeIsScopeLevel, `${descriptor.domain} completeIsScopeLevel`).toBe(true);
+      const clusterScoped = entry.scopeKind === 'cluster';
+      expect(descriptor.isClusterScoped, `${descriptor.domain} isClusterScoped`).toBe(
+        clusterScoped
+      );
+    }
   });
 });

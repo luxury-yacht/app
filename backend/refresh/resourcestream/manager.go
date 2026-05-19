@@ -388,20 +388,25 @@ func (m *Manager) handleCustomResourceDefinition(obj interface{}, updateType Mes
 }
 
 func (m *Manager) broadcastCustomDomainCompletes(oldCRD *apiextensionsv1.CustomResourceDefinition, newCRD *apiextensionsv1.CustomResourceDefinition) {
-	targets := make(map[string]string, 2)
+	type completeTarget struct {
+		resourceVersion string
+		ref             *resourcemodel.ResourceRef
+	}
+	targets := make(map[string]completeTarget, 2)
 	for _, crd := range []*apiextensionsv1.CustomResourceDefinition{oldCRD, newCRD} {
 		domain := customCRDDomain(crd)
 		if domain == "" {
 			continue
 		}
-		targets[domain] = crd.ResourceVersion
+		ref := m.resourceRefForObject(crd, "apiextensions.k8s.io", "v1", "CustomResourceDefinition", "customresourcedefinitions")
+		targets[domain] = completeTarget{resourceVersion: crd.ResourceVersion, ref: &ref}
 	}
-	for domain, resourceVersion := range targets {
-		m.broadcastCustomDomainComplete(domain, resourceVersion)
+	for domain, target := range targets {
+		m.broadcastCustomDomainComplete(domain, target.resourceVersion, target.ref)
 	}
 }
 
-func (m *Manager) broadcastCustomDomainComplete(domain, resourceVersion string) {
+func (m *Manager) broadcastCustomDomainComplete(domain, resourceVersion string, ref *resourcemodel.ResourceRef) {
 	scopes := m.activeScopesForDomain(domain)
 	if len(scopes) == 0 {
 		switch domain {
@@ -413,15 +418,15 @@ func (m *Manager) broadcastCustomDomainComplete(domain, resourceVersion string) 
 			return
 		}
 	}
+	// COMPLETE is scope-level resync. Ref is carried as diagnostic context
+	// so listeners and tooling can identify which CRD triggered the resync.
 	update := Update{
 		Type:            MessageTypeComplete,
 		Domain:          domain,
 		ClusterID:       m.clusterMeta.ClusterID,
 		ClusterName:     m.clusterMeta.ClusterName,
 		ResourceVersion: resourceVersion,
-		Kind:            "CustomResourceDefinition",
-		APIGroup:        "apiextensions.k8s.io",
-		APIVersion:      "v1",
+		Ref:             ref,
 	}
 	m.broadcast(domain, scopes, update)
 }
@@ -933,17 +938,14 @@ func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, 
 
 	releaseName := helmReleaseName(name)
 	ref := m.helmReleaseRef(namespace, releaseName)
+	// COMPLETE is scope-level resync. Ref is carried as diagnostic context
+	// so debugging can see which Helm release triggered the resync.
 	update := Update{
 		Type:            MessageTypeComplete,
 		Domain:          domainNamespaceHelm,
 		ClusterID:       m.clusterMeta.ClusterID,
 		ClusterName:     m.clusterMeta.ClusterName,
 		ResourceVersion: resourceVersion,
-		Name:            releaseName,
-		Namespace:       namespace,
-		Kind:            "HelmRelease",
-		APIGroup:        ref.Group,
-		APIVersion:      ref.Version,
 		Ref:             &ref,
 		Error:           reason,
 	}
@@ -1406,7 +1408,7 @@ func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	summary, err := snapshot.BuildNodeSummary(m.clusterMeta, node, pods, m.metrics)
+	summary, err := snapshot.BuildNodeSummary(m.clusterMeta, node, pods, m.nodeMetricsSnapshot(), m.podMetricsSnapshot())
 	if err != nil {
 		m.logWarn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err))
 		if m.telemetry != nil {
@@ -1608,7 +1610,7 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 		}
 		return
 	}
-	summary, err := snapshot.BuildNodeSummary(m.clusterMeta, node, pods, m.metrics)
+	summary, err := snapshot.BuildNodeSummary(m.clusterMeta, node, pods, m.nodeMetricsSnapshot(), m.podMetricsSnapshot())
 	if err != nil {
 		m.logWarn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err))
 		if m.telemetry != nil {
@@ -1627,6 +1629,13 @@ func (m *Manager) podMetricsSnapshot() map[string]metrics.PodUsage {
 		return map[string]metrics.PodUsage{}
 	}
 	return m.metrics.LatestPodUsage()
+}
+
+func (m *Manager) nodeMetricsSnapshot() map[string]metrics.NodeUsage {
+	if m.metrics == nil {
+		return map[string]metrics.NodeUsage{}
+	}
+	return m.metrics.LatestNodeUsage()
 }
 
 func (m *Manager) broadcast(domain string, scopes []string, update Update) {

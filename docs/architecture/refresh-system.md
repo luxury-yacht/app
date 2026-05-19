@@ -278,13 +278,46 @@ Resource stream safety rules:
   kind, row collection access, row identity, drift keys, sorting, and metrics
   preservation. They must not encode multi-cluster capability flags.
 - Row updates and row deletes carry a top-level `ref` with the full
-  `resourcemodel.ResourceRef` identity. During the migration window the backend
-  also populates legacy top-level identity fields (`clusterId`, `apiGroup`,
-  `apiVersion`, `kind`, `namespace`, and `name`) from that same ref; frontend
-  update keys prefer `ref` and use legacy fields only as compatibility fallback.
+  `resourcemodel.ResourceRef` identity. Row identity flows only through `ref`;
+  the legacy top-level fields (`uid`, `name`, `namespace`, `kind`, `apiGroup`,
+  `apiVersion`) have been removed from the wire payload. `clusterId` /
+  `clusterName` remain on the envelope as routing metadata that applies to
+  every message type (including control messages without a row `ref`).
 - `COMPLETE` remains a scope-level control message that triggers a full
   subscription resync. Any identity carried on `COMPLETE` is diagnostic context,
-  not a targeted row invalidation contract.
+  not a targeted row invalidation contract. CRD signature changes and Helm
+  release identity churn both fan out as scope-level `COMPLETE` messages and
+  attach the originating object's `ref` for diagnostic visibility only.
+- Stream selectors are typed: `resourcestream.StreamSelector` carries
+  `ClusterID`, `Domain`, `ScopeKind` and the scope-kind-specific fields
+  (`Namespace`, `Node`, or full-GVK `Workload`). Transport scope strings are
+  parsed once at the WebSocket boundary via `ParseStreamSelector`; downstream
+  routing and projection code uses the typed selector. Selectors become a
+  concrete `ResourceRef` only when resolving a specific affected row.
+- Snapshot vs stream row parity is enforced by
+  `backend/refresh/snapshot/parity_test.go`. For every domain returned by
+  `resourcestream.SupportedDomains()` the harness runs the canonical snapshot
+  builder and the per-row `Build*Summary` projector against the same fixture
+  inputs and asserts byte-equality on the JSON. The sister test
+  `TestSnapshotStreamRowParityCoversAllSupportedDomains` locks the harness to
+  the registry so a new domain cannot ship without a parity case (or an
+  explicit, documented exclusion — `namespace-helm` is the only excluded
+  domain because its stream contract is scope-level COMPLETE only).
+- Per-domain stream projection metadata (scope kind, primary/related
+  resources, metrics dependency, complete-is-scope-level) is authored in the
+  `resourceStream.domains` block of
+  `backend/refresh/domain/refresh-domain-contract.json`. The backend test
+  `TestResourceStreamDomainsMatchProjectionDescriptors` locks the JSON to
+  `resourcestream.ProjectionDescriptors()`; the frontend test
+  `resource stream domain descriptors > matches the backend-authored projection
+  contract` locks `resourceStreamDomainDescriptors.scopeKind` /
+  `.preserveMetrics` / `.isClusterScoped` to the same JSON.
+- Metric-bearing projectors (`BuildPodSummary`, `BuildWorkloadSummary`,
+  `BuildNodeSummary`) accept the latest usage snapshot as parameters rather
+  than reading from a `metrics.Provider` internally. Stream handlers fetch
+  usage once per event via `Manager.podMetricsSnapshot()` /
+  `Manager.nodeMetricsSnapshot()` and pass it in, so parity tests can drive
+  both the snapshot and stream paths with the same fixture.
 - Keep implementation ownership split: `resourceStreamRows.ts` owns pure row
   math; `ResourceStreamManager` owns store mutation, resync, drift, health,
   telemetry, and fallback decisions; `ResourceStreamConnection` owns WebSocket

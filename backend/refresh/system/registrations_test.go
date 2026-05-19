@@ -27,8 +27,27 @@ type refreshDomainContract struct {
 			CompleteSemantics           string   `json:"completeSemantics"`
 			CompleteIdentity            string   `json:"completeIdentity"`
 		} `json:"updateIdentity"`
+		Domains map[string]streamDomainContract `json:"domains"`
 	} `json:"resourceStream"`
 	Domains []refreshDomainRecord `json:"domains"`
+}
+
+type streamDomainContract struct {
+	ScopeKind              string                 `json:"scopeKind"`
+	MetricsDependency      bool                   `json:"metricsDependency"`
+	CompleteIsScopeLevel   bool                   `json:"completeIsScopeLevel"`
+	LegacyIdentityFallback bool                   `json:"legacyIdentityFallback"`
+	RowProjection          string                 `json:"rowProjection,omitempty"`
+	PrimaryResources       []streamResourceRecord `json:"primaryResources"`
+	RelatedResources       []streamResourceRecord `json:"relatedResources"`
+	SyntheticRowKind       *streamResourceRecord  `json:"syntheticRowKind,omitempty"`
+}
+
+type streamResourceRecord struct {
+	Group    string `json:"group"`
+	Version  string `json:"version"`
+	Kind     string `json:"kind"`
+	Resource string `json:"resource"`
 }
 
 type refreshDomainRecord struct {
@@ -124,9 +143,45 @@ func TestResourceStreamIdentityContractIsAuthored(t *testing.T) {
 	identity := contract.ResourceStream.UpdateIdentity
 	require.Equal(t, "ref", identity.RowUpdates)
 	require.Equal(t, "ref", identity.RowDeletes)
-	require.ElementsMatch(t, []string{"clusterId", "apiGroup", "apiVersion", "kind", "namespace", "name"}, identity.LegacyFieldsDuringMigration)
+	require.Empty(t, identity.LegacyFieldsDuringMigration, "legacy field migration window must be closed once all domains use Ref")
 	require.Equal(t, "scope-level-resync", identity.CompleteSemantics)
 	require.Equal(t, "diagnostic-only", identity.CompleteIdentity)
+}
+
+// TestResourceStreamDomainsMatchProjectionDescriptors locks the per-domain
+// stream metadata in refresh-domain-contract.json to the in-code projection
+// descriptors. Any drift between the two surfaces here so the frontend
+// (which validates against the same JSON) can never see a domain whose
+// metadata disagrees with the backend.
+func TestResourceStreamDomainsMatchProjectionDescriptors(t *testing.T) {
+	contract := loadRefreshDomainContract(t)
+	descriptors := resourcestream.ProjectionDescriptors()
+
+	require.Len(t, contract.ResourceStream.Domains, len(descriptors), "contract domain count must equal projection descriptor count")
+
+	for domain, descriptor := range descriptors {
+		entry, ok := contract.ResourceStream.Domains[domain]
+		require.Truef(t, ok, "resourceStream.domains.%s missing from refresh-domain-contract.json", domain)
+		require.Equalf(t, descriptor.ScopeKind, entry.ScopeKind, "domain %s scopeKind drift", domain)
+		require.Equalf(t, descriptor.MetricsDependency, entry.MetricsDependency, "domain %s metricsDependency drift", domain)
+		require.Equalf(t, descriptor.CompleteIsScopeLevel, entry.CompleteIsScopeLevel, "domain %s completeIsScopeLevel drift", domain)
+		require.Equalf(t, descriptor.LegacyIdentityFallback, entry.LegacyIdentityFallback, "domain %s legacyIdentityFallback drift", domain)
+		requireResourceSetEqual(t, domain, "primaryResources", descriptor.PrimaryResources, entry.PrimaryResources)
+		requireResourceSetEqual(t, domain, "relatedResources", descriptor.RelatedResources, entry.RelatedResources)
+	}
+}
+
+func requireResourceSetEqual(t *testing.T, domain, label string, code []resourcestream.ResourceDescriptor, contract []streamResourceRecord) {
+	t.Helper()
+	require.Lenf(t, contract, len(code), "domain %s %s length drift", domain, label)
+	codeKeys := make(map[string]resourcestream.ResourceDescriptor, len(code))
+	for _, r := range code {
+		codeKeys[r.Group+"/"+r.Version+"/"+r.Kind+"/"+r.Resource] = r
+	}
+	for _, r := range contract {
+		key := r.Group + "/" + r.Version + "/" + r.Kind + "/" + r.Resource
+		require.Containsf(t, codeKeys, key, "domain %s %s entry %q not present in projection descriptor", domain, label, key)
+	}
 }
 
 func TestResourceStreamPermissionRequirementsStayAlignedWithSnapshotRuntime(t *testing.T) {

@@ -137,14 +137,7 @@ describe('refresh domain contract', () => {
     expect(refreshDomainContract.resourceStream.updateIdentity).toEqual({
       rowUpdates: 'ref',
       rowDeletes: 'ref',
-      legacyFieldsDuringMigration: [
-        'clusterId',
-        'apiGroup',
-        'apiVersion',
-        'kind',
-        'namespace',
-        'name',
-      ],
+      legacyFieldsDuringMigration: [],
       completeSemantics: 'scope-level-resync',
       completeIdentity: 'diagnostic-only',
     });

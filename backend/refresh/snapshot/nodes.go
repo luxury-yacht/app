@@ -206,15 +206,35 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 
 // buildNodeSnapshot assembles node summaries with cluster metadata.
 func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1.Pod, provider metrics.Provider) *refresh.Snapshot {
-	meta := ClusterMetaFromContext(ctx)
-	items := make([]NodeSummary, 0, len(nodes))
-	var version uint64
-	nodeMetrics := map[string]metrics.NodeUsage{}
-	podMetrics := map[string]metrics.PodUsage{}
+	var (
+		nodeMetrics map[string]metrics.NodeUsage
+		podMetrics  map[string]metrics.PodUsage
+		metaSrc     metrics.Metadata
+	)
 	if provider != nil {
 		nodeMetrics = provider.LatestNodeUsage()
 		podMetrics = provider.LatestPodUsage()
+		metaSrc = provider.Metadata()
 	}
+	return buildNodeSnapshotFromUsage(ctx, nodes, pods, nodeUsageOrEmpty(nodeMetrics), podUsageOrEmpty(podMetrics), metaSrc)
+}
+
+// buildNodeSnapshotFromUsage assembles node summaries using pre-resolved
+// metrics maps. This is the metrics-as-parameter path required by the
+// resource-stream projection contract: stream handlers fetch the usage
+// snapshot once and pass it in, so per-event row projection is
+// deterministic and tests can use fixture metrics.
+func buildNodeSnapshotFromUsage(
+	ctx context.Context,
+	nodes []*corev1.Node,
+	pods []*corev1.Pod,
+	nodeMetrics map[string]metrics.NodeUsage,
+	podMetrics map[string]metrics.PodUsage,
+	metricsMeta metrics.Metadata,
+) *refresh.Snapshot {
+	meta := ClusterMetaFromContext(ctx)
+	items := make([]NodeSummary, 0, len(nodes))
+	var version uint64
 
 	podsByNode := make(map[string][]*corev1.Pod)
 	for _, pod := range pods {
@@ -322,23 +342,18 @@ func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1
 	}
 
 	metricsInfo := NodeMetricsInfo{Stale: true}
-	if provider != nil {
-		meta := provider.Metadata()
-		if !meta.CollectedAt.IsZero() {
-			metricsInfo.CollectedAt = meta.CollectedAt.Unix()
-			metricsInfo.Stale = time.Since(meta.CollectedAt) > config.MetricsStaleThreshold
-		} else {
-			metricsInfo.Stale = true
-		}
-		if meta.LastError != "" {
-			metricsInfo.LastError = meta.LastError
-		}
-		if meta.ConsecutiveFailures > 0 {
-			metricsInfo.ConsecutiveFailures = meta.ConsecutiveFailures
-		}
-		metricsInfo.SuccessCount = meta.SuccessCount
-		metricsInfo.FailureCount = meta.FailureCount
+	if !metricsMeta.CollectedAt.IsZero() {
+		metricsInfo.CollectedAt = metricsMeta.CollectedAt.Unix()
+		metricsInfo.Stale = time.Since(metricsMeta.CollectedAt) > config.MetricsStaleThreshold
 	}
+	if metricsMeta.LastError != "" {
+		metricsInfo.LastError = metricsMeta.LastError
+	}
+	if metricsMeta.ConsecutiveFailures > 0 {
+		metricsInfo.ConsecutiveFailures = metricsMeta.ConsecutiveFailures
+	}
+	metricsInfo.SuccessCount = metricsMeta.SuccessCount
+	metricsInfo.FailureCount = metricsMeta.FailureCount
 
 	snap := &refresh.Snapshot{
 		Domain:  "nodes",
@@ -350,6 +365,20 @@ func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1
 		},
 	}
 	return snap
+}
+
+func nodeUsageOrEmpty(m map[string]metrics.NodeUsage) map[string]metrics.NodeUsage {
+	if m == nil {
+		return map[string]metrics.NodeUsage{}
+	}
+	return m
+}
+
+func podUsageOrEmpty(m map[string]metrics.PodUsage) map[string]metrics.PodUsage {
+	if m == nil {
+		return map[string]metrics.PodUsage{}
+	}
+	return m
 }
 
 func extractRoles(labels map[string]string) []string {

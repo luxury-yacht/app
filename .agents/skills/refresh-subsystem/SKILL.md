@@ -134,11 +134,40 @@ Keep connection lifecycle in `ResourceStreamConnection`, subscription mechanics
 in `ResourceStreamSubscriptionStore`, and pure row math in
 `resourceStreamRows.ts`.
 
-Resource stream row updates and deletes must carry a top-level
-`resourcemodel.ResourceRef` as `ref`. Legacy top-level identity fields are
-migration compatibility only and must be populated from the same ref. Frontend
-row keys prefer `ref`; do not add new key logic that guesses GVK from kind/name.
-`COMPLETE` is scope-level resync, not targeted row invalidation.
+Resource stream row updates and deletes carry identity only through the
+top-level `ref` (`resourcemodel.ResourceRef`). Legacy top-level identity fields
+(`uid`, `name`, `namespace`, `kind`, `apiGroup`, `apiVersion`) have been
+removed from the wire payload; `clusterId` / `clusterName` remain as envelope
+routing metadata. Do not add new key logic that guesses GVK from kind/name.
+`COMPLETE` is scope-level resync, not targeted row invalidation — any `ref` on
+COMPLETE is diagnostic context only.
+
+Stream selectors are typed (`resourcestream.StreamSelector`). Parse transport
+scope strings once at the WebSocket boundary via `ParseStreamSelector`; pass
+the typed selector through internal routing and convert to a concrete
+`ResourceRef` only when resolving a specific affected row.
+
+Snapshot vs stream row parity is enforced by
+`backend/refresh/snapshot/parity_test.go`. When you add a streamed domain you
+must add a parity case (or, for COMPLETE-only contracts like
+`namespace-helm`, an explicit excluded entry in
+`TestSnapshotStreamRowParityCoversAllSupportedDomains`). When you add a field
+to a `*Summary` struct, add an assertion in either an existing
+`TestBuild*SummaryPopulatesAllFields` test or the parity case so a missed
+population fails CI rather than silently dropping the field on stream rows.
+
+Per-domain stream metadata (scope kind, primary/related resources, metrics
+dependency) is authored once in the `resourceStream.domains` block of
+`backend/refresh/domain/refresh-domain-contract.json`. Backend
+(`TestResourceStreamDomainsMatchProjectionDescriptors`) and frontend
+(`resource stream domain descriptors > matches the backend-authored projection
+contract`) tests both lock that JSON to their respective descriptor tables.
+
+Metric-bearing projectors accept the latest usage maps as parameters; they do
+not reach into `metrics.Provider` themselves. Use
+`Manager.podMetricsSnapshot()` / `Manager.nodeMetricsSnapshot()` at the call
+site and pass the maps in, so per-row construction stays deterministic for
+tests and parity comparisons.
 
 ## Snapshot Building
 

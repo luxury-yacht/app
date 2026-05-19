@@ -801,13 +801,19 @@ func BuildStandalonePodWorkloadSummary(
 	return summary
 }
 
-// BuildNodeSummary builds a node row payload from the supplied node and pod list.
-func BuildNodeSummary(meta ClusterMeta, node *corev1.Node, pods []*corev1.Pod, provider metrics.Provider) (NodeSummary, error) {
+// BuildNodeSummary builds a node row payload from the supplied node, pod
+// list, and pre-resolved metrics maps. The metrics-as-parameter contract
+// (see resource-stream projection plan, Phase 5) keeps the projector
+// deterministic: stream handlers fetch the latest usage snapshot once
+// per event and pass it in, so parity tests can drive snapshot and
+// stream paths with the same fixtures. Pass nil maps to render a node
+// row without metrics — both maps are treated as empty.
+func BuildNodeSummary(meta ClusterMeta, node *corev1.Node, pods []*corev1.Pod, nodeUsage map[string]metrics.NodeUsage, podUsage map[string]metrics.PodUsage) (NodeSummary, error) {
 	if node == nil {
 		return NodeSummary{}, errors.New("node is nil")
 	}
 	ctx := WithClusterMeta(context.Background(), meta)
-	snap := buildNodeSnapshot(ctx, []*corev1.Node{node}, pods, provider)
+	snap := buildNodeSnapshotFromUsage(ctx, []*corev1.Node{node}, pods, nodeUsageOrEmpty(nodeUsage), podUsageOrEmpty(podUsage), metrics.Metadata{})
 	if snap == nil {
 		return NodeSummary{}, errors.New("node snapshot unavailable")
 	}

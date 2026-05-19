@@ -24,26 +24,23 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
+
+func refPtr(ref resourcemodel.ResourceRef) *resourcemodel.ResourceRef { return &ref }
 
 func requireUpdateObjectMetadata(t *testing.T, update Update, resourceVersion, uid, name, namespace, kind string) {
 	t.Helper()
 	require.Equal(t, "c1", update.ClusterID)
 	require.Equal(t, "cluster", update.ClusterName)
 	require.Equal(t, resourceVersion, update.ResourceVersion)
-	require.Equal(t, uid, update.UID)
-	require.Equal(t, name, update.Name)
-	require.Equal(t, namespace, update.Namespace)
-	require.Equal(t, kind, update.Kind)
 	require.NotNil(t, update.Ref)
 	require.Equal(t, update.ClusterID, update.Ref.ClusterID)
-	require.Equal(t, update.APIGroup, update.Ref.Group)
-	require.Equal(t, update.APIVersion, update.Ref.Version)
-	require.Equal(t, update.Kind, update.Ref.Kind)
-	require.Equal(t, update.Namespace, update.Ref.Namespace)
-	require.Equal(t, update.Name, update.Ref.Name)
-	require.Equal(t, update.UID, update.Ref.UID)
+	require.Equal(t, uid, update.Ref.UID)
+	require.Equal(t, name, update.Ref.Name)
+	require.Equal(t, namespace, update.Ref.Namespace)
+	require.Equal(t, kind, update.Ref.Kind)
 }
 
 func requireNextUpdate(t *testing.T, sub *Subscription) Update {
@@ -89,8 +86,8 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainPods, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "pod-1", update.Name)
-		require.Equal(t, "default", update.Namespace)
+		require.Equal(t, "pod-1", update.Ref.Name)
+		require.Equal(t, "default", update.Ref.Namespace)
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected update to be delivered")
@@ -187,15 +184,11 @@ func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
 		ClusterID:       "c1",
 		ClusterName:     "cluster",
 		ResourceVersion: "1",
-		UID:             "pod-1",
-		Name:            "pod-1",
-		Namespace:       "default",
-		Kind:            "Pod",
+		Ref:             refPtr(resourcemodel.NewResourceRef("c1", "", "v1", "Pod", "pods", "default", "pod-1", "pod-1")),
 	}
 	second := first
 	second.ResourceVersion = "2"
-	second.UID = "pod-2"
-	second.Name = "pod-2"
+	second.Ref = refPtr(resourcemodel.NewResourceRef("c1", "", "v1", "Pod", "pods", "default", "pod-2", "pod-2"))
 
 	manager.broadcast(domainPods, []string{"namespace:default"}, first)
 	manager.broadcast(domainPods, []string{"namespace:default"}, second)
@@ -204,7 +197,7 @@ func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, updates, 1)
 	require.Equal(t, "2", updates[0].Sequence)
-	require.Equal(t, "pod-2", updates[0].Name)
+	require.Equal(t, "pod-2", updates[0].Ref.Name)
 }
 
 func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
@@ -225,10 +218,7 @@ func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 		ClusterID:       "c1",
 		ClusterName:     "cluster",
 		ResourceVersion: "1",
-		UID:             "pod-1",
-		Name:            "pod-1",
-		Namespace:       "default",
-		Kind:            "Pod",
+		Ref:             refPtr(resourcemodel.NewResourceRef("c1", "", "v1", "Pod", "pods", "default", "pod-1", "pod-1")),
 	}
 	manager.broadcast(domainPods, []string{"namespace:default"}, update)
 
@@ -482,11 +472,11 @@ func TestManagerCustomUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainNamespaceCustom, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "widget-1", update.Name)
-		require.Equal(t, "default", update.Namespace)
-		require.Equal(t, "Widget", update.Kind)
-		require.Equal(t, "example.com", update.APIGroup)
-		require.Equal(t, "v1", update.APIVersion)
+		require.Equal(t, "widget-1", update.Ref.Name)
+		require.Equal(t, "default", update.Ref.Namespace)
+		require.Equal(t, "Widget", update.Ref.Kind)
+		require.Equal(t, "example.com", update.Ref.Group)
+		require.Equal(t, "v1", update.Ref.Version)
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected custom update to be delivered")
@@ -595,7 +585,7 @@ func TestManagerCRDSignatureChangeCompletesCustomDomain(t *testing.T) {
 	require.Equal(t, domainNamespaceCustom, update.Domain)
 	require.Equal(t, "namespace:default", update.Scope)
 	require.Equal(t, "11", update.ResourceVersion)
-	require.Equal(t, "CustomResourceDefinition", update.Kind)
+	require.Equal(t, "CustomResourceDefinition", update.Ref.Kind)
 }
 
 func TestManagerClusterCustomUpdateBroadcasts(t *testing.T) {
@@ -632,10 +622,10 @@ func TestManagerClusterCustomUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainClusterCustom, update.Domain)
 		require.Equal(t, "", update.Scope)
-		require.Equal(t, "widget-cluster", update.Name)
-		require.Equal(t, "Widget", update.Kind)
-		require.Equal(t, "example.com", update.APIGroup)
-		require.Equal(t, "v1", update.APIVersion)
+		require.Equal(t, "widget-cluster", update.Ref.Name)
+		require.Equal(t, "Widget", update.Ref.Kind)
+		require.Equal(t, "example.com", update.Ref.Group)
+		require.Equal(t, "v1", update.Ref.Version)
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected cluster custom update to be delivered")
@@ -680,8 +670,8 @@ func TestManagerClusterCRDUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainClusterCRDs, update.Domain)
 		require.Equal(t, "", update.Scope)
-		require.Equal(t, "widgets.example.com", update.Name)
-		require.Equal(t, "CustomResourceDefinition", update.Kind)
+		require.Equal(t, "widgets.example.com", update.Ref.Name)
+		require.Equal(t, "CustomResourceDefinition", update.Ref.Kind)
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected cluster CRD update to be delivered")
@@ -718,9 +708,9 @@ func TestManagerHelmUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeComplete, update.Type)
 		require.Equal(t, domainNamespaceHelm, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "demo", update.Name)
-		require.Equal(t, "default", update.Namespace)
-		require.Equal(t, "HelmRelease", update.Kind)
+		require.Equal(t, "demo", update.Ref.Name)
+		require.Equal(t, "default", update.Ref.Namespace)
+		require.Equal(t, "HelmRelease", update.Ref.Kind)
 	default:
 		t.Fatal("expected helm update to be delivered")
 	}
@@ -755,9 +745,9 @@ func TestManagerSecretUpdateRefreshesOldHelmReleaseWhenRelationChanges(t *testin
 	update := requireNextUpdate(t, sub)
 	require.Equal(t, MessageTypeComplete, update.Type)
 	require.Equal(t, domainNamespaceHelm, update.Domain)
-	require.Equal(t, "demo", update.Name)
-	require.Equal(t, "default", update.Namespace)
-	require.Equal(t, "HelmRelease", update.Kind)
+	require.Equal(t, "demo", update.Ref.Name)
+	require.Equal(t, "default", update.Ref.Namespace)
+	require.Equal(t, "HelmRelease", update.Ref.Kind)
 }
 
 func TestManagerConfigMapUpdateRefreshesOldHelmReleaseWhenRelationChanges(t *testing.T) {
@@ -787,9 +777,9 @@ func TestManagerConfigMapUpdateRefreshesOldHelmReleaseWhenRelationChanges(t *tes
 	update := requireNextUpdate(t, sub)
 	require.Equal(t, MessageTypeComplete, update.Type)
 	require.Equal(t, domainNamespaceHelm, update.Domain)
-	require.Equal(t, "demo", update.Name)
-	require.Equal(t, "default", update.Namespace)
-	require.Equal(t, "HelmRelease", update.Kind)
+	require.Equal(t, "demo", update.Ref.Name)
+	require.Equal(t, "default", update.Ref.Namespace)
+	require.Equal(t, "HelmRelease", update.Ref.Kind)
 }
 
 func TestManagerAutoscalingUpdateBroadcasts(t *testing.T) {
@@ -909,7 +899,7 @@ func TestManagerHPADeleteRefreshesTargetWorkloadRow(t *testing.T) {
 
 	update := requireNextUpdate(t, sub)
 	require.Equal(t, domainWorkloads, update.Domain)
-	require.Equal(t, "web", update.Name)
+	require.Equal(t, "web", update.Ref.Name)
 	row, ok := update.Row.(snapshot.WorkloadSummary)
 	require.True(t, ok)
 	require.False(t, row.HPAManaged)
@@ -985,7 +975,7 @@ func TestManagerPodMoveRefreshesOldAndNewNodeRows(t *testing.T) {
 	seen := map[string]bool{}
 	for i := 0; i < 2; i++ {
 		update := requireNextUpdate(t, sub)
-		seen[update.Name] = true
+		seen[update.Ref.Name] = true
 	}
 	require.True(t, seen["node-a"])
 	require.True(t, seen["node-b"])
@@ -1014,11 +1004,11 @@ func TestManagerPodMoveDeletesOldNodePodScope(t *testing.T) {
 
 	oldNodeUpdate := requireNextUpdate(t, oldNodeSub)
 	require.Equal(t, MessageTypeDeleted, oldNodeUpdate.Type)
-	require.Equal(t, "pod-1", oldNodeUpdate.Name)
+	require.Equal(t, "pod-1", oldNodeUpdate.Ref.Name)
 
 	newNodeUpdate := requireNextUpdate(t, newNodeSub)
 	require.Equal(t, MessageTypeModified, newNodeUpdate.Type)
-	require.Equal(t, "pod-1", newNodeUpdate.Name)
+	require.Equal(t, "pod-1", newNodeUpdate.Ref.Name)
 	require.NotNil(t, newNodeUpdate.Row)
 }
 
@@ -1052,8 +1042,8 @@ func TestManagerEndpointSliceRetargetRefreshesOldAndNewServices(t *testing.T) {
 	seenServices := map[string]bool{}
 	for i := 0; i < 3; i++ {
 		update := requireNextUpdate(t, sub)
-		if update.Kind == "Service" {
-			seenServices[update.Name] = true
+		if update.Ref.Kind == "Service" {
+			seenServices[update.Ref.Name] = true
 		}
 	}
 	require.True(t, seenServices["old-svc"])
@@ -1111,7 +1101,7 @@ func TestManagerReplicaSetUpdateRefreshesOldAndNewPodOwnerScopes(t *testing.T) {
 
 	oldUpdate := requireNextUpdate(t, oldSub)
 	require.Equal(t, MessageTypeDeleted, oldUpdate.Type)
-	require.Equal(t, "pod-1", oldUpdate.Name)
+	require.Equal(t, "pod-1", oldUpdate.Ref.Name)
 
 	newUpdate := requireNextUpdate(t, newSub)
 	require.Equal(t, MessageTypeModified, newUpdate.Type)
@@ -1143,9 +1133,7 @@ func TestManagerBackpressureTriggersReset(t *testing.T) {
 		Domain:      domainPods,
 		ClusterID:   "c1",
 		ClusterName: "cluster",
-		Name:        "pod-1",
-		Namespace:   "default",
-		Kind:        "Pod",
+		Ref:         refPtr(resourcemodel.NewResourceRef("c1", "", "v1", "Pod", "pods", "default", "pod-1", "")),
 	}
 
 	for i := 0; i < config.ResourceStreamSubscriberBufferSize+1; i++ {
@@ -1216,8 +1204,8 @@ func TestManagerWorkloadUpdateFromPod(t *testing.T) {
 		require.Equal(t, MessageTypeModified, update.Type)
 		require.Equal(t, domainWorkloads, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "web", update.Name)
-		require.Equal(t, "Deployment", update.Kind)
+		require.Equal(t, "web", update.Ref.Name)
+		require.Equal(t, "Deployment", update.Ref.Kind)
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected workload update to be delivered")
@@ -1267,8 +1255,8 @@ func TestManagerWorkloadUpdateFromCompletedOwnedPod(t *testing.T) {
 		require.Equal(t, MessageTypeModified, update.Type)
 		require.Equal(t, domainWorkloads, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "web", update.Name)
-		require.Equal(t, "Deployment", update.Kind)
+		require.Equal(t, "web", update.Ref.Name)
+		require.Equal(t, "Deployment", update.Ref.Kind)
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected completed owned pod to refresh workload row")
@@ -1302,8 +1290,8 @@ func TestManagerDeletesStandaloneWorkloadRowWhenPodCompletes(t *testing.T) {
 		require.Equal(t, MessageTypeDeleted, update.Type)
 		require.Equal(t, domainWorkloads, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, "pod-1", update.Name)
-		require.Equal(t, "Pod", update.Kind)
+		require.Equal(t, "pod-1", update.Ref.Name)
+		require.Equal(t, "Pod", update.Ref.Kind)
 		require.Nil(t, update.Row)
 	default:
 		t.Fatal("expected completed standalone pod to delete workload row")
@@ -1348,8 +1336,8 @@ func TestManagerNodeUpdateFromPod(t *testing.T) {
 	case update := <-sub.Updates:
 		require.Equal(t, MessageTypeModified, update.Type)
 		require.Equal(t, domainNodes, update.Domain)
-		require.Equal(t, "node-a", update.Name)
-		require.Equal(t, "Node", update.Kind)
+		require.Equal(t, "node-a", update.Ref.Name)
+		require.Equal(t, "Node", update.Ref.Kind)
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected node update to be delivered")

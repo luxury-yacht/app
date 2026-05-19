@@ -55,8 +55,71 @@ func TestStreamHandlersDoNotConstructRowsDirectly(t *testing.T) {
 						require.Failf(t, "direct row assignment", "%s assigns update.Row; use projection/update helpers", fset.Position(selector.Pos()))
 					}
 				}
+			case *ast.CallExpr:
+				if !callIsObjectRowUpdate(n) {
+					return true
+				}
+				if len(n.Args) == 0 {
+					return true
+				}
+				row := n.Args[len(n.Args)-1]
+				if !rowArgIsApproved(row) {
+					require.Failf(
+						t,
+						"row arg must come from snapshot.Build* projector",
+						"%s passes a non-projector value as the row argument to newObjectRowUpdate; "+
+							"row construction must go through snapshot.Build*Summary or a nil/identifier value derived from one",
+						fset.Position(row.Pos()),
+					)
+				}
 			}
 			return true
 		})
 	}
+}
+
+// callIsObjectRowUpdate reports whether the call expression invokes the
+// newObjectRowUpdate helper that wraps a projected row in an Update.
+// Direct calls and method calls on `m`/`mgr` style receivers all qualify.
+func callIsObjectRowUpdate(call *ast.CallExpr) bool {
+	switch fn := call.Fun.(type) {
+	case *ast.Ident:
+		return fn.Name == "newObjectRowUpdate"
+	case *ast.SelectorExpr:
+		return fn.Sel.Name == "newObjectRowUpdate"
+	}
+	return false
+}
+
+// rowArgIsApproved enforces that the row argument to newObjectRowUpdate
+// is one of:
+//   - nil (a row-less delete or transport message)
+//   - a simple identifier (a local variable assigned earlier in the function;
+//     parity tests cover the contents end-to-end)
+//   - a direct CallExpr to snapshot.Build*Summary or to a local helper whose
+//     name starts with "build" (defensive — wraps a projector call)
+//
+// It rejects composite literals like `PodSummary{...}` or `snapshot.PodSummary{...}`,
+// which would let a handler hand-assemble a row payload outside the projector.
+func rowArgIsApproved(arg ast.Expr) bool {
+	switch v := arg.(type) {
+	case *ast.Ident:
+		// `nil` literal or a local variable — accepted; identifier provenance
+		// is covered by parity tests on the projector return value.
+		return true
+	case *ast.CallExpr:
+		// Direct projector call (snapshot.Build*Summary) or local helper call.
+		switch fn := v.Fun.(type) {
+		case *ast.SelectorExpr:
+			return strings.HasPrefix(fn.Sel.Name, "Build") || strings.HasPrefix(fn.Sel.Name, "build")
+		case *ast.Ident:
+			return strings.HasPrefix(fn.Name, "Build") || strings.HasPrefix(fn.Name, "build")
+		}
+		return false
+	case *ast.SelectorExpr:
+		// Field access on a struct value — e.g. `summary.Row`. Allowed but
+		// uncommon.
+		return true
+	}
+	return false
 }

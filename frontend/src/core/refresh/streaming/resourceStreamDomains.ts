@@ -384,33 +384,38 @@ const buildClusterCustomKey = (
 
 const buildNodeKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
 
+// All identity now flows through update.ref. The legacy top-level
+// identity fields (clusterId/apiGroup/apiVersion/kind/namespace/name)
+// have been removed from the wire payload — see the resource-stream
+// projection contract plan. Row-shape fallbacks remain because some
+// payload shapes (e.g. nodes) embed identity in the row itself.
 const updateClusterId = (update: ResourceStreamRowUpdate, fallbackClusterId: string): string =>
   update.ref?.clusterId ?? update.clusterId ?? fallbackClusterId;
 
 const updateNamespace = <T extends { namespace?: string }>(
   update: ResourceStreamRowUpdate,
   row: T | undefined
-): string => update.ref?.namespace ?? update.namespace ?? row?.namespace ?? '';
+): string => update.ref?.namespace ?? row?.namespace ?? '';
 
 const updateName = <T extends { name?: string }>(
   update: ResourceStreamRowUpdate,
   row: T | undefined
-): string => update.ref?.name ?? update.name ?? row?.name ?? '';
+): string => update.ref?.name ?? row?.name ?? '';
 
 const updateKind = <T extends { kind?: string }>(
   update: ResourceStreamRowUpdate,
   row: T | undefined
-): string => update.ref?.kind ?? update.kind ?? row?.kind ?? '';
+): string => update.ref?.kind ?? row?.kind ?? '';
 
 const updateAPIGroup = <T extends { apiGroup?: string }>(
   update: ResourceStreamRowUpdate,
   row: T | undefined
-): string => update.ref?.group ?? update.apiGroup ?? row?.apiGroup ?? '';
+): string => update.ref?.group ?? row?.apiGroup ?? '';
 
 const updateAPIVersion = <T extends { apiVersion?: string }>(
   update: ResourceStreamRowUpdate,
   row: T | undefined
-): string => update.ref?.version ?? update.apiVersion ?? row?.apiVersion ?? '';
+): string => update.ref?.version ?? row?.apiVersion ?? '';
 
 const updateRow = <T>(update: ResourceStreamRowUpdate): T | undefined =>
   update.row as T | undefined;

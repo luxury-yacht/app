@@ -47,6 +47,24 @@ export interface RefreshDomainContractEntry<D extends RefreshDomain = RefreshDom
   };
 }
 
+export interface StreamResourceContractRecord {
+  group: string;
+  version: string;
+  kind: string;
+  resource: string;
+}
+
+export interface StreamDomainContractEntry {
+  scopeKind: 'pod' | 'namespace' | 'cluster';
+  metricsDependency: boolean;
+  completeIsScopeLevel: boolean;
+  legacyIdentityFallback: boolean;
+  rowProjection?: 'scope-level-complete-only';
+  primaryResources: StreamResourceContractRecord[];
+  relatedResources: StreamResourceContractRecord[];
+  syntheticRowKind?: StreamResourceContractRecord;
+}
+
 export interface RefreshDomainContract {
   version: 2;
   resourceStream: {
@@ -57,6 +75,7 @@ export interface RefreshDomainContract {
       completeSemantics: 'scope-level-resync';
       completeIdentity: 'diagnostic-only';
     };
+    domains: Record<string, StreamDomainContractEntry>;
   };
   domains: RefreshDomainContractEntry[];
 }

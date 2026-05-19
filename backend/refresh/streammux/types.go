@@ -40,6 +40,13 @@ type ClientMessage struct {
 }
 
 // ServerMessage is the envelope sent back to websocket clients.
+//
+// Row identity flows through Ref. The previous top-level identity
+// fields (UID/Name/Namespace/Kind/APIGroup/APIVersion) have been
+// removed as part of the resource-stream projection contract plan;
+// consumers must read identity from Ref. ClusterID and ClusterName
+// stay on the envelope as routing metadata that applies to every
+// message type (including control messages without a row Ref).
 type ServerMessage struct {
 	Type            MessageType                     `json:"type"`
 	ClusterID       string                          `json:"clusterId,omitempty"`
@@ -48,12 +55,6 @@ type ServerMessage struct {
 	Scope           string                          `json:"scope,omitempty"`
 	ResourceVersion string                          `json:"resourceVersion,omitempty"`
 	Sequence        string                          `json:"sequence,omitempty"`
-	UID             string                          `json:"uid,omitempty"`
-	Name            string                          `json:"name,omitempty"`
-	Namespace       string                          `json:"namespace,omitempty"`
-	Kind            string                          `json:"kind,omitempty"`
-	APIGroup        string                          `json:"apiGroup,omitempty"`
-	APIVersion      string                          `json:"apiVersion,omitempty"`
 	Ref             *resourcemodel.ResourceRef      `json:"ref,omitempty"`
 	Row             interface{}                     `json:"row,omitempty"`
 	Error           string                          `json:"error,omitempty"`
