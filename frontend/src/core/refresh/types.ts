@@ -87,6 +87,7 @@ export interface ClusterMeta {
 }
 
 export interface NamespaceSummary extends ClusterMeta {
+  ref: ResourceRef;
   name: string;
   phase: string;
   status?: string;
@@ -263,6 +264,7 @@ export interface ClusterOverviewPayload {
 export interface RecentEventEntry {
   clusterId?: string;
   clusterName?: string;
+  involvedObject?: ResourceLink;
   eventUid: string;
   reason: string;
   message: string;

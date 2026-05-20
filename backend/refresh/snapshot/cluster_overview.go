@@ -151,17 +151,18 @@ type WorkloadTypeResourceUsage struct {
 // Only the fields needed to render the row and navigate to the involved
 // object are included; richer event detail lives in the Events views.
 type RecentEvent struct {
-	ClusterID        string `json:"clusterId,omitempty"`
-	ClusterName      string `json:"clusterName,omitempty"`
-	EventUID         string `json:"eventUid"`
-	Reason           string `json:"reason"`
-	Message          string `json:"message"`
-	Timestamp        int64  `json:"timestamp"`
-	ObjectKind       string `json:"objectKind"`
-	ObjectName       string `json:"objectName"`
-	ObjectNamespace  string `json:"objectNamespace"`
-	ObjectAPIVersion string `json:"objectApiVersion"`
-	ObjectUID        string `json:"objectUid"`
+	ClusterID        string                      `json:"clusterId,omitempty"`
+	ClusterName      string                      `json:"clusterName,omitempty"`
+	InvolvedObject   *resourcemodel.ResourceLink `json:"involvedObject,omitempty"`
+	EventUID         string                      `json:"eventUid"`
+	Reason           string                      `json:"reason"`
+	Message          string                      `json:"message"`
+	Timestamp        int64                       `json:"timestamp"`
+	ObjectKind       string                      `json:"objectKind"`
+	ObjectName       string                      `json:"objectName"`
+	ObjectNamespace  string                      `json:"objectNamespace"`
+	ObjectAPIVersion string                      `json:"objectApiVersion"`
+	ObjectUID        string                      `json:"objectUid"`
 }
 
 // RegisterClusterOverviewDomain wires the cluster-overview domain into the registry.
@@ -425,7 +426,7 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 		versionFn = func(context.Context) string { return defaultClusterVersion("") }
 	}
 
-	snapshot, err := buildClusterOverviewSnapshot(ctx, nodes, pods, namespaces, replicaSets, b.metrics, versionFn, b.serverHost)
+	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, nodes, pods, namespaces, replicaSets, b.metrics, versionFn, b.serverHost)
 	if err != nil {
 		return nil, err
 	}
@@ -441,11 +442,12 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 
 // Build assembles the cluster overview payload from cached resources and metrics.
 func (b *ClusterOverviewBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return b.buildFromListers(ctx)
+	return b.buildFromListers(ctx, scope)
 }
 
 func buildClusterOverviewSnapshot(
 	ctx context.Context,
+	scope string,
 	nodes []*corev1.Node,
 	pods []*corev1.Pod,
 	namespaces []*corev1.Namespace,
@@ -651,7 +653,7 @@ func buildClusterOverviewSnapshot(
 
 	return &refresh.Snapshot{
 		Domain:  clusterOverviewDomainName,
-		Scope:   "",
+		Scope:   scope,
 		Version: version,
 		Payload: ClusterOverviewSnapshot{
 			ClusterMeta: meta,
@@ -971,7 +973,7 @@ func informerSynced(fn cache.InformerSynced) bool {
 	return fn == nil || fn()
 }
 
-func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh.Snapshot, error) {
+func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	if err := b.waitForInformerSync(ctx); err != nil {
 		return nil, err
 	}
@@ -1087,7 +1089,7 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh
 		return nil, replicaSetRes.err
 	}
 
-	snapshot, err := buildClusterOverviewSnapshot(ctx, nodeRes.items, podRes.items, namespaceRes.items, replicaSetRes.items, b.metrics, b.serverVersion, b.serverHost)
+	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, nodeRes.items, podRes.items, namespaceRes.items, replicaSetRes.items, b.metrics, b.serverVersion, b.serverHost)
 	if err != nil {
 		return nil, err
 	}
@@ -1129,9 +1131,11 @@ func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
 
 	out := make([]RecentEvent, 0, len(filtered))
 	for _, evt := range filtered {
+		facts := resourcemodel.BuildEventFacts(meta.ClusterID, evt)
 		out = append(out, RecentEvent{
 			ClusterID:        meta.ClusterID,
 			ClusterName:      meta.ClusterName,
+			InvolvedObject:   facts.InvolvedObject,
 			EventUID:         string(evt.UID),
 			Reason:           strings.TrimSpace(evt.Reason),
 			Message:          resourcemodel.EventMessage(evt),

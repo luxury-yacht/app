@@ -15,7 +15,7 @@
       "cachePolicy": "snapshot-cache-with-merge",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "snapshot-table-payload",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "cluster-overview": {
       "behaviorClass": "aggregate-snapshot",
@@ -31,7 +31,7 @@
       "cachePolicy": "snapshot-cache",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "aggregate-snapshot-permission-fallback",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "catalog": {
       "behaviorClass": "catalog-stream",

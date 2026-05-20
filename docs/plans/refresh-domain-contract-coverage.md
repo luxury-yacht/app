@@ -409,18 +409,18 @@ Validation:
 
 ## Phase 2: Snapshot And Aggregate Domains
 
-- [ ] Define the `snapshot-table` contract for `namespaces`, including scope
+- [x] Define the `snapshot-table` contract for `namespaces`, including scope
       encoding, cluster-prefixed refresh keys, payload shape, object identity,
       frontend snapshot merge reuse, and permission-denied behavior.
-- [ ] Resolve the namespace-listing canonical-source contract: namespace
+- [x] Resolve the namespace-listing canonical-source contract: namespace
       existence must come from `objectcatalog` or the namespace snapshot must be
       tested as a projection that stays compatible with the object catalog
       source of truth.
-- [ ] Define the `aggregate-snapshot` contract for `cluster-overview`,
+- [x] Define the `aggregate-snapshot` contract for `cluster-overview`,
       including list-watch registration, list-only fallback, metrics fallback,
       partial-permission behavior, and object-reference identity in drill-down
       data.
-- [ ] Add coverage proofs for both classes before later phases remove
+- [x] Add coverage proofs for both classes before later phases remove
       `coverageStatus: "planned"`.
 
 Validation:
@@ -428,6 +428,13 @@ Validation:
 - `go test ./backend/refresh/snapshot ./backend/objectcatalog`
 - `npm run test --prefix frontend -- ClusterOverview orchestrator backgroundClusterRefresher`
 - `mage qc:prerelease` before reporting the implementation phase complete
+
+Progress:
+
+- 2026-05-19: `namespaces` and `cluster-overview` coverage moved from planned
+  to enforced. Namespace snapshots now carry a canonical namespace `ref`;
+  cluster-overview preserves the requested cluster-prefixed scope and recent
+  warning events carry involved-object links when identity is complete.
 
 ## Phase 3: Resource Row Domains
 

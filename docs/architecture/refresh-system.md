@@ -85,6 +85,12 @@ change so stale names fail contract checks.
 Behavior classes describe correctness rules, not implementation inheritance:
 
 - `snapshot-table` and `aggregate-snapshot` are whole-payload snapshot domains.
+  `namespaces` is a snapshot-table projection over namespace objects; it carries
+  a full namespace `ref` so typed namespace UI can stay compatible with the
+  object catalog's canonical identity and existence model.
+  `cluster-overview` is an aggregate snapshot; its payload preserves the
+  cluster-prefixed request scope and includes full involved-object links for
+  recent warning event drill-downs when Kubernetes supplies enough identity.
 - `resource-stream-table` domains use snapshot baselines plus row
   update/delete and scope-level COMPLETE stream semantics.
 - `complete-resync-stream` domains, currently `namespace-helm`, share the

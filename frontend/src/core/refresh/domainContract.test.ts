@@ -175,6 +175,8 @@ const COVERAGE_CONTRACTS = new Set([
   'aggregate-snapshot-permission-fallback',
 ]);
 const ENFORCED_COVERAGE_PROOFS: Record<string, Set<RefreshDomain>> = {
+  'snapshot-table-payload': new Set(['namespaces']),
+  'aggregate-snapshot-permission-fallback': new Set(['cluster-overview']),
   'resource-stream-row-parity': new Set(
     RESOURCE_STREAM_DOMAINS.filter((domain) => domain !== 'namespace-helm')
   ),

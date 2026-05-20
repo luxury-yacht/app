@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	cgotesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
@@ -235,6 +236,29 @@ func TestClusterOverviewBuilder(t *testing.T) {
 	require.Equal(t, uint64(1), metricsMeta.FailureCount)
 
 	require.Equal(t, overview.TotalNodes, snapshot.Stats.ItemCount)
+}
+
+func TestClusterOverviewBuilderPreservesScopeAndClusterMeta(t *testing.T) {
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{
+		ClusterID:   "cluster-a",
+		ClusterName: "prod",
+	})
+	builder := &ClusterOverviewBuilder{
+		nodeLister:      testsupport.NewNodeLister(t),
+		podLister:       testsupport.NewPodLister(t),
+		namespaceLister: testsupport.NewNamespaceLister(t),
+		metrics:         fakeClusterMetrics{},
+	}
+
+	snapshot, err := builder.Build(ctx, "cluster-a|")
+	require.NoError(t, err)
+	require.Equal(t, clusterOverviewDomainName, snapshot.Domain)
+	require.Equal(t, "cluster-a|", snapshot.Scope)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Equal(t, "cluster-a", payload.ClusterID)
+	require.Equal(t, "prod", payload.ClusterName)
 }
 
 func TestClusterOverviewBuilderAggregatesWorkloadResourceUsage(t *testing.T) {
@@ -506,7 +530,7 @@ func TestClusterOverviewListBuilderIncludesOptionalCountsAndRecentEvents(t *test
 		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "daemon-a", Namespace: "default"}},
 		&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "cron-a", Namespace: "default"}},
 		&corev1.Event{
-			ObjectMeta: metav1.ObjectMeta{Name: "warn-a", Namespace: "default", UID: "event-1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "warn-a", Namespace: "default", UID: types.UID("event-1")},
 			Type:       corev1.EventTypeWarning,
 			LastTimestamp: metav1.Time{
 				Time: now,
@@ -516,7 +540,7 @@ func TestClusterOverviewListBuilderIncludesOptionalCountsAndRecentEvents(t *test
 				Name:       "pod-a",
 				Namespace:  "default",
 				APIVersion: "v1",
-				UID:        "pod-uid-1",
+				UID:        types.UID("pod-uid-1"),
 			},
 			Message: "Back-off restarting failed container",
 			Reason:  "BackOff",
@@ -530,18 +554,75 @@ func TestClusterOverviewListBuilderIncludesOptionalCountsAndRecentEvents(t *test
 		serverHost: "https://cluster.example.com",
 	}
 
-	snapshot, err := builder.Build(context.Background(), "")
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{
+		ClusterID:   "cluster-a",
+		ClusterName: "prod",
+	})
+	snapshot, err := builder.Build(ctx, "cluster-a|")
 	require.NoError(t, err)
+	require.Equal(t, "cluster-a|", snapshot.Scope)
 
 	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
 	require.True(t, ok)
+	require.Equal(t, "cluster-a", payload.ClusterID)
 	require.Equal(t, 1, payload.Overview.TotalDeployments)
 	require.Equal(t, 1, payload.Overview.TotalStatefulSets)
 	require.Equal(t, 1, payload.Overview.TotalDaemonSets)
 	require.Equal(t, 1, payload.Overview.TotalCronJobs)
 	require.Len(t, payload.Overview.RecentEvents, 1)
-	require.Equal(t, "event-1", payload.Overview.RecentEvents[0].EventUID)
-	require.Equal(t, "pod-uid-1", payload.Overview.RecentEvents[0].ObjectUID)
+	event := payload.Overview.RecentEvents[0]
+	require.Equal(t, "cluster-a", event.ClusterID)
+	require.Equal(t, "prod", event.ClusterName)
+	require.Equal(t, "event-1", event.EventUID)
+	require.Equal(t, "pod-uid-1", event.ObjectUID)
+	require.NotNil(t, event.InvolvedObject)
+	require.NotNil(t, event.InvolvedObject.Ref)
+	require.Equal(t, "cluster-a", event.InvolvedObject.Ref.ClusterID)
+	require.Equal(t, "", event.InvolvedObject.Ref.Group)
+	require.Equal(t, "v1", event.InvolvedObject.Ref.Version)
+	require.Equal(t, "Pod", event.InvolvedObject.Ref.Kind)
+	require.Equal(t, "default", event.InvolvedObject.Ref.Namespace)
+	require.Equal(t, "pod-a", event.InvolvedObject.Ref.Name)
+	require.Equal(t, "pod-uid-1", event.InvolvedObject.Ref.UID)
+}
+
+func TestClusterOverviewListBuilderKeepsRequiredFallbackPartialWhenPodsAndNamespacesForbidden(t *testing.T) {
+	client := kubefake.NewSimpleClientset(
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a"}},
+	)
+	for _, resource := range []struct {
+		group    string
+		resource string
+	}{
+		{group: "", resource: "pods"},
+		{group: "", resource: "namespaces"},
+	} {
+		resource := resource
+		client.PrependReactor("list", resource.resource, func(cgotesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewForbidden(
+				schema.GroupResource{Group: resource.group, Resource: resource.resource},
+				resource.resource,
+				errors.New("forbidden"),
+			)
+		})
+	}
+
+	builder := &ClusterOverviewListBuilder{
+		client:     client,
+		metrics:    fakeClusterMetrics{},
+		versionFn:  func(context.Context) string { return "v1.30.0" },
+		serverHost: "https://cluster.example.com",
+	}
+
+	snapshot, err := builder.Build(context.Background(), "cluster-a|")
+	require.NoError(t, err)
+	require.Equal(t, "cluster-a|", snapshot.Scope)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Equal(t, 1, payload.Overview.TotalNodes)
+	require.Zero(t, payload.Overview.TotalPods)
+	require.Zero(t, payload.Overview.TotalNamespaces)
 }
 
 func TestClusterOverviewListBuilderIgnoresForbiddenOptionalResources(t *testing.T) {

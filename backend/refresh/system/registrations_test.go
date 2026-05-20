@@ -246,6 +246,35 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	}
 }
 
+func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
+	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	byDomain := make(map[string]domainRegistration, len(registrations))
+	for _, registration := range registrations {
+		byDomain[registration.name] = registration
+	}
+
+	namespaces := byDomain["namespaces"]
+	require.NotNil(t, namespaces.direct, "namespaces must remain a direct snapshot registration")
+	require.Nil(t, namespaces.list)
+	require.Nil(t, namespaces.listWatch)
+
+	overview := byDomain["cluster-overview"]
+	require.Nil(t, overview.direct)
+	require.Nil(t, overview.list)
+	require.NotNil(t, overview.listWatch, "cluster-overview must keep listWatch registration with list fallback")
+	require.Equal(t, []listWatchCheck{
+		{group: "", resource: "nodes"},
+		{group: "", resource: "pods"},
+		{group: "", resource: "namespaces"},
+	}, overview.listWatch.checks)
+	require.Equal(t, []listCheck{
+		{group: "", resource: "nodes"},
+	}, overview.listWatch.fallbackChecks)
+	require.NotNil(t, overview.listWatch.registerInformer)
+	require.NotNil(t, overview.listWatch.registerFallback)
+	require.Equal(t, "cluster overview requires nodes", overview.listWatch.deniedReason)
+}
+
 func TestResourceStreamDomainsAreRegisteredRefreshDomains(t *testing.T) {
 	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
 	registered := make(map[string]struct{}, len(registrations))
@@ -432,8 +461,10 @@ func enforcedCoverageProofs(t *testing.T) map[string]map[string]struct{} {
 	delete(resourceStreamDomains, "namespace-helm")
 
 	return map[string]map[string]struct{}{
-		"resource-stream-row-parity": resourceStreamDomains,
-		"complete-resync-only":       setOf("namespace-helm"),
+		"snapshot-table-payload":                 setOf("namespaces"),
+		"aggregate-snapshot-permission-fallback": setOf("cluster-overview"),
+		"resource-stream-row-parity":             resourceStreamDomains,
+		"complete-resync-only":                   setOf("namespace-helm"),
 	}
 }
 

@@ -43,16 +43,17 @@ type NamespaceSnapshot struct {
 // NamespaceSummary provides high level namespace metadata.
 type NamespaceSummary struct {
 	ClusterMeta
-	Name               string `json:"name"`
-	Phase              string `json:"phase"`
-	Status             string `json:"status,omitempty"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	ResourceVersion    string `json:"resourceVersion"`
-	CreationUnix       int64  `json:"creationTimestamp"`
-	HasWorkloads       bool   `json:"hasWorkloads"`
-	WorkloadsUnknown   bool   `json:"workloadsUnknown,omitempty"`
+	Ref                resourcemodel.ResourceRef `json:"ref"`
+	Name               string                    `json:"name"`
+	Phase              string                    `json:"phase"`
+	Status             string                    `json:"status,omitempty"`
+	StatusState        string                    `json:"statusState,omitempty"`
+	StatusPresentation string                    `json:"statusPresentation,omitempty"`
+	StatusReason       string                    `json:"statusReason,omitempty"`
+	ResourceVersion    string                    `json:"resourceVersion"`
+	CreationUnix       int64                     `json:"creationTimestamp"`
+	HasWorkloads       bool                      `json:"hasWorkloads"`
+	WorkloadsUnknown   bool                      `json:"workloadsUnknown,omitempty"`
 }
 
 // RegisterNamespaceDomain registers the namespace domain with the registry.
@@ -121,6 +122,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		model := resourcemodel.BuildNamespaceResourceModel(meta.ClusterID, ns, hasWorkloads, !workloadsUnknown, nil, nil)
 		items = append(items, NamespaceSummary{
 			ClusterMeta:        meta,
+			Ref:                model.Ref,
 			Name:               model.Ref.Name,
 			Phase:              model.Status.State,
 			Status:             model.Status.Label,

@@ -93,6 +93,43 @@ func TestBuildSummaryAndSort(t *testing.T) {
 	}
 }
 
+func TestBuildSummaryForNamespaceCanonicalIdentity(t *testing.T) {
+	desc := resourceDescriptor{
+		Kind:       "Namespace",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "namespaces",
+		Scope:      ScopeCluster,
+		Namespaced: false,
+	}
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "alpha",
+			UID:               "namespace-alpha",
+			ResourceVersion:   "42",
+			CreationTimestamp: metav1.NewTime(time.Unix(1700000000, 0)),
+		},
+	}
+	svc := &Service{clusterID: "cluster-a", clusterName: "prod"}
+
+	summary := svc.buildSummary(desc, namespace)
+	if summary.ClusterID != "cluster-a" || summary.ClusterName != "prod" {
+		t.Fatalf("unexpected cluster identity: %#v", summary)
+	}
+	if summary.Group != "" || summary.Version != "v1" || summary.Kind != "Namespace" || summary.Resource != "namespaces" {
+		t.Fatalf("unexpected namespace GVK/GVR identity: %#v", summary)
+	}
+	if summary.Namespace != "" || summary.Name != "alpha" || summary.UID != "namespace-alpha" {
+		t.Fatalf("unexpected namespace object identity: %#v", summary)
+	}
+	if summary.ResourceVersion != "42" || summary.CreationTimestamp != "2023-11-14T22:13:20Z" {
+		t.Fatalf("unexpected namespace metadata: %#v", summary)
+	}
+	if summary.Scope != ScopeCluster {
+		t.Fatalf("expected cluster-scoped namespace summary, got %#v", summary.Scope)
+	}
+}
+
 func TestSnapshotSortedKeys(t *testing.T) {
 	if snapshotSortedKeys(nil) != nil {
 		t.Fatalf("expected nil from nil input")

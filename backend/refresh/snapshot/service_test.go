@@ -352,6 +352,40 @@ func TestServiceBuildBlocksPermissionDenied(t *testing.T) {
 	}
 }
 
+func TestServiceBuildBlocksNamespacesWithoutListPermission(t *testing.T) {
+	reg := domain.New()
+	called := false
+	if err := reg.Register(refresh.DomainConfig{
+		Name: "namespaces",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			called = true
+			return &refresh.Snapshot{
+				Domain: "namespaces",
+				Scope:  scope,
+			}, nil
+		},
+	}); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
+		if group == "" && resource == "namespaces" && verb == "list" {
+			return false, nil
+		}
+		return true, nil
+	})
+	service := NewServiceWithPermissions(reg, nil, ClusterMeta{}, checker)
+
+	if _, err := service.Build(context.Background(), "namespaces", "cluster-a|"); err == nil {
+		t.Fatalf("expected permission error")
+	} else if !refresh.IsPermissionDenied(err) {
+		t.Fatalf("expected permission denied error, got %v", err)
+	}
+	if called {
+		t.Fatalf("expected namespaces builder to be skipped on permission denial")
+	}
+}
+
 func TestServiceBuildAllowsPartialPermissions(t *testing.T) {
 	reg := domain.New()
 	called := false

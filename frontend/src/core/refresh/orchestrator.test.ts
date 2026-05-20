@@ -600,6 +600,14 @@ describe('refreshOrchestrator', () => {
     const scope = 'cluster-a';
     const cachedNamespace = {
       clusterId: 'cluster-a',
+      ref: {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Namespace',
+        resource: 'namespaces',
+        name: 'alpha',
+      },
       name: 'alpha',
       phase: 'Active',
       resourceVersion: '1',
@@ -608,6 +616,14 @@ describe('refreshOrchestrator', () => {
     };
     const changedNamespace = {
       clusterId: 'cluster-a',
+      ref: {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Namespace',
+        resource: 'namespaces',
+        name: 'beta',
+      },
       name: 'beta',
       phase: 'Active',
       resourceVersion: '2',
