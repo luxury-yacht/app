@@ -258,6 +258,104 @@ func TestBuildSummaryNamespaced(t *testing.T) {
 	}
 }
 
+func TestBuildSummaryIncludesActionFactsFromUnstructured(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
+
+	deploy := &unstructured.Unstructured{
+		Object: map[string]any{
+			"spec": map[string]any{
+				"replicas": int64(3),
+				"template": map[string]any{
+					"spec": map[string]any{
+						"containers": []any{
+							map[string]any{
+								"ports": []any{map[string]any{"containerPort": int64(8080), "protocol": "TCP"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	deploy.SetName("web")
+	deploy.SetNamespace("default")
+	deploySummary := svc.buildSummary(
+		resourceDescriptor{Kind: "Deployment", Group: "apps", Version: "v1", Resource: "deployments", Scope: ScopeNamespace},
+		deploy,
+	)
+	if deploySummary.ActionFacts == nil || deploySummary.ActionFacts.DesiredReplicas == nil || *deploySummary.ActionFacts.DesiredReplicas != 3 {
+		t.Fatalf("expected deployment desired replica action fact, got %#v", deploySummary.ActionFacts)
+	}
+	if deploySummary.ActionFacts.PortForwardAvailable == nil || !*deploySummary.ActionFacts.PortForwardAvailable {
+		t.Fatalf("expected deployment port-forward action fact, got %#v", deploySummary.ActionFacts)
+	}
+
+	cron := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{"suspend": true}}}
+	cron.SetName("nightly")
+	cron.SetNamespace("default")
+	cronSummary := svc.buildSummary(
+		resourceDescriptor{Kind: "CronJob", Group: "batch", Version: "v1", Resource: "cronjobs", Scope: ScopeNamespace},
+		cron,
+	)
+	if cronSummary.ActionFacts == nil || cronSummary.ActionFacts.Status != "Suspended" {
+		t.Fatalf("expected suspended cronjob action fact, got %#v", cronSummary.ActionFacts)
+	}
+}
+
+func TestEnrichCatalogActionFactsMarksHPAManagedWorkloads(t *testing.T) {
+	falseValue := false
+	items := map[string]Summary{
+		"hpa": {
+			Kind:      "HorizontalPodAutoscaler",
+			Group:     "autoscaling",
+			Version:   "v2",
+			Resource:  "horizontalpodautoscalers",
+			Namespace: "default",
+			Name:      "web",
+			ActionFacts: &ActionFacts{ScaleTarget: &ActionScaleTarget{
+				Group:     "apps",
+				Version:   "v1",
+				Kind:      "Deployment",
+				Namespace: "default",
+				Name:      "web",
+			}},
+		},
+		"managed": {
+			Kind:        "Deployment",
+			Group:       "apps",
+			Version:     "v1",
+			Resource:    "deployments",
+			Namespace:   "default",
+			Name:        "web",
+			ActionFacts: &ActionFacts{HPAManaged: &falseValue},
+		},
+		"unmanaged": {
+			Kind:      "Deployment",
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Namespace: "default",
+			Name:      "api",
+		},
+	}
+	allowed := map[string]resourceDescriptor{
+		"autoscaling/v2/horizontalpodautoscalers": {
+			Group:    "autoscaling",
+			Version:  "v2",
+			Resource: "horizontalpodautoscalers",
+		},
+	}
+
+	enrichCatalogActionFacts(items, allowed, nil)
+
+	if items["managed"].ActionFacts == nil || items["managed"].ActionFacts.HPAManaged == nil || !*items["managed"].ActionFacts.HPAManaged {
+		t.Fatalf("expected managed deployment to be marked HPA-managed, got %#v", items["managed"].ActionFacts)
+	}
+	if items["unmanaged"].ActionFacts == nil || items["unmanaged"].ActionFacts.HPAManaged == nil || *items["unmanaged"].ActionFacts.HPAManaged {
+		t.Fatalf("expected unmanaged deployment to be marked not HPA-managed, got %#v", items["unmanaged"].ActionFacts)
+	}
+}
+
 func TestBuildSummaryClusterScope(t *testing.T) {
 	desc := resourceDescriptor{
 		Kind:     "CustomThing",

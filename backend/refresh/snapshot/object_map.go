@@ -163,11 +163,22 @@ type ObjectMapReference struct {
 
 // ObjectMapNode is one Kubernetes object in the relationship graph.
 type ObjectMapNode struct {
-	ID                string             `json:"id"`
-	Depth             int                `json:"depth"`
-	Ref               ObjectMapReference `json:"ref"`
-	CreationTimestamp string             `json:"creationTimestamp,omitempty"`
-	Status            *ObjectMapStatus   `json:"status,omitempty"`
+	ID                string                `json:"id"`
+	Depth             int                   `json:"depth"`
+	Ref               ObjectMapReference    `json:"ref"`
+	CreationTimestamp string                `json:"creationTimestamp,omitempty"`
+	Status            *ObjectMapStatus      `json:"status,omitempty"`
+	ActionFacts       *ObjectMapActionFacts `json:"actionFacts,omitempty"`
+}
+
+// ObjectMapActionFacts carries the state needed to present context-menu
+// actions without deriving meaning from missing graph edges.
+type ObjectMapActionFacts struct {
+	Status               string `json:"status,omitempty"`
+	Unschedulable        *bool  `json:"unschedulable,omitempty"`
+	PortForwardAvailable *bool  `json:"portForwardAvailable,omitempty"`
+	HPAManaged           *bool  `json:"hpaManaged,omitempty"`
+	DesiredReplicas      *int32 `json:"desiredReplicas,omitempty"`
 }
 
 // ObjectMapStatus is a compact card-level status indicator. State is the source
@@ -232,6 +243,7 @@ type objectMapRecord struct {
 	ref                ObjectMapReference
 	creationTimestamp  string
 	status             *ObjectMapStatus
+	actionFacts        *ObjectMapActionFacts
 	owners             []metav1.OwnerReference
 	labels             map[string]string
 	pod                *corev1.Pod
@@ -266,6 +278,7 @@ type objectMapIndex struct {
 	byIdent    map[string]*objectMapRecord
 	warnings   []string
 	listErrors []string
+	hpaListed  bool
 }
 
 type objectMapGraph struct {
@@ -330,6 +343,7 @@ func (b *objectMapBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	if err := index.listError(); err != nil {
 		return nil, err
 	}
+	index.enrichActionFacts()
 
 	seed, ok := index.findIdentity(opts.identity.Namespace, opts.identity.GVK, opts.identity.Name)
 	if !ok {
@@ -376,6 +390,7 @@ func (b *objectMapBuilder) buildNamespace(ctx context.Context, scope string, opt
 	if err := index.listError(); err != nil {
 		return nil, err
 	}
+	index.enrichActionFacts()
 
 	graph := index.buildNamespaceGraph(opts.namespace, opts.maxNodes)
 	nodes := sortedObjectMapNodes(graph.nodes)
@@ -608,6 +623,7 @@ func (idx *objectMapIndex) collectPods(ctx context.Context, client kubernetes.In
 			ref:               refFromObject(&pod.ObjectMeta, "", "v1", "Pod", "pods", pod.Namespace),
 			creationTimestamp: objectCreationTimestamp(&pod.ObjectMeta),
 			status:            objectMapPodStatus(idx.meta.ClusterID, pod),
+			actionFacts:       objectMapPortForwardFacts(hasForwardablePodPorts(&pod)),
 			owners:            pod.OwnerReferences,
 			labels:            cloneStringMap(pod.Labels),
 			pod:               &pod,
@@ -626,6 +642,7 @@ func (idx *objectMapIndex) collectServices(ctx context.Context, client kubernete
 			ref:               refFromObject(&svc.ObjectMeta, "", "v1", "Service", "services", svc.Namespace),
 			creationTimestamp: objectCreationTimestamp(&svc.ObjectMeta),
 			status:            objectMapServiceStatus(idx.meta.ClusterID, svc),
+			actionFacts:       objectMapPortForwardFacts(serviceHasForwardablePorts(svc.Spec.Ports)),
 			owners:            svc.OwnerReferences,
 			labels:            cloneStringMap(svc.Labels),
 			service:           &svc,
@@ -767,6 +784,7 @@ func (idx *objectMapIndex) collectNodes(ctx context.Context, client kubernetes.I
 			ref:               refFromObject(&node.ObjectMeta, "", "v1", "Node", "nodes", ""),
 			creationTimestamp: objectCreationTimestamp(&node.ObjectMeta),
 			status:            objectMapNodeStatus(idx.meta.ClusterID, node),
+			actionFacts:       objectMapNodeActionFacts(node.Spec.Unschedulable),
 			owners:            node.OwnerReferences,
 			labels:            cloneStringMap(node.Labels),
 		})
@@ -784,6 +802,7 @@ func (idx *objectMapIndex) collectDeployments(ctx context.Context, client kubern
 			ref:               refFromObject(&deploy.ObjectMeta, "apps", "v1", "Deployment", "deployments", deploy.Namespace),
 			creationTimestamp: objectCreationTimestamp(&deploy.ObjectMeta),
 			status:            objectMapDeploymentStatus(idx.meta.ClusterID, deploy),
+			actionFacts:       objectMapScalableWorkloadFacts(deploy.Spec.Replicas, hasForwardableContainerPorts(deploy.Spec.Template.Spec.Containers)),
 			owners:            deploy.OwnerReferences,
 			labels:            cloneStringMap(deploy.Labels),
 			template:          &deploy.Spec.Template,
@@ -802,6 +821,7 @@ func (idx *objectMapIndex) collectReplicaSets(ctx context.Context, client kubern
 			ref:               refFromObject(&rs.ObjectMeta, "apps", "v1", "ReplicaSet", "replicasets", rs.Namespace),
 			creationTimestamp: objectCreationTimestamp(&rs.ObjectMeta),
 			status:            objectMapReplicaSetStatus(idx.meta.ClusterID, rs),
+			actionFacts:       objectMapScalableWorkloadFacts(rs.Spec.Replicas, hasForwardableContainerPorts(rs.Spec.Template.Spec.Containers)),
 			owners:            rs.OwnerReferences,
 			labels:            cloneStringMap(rs.Labels),
 			template:          &rs.Spec.Template,
@@ -820,6 +840,7 @@ func (idx *objectMapIndex) collectStatefulSets(ctx context.Context, client kuber
 			ref:               refFromObject(&sts.ObjectMeta, "apps", "v1", "StatefulSet", "statefulsets", sts.Namespace),
 			creationTimestamp: objectCreationTimestamp(&sts.ObjectMeta),
 			status:            objectMapStatefulSetStatus(idx.meta.ClusterID, sts),
+			actionFacts:       objectMapScalableWorkloadFacts(sts.Spec.Replicas, hasForwardableContainerPorts(sts.Spec.Template.Spec.Containers)),
 			owners:            sts.OwnerReferences,
 			labels:            cloneStringMap(sts.Labels),
 			template:          &sts.Spec.Template,
@@ -838,6 +859,7 @@ func (idx *objectMapIndex) collectDaemonSets(ctx context.Context, client kuberne
 			ref:               refFromObject(&ds.ObjectMeta, "apps", "v1", "DaemonSet", "daemonsets", ds.Namespace),
 			creationTimestamp: objectCreationTimestamp(&ds.ObjectMeta),
 			status:            objectMapDaemonSetStatus(idx.meta.ClusterID, ds),
+			actionFacts:       objectMapPortForwardFacts(hasForwardableContainerPorts(ds.Spec.Template.Spec.Containers)),
 			owners:            ds.OwnerReferences,
 			labels:            cloneStringMap(ds.Labels),
 			template:          &ds.Spec.Template,
@@ -856,6 +878,7 @@ func (idx *objectMapIndex) collectJobs(ctx context.Context, client kubernetes.In
 			ref:               refFromObject(&job.ObjectMeta, "batch", "v1", "Job", "jobs", job.Namespace),
 			creationTimestamp: objectCreationTimestamp(&job.ObjectMeta),
 			status:            objectMapJobStatus(idx.meta.ClusterID, job),
+			actionFacts:       objectMapPortForwardFacts(hasForwardableContainerPorts(job.Spec.Template.Spec.Containers)),
 			owners:            job.OwnerReferences,
 			labels:            cloneStringMap(job.Labels),
 			template:          job.Spec.Template.DeepCopy(),
@@ -874,6 +897,7 @@ func (idx *objectMapIndex) collectCronJobs(ctx context.Context, client kubernete
 			ref:               refFromObject(&cron.ObjectMeta, "batch", "v1", "CronJob", "cronjobs", cron.Namespace),
 			creationTimestamp: objectCreationTimestamp(&cron.ObjectMeta),
 			status:            objectMapCronJobStatus(idx.meta.ClusterID, cron),
+			actionFacts:       objectMapCronJobActionFacts(cron),
 			owners:            cron.OwnerReferences,
 			labels:            cloneStringMap(cron.Labels),
 			cronJobTpl:        cron.Spec.JobTemplate.Spec.Template.DeepCopy(),
@@ -886,6 +910,7 @@ func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.In
 	if idx.skipListError("horizontalpodautoscalers", err) {
 		return
 	}
+	idx.hpaListed = true
 	for i := range list.Items {
 		hpa := list.Items[i]
 		idx.addRecord(&objectMapRecord{
@@ -1211,6 +1236,9 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	if dst.status == nil {
 		dst.status = src.status
 	}
+	if dst.actionFacts == nil {
+		dst.actionFacts = cloneObjectMapActionFacts(src.actionFacts)
+	}
 	if len(dst.owners) == 0 {
 		dst.owners = src.owners
 	}
@@ -1288,6 +1316,53 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	}
 }
 
+func (idx *objectMapIndex) enrichActionFacts() {
+	if idx == nil || !idx.hpaListed {
+		return
+	}
+	managedTargets := make(map[string]struct{})
+	for _, record := range idx.records {
+		if record == nil || record.hpa == nil {
+			continue
+		}
+		model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(idx.meta.ClusterID, record.hpa)
+		target := idx.recordForResourceLink(model.Facts.HorizontalPodAutoscaler.ScaleTarget)
+		if target == nil {
+			continue
+		}
+		managedTargets[objectMapActionTargetKey(target.ref)] = struct{}{}
+	}
+	for _, record := range idx.records {
+		if record == nil || !isObjectMapScalableWorkload(record.ref) {
+			continue
+		}
+		managed := false
+		if _, ok := managedTargets[objectMapActionTargetKey(record.ref)]; ok {
+			managed = true
+		}
+		if record.actionFacts == nil {
+			record.actionFacts = &ObjectMapActionFacts{}
+		}
+		record.actionFacts.HPAManaged = &managed
+	}
+}
+
+func isObjectMapScalableWorkload(ref ObjectMapReference) bool {
+	return ref.Group == "apps" &&
+		ref.Version == "v1" &&
+		(ref.Kind == "Deployment" || ref.Kind == "StatefulSet" || ref.Kind == "ReplicaSet")
+}
+
+func objectMapActionTargetKey(ref ObjectMapReference) string {
+	return strings.Join([]string{
+		strings.TrimSpace(ref.Namespace),
+		strings.TrimSpace(ref.Group),
+		strings.TrimSpace(ref.Version),
+		strings.TrimSpace(ref.Kind),
+		strings.TrimSpace(ref.Name),
+	}, "\x00")
+}
+
 func objectMapNodeFromRecord(id string, depth int, record *objectMapRecord) ObjectMapNode {
 	if record == nil {
 		return ObjectMapNode{ID: id, Depth: depth}
@@ -1298,7 +1373,32 @@ func objectMapNodeFromRecord(id string, depth int, record *objectMapRecord) Obje
 		Ref:               record.ref,
 		CreationTimestamp: record.creationTimestamp,
 		Status:            cloneObjectMapStatus(record.status),
+		ActionFacts:       cloneObjectMapActionFacts(record.actionFacts),
 	}
+}
+
+func cloneObjectMapActionFacts(facts *ObjectMapActionFacts) *ObjectMapActionFacts {
+	if facts == nil {
+		return nil
+	}
+	clone := *facts
+	if facts.Unschedulable != nil {
+		value := *facts.Unschedulable
+		clone.Unschedulable = &value
+	}
+	if facts.PortForwardAvailable != nil {
+		value := *facts.PortForwardAvailable
+		clone.PortForwardAvailable = &value
+	}
+	if facts.HPAManaged != nil {
+		value := *facts.HPAManaged
+		clone.HPAManaged = &value
+	}
+	if facts.DesiredReplicas != nil {
+		value := *facts.DesiredReplicas
+		clone.DesiredReplicas = &value
+	}
+	return &clone
 }
 
 func cloneObjectMapStatus(status *ObjectMapStatus) *ObjectMapStatus {
@@ -1307,6 +1407,39 @@ func cloneObjectMapStatus(status *ObjectMapStatus) *ObjectMapStatus {
 	}
 	clone := *status
 	return &clone
+}
+
+func objectMapPortForwardFacts(available bool) *ObjectMapActionFacts {
+	return &ObjectMapActionFacts{PortForwardAvailable: &available}
+}
+
+func objectMapScalableWorkloadFacts(replicas *int32, portForwardAvailable bool) *ObjectMapActionFacts {
+	return &ObjectMapActionFacts{
+		PortForwardAvailable: &portForwardAvailable,
+		DesiredReplicas:      replicas,
+	}
+}
+
+func objectMapNodeActionFacts(unschedulable bool) *ObjectMapActionFacts {
+	return &ObjectMapActionFacts{Unschedulable: &unschedulable}
+}
+
+func objectMapCronJobActionFacts(cron batchv1.CronJob) *ObjectMapActionFacts {
+	available := hasForwardableContainerPorts(cron.Spec.JobTemplate.Spec.Template.Spec.Containers)
+	facts := &ObjectMapActionFacts{PortForwardAvailable: &available}
+	if cron.Spec.Suspend != nil && *cron.Spec.Suspend {
+		facts.Status = "Suspended"
+	}
+	return facts
+}
+
+func serviceHasForwardablePorts(ports []corev1.ServicePort) bool {
+	for _, port := range ports {
+		if port.Protocol == "" || port.Protocol == corev1.ProtocolTCP {
+			return true
+		}
+	}
+	return false
 }
 
 func objectMapStatus(state, label string, reasons ...string) *ObjectMapStatus {

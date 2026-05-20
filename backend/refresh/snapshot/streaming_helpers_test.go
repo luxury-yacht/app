@@ -165,7 +165,8 @@ func TestBuildWorkloadSummaryMatchesSnapshotHPAContext(t *testing.T) {
 	streamRow, err := BuildWorkloadSummary(ClusterMeta{}, deployment, nil, nil, hpa)
 	require.NoError(t, err)
 	require.Equal(t, payload.Workloads[0], streamRow)
-	require.True(t, streamRow.HPAManaged)
+	require.NotNil(t, streamRow.HPAManaged)
+	require.True(t, *streamRow.HPAManaged)
 }
 
 func TestBuildWorkloadSummaryDeploymentReadyUsesOwnedPods(t *testing.T) {

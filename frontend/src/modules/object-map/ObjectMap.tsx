@@ -46,7 +46,6 @@ import {
 } from '@shared/components/icons/ObjectMapIcons';
 
 const ObjectMapG6Renderer = React.lazy(() => import('./ObjectMapG6Renderer'));
-const OBJECT_MAP_SCALABLE_KINDS = new Set(['Deployment', 'StatefulSet', 'ReplicaSet']);
 
 const objectMapTimingNow = (): number =>
   typeof performance === 'undefined' ? Date.now() : performance.now();
@@ -322,39 +321,25 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     visibleState.visibleLayout.nodes.length,
   ]);
 
-  const hpaManagedNodeIds = useMemo(() => {
-    const nodeById = new Map(payload.nodes.map((node) => [node.id, node]));
-    const managed = new Set<string>();
-    for (const edge of payload.edges) {
-      if (edge.type !== 'scales') continue;
-      const source = nodeById.get(edge.source);
-      const target = nodeById.get(edge.target);
-      if (
-        source?.ref.kind === 'HorizontalPodAutoscaler' &&
-        target &&
-        OBJECT_MAP_SCALABLE_KINDS.has(target.ref.kind)
-      ) {
-        managed.add(target.id);
-      }
-    }
-    return managed;
-  }, [payload.edges, payload.nodes]);
-  const nodeIdByReference = useMemo(
-    () => new Map(payload.nodes.map((node) => [objectMapReferenceKey(node.ref), node.id])),
+  const nodeByReference = useMemo(
+    () => new Map(payload.nodes.map((node) => [objectMapReferenceKey(node.ref), node])),
     [payload.nodes]
   );
   const contextMenuObject = useMemo<ObjectActionData | null>(() => {
     if (contextMenu?.type !== 'object') return null;
     const ref = contextMenu.request.ref;
-    if (!OBJECT_MAP_SCALABLE_KINDS.has(ref.kind)) {
-      return ref;
-    }
-    const nodeId = nodeIdByReference.get(objectMapReferenceKey(ref));
+    const node = nodeByReference.get(objectMapReferenceKey(ref));
+    const actionFacts = node?.actionFacts;
     return {
       ...ref,
-      hpaManaged: nodeId ? hpaManagedNodeIds.has(nodeId) : null,
+      status: actionFacts?.status,
+      unschedulable: actionFacts?.unschedulable,
+      portForwardAvailable: actionFacts?.portForwardAvailable,
+      hpaManaged:
+        actionFacts?.hpaManaged === true ? true : actionFacts?.hpaManaged === false ? false : null,
+      desiredReplicas: actionFacts?.desiredReplicas,
     };
-  }, [contextMenu, hpaManagedNodeIds, nodeIdByReference]);
+  }, [contextMenu, nodeByReference]);
   const objectActions = useObjectActionController({
     context: 'object-map',
     onOpen: onOpenPanel ? (object) => onOpenPanel(object as ObjectMapReference) : undefined,

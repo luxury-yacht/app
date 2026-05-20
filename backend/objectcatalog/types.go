@@ -52,19 +52,42 @@ type HealthStatus struct {
 
 // Summary represents the lightweight metadata captured for each Kubernetes object.
 type Summary struct {
-	ClusterID         string `json:"clusterId"`              // stable identifier for the source cluster
-	ClusterName       string `json:"clusterName"`            // display name for the source cluster
-	Kind              string `json:"kind"`                   // resource kind
-	Group             string `json:"group"`                  // resource group
-	Version           string `json:"version"`                // resource version
-	Resource          string `json:"resource"`               // resource name
-	Namespace         string `json:"namespace,omitempty"`    // resource namespace
-	Name              string `json:"name"`                   // resource name
-	UID               string `json:"uid"`                    // resource UID
-	ResourceVersion   string `json:"resourceVersion"`        // resource version
-	CreationTimestamp string `json:"creationTimestamp"`      // resource creation timestamp
-	Scope             Scope  `json:"scope"`                  // resource scope
-	LabelsDigest      string `json:"labelsDigest,omitempty"` // optional digest of resource labels
+	ClusterID         string       `json:"clusterId"`              // stable identifier for the source cluster
+	ClusterName       string       `json:"clusterName"`            // display name for the source cluster
+	Kind              string       `json:"kind"`                   // resource kind
+	Group             string       `json:"group"`                  // resource group
+	Version           string       `json:"version"`                // resource version
+	Resource          string       `json:"resource"`               // resource name
+	Namespace         string       `json:"namespace,omitempty"`    // resource namespace
+	Name              string       `json:"name"`                   // resource name
+	UID               string       `json:"uid"`                    // resource UID
+	ResourceVersion   string       `json:"resourceVersion"`        // resource version
+	CreationTimestamp string       `json:"creationTimestamp"`      // resource creation timestamp
+	Scope             Scope        `json:"scope"`                  // resource scope
+	LabelsDigest      string       `json:"labelsDigest,omitempty"` // optional digest of resource labels
+	ActionFacts       *ActionFacts `json:"actionFacts,omitempty"`  // optional facts needed to present object actions correctly
+}
+
+// ActionFacts carries lightweight, action-relevant state for catalog rows.
+// Identity stays on Summary; these fields only answer whether a known action
+// variant is appropriate for the current object state.
+type ActionFacts struct {
+	Status               string             `json:"status,omitempty"`
+	Unschedulable        *bool              `json:"unschedulable,omitempty"`
+	PortForwardAvailable *bool              `json:"portForwardAvailable,omitempty"`
+	HPAManaged           *bool              `json:"hpaManaged,omitempty"`
+	DesiredReplicas      *int32             `json:"desiredReplicas,omitempty"`
+	ScaleTarget          *ActionScaleTarget `json:"-"`
+}
+
+// ActionScaleTarget is the target referenced by an autoscaler. It is used by
+// backend catalog enrichment and is intentionally not part of the JSON payload.
+type ActionScaleTarget struct {
+	Group     string
+	Version   string
+	Kind      string
+	Namespace string
+	Name      string
 }
 
 // Descriptor captures discovery metadata for a Kubernetes resource handled by the catalog.

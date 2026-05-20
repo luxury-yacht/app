@@ -208,18 +208,34 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   // Context menu items builder
   const getContextMenuItems = useCallback(
     (row: BrowseTableRow): ContextMenuItem[] => {
+      const actionFacts = row.item.actionFacts;
       return objectActions.getMenuItems(
-        buildRequiredObjectReference({
-          kind: row.item.kind,
-          name: row.item.name,
-          namespace: row.item.namespace,
-          clusterId: row.item.clusterId,
-          clusterName: row.item.clusterName,
-          group: row.item.group,
-          version: row.item.version,
-          resource: row.item.resource,
-          uid: row.item.uid,
-        })
+        buildRequiredObjectReference(
+          {
+            kind: row.item.kind,
+            name: row.item.name,
+            namespace: row.item.namespace,
+            clusterId: row.item.clusterId,
+            clusterName: row.item.clusterName,
+            group: row.item.group,
+            version: row.item.version,
+            resource: row.item.resource,
+            uid: row.item.uid,
+          },
+          undefined,
+          {
+            status: actionFacts?.status,
+            unschedulable: actionFacts?.unschedulable,
+            portForwardAvailable: actionFacts?.portForwardAvailable,
+            hpaManaged:
+              actionFacts?.hpaManaged === true
+                ? true
+                : actionFacts?.hpaManaged === false
+                  ? false
+                  : null,
+            desiredReplicas: actionFacts?.desiredReplicas,
+          }
+        )
       );
     },
     [objectActions]

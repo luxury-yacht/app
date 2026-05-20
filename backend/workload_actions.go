@@ -438,6 +438,9 @@ func (a *App) triggerCronJobInternal(clusterID, namespace, name string) (string,
 	if err != nil {
 		return "", fmt.Errorf("failed to get cronjob %s/%s: %w", namespace, name, err)
 	}
+	if cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend {
+		return "", fmt.Errorf("cannot trigger suspended cronjob %s/%s", namespace, name)
+	}
 	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Kind:      "Job",
 		Namespace: namespace,

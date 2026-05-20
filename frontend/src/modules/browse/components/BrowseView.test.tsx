@@ -10,6 +10,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import BrowseView from '@/modules/browse/components/BrowseView';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -90,6 +91,33 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
+vi.mock('@/core/capabilities', () => ({
+  getPermissionKey: (
+    kind: string,
+    verb: string,
+    namespace?: string | null,
+    subresource?: string | null,
+    clusterId?: string | null,
+    group?: string | null,
+    version?: string | null
+  ) =>
+    [
+      clusterId ?? '',
+      group ?? '',
+      version ?? '',
+      kind,
+      namespace ?? '',
+      verb,
+      subresource ?? '',
+    ].join('|'),
+  queryKindPermissions: vi.fn(),
+  useUserPermissions: () => {
+    const permissions = new Map();
+    permissions.get = () => ({ allowed: true, pending: false });
+    return permissions;
+  },
 }));
 
 vi.mock('@/hooks/useShortNames', () => ({
@@ -409,6 +437,75 @@ describe('BrowseView', () => {
         'cluster-1|limit=1&namespace=cluster',
         expect.objectContaining({ isManual: false })
       );
+    });
+  });
+
+  describe('Action facts', () => {
+    it('threads catalog action facts into shared context-menu actions', async () => {
+      refreshMocks.scopedDomains.set('cluster-1|limit=1000&namespace=default', {
+        status: 'ready',
+        data: {
+          items: [
+            {
+              uid: 'deploy-1',
+              kind: 'Deployment',
+              name: 'web',
+              namespace: 'default',
+              scope: 'Namespace',
+              resource: 'deployments',
+              group: 'apps',
+              version: 'v1',
+              resourceVersion: '1',
+              creationTimestamp: new Date().toISOString(),
+              clusterId: 'cluster-1',
+              actionFacts: { hpaManaged: true, desiredReplicas: 3 },
+            },
+            {
+              uid: 'cron-1',
+              kind: 'CronJob',
+              name: 'nightly',
+              namespace: 'default',
+              scope: 'Namespace',
+              resource: 'cronjobs',
+              group: 'batch',
+              version: 'v1',
+              resourceVersion: '1',
+              creationTimestamp: new Date().toISOString(),
+              clusterId: 'cluster-1',
+              actionFacts: { status: 'Suspended' },
+            },
+          ],
+          kinds: [
+            { kind: 'Deployment', namespaced: true },
+            { kind: 'CronJob', namespaced: true },
+          ],
+          namespaces: ['default'],
+        },
+        scope: 'cluster-1|limit=1000&namespace=default',
+      });
+
+      await act(async () => {
+        root.render(<BrowseView namespace="default" />);
+        await Promise.resolve();
+      });
+
+      const rows = gridTablePropsRef.current?.data ?? [];
+      const byKind = new Map(rows.map((row: any) => [row.item.kind, row]));
+
+      const deploymentMenu = gridTablePropsRef.current.getCustomContextMenuItems(
+        byKind.get('Deployment')
+      );
+      expect(
+        deploymentMenu.some((item: any) => item.actionId === OBJECT_ACTION_IDS.scaleToZero)
+      ).toBe(true);
+      expect(deploymentMenu.some((item: any) => item.actionId === OBJECT_ACTION_IDS.scale)).toBe(
+        false
+      );
+
+      const cronMenu = gridTablePropsRef.current.getCustomContextMenuItems(byKind.get('CronJob'));
+      expect(cronMenu.some((item: any) => item.actionId === OBJECT_ACTION_IDS.resume)).toBe(true);
+      const trigger = cronMenu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.triggerNow);
+      expect(trigger?.disabled).toBe(true);
     });
   });
 });

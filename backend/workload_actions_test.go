@@ -494,6 +494,47 @@ func TestTriggerCronJobCreatesJob(t *testing.T) {
 	require.Equal(t, "backup", createdJob.Spec.Template.Spec.Containers[0].Name)
 }
 
+func TestTriggerCronJobRejectsSuspendedCronJob(t *testing.T) {
+	t.Helper()
+
+	suspended := true
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "backup", Namespace: "default"},
+		Spec: batchv1.CronJobSpec{
+			Suspend:  &suspended,
+			Schedule: "0 * * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers:    []corev1.Container{{Name: "backup", Image: "backup:latest"}},
+							RestartPolicy: corev1.RestartPolicyNever,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	client := cgofake.NewClientset(cronJob)
+	allowSelfSubjectAccessReviews(client)
+	app := &App{logger: NewLogger(10)}
+	app.clusterClients = map[string]*clusterClients{
+		workloadClusterID: {
+			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
+
+	_, err := app.triggerCronJob(workloadClusterID, "default", "backup")
+	require.EqualError(t, err, "cannot trigger suspended cronjob default/backup")
+	jobs, listErr := client.BatchV1().Jobs("default").List(context.Background(), metav1.ListOptions{})
+	require.NoError(t, listErr)
+	require.Empty(t, jobs.Items)
+}
+
 func TestTriggerCronJobErrors(t *testing.T) {
 	t.Helper()
 

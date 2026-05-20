@@ -909,7 +909,8 @@ func TestManagerWorkloadStreamRowsIncludeHPAContext(t *testing.T) {
 	require.Equal(t, domainWorkloads, update.Domain)
 	row, ok := update.Row.(snapshot.WorkloadSummary)
 	require.True(t, ok)
-	require.True(t, row.HPAManaged)
+	require.NotNil(t, row.HPAManaged)
+	require.True(t, *row.HPAManaged)
 }
 
 func TestManagerHPADeleteRefreshesTargetWorkloadRow(t *testing.T) {
@@ -947,7 +948,8 @@ func TestManagerHPADeleteRefreshesTargetWorkloadRow(t *testing.T) {
 	require.Equal(t, "web", update.Ref.Name)
 	row, ok := update.Row.(snapshot.WorkloadSummary)
 	require.True(t, ok)
-	require.False(t, row.HPAManaged)
+	require.NotNil(t, row.HPAManaged)
+	require.False(t, *row.HPAManaged)
 }
 
 func TestManagerHPAUpdateRefreshesOldAndNewTargets(t *testing.T) {
@@ -990,8 +992,10 @@ func TestManagerHPAUpdateRefreshesOldAndNewTargets(t *testing.T) {
 		require.True(t, ok)
 		rows[row.Name] = row
 	}
-	require.True(t, rows["web-new"].HPAManaged)
-	require.False(t, rows["web-old"].HPAManaged)
+	require.NotNil(t, rows["web-new"].HPAManaged)
+	require.True(t, *rows["web-new"].HPAManaged)
+	require.NotNil(t, rows["web-old"].HPAManaged)
+	require.False(t, *rows["web-old"].HPAManaged)
 }
 
 func TestManagerPodMoveRefreshesOldAndNewNodeRows(t *testing.T) {

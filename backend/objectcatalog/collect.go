@@ -426,6 +426,7 @@ func (s *Service) buildSummary(desc resourceDescriptor, item metav1.Object) Summ
 	if digest := labelsDigest(item.GetLabels()); digest != "" {
 		summary.LabelsDigest = digest
 	}
+	summary.ActionFacts = buildSummaryActionFacts(desc, item)
 
 	return summary
 }

@@ -780,9 +780,11 @@ func BuildWorkloadSummary(
 	}
 
 	summary.ClusterMeta = meta
+	managed := false
 	if _, ok := buildHPATargetSet(hpas)[workloadHPATargetKey(summary)]; ok {
-		summary.HPAManaged = true
+		managed = true
 	}
+	summary.HPAManaged = &managed
 	return summary, nil
 }
 
@@ -795,9 +797,11 @@ func BuildStandalonePodWorkloadSummary(
 ) WorkloadSummary {
 	summary := buildStandalonePodSummary(meta.ClusterID, pod, usage)
 	summary.ClusterMeta = meta
+	managed := false
 	if _, ok := buildHPATargetSet(hpas)[workloadHPATargetKey(summary)]; ok {
-		summary.HPAManaged = true
+		managed = true
 	}
+	summary.HPAManaged = &managed
 	return summary
 }
 

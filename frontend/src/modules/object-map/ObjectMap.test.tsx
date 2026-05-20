@@ -381,6 +381,7 @@ const hpaManagedPayload: ObjectMapSnapshotPayload = {
         ...ref('deploy', 'Deployment', 'web', 'apps'),
         resource: 'deployments',
       },
+      actionFacts: { hpaManaged: true, desiredReplicas: 3 },
     },
   ],
   edges: [
@@ -398,9 +399,39 @@ const nonHpaManagedScalablePayload: ObjectMapSnapshotPayload = {
         ...ref('deploy', 'Deployment', 'web', 'apps'),
         resource: 'deployments',
       },
+      actionFacts: { hpaManaged: false, desiredReplicas: 3 },
     },
   ],
   edges: [],
+};
+
+const hpaManagedFactWithoutEdgePayload: ObjectMapSnapshotPayload = {
+  ...nonHpaManagedScalablePayload,
+  nodes: [
+    {
+      id: 'deploy',
+      depth: 0,
+      ref: {
+        ...ref('deploy', 'Deployment', 'web', 'apps'),
+        resource: 'deployments',
+      },
+      actionFacts: { hpaManaged: true, desiredReplicas: 3 },
+    },
+  ],
+};
+
+const unknownHpaManagedScalablePayload: ObjectMapSnapshotPayload = {
+  ...nonHpaManagedScalablePayload,
+  nodes: [
+    {
+      id: 'deploy',
+      depth: 0,
+      ref: {
+        ...ref('deploy', 'Deployment', 'web', 'apps'),
+        resource: 'deployments',
+      },
+    },
+  ],
 };
 
 const transitiveKindFilterPayload: ObjectMapSnapshotPayload = {
@@ -1213,7 +1244,7 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
-  it('shows HPA scale actions for map workloads with an incoming scales edge', async () => {
+  it('shows HPA scale actions from node action facts', async () => {
     const { container, cleanup } = await renderObjectMap({ testPayload: hpaManagedPayload });
     const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
     expect(deploy).toBeTruthy();
@@ -1232,7 +1263,28 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
-  it('shows normal Scale for map workloads without an incoming scales edge', async () => {
+  it('shows HPA scale actions even when the scales edge is not visible', async () => {
+    const { container, cleanup } = await renderObjectMap({
+      testPayload: hpaManagedFactWithoutEdgePayload,
+    });
+    const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
+    expect(deploy).toBeTruthy();
+
+    await act(async () => {
+      deploy!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      await Promise.resolve();
+    });
+
+    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
+    expect(
+      menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`)
+    ).toBeTruthy();
+    expect(menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`)).toBeNull();
+
+    cleanup();
+  });
+
+  it('shows normal Scale for map workloads when action facts say no HPA manages them', async () => {
     const { container, cleanup } = await renderObjectMap({
       testPayload: nonHpaManagedScalablePayload,
     });
@@ -1248,6 +1300,27 @@ describe('ObjectMap', () => {
     expect(
       menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`)
     ).toBeTruthy();
+    expect(
+      menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`)
+    ).toBeNull();
+
+    cleanup();
+  });
+
+  it('hides scale actions for map workloads when HPA ownership is unknown', async () => {
+    const { container, cleanup } = await renderObjectMap({
+      testPayload: unknownHpaManagedScalablePayload,
+    });
+    const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
+    expect(deploy).toBeTruthy();
+
+    await act(async () => {
+      deploy!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      await Promise.resolve();
+    });
+
+    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
+    expect(menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`)).toBeNull();
     expect(
       menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`)
     ).toBeNull();

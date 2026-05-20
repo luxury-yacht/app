@@ -1180,14 +1180,23 @@ func TestNamespaceWorkloadsBuilderMarksHPAManagedByFullGVK(t *testing.T) {
 	require.NoError(t, err)
 	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.Len(t, payload.Workloads, 1)
-	require.False(t, payload.Workloads[0].HPAManaged)
+	require.NotNil(t, payload.Workloads[0].HPAManaged)
+	require.False(t, *payload.Workloads[0].HPAManaged)
+
+	builder.hpaLister = nil
+	snapshot, err = builder.Build(context.Background(), "namespace:default")
+	require.NoError(t, err)
+	payload = snapshot.Payload.(NamespaceWorkloadsSnapshot)
+	require.Len(t, payload.Workloads, 1)
+	require.Nil(t, payload.Workloads[0].HPAManaged)
 
 	builder.hpaLister = testsupport.NewHorizontalPodAutoscalerLister(t, customTargetHPA, appsTargetHPA)
 	snapshot, err = builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	payload = snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.Len(t, payload.Workloads, 1)
-	require.True(t, payload.Workloads[0].HPAManaged)
+	require.NotNil(t, payload.Workloads[0].HPAManaged)
+	require.True(t, *payload.Workloads[0].HPAManaged)
 }
 
 func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {

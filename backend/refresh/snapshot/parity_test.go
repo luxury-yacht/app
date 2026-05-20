@@ -369,7 +369,8 @@ func parityWorkloadsCase(meta ClusterMeta, withHPA bool) parityCase {
 			if withHPA {
 				for _, row := range payload.Workloads {
 					if row.Kind == "Deployment" && row.Name == "web" {
-						require.True(t, row.HPAManaged, "snapshot deployment row should be marked HPA-managed")
+						require.NotNil(t, row.HPAManaged, "snapshot deployment row should have HPA coverage")
+						require.True(t, *row.HPAManaged, "snapshot deployment row should be marked HPA-managed")
 					}
 				}
 			}

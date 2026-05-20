@@ -55,6 +55,9 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	if status := nodeByKindName(t, payload, "Deployment", "web").Status; status == nil || status.State != "2/2" || status.Label != "Running" || status.Presentation != "ready" {
 		t.Fatalf("unexpected deployment status: %#v", status)
 	}
+	if facts := nodeByKindName(t, payload, "Deployment", "web").ActionFacts; facts == nil || facts.HPAManaged == nil || !*facts.HPAManaged {
+		t.Fatalf("unexpected deployment action facts: %#v", facts)
+	}
 	if status := nodeByKindName(t, payload, "ConfigMap", "app-config").Status; status == nil || status.State != "2" || status.Label != "2 items" || status.Presentation != "ready" {
 		t.Fatalf("unexpected configmap status: %#v", status)
 	}

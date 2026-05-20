@@ -84,7 +84,8 @@ type WorkloadSummary struct {
 	MemLimit             string `json:"memLimit,omitempty"`
 	PortForwardAvailable bool   `json:"portForwardAvailable"`
 	// HPAManaged indicates whether a HorizontalPodAutoscaler targets this workload.
-	HPAManaged bool `json:"hpaManaged"`
+	// Nil means HPA coverage was unavailable, so action surfaces must fail closed.
+	HPAManaged *bool `json:"hpaManaged,omitempty"`
 }
 
 func parseNamespaceScope(scope string) (string, error) {
@@ -212,10 +213,11 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 		}
 	}
 
-	// List HPAs to mark workloads that are managed by an autoscaler.
-	hpas, _ := b.listHPAs(namespace)
+	// List HPAs to mark workloads that are managed by an autoscaler. If this
+	// coverage is unavailable, leave ownership unknown instead of emitting false.
+	hpas, hpaErr := b.listHPAs(namespace)
 
-	return b.buildSnapshot(meta, scopeLabel, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas)
+	return b.buildSnapshot(meta, scopeLabel, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas, hpaErr == nil)
 }
 func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	meta ClusterMeta,
@@ -227,6 +229,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	jobs []*batchv1.Job,
 	cronJobs []*batchv1.CronJob,
 	hpas []*autoscalingv1.HorizontalPodAutoscaler,
+	hpaKnown bool,
 ) (*refresh.Snapshot, error) {
 	podUsage := map[string]metrics.PodUsage{}
 	if b.metrics != nil {
@@ -255,8 +258,12 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		summary.ClusterMeta = meta
 		// Mark as HPA-managed only when the HPA target carries the same full
 		// GVK. Kind/name-only matching can collide with custom resources.
-		if _, ok := hpaTargets[workloadHPATargetKey(summary)]; ok {
-			summary.HPAManaged = true
+		if hpaKnown {
+			managed := false
+			if _, ok := hpaTargets[workloadHPATargetKey(summary)]; ok {
+				managed = true
+			}
+			summary.HPAManaged = &managed
 		}
 		items = append(items, summary)
 		if obj == nil {
@@ -763,7 +770,7 @@ func (b *NamespaceWorkloadsBuilder) listCronJobs(namespace string) ([]*batchv1.C
 // listHPAs lists HorizontalPodAutoscalers in the given namespace (or all if empty).
 func (b *NamespaceWorkloadsBuilder) listHPAs(namespace string) ([]*autoscalingv1.HorizontalPodAutoscaler, error) {
 	if b.hpaLister == nil {
-		return nil, nil
+		return nil, errors.New("hpa lister unavailable")
 	}
 	if namespace == "" {
 		return b.hpaLister.List(labels.Everything())

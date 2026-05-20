@@ -23,7 +23,7 @@ export interface WorkloadData {
   memRequest?: number | string;
   memLimit?: number | string;
   portForwardAvailable?: boolean;
-  hpaManaged?: boolean;
+  hpaManaged?: boolean | null;
   age?: string;
   [key: string]: any;
 }

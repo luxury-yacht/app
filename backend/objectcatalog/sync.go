@@ -425,8 +425,11 @@ func (s *Service) sync(ctx context.Context) error {
 		}
 	}
 
+	enrichCatalogActionFacts(newItems, allowedSet, failed)
+
 	if collectErr == nil {
 		agg.finalize(descriptorCache, true)
+		s.rebuildCacheFromItems(newItems, descriptorCache)
 		s.pruneMissing(newLastSeen)
 	} else {
 		agg.finalize(descriptorCache, false)

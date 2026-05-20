@@ -468,6 +468,13 @@ export interface CatalogItem extends ClusterMeta {
   creationTimestamp: string;
   scope: CatalogItemScope;
   labelsDigest?: string;
+  actionFacts?: {
+    status?: string;
+    unschedulable?: boolean;
+    portForwardAvailable?: boolean;
+    hpaManaged?: boolean;
+    desiredReplicas?: number;
+  };
 }
 
 export interface CatalogParity {
@@ -620,6 +627,13 @@ export interface ObjectMapNode {
   ref: ObjectMapReference;
   creationTimestamp?: string;
   status?: ObjectMapStatus;
+  actionFacts?: {
+    status?: string;
+    unschedulable?: boolean;
+    portForwardAvailable?: boolean;
+    hpaManaged?: boolean;
+    desiredReplicas?: number;
+  };
 }
 
 export interface ObjectMapStatus {
@@ -679,7 +693,7 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
   restarts: number;
   age: string;
   portForwardAvailable?: boolean;
-  hpaManaged?: boolean;
+  hpaManaged?: boolean | null;
   cpuUsage?: string;
   cpuRequest?: string;
   cpuLimit?: string;
