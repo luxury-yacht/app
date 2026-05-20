@@ -70,6 +70,32 @@ const flushPromises = async () => {
   await Promise.resolve();
 };
 
+const resourceRef = ({
+  clusterId = 'cluster-a',
+  group = '',
+  version = 'v1',
+  kind,
+  resource,
+  namespace,
+  name,
+}: {
+  clusterId?: string;
+  group?: string;
+  version?: string;
+  kind: string;
+  resource?: string;
+  namespace?: string;
+  name: string;
+}) => ({
+  clusterId,
+  group,
+  version,
+  kind,
+  resource,
+  namespace,
+  name,
+});
+
 beforeEach(() => {
   ensureRefreshBaseURLMock.mockReset();
   ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
@@ -408,6 +434,7 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '2',
         name: 'pod-a',
         namespace: 'default',
+        ref: resourceRef({ kind: 'Pod', namespace: 'default', name: 'pod-a' }),
         row: { ...existing, status: 'Pending', cpuUsage: '5m', memUsage: '8Mi' },
       })
     );
@@ -466,6 +493,12 @@ describe('ResourceStreamManager', () => {
         name: 'web',
         namespace: 'default',
         kind: 'Deployment',
+        ref: resourceRef({
+          group: 'apps',
+          kind: 'Deployment',
+          namespace: 'default',
+          name: 'web',
+        }),
         row: { ...existingWorkload },
       })
     );
@@ -564,6 +597,7 @@ describe('ResourceStreamManager', () => {
         name: 'config-a',
         namespace: 'default',
         kind: 'ConfigMap',
+        ref: resourceRef({ kind: 'ConfigMap', namespace: 'default', name: 'config-a' }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -613,6 +647,7 @@ describe('ResourceStreamManager', () => {
         namespace: 'default',
         kind: 'ConfigMap',
         clusterId: 'backend-id',
+        ref: resourceRef({ kind: 'ConfigMap', namespace: 'default', name: 'config-a' }),
         row: {
           clusterId: 'backend-id',
           clusterName: 'backend-id',
@@ -661,6 +696,7 @@ describe('ResourceStreamManager', () => {
         name: 'config-a',
         namespace: 'default',
         kind: 'ConfigMap',
+        ref: resourceRef({ kind: 'ConfigMap', namespace: 'default', name: 'config-a' }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -709,6 +745,7 @@ describe('ResourceStreamManager', () => {
         name: 'svc-a',
         namespace: 'default',
         kind: 'Service',
+        ref: resourceRef({ kind: 'Service', namespace: 'default', name: 'svc-a' }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -756,6 +793,12 @@ describe('ResourceStreamManager', () => {
         name: 'role-a',
         namespace: 'default',
         kind: 'Role',
+        ref: resourceRef({
+          group: 'rbac.authorization.k8s.io',
+          kind: 'Role',
+          namespace: 'default',
+          name: 'role-a',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -803,6 +846,13 @@ describe('ResourceStreamManager', () => {
         name: 'widget-a',
         namespace: 'default',
         kind: 'Widget',
+        ref: resourceRef({
+          group: 'example.com',
+          version: 'v1',
+          kind: 'Widget',
+          namespace: 'default',
+          name: 'widget-a',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -856,6 +906,13 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '4',
         apiGroup: 'alpha.example.com',
         apiVersion: 'v1',
+        ref: resourceRef({
+          group: 'alpha.example.com',
+          version: 'v1',
+          kind: 'Widget',
+          namespace: 'default',
+          name: 'shared',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -875,6 +932,13 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '5',
         apiGroup: 'beta.example.com',
         apiVersion: 'v1',
+        ref: resourceRef({
+          group: 'beta.example.com',
+          version: 'v1',
+          kind: 'Widget',
+          namespace: 'default',
+          name: 'shared',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -944,6 +1008,13 @@ describe('ResourceStreamManager', () => {
         name: 'widget-a',
         namespace: 'default',
         kind: 'Widget',
+        ref: resourceRef({
+          group: 'example.com',
+          version: 'v1alpha1',
+          kind: 'Widget',
+          namespace: 'default',
+          name: 'widget-a',
+        }),
         row: { ...existingResource },
       })
     );
@@ -1043,6 +1114,13 @@ describe('ResourceStreamManager', () => {
         name: 'release-a',
         namespace: 'default',
         kind: 'HelmRelease',
+        ref: resourceRef({
+          group: 'helm.sh',
+          version: 'v3',
+          kind: 'HelmRelease',
+          namespace: 'default',
+          name: 'release-a',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -1106,6 +1184,13 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '4',
         name: 'release-a',
         namespace: 'default',
+        ref: resourceRef({
+          group: 'helm.sh',
+          version: 'v3',
+          kind: 'HelmRelease',
+          namespace: 'default',
+          name: 'release-a',
+        }),
         row: { ...sharedRow },
       })
     );
@@ -1206,6 +1291,13 @@ describe('ResourceStreamManager', () => {
         name: 'hpa-a',
         namespace: 'default',
         kind: 'HorizontalPodAutoscaler',
+        ref: resourceRef({
+          group: 'autoscaling',
+          version: 'v2',
+          kind: 'HorizontalPodAutoscaler',
+          namespace: 'default',
+          name: 'hpa-a',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -1270,6 +1362,13 @@ describe('ResourceStreamManager', () => {
         name: 'hpa-a',
         namespace: 'default',
         kind: 'HorizontalPodAutoscaler',
+        ref: resourceRef({
+          group: 'autoscaling',
+          version: 'v2',
+          kind: 'HorizontalPodAutoscaler',
+          namespace: 'default',
+          name: 'hpa-a',
+        }),
         row: { ...sharedRow },
       })
     );
@@ -1378,6 +1477,7 @@ describe('ResourceStreamManager', () => {
         name: 'quota-a',
         namespace: 'default',
         kind: 'ResourceQuota',
+        ref: resourceRef({ kind: 'ResourceQuota', namespace: 'default', name: 'quota-a' }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -1425,6 +1525,11 @@ describe('ResourceStreamManager', () => {
         name: 'pvc-a',
         namespace: 'default',
         kind: 'PersistentVolumeClaim',
+        ref: resourceRef({
+          kind: 'PersistentVolumeClaim',
+          namespace: 'default',
+          name: 'pvc-a',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -1473,6 +1578,11 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '7',
         name: 'cluster-role',
         kind: 'ClusterRole',
+        ref: resourceRef({
+          group: 'rbac.authorization.k8s.io',
+          kind: 'ClusterRole',
+          name: 'cluster-role',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -1530,6 +1640,11 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '8',
         name: 'cluster-role',
         kind: 'ClusterRole',
+        ref: resourceRef({
+          group: 'rbac.authorization.k8s.io',
+          kind: 'ClusterRole',
+          name: 'cluster-role',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -1576,6 +1691,7 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '7',
         name: 'pv-a',
         kind: 'PersistentVolume',
+        ref: resourceRef({ kind: 'PersistentVolume', name: 'pv-a' }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -1624,6 +1740,11 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '7',
         name: 'standard',
         kind: 'StorageClass',
+        ref: resourceRef({
+          group: 'storage.k8s.io',
+          kind: 'StorageClass',
+          name: 'standard',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -1670,6 +1791,12 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '7',
         name: 'widgets.example.com',
         kind: 'CustomResourceDefinition',
+        ref: resourceRef({
+          group: 'apiextensions.k8s.io',
+          kind: 'CustomResourceDefinition',
+          resource: 'customresourcedefinitions',
+          name: 'widgets.example.com',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -1718,6 +1845,11 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '7',
         name: 'cluster-widget',
         kind: 'Widget',
+        ref: resourceRef({
+          group: 'example.com',
+          kind: 'Widget',
+          name: 'cluster-widget',
+        }),
         row: {
           clusterId: 'cluster-a',
           clusterName: 'cluster-a',
@@ -1760,6 +1892,7 @@ describe('ResourceStreamManager', () => {
         type: 'ADDED',
         domain: 'nodes',
         resourceVersion: '11',
+        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
         row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
       })
     );
@@ -1789,6 +1922,7 @@ describe('ResourceStreamManager', () => {
         name: 'node-a',
         resourceVersion: '10',
         sequence: 1,
+        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
         row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
       })
     );
@@ -1803,6 +1937,7 @@ describe('ResourceStreamManager', () => {
         name: 'node-a',
         resourceVersion: '5',
         sequence: 2,
+        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
         row: { name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' },
       })
     );
@@ -1848,6 +1983,7 @@ describe('ResourceStreamManager', () => {
         domain: 'nodes',
         scope: '',
         resourceVersion: '1',
+        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
         row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
       })
     );
@@ -2234,6 +2370,7 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '5',
         sequence: 1,
         name: 'node-a',
+        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
         row: { name: 'node-a', status: 'Unknown', clusterId: 'cluster-a' },
       })
     );
@@ -2249,6 +2386,7 @@ describe('ResourceStreamManager', () => {
         resourceVersion: '12',
         sequence: 2,
         name: 'node-a',
+        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
         row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
       })
     );

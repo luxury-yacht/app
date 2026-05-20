@@ -119,6 +119,40 @@ describe('resource stream row helpers', () => {
     expect(changedRows[0].details).toBe('new');
   });
 
+  it('ignores row updates without canonical ref identity', () => {
+    const existingRow = {
+      clusterId: 'cluster-a',
+      namespace: 'default',
+      kind: 'ConfigMap',
+      name: 'settings',
+      details: 'old',
+    };
+    const existingRows = [existingRow];
+
+    const nextRows = applyResourceRowUpdates(
+      existingRows,
+      [
+        {
+          type: 'DELETED',
+          clusterId: 'cluster-a',
+          row: { ...existingRow },
+        },
+        {
+          type: 'MODIFIED',
+          clusterId: 'cluster-a',
+          row: { ...existingRow, details: 'new' },
+        },
+      ],
+      'cluster-a',
+      namespaceConfigCollection,
+      false
+    );
+
+    expect(nextRows).toBe(existingRows);
+    expect(nextRows[0]).toBe(existingRow);
+    expect(nextRows[0].details).toBe('old');
+  });
+
   it('replaces snapshot rows only for the target cluster', () => {
     const clusterARow = {
       clusterId: 'cluster-a',

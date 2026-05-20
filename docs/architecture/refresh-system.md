@@ -315,6 +315,8 @@ Resource stream safety rules:
   `apiVersion`) have been removed from the wire payload. `clusterId` /
   `clusterName` remain on the envelope as routing metadata that applies to
   every message type (including control messages without a row `ref`).
+  Frontend row update/delete keys are built only from `ref`; an update without
+  a complete row `ref` is ignored instead of being guessed from row fields.
 - `COMPLETE` remains a scope-level control message that triggers a full
   subscription resync. Any identity carried on `COMPLETE` is diagnostic context,
   not a targeted row invalidation contract. CRD signature changes and Helm

@@ -585,7 +585,43 @@ func TestManagerCRDSignatureChangeCompletesCustomDomain(t *testing.T) {
 	require.Equal(t, domainNamespaceCustom, update.Domain)
 	require.Equal(t, "namespace:default", update.Scope)
 	require.Equal(t, "11", update.ResourceVersion)
+	require.Nil(t, update.Row)
+	require.NotNil(t, update.Ref)
+	require.Equal(t, "c1", update.Ref.ClusterID)
+	require.Equal(t, "apiextensions.k8s.io", update.Ref.Group)
+	require.Equal(t, "v1", update.Ref.Version)
 	require.Equal(t, "CustomResourceDefinition", update.Ref.Kind)
+	require.Equal(t, "widgets.example.com", update.Ref.Name)
+}
+
+func TestManagerClusterCustomCRDSignatureChangeCompletesCustomDomain(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+	sub, err := manager.Subscribe(domainClusterCustom, "")
+	require.NoError(t, err)
+
+	oldCRD := customResourceDefinition("clusterwidgets.example.com", "example.com", "clusterwidgets", "ClusterWidget", apiextensionsv1.ClusterScoped, "10")
+	newCRD := oldCRD.DeepCopy()
+	newCRD.ResourceVersion = "11"
+	newCRD.Spec.Names.Plural = "renamedclusterwidgets"
+
+	manager.handleCustomResourceDefinitionEvent(oldCRD, newCRD, MessageTypeModified)
+
+	update := requireNextUpdate(t, sub)
+	require.Equal(t, MessageTypeComplete, update.Type)
+	require.Equal(t, domainClusterCustom, update.Domain)
+	require.Equal(t, "", update.Scope)
+	require.Equal(t, "11", update.ResourceVersion)
+	require.Nil(t, update.Row)
+	require.NotNil(t, update.Ref)
+	require.Equal(t, "c1", update.Ref.ClusterID)
+	require.Equal(t, "apiextensions.k8s.io", update.Ref.Group)
+	require.Equal(t, "v1", update.Ref.Version)
+	require.Equal(t, "CustomResourceDefinition", update.Ref.Kind)
+	require.Equal(t, "clusterwidgets.example.com", update.Ref.Name)
 }
 
 func TestManagerClusterCustomUpdateBroadcasts(t *testing.T) {

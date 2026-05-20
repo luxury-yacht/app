@@ -438,16 +438,16 @@ Progress:
 
 ## Phase 3: Resource Row Domains
 
-- [ ] Confirm every `resource-stream-table` domain is covered by
+- [x] Confirm every `resource-stream-table` domain is covered by
       snapshot/stream row parity.
-- [ ] Expand parity cases where row fields still rely on fixture-light coverage.
-- [ ] Add guardrails that row-update/delete keys are derived from `ref`, not
+- [x] Expand parity cases where row fields still rely on fixture-light coverage.
+- [x] Add guardrails that row-update/delete keys are derived from `ref`, not
       legacy top-level identity or kind/name guessing.
-- [ ] Confirm COMPLETE messages remain scope-level only.
-- [ ] Keep mixed domains such as `namespace-custom` classified as
+- [x] Confirm COMPLETE messages remain scope-level only.
+- [x] Keep mixed domains such as `namespace-custom` classified as
       `resource-stream-table` when they have ordinary row updates, even if some
       related-resource changes also trigger scope-level COMPLETE resyncs.
-- [ ] Cover CRD signature churn for `namespace-custom` and `cluster-custom` as
+- [x] Cover CRD signature churn for `namespace-custom` and `cluster-custom` as
       secondary `complete-resync` behavior on otherwise row-oriented domains.
 
 Validation:
@@ -455,6 +455,18 @@ Validation:
 - `go test ./backend/refresh/resourcestream ./backend/refresh/snapshot`
 - `npm run test --prefix frontend -- resourceStreamDomains resourceStreamManager resourceStreamRows`
 - `mage qc:prerelease` before reporting the implementation phase complete
+
+Progress:
+
+- 2026-05-19: Resource-stream row coverage is enforced for all
+  `resource-stream-table` domains. Existing backend parity and projection
+  descriptor tests already cover every row-oriented domain, with
+  `namespace-helm` explicitly excluded because it is COMPLETE-only. Frontend
+  update/delete keys now fail closed unless the stream update carries a complete
+  `ref`; legacy row/envelope fields are no longer accepted as key sources. CRD
+  signature churn is covered for both `namespace-custom` and `cluster-custom`
+  as scope-level `COMPLETE` behavior, with the CRD `ref` retained only as
+  diagnostic context.
 
 ## Phase 4: Complete-Resync Domains
 

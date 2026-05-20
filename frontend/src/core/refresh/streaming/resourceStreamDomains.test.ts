@@ -15,6 +15,7 @@ import {
   resourceStreamDomainDescriptors,
   type ResourceDomain,
 } from './resourceStreamDomains';
+import type { ResourceRef } from './resourceStreamRows';
 
 const EXPECTED_DOMAINS: ResourceDomain[] = [
   'pods',
@@ -149,6 +150,131 @@ const expectedSnapshotKeys: Record<ResourceDomain, string[]> = {
   nodes: ['cluster-a::node-a'],
 };
 
+const updateRefs: Record<ResourceDomain, ResourceRef> = {
+  pods: {
+    clusterId: 'cluster-a',
+    group: '',
+    version: 'v1',
+    kind: 'Pod',
+    namespace: 'default',
+    name: 'pod-a',
+  },
+  'namespace-workloads': {
+    clusterId: 'cluster-a',
+    group: 'apps',
+    version: 'v1',
+    kind: 'Deployment',
+    namespace: 'default',
+    name: 'web',
+  },
+  'namespace-config': {
+    clusterId: 'cluster-a',
+    group: '',
+    version: 'v1',
+    kind: 'ConfigMap',
+    namespace: 'default',
+    name: 'config-a',
+  },
+  'namespace-network': {
+    clusterId: 'cluster-a',
+    group: '',
+    version: 'v1',
+    kind: 'Service',
+    namespace: 'default',
+    name: 'svc-a',
+  },
+  'namespace-rbac': {
+    clusterId: 'cluster-a',
+    group: 'rbac.authorization.k8s.io',
+    version: 'v1',
+    kind: 'Role',
+    namespace: 'default',
+    name: 'role-a',
+  },
+  'namespace-custom': {
+    clusterId: 'cluster-a',
+    group: 'example.com',
+    version: 'v1',
+    kind: 'Widget',
+    namespace: 'default',
+    name: 'widget-a',
+  },
+  'namespace-helm': {
+    clusterId: 'cluster-a',
+    group: 'helm.sh',
+    version: 'v3',
+    kind: 'HelmRelease',
+    namespace: 'default',
+    name: 'release-a',
+  },
+  'namespace-autoscaling': {
+    clusterId: 'cluster-a',
+    group: 'autoscaling',
+    version: 'v2',
+    kind: 'HorizontalPodAutoscaler',
+    namespace: 'default',
+    name: 'hpa-a',
+  },
+  'namespace-quotas': {
+    clusterId: 'cluster-a',
+    group: '',
+    version: 'v1',
+    kind: 'ResourceQuota',
+    namespace: 'default',
+    name: 'quota-a',
+  },
+  'namespace-storage': {
+    clusterId: 'cluster-a',
+    group: '',
+    version: 'v1',
+    kind: 'PersistentVolumeClaim',
+    namespace: 'default',
+    name: 'claim-a',
+  },
+  'cluster-rbac': {
+    clusterId: 'cluster-a',
+    group: 'rbac.authorization.k8s.io',
+    version: 'v1',
+    kind: 'ClusterRole',
+    name: 'role-a',
+  },
+  'cluster-storage': {
+    clusterId: 'cluster-a',
+    group: '',
+    version: 'v1',
+    kind: 'PersistentVolume',
+    name: 'pv-a',
+  },
+  'cluster-config': {
+    clusterId: 'cluster-a',
+    group: 'storage.k8s.io',
+    version: 'v1',
+    kind: 'StorageClass',
+    name: 'standard',
+  },
+  'cluster-crds': {
+    clusterId: 'cluster-a',
+    group: 'apiextensions.k8s.io',
+    version: 'v1',
+    kind: 'CustomResourceDefinition',
+    name: 'widgets.example.com',
+  },
+  'cluster-custom': {
+    clusterId: 'cluster-a',
+    group: 'example.com',
+    version: 'v1',
+    kind: 'ClusterWidget',
+    name: 'widget-a',
+  },
+  nodes: {
+    clusterId: 'cluster-a',
+    group: '',
+    version: 'v1',
+    kind: 'Node',
+    name: 'node-a',
+  },
+};
+
 describe('resource stream domain descriptors', () => {
   it('covers every streamed resource domain exactly once', () => {
     expect(RESOURCE_STREAM_DOMAINS).toEqual(EXPECTED_DOMAINS);
@@ -205,11 +331,9 @@ describe('resource stream domain descriptors', () => {
       );
       expect(collectionKeys).toEqual(keys);
 
-      const [row] = rows;
-      const clusterId = (row as { clusterId?: string }).clusterId;
-      expect(descriptor.collection.buildUpdateKey({ clusterId, row }, 'fallback-cluster')).toBe(
-        expectedSnapshotKeys[domain][0]
-      );
+      expect(
+        descriptor.collection.buildUpdateKey({ ref: updateRefs[domain] }, 'fallback-cluster')
+      ).toBe(expectedSnapshotKeys[domain][0]);
 
       const sortedRows = [...rows];
       descriptor.sortRows(sortedRows);
@@ -218,6 +342,24 @@ describe('resource stream domain descriptors', () => {
       const emptyPayload = descriptor.collection.emptyPayload('empty-cluster');
       expect(descriptor.buildSnapshotKeys(emptyPayload, 'empty-cluster')).toEqual(new Set());
     });
+  });
+
+  it('requires update ref identity instead of legacy row or envelope fields', () => {
+    EXPECTED_DOMAINS.forEach((domain) => {
+      const descriptor = getResourceStreamDomainDescriptor(domain);
+      const [row] = descriptor.collection.getRows(samplePayloads[domain]);
+      expect(
+        descriptor.collection.buildUpdateKey({ clusterId: 'cluster-a', row }, 'fallback-cluster')
+      ).toBe('');
+    });
+
+    resourceStreamDomainDescriptors
+      .filter((descriptor) => descriptor.scopeKind !== 'cluster')
+      .forEach((descriptor) => {
+        const ref = { ...updateRefs[descriptor.domain] };
+        delete ref.namespace;
+        expect(descriptor.collection.buildUpdateKey({ ref }, 'fallback-cluster')).toBe('');
+      });
   });
 
   it('keys custom resources by full GVK so same-kind resources do not collide', () => {
@@ -295,6 +437,21 @@ describe('resource stream domain descriptors', () => {
       'cluster-a::alpha.example.com::v1::ClusterWidget::shared',
       'cluster-a::beta.example.com::v1::ClusterWidget::shared',
     ]);
+    expect(
+      clusterDescriptor.collection.buildUpdateKey(
+        {
+          clusterId: 'wrong-cluster',
+          ref: {
+            clusterId: 'cluster-a',
+            group: 'beta.example.com',
+            version: 'v1',
+            kind: 'ClusterWidget',
+            name: 'shared',
+          },
+        },
+        'fallback-cluster'
+      )
+    ).toBe('cluster-a::beta.example.com::v1::ClusterWidget::shared');
   });
 
   it('exposes domain guards from the descriptor table', () => {
