@@ -479,7 +479,7 @@
       "cachePolicy": "stream-only",
       "streamSemantics": ["line-stream"],
       "coverageContract": "log-stream-lifecycle",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     }
   },
   "resourceStream": {

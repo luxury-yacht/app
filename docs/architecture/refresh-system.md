@@ -296,8 +296,16 @@ Streaming behavior is registered per domain in the orchestrator:
   display fields for the involved object, and a separate openable
   `involvedObject` `ResourceLink` when Kubernetes supplied enough GVK identity.
   It does not use event SSE resume semantics.
-- `container-logs` streams object-panel log lines and has a log-viewer fallback
-  path when streaming is unavailable.
+- `container-logs` is a stream-only log domain for object-panel scopes. Its
+  scope is the cluster-prefixed, namespaced object scope
+  `<cluster>|<namespace>:<group>/<version>:<kind>:<name>` plus log query
+  filters such as container and selected pod/container targets. The backend
+  sends an empty `reset=true` connection frame, then a timestamp-sorted initial
+  tail, then line append frames. Reconnect dedupe is server-side using
+  Kubernetes `SinceTime` plus the set of lines seen at the last timestamp; the
+  frontend keeps its buffer across empty reset frames and uses fallback polling
+  through `FetchContainerLogs` only when streaming is unavailable. Log rows do
+  not join resource-stream table contracts.
 
 `fetchScopedDomain` behavior for streaming domains:
 

@@ -352,7 +352,7 @@ describe('ContainerLogsStreamManager', () => {
     expect(errorHandlerMock.handle).not.toHaveBeenCalled();
   });
 
-  test('startStream appends cached selection filters to the stream URL', async () => {
+  test('startStream appends cluster-prefixed scope and cached selection filters to the stream URL', async () => {
     class MockEventSource {
       static instances: MockEventSource[] = [];
       listeners: Record<string, (evt?: any) => void> = {};
@@ -367,18 +367,21 @@ describe('ContainerLogsStreamManager', () => {
     }
     (globalThis as any).EventSource = MockEventSource as any;
 
-    setContainerLogsStreamScopeParams(SCOPE, {
+    const logScope = 'cluster-a|default:apps/v1:deployment:web';
+    setContainerLogsStreamScopeParams(logScope, {
+      container: 'app',
       selectedFilters: ['pod:web-2', 'container:app'],
     });
 
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
     const manager = new ContainerLogsStreamManager();
 
-    await manager.startStream(SCOPE);
+    await manager.startStream(logScope);
 
     expect(MockEventSource.instances).toHaveLength(1);
     const streamURL = new URL(MockEventSource.instances[0]!.url);
-    expect(streamURL.searchParams.get('scope')).toBe(SCOPE);
+    expect(streamURL.searchParams.get('scope')).toBe(logScope);
+    expect(streamURL.searchParams.get('container')).toBe('app');
     expect(streamURL.searchParams.getAll('selectedFilter')).toEqual(['pod:web-2', 'container:app']);
   });
 

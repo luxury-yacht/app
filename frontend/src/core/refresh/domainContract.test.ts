@@ -185,6 +185,7 @@ const ENFORCED_COVERAGE_PROOFS: Record<string, Set<RefreshDomain>> = {
   'catalog-snapshot-query': new Set(['catalog-diff']),
   'event-resume-merge': new Set(['cluster-events', 'namespace-events']),
   'event-snapshot-payload': new Set(['object-events']),
+  'log-stream-lifecycle': new Set(['container-logs']),
 };
 
 describe('refresh domain contract', () => {
@@ -394,7 +395,13 @@ describe('refresh domain contract', () => {
           break;
         case 'container-logs-stream':
           expect(inventory.behaviorClass).toBe('log-stream');
+          expect(entry.domain).toBe('container-logs');
+          expect(entry.frontend.diagnosticsStream).toBe('container-logs');
+          expect(inventory.scopeContract.kind).toBe('log-stream-selector');
+          expect(inventory.payloadOwner).toBe('backend/refresh/containerlogsstream');
           expect(inventory.cachePolicy).toBe('stream-only');
+          expect(inventory.streamSemantics).toEqual(['line-stream']);
+          expect(inventory.coverageContract).toBe('log-stream-lifecycle');
           break;
         case 'snapshot':
           expect(['resource-stream-table', 'complete-resync-stream', 'log-stream']).not.toContain(

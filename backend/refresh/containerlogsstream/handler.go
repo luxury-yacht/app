@@ -458,6 +458,8 @@ func parseOptions(r *http.Request) (Options, error) {
 			return ""
 		}(),
 		Namespace:        identity.Namespace,
+		Group:            strings.TrimSpace(identity.GVK.Group),
+		Version:          strings.TrimSpace(identity.GVK.Version),
 		Kind:             strings.ToLower(strings.TrimSpace(identity.GVK.Kind)),
 		Name:             strings.TrimSpace(identity.Name),
 		PodFilter:        podFilter,

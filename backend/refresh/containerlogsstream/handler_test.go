@@ -41,12 +41,22 @@ func TestParseOptions(t *testing.T) {
 		include          string
 		exclude          string
 		tail             int
+		clusterID        string
+		namespace        string
+		group            string
+		version          string
+		objectName       string
+		scopeString      string
 	}{
 		{
-			name:  "valid scope with defaults",
-			query: url.Values{"scope": []string{"default:/v1:pod:nginx"}},
-			kind:  "pod",
-			tail:  config.ContainerLogsStreamDefaultTailLines,
+			name:        "valid scope with defaults",
+			query:       url.Values{"scope": []string{"default:/v1:pod:nginx"}},
+			kind:        "pod",
+			namespace:   "default",
+			version:     "v1",
+			objectName:  "nginx",
+			scopeString: "default:/v1:pod:nginx",
+			tail:        config.ContainerLogsStreamDefaultTailLines,
 		},
 		{
 			name: "custom tail and filters",
@@ -74,19 +84,34 @@ func TestParseOptions(t *testing.T) {
 			containerState:   "running",
 			include:          "error|warn",
 			exclude:          "healthcheck",
+			namespace:        "prod",
+			group:            "apps",
+			version:          "v1",
+			objectName:       "web",
+			scopeString:      "prod:apps/v1:deployment:web",
 			tail:             200,
 		},
 		{
-			name:  "gvk scope",
-			query: url.Values{"scope": []string{"cluster-a|default:apps/v1:deployment:web"}},
-			kind:  "deployment",
-			tail:  config.ContainerLogsStreamDefaultTailLines,
+			name:        "gvk scope",
+			query:       url.Values{"scope": []string{"cluster-a|default:apps/v1:deployment:web"}},
+			kind:        "deployment",
+			clusterID:   "cluster-a",
+			namespace:   "default",
+			group:       "apps",
+			version:     "v1",
+			objectName:  "web",
+			scopeString: "cluster-a|default:apps/v1:deployment:web",
+			tail:        config.ContainerLogsStreamDefaultTailLines,
 		},
 		{
-			name:  "tail capped at max",
-			query: url.Values{"scope": []string{"default:/v1:pod:nginx"}, "tailLines": []string{"99999"}},
-			kind:  "pod",
-			tail:  config.ContainerLogsStreamMaxTailLines,
+			name:        "tail capped at max",
+			query:       url.Values{"scope": []string{"default:/v1:pod:nginx"}, "tailLines": []string{"99999"}},
+			kind:        "pod",
+			namespace:   "default",
+			version:     "v1",
+			objectName:  "nginx",
+			scopeString: "default:/v1:pod:nginx",
+			tail:        config.ContainerLogsStreamMaxTailLines,
 		},
 		{
 			name:        "invalid line filter",
@@ -144,6 +169,24 @@ func TestParseOptions(t *testing.T) {
 		}
 		if opts.Kind != tt.kind {
 			t.Fatalf("%s: expected kind %q, got %q", tt.name, tt.kind, opts.Kind)
+		}
+		if opts.ClusterID != tt.clusterID {
+			t.Fatalf("%s: expected cluster id %q, got %q", tt.name, tt.clusterID, opts.ClusterID)
+		}
+		if opts.Namespace != tt.namespace {
+			t.Fatalf("%s: expected namespace %q, got %q", tt.name, tt.namespace, opts.Namespace)
+		}
+		if opts.Group != tt.group {
+			t.Fatalf("%s: expected group %q, got %q", tt.name, tt.group, opts.Group)
+		}
+		if opts.Version != tt.version {
+			t.Fatalf("%s: expected version %q, got %q", tt.name, tt.version, opts.Version)
+		}
+		if opts.Name != tt.objectName {
+			t.Fatalf("%s: expected name %q, got %q", tt.name, tt.objectName, opts.Name)
+		}
+		if opts.ScopeString != tt.scopeString {
+			t.Fatalf("%s: expected raw scope %q, got %q", tt.name, tt.scopeString, opts.ScopeString)
 		}
 		if opts.PodFilter != tt.podFilter {
 			t.Fatalf("%s: expected pod filter %q, got %q", tt.name, tt.podFilter, opts.PodFilter)

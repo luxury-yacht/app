@@ -19,6 +19,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildTargetsFromPod(t *testing.T) {
@@ -148,6 +149,53 @@ func TestListPodsForPodKind(t *testing.T) {
 	if len(pods) != 1 || pods[0].Name != "pod-1" {
 		t.Fatalf("expected single pod-1 result, got %#v", pods)
 	}
+}
+
+func TestTailSortsInitialEntriesByTimestampAcrossTargets(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "demo"},
+		Spec: corev1.PodSpec{
+			InitContainers: []corev1.Container{{Name: "init"}},
+			Containers:     []corev1.Container{{Name: "app"}},
+		},
+	}
+	baseClient := fake.NewClientset(pod)
+	delegateCore := baseClient.CoreV1()
+	origin := time.Unix(0, 0)
+	streams := []string{
+		buildContainerLogsStream(origin, []time.Duration{3 * time.Second}, []string{"init late"}),
+		buildContainerLogsStream(origin, []time.Duration{time.Second}, []string{"app early"}),
+	}
+	override := newLogPods(delegateCore.Pods("default"), "default", streams)
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{
+			CoreV1Interface: delegateCore,
+			overrides:       map[string]*logPods{"default": override},
+		},
+	}
+	streamer := NewStreamer(client, noopLogger{}, nil)
+
+	entries, states, pods, selector, warnings, skipped, skipReason, err := streamer.tail(context.Background(), Options{
+		Namespace:        "default",
+		Kind:             "pod",
+		Name:             "demo",
+		IncludeInit:      true,
+		IncludeEphemeral: true,
+		ContainerState:   containerlogs.ContainerStateAll,
+		TailLines:        50,
+	}, nil)
+
+	require.NoError(t, err)
+	require.Len(t, pods, 1)
+	require.Empty(t, selector)
+	require.Empty(t, warnings)
+	require.Zero(t, skipped)
+	require.Empty(t, skipReason)
+	require.Len(t, states, 2)
+	require.Len(t, entries, 2)
+	require.Equal(t, []string{"app early", "init late"}, []string{entries[0].Line, entries[1].Line})
+	require.Less(t, entries[0].Timestamp, entries[1].Timestamp)
 }
 
 func TestListPodsSelectorError(t *testing.T) {

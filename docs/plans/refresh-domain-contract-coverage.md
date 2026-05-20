@@ -554,16 +554,27 @@ Progress:
 
 ## Phase 7: Log Domains
 
-- [ ] Define log stream contracts for line ordering, timestamps, reconnect,
+- [x] Define log stream contracts for line ordering, timestamps, reconnect,
       fallback, and scope identity.
-- [ ] Test cluster/object/container scoping and permission-denied diagnostics.
-- [ ] Confirm log workflows do not leak rows into resource-table contracts.
+- [x] Test cluster/object/container scoping and permission-denied diagnostics.
+- [x] Confirm log workflows do not leak rows into resource-table contracts.
 
 Validation:
 
 - `go test ./backend/refresh/containerlogsstream ./backend/resources/pods`
 - `npm run test --prefix frontend -- containerLogsStreamManager LogViewer`
 - `mage qc:prerelease` before reporting the implementation phase complete
+
+Progress:
+
+- 2026-05-20: `container-logs` is enforced as the only `log-stream`
+  `stream-only` domain. Backend and frontend contract tests now prove it uses
+  log-stream selector scope, line-stream semantics, the container log stream
+  endpoint/orchestrator, and no resource-table contract home. Log tests cover
+  cluster-prefixed object scope parsing, container/filter URL construction,
+  timestamp-sorted initial tails, reconnect dedupe via `SinceTime`, structured
+  permission-denied payloads, frontend empty-reset buffer preservation, and the
+  LogViewer fallback path through `FetchContainerLogs`.
 
 ## Phase 8: Detail, Graph, And Operation Domains
 

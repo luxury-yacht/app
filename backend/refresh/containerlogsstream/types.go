@@ -26,6 +26,8 @@ func (noopLogger) Error(string, ...string) {}
 type Options struct {
 	ClusterID        string
 	Namespace        string
+	Group            string
+	Version          string
 	Kind             string
 	Name             string
 	PodFilter        string

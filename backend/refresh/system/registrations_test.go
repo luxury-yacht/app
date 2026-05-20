@@ -3,6 +3,8 @@ package system
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
@@ -10,13 +12,17 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 // These tests guard the registration table ordering and dependency checks.
@@ -278,6 +284,14 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	require.Equal(t, "snapshot-cache", objectEvents.CachePolicy)
 	require.Equal(t, []string{"snapshot-replace"}, objectEvents.StreamSemantics)
 	require.Equal(t, "event-snapshot-payload", objectEvents.CoverageContract)
+
+	containerLogs := contract.DomainInventory["container-logs"]
+	require.Equal(t, "log-stream", containerLogs.BehaviorClass)
+	require.Equal(t, "log-stream-selector", containerLogs.ScopeContract.Kind)
+	require.Equal(t, "backend/refresh/containerlogsstream", containerLogs.PayloadOwner)
+	require.Equal(t, "stream-only", containerLogs.CachePolicy)
+	require.Equal(t, []string{"line-stream"}, containerLogs.StreamSemantics)
+	require.Equal(t, "log-stream-lifecycle", containerLogs.CoverageContract)
 }
 
 func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
@@ -333,6 +347,49 @@ func TestDomainRegistrationsHaveRuntimePermissionPolicyOrExemption(t *testing.T)
 			require.Equal(t, "streamOnly", domain.Backend.Registration)
 		default:
 			require.Failf(t, "unknown permission contract", "domain=%s permission=%s", domain.Domain, domain.Backend.Permission)
+		}
+	}
+}
+
+func TestStreamOnlyDomainsHaveEndpointWiring(t *testing.T) {
+	contract := loadRefreshDomainContract(t)
+	streamOnlyDomains := make([]string, 0)
+	for _, domain := range contract.Domains {
+		if domain.Backend.Registration == "streamOnly" {
+			streamOnlyDomains = append(streamOnlyDomains, domain.Domain)
+		}
+	}
+	require.NotEmpty(t, streamOnlyDomains)
+
+	kubeClient := fake.NewClientset()
+	runtimePerms := permissions.NewChecker(kubeClient, "cluster-a", 0)
+	informerFactory := informer.New(kubeClient, nil, 0, runtimePerms)
+	mux := http.NewServeMux()
+
+	_, _, err := registerStreamHandlers(mux, streamDeps{
+		informerFactory: informerFactory,
+		snapshotService: streamHandlerSnapshotService{},
+		cfg: Config{
+			KubernetesClient: kubeClient,
+			ClusterID:        "cluster-a",
+			ClusterName:      "Cluster A",
+		},
+		telemetry:   telemetry.NewRecorder(),
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"},
+	})
+	require.NoError(t, err)
+
+	for _, domain := range streamOnlyDomains {
+		switch domain {
+		case "container-logs":
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/container-logs?scope=", nil)
+			mux.ServeHTTP(rec, req)
+
+			require.NotEqual(t, http.StatusNotFound, rec.Code)
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+		default:
+			require.Failf(t, "missing stream-only endpoint assertion", "domain=%s", domain)
 		}
 	}
 }
@@ -503,6 +560,7 @@ func enforcedCoverageProofs(t *testing.T) map[string]map[string]struct{} {
 		"catalog-snapshot-query":                 setOf("catalog-diff"),
 		"event-resume-merge":                     setOf("cluster-events", "namespace-events"),
 		"event-snapshot-payload":                 setOf("object-events"),
+		"log-stream-lifecycle":                   setOf("container-logs"),
 	}
 }
 
@@ -527,6 +585,12 @@ func requireSourcePathExists(t *testing.T, owner string) {
 }
 
 type fullObjectDetailProvider struct{}
+
+type streamHandlerSnapshotService struct{}
+
+func (streamHandlerSnapshotService) Build(context.Context, string, string) (*refresh.Snapshot, error) {
+	return &refresh.Snapshot{}, nil
+}
 
 func (fullObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (interface{}, string, error) {
 	return nil, "", nil
