@@ -57,6 +57,44 @@ export interface ResourceLink {
   display?: DisplayRef;
 }
 
+export interface ResourceStatusPresentation {
+  label: string;
+  state: string;
+  presentation?: string;
+  reason?: string;
+  message?: string;
+  signals?: Array<{
+    type: string;
+    name: string;
+    status: string;
+    reason?: string;
+    message?: string;
+  }>;
+  badges?: Array<{
+    text: string;
+    status: string;
+  }>;
+  lifecycle?: {
+    deleting: boolean;
+    finalizerBlocked: boolean;
+  };
+}
+
+export interface ResourceModel {
+  ref: ResourceRef;
+  source: string;
+  scope: string;
+  metadata?: {
+    labels?: Record<string, string>;
+    annotations?: Record<string, string>;
+    creationTimestamp?: string;
+    resourceVersion?: string;
+    finalizers?: string[];
+  };
+  status: ResourceStatusPresentation;
+  facts?: Record<string, unknown>;
+}
+
 export interface ConditionFacts {
   type: string;
   status: string;
@@ -522,6 +560,7 @@ export interface PodSnapshotPayload extends ClusterMeta {
 
 export interface ObjectDetailsSnapshotPayload extends ClusterMeta {
   details: any;
+  resourceModel?: ResourceModel;
 }
 
 export interface ObjectEventSummary extends ClusterMeta {

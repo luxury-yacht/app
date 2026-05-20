@@ -474,10 +474,16 @@ Kubeconfig changes are a full refresh lifecycle reset:
 uses an informer-based builder when nodes/pods/namespaces list/watch permissions
 exist and falls back to list-only behavior when required.
 
-Object-panel refresh scopes must use canonical object identity. `object-details`,
-`object-events`, `object-yaml`, Helm manifest/value domains, and `object-map`
-use cluster-prefixed object scopes; logs use `container-logs` streaming with
-fallback polling in the log viewer.
+Object-panel refresh scopes must use canonical identity for the payload they
+load. `object-details`, `object-events`, and `object-yaml` use cluster-prefixed
+full object scopes parsed by `ParseObjectScope`. Helm manifest/value domains use
+cluster-prefixed Helm release scopes in `namespace:name` form and keep rendered
+manifest resource links as full `ResourceLink` values when the target kind is
+openable. `object-map` uses cluster-prefixed object-map scopes and must return
+nodes and edges whose ids resolve to full object references. `object-maintenance`
+uses cluster-prefixed `aggregate` or `node:<name>` scopes, bypasses the snapshot
+cache/singleflight path, and filters drain state by `clusterId`. Logs use
+`container-logs` streaming with fallback polling in the log viewer.
 
 ## Adding Or Updating Domains
 

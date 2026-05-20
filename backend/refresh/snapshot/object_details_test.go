@@ -67,7 +67,8 @@ func TestObjectDetailsBuilderFallsBackToGenericDetails(t *testing.T) {
 		provider: provider,
 	}
 
-	snapshot, err := builder.Build(context.Background(), "default:/v1:configmap:demo")
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+	snapshot, err := builder.Build(ctx, "cluster-a|default:/v1:configmap:demo")
 	if err != nil {
 		t.Fatalf("Build failed: %v", err)
 	}
@@ -91,6 +92,16 @@ func TestObjectDetailsBuilderFallsBackToGenericDetails(t *testing.T) {
 	}
 	if details["kind"] != "Configmap" || details["name"] != "demo" || details["namespace"] != "default" {
 		t.Fatalf("unexpected generic details: %#v", details)
+	}
+	if payload.ClusterID != "cluster-a" || payload.ClusterName != "Cluster A" {
+		t.Fatalf("expected cluster metadata on fallback payload, got %#v", payload.ClusterMeta)
+	}
+	if payload.ResourceModel == nil {
+		t.Fatal("expected generic fallback to include a resource model")
+	}
+	ref := payload.ResourceModel.Ref
+	if ref.ClusterID != "cluster-a" || ref.Group != "" || ref.Version != "v1" || ref.Kind != "configmap" || ref.Namespace != "default" || ref.Name != "demo" {
+		t.Fatalf("expected full resource model ref, got %#v", ref)
 	}
 }
 

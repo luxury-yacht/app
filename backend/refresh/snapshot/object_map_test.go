@@ -34,7 +34,7 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	builder := &objectMapBuilder{client: client}
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
-	snap, err := builder.Build(ctx, "default:apps/v1:Deployment:web?maxDepth=5&maxNodes=100")
+	snap, err := builder.Build(ctx, "cluster-a|default:apps/v1:Deployment:web?maxDepth=5&maxNodes=100")
 	if err != nil {
 		t.Fatalf("Build returned error: %v", err)
 	}
@@ -48,6 +48,7 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 			t.Fatalf("node identity is incomplete: %#v", node)
 		}
 	}
+	assertEdgesReferenceNodes(t, payload)
 	if got := nodeByKindName(t, payload, "Deployment", "web").CreationTimestamp; got != "2024-01-02T03:04:05Z" {
 		t.Fatalf("unexpected creation timestamp for deployment node: %q", got)
 	}
@@ -1450,6 +1451,22 @@ func assertMissingEdge(t *testing.T, payload ObjectMapSnapshotPayload, sourceKin
 	for _, edge := range payload.Edges {
 		if edge.Source == sourceID && edge.Target == targetID && edge.Type == edgeType {
 			t.Fatalf("unexpected %s edge %s/%s -> %s/%s; edges=%#v", edgeType, sourceKind, sourceName, targetKind, targetName, payload.Edges)
+		}
+	}
+}
+
+func assertEdgesReferenceNodes(t *testing.T, payload ObjectMapSnapshotPayload) {
+	t.Helper()
+	nodeIDs := make(map[string]struct{}, len(payload.Nodes))
+	for _, node := range payload.Nodes {
+		nodeIDs[node.ID] = struct{}{}
+	}
+	for _, edge := range payload.Edges {
+		if _, ok := nodeIDs[edge.Source]; !ok {
+			t.Fatalf("edge source %q does not reference a node: %#v", edge.Source, edge)
+		}
+		if _, ok := nodeIDs[edge.Target]; !ok {
+			t.Fatalf("edge target %q does not reference a node: %#v", edge.Target, edge)
 		}
 	}
 }

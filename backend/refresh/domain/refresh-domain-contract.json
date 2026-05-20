@@ -367,7 +367,7 @@
       "cachePolicy": "snapshot-cache-plus-provider-cache",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "detail-payload-shape",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "object-yaml": {
       "behaviorClass": "detail-payload",
@@ -383,7 +383,7 @@
       "cachePolicy": "snapshot-cache-plus-provider-cache",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "detail-payload-shape",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "object-helm-manifest": {
       "behaviorClass": "helm-content-payload",
@@ -399,7 +399,7 @@
       "cachePolicy": "snapshot-cache-plus-provider-cache",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "helm-content-shape",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "object-helm-values": {
       "behaviorClass": "helm-content-payload",
@@ -415,7 +415,7 @@
       "cachePolicy": "snapshot-cache-plus-provider-cache",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "helm-content-shape",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "object-events": {
       "behaviorClass": "event-snapshot",
@@ -447,7 +447,7 @@
       "cachePolicy": "snapshot-cache",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "graph-payload-identity",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "object-maintenance": {
       "behaviorClass": "operation-state",
@@ -463,7 +463,7 @@
       "cachePolicy": "snapshot-cache-bypass",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "operation-state-transitions",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "container-logs": {
       "behaviorClass": "log-stream",

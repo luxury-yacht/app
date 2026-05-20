@@ -285,6 +285,40 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	require.Equal(t, []string{"snapshot-replace"}, objectEvents.StreamSemantics)
 	require.Equal(t, "event-snapshot-payload", objectEvents.CoverageContract)
 
+	for _, domainID := range []string{"object-details", "object-yaml"} {
+		detail := contract.DomainInventory[domainID]
+		require.Equal(t, "detail-payload", detail.BehaviorClass)
+		require.Equal(t, "object-ref", detail.ScopeContract.Kind)
+		require.Equal(t, "snapshot-cache-plus-provider-cache", detail.CachePolicy)
+		require.Equal(t, []string{"snapshot-replace"}, detail.StreamSemantics)
+		require.Equal(t, "detail-payload-shape", detail.CoverageContract)
+	}
+
+	for _, domainID := range []string{"object-helm-manifest", "object-helm-values"} {
+		helm := contract.DomainInventory[domainID]
+		require.Equal(t, "helm-content-payload", helm.BehaviorClass)
+		require.Equal(t, "helm-release", helm.ScopeContract.Kind)
+		require.Equal(t, "snapshot-cache-plus-provider-cache", helm.CachePolicy)
+		require.Equal(t, []string{"snapshot-replace"}, helm.StreamSemantics)
+		require.Equal(t, "helm-content-shape", helm.CoverageContract)
+	}
+
+	objectMap := contract.DomainInventory["object-map"]
+	require.Equal(t, "graph-payload", objectMap.BehaviorClass)
+	require.Equal(t, "object-map", objectMap.ScopeContract.Kind)
+	require.Equal(t, "backend/refresh/snapshot.ObjectMapBuilder", objectMap.PayloadOwner)
+	require.Equal(t, "snapshot-cache", objectMap.CachePolicy)
+	require.Equal(t, []string{"snapshot-replace"}, objectMap.StreamSemantics)
+	require.Equal(t, "graph-payload-identity", objectMap.CoverageContract)
+
+	objectMaintenance := contract.DomainInventory["object-maintenance"]
+	require.Equal(t, "operation-state", objectMaintenance.BehaviorClass)
+	require.Equal(t, "node-maintenance", objectMaintenance.ScopeContract.Kind)
+	require.Equal(t, "backend/refresh/snapshot.NodeMaintenanceBuilder", objectMaintenance.PayloadOwner)
+	require.Equal(t, "snapshot-cache-bypass", objectMaintenance.CachePolicy)
+	require.Equal(t, []string{"snapshot-replace"}, objectMaintenance.StreamSemantics)
+	require.Equal(t, "operation-state-transitions", objectMaintenance.CoverageContract)
+
 	containerLogs := contract.DomainInventory["container-logs"]
 	require.Equal(t, "log-stream", containerLogs.BehaviorClass)
 	require.Equal(t, "log-stream-selector", containerLogs.ScopeContract.Kind)
@@ -561,6 +595,10 @@ func enforcedCoverageProofs(t *testing.T) map[string]map[string]struct{} {
 		"event-resume-merge":                     setOf("cluster-events", "namespace-events"),
 		"event-snapshot-payload":                 setOf("object-events"),
 		"log-stream-lifecycle":                   setOf("container-logs"),
+		"detail-payload-shape":                   setOf("object-details", "object-yaml"),
+		"helm-content-shape":                     setOf("object-helm-manifest", "object-helm-values"),
+		"graph-payload-identity":                 setOf("object-map"),
+		"operation-state-transitions":            setOf("object-maintenance"),
 	}
 }
 

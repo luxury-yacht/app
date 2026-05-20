@@ -186,6 +186,10 @@ const ENFORCED_COVERAGE_PROOFS: Record<string, Set<RefreshDomain>> = {
   'event-resume-merge': new Set(['cluster-events', 'namespace-events']),
   'event-snapshot-payload': new Set(['object-events']),
   'log-stream-lifecycle': new Set(['container-logs']),
+  'detail-payload-shape': new Set(['object-details', 'object-yaml']),
+  'helm-content-shape': new Set(['object-helm-manifest', 'object-helm-values']),
+  'graph-payload-identity': new Set(['object-map']),
+  'operation-state-transitions': new Set(['object-maintenance']),
 };
 
 describe('refresh domain contract', () => {
@@ -428,6 +432,36 @@ describe('refresh domain contract', () => {
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
             expect(inventory.streamSemantics).not.toContain('append-merge');
             expect(inventory.coverageContract).toBe('event-snapshot-payload');
+          }
+          if (inventory.behaviorClass === 'detail-payload') {
+            expect(['object-details', 'object-yaml']).toContain(entry.domain);
+            expect(inventory.scopeContract.kind).toBe('object-ref');
+            expect(inventory.cachePolicy).toBe('snapshot-cache-plus-provider-cache');
+            expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
+            expect(inventory.coverageContract).toBe('detail-payload-shape');
+          }
+          if (inventory.behaviorClass === 'helm-content-payload') {
+            expect(['object-helm-manifest', 'object-helm-values']).toContain(entry.domain);
+            expect(inventory.scopeContract.kind).toBe('helm-release');
+            expect(inventory.cachePolicy).toBe('snapshot-cache-plus-provider-cache');
+            expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
+            expect(inventory.coverageContract).toBe('helm-content-shape');
+          }
+          if (inventory.behaviorClass === 'graph-payload') {
+            expect(entry.domain).toBe('object-map');
+            expect(inventory.scopeContract.kind).toBe('object-map');
+            expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.ObjectMapBuilder');
+            expect(inventory.cachePolicy).toBe('snapshot-cache');
+            expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
+            expect(inventory.coverageContract).toBe('graph-payload-identity');
+          }
+          if (inventory.behaviorClass === 'operation-state') {
+            expect(entry.domain).toBe('object-maintenance');
+            expect(inventory.scopeContract.kind).toBe('node-maintenance');
+            expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.NodeMaintenanceBuilder');
+            expect(inventory.cachePolicy).toBe('snapshot-cache-bypass');
+            expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
+            expect(inventory.coverageContract).toBe('operation-state-transitions');
           }
           break;
         default:

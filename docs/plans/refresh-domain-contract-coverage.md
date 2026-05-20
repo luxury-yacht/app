@@ -578,25 +578,39 @@ Progress:
 
 ## Phase 8: Detail, Graph, And Operation Domains
 
-- [ ] Define detail-payload contracts for `object-details` and `object-yaml`
+- [x] Define detail-payload contracts for `object-details` and `object-yaml`
       using full object reference scopes.
-- [ ] Define Helm content contracts for `object-helm-manifest` and
+- [x] Define Helm content contracts for `object-helm-manifest` and
       `object-helm-values` using the current Helm release `namespace:name`
       scope, rendered content shape, and related resource-link identity.
-- [ ] Define graph-payload contracts for `object-map`, including node/edge
+- [x] Define graph-payload contracts for `object-map`, including node/edge
       identity and relationship refs.
-- [ ] Define operation-state contracts for `object-maintenance`, including
+- [x] Define operation-state contracts for `object-maintenance`, including
       cache bypass, lifecycle cleanup, and long-running state transitions.
-- [ ] Include object-maintenance scope parsing (`node:<name>` and aggregate
+- [x] Include object-maintenance scope parsing (`node:<name>` and aggregate
       scope) and multi-cluster drain-job isolation in the operation-state
       coverage.
-- [ ] Add or expand tests at the closest useful level for each class.
+- [x] Add or expand tests at the closest useful level for each class.
 
 Validation:
 
 - `go test ./backend/resources/... ./backend/refresh/snapshot ./backend/nodemaintenance`
 - `npm run test --prefix frontend -- ObjectPanel objectMap useNodeMaintenanceActions`
 - `mage qc:prerelease` before reporting the implementation phase complete
+
+Progress:
+
+- 2026-05-20: `object-details`, `object-yaml`, `object-helm-manifest`,
+  `object-helm-values`, `object-map`, and `object-maintenance` coverage
+  contracts are enforced. Detail and YAML builders now have payload-shape tests
+  for full object scopes and cluster metadata; object-details fallback preserves
+  a full `ResourceModel` ref. Helm content tests cover cluster-prefixed
+  release scopes, rendered manifest/values payloads, revision versions, and
+  manifest resource-link identity. Object-map coverage now proves
+  cluster-prefixed graph scopes and requires every edge endpoint to resolve to
+  an emitted node. Node maintenance coverage proves cache-bypass operation state
+  is cluster-filtered for both `node:<name>` and `aggregate` scopes, alongside
+  existing store lifecycle/cancel/cleanup tests.
 
 ## Phase 9: Infrastructure Consolidation
 
