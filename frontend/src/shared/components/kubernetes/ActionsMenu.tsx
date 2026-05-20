@@ -30,8 +30,8 @@ interface ActionsMenuProps {
   object: ObjectActionData | null;
   currentReplicas?: number;
   actionLoading?: boolean;
-  // Whether a HorizontalPodAutoscaler manages this workload.
-  hpaManaged?: boolean;
+  // Whether a HorizontalPodAutoscaler manages this workload. Null means unknown.
+  hpaManaged?: boolean | null;
   onRestart?: () => void;
   onRollback?: () => void;
   onScale?: (replicas: number) => void;
@@ -47,7 +47,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     object,
     currentReplicas,
     actionLoading = false,
-    hpaManaged = false,
+    hpaManaged = null,
     onRestart,
     onRollback,
     onScale,
@@ -159,13 +159,14 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     );
 
     // Merge hpaManaged flag into the object data for the actions hook.
+    // Unknown must stay unknown so scale actions fail closed.
     const actionObject = useMemo(
       () =>
         object
           ? {
               ...object,
               desiredReplicas: resolvedCurrentReplicas,
-              hpaManaged: hpaManaged || object.hpaManaged,
+              hpaManaged: hpaManaged ?? object.hpaManaged ?? null,
             }
           : null,
       [object, hpaManaged, resolvedCurrentReplicas]

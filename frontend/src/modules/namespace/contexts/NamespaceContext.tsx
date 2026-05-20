@@ -19,6 +19,7 @@ import React, {
 } from 'react';
 import { formatAge } from '@utils/ageFormatter';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { errorHandler } from '@utils/errorHandler';
 import { queryNamespacePermissions } from '@/core/capabilities';
 import { requestRefreshDomain } from '@/core/data-access';
@@ -33,6 +34,7 @@ import {
   ALL_NAMESPACES_SCOPE,
   isAllNamespaces,
 } from '@modules/namespace/constants';
+import type { ClusterLifecycleState } from '@core/contexts/ClusterLifecycleContext';
 
 export interface NamespaceListItem {
   name: string;
@@ -77,19 +79,37 @@ interface NamespaceProviderProps {
   children: ReactNode;
 }
 
+const isNamespaceRefreshAvailable = (state: ClusterLifecycleState): boolean =>
+  state === 'loading' || state === 'loading_slow' || state === 'ready';
+
 export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }) => {
   const { selectedKubeconfig, selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const { getClusterState } = useClusterLifecycle();
+  const activeClusterId = selectedClusterId?.trim() || '';
+  const activeClusterRefreshAvailable = activeClusterId
+    ? isNamespaceRefreshAvailable(getClusterState(activeClusterId))
+    : false;
+  const refreshAvailableClusterIds = useMemo(
+    () =>
+      selectedClusterIds
+        .map((clusterId) => clusterId.trim())
+        .filter(
+          (clusterId) =>
+            clusterId.length > 0 && isNamespaceRefreshAvailable(getClusterState(clusterId))
+        ),
+    [getClusterState, selectedClusterIds]
+  );
 
   // Namespace refresh state is per cluster. Cross-cluster namespace views should
   // derive from per-cluster scoped entries rather than one aggregate domain.
   const namespacesScope = useMemo(
-    () => buildClusterScope(selectedClusterId ?? undefined, ''),
-    [selectedClusterId]
+    () => (activeClusterRefreshAvailable ? buildClusterScope(activeClusterId, '') : ''),
+    [activeClusterId, activeClusterRefreshAvailable]
   );
   const namespaceScopes = useMemo(() => {
     const seen = new Set<string>();
     const scopes: string[] = [];
-    selectedClusterIds.forEach((clusterId) => {
+    refreshAvailableClusterIds.forEach((clusterId) => {
       const scope = buildClusterScope(clusterId, '');
       if (!scope || seen.has(scope)) {
         return;
@@ -98,11 +118,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       scopes.push(scope);
     });
     return scopes;
-  }, [selectedClusterIds]);
+  }, [refreshAvailableClusterIds]);
 
   const namespaceDomain = useRefreshScopedDomain('namespaces', namespacesScope);
   const { suppressPassiveLoading } = useAutoRefreshLoadingState();
-  const activeClusterId = selectedClusterId?.trim() || '';
   // Track namespace selection per cluster tab to avoid cross-tab selection bleed.
   const [namespaceSelections, setNamespaceSelections] = useState<
     Record<string, string | undefined>
@@ -147,11 +166,11 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   }, []);
 
   const scopedNamespaces = useMemo(() => {
-    if (!namespaceDomain.data || !activeClusterId) {
+    if (!namespaceDomain.data || !activeClusterId || !activeClusterRefreshAvailable) {
       return [];
     }
     return namespaceDomain.data.namespaces.filter((ns) => ns.clusterId === activeClusterId);
-  }, [activeClusterId, namespaceDomain.data]);
+  }, [activeClusterId, activeClusterRefreshAvailable, namespaceDomain.data]);
 
   useEffect(() => {
     if (!namespaceDomain.data) {
@@ -161,7 +180,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       return;
     }
 
-    if (!activeClusterId) {
+    if (!activeClusterId || !activeClusterRefreshAvailable) {
       updateNamespaces([]);
       return;
     }
@@ -196,6 +215,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     updateNamespaces([allNamespaceItem, ...mappedNamespaces]);
   }, [
     activeClusterId,
+    activeClusterRefreshAvailable,
     allNamespaceItem,
     namespaceDomain.status,
     namespaceDomain.data,

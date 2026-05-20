@@ -73,8 +73,9 @@ export interface ObjectActionData {
   desiredReplicas?: number;
   // Whether the target exposes any forwardable TCP ports.
   portForwardAvailable?: boolean;
-  // Whether a HorizontalPodAutoscaler targets this workload.
-  hpaManaged?: boolean;
+  // Whether a HorizontalPodAutoscaler targets this workload. `null`/`undefined`
+  // means the action surface has not established HPA ownership yet.
+  hpaManaged?: boolean | null;
   // Node-only: when true the cordon action toggles to "Uncordon".
   unschedulable?: boolean;
   // For Event-specific actions - the involved object reference (e.g., "Pod/my-pod")
@@ -204,15 +205,15 @@ function getPortForwardAvailability(
   };
 }
 
-const extractDesiredReplicas = (object: ObjectActionData): number => {
+const extractDesiredReplicas = (object: ObjectActionData): number | null => {
   if (typeof object.desiredReplicas === 'number' && Number.isFinite(object.desiredReplicas)) {
     return Math.max(0, object.desiredReplicas);
   }
   const ready = object.ready?.trim();
-  if (!ready) return 0;
+  if (!ready) return null;
   const segments = ready.split('/');
   const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
-  return Number.isFinite(candidate) ? Math.max(0, candidate) : 0;
+  return Number.isFinite(candidate) ? Math.max(0, candidate) : null;
 };
 
 /**
@@ -319,7 +320,7 @@ export function buildObjectActionItems({
     (RESTARTABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRestart)) ||
     (ROLLBACKABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRollback)) ||
     (SCALABLE_KINDS.includes(normalizedKind) &&
-      (Boolean(object.hpaManaged) || Boolean(handlers.onScale))) ||
+      (object.hpaManaged === true || (object.hpaManaged === false && Boolean(handlers.onScale)))) ||
     (CORDONABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onCordon)) ||
     (DRAINABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onDrain)) ||
     portForwardAvailability.show;
@@ -392,7 +393,7 @@ export function buildObjectActionItems({
 
   // Scale
   if (SCALABLE_KINDS.includes(normalizedKind) && scaleStatus?.allowed && !scaleStatus.pending) {
-    if (object.hpaManaged) {
+    if (object.hpaManaged === true) {
       const desiredReplicas = extractDesiredReplicas(object);
       if (desiredReplicas === 0) {
         menuItems.push({
@@ -411,7 +412,7 @@ export function buildObjectActionItems({
           disabled: actionLoading || !handlers.onScaleToZero,
         });
       }
-    } else if (handlers.onScale) {
+    } else if (object.hpaManaged === false && handlers.onScale) {
       menuItems.push({
         actionId: OBJECT_ACTION_IDS.scale,
         label: objectActionLabel(OBJECT_ACTION_IDS.scale),

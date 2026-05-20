@@ -292,6 +292,97 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 	}
 }
 
+func TestScaleWorkloadRestrictsHPAManagedWorkloads(t *testing.T) {
+	t.Helper()
+
+	tests := []struct {
+		name            string
+		currentReplicas int32
+		requestReplicas int
+		wantErr         string
+	}{
+		{
+			name:            "blocks arbitrary scale",
+			currentReplicas: 3,
+			requestReplicas: 5,
+			wantErr:         "manual scale is disabled for HPA-managed Deployment default/demo",
+		},
+		{
+			name:            "blocks resume when not scaled to zero",
+			currentReplicas: 3,
+			requestReplicas: 1,
+			wantErr:         "manual scale is disabled for HPA-managed Deployment default/demo",
+		},
+		{
+			name:            "allows scale to zero",
+			currentReplicas: 3,
+			requestReplicas: 0,
+		},
+		{
+			name:            "allows resume from zero",
+			currentReplicas: 0,
+			requestReplicas: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			replicas := tc.currentReplicas
+			deployment := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
+				Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+			}
+			hpa := &autoscalingv1.HorizontalPodAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{Name: "demo-hpa", Namespace: "default"},
+				Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
+					ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "apps/v1",
+						Kind:       "Deployment",
+						Name:       "demo",
+					},
+				},
+			}
+
+			client := cgofake.NewClientset(deployment, hpa)
+			allowSelfSubjectAccessReviews(client)
+			updateCount := 0
+			client.Fake.PrependReactor("update", "deployments", func(action cgotesting.Action) (handled bool, ret runtime.Object, err error) {
+				if action.GetSubresource() != "scale" {
+					return false, nil, nil
+				}
+				updateAction, ok := action.(cgotesting.UpdateAction)
+				if !ok {
+					return false, nil, nil
+				}
+				scale, ok := updateAction.GetObject().(*autoscalingv1.Scale)
+				require.True(t, ok, "expected autoscalingv1.Scale")
+				updateCount++
+				return true, scale, nil
+			})
+
+			app := &App{logger: NewLogger(100)}
+			app.clusterClients = map[string]*clusterClients{
+				workloadClusterID: {
+					meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+					kubeconfigPath:    "/path",
+					kubeconfigContext: "ctx",
+					client:            client,
+				},
+			}
+
+			err := app.scaleWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", tc.requestReplicas)
+			if tc.wantErr != "" {
+				require.EqualError(t, err, tc.wantErr)
+				require.Equal(t, 0, updateCount, "HPA-managed arbitrary scale must not reach UpdateScale")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, 1, updateCount)
+		})
+	}
+}
+
 func TestScaleWorkloadErrors(t *testing.T) {
 	t.Helper()
 

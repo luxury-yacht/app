@@ -65,11 +65,15 @@ const Overview: React.FC<OverviewProps> = (props) => {
   const objectVersion = objectData?.version ?? '';
 
   // Check whether a HPA manages this workload (only for scalable kinds).
-  const [hpaManaged, setHpaManaged] = useState(false);
+  const [hpaManaged, setHpaManaged] = useState<boolean | null>(null);
   const isScalable = SCALABLE_KINDS.includes(normalizeKind(props.kind));
   useEffect(() => {
-    if (!isScalable || !clusterId || !props.namespace || !props.name || !objectVersion) {
+    if (!isScalable) {
       setHpaManaged(false);
+      return;
+    }
+    if (!clusterId || !props.namespace || !props.name || !objectVersion) {
+      setHpaManaged(null);
       return;
     }
     let cancelled = false;
@@ -88,11 +92,11 @@ const Overview: React.FC<OverviewProps> = (props) => {
     })
       .then((result) => {
         if (!cancelled) {
-          setHpaManaged(result.status === 'executed' ? Boolean(result.data) : false);
+          setHpaManaged(result.status === 'executed' ? Boolean(result.data) : null);
         }
       })
       .catch(() => {
-        if (!cancelled) setHpaManaged(false);
+        if (!cancelled) setHpaManaged(null);
       });
     return () => {
       cancelled = true;
@@ -124,7 +128,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
   const renderOverviewContent = () => {
     return overviewRegistry.renderComponent({
       ...props,
-      hpaManaged,
+      hpaManaged: hpaManaged === true,
       drainInProgress: Boolean(activeDrainJob),
       onOpenDrain,
     });
@@ -162,6 +166,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
       status: props.suspend ? 'Suspended' : props.status,
       ready: props.ready !== undefined && props.ready !== null ? String(props.ready) : undefined,
       desiredReplicas: currentScaleReplicas,
+      hpaManaged,
       unschedulable: props.unschedulable,
       portForwardAvailable: props.portForwardAvailable,
     }),
@@ -179,6 +184,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
       objectGroup,
       objectVersion,
       currentScaleReplicas,
+      hpaManaged,
     ]
   );
 

@@ -214,7 +214,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
               status: row.status,
               ready: row.ready,
               portForwardAvailable: row.portForwardAvailable,
-              hpaManaged: Boolean(row.hpaManaged),
+              hpaManaged: row.hpaManaged === true ? true : row.hpaManaged === false ? false : null,
             }
           )
         );

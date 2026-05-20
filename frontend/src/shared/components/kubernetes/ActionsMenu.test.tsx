@@ -191,7 +191,7 @@ describe('ActionsMenu', () => {
     const onScale = vi.fn();
 
     await renderMenu({
-      object: makeObject('Deployment'),
+      object: makeObject('Deployment', { hpaManaged: false }),
       currentReplicas: 3,
       onScale,
     });
@@ -237,7 +237,7 @@ describe('ActionsMenu', () => {
     const onScale = vi.fn();
 
     await renderMenu({
-      object: makeObject('Deployment', { ready: '2/6' }),
+      object: makeObject('Deployment', { ready: '2/6', hpaManaged: false }),
       onScale,
     });
 
@@ -304,7 +304,7 @@ describe('ActionsMenu', () => {
     const onScale = vi.fn();
 
     await renderMenu({
-      object: makeObject('Deployment', { ready: '2/4' }),
+      object: makeObject('Deployment', { ready: '2/4', hpaManaged: false }),
       onScale,
     });
 
@@ -406,6 +406,20 @@ describe('ActionsMenu', () => {
     });
 
     expect(container.querySelector('.actions-menu-dropdown')).toBeNull();
+  });
+
+  it('does not show Scale while HPA ownership is unknown', async () => {
+    await renderMenu({
+      object: makeObject('Deployment', { ready: '2/4' }),
+      onScale: vi.fn(),
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+
+    expect(items.some((item) => item.textContent === 'Scale')).toBe(false);
+    expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(false);
+    expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
   });
 
   it('shows port forward action for Pod', async () => {

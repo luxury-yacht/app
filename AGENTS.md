@@ -37,6 +37,30 @@ You MUST follow these at all times.
 - **NEVER RUN STATE-MODIFYING GIT COMMANDS OR CREATE PRS UNLESS EXPLICITLY
   DIRECTED.** Read-only git commands are fine.
 
+  ### Cross-Layer Contract Rule
+
+  Before changing code that crosses backend/frontend boundaries, lifecycle state,
+  refresh domains, cluster identity, permissions, object references, provider
+  ordering, or cache/stream behavior, first trace the contract from source to
+  consumer.
+
+  Do not edit until you can identify:
+  - the producer of the state/data/event,
+  - every consumer affected by the change,
+  - the ordering guarantees between producer and consumer,
+  - whether the proposed fix can create a circular dependency,
+  - the exact regression test that proves the real contract.
+
+  Names are not contracts. Verify lifecycle states, readiness flags, permissions,
+  and identity fields at their source before using them as gates.
+
+  For readiness or gating changes, explicitly prove both sides:
+  - the gate blocks the invalid early state,
+  - the gate still allows the operation required to reach the later ready state.
+
+  If the correct source contract is unclear, stop and inspect the producer code
+  instead of applying a local frontend/backend workaround.
+
 ### Important Rules
 
 - Keep changes as small as possible while still being complete and correct.

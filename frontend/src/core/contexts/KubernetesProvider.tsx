@@ -9,6 +9,7 @@ import { KubeconfigProvider } from '@modules/kubernetes/config/KubeconfigContext
 import { NamespaceProvider } from '@modules/namespace/contexts/NamespaceContext';
 import { ViewStateProvider, useViewState } from './ViewStateContext';
 import { AppearanceModeProvider } from './AppearanceModeContext';
+import { ClusterLifecycleProvider } from './ClusterLifecycleContext';
 import { RefreshManagerProvider } from '@/core/refresh/contexts/RefreshManagerContext';
 import { useBackgroundClusterRefresh } from '@/core/refresh/hooks/useBackgroundClusterRefresh';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -50,9 +51,11 @@ export const KubernetesProvider: React.FC<KubernetesProviderProps> = ({ children
       <RefreshManagerProvider>
         <KubeconfigProvider>
           <ViewStateProvider>
-            <NamespaceProvider>
-              <BackgroundClusterRefreshBridge>{children}</BackgroundClusterRefreshBridge>
-            </NamespaceProvider>
+            <ClusterLifecycleProvider>
+              <NamespaceProvider>
+                <BackgroundClusterRefreshBridge>{children}</BackgroundClusterRefreshBridge>
+              </NamespaceProvider>
+            </ClusterLifecycleProvider>
           </ViewStateProvider>
         </KubeconfigProvider>
       </RefreshManagerProvider>

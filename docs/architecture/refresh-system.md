@@ -5,6 +5,8 @@ streaming endpoints, and a frontend orchestrator that scopes every request to
 exactly one relevant cluster.
 
 See [README.md](README.md) for the architecture doc map.
+Use [refresh-smoke.md](../workflows/refresh-smoke.md) for manual runtime smoke
+checks before releases or after high-risk refresh subsystem changes.
 
 ## Quick Model
 

@@ -33,6 +33,7 @@ behavior, frontend infrastructure, or workflow-specific code.
 | -------------------------------------------- | ------------------------------------------------------------------------ |
 | How does the object relationship map work?   | [workflows/object-map.md](workflows/object-map.md)                       |
 | How are live shell, port-forward, and drain operations tracked and cleaned up? | [workflows/operation-lifecycle.md](workflows/operation-lifecycle.md) |
+| How should refresh runtime behavior be smoked before release? | [workflows/refresh-smoke.md](workflows/refresh-smoke.md) |
 | How do shell exec and debug containers work? | [workflows/shell-debug.md](workflows/shell-debug.md)                     |
 | Which logs doc should I use?                 | [workflows/logs/overview.md](workflows/logs/overview.md)                 |
 | How do container/pod/workload logs work?     | [workflows/logs/container-logs.md](workflows/logs/container-logs.md)     |
@@ -43,6 +44,8 @@ behavior, frontend infrastructure, or workflow-specific code.
 
 - [plans/in-cluster-web-mode.md](plans/in-cluster-web-mode.md) is the current
   in-cluster web mode design.
+- [plans/refresh-domain-follow-ups.md](plans/refresh-domain-follow-ups.md)
+  tracks non-blocking refresh-domain contract follow-ups.
 - [plans/todos.md](plans/todos.md) is a lightweight feature backlog.
 - [release/pending.md](release/pending.md) tracks unreleased changelog entries.
 

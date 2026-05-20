@@ -280,6 +280,52 @@ describe('buildObjectActionItems', () => {
     ]);
   });
 
+  it('shows normal Scale only when HPA ownership is explicitly known false', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+        hpaManaged: false,
+      },
+      context: 'gridtable',
+      handlers: {
+        onScale: () => undefined,
+      },
+      permissions: {
+        scale: { allowed: true, pending: false },
+      },
+    });
+
+    expect(findAction(items, OBJECT_ACTION_IDS.scale)).toBeDefined();
+    expect(findAction(items, OBJECT_ACTION_IDS.scaleToZero)).toBeUndefined();
+  });
+
+  it('hides scale actions when HPA ownership is unknown', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers: {
+        onScale: () => undefined,
+        onScaleToZero: () => undefined,
+        onResumeFromZero: () => undefined,
+      },
+      permissions: {
+        scale: { allowed: true, pending: false },
+      },
+    });
+
+    expect(findAction(items, OBJECT_ACTION_IDS.scale)).toBeUndefined();
+    expect(findAction(items, OBJECT_ACTION_IDS.scaleToZero)).toBeUndefined();
+    expect(findAction(items, OBJECT_ACTION_IDS.resumeFromZero)).toBeUndefined();
+  });
+
   it('shows only Scale to 0 for HPA-managed workloads above zero', () => {
     let scaledToZero = false;
     const items = buildObjectActionItems({

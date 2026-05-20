@@ -31,10 +31,7 @@ import { autoApplyClusterTheme } from '@/core/settings/clusterThemeAutoApply';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
-import {
-  ClusterLifecycleProvider,
-  useClusterLifecycle,
-} from '@core/contexts/ClusterLifecycleContext';
+import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { FavoritesProvider } from '@core/contexts/FavoritesContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { ErrorProvider } from '@core/contexts/ErrorContext';
@@ -234,15 +231,13 @@ function App() {
               <AuthErrorProvider>
                 <div className="app">
                   <KubernetesProvider>
-                    <ClusterLifecycleProvider>
-                      <FavoritesProvider>
-                        <TabDragProvider>
-                          <DockablePanelProvider>
-                            <AppContent />
-                          </DockablePanelProvider>
-                        </TabDragProvider>
-                      </FavoritesProvider>
-                    </ClusterLifecycleProvider>
+                    <FavoritesProvider>
+                      <TabDragProvider>
+                        <DockablePanelProvider>
+                          <AppContent />
+                        </DockablePanelProvider>
+                      </TabDragProvider>
+                    </FavoritesProvider>
                   </KubernetesProvider>
                 </div>
               </AuthErrorProvider>

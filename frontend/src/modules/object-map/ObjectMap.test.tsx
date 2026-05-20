@@ -30,6 +30,33 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
 }));
 
+vi.mock('@/core/capabilities', () => ({
+  getPermissionKey: (
+    kind: string,
+    verb: string,
+    namespace?: string | null,
+    subresource?: string | null,
+    clusterId?: string | null,
+    group?: string | null,
+    version?: string | null
+  ) =>
+    [
+      clusterId ?? '',
+      group ?? '',
+      version ?? '',
+      kind,
+      namespace ?? '',
+      verb,
+      subresource ?? '',
+    ].join('|'),
+  queryKindPermissions: vi.fn(),
+  useUserPermissions: () => {
+    const permissions = new Map();
+    permissions.get = () => ({ allowed: true, pending: false });
+    return permissions;
+  },
+}));
+
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({ openWithObject: vi.fn() }),
 }));
@@ -334,6 +361,46 @@ const shortNamesPayload: ObjectMapSnapshotPayload = {
   edges: [
     { id: 'edge-service', source: 'service', target: 'pod', type: 'selector', label: 'selects' },
   ],
+};
+
+const hpaManagedPayload: ObjectMapSnapshotPayload = {
+  ...payload,
+  nodes: [
+    {
+      id: 'hpa',
+      depth: 1,
+      ref: {
+        ...ref('hpa', 'HorizontalPodAutoscaler', 'web', 'autoscaling', 'v2'),
+        resource: 'horizontalpodautoscalers',
+      },
+    },
+    {
+      id: 'deploy',
+      depth: 0,
+      ref: {
+        ...ref('deploy', 'Deployment', 'web', 'apps'),
+        resource: 'deployments',
+      },
+    },
+  ],
+  edges: [
+    { id: 'edge-hpa-deploy', source: 'hpa', target: 'deploy', type: 'scales', label: 'scales' },
+  ],
+};
+
+const nonHpaManagedScalablePayload: ObjectMapSnapshotPayload = {
+  ...payload,
+  nodes: [
+    {
+      id: 'deploy',
+      depth: 0,
+      ref: {
+        ...ref('deploy', 'Deployment', 'web', 'apps'),
+        resource: 'deployments',
+      },
+    },
+  ],
+  edges: [],
 };
 
 const transitiveKindFilterPayload: ObjectMapSnapshotPayload = {
@@ -1142,6 +1209,48 @@ describe('ObjectMap', () => {
         uid: 'pod-uid',
       })
     );
+
+    cleanup();
+  });
+
+  it('shows HPA scale actions for map workloads with an incoming scales edge', async () => {
+    const { container, cleanup } = await renderObjectMap({ testPayload: hpaManagedPayload });
+    const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
+    expect(deploy).toBeTruthy();
+
+    await act(async () => {
+      deploy!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      await Promise.resolve();
+    });
+
+    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
+    expect(
+      menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`)
+    ).toBeTruthy();
+    expect(menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`)).toBeNull();
+
+    cleanup();
+  });
+
+  it('shows normal Scale for map workloads without an incoming scales edge', async () => {
+    const { container, cleanup } = await renderObjectMap({
+      testPayload: nonHpaManagedScalablePayload,
+    });
+    const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
+    expect(deploy).toBeTruthy();
+
+    await act(async () => {
+      deploy!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      await Promise.resolve();
+    });
+
+    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
+    expect(
+      menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`)
+    ).toBeTruthy();
+    expect(
+      menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`)
+    ).toBeNull();
 
     cleanup();
   });

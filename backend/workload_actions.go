@@ -11,6 +11,8 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
 const rolloutAnnotation = "kubectl.kubernetes.io/restartedAt"
@@ -245,6 +247,10 @@ func (a *App) scaleWorkloadInternal(clusterID, namespace, group, version, worklo
 		ctx = context.Background()
 	}
 
+	if err := ensureHPAManagedScaleAllowed(ctx, deps, namespace, group, version, workloadKind, name, replicas); err != nil {
+		return err
+	}
+
 	switch workloadKind {
 	case "Deployment":
 		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
@@ -321,6 +327,66 @@ func (a *App) scaleWorkloadInternal(clusterID, namespace, group, version, worklo
 	}
 	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
 	return nil
+}
+
+func ensureHPAManagedScaleAllowed(ctx context.Context, deps common.Dependencies, namespace, group, version, workloadKind, name string, replicas int) error {
+	managed, err := isWorkloadHPAManaged(ctx, deps, namespace, group, version, workloadKind, name)
+	if err != nil {
+		return fmt.Errorf("failed to determine HPA ownership for %s %s/%s: %w", workloadKind, namespace, name, err)
+	}
+	if !managed {
+		return nil
+	}
+	if replicas == 0 {
+		return nil
+	}
+	if replicas == 1 {
+		current, err := currentWorkloadDesiredReplicas(ctx, deps, namespace, workloadKind, name)
+		if err != nil {
+			return fmt.Errorf("failed to read current scale for HPA-managed %s %s/%s: %w", workloadKind, namespace, name, err)
+		}
+		if current == 0 {
+			return nil
+		}
+	}
+	return fmt.Errorf("manual scale is disabled for HPA-managed %s %s/%s", workloadKind, namespace, name)
+}
+
+func currentWorkloadDesiredReplicas(ctx context.Context, deps common.Dependencies, namespace, workloadKind, name string) (int32, error) {
+	if deps.KubernetesClient == nil {
+		return 0, fmt.Errorf("kubernetes client is not initialized")
+	}
+	switch workloadKind {
+	case "Deployment":
+		deployment, err := deps.KubernetesClient.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return 0, err
+		}
+		if deployment.Spec.Replicas == nil {
+			return 1, nil
+		}
+		return *deployment.Spec.Replicas, nil
+	case "StatefulSet":
+		statefulSet, err := deps.KubernetesClient.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return 0, err
+		}
+		if statefulSet.Spec.Replicas == nil {
+			return 1, nil
+		}
+		return *statefulSet.Spec.Replicas, nil
+	case "ReplicaSet":
+		replicaSet, err := deps.KubernetesClient.AppsV1().ReplicaSets(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return 0, err
+		}
+		if replicaSet.Spec.Replicas == nil {
+			return 1, nil
+		}
+		return *replicaSet.Spec.Replicas, nil
+	default:
+		return 0, fmt.Errorf("scaling not supported for workload kind %q", workloadKind)
+	}
 }
 
 // triggerCronJob creates a Job immediately from a CronJob's jobTemplate spec.

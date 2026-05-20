@@ -901,7 +901,7 @@ export namespace objectcatalog {
 }
 
 export namespace resourcemodel {
-
+	
 	export class DisplayRef {
 	    clusterId: string;
 	    group?: string;
@@ -911,11 +911,11 @@ export namespace resourcemodel {
 	    namespace?: string;
 	    name?: string;
 	    uid?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DisplayRef(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.clusterId = source["clusterId"];
@@ -937,11 +937,11 @@ export namespace resourcemodel {
 	    namespace?: string;
 	    name?: string;
 	    uid?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ResourceRef(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.clusterId = source["clusterId"];
@@ -5434,3 +5434,4 @@ export namespace v1 {
 	}
 
 }
+

@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/resources/autoscaling"
+	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
 func (a *App) GetHorizontalPodAutoscaler(clusterID, namespace, name string) (*HorizontalPodAutoscalerDetails, error) {
@@ -36,24 +37,27 @@ func (a *App) IsWorkloadHPAManaged(clusterID, namespace, group, version, kind, n
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return false, err
 	}
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return false, err
+	}
+	ctx := deps.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	return isWorkloadHPAManaged(ctx, deps, namespace, group, version, kind, name)
+}
+
+func isWorkloadHPAManaged(ctx context.Context, deps common.Dependencies, namespace, group, version, kind, name string) (bool, error) {
+	if deps.KubernetesClient == nil {
+		return false, fmt.Errorf("kubernetes client is not initialized")
+	}
 	kind, err := normalizeAppsV1WorkloadKind(group, version, kind, scalableWorkloadKinds)
 	if err != nil {
 		return false, fmt.Errorf("HPA-managed check not supported: %w", err)
 	}
 	targetGVK := schema.GroupVersionKind{Group: strings.TrimSpace(group), Version: strings.TrimSpace(version), Kind: kind}
-
-	deps, _, err := a.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return false, err
-	}
-	if deps.KubernetesClient == nil {
-		return false, fmt.Errorf("kubernetes client is not initialized")
-	}
-
-	ctx := deps.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
 
 	hpas, err := deps.KubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {

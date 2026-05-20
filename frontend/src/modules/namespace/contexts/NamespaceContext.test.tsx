@@ -14,6 +14,10 @@ import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
 
 let mockClusterId = 'cluster-a';
 let mockClusterIds = ['cluster-a'];
+let mockClusterLifecycleStates = new Map([
+  ['cluster-a', 'loading'],
+  ['cluster-b', 'loading'],
+]);
 
 const { mockRefreshOrchestrator, namespaceDomainRef, namespaceDomainsByScopeRef } = vi.hoisted(
   () => {
@@ -36,6 +40,13 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
     selectedKubeconfig: 'test',
     selectedClusterId: mockClusterId,
     selectedClusterIds: mockClusterIds,
+  }),
+}));
+
+vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
+  useClusterLifecycle: () => ({
+    getClusterState: (clusterId: string) => mockClusterLifecycleStates.get(clusterId) ?? '',
+    isClusterReady: (clusterId: string) => mockClusterLifecycleStates.get(clusterId) === 'ready',
   }),
 }));
 
@@ -81,6 +92,10 @@ describe('NamespaceProvider selection behaviour', () => {
     namespaceDomainsByScopeRef.current = {};
     mockClusterId = 'cluster-a';
     mockClusterIds = ['cluster-a', 'cluster-b'];
+    mockClusterLifecycleStates = new Map([
+      ['cluster-a', 'loading'],
+      ['cluster-b', 'loading'],
+    ]);
     namespaceRef.current = null;
     vi.clearAllMocks();
   });
@@ -243,6 +258,60 @@ describe('NamespaceProvider selection behaviour', () => {
       'namespaces',
       'cluster-a|',
       { isManual: false }
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      { isManual: false }
+    );
+
+    cleanup();
+  });
+
+  it('does not request namespace refresh until backend lifecycle reaches refresh availability', () => {
+    mockClusterLifecycleStates = new Map([
+      ['cluster-a', 'loading'],
+      ['cluster-b', 'connected'],
+    ]);
+    const { rerender, cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-a|',
+      true
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-a|',
+      { isManual: false }
+    );
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      true
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      { isManual: false }
+    );
+
+    mockClusterLifecycleStates = new Map([
+      ['cluster-a', 'loading'],
+      ['cluster-b', 'loading'],
+    ]);
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      true
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',

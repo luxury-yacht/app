@@ -15,6 +15,7 @@ import Tooltip from '@shared/components/Tooltip';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { OBJECT_MAP_EDGE_FAMILY_LABELS, objectMapEdgeClass } from './objectMapEdgeStyle';
 import type { EdgeKindMeta } from './objectMapEdgeStyle';
 import type { ObjectMapContextMenuRequest } from './objectMapRendererTypes';
@@ -45,6 +46,7 @@ import {
 } from '@shared/components/icons/ObjectMapIcons';
 
 const ObjectMapG6Renderer = React.lazy(() => import('./ObjectMapG6Renderer'));
+const OBJECT_MAP_SCALABLE_KINDS = new Set(['Deployment', 'StatefulSet', 'ReplicaSet']);
 
 const objectMapTimingNow = (): number =>
   typeof performance === 'undefined' ? Date.now() : performance.now();
@@ -58,6 +60,17 @@ type ObjectMapLegendGroup = {
   label: string;
   entries: EdgeKindMeta[];
 };
+
+const objectMapReferenceKey = (ref: ObjectMapReference): string =>
+  [
+    ref.clusterId,
+    ref.group,
+    ref.version,
+    ref.kind,
+    ref.namespace ?? '',
+    ref.name,
+    ref.uid ?? '',
+  ].join('\u0000');
 
 export interface ObjectMapProps {
   payload: ObjectMapSnapshotPayload;
@@ -309,7 +322,39 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     visibleState.visibleLayout.nodes.length,
   ]);
 
-  const contextMenuObject = contextMenu?.type === 'object' ? contextMenu.request.ref : null;
+  const hpaManagedNodeIds = useMemo(() => {
+    const nodeById = new Map(payload.nodes.map((node) => [node.id, node]));
+    const managed = new Set<string>();
+    for (const edge of payload.edges) {
+      if (edge.type !== 'scales') continue;
+      const source = nodeById.get(edge.source);
+      const target = nodeById.get(edge.target);
+      if (
+        source?.ref.kind === 'HorizontalPodAutoscaler' &&
+        target &&
+        OBJECT_MAP_SCALABLE_KINDS.has(target.ref.kind)
+      ) {
+        managed.add(target.id);
+      }
+    }
+    return managed;
+  }, [payload.edges, payload.nodes]);
+  const nodeIdByReference = useMemo(
+    () => new Map(payload.nodes.map((node) => [objectMapReferenceKey(node.ref), node.id])),
+    [payload.nodes]
+  );
+  const contextMenuObject = useMemo<ObjectActionData | null>(() => {
+    if (contextMenu?.type !== 'object') return null;
+    const ref = contextMenu.request.ref;
+    if (!OBJECT_MAP_SCALABLE_KINDS.has(ref.kind)) {
+      return ref;
+    }
+    const nodeId = nodeIdByReference.get(objectMapReferenceKey(ref));
+    return {
+      ...ref,
+      hpaManaged: nodeId ? hpaManagedNodeIds.has(nodeId) : null,
+    };
+  }, [contextMenu, hpaManagedNodeIds, nodeIdByReference]);
   const objectActions = useObjectActionController({
     context: 'object-map',
     onOpen: onOpenPanel ? (object) => onOpenPanel(object as ObjectMapReference) : undefined,

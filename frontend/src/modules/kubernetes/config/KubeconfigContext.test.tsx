@@ -175,6 +175,39 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
+  it('updates cluster-data identity immediately when activating an already committed tab', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'beta',
+        path: '/kube/beta',
+        context: 'prod',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
+
+    const { getContext, unmount } = await renderProvider();
+
+    act(() => {
+      getContext().setActiveKubeconfig('/kube/beta:prod');
+    });
+
+    expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
+    expect(getContext().selectedClusterId).toBe('beta:prod');
+    expect(getContext().selectedClusterIds).toEqual(['alpha:dev', 'beta:prod']);
+
+    unmount();
+  });
+
   it('allows same context name from different kubeconfig files', async () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
@@ -340,6 +373,71 @@ describe('KubeconfigContext', () => {
     });
 
     resolveFirst();
+
+    unmount();
+  });
+
+  it('keeps cluster-data identity on the committed selection until backend activation completes', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'beta',
+        path: '/kube/beta',
+        context: 'prod',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev']);
+
+    let resolveSelection!: () => void;
+    const pendingSelection = new Promise<void>((resolve) => {
+      resolveSelection = resolve;
+    });
+    setSelectedKubeconfigsMock.mockReturnValueOnce(pendingSelection);
+
+    const { getContext, unmount } = await renderProvider();
+    let openPromise: Promise<void> | null = null;
+
+    await act(async () => {
+      openPromise = getContext().openKubeconfig('/kube/beta:prod');
+      await flushPromises();
+    });
+
+    expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
+    expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev', '/kube/beta:prod']);
+    expect(getContext().selectedClusterId).toBe('alpha:dev');
+    expect(getContext().selectedClusterIds).toEqual(['alpha:dev']);
+    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith({
+      selectedClusterId: 'alpha:dev',
+      selectedClusterName: 'dev',
+      selectedClusterIds: ['alpha:dev'],
+      allConnectedClusterIds: ['alpha:dev'],
+      backgroundRefreshEnabled: true,
+    });
+
+    await act(async () => {
+      resolveSelection();
+      await (openPromise ?? Promise.resolve());
+      await flushPromises();
+    });
+
+    expect(getContext().selectedClusterId).toBe('beta:prod');
+    expect(getContext().selectedClusterIds).toEqual(['alpha:dev', 'beta:prod']);
+    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith({
+      selectedClusterId: 'beta:prod',
+      selectedClusterName: 'prod',
+      selectedClusterIds: ['beta:prod'],
+      allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
+      backgroundRefreshEnabled: true,
+    });
 
     unmount();
   });

@@ -105,6 +105,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const [kubeconfigs, setKubeconfigs] = useState<types.KubeconfigInfo[]>([]);
   const [selectedKubeconfigs, setSelectedKubeconfigsState] = useState<string[]>([]);
   const [selectedKubeconfig, setSelectedKubeconfigState] = useState<string>('');
+  const [committedSelectedKubeconfigs, setCommittedSelectedKubeconfigs] = useState<string[]>([]);
+  const [committedSelectedKubeconfig, setCommittedSelectedKubeconfig] = useState<string>('');
   const [kubeconfigsLoading, setKubeconfigsLoading] = useState(false);
   const { enabled: backgroundRefreshEnabled } = useBackgroundRefresh();
   const kubeconfigsRef = useRef<types.KubeconfigInfo[]>([]);
@@ -145,8 +147,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   }, []);
 
   const selectedClusterMeta = useMemo(
-    () => resolveClusterMeta(selectedKubeconfig, kubeconfigs),
-    [resolveClusterMeta, selectedKubeconfig, kubeconfigs]
+    () => resolveClusterMeta(committedSelectedKubeconfig, kubeconfigs),
+    [resolveClusterMeta, committedSelectedKubeconfig, kubeconfigs]
   );
 
   useEffect(() => {
@@ -191,14 +193,14 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
 
   const selectedClusterIds = useMemo(() => {
     const ids = new Set<string>();
-    selectedKubeconfigs.forEach((selection) => {
+    committedSelectedKubeconfigs.forEach((selection) => {
       const id = resolveClusterMeta(selection, kubeconfigs).id;
       if (id) {
         ids.add(id);
       }
     });
     return Array.from(ids);
-  }, [kubeconfigs, resolveClusterMeta, selectedKubeconfigs]);
+  }, [committedSelectedKubeconfigs, kubeconfigs, resolveClusterMeta]);
 
   const updateRefreshContext = useCallback(
     (meta: { id: string; name: string }, clusterIds: string[]) => {
@@ -252,6 +254,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       committedActiveRef.current = normalizedSelection[0] || '';
       setSelectedKubeconfigsState(normalizedSelection);
       setSelectedKubeconfigState(normalizedSelection[0] || '');
+      setCommittedSelectedKubeconfigs(normalizedSelection);
+      setCommittedSelectedKubeconfig(normalizedSelection[0] || '');
     } catch (error) {
       errorHandler.handle(
         error,
@@ -382,10 +386,13 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           eventBus.emit('kubeconfig:selection-changed');
         }
         selectionPendingRef.current = false;
-        // Push refresh context after the backend activates the new selection.
-        updateRefreshContext(nextMeta, nextClusterIds);
+        // Publish cluster-data identities only after the backend activates the
+        // matching client pool and refresh subsystems.
         committedSelectionsRef.current = normalizedSelections;
         committedActiveRef.current = nextActive;
+        setCommittedSelectedKubeconfigs(normalizedSelections);
+        setCommittedSelectedKubeconfig(nextActive);
+        updateRefreshContext(nextMeta, nextClusterIds);
 
         // 4. Perform a manual refresh (will be triggered by kubeconfig:changed event).
         if (shouldEmitChanged) {
@@ -412,15 +419,17 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
             rollbackActive && confirmed.includes(rollbackActive)
               ? rollbackActive
               : confirmed[0] || '';
-          committedSelectionsRef.current = rollbackSelections;
-          committedActiveRef.current = rollbackActive;
         } catch {
           // Keep last committed in-memory snapshot when backend confirmation fails.
         }
+        committedSelectionsRef.current = rollbackSelections;
+        committedActiveRef.current = rollbackActive;
         selectedKubeconfigsRef.current = rollbackSelections;
         selectedKubeconfigRef.current = rollbackActive;
         setSelectedKubeconfigsState(rollbackSelections);
         setSelectedKubeconfigState(rollbackActive);
+        setCommittedSelectedKubeconfigs(rollbackSelections);
+        setCommittedSelectedKubeconfig(rollbackActive);
         errorHandler.handle(
           error,
           {
@@ -527,6 +536,10 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       }
       selectedKubeconfigRef.current = config;
       setSelectedKubeconfigState(config);
+      if (committedSelectionsRef.current.includes(config)) {
+        committedActiveRef.current = config;
+        setCommittedSelectedKubeconfig(config);
+      }
     },
     [selectedKubeconfig, selectedKubeconfigs]
   );

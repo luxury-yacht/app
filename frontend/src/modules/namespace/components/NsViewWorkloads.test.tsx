@@ -588,8 +588,20 @@ describe('NsViewWorkloads', () => {
 
     it('includes Scale for Deployments and StatefulSets', async () => {
       const workloads = [
-        { kind: 'Deployment', name: 'api', namespace: 'default', status: 'Running' },
-        { kind: 'StatefulSet', name: 'db', namespace: 'default', status: 'Running' },
+        {
+          kind: 'Deployment',
+          name: 'api',
+          namespace: 'default',
+          status: 'Running',
+          hpaManaged: false,
+        },
+        {
+          kind: 'StatefulSet',
+          name: 'db',
+          namespace: 'default',
+          status: 'Running',
+          hpaManaged: false,
+        },
       ];
 
       await act(async () => {
