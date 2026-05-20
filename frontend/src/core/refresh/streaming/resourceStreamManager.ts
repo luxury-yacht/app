@@ -19,6 +19,7 @@ import {
 import { resolvePermissionDeniedMessage } from '../permissionErrors';
 import {
   getResourceStreamDomainDescriptor,
+  isCompleteResyncStreamDomain,
   isClusterScopedDomain,
   isSupportedDomain,
   type ResourceDomain,
@@ -679,6 +680,11 @@ export class ResourceStreamManager {
       return;
     }
     if (subscription.driftDetected) {
+      return;
+    }
+    if (isCompleteResyncStreamDomain(subscription.domain)) {
+      this.markSubscriptionDelivery(subscription);
+      void this.resyncSubscription(subscription, 'complete-only update');
       return;
     }
 

@@ -1085,7 +1085,7 @@ describe('ResourceStreamManager', () => {
     expect(nextState.data?.resources?.[0]).toBe(existingResource);
   });
 
-  test('applies namespace helm updates', () => {
+  test('resyncs namespace helm updates instead of mutating rows directly', async () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -1095,64 +1095,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-helm', storeScope);
 
-    setScopedDomainState('namespace-helm', storeScope, () => ({
-      status: 'ready',
-      data: { releases: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'namespace-helm',
-        scope: 'namespace:default',
-        resourceVersion: '4',
-        name: 'release-a',
-        namespace: 'default',
-        kind: 'HelmRelease',
-        ref: resourceRef({
-          group: 'helm.sh',
-          version: 'v3',
-          kind: 'HelmRelease',
-          namespace: 'default',
-          name: 'release-a',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          name: 'release-a',
-          namespace: 'default',
-          chart: 'demo-1.0.0',
-          appVersion: '1.0.0',
-          status: 'deployed',
-          revision: 1,
-          updated: '2024-01-01T00:00:00Z',
-          age: '1m',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('namespace-helm', storeScope);
-    expect(state.data?.releases?.[0]?.name).toBe('release-a');
-  });
-
-  test('reuses namespace helm rows when an unchanged update is applied', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-helm', storeScope);
-
-    const sharedRow = {
+    const existingRow = {
       clusterId: 'cluster-a',
       clusterName: 'cluster-a',
       name: 'release-a',
@@ -1162,18 +1105,44 @@ describe('ResourceStreamManager', () => {
       status: 'deployed',
       revision: 1,
       updated: '2024-01-01T00:00:00Z',
+      age: '2m',
+    };
+    const snapshotRow = {
+      ...existingRow,
+      status: 'superseded',
+      revision: 2,
       age: '1m',
+    };
+    const rowUpdate = {
+      ...existingRow,
+      status: 'targeted-row-update',
+      revision: 3,
     };
 
     setScopedDomainState('namespace-helm', storeScope, () => ({
       status: 'ready',
-      data: { releases: [sharedRow], clusterId: 'cluster-a' },
+      data: { releases: [existingRow], clusterId: 'cluster-a' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
       scope: storeScope,
     }));
-    const previousRows = getScopedDomainState('namespace-helm', storeScope).data?.releases;
+
+    fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'namespace-helm',
+        scope: 'namespace:default',
+        version: 5,
+        checksum: 'helm-resync',
+        generatedAt: Date.now(),
+        payload: {
+          releases: [snapshotRow],
+          clusterId: 'cluster-a',
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
 
     manager.handleMessage(
       'cluster-a',
@@ -1191,15 +1160,96 @@ describe('ResourceStreamManager', () => {
           namespace: 'default',
           name: 'release-a',
         }),
-        row: { ...sharedRow },
+        row: rowUpdate,
       })
     );
 
-    vi.advanceTimersByTime(200);
+    await flushPromises();
 
     const state = getScopedDomainState('namespace-helm', storeScope);
-    expect(state.data?.releases).toBe(previousRows);
-    expect(state.data?.releases?.[0]).toBe(sharedRow);
+    expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(state.data?.releases?.[0]?.status).toBe('superseded');
+    expect(state.data?.releases?.[0]?.revision).toBe(2);
+    expect(state.data?.releases?.[0]?.status).not.toBe('targeted-row-update');
+  });
+
+  test('resyncs namespace helm COMPLETE messages as scope-level changes', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-helm', storeScope);
+
+    const existingRow = {
+      clusterId: 'cluster-a',
+      clusterName: 'cluster-a',
+      name: 'release-a',
+      namespace: 'default',
+      chart: 'demo-1.0.0',
+      appVersion: '1.0.0',
+      status: 'deployed',
+      revision: 1,
+      updated: '2024-01-01T00:00:00Z',
+      age: '2m',
+    };
+    const snapshotRow = {
+      ...existingRow,
+      status: 'failed',
+      revision: 4,
+      age: '1m',
+    };
+
+    setScopedDomainState('namespace-helm', storeScope, () => ({
+      status: 'ready',
+      data: { releases: [existingRow], clusterId: 'cluster-a' },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'namespace-helm',
+        scope: 'namespace:default',
+        version: 6,
+        checksum: 'helm-complete',
+        generatedAt: Date.now(),
+        payload: {
+          releases: [snapshotRow],
+          clusterId: 'cluster-a',
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'COMPLETE',
+        domain: 'namespace-helm',
+        scope: 'namespace:default',
+        resourceVersion: '6',
+        ref: resourceRef({
+          group: 'helm.sh',
+          version: 'v3',
+          kind: 'HelmRelease',
+          namespace: 'default',
+          name: 'release-a',
+        }),
+      })
+    );
+
+    await flushPromises();
+
+    const state = getScopedDomainState('namespace-helm', storeScope);
+    expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(state.data?.releases?.[0]?.status).toBe('failed');
+    expect(state.data?.releases?.[0]?.revision).toBe(4);
   });
 
   test('reuses namespace helm rows when an identical helm snapshot is applied', () => {

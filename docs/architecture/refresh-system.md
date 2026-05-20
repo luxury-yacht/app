@@ -95,7 +95,8 @@ Behavior classes describe correctness rules, not implementation inheritance:
   update/delete and scope-level COMPLETE stream semantics.
 - `complete-resync-stream` domains, currently `namespace-helm`, share the
   resource stream transport but use COMPLETE as a scope-level change detector
-  instead of row updates.
+  instead of row updates. The frontend treats any row-style message for these
+  domains as a resync signal and does not apply targeted row mutations.
 - `catalog-stream`, `event-stream`, and `log-stream` use stream-specific
   reducers on top of catalog/event/log transports.
 - `catalog-snapshot`, `event-snapshot`, `detail-payload`,

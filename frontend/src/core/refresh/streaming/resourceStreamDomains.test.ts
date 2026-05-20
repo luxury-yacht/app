@@ -7,8 +7,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  COMPLETE_RESYNC_STREAM_DOMAINS,
   RESOURCE_STREAM_DOMAINS,
   getResourceStreamDomainDescriptor,
+  isCompleteResyncStreamDomain,
   isClusterScopedDomain,
   isSupportedDomain,
   normalizeResourceScope,
@@ -293,6 +295,13 @@ describe('resource stream domain descriptors', () => {
       expect(typeof descriptor.collection.buildUpdateKey).toBe('function');
       expect(descriptor.isClusterScoped).toBe(CLUSTER_SCOPED_DOMAINS.has(descriptor.domain));
       expect('supportsMultiCluster' in descriptor).toBe(false);
+    });
+  });
+
+  it('derives COMPLETE-only resource stream domains from the shared inventory', () => {
+    expect(Array.from(COMPLETE_RESYNC_STREAM_DOMAINS)).toEqual(['namespace-helm']);
+    EXPECTED_DOMAINS.forEach((domain) => {
+      expect(isCompleteResyncStreamDomain(domain)).toBe(domain === 'namespace-helm');
     });
   });
 

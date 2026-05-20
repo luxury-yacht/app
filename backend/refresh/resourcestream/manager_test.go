@@ -744,8 +744,11 @@ func TestManagerHelmUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeComplete, update.Type)
 		require.Equal(t, domainNamespaceHelm, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
+		require.Nil(t, update.Row)
 		require.Equal(t, "demo", update.Ref.Name)
 		require.Equal(t, "default", update.Ref.Namespace)
+		require.Equal(t, "helm.sh", update.Ref.Group)
+		require.Equal(t, "v3", update.Ref.Version)
 		require.Equal(t, "HelmRelease", update.Ref.Kind)
 	default:
 		t.Fatal("expected helm update to be delivered")
@@ -781,8 +784,11 @@ func TestManagerSecretUpdateRefreshesOldHelmReleaseWhenRelationChanges(t *testin
 	update := requireNextUpdate(t, sub)
 	require.Equal(t, MessageTypeComplete, update.Type)
 	require.Equal(t, domainNamespaceHelm, update.Domain)
+	require.Nil(t, update.Row)
 	require.Equal(t, "demo", update.Ref.Name)
 	require.Equal(t, "default", update.Ref.Namespace)
+	require.Equal(t, "helm.sh", update.Ref.Group)
+	require.Equal(t, "v3", update.Ref.Version)
 	require.Equal(t, "HelmRelease", update.Ref.Kind)
 }
 
@@ -813,8 +819,11 @@ func TestManagerConfigMapUpdateRefreshesOldHelmReleaseWhenRelationChanges(t *tes
 	update := requireNextUpdate(t, sub)
 	require.Equal(t, MessageTypeComplete, update.Type)
 	require.Equal(t, domainNamespaceHelm, update.Domain)
+	require.Nil(t, update.Row)
 	require.Equal(t, "demo", update.Ref.Name)
 	require.Equal(t, "default", update.Ref.Namespace)
+	require.Equal(t, "helm.sh", update.Ref.Group)
+	require.Equal(t, "v3", update.Ref.Version)
 	require.Equal(t, "HelmRelease", update.Ref.Kind)
 }
 

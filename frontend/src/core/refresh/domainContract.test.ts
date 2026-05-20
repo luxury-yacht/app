@@ -344,6 +344,15 @@ describe('refresh domain contract', () => {
           inventory.behaviorClass
         );
         expect(inventory.scopeContract.kind).toBe('resource-stream-selector');
+        const streamContract = refreshDomainContract.resourceStream.domains[entry.domain];
+        if (inventory.behaviorClass === 'complete-resync-stream') {
+          expect(streamContract.rowProjection).toBe('scope-level-complete-only');
+          expect(inventory.streamSemantics).not.toContain('row-update');
+          expect(inventory.coverageContract).toBe('complete-resync-only');
+        } else {
+          expect(streamContract.rowProjection).toBeUndefined();
+          expect(inventory.streamSemantics).toContain('row-update');
+        }
       } else {
         expect(resourceStreamDomains.has(entry.domain)).toBe(false);
         expect(['resource-stream-table', 'complete-resync-stream']).not.toContain(

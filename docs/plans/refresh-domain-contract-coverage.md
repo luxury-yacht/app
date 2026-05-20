@@ -470,10 +470,10 @@ Progress:
 
 ## Phase 4: Complete-Resync Domains
 
-- [ ] Encode COMPLETE-only domains as their own behavior class.
-- [ ] Test that COMPLETE messages trigger full resync and do not attempt
+- [x] Encode COMPLETE-only domains as their own behavior class.
+- [x] Test that COMPLETE messages trigger full resync and do not attempt
       targeted row mutation.
-- [ ] Cover Helm release identity churn as the explicit COMPLETE-only resync
+- [x] Cover Helm release identity churn as the explicit COMPLETE-only resync
       case for `namespace-helm`.
 
 Validation:
@@ -481,6 +481,19 @@ Validation:
 - `go test ./backend/refresh/resourcestream ./backend/refresh/snapshot`
 - `npm run test --prefix frontend -- resourceStreamManager`
 - `mage qc:prerelease` before reporting the implementation phase complete
+
+Progress:
+
+- 2026-05-20: `namespace-helm` is enforced as the only
+  `complete-resync-stream` domain. Contract tests now require COMPLETE-only
+  resource-stream domains to declare `rowProjection:
+  scope-level-complete-only`, omit `row-update` stream semantics, and use the
+  `complete-resync-only` coverage contract. The frontend derives the
+  COMPLETE-only set from the shared inventory and resyncs instead of applying
+  targeted row mutation if a row-style Helm message is received. Helm
+  `COMPLETE` messages and Helm Secret/ConfigMap identity churn are covered as
+  scope-level resync behavior with Helm release `ref` retained only as
+  diagnostic context.
 
 ## Phase 5: Catalog Domains
 

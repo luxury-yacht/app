@@ -5,6 +5,7 @@
  */
 
 import type { AppEvents } from '@/core/events';
+import { refreshDomainContract } from '../domainRegistry';
 import type {
   ClusterConfigEntry,
   ClusterConfigSnapshotPayload,
@@ -1173,6 +1174,18 @@ export const getResourceStreamDomainDescriptor = (
 
 export const isClusterScopedDomain = (domain: ResourceDomain): boolean =>
   getResourceStreamDomainDescriptor(domain).isClusterScoped;
+
+export const COMPLETE_RESYNC_STREAM_DOMAINS = new Set<ResourceDomain>(
+  Object.entries(refreshDomainContract.domainInventory)
+    .filter(
+      ([domain, inventory]) =>
+        inventory.behaviorClass === 'complete-resync-stream' && isSupportedDomain(domain)
+    )
+    .map(([domain]) => domain as ResourceDomain)
+);
+
+export const isCompleteResyncStreamDomain = (domain: ResourceDomain): boolean =>
+  COMPLETE_RESYNC_STREAM_DOMAINS.has(domain);
 
 export const normalizeResourceScope = (domain: ResourceDomain, scope: string): string => {
   const descriptor = getResourceStreamDomainDescriptor(domain);
