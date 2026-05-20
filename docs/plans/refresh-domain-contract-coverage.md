@@ -619,31 +619,31 @@ The goal is fewer lifecycle and registration paths, not fewer correctness
 models. Each consolidation must keep the behavior adapters named in the desired
 end-state matrix and must delete the duplicated local path it replaces.
 
-- [ ] Consolidate shared frontend SSE transport lifecycle for event, catalog,
+- [x] Consolidate shared frontend SSE transport lifecycle for event, catalog,
       and log streams: EventSource creation, reconnect/backoff, permission-error
       parsing, health telemetry, visibility pause/resume, and cleanup. Keep
       event, catalog, and log reducers separate unless tests prove identical
       state semantics.
-- [ ] Consolidate frontend scoped snapshot lifecycle for snapshot payload
+- [x] Consolidate frontend scoped snapshot lifecycle for snapshot payload
       domains: scope enablement, refresh requests, cache-bypass/manual refresh,
       error handling, diagnostics rows, and optional keyed merge reuse.
-- [ ] Extract keyed snapshot merge reuse for domains that can declare a
+- [x] Extract keyed snapshot merge reuse for domains that can declare a
       collection field and stable key without hiding payload-specific behavior.
       Initial candidates are `namespaces`, `catalog-diff`, and
       `object-maintenance`.
-- [ ] Consolidate backend registration metadata/helpers for `list`,
+- [x] Consolidate backend registration metadata/helpers for `list`,
       `listWatch`, list fallback, provider/service-gated direct registrations,
       and dynamic-client requirements while preserving distinct registration
       behavior.
-- [ ] Replace separate permission compatibility assertions with one domain-id
+- [x] Replace separate permission compatibility assertions with one domain-id
       keyed helper covering snapshot runtime requirements, resource-stream
       requirements, stream-specific permissions, and explicit exemptions.
-- [ ] Reuse shared cluster-prefix normalization helpers across scope builders
+- [x] Reuse shared cluster-prefix normalization helpers across scope builders
       and parsers while keeping object, resource-stream, catalog, Helm, and
       node-maintenance scope parsers explicit.
-- [ ] Keep coverage proof plumbing behavior-class-driven so future domains fail
+- [x] Keep coverage proof plumbing behavior-class-driven so future domains fail
       closed through the inventory instead of requiring one-off assertions.
-- [ ] Remove any superseded duplicate lifecycle, registration, permission, or
+- [x] Remove any superseded duplicate lifecycle, registration, permission, or
       merge helpers in the touched paths.
 
 Validation:
@@ -652,6 +652,24 @@ Validation:
 - `npm run test --prefix frontend -- refresh streaming domainContract domainRegistry`
 - `npm run typecheck --prefix frontend`
 - `mage qc:prerelease` before reporting the implementation phase complete
+
+Progress:
+
+- 2026-05-20: Phase 9 consolidated infrastructure only where Phases 2-8 had
+  behavior tests to protect the reducers. Event, catalog, and log stream
+  managers now share `sseStreamTransport` for EventSource creation, listener
+  cleanup, and reconnect delay calculation while keeping event ordering,
+  catalog merge/fallback, and log buffering separate. Snapshot polling merge
+  reuse is dispatched through a domain-keyed handler table for `namespaces`,
+  `catalog-diff`, and `object-maintenance`, leaving payload-specific stable
+  keys explicit. Backend registration dependency gates now use shared
+  `withSkipUnless` and `requireAvailable` helpers, while list/listWatch
+  behavior remains explicit in the registration table. Permission compatibility
+  checks now flow through one domain-id helper that covers runtime,
+  resource-stream, stream-specific, and exempt domains. Backend and frontend
+  coverage proof registries are behavior-class driven, so adding a domain with
+  an enforced coverage status must match the class contract instead of adding a
+  parallel one-off list.
 
 ## Phase 10: Runtime Smoke Checklist
 

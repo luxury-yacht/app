@@ -5,7 +5,6 @@
  * Implements containerLogsStreamManager logic for the core layer.
  */
 
-import { ensureRefreshBaseURL } from '../client';
 import type { SnapshotStats } from '../client';
 import { resetScopedDomainState, setScopedDomainState } from '../store';
 import type {
@@ -21,6 +20,11 @@ import {
   OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
 } from '@/core/settings/appPreferences';
 import { getContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
+import {
+  closeRefreshEventSource,
+  openRefreshEventSource,
+  sseReconnectDelay,
+} from './sseStreamTransport';
 
 type StreamMode = 'stream' | 'manual';
 
@@ -131,35 +135,37 @@ class ContainerLogsStreamConnection {
   }
 
   private closeEventSource(): void {
-    if (!this.eventSource) {
-      return;
-    }
-    this.eventSource.removeEventListener('log', this.handleLogEvent as EventListener);
-    this.eventSource.removeEventListener('error', this.handleError as EventListener);
-    this.eventSource.close();
+    closeRefreshEventSource(this.eventSource, {
+      log: this.handleLogEvent as EventListener,
+      error: this.handleError as EventListener,
+    });
     this.eventSource = null;
   }
 
   private async openStream(): Promise<void> {
     try {
-      const baseURL = await ensureRefreshBaseURL();
+      const handle = await openRefreshEventSource({
+        path: '/api/v2/stream/container-logs',
+        configureURL: (url) => {
+          url.searchParams.set('scope', this.scope);
+          const streamParams = getContainerLogsStreamScopeParams(this.scope);
+          if (streamParams?.container) {
+            url.searchParams.set('container', streamParams.container);
+          }
+          for (const selectedFilter of streamParams?.selectedFilters ?? []) {
+            url.searchParams.append('selectedFilter', selectedFilter);
+          }
+        },
+        listeners: {
+          log: this.handleLogEvent as EventListener,
+          error: this.handleError as EventListener,
+        },
+      });
       if (this.closed) {
+        handle.close();
         return;
       }
-      const url = new URL('/api/v2/stream/container-logs', baseURL);
-      url.searchParams.set('scope', this.scope);
-      const streamParams = getContainerLogsStreamScopeParams(this.scope);
-      if (streamParams?.container) {
-        url.searchParams.set('container', streamParams.container);
-      }
-      for (const selectedFilter of streamParams?.selectedFilters ?? []) {
-        url.searchParams.append('selectedFilter', selectedFilter);
-      }
-
-      const eventSource = new EventSource(url.toString());
-      this.eventSource = eventSource;
-      eventSource.addEventListener('log', this.handleLogEvent as EventListener);
-      eventSource.addEventListener('error', this.handleError as EventListener);
+      this.eventSource = handle.source;
       this.manager.markConnected(this.scope);
     } catch (error) {
       const message =
@@ -179,7 +185,7 @@ class ContainerLogsStreamConnection {
       return;
     }
     this.closeEventSource();
-    const delay = Math.min(30_000, 1000 * Math.pow(2, this.attempt));
+    const delay = sseReconnectDelay(this.attempt);
     this.attempt += 1;
     this.manager.handleStreamError(
       this.scope,

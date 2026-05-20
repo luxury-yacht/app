@@ -5,7 +5,6 @@
  * Implements catalogStreamManager logic for the core layer.
  */
 
-import { ensureRefreshBaseURL } from '../client';
 import { parseClusterScope } from '../clusterScope';
 import { refreshManager } from '../RefreshManager';
 import { CLUSTER_REFRESHERS } from '../refresherTypes';
@@ -16,6 +15,11 @@ import { CatalogStreamMergeQueue } from './catalogStreamMerge';
 import { errorHandler } from '@utils/errorHandler';
 import { APP_LOG_SOURCES, logAppLogsWarn } from '@/core/logging/appLogsClient';
 import { eventBus } from '@/core/events';
+import {
+  closeRefreshEventSource,
+  openRefreshEventSource,
+  sseReconnectDelay,
+} from './sseStreamTransport';
 
 type CatalogStreamEvent = CatalogStreamEventPayload;
 
@@ -168,12 +172,8 @@ class CatalogStreamManager {
       window.clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
-    if (this.eventSource) {
-      this.eventSource.onmessage = null;
-      this.eventSource.onerror = null;
-      this.eventSource.close();
-      this.eventSource = null;
-    }
+    closeRefreshEventSource(this.eventSource);
+    this.eventSource = null;
     if (reset) {
       // Guard: scope is set to null after reset, so capture before clearing.
       if (this.scope) {
@@ -220,28 +220,29 @@ class CatalogStreamManager {
       return;
     }
     try {
-      const baseURL = await ensureRefreshBaseURL();
-      if (this.closed || session !== this.session) {
-        return;
-      }
-
-      const url = new URL('/api/v2/stream/catalog', baseURL);
-      if (this.scope && this.scope.length > 0) {
-        url.search = `?${this.scope}`;
-      } else {
-        url.search = '';
-      }
-
-      const eventSource = new EventSource(url.toString());
+      const handle = await openRefreshEventSource({
+        path: '/api/v2/stream/catalog',
+        configureURL: (url) => {
+          if (this.scope && this.scope.length > 0) {
+            url.search = `?${this.scope}`;
+          } else {
+            url.search = '';
+          }
+        },
+        onMessage: (message) => this.handleMessage(session, message),
+        onError: (event) => this.handleError(session, event),
+      });
       if (session !== this.session) {
-        eventSource.close();
+        handle.close();
         return;
       }
-      this.eventSource = eventSource;
+      if (this.closed) {
+        handle.close();
+        return;
+      }
+      this.eventSource = handle.source;
       this.attempt = 0;
       this.suppressErrorsUntil = 0;
-      eventSource.onmessage = (message) => this.handleMessage(session, message);
-      eventSource.onerror = (event) => this.handleError(session, event);
     } catch (error) {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: 'catalog-stream',
@@ -400,9 +401,7 @@ class CatalogStreamManager {
     if (this.closed || session !== this.session || this.retryTimer !== null) {
       return;
     }
-    const backoff = Math.min(30000, 1000 * 2 ** this.attempt);
-    const jitter = Math.random() * 250;
-    const delay = Math.max(500, backoff + jitter);
+    const delay = sseReconnectDelay(this.attempt, { jitterMs: 250, minMs: 500 });
     this.attempt += 1;
     this.retryTimer = window.setTimeout(() => {
       this.retryTimer = null;

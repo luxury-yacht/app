@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -228,16 +229,12 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			deniedReason: "cluster overview requires nodes",
 		}),
 
-		withSkip(directRegistration("catalog", func() error {
+		withSkipUnless(directRegistration("catalog", func() error {
 			return snapshot.RegisterCatalogDomain(deps.registry, catalogConfig)
-		}), func() bool {
-			return deps.cfg.ObjectCatalogService == nil
-		}),
-		withSkip(directRegistration("catalog-diff", func() error {
+		}), func() bool { return deps.cfg.ObjectCatalogService != nil }),
+		withSkipUnless(directRegistration("catalog-diff", func() error {
 			return snapshot.RegisterCatalogDiffDomain(deps.registry, catalogConfig)
-		}), func() bool {
-			return deps.cfg.ObjectCatalogService == nil
-		}),
+		}), func() bool { return deps.cfg.ObjectCatalogService != nil }),
 
 		listWatchRegistration(listWatchDomainConfig{
 			name:          "nodes",
@@ -431,12 +428,9 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.cfg.Logger,
 				)
 			},
-		}, crdMeta)), func() error {
-			if deps.cfg.DynamicClient == nil {
-				return fmt.Errorf("dynamic client must be provided for namespace custom resources")
-			}
-			return nil
-		}),
+		}, crdMeta)), requireAvailable("dynamic client must be provided for namespace custom resources", func() bool {
+			return deps.cfg.DynamicClient != nil
+		})),
 
 		directRegistration("namespace-events", func() error {
 			return snapshot.RegisterNamespaceEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory())
@@ -447,12 +441,9 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				deps.informerFactory.SharedInformerFactory(),
 				deps.cfg.HelmFactory,
 			)
-		}), func() error {
-			if deps.cfg.HelmFactory == nil {
-				return fmt.Errorf("helm factory must be provided for namespace helm domain")
-			}
-			return nil
-		}),
+		}), requireAvailable("helm factory must be provided for namespace helm domain", func() bool {
+			return deps.cfg.HelmFactory != nil
+		})),
 		listRegistration(listDomainConfig{
 			name:          "namespace-network",
 			issueResource: "core/services,discovery.k8s.io/endpointslices,networking.k8s.io/ingresses,networking.k8s.io/networkpolicies,gateway.networking.k8s.io",
@@ -561,21 +552,15 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				deps.cfg.ObjectDetailsProvider,
 			)
 		}),
-		withSkip(directRegistration("object-yaml", func() error {
+		withSkipUnless(directRegistration("object-yaml", func() error {
 			return snapshot.RegisterObjectYAMLDdomain(deps.registry, yamlProvider)
-		}), func() bool {
-			return !yamlOK
-		}),
-		withSkip(directRegistration("object-helm-manifest", func() error {
+		}), func() bool { return yamlOK }),
+		withSkipUnless(directRegistration("object-helm-manifest", func() error {
 			return snapshot.RegisterObjectHelmManifestDomain(deps.registry, helmProvider)
-		}), func() bool {
-			return !helmOK
-		}),
-		withSkip(directRegistration("object-helm-values", func() error {
+		}), func() bool { return helmOK }),
+		withSkipUnless(directRegistration("object-helm-values", func() error {
 			return snapshot.RegisterObjectHelmValuesDomain(deps.registry, helmProvider)
-		}), func() bool {
-			return !helmOK
-		}),
+		}), func() bool { return helmOK }),
 		directRegistration("object-events", func() error {
 			return snapshot.RegisterObjectEventsDomain(deps.registry, deps.cfg.KubernetesClient, deps.informerFactory.SharedInformerFactory())
 		}),
@@ -613,9 +598,24 @@ func withSkip(registration domainRegistration, skip func() bool) domainRegistrat
 	return registration
 }
 
+func withSkipUnless(registration domainRegistration, available func() bool) domainRegistration {
+	return withSkip(registration, func() bool {
+		return !available()
+	})
+}
+
 func withRequire(registration domainRegistration, require func() error) domainRegistration {
 	registration.require = require
 	return registration
+}
+
+func requireAvailable(message string, available func() bool) func() error {
+	return func() error {
+		if !available() {
+			return errors.New(message)
+		}
+		return nil
+	}
 }
 
 // applyListMeta copies shared metadata into a list-gated registration config.

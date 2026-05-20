@@ -322,6 +322,14 @@ Streaming behavior is registered per domain in the orchestrator:
 - If a stream is inactive, unhealthy, blocked by drift detection, or disabled by
   the current view/context, snapshot polling remains the fallback.
 
+Frontend SSE streams share transport primitives in
+`frontend/src/core/refresh/streaming/sseStreamTransport.ts`. Event, catalog, and
+container-log managers use that helper for EventSource URL creation, listener
+cleanup, and reconnect delay calculation. Keep their reducers separate: event
+streams own ordering/dedupe/resume tokens, catalog streams own snapshot-shaped
+merge/fallback behavior, and log streams own line buffers, warnings, filters,
+and fallback polling.
+
 Resource stream safety rules:
 
 - Descriptors in `resourceStreamDomains.ts` describe row behavior only: scope
@@ -484,6 +492,12 @@ nodes and edges whose ids resolve to full object references. `object-maintenance
 uses cluster-prefixed `aggregate` or `node:<name>` scopes, bypasses the snapshot
 cache/singleflight path, and filters drain state by `clusterId`. Logs use
 `container-logs` streaming with fallback polling in the log viewer.
+
+Polling snapshot merge reuse is centralized in
+`frontend/src/core/refresh/snapshotMerge.ts`. A domain may opt in only when it
+can name a collection field and a stable full-identity key without hiding
+payload-specific semantics. Current opt-ins are `namespaces`, `catalog-diff`,
+and `object-maintenance`.
 
 ## Adding Or Updating Domains
 

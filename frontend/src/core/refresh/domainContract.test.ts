@@ -174,22 +174,61 @@ const COVERAGE_CONTRACTS = new Set([
   'operation-state-transitions',
   'aggregate-snapshot-permission-fallback',
 ]);
-const ENFORCED_COVERAGE_PROOFS: Record<string, Set<RefreshDomain>> = {
-  'snapshot-table-payload': new Set(['namespaces']),
-  'aggregate-snapshot-permission-fallback': new Set(['cluster-overview']),
-  'resource-stream-row-parity': new Set(
-    RESOURCE_STREAM_DOMAINS.filter((domain) => domain !== 'namespace-helm')
-  ),
-  'complete-resync-only': new Set(['namespace-helm']),
-  'catalog-consistency': new Set(['catalog']),
-  'catalog-snapshot-query': new Set(['catalog-diff']),
-  'event-resume-merge': new Set(['cluster-events', 'namespace-events']),
-  'event-snapshot-payload': new Set(['object-events']),
-  'log-stream-lifecycle': new Set(['container-logs']),
-  'detail-payload-shape': new Set(['object-details', 'object-yaml']),
-  'helm-content-shape': new Set(['object-helm-manifest', 'object-helm-values']),
-  'graph-payload-identity': new Set(['object-map']),
-  'operation-state-transitions': new Set(['object-maintenance']),
+const COVERAGE_PROOF_FAMILIES: Array<{
+  coverageContract: string;
+  behaviorClasses: Set<string>;
+}> = [
+  { coverageContract: 'snapshot-table-payload', behaviorClasses: new Set(['snapshot-table']) },
+  {
+    coverageContract: 'aggregate-snapshot-permission-fallback',
+    behaviorClasses: new Set(['aggregate-snapshot']),
+  },
+  {
+    coverageContract: 'resource-stream-row-parity',
+    behaviorClasses: new Set(['resource-stream-table']),
+  },
+  {
+    coverageContract: 'complete-resync-only',
+    behaviorClasses: new Set(['complete-resync-stream']),
+  },
+  { coverageContract: 'catalog-consistency', behaviorClasses: new Set(['catalog-stream']) },
+  { coverageContract: 'catalog-snapshot-query', behaviorClasses: new Set(['catalog-snapshot']) },
+  { coverageContract: 'event-resume-merge', behaviorClasses: new Set(['event-stream']) },
+  { coverageContract: 'event-snapshot-payload', behaviorClasses: new Set(['event-snapshot']) },
+  { coverageContract: 'log-stream-lifecycle', behaviorClasses: new Set(['log-stream']) },
+  { coverageContract: 'detail-payload-shape', behaviorClasses: new Set(['detail-payload']) },
+  {
+    coverageContract: 'helm-content-shape',
+    behaviorClasses: new Set(['helm-content-payload']),
+  },
+  { coverageContract: 'graph-payload-identity', behaviorClasses: new Set(['graph-payload']) },
+  {
+    coverageContract: 'operation-state-transitions',
+    behaviorClasses: new Set(['operation-state']),
+  },
+];
+
+const enforcedCoverageProofs = (): Record<string, Set<RefreshDomain>> => {
+  const proofs: Record<string, Set<RefreshDomain>> = {};
+  COVERAGE_PROOF_FAMILIES.forEach((family) => {
+    proofs[family.coverageContract] = new Set<RefreshDomain>();
+  });
+
+  for (const [domain, inventory] of Object.entries(refreshDomainContract.domainInventory)) {
+    if (inventory.coverageStatus !== 'enforced') {
+      continue;
+    }
+    const family = COVERAGE_PROOF_FAMILIES.find((candidate) =>
+      candidate.behaviorClasses.has(inventory.behaviorClass)
+    );
+    expect(family, `${domain} behavior-class coverage proof`).toBeDefined();
+    expect(inventory.coverageContract, `${domain} coverage contract`).toBe(
+      family?.coverageContract
+    );
+    proofs[family!.coverageContract].add(domain as RefreshDomain);
+  }
+
+  return proofs;
 };
 
 describe('refresh domain contract', () => {
@@ -305,6 +344,7 @@ describe('refresh domain contract', () => {
     const contractDomains = refreshDomainContract.domains.map((entry) => entry.domain);
     const inventoryDomains = Object.keys(refreshDomainContract.domainInventory).sort();
     expect(inventoryDomains).toEqual([...contractDomains].sort());
+    const coverageProofs = enforcedCoverageProofs();
 
     for (const [domain, inventory] of Object.entries(refreshDomainContract.domainInventory)) {
       expect(BEHAVIOR_CLASSES.has(inventory.behaviorClass), `${domain} behaviorClass`).toBe(true);
@@ -328,7 +368,7 @@ describe('refresh domain contract', () => {
       expect(COVERAGE_CONTRACTS.has(inventory.coverageContract), `${domain} coverage`).toBe(true);
       expect(['enforced', 'planned']).toContain(inventory.coverageStatus);
       if (inventory.coverageStatus === 'enforced') {
-        const proof = ENFORCED_COVERAGE_PROOFS[inventory.coverageContract];
+        const proof = coverageProofs[inventory.coverageContract];
         expect(proof, `${domain} enforced proof`).toBeDefined();
         expect(proof.has(domain as RefreshDomain), `${domain} enforced proof membership`).toBe(
           true

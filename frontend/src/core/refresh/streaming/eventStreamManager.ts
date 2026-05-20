@@ -5,7 +5,6 @@
  * Implements eventStreamManager logic for the core layer.
  */
 
-import { ensureRefreshBaseURL } from '../client';
 import type { SnapshotStats } from '../client';
 import { parseClusterScope } from '../clusterScope';
 import { setScopedDomainState, resetScopedDomainState } from '../store';
@@ -21,6 +20,11 @@ import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../per
 import { formatAge } from '@/utils/ageFormatter';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
+import {
+  closeRefreshEventSource,
+  openRefreshEventSource,
+  sseReconnectDelay,
+} from './sseStreamTransport';
 
 interface StreamEventPayload {
   domain: string;
@@ -144,33 +148,34 @@ class EventStreamConnection {
   }
 
   private closeEventSource(): void {
-    if (!this.eventSource) {
-      return;
-    }
-    this.eventSource.removeEventListener('event', this.handleEvent as EventListener);
-    this.eventSource.removeEventListener('error', this.handleError as EventListener);
-    this.eventSource.close();
+    closeRefreshEventSource(this.eventSource, {
+      event: this.handleEvent as EventListener,
+      error: this.handleError as EventListener,
+    });
     this.eventSource = null;
   }
 
   private async openStream(): Promise<void> {
     try {
-      const baseURL = await ensureRefreshBaseURL();
+      const handle = await openRefreshEventSource({
+        path: '/api/v2/stream/events',
+        configureURL: (url) => {
+          url.searchParams.set('scope', this.scope);
+          const resumeId = this.getResumeId();
+          if (resumeId) {
+            url.searchParams.set('since', resumeId);
+          }
+        },
+        listeners: {
+          event: this.handleEvent as EventListener,
+          error: this.handleError as EventListener,
+        },
+      });
       if (this.closed) {
+        handle.close();
         return;
       }
-
-      const url = new URL('/api/v2/stream/events', baseURL);
-      url.searchParams.set('scope', this.scope);
-      const resumeId = this.getResumeId();
-      if (resumeId) {
-        url.searchParams.set('since', resumeId);
-      }
-
-      const eventSource = new EventSource(url.toString());
-      this.eventSource = eventSource;
-      eventSource.addEventListener('event', this.handleEvent as EventListener);
-      eventSource.addEventListener('error', this.handleError as EventListener);
+      this.eventSource = handle.source;
       this.manager.markConnected(this.domain, this.scope);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to open event stream';
@@ -184,7 +189,7 @@ class EventStreamConnection {
       return;
     }
     this.closeEventSource();
-    const delay = Math.min(30_000, 1_000 * Math.pow(2, this.attempt));
+    const delay = sseReconnectDelay(this.attempt);
     this.attempt += 1;
     this.manager.handleStreamError(
       this.domain,

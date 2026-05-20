@@ -369,19 +369,13 @@ func TestResourceStreamDomainsAreRegisteredRefreshDomains(t *testing.T) {
 	}
 }
 
-func TestDomainRegistrationsHaveRuntimePermissionPolicyOrExemption(t *testing.T) {
-	runtimePolicies := snapshot.RuntimePermissionRequirements()
+func TestDomainPermissionContractsJoinExpectedRequirementSources(t *testing.T) {
+	sources := permissionContractSources{
+		runtime: snapshot.RuntimePermissionRequirements(),
+		stream:  resourcestream.PermissionRequirementsByDomain(),
+	}
 	for _, domain := range loadRefreshDomainContract(t).Domains {
-		switch domain.Backend.Permission {
-		case "runtime":
-			require.Containsf(t, runtimePolicies, domain.Domain, "domain %q must have a runtime permission policy", domain.Domain)
-		case "exempt":
-			require.NotContainsf(t, runtimePolicies, domain.Domain, "domain %q is contract-exempt and should not have a broad runtime policy", domain.Domain)
-		case "stream-specific":
-			require.Equal(t, "streamOnly", domain.Backend.Registration)
-		default:
-			require.Failf(t, "unknown permission contract", "domain=%s permission=%s", domain.Domain, domain.Backend.Permission)
-		}
+		requireDomainPermissionContract(t, domain, sources)
 	}
 }
 
@@ -431,11 +425,6 @@ func TestStreamOnlyDomainsHaveEndpointWiring(t *testing.T) {
 func TestResourceStreamDomainsMatchAuthoredContract(t *testing.T) {
 	contractDomains := contractResourceStreamDomains(t)
 	require.ElementsMatch(t, contractDomains, resourcestream.SupportedDomains())
-
-	streamRequirements := resourcestream.PermissionRequirementsByDomain()
-	for _, domainName := range contractDomains {
-		require.Containsf(t, streamRequirements, domainName, "resource stream domain %q must declare permission requirements", domainName)
-	}
 }
 
 func TestResourceStreamIdentityContractIsAuthored(t *testing.T) {
@@ -481,30 +470,6 @@ func requireResourceSetEqual(t *testing.T, domain, label string, code []resource
 	for _, r := range contract {
 		key := r.Group + "/" + r.Version + "/" + r.Kind + "/" + r.Resource
 		require.Containsf(t, codeKeys, key, "domain %s %s entry %q not present in projection descriptor", domain, label, key)
-	}
-}
-
-func TestResourceStreamPermissionRequirementsStayAlignedWithSnapshotRuntime(t *testing.T) {
-	streamRequirements := resourcestream.PermissionRequirementsByDomain()
-	snapshotRequirements := snapshot.RuntimePermissionRequirements()
-
-	for _, domainName := range resourcestream.SupportedDomains() {
-		streamReqs, ok := streamRequirements[domainName]
-		require.Truef(t, ok, "stream domain %q is missing a permission requirement contract", domainName)
-		snapshotReq, ok := snapshotRequirements[domainName]
-		require.Truef(t, ok, "stream domain %q is missing a snapshot runtime permission contract", domainName)
-
-		streamKeys := requirementKeys(streamReqs)
-		for _, req := range snapshotReq.Requirements {
-			require.Containsf(
-				t,
-				streamKeys,
-				permissions.ResourceKey(req.Group, req.Resource),
-				"stream domain %q must include snapshot resource %s",
-				domainName,
-				permissions.ResourceKey(req.Group, req.Resource),
-			)
-		}
 	}
 }
 
@@ -580,26 +545,89 @@ func requirementKeys(reqs []permissions.ResourceRequirement) map[string]struct{}
 	return keys
 }
 
+type permissionContractSources struct {
+	runtime map[string]snapshot.DomainPermissionRequirement
+	stream  map[string][]permissions.ResourceRequirement
+}
+
+func requireDomainPermissionContract(t *testing.T, domain refreshDomainRecord, sources permissionContractSources) {
+	t.Helper()
+
+	runtimeReq, hasRuntime := sources.runtime[domain.Domain]
+	streamReqs, hasStream := sources.stream[domain.Domain]
+
+	switch domain.Backend.Permission {
+	case "runtime":
+		require.Truef(t, hasRuntime, "domain %q must have a runtime permission policy", domain.Domain)
+		if domain.Backend.ResourceStream {
+			require.Truef(t, hasStream, "resource stream domain %q must declare stream permission requirements", domain.Domain)
+			streamKeys := requirementKeys(streamReqs)
+			for _, req := range runtimeReq.Requirements {
+				require.Containsf(
+					t,
+					streamKeys,
+					permissions.ResourceKey(req.Group, req.Resource),
+					"stream domain %q must include snapshot resource %s",
+					domain.Domain,
+					permissions.ResourceKey(req.Group, req.Resource),
+				)
+			}
+		}
+	case "exempt":
+		require.Falsef(t, hasRuntime, "domain %q is contract-exempt and should not have a broad runtime policy", domain.Domain)
+		require.Falsef(t, hasStream, "domain %q is contract-exempt and should not have stream requirements", domain.Domain)
+	case "stream-specific":
+		require.Equal(t, "streamOnly", domain.Backend.Registration)
+		require.Falsef(t, hasRuntime, "stream-specific domain %q should not use snapshot runtime permission checks", domain.Domain)
+	default:
+		require.Failf(t, "unknown permission contract", "domain=%s permission=%s", domain.Domain, domain.Backend.Permission)
+	}
+}
+
 func enforcedCoverageProofs(t *testing.T) map[string]map[string]struct{} {
 	t.Helper()
-	resourceStreamDomains := setOf(contractResourceStreamDomains(t)...)
-	delete(resourceStreamDomains, "namespace-helm")
-
-	return map[string]map[string]struct{}{
-		"snapshot-table-payload":                 setOf("namespaces"),
-		"aggregate-snapshot-permission-fallback": setOf("cluster-overview"),
-		"resource-stream-row-parity":             resourceStreamDomains,
-		"complete-resync-only":                   setOf("namespace-helm"),
-		"catalog-consistency":                    setOf("catalog"),
-		"catalog-snapshot-query":                 setOf("catalog-diff"),
-		"event-resume-merge":                     setOf("cluster-events", "namespace-events"),
-		"event-snapshot-payload":                 setOf("object-events"),
-		"log-stream-lifecycle":                   setOf("container-logs"),
-		"detail-payload-shape":                   setOf("object-details", "object-yaml"),
-		"helm-content-shape":                     setOf("object-helm-manifest", "object-helm-values"),
-		"graph-payload-identity":                 setOf("object-map"),
-		"operation-state-transitions":            setOf("object-maintenance"),
+	contract := loadRefreshDomainContract(t)
+	families := []struct {
+		coverageContract string
+		behaviorClasses  map[string]struct{}
+	}{
+		{"snapshot-table-payload", setOf("snapshot-table")},
+		{"aggregate-snapshot-permission-fallback", setOf("aggregate-snapshot")},
+		{"resource-stream-row-parity", setOf("resource-stream-table")},
+		{"complete-resync-only", setOf("complete-resync-stream")},
+		{"catalog-consistency", setOf("catalog-stream")},
+		{"catalog-snapshot-query", setOf("catalog-snapshot")},
+		{"event-resume-merge", setOf("event-stream")},
+		{"event-snapshot-payload", setOf("event-snapshot")},
+		{"log-stream-lifecycle", setOf("log-stream")},
+		{"detail-payload-shape", setOf("detail-payload")},
+		{"helm-content-shape", setOf("helm-content-payload")},
+		{"graph-payload-identity", setOf("graph-payload")},
+		{"operation-state-transitions", setOf("operation-state")},
 	}
+
+	proofs := make(map[string]map[string]struct{}, len(families))
+	for _, family := range families {
+		proofs[family.coverageContract] = map[string]struct{}{}
+	}
+
+	for domainID, inventory := range contract.DomainInventory {
+		if inventory.CoverageStatus != "enforced" {
+			continue
+		}
+		matched := false
+		for _, family := range families {
+			if _, ok := family.behaviorClasses[inventory.BehaviorClass]; !ok {
+				continue
+			}
+			require.Equalf(t, family.coverageContract, inventory.CoverageContract, "domain %q coverage contract must match behavior class", domainID)
+			proofs[family.coverageContract][domainID] = struct{}{}
+			matched = true
+			break
+		}
+		require.Truef(t, matched, "domain %q has no behavior-class coverage proof", domainID)
+	}
+	return proofs
 }
 
 func setOf(values ...string) map[string]struct{} {

@@ -100,77 +100,85 @@ export const mergeWorkloadMetricRows = (
 };
 
 // Incrementally reuse row objects for polling-only list payloads.
+const mergeNamespacePayload = (
+  payload: NamespaceSnapshotPayload,
+  scope?: string
+): NamespaceSnapshotPayload => {
+  const previous = getScopedDomainState('namespaces', scope!)
+    .data as NamespaceSnapshotPayload | null;
+  if (!previous?.namespaces?.length) {
+    return payload;
+  }
+  // payload.clusterId is required on ClusterMeta-derived payloads, so the
+  // merge-key fallback does not need a blank-cluster guard.
+  const fallbackClusterId = payload.clusterId;
+  const merged = mergeListByKey(
+    payload.namespaces ?? [],
+    previous.namespaces ?? [],
+    (entry) => `${entry.clusterId ?? fallbackClusterId}::${entry.name}`
+  );
+  return merged === payload.namespaces ? payload : { ...payload, namespaces: merged };
+};
+
+const mergeObjectMaintenancePayload = (
+  payload: NodeMaintenanceSnapshotPayload,
+  scope?: string
+): NodeMaintenanceSnapshotPayload => {
+  if (!scope) {
+    return payload;
+  }
+  const previous = getScopedDomainState('object-maintenance', scope)
+    .data as NodeMaintenanceSnapshotPayload | null;
+  if (!previous?.drains?.length) {
+    return payload;
+  }
+  const fallbackClusterId = payload.clusterId;
+  const merged = mergeListByKey(
+    payload.drains ?? [],
+    previous.drains ?? [],
+    (entry) => `${entry.clusterId ?? fallbackClusterId}::${entry.id}`
+  );
+  return merged === payload.drains ? payload : { ...payload, drains: merged };
+};
+
+const mergeCatalogDiffPayload = (
+  payload: CatalogSnapshotPayload,
+  scope?: string
+): CatalogSnapshotPayload => {
+  if (!scope) {
+    return payload;
+  }
+  const previous = getScopedDomainState('catalog-diff', scope)
+    .data as CatalogSnapshotPayload | null;
+  if (!previous?.items?.length) {
+    return payload;
+  }
+  const fallbackClusterId = payload.clusterId;
+  const merged = mergeListByKey(payload.items ?? [], previous.items ?? [], (entry) => {
+    const clusterId = entry.clusterId ?? fallbackClusterId;
+    if (entry.uid) {
+      return `${clusterId}::${entry.uid}`;
+    }
+    return `${clusterId}::${entry.group}::${entry.version}::${entry.resource}::${entry.namespace ?? ''}::${entry.name}`;
+  });
+  return merged === payload.items ? payload : { ...payload, items: merged };
+};
+
+const pollingListMergeHandlers = {
+  namespaces: mergeNamespacePayload,
+  'object-maintenance': mergeObjectMaintenancePayload,
+  'catalog-diff': mergeCatalogDiffPayload,
+};
+
 export const mergePollingListPayload = <K extends RefreshDomain>(
   domain: K,
   payload: DomainPayloadMap[K],
   scope?: string
 ): DomainPayloadMap[K] => {
-  if (domain === 'namespaces') {
-    const previous = getScopedDomainState('namespaces', scope!)
-      .data as NamespaceSnapshotPayload | null;
-    if (!previous?.namespaces?.length) {
-      return payload;
-    }
-    const incoming = payload as NamespaceSnapshotPayload;
-    // incoming.clusterId is now a required field on ClusterMeta-derived
-    // payloads, so the merge-key fallback doesn't need a `?? ''` guard.
-    const fallbackClusterId = incoming.clusterId;
-    const merged = mergeListByKey(
-      incoming.namespaces ?? [],
-      previous.namespaces ?? [],
-      (entry) => `${entry.clusterId ?? fallbackClusterId}::${entry.name}`
-    );
-    if (merged === incoming.namespaces) {
-      return payload;
-    }
-    return { ...incoming, namespaces: merged } as DomainPayloadMap[K];
-  }
-
-  if (domain === 'object-maintenance') {
-    if (!scope) {
-      return payload;
-    }
-    const previous = getScopedDomainState('object-maintenance', scope)
-      .data as NodeMaintenanceSnapshotPayload | null;
-    if (!previous?.drains?.length) {
-      return payload;
-    }
-    const incoming = payload as NodeMaintenanceSnapshotPayload;
-    const fallbackClusterId = incoming.clusterId;
-    const merged = mergeListByKey(
-      incoming.drains ?? [],
-      previous.drains ?? [],
-      (entry) => `${entry.clusterId ?? fallbackClusterId}::${entry.id}`
-    );
-    if (merged === incoming.drains) {
-      return payload;
-    }
-    return { ...incoming, drains: merged } as DomainPayloadMap[K];
-  }
-
-  if (domain === 'catalog-diff') {
-    if (!scope) {
-      return payload;
-    }
-    const previous = getScopedDomainState('catalog-diff', scope)
-      .data as CatalogSnapshotPayload | null;
-    if (!previous?.items?.length) {
-      return payload;
-    }
-    const incoming = payload as CatalogSnapshotPayload;
-    const fallbackClusterId = incoming.clusterId;
-    const merged = mergeListByKey(incoming.items ?? [], previous.items ?? [], (entry) => {
-      const clusterId = entry.clusterId ?? fallbackClusterId;
-      if (entry.uid) {
-        return `${clusterId}::${entry.uid}`;
-      }
-      return `${clusterId}::${entry.group}::${entry.version}::${entry.resource}::${entry.namespace ?? ''}::${entry.name}`;
-    });
-    if (merged === incoming.items) {
-      return payload;
-    }
-    return { ...incoming, items: merged } as DomainPayloadMap[K];
-  }
-
-  return payload;
+  const handler = pollingListMergeHandlers[
+    domain as keyof typeof pollingListMergeHandlers
+  ] as unknown as
+    | ((payload: DomainPayloadMap[K], scope?: string) => DomainPayloadMap[K])
+    | undefined;
+  return handler ? handler(payload, scope) : payload;
 };

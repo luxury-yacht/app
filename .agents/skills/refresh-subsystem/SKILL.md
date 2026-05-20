@@ -192,6 +192,11 @@ Four stream types use the refresh HTTP server, with different transports:
 | Catalog        | SSE (EventSource) | `backend/refresh/snapshot/catalog_stream.go` | `frontend/src/core/refresh/streaming/catalogStreamManager.ts`       |
 | Container logs | SSE (EventSource) | `backend/refresh/containerlogsstream/`       | `frontend/src/core/refresh/streaming/containerLogsStreamManager.ts` |
 
+Frontend SSE managers share `frontend/src/core/refresh/streaming/sseStreamTransport.ts`
+for EventSource URL creation, listener cleanup, and reconnect delay calculation.
+Keep event, catalog, and log reducers separate unless tests prove their state
+semantics are identical.
+
 **Event stream resume:** Backend buffers recent events in a circular buffer per scope. On reconnect, frontend sends `?since=<sequence>` to resume. If the buffer overflowed, resume returns empty and the client must re-snapshot. **Resume is not guaranteed.**
 
 **Resource stream resume:** Resource WebSocket subscriptions are keyed by a single cluster, domain, and normalized scope. The frontend sends resume tokens per subscription; expired buffers trigger `RESET` and a snapshot resync. Multi-cluster resource stream scopes are rejected on both the frontend subscription path and backend stream mux path, matching the broader single-cluster refresh-domain contract.
@@ -235,6 +240,10 @@ helpers, but keep pods, endpoint slices, workloads, custom resources,
 node-derived updates, and Helm resync signals explicit.
 Do not assign `Update.Row` in stream handlers; add or reuse projection helpers
 so snapshot and stream rows are built by the same canonical constructor path.
+Resource-stream permission resources live in
+`backend/refresh/resourcestream/permission_contract.go` and are checked against
+snapshot runtime permissions by
+`TestDomainPermissionContractsJoinExpectedRequirementSources`.
 
 ## Known Fragility Points
 
