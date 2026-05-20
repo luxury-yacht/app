@@ -527,19 +527,30 @@ Progress:
 
 ## Phase 6: Event Domains
 
-- [ ] Define event identity and merge keys per event domain.
-- [ ] Test ordering, dedupe, resume-token behavior, buffer overflow fallback,
+- [x] Define event identity and merge keys per event domain.
+- [x] Test ordering, dedupe, resume-token behavior, buffer overflow fallback,
       and involved-object identity completeness for SSE event-stream domains.
-- [ ] Test `object-events` as a snapshot event payload: full object scope input,
+- [x] Test `object-events` as a snapshot event payload: full object scope input,
       event identity, involved-object identity completeness, and no SSE resume
       expectations.
-- [ ] Keep display-only involved objects separate from openable full refs.
+- [x] Keep display-only involved objects separate from openable full refs.
 
 Validation:
 
 - `go test ./backend/refresh/eventstream ./backend/refresh/snapshot`
 - `npm run test --prefix frontend -- eventStreamManager EventsTab`
 - `mage qc:prerelease` before reporting the implementation phase complete
+
+Progress:
+
+- 2026-05-20: `cluster-events`, `namespace-events`, and `object-events`
+  coverage contracts are enforced. Event stream tests now lock per-scope resume
+  buffers, expired-token snapshot fallback, frontend ordering/dedupe by event
+  UID, and involved-object ref preservation. `object-events` now carries event
+  `name`, `uid`, and `resourceVersion` in addition to involved-object display
+  fields and the separate openable `ResourceLink`; the Events tab prefers that
+  full ref when present, so display labels no longer have to double as object
+  identity.
 
 ## Phase 7: Log Domains
 

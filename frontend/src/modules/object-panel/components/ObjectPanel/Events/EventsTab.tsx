@@ -77,6 +77,7 @@ interface EventDisplay {
   objectNamespace: string;
   objectUid?: string;
   objectApiVersion?: string;
+  involvedObject?: ObjectEventSummary['involvedObject'];
   objectRef?: ResolvedObjectReference;
   // Per-event cluster identity from ObjectEventSummary (extends ClusterMeta).
   clusterId?: string;
@@ -187,10 +188,12 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
         | 'objectNamespace'
         | 'objectUid'
         | 'objectApiVersion'
+        | 'involvedObject'
         | 'clusterId'
         | 'clusterName'
       >
     ) => ({
+      involvedObject: event.involvedObject,
       object: `${event.objectKind}/${event.objectName}`,
       objectUid: event.objectUid,
       objectApiVersion: event.objectApiVersion,
@@ -229,6 +232,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
             objectNamespace,
             objectUid: event.involvedObjectUid,
             objectApiVersion: event.involvedObjectApiVersion,
+            involvedObject: event.involvedObject,
             clusterId: event.clusterId,
             clusterName: event.clusterName,
           })
@@ -248,6 +252,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           objectNamespace,
           objectUid: event.involvedObjectUid,
           objectApiVersion: event.involvedObjectApiVersion,
+          involvedObject: event.involvedObject,
           objectRef,
           clusterId: event.clusterId,
           clusterName: event.clusterName,
@@ -287,6 +292,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           objectNamespace: item.objectNamespace,
           objectUid: item.objectUid,
           objectApiVersion: item.objectApiVersion,
+          involvedObject: item.involvedObject,
           clusterId: item.clusterId,
           clusterName: item.clusterName,
         })
@@ -303,6 +309,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           objectNamespace: item.objectNamespace,
           objectUid: item.objectUid,
           objectApiVersion: item.objectApiVersion,
+          involvedObject: item.involvedObject,
           clusterId: item.clusterId,
           clusterName: item.clusterName,
         })
@@ -324,6 +331,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           objectNamespace: item.objectNamespace,
           objectUid: item.objectUid,
           objectApiVersion: item.objectApiVersion,
+          involvedObject: item.involvedObject,
           clusterId: item.clusterId,
           clusterName: item.clusterName,
         })

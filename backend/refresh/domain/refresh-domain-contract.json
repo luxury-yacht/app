@@ -143,7 +143,7 @@
       "cachePolicy": "snapshot-cache",
       "streamSemantics": ["append-merge"],
       "coverageContract": "event-resume-merge",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "cluster-rbac": {
       "behaviorClass": "resource-stream-table",
@@ -255,7 +255,7 @@
       "cachePolicy": "snapshot-cache",
       "streamSemantics": ["append-merge"],
       "coverageContract": "event-resume-merge",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "namespace-helm": {
       "behaviorClass": "complete-resync-stream",
@@ -431,7 +431,7 @@
       "cachePolicy": "snapshot-cache",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "event-snapshot-payload",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "object-map": {
       "behaviorClass": "graph-payload",

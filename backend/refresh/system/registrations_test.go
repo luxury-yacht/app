@@ -260,6 +260,24 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	require.Equal(t, "external-catalog-cache-with-merge", catalogDiff.CachePolicy)
 	require.Equal(t, []string{"snapshot-replace"}, catalogDiff.StreamSemantics)
 	require.Equal(t, "catalog-snapshot-query", catalogDiff.CoverageContract)
+
+	for _, domainID := range []string{"cluster-events", "namespace-events"} {
+		events := contract.DomainInventory[domainID]
+		require.Equal(t, "event-stream", events.BehaviorClass)
+		require.Equal(t, "event-stream-scope", events.ScopeContract.Kind)
+		require.Equal(t, "backend/refresh/eventstream", events.PayloadOwner)
+		require.Equal(t, "snapshot-cache", events.CachePolicy)
+		require.Equal(t, []string{"append-merge"}, events.StreamSemantics)
+		require.Equal(t, "event-resume-merge", events.CoverageContract)
+	}
+
+	objectEvents := contract.DomainInventory["object-events"]
+	require.Equal(t, "event-snapshot", objectEvents.BehaviorClass)
+	require.Equal(t, "object-ref", objectEvents.ScopeContract.Kind)
+	require.Equal(t, "backend/refresh/snapshot.ObjectEventsBuilder", objectEvents.PayloadOwner)
+	require.Equal(t, "snapshot-cache", objectEvents.CachePolicy)
+	require.Equal(t, []string{"snapshot-replace"}, objectEvents.StreamSemantics)
+	require.Equal(t, "event-snapshot-payload", objectEvents.CoverageContract)
 }
 
 func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
@@ -483,6 +501,8 @@ func enforcedCoverageProofs(t *testing.T) map[string]map[string]struct{} {
 		"complete-resync-only":                   setOf("namespace-helm"),
 		"catalog-consistency":                    setOf("catalog"),
 		"catalog-snapshot-query":                 setOf("catalog-diff"),
+		"event-resume-merge":                     setOf("cluster-events", "namespace-events"),
+		"event-snapshot-payload":                 setOf("object-events"),
 	}
 }
 

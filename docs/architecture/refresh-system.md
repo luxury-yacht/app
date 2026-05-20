@@ -286,7 +286,16 @@ Streaming behavior is registered per domain in the orchestrator:
 - `catalog` uses SSE snapshots from the object catalog and also supports normal
   snapshot fetches for startup, filtering, pagination, and manual requests.
 - `cluster-events` and `namespace-events` use SSE and keep an in-memory sorted
-  event list with merge-by-UID behavior.
+  event list with merge-by-UID behavior. Event SSE payloads use monotonic
+  per-scope sequence IDs; reconnects send `since=<sequence>` and the backend
+  replays buffered events when the token is still inside the resume window. If
+  the token is older than the buffer, the handler falls back to a fresh
+  snapshot reset.
+- `object-events` is a snapshot-only event payload for one fully identified
+  object scope. It carries event identity (`name`, `uid`, `resourceVersion`),
+  display fields for the involved object, and a separate openable
+  `involvedObject` `ResourceLink` when Kubernetes supplied enough GVK identity.
+  It does not use event SSE resume semantics.
 - `container-logs` streams object-panel log lines and has a log-viewer fallback
   path when streaming is unavailable.
 

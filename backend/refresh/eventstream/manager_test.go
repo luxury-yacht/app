@@ -263,3 +263,22 @@ func TestManagerSubscribeWithResumeReplaysAndSubscribes(t *testing.T) {
 		}
 	}
 }
+
+func TestEventBufferDetectsExpiredResumeAfterOverflow(t *testing.T) {
+	buffer := newEventBuffer(2)
+	buffer.add(bufferedEvent{sequence: 1, entry: Entry{Name: "one"}})
+	buffer.add(bufferedEvent{sequence: 2, entry: Entry{Name: "two"}})
+	buffer.add(bufferedEvent{sequence: 3, entry: Entry{Name: "three"}})
+
+	if _, ok := buffer.since(1); ok {
+		t.Fatal("expected resume before oldest buffered event to fail")
+	}
+
+	events, ok := buffer.since(2)
+	if !ok {
+		t.Fatal("expected resume from retained sequence to succeed")
+	}
+	if len(events) != 1 || events[0].sequence != 3 || events[0].entry.Name != "three" {
+		t.Fatalf("unexpected resume events: %+v", events)
+	}
+}

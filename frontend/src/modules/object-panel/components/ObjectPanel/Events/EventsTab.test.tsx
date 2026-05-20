@@ -341,6 +341,63 @@ describe('EventsTab', () => {
     expect(call.version).toBe('v1alpha1');
   });
 
+  it('prefers the openable involvedObject ref over display-only event object fields', async () => {
+    hoistedSnapshot.data = {
+      events: [
+        makeEvent({
+          involvedObjectKind: 'Pod',
+          involvedObjectName: 'display-only-name',
+          involvedObjectNamespace: 'default',
+          involvedObjectUid: 'display-uid',
+          involvedObjectApiVersion: 'v1',
+          involvedObject: {
+            ref: {
+              clusterId: EVENT_CLUSTER_ID,
+              group: 'apps',
+              version: 'v1',
+              kind: 'Deployment',
+              resource: 'deployments',
+              namespace: 'team-a',
+              name: 'api',
+              uid: 'deployment-uid',
+            },
+          },
+        }),
+      ],
+    };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          isActive={true}
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
+        />
+      );
+    });
+
+    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
+    await act(async () => {
+      row.click();
+      await Promise.resolve();
+    });
+
+    expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
+    expect(mockOpenWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: EVENT_CLUSTER_ID,
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        resource: 'deployments',
+        namespace: 'team-a',
+        name: 'api',
+        uid: 'deployment-uid',
+      })
+    );
+  });
+
   it('parses core/v1 involvedObject apiVersion into an empty group + v1 version', async () => {
     hoistedSnapshot.data = {
       events: [

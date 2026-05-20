@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -150,6 +151,124 @@ func TestObjectEventsBuilderAPIFallbackFiltersKind(t *testing.T) {
 	}
 	if payload.Events[0].InvolvedObjectKind != "Pod" {
 		t.Fatalf("expected Pod event, got %q", payload.Events[0].InvolvedObjectKind)
+	}
+}
+
+func TestObjectEventsBuilderPayloadCarriesEventIdentityAndFullInvolvedObjectRef(t *testing.T) {
+	eventTime := metav1.NewTime(time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC))
+	deploymentEvent := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "api-scaled.17f",
+			Namespace:       "default",
+			UID:             "event-uid-1",
+			ResourceVersion: "42",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Name:       "api",
+			Namespace:  "default",
+			Kind:       "Deployment",
+			UID:        "deployment-uid-1",
+			APIVersion: "apps/v1",
+		},
+		Type:           corev1.EventTypeNormal,
+		Reason:         "ScalingReplicaSet",
+		Message:        "Scaled up replica set",
+		Count:          3,
+		FirstTimestamp: eventTime,
+		LastTimestamp:  eventTime,
+	}
+	otherEvent := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "pod-event",
+			Namespace:       "default",
+			ResourceVersion: "43",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Name:       "api",
+			Namespace:  "default",
+			Kind:       "Pod",
+			APIVersion: "v1",
+		},
+	}
+
+	client := fake.NewClientset()
+	events := []*corev1.Event{deploymentEvent, otherEvent}
+	client.PrependReactor("list", "events", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		listAction, ok := action.(cgotesting.ListAction)
+		if !ok {
+			return false, nil, fmt.Errorf("unexpected action %T", action)
+		}
+		selector := listAction.GetListRestrictions().Fields
+		if selector == nil {
+			selector = fields.Everything()
+		}
+		list := &corev1.EventList{}
+		list.ResourceVersion = "42"
+		for _, evt := range events {
+			if selector.Matches(fields.Set{
+				"involvedObject.name":       evt.InvolvedObject.Name,
+				"involvedObject.namespace":  evt.InvolvedObject.Namespace,
+				"involvedObject.kind":       evt.InvolvedObject.Kind,
+				"involvedObject.apiVersion": evt.InvolvedObject.APIVersion,
+			}) {
+				list.Items = append(list.Items, *evt)
+			}
+		}
+		return true, list, nil
+	})
+
+	builder := &ObjectEventsBuilder{
+		client:       client,
+		eventSynced:  func() bool { return false },
+		eventLister:  nil,
+		eventIndexer: nil,
+	}
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
+	scope := "default:apps/v1:Deployment:api"
+	snap, err := builder.Build(WithClusterMeta(context.Background(), meta), scope)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	if snap.Domain != objectEventsDomain {
+		t.Fatalf("expected object-events domain, got %q", snap.Domain)
+	}
+	if snap.Scope != scope {
+		t.Fatalf("expected scope %q, got %q", scope, snap.Scope)
+	}
+	payload, ok := snap.Payload.(ObjectEventsSnapshotPayload)
+	if !ok {
+		t.Fatalf("expected payload type ObjectEventsSnapshotPayload")
+	}
+	if payload.ClusterID != meta.ClusterID || payload.ClusterName != meta.ClusterName {
+		t.Fatalf("payload lost cluster metadata: %+v", payload.ClusterMeta)
+	}
+	if len(payload.Events) != 1 {
+		t.Fatalf("expected one filtered object event, got %d", len(payload.Events))
+	}
+
+	event := payload.Events[0]
+	if event.Name != "api-scaled.17f" || event.UID != "event-uid-1" || event.ResourceVersion != "42" {
+		t.Fatalf("event identity was not preserved: %+v", event)
+	}
+	if event.InvolvedObjectName != "api" ||
+		event.InvolvedObjectKind != "Deployment" ||
+		event.InvolvedObjectNamespace != "default" ||
+		event.InvolvedObjectUID != "deployment-uid-1" ||
+		event.InvolvedObjectAPIVersion != "apps/v1" {
+		t.Fatalf("display involved-object fields were not preserved: %+v", event)
+	}
+	if event.InvolvedObject == nil || event.InvolvedObject.Ref == nil {
+		t.Fatalf("expected full involved-object ref, got %+v", event.InvolvedObject)
+	}
+	ref := event.InvolvedObject.Ref
+	if ref.ClusterID != "cluster-a" ||
+		ref.Group != "apps" ||
+		ref.Version != "v1" ||
+		ref.Kind != "Deployment" ||
+		ref.Namespace != "default" ||
+		ref.Name != "api" ||
+		ref.UID != "deployment-uid-1" {
+		t.Fatalf("unexpected involved-object ref: %+v", ref)
 	}
 }
 

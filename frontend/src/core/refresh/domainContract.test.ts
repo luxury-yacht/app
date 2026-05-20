@@ -183,6 +183,8 @@ const ENFORCED_COVERAGE_PROOFS: Record<string, Set<RefreshDomain>> = {
   'complete-resync-only': new Set(['namespace-helm']),
   'catalog-consistency': new Set(['catalog']),
   'catalog-snapshot-query': new Set(['catalog-diff']),
+  'event-resume-merge': new Set(['cluster-events', 'namespace-events']),
+  'event-snapshot-payload': new Set(['object-events']),
 };
 
 describe('refresh domain contract', () => {
@@ -370,6 +372,13 @@ describe('refresh domain contract', () => {
           break;
         case 'event-stream':
           expect(inventory.behaviorClass).toBe('event-stream');
+          expect(EVENT_STREAM_DOMAINS.has(entry.domain)).toBe(true);
+          expect(entry.frontend.diagnosticsStream).toBe('events');
+          expect(inventory.scopeContract.kind).toBe('event-stream-scope');
+          expect(inventory.payloadOwner).toBe('backend/refresh/eventstream');
+          expect(inventory.cachePolicy).toBe('snapshot-cache');
+          expect(inventory.streamSemantics).toEqual(['append-merge']);
+          expect(inventory.coverageContract).toBe('event-resume-merge');
           break;
         case 'catalog-stream':
           expect(inventory.behaviorClass).toBe('catalog-stream');
@@ -401,6 +410,17 @@ describe('refresh domain contract', () => {
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
             expect(inventory.streamSemantics).not.toContain('append-merge');
             expect(inventory.coverageContract).toBe('catalog-snapshot-query');
+          }
+          if (inventory.behaviorClass === 'event-snapshot') {
+            expect(entry.domain).toBe('object-events');
+            expect(entry.frontend.orchestrator).toBe('snapshot');
+            expect(entry.frontend.diagnosticsStream).toBeNull();
+            expect(inventory.scopeContract.kind).toBe('object-ref');
+            expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.ObjectEventsBuilder');
+            expect(inventory.cachePolicy).toBe('snapshot-cache');
+            expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
+            expect(inventory.streamSemantics).not.toContain('append-merge');
+            expect(inventory.coverageContract).toBe('event-snapshot-payload');
           }
           break;
         default:

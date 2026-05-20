@@ -280,6 +280,84 @@ describe('EventStreamManager', () => {
     expect(state.data?.events?.[0].ageTimestamp).toBe(updatedCreatedAt);
   });
 
+  test('orders event stream rows and dedupes by event UID before display identity', async () => {
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+    (manager as any).clusterScope = 'cluster-a|cluster';
+
+    manager.applyPayload('cluster-events', 'cluster-a|cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster-a|cluster',
+      sequence: 1,
+      generatedAt: 100,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-a',
+          name: 'event-original-name',
+          uid: 'event-uid-1',
+          resourceVersion: '10',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Normal',
+          source: 'kubelet',
+          reason: 'Started',
+          object: 'Pod/api',
+          message: 'original event',
+          createdAt: 1_700_000_001_000,
+        },
+        {
+          clusterId: 'cluster-a',
+          name: 'event-unrelated',
+          uid: 'event-uid-2',
+          resourceVersion: '9',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'scheduler',
+          reason: 'Scheduled',
+          object: 'Pod/worker',
+          message: 'newer unrelated event',
+          createdAt: 1_700_000_003_000,
+        },
+      ],
+    });
+    await flushTimers();
+
+    manager.applyPayload('cluster-events', 'cluster-a|cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster-a|cluster',
+      sequence: 2,
+      generatedAt: 200,
+      events: [
+        {
+          clusterId: 'cluster-a',
+          name: 'event-renamed-by-apiserver',
+          uid: 'event-uid-1',
+          resourceVersion: '11',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'kubelet',
+          reason: 'BackOff',
+          object: 'Pod/api',
+          message: 'updated event',
+          createdAt: 1_700_000_002_000,
+        },
+      ],
+    });
+    await flushTimers();
+
+    const state = getScopedDomainState('cluster-events', 'cluster-a|cluster');
+    expect(state.data?.events?.[0].clusterId).toBe('cluster-a');
+    expect(state.data?.events?.map((event) => event.uid)).toEqual(['event-uid-2', 'event-uid-1']);
+    expect(state.data?.events?.map((event) => event.message)).toEqual([
+      'newer unrelated event',
+      'updated event',
+    ]);
+    expect(state.data?.events?.[1].resourceVersion).toBe('11');
+  });
+
   test('applyPayload updates namespace events state', async () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();

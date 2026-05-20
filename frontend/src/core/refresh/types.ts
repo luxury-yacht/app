@@ -526,6 +526,9 @@ export interface ObjectDetailsSnapshotPayload extends ClusterMeta {
 
 export interface ObjectEventSummary extends ClusterMeta {
   kind: string;
+  name?: string;
+  uid?: string;
+  resourceVersion?: string;
   eventType: string;
   reason: string;
   message: string;

@@ -37,6 +37,9 @@ type ObjectEventsBuilder struct {
 type ObjectEventSummary struct {
 	ClusterMeta
 	Kind                     string                      `json:"kind"`
+	Name                     string                      `json:"name"`
+	UID                      string                      `json:"uid"`
+	ResourceVersion          string                      `json:"resourceVersion"`
 	EventType                string                      `json:"eventType"`
 	Reason                   string                      `json:"reason"`
 	Message                  string                      `json:"message"`
@@ -327,6 +330,9 @@ func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
 	return ObjectEventSummary{
 		ClusterMeta:              meta,
 		Kind:                     "event",
+		Name:                     evt.Name,
+		UID:                      string(evt.UID),
+		ResourceVersion:          evt.ResourceVersion,
 		EventType:                facts.EventType,
 		Reason:                   facts.Reason,
 		Message:                  facts.Message,
