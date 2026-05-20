@@ -244,6 +244,22 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 			require.Failf(t, "unknown registration", "domain=%s registration=%s", domainID, domain.Backend.Registration)
 		}
 	}
+
+	catalog := contract.DomainInventory["catalog"]
+	require.Equal(t, "catalog-stream", catalog.BehaviorClass)
+	require.Equal(t, "catalog-query", catalog.ScopeContract.Kind)
+	require.Equal(t, "backend/objectcatalog.Service", catalog.PayloadOwner)
+	require.Equal(t, "external-catalog-cache", catalog.CachePolicy)
+	require.ElementsMatch(t, []string{"snapshot-replace", "append-merge"}, catalog.StreamSemantics)
+	require.Equal(t, "catalog-consistency", catalog.CoverageContract)
+
+	catalogDiff := contract.DomainInventory["catalog-diff"]
+	require.Equal(t, "catalog-snapshot", catalogDiff.BehaviorClass)
+	require.Equal(t, "catalog-query", catalogDiff.ScopeContract.Kind)
+	require.Equal(t, "backend/objectcatalog.Service", catalogDiff.PayloadOwner)
+	require.Equal(t, "external-catalog-cache-with-merge", catalogDiff.CachePolicy)
+	require.Equal(t, []string{"snapshot-replace"}, catalogDiff.StreamSemantics)
+	require.Equal(t, "catalog-snapshot-query", catalogDiff.CoverageContract)
 }
 
 func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
@@ -465,6 +481,8 @@ func enforcedCoverageProofs(t *testing.T) map[string]map[string]struct{} {
 		"aggregate-snapshot-permission-fallback": setOf("cluster-overview"),
 		"resource-stream-row-parity":             resourceStreamDomains,
 		"complete-resync-only":                   setOf("namespace-helm"),
+		"catalog-consistency":                    setOf("catalog"),
+		"catalog-snapshot-query":                 setOf("catalog-diff"),
 	}
 }
 

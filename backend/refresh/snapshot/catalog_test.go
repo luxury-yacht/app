@@ -1,10 +1,13 @@
 package snapshot
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"unsafe"
 
@@ -172,6 +175,168 @@ func TestCatalogBuildPreservesContinueWhenCachesReady(t *testing.T) {
 	}
 	if payload.IsFinal {
 		t.Fatal("expected non-final payload while continue token is present")
+	}
+}
+
+func TestCatalogSnapshotAndStreamUseSameCatalogQueryContract(t *testing.T) {
+	summaries := []objectcatalog.Summary{
+		{
+			Kind:            "Deployment",
+			Group:           "apps",
+			Version:         "v1",
+			Resource:        "deployments",
+			Namespace:       "default",
+			Name:            "alpha",
+			UID:             "uid-alpha",
+			ResourceVersion: "1",
+			Scope:           objectcatalog.ScopeNamespace,
+		},
+		{
+			Kind:            "Deployment",
+			Group:           "apps",
+			Version:         "v1",
+			Resource:        "deployments",
+			Namespace:       "default",
+			Name:            "bravo",
+			UID:             "uid-bravo",
+			ResourceVersion: "2",
+			Scope:           objectcatalog.ScopeNamespace,
+		},
+		{
+			Kind:            "Pod",
+			Group:           "",
+			Version:         "v1",
+			Resource:        "pods",
+			Namespace:       "kube-system",
+			Name:            "ignored",
+			UID:             "uid-ignored",
+			ResourceVersion: "3",
+			Scope:           objectcatalog.ScopeNamespace,
+		},
+	}
+	svc := seedCatalogService(t, summaries)
+	markCatalogCachesReady(t, svc, summaries)
+
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
+	scope := "cluster-a|kind=Deployment&namespace=default&limit=1"
+	builder := &catalogBuilder{
+		domain:         catalogDomain,
+		catalogService: func() *objectcatalog.Service { return svc },
+	}
+
+	snap, err := builder.Build(WithClusterMeta(context.Background(), meta), scope)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	if snap.Domain != catalogDomain {
+		t.Fatalf("expected catalog domain, got %q", snap.Domain)
+	}
+	if snap.Scope != scope {
+		t.Fatalf("expected scope %q, got %q", scope, snap.Scope)
+	}
+	payload, ok := snap.Payload.(CatalogSnapshot)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", snap.Payload)
+	}
+	if payload.ClusterID != meta.ClusterID || payload.ClusterName != meta.ClusterName {
+		t.Fatalf("snapshot lost cluster metadata: %+v", payload.ClusterMeta)
+	}
+	if payload.Total != 2 || len(payload.Items) != 1 || payload.Continue == "" {
+		t.Fatalf("unexpected paginated payload: total=%d len=%d continue=%q", payload.Total, len(payload.Items), payload.Continue)
+	}
+	if item := payload.Items[0]; item.UID != "uid-alpha" || item.Group != "apps" || item.Version != "v1" || item.Resource != "deployments" {
+		t.Fatalf("snapshot lost catalog identity fields: %+v", item)
+	}
+
+	opts, err := parseBrowseScope(scope)
+	if err != nil {
+		t.Fatalf("parseBrowseScope returned error: %v", err)
+	}
+	handler := &catalogStreamHandler{clusterMeta: meta}
+	recorder := newCatalogFlushRecorder()
+	if err := handler.writeSnapshot(recorder, recorder, svc, opts, false, true, 7); err != nil {
+		t.Fatalf("writeSnapshot returned error: %v", err)
+	}
+	event := decodeFirstCatalogStreamEvent(t, recorder.BodyString())
+	if event.Sequence != 7 || !event.Reset {
+		t.Fatalf("unexpected stream event envelope: sequence=%d reset=%v", event.Sequence, event.Reset)
+	}
+	if event.SnapshotMode != catalogStreamSnapshotPartial {
+		t.Fatalf("expected partial stream mode for paginated payload, got %q", event.SnapshotMode)
+	}
+	if event.Snapshot.ClusterID != payload.ClusterID || event.Snapshot.ClusterName != payload.ClusterName {
+		t.Fatalf("stream lost cluster metadata: %+v", event.Snapshot.ClusterMeta)
+	}
+	if !reflect.DeepEqual(event.Snapshot.Items, payload.Items) {
+		t.Fatalf("stream items diverged from snapshot items: stream=%+v snapshot=%+v", event.Snapshot.Items, payload.Items)
+	}
+	if event.Snapshot.Continue != payload.Continue ||
+		event.Snapshot.Total != payload.Total ||
+		event.Snapshot.BatchSize != payload.BatchSize ||
+		event.Snapshot.TotalBatches != payload.TotalBatches ||
+		!reflect.DeepEqual(event.Snapshot.Kinds, payload.Kinds) ||
+		!reflect.DeepEqual(event.Snapshot.Namespaces, payload.Namespaces) {
+		t.Fatalf("stream query metadata diverged from snapshot: stream=%+v snapshot=%+v", event.Snapshot, payload)
+	}
+}
+
+func TestCatalogDiffBuildUsesCatalogSnapshotQueryContract(t *testing.T) {
+	summaries := []objectcatalog.Summary{
+		{
+			Kind:            "Deployment",
+			Group:           "apps",
+			Version:         "v1",
+			Resource:        "deployments",
+			Namespace:       "default",
+			Name:            "alpha",
+			UID:             "uid-alpha",
+			ResourceVersion: "1",
+			Scope:           objectcatalog.ScopeNamespace,
+		},
+		{
+			Kind:            "Deployment",
+			Group:           "apps",
+			Version:         "v1",
+			Resource:        "deployments",
+			Namespace:       "default",
+			Name:            "beta",
+			UID:             "uid-beta",
+			ResourceVersion: "2",
+			Scope:           objectcatalog.ScopeNamespace,
+		},
+	}
+	svc := seedCatalogService(t, summaries)
+	markCatalogCachesReady(t, svc, summaries)
+
+	builder := &catalogBuilder{
+		domain:         catalogDiffDomain,
+		catalogService: func() *objectcatalog.Service { return svc },
+	}
+	scope := "cluster-a|kind=Deployment&namespace=default&search=beta&limit=50"
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
+	snap, err := builder.Build(WithClusterMeta(context.Background(), meta), scope)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	if snap.Domain != catalogDiffDomain {
+		t.Fatalf("expected catalog-diff domain, got %q", snap.Domain)
+	}
+	if snap.Scope != scope {
+		t.Fatalf("expected scope %q, got %q", scope, snap.Scope)
+	}
+	payload, ok := snap.Payload.(CatalogSnapshot)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", snap.Payload)
+	}
+	if payload.ClusterID != meta.ClusterID || payload.ClusterName != meta.ClusterName {
+		t.Fatalf("catalog-diff lost cluster metadata: %+v", payload.ClusterMeta)
+	}
+	if payload.Total != 1 || len(payload.Items) != 1 {
+		t.Fatalf("expected one filtered diff item, got total=%d len=%d", payload.Total, len(payload.Items))
+	}
+	item := payload.Items[0]
+	if item.UID != "uid-beta" || item.Group != "apps" || item.Version != "v1" || item.Resource != "deployments" {
+		t.Fatalf("catalog-diff lost catalog identity fields: %+v", item)
 	}
 }
 
@@ -349,4 +514,26 @@ func markCatalogCachesReady(t *testing.T, svc *objectcatalog.Service, summaries 
 		t.Fatal("catalog service cachesReady field not found")
 	}
 	setUnexportedField(cachesReadyField, true)
+}
+
+func decodeFirstCatalogStreamEvent(t *testing.T, body string) catalogStreamEvent {
+	t.Helper()
+	scanner := bufio.NewScanner(strings.NewReader(body))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		var event catalogStreamEvent
+		if err := json.Unmarshal([]byte(payload), &event); err != nil {
+			t.Fatalf("unmarshal catalog stream event: %v", err)
+		}
+		return event
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan catalog stream body: %v", err)
+	}
+	t.Fatalf("expected catalog stream event in body %q", body)
+	return catalogStreamEvent{}
 }

@@ -385,9 +385,12 @@ Resource stream safety rules:
 
 ## Catalog Integration
 
-The object catalog owns discovery, canonical object identity, namespace
-metadata, and browse query semantics. See [catalog.md](catalog.md) for service
-lifecycle, lookup/query APIs, freshness, and Browse ownership.
+The object catalog owns discovery, canonical object identity, object existence,
+namespace and cluster listing metadata, and browse query semantics. See
+[catalog.md](catalog.md) for service lifecycle, lookup/query APIs, freshness,
+and Browse ownership. Refresh domains that need to answer "what objects exist?"
+or "which namespaces/clusters can be browsed?" must query or project from the
+catalog instead of rebuilding those inventories locally.
 
 Refresh-specific integration points:
 
@@ -398,6 +401,9 @@ Refresh-specific integration points:
 - Catalog stream events are snapshot-shaped and apply through the refresh store.
 - Manual/filter/pagination requests still use snapshot fetches; SSE is not a
   replacement for query-specific fetches.
+- The `catalog-diff` domain reuses the catalog snapshot/query payload for object
+  diff workflows through the snapshot orchestrator. It does not participate in
+  catalog stream diagnostics, resume, or stream-health contracts.
 - `snapshotMode: full|partial` describes backend batching of snapshot payloads,
   not a separate UI pagination model.
 

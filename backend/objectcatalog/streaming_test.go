@@ -162,6 +162,42 @@ func TestStreamingAggregatorEmitsOutOfOrderBatches(t *testing.T) {
 	}
 }
 
+func TestStreamingAggregatorFinalizeReplacesStaleObjects(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+	descriptors := []Descriptor{{Kind: "Pod", Resource: "pods", Version: "v1", Scope: ScopeNamespace, Namespaced: true}}
+
+	agg := newStreamingAggregator(svc)
+	agg.emit(0, []Summary{
+		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "survivor", UID: "uid-survivor", Scope: ScopeNamespace},
+		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "stale", UID: "uid-stale", Scope: ScopeNamespace},
+	})
+	agg.finalize(descriptors, true)
+
+	result := svc.Query(QueryOptions{Limit: 10})
+	if result.TotalItems != 2 {
+		t.Fatalf("expected initial total 2, got %d", result.TotalItems)
+	}
+
+	agg = newStreamingAggregator(svc)
+	agg.emit(0, []Summary{
+		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "survivor", UID: "uid-survivor", Scope: ScopeNamespace},
+	})
+	agg.finalize(descriptors, true)
+
+	result = svc.Query(QueryOptions{Limit: 10})
+	if result.TotalItems != 1 || len(result.Items) != 1 {
+		t.Fatalf("expected final total 1, got total=%d items=%#v", result.TotalItems, result.Items)
+	}
+	if result.Items[0].UID != "uid-survivor" {
+		t.Fatalf("expected only survivor item, got %+v", result.Items[0])
+	}
+
+	stale := svc.Query(QueryOptions{Search: "stale", Limit: 10})
+	if stale.TotalItems != 0 || len(stale.Items) != 0 {
+		t.Fatalf("expected stale object to be removed, got total=%d items=%#v", stale.TotalItems, stale.Items)
+	}
+}
+
 func TestPruneMissingHonorsTTL(t *testing.T) {
 	now := time.Now()
 	svc := &Service{opts: Options{EvictionTTL: time.Minute}, now: func() time.Time { return now }}

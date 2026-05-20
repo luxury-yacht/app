@@ -1271,6 +1271,94 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
   });
 
+  test('shows catalog stream degradation separately from resource stream recovery state', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
+    const now = Date.now();
+
+    fetchTelemetrySummaryMock.mockResolvedValueOnce({
+      snapshots: [],
+      metrics: {
+        lastCollected: now,
+        lastDurationMs: 200,
+        consecutiveFailures: 0,
+        successCount: 1,
+        failureCount: 0,
+        active: true,
+      },
+      streams: [
+        {
+          name: 'resources',
+          activeSessions: 1,
+          totalMessages: 5,
+          droppedMessages: 0,
+          skippedTargets: 0,
+          errorCount: 1,
+          lastConnect: now - 1000,
+          lastEvent: now - 500,
+          lastError: 'Resource stream disconnected',
+        },
+        {
+          name: 'catalog',
+          activeSessions: 1,
+          totalMessages: 3,
+          droppedMessages: 2,
+          skippedTargets: 0,
+          errorCount: 1,
+          lastConnect: now - 1200,
+          lastEvent: now - 700,
+          lastError: 'Catalog stream disconnected',
+        },
+      ],
+    });
+    const resourceStreamSpy = vi
+      .spyOn(resourceStreamManager, 'getTelemetrySummary')
+      .mockReturnValue({
+        resyncCount: 4,
+        fallbackCount: 2,
+        lastResyncAt: now - 600,
+        lastResyncReason: 'reset',
+        lastFallbackAt: now - 400,
+        lastFallbackReason: 'gap detected',
+      });
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
+
+    await flushAsync();
+    await flushAsync();
+
+    const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
+    await act(async () => {
+      tabButtons[2].click();
+      await Promise.resolve();
+    });
+    await flushAsync();
+
+    const streamsSection = rendered.container.querySelector('.diagnostics-section');
+    const streamRows = Array.from(streamsSection?.querySelectorAll('tbody tr') ?? []);
+    const catalogRow = streamRows.find((row) => row.textContent?.includes('Catalog'));
+    const resourcesRow = streamRows.find((row) => row.textContent?.includes('Resources'));
+    expect(catalogRow).toBeDefined();
+    expect(resourcesRow).toBeDefined();
+
+    const catalogCells = catalogRow!.querySelectorAll('td');
+    expect(catalogCells[5]?.textContent?.trim()).toBe('1');
+    expect(catalogCells[6]?.textContent?.trim()).toBe('—');
+    expect(catalogCells[7]?.textContent?.trim()).toBe('—');
+    expect(catalogCells[10]?.textContent?.trim()).toBe('Catalog stream disconnected');
+
+    const resourceCells = resourcesRow!.querySelectorAll('td');
+    expect(resourceCells[5]?.textContent?.trim()).toBe('1');
+    expect(resourceCells[6]?.textContent?.trim()).toBe('4');
+    expect(resourceCells[7]?.textContent?.trim()).toBe('2');
+    expect(resourceCells[10]?.textContent?.trim()).toBe('Resource stream disconnected');
+
+    await rendered.unmount();
+    resourceStreamSpy.mockRestore();
+  });
+
   test('shows idle metrics summary when polling is inactive', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));

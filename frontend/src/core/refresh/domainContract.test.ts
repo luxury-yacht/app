@@ -181,6 +181,8 @@ const ENFORCED_COVERAGE_PROOFS: Record<string, Set<RefreshDomain>> = {
     RESOURCE_STREAM_DOMAINS.filter((domain) => domain !== 'namespace-helm')
   ),
   'complete-resync-only': new Set(['namespace-helm']),
+  'catalog-consistency': new Set(['catalog']),
+  'catalog-snapshot-query': new Set(['catalog-diff']),
 };
 
 describe('refresh domain contract', () => {
@@ -371,6 +373,15 @@ describe('refresh domain contract', () => {
           break;
         case 'catalog-stream':
           expect(inventory.behaviorClass).toBe('catalog-stream');
+          expect(entry.domain).toBe('catalog');
+          expect(entry.frontend.diagnosticsStream).toBe('catalog');
+          expect(inventory.scopeContract.kind).toBe('catalog-query');
+          expect(inventory.payloadOwner).toBe('backend/objectcatalog.Service');
+          expect(inventory.cachePolicy).toBe('external-catalog-cache');
+          expect(inventory.streamSemantics).toEqual(
+            expect.arrayContaining(['snapshot-replace', 'append-merge'])
+          );
+          expect(inventory.coverageContract).toBe('catalog-consistency');
           break;
         case 'container-logs-stream':
           expect(inventory.behaviorClass).toBe('log-stream');
@@ -380,6 +391,17 @@ describe('refresh domain contract', () => {
           expect(['resource-stream-table', 'complete-resync-stream', 'log-stream']).not.toContain(
             inventory.behaviorClass
           );
+          if (inventory.behaviorClass === 'catalog-snapshot') {
+            expect(entry.domain).toBe('catalog-diff');
+            expect(entry.frontend.orchestrator).toBe('snapshot');
+            expect(entry.frontend.diagnosticsStream).toBeNull();
+            expect(inventory.scopeContract.kind).toBe('catalog-query');
+            expect(inventory.payloadOwner).toBe('backend/objectcatalog.Service');
+            expect(inventory.cachePolicy).toBe('external-catalog-cache-with-merge');
+            expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
+            expect(inventory.streamSemantics).not.toContain('append-merge');
+            expect(inventory.coverageContract).toBe('catalog-snapshot-query');
+          }
           break;
         default:
           expect.fail(`Unknown orchestrator kind ${entry.frontend.orchestrator}`);

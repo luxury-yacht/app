@@ -497,15 +497,15 @@ Progress:
 
 ## Phase 5: Catalog Domains
 
-- [ ] Document object catalog as the canonical owner for discovery, browse
+- [x] Document object catalog as the canonical owner for discovery, browse
       identity, object existence, and namespace/cluster listings.
-- [ ] Add catalog snapshot/stream consistency tests for identity, cluster
+- [x] Add catalog snapshot/stream consistency tests for identity, cluster
       scoping, pagination/filter inputs, and stale/delete behavior.
-- [ ] Cover `catalog-diff` separately as a `catalog-snapshot` domain: same
+- [x] Cover `catalog-diff` separately as a `catalog-snapshot` domain: same
       catalog payload/query owner, snapshot orchestrator, scoped diff workflow,
       and frontend snapshot merge reuse, but no catalog stream diagnostics or
       resume contract.
-- [ ] Verify diagnostics expose catalog stream degradation distinctly from
+- [x] Verify diagnostics expose catalog stream degradation distinctly from
       resource stream degradation.
 
 Validation:
@@ -513,6 +513,17 @@ Validation:
 - `go test ./backend/objectcatalog ./backend/refresh/snapshot`
 - `npm run test --prefix frontend -- catalogStreamManager browse ObjectDiffModal DiagnosticsPanel`
 - `mage qc:prerelease` before reporting the implementation phase complete
+
+Progress:
+
+- 2026-05-20: `catalog` and `catalog-diff` coverage contracts are enforced.
+  Backend tests prove catalog snapshots and SSE stream events share the same
+  object catalog query/payload identity, cluster metadata, filter/pagination
+  behavior, and full-state stale/delete replacement semantics. `catalog-diff`
+  is locked as a snapshot-only catalog query domain with frontend snapshot merge
+  reuse and no catalog stream diagnostics/resume contract. Diagnostics tests now
+  distinguish catalog stream degradation from resource stream resync/fallback
+  recovery state.
 
 ## Phase 6: Event Domains
 

@@ -47,7 +47,7 @@
       "cachePolicy": "external-catalog-cache",
       "streamSemantics": ["snapshot-replace", "append-merge"],
       "coverageContract": "catalog-consistency",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "catalog-diff": {
       "behaviorClass": "catalog-snapshot",
@@ -63,7 +63,7 @@
       "cachePolicy": "external-catalog-cache-with-merge",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "catalog-snapshot-query",
-      "coverageStatus": "planned"
+      "coverageStatus": "enforced"
     },
     "nodes": {
       "behaviorClass": "resource-stream-table",
