@@ -22,7 +22,6 @@ func TestProjectionDescriptorsStayAlignedWithSupportedDomains(t *testing.T) {
 		require.NotEmptyf(t, descriptor.AffectedRowResolver, "domain %s must declare affected-row resolver", domain)
 		require.NotEmptyf(t, descriptor.StaleScopeResolver, "domain %s must declare stale-scope resolver", domain)
 		require.Truef(t, descriptor.CompleteIsScopeLevel, "domain %s must keep COMPLETE scope-level", domain)
-		require.Falsef(t, descriptor.LegacyIdentityFallback, "domain %s must not fall back to legacy identity fields after migration", domain)
 
 		require.Contains(t, permissionRequirements, domain)
 		requireDescriptorCoversPermissions(t, domain, descriptor, permissionRequirements[domain])

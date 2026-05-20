@@ -15,11 +15,10 @@ import { CatalogStreamMergeQueue } from './catalogStreamMerge';
 import { errorHandler } from '@utils/errorHandler';
 import { APP_LOG_SOURCES, logAppLogsWarn } from '@/core/logging/appLogsClient';
 import { eventBus } from '@/core/events';
-import {
-  closeRefreshEventSource,
-  openRefreshEventSource,
-  sseReconnectDelay,
-} from './sseStreamTransport';
+import { closeRefreshEventSource, openRefreshEventSource } from './sseStreamTransport';
+import { StreamErrorNotifier } from './streamErrorNotifier';
+import { streamReconnectDelay } from './streamTiming';
+import { StreamVisibilityController } from './streamVisibilityController';
 
 type CatalogStreamEvent = CatalogStreamEventPayload;
 
@@ -89,9 +88,16 @@ class CatalogStreamManager {
   private closed = false;
   private attempt = 0;
   private session = 0;
-  private suppressErrorsUntil = 0;
-  private suspendedForVisibility = false;
-  private suspendedScope: string | null = null;
+  private streamErrors = new StreamErrorNotifier();
+  private visibility = new StreamVisibilityController<string>({
+    captureActive: () => (this.eventSource && this.scope ? [this.scope] : []),
+    suspendActive: () => {
+      this.stop(false);
+    },
+    resumeItem: (scope) => {
+      void this.start(scope);
+    },
+  });
   private flushTimer: number | null = null;
   private lastAppliedSequence = 0;
   private lastFallbackAt = 0;
@@ -104,42 +110,16 @@ class CatalogStreamManager {
   constructor() {
     eventBus.on('kubeconfig:changing', this.handleKubeconfigChanging);
     eventBus.on('kubeconfig:changed', this.handleKubeconfigChanged);
-    eventBus.on('app:visibility-hidden', this.suspendForVisibility);
-    eventBus.on('app:visibility-visible', this.resumeFromVisibility);
+    eventBus.on('app:visibility-hidden', this.visibility.suspend);
+    eventBus.on('app:visibility-visible', this.visibility.resume);
   }
 
-  private suspendForVisibility = (): void => {
-    if (this.suspendedForVisibility) {
-      return;
-    }
-    this.suspendedForVisibility = true;
-
-    // Store active scope before stopping
-    if (this.eventSource && this.scope) {
-      this.suspendedScope = this.scope;
-      this.stop(false);
-    }
-  };
-
-  private resumeFromVisibility = (): void => {
-    if (!this.suspendedForVisibility) {
-      return;
-    }
-    this.suspendedForVisibility = false;
-
-    // Restore stream if it was active
-    if (this.suspendedScope) {
-      void this.start(this.suspendedScope);
-    }
-    this.suspendedScope = null;
-  };
-
   private handleKubeconfigChanging = () => {
-    this.suppressErrorsUntil = Date.now() + 5000;
+    this.streamErrors.suppressFor(5000);
   };
 
   private handleKubeconfigChanged = () => {
-    this.suppressErrorsUntil = Date.now() + 2000;
+    this.streamErrors.suppressFor(2000);
   };
 
   async start(scope: string): Promise<() => void> {
@@ -166,7 +146,7 @@ class CatalogStreamManager {
     this.clearFlushTimer();
     this.mergeQueue.reset();
     if (reset) {
-      this.suppressErrorsUntil = Date.now() + 2000;
+      this.streamErrors.suppressFor(2000);
     }
     if (this.retryTimer !== null) {
       window.clearTimeout(this.retryTimer);
@@ -242,7 +222,7 @@ class CatalogStreamManager {
       }
       this.eventSource = handle.source;
       this.attempt = 0;
-      this.suppressErrorsUntil = 0;
+      this.streamErrors.clearSuppression();
     } catch (error) {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: 'catalog-stream',
@@ -379,18 +359,17 @@ class CatalogStreamManager {
     if (this.closed || session !== this.session) {
       return;
     }
-    const now = Date.now();
-    const withinSuppressedWindow = now < this.suppressErrorsUntil;
-    if (!withinSuppressedWindow) {
-      errorHandler.handle(new Error('Catalog stream connection lost'), {
-        source: 'catalog-stream',
-        context: {
-          eventType: event?.type ?? 'unknown',
-          scope: this.scope ?? '',
-          attempt: this.attempt,
-        },
-      });
-    }
+    this.streamErrors.notify({
+      source: 'catalog-stream',
+      domain: 'catalog',
+      scope: this.scope ?? '',
+      message: 'Catalog stream connection lost',
+      context: {
+        eventType: event?.type ?? 'unknown',
+        scope: this.scope ?? '',
+        attempt: this.attempt,
+      },
+    });
     if (this.closed || session !== this.session) {
       return;
     }
@@ -401,7 +380,7 @@ class CatalogStreamManager {
     if (this.closed || session !== this.session || this.retryTimer !== null) {
       return;
     }
-    const delay = sseReconnectDelay(this.attempt, { jitterMs: 250, minMs: 500 });
+    const delay = streamReconnectDelay(this.attempt, { jitterMs: 250, minMs: 500 });
     this.attempt += 1;
     this.retryTimer = window.setTimeout(() => {
       this.retryTimer = null;

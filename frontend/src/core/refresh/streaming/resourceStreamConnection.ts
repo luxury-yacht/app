@@ -1,5 +1,6 @@
 import { ensureRefreshBaseURL, invalidateRefreshBaseURL } from '../client';
 import type { ResourceDomain } from './resourceStreamDomains';
+import { streamReconnectDelay } from './streamTiming';
 
 const RESOURCE_STREAM_PATH = '/api/v2/stream/resources';
 const RECONNECT_JITTER_FACTOR = 0.2;
@@ -126,9 +127,10 @@ export class ResourceStreamConnection {
       return;
     }
     this.clearReconnect();
-    const baseDelay = Math.min(30_000, 1000 * Math.pow(2, this.attempt));
-    const jitter = 1 + (Math.random() * 2 - 1) * RECONNECT_JITTER_FACTOR;
-    const delay = Math.max(0, Math.round(baseDelay * jitter));
+    const delay = streamReconnectDelay(this.attempt, {
+      jitterFactor: RECONNECT_JITTER_FACTOR,
+      round: true,
+    });
     this.attempt += 1;
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;

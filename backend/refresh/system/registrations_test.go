@@ -63,14 +63,13 @@ type scopeContract struct {
 }
 
 type streamDomainContract struct {
-	ScopeKind              string                 `json:"scopeKind"`
-	MetricsDependency      bool                   `json:"metricsDependency"`
-	CompleteIsScopeLevel   bool                   `json:"completeIsScopeLevel"`
-	LegacyIdentityFallback bool                   `json:"legacyIdentityFallback"`
-	RowProjection          string                 `json:"rowProjection,omitempty"`
-	PrimaryResources       []streamResourceRecord `json:"primaryResources"`
-	RelatedResources       []streamResourceRecord `json:"relatedResources"`
-	SyntheticRowKind       *streamResourceRecord  `json:"syntheticRowKind,omitempty"`
+	ScopeKind            string                 `json:"scopeKind"`
+	MetricsDependency    bool                   `json:"metricsDependency"`
+	CompleteIsScopeLevel bool                   `json:"completeIsScopeLevel"`
+	RowProjection        string                 `json:"rowProjection,omitempty"`
+	PrimaryResources     []streamResourceRecord `json:"primaryResources"`
+	RelatedResources     []streamResourceRecord `json:"relatedResources"`
+	SyntheticRowKind     *streamResourceRecord  `json:"syntheticRowKind,omitempty"`
 }
 
 type streamResourceRecord struct {
@@ -191,7 +190,6 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 		"operation-state-transitions",
 		"aggregate-snapshot-permission-fallback",
 	)
-	coverageStatuses := setOf("enforced", "planned")
 	enforcedProofs := enforcedCoverageProofs(t)
 
 	for domainID, inventory := range contract.DomainInventory {
@@ -212,12 +210,10 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 			require.Containsf(t, streamSemantics, semantic, "domain %q stream semantic", domainID)
 		}
 		require.Containsf(t, coverageContracts, inventory.CoverageContract, "domain %q coverageContract", domainID)
-		require.Containsf(t, coverageStatuses, inventory.CoverageStatus, "domain %q coverageStatus", domainID)
-		if inventory.CoverageStatus == "enforced" {
-			domains, ok := enforcedProofs[inventory.CoverageContract]
-			require.Truef(t, ok, "enforced coverage contract %q has no proof registry", inventory.CoverageContract)
-			require.Containsf(t, domains, domainID, "domain %q marked enforced without coverage proof", domainID)
-		}
+		require.Equalf(t, "enforced", inventory.CoverageStatus, "domain %q coverageStatus", domainID)
+		domains, ok := enforcedProofs[inventory.CoverageContract]
+		require.Truef(t, ok, "enforced coverage contract %q has no proof registry", inventory.CoverageContract)
+		require.Containsf(t, domains, domainID, "domain %q marked enforced without coverage proof", domainID)
 	}
 }
 
@@ -454,7 +450,6 @@ func TestResourceStreamDomainsMatchProjectionDescriptors(t *testing.T) {
 		require.Equalf(t, descriptor.ScopeKind, entry.ScopeKind, "domain %s scopeKind drift", domain)
 		require.Equalf(t, descriptor.MetricsDependency, entry.MetricsDependency, "domain %s metricsDependency drift", domain)
 		require.Equalf(t, descriptor.CompleteIsScopeLevel, entry.CompleteIsScopeLevel, "domain %s completeIsScopeLevel drift", domain)
-		require.Equalf(t, descriptor.LegacyIdentityFallback, entry.LegacyIdentityFallback, "domain %s legacyIdentityFallback drift", domain)
 		requireResourceSetEqual(t, domain, "primaryResources", descriptor.PrimaryResources, entry.PrimaryResources)
 		requireResourceSetEqual(t, domain, "relatedResources", descriptor.RelatedResources, entry.RelatedResources)
 	}

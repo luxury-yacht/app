@@ -13,18 +13,16 @@ import type {
   PermissionDeniedStatus,
 } from '../types';
 import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
-import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
 import {
   getObjPanelLogsBufferMaxSize,
   OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
 } from '@/core/settings/appPreferences';
 import { getContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
-import {
-  closeRefreshEventSource,
-  openRefreshEventSource,
-  sseReconnectDelay,
-} from './sseStreamTransport';
+import { closeRefreshEventSource, openRefreshEventSource } from './sseStreamTransport';
+import { StreamErrorNotifier } from './streamErrorNotifier';
+import { streamReconnectDelay } from './streamTiming';
+import { StreamVisibilityController } from './streamVisibilityController';
 
 type StreamMode = 'stream' | 'manual';
 
@@ -185,7 +183,7 @@ class ContainerLogsStreamConnection {
       return;
     }
     this.closeEventSource();
-    const delay = sseReconnectDelay(this.attempt);
+    const delay = streamReconnectDelay(this.attempt);
     this.attempt += 1;
     this.manager.handleStreamError(
       this.scope,
@@ -247,9 +245,19 @@ export class ContainerLogsStreamManager {
   private backendWarnings = new Map<string, string[]>();
   /** Monotonically increasing counter for stable entry keys across buffer truncations. */
   private seqCounter = 0;
-  private lastNotifiedErrors = new Map<string, string>();
-  private suspendedForVisibility = false;
-  private suspendedScopes = new Set<string>();
+  private errorNotifier = new StreamErrorNotifier();
+  private visibility = new StreamVisibilityController<string>({
+    captureActive: () => Array.from(this.connections.keys()),
+    suspendActive: () => {
+      for (const connection of this.connections.values()) {
+        connection.stop(true);
+      }
+      this.connections.clear();
+    },
+    resumeItem: (scope) => {
+      void this.startStream(scope);
+    },
+  });
   /**
    * Maximum entries kept per scope before the front of the buffer is
    * trimmed. User-configurable via Object Panel Logs Tab Settings;
@@ -265,8 +273,8 @@ export class ContainerLogsStreamManager {
     eventBus.on('kubeconfig:changing', () => {
       this.stopAll(true);
     });
-    eventBus.on('app:visibility-hidden', () => this.suspendForVisibility());
-    eventBus.on('app:visibility-visible', () => this.resumeFromVisibility());
+    eventBus.on('app:visibility-hidden', this.visibility.suspend);
+    eventBus.on('app:visibility-visible', this.visibility.resume);
     // Pull the initial value from the preference cache. If hydration
     // hasn't run yet this returns the default; the subsequent hydration
     // will emit 'settings:obj-panel-logs-buffer-size' only if the stored value
@@ -312,33 +320,6 @@ export class ContainerLogsStreamManager {
         };
       });
     }
-  }
-
-  private suspendForVisibility(): void {
-    if (this.suspendedForVisibility) {
-      return;
-    }
-    this.suspendedForVisibility = true;
-
-    // Store active scopes and stop connections without resetting data
-    for (const [scope, connection] of this.connections) {
-      this.suspendedScopes.add(scope);
-      connection.stop(true);
-    }
-    this.connections.clear();
-  }
-
-  private resumeFromVisibility(): void {
-    if (!this.suspendedForVisibility) {
-      return;
-    }
-    this.suspendedForVisibility = false;
-
-    // Restore streams that were active
-    for (const scope of this.suspendedScopes) {
-      void this.startStream(scope);
-    }
-    this.suspendedScopes.clear();
   }
 
   async startStream(scope: string): Promise<void> {
@@ -561,28 +542,17 @@ export class ContainerLogsStreamManager {
     this.clearStreamError(scope);
   }
 
-  private getNotificationKey(scope: string): string {
-    return scope || '__global__';
-  }
-
   private notifyStreamError(scope: string, message: string): void {
-    const key = this.getNotificationKey(scope);
-    if (this.lastNotifiedErrors.get(key) === message) {
-      return;
-    }
-    this.lastNotifiedErrors.set(key, message);
-    errorHandler.handle(new Error(message), {
+    this.errorNotifier.notify({
       source: 'refresh-log-stream',
       domain: DOMAIN_NAME,
       scope: scope || 'global',
+      message,
     });
   }
 
   private clearStreamError(scope: string): void {
-    const key = this.getNotificationKey(scope);
-    if (this.lastNotifiedErrors.has(key)) {
-      this.lastNotifiedErrors.delete(key);
-    }
+    this.errorNotifier.clear(DOMAIN_NAME, scope);
   }
 
   private buildStats(scope: string, count: number): SnapshotStats | null {

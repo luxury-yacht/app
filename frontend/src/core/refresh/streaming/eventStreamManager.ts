@@ -18,13 +18,11 @@ import type {
 } from '../types';
 import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
 import { formatAge } from '@/utils/ageFormatter';
-import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
-import {
-  closeRefreshEventSource,
-  openRefreshEventSource,
-  sseReconnectDelay,
-} from './sseStreamTransport';
+import { closeRefreshEventSource, openRefreshEventSource } from './sseStreamTransport';
+import { StreamErrorNotifier } from './streamErrorNotifier';
+import { streamReconnectDelay } from './streamTiming';
+import { StreamVisibilityController } from './streamVisibilityController';
 
 interface StreamEventPayload {
   domain: string;
@@ -189,7 +187,7 @@ class EventStreamConnection {
       return;
     }
     this.closeEventSource();
-    const delay = sseReconnectDelay(this.attempt);
+    const delay = streamReconnectDelay(this.attempt);
     this.attempt += 1;
     this.manager.handleStreamError(
       this.domain,
@@ -292,82 +290,67 @@ export class EventStreamManager {
     { generatedAt: number; error: string | null; total: number; truncated: boolean }
   >();
   private namespaceEventMeta = new Map<string, { total: number; truncated: boolean }>();
-  private lastNotifiedErrors = new Map<string, string>();
   private consecutiveErrors = new Map<string, number>();
-  private suspendedForVisibility = false;
-  private suspendedClusterScope: string | null = null;
-  private suspendedNamespaceScope: string | null = null;
+  private errorNotifier = new StreamErrorNotifier();
+  private visibility = new StreamVisibilityController<{
+    domain: typeof CLUSTER_DOMAIN | typeof NAMESPACE_DOMAIN;
+    scope: string;
+  }>({
+    captureActive: () => {
+      const active: Array<{
+        domain: typeof CLUSTER_DOMAIN | typeof NAMESPACE_DOMAIN;
+        scope: string;
+      }> = [];
+      if (this.clusterConnection && this.clusterScope) {
+        active.push({ domain: CLUSTER_DOMAIN, scope: this.clusterScope });
+      }
+      if (this.namespaceConnection && this.namespaceScope) {
+        active.push({ domain: NAMESPACE_DOMAIN, scope: this.namespaceScope });
+      }
+      return active;
+    },
+    suspendActive: () => {
+      if (this.clusterConnection) {
+        this.clusterConnection.stop(false);
+        this.clusterConnection = null;
+      }
+      if (this.namespaceConnection) {
+        this.namespaceConnection.stop(false);
+        this.namespaceConnection = null;
+      }
+    },
+    resumeItem: (item) => {
+      if (item.domain === CLUSTER_DOMAIN) {
+        void this.startCluster(item.scope);
+      } else {
+        void this.startNamespace(item.scope);
+      }
+    },
+  });
 
   constructor() {
     eventBus.on('kubeconfig:changing', () => this.stopAll(true));
     eventBus.on('view:reset', () => this.stopAll(false));
-    eventBus.on('app:visibility-hidden', () => this.suspendForVisibility());
-    eventBus.on('app:visibility-visible', () => this.resumeFromVisibility());
+    eventBus.on('app:visibility-hidden', this.visibility.suspend);
+    eventBus.on('app:visibility-visible', this.visibility.resume);
   }
 
-  private suspendForVisibility(): void {
-    if (this.suspendedForVisibility) {
-      return;
-    }
-    this.suspendedForVisibility = true;
-
-    // Store active scopes before stopping
-    this.suspendedClusterScope = this.clusterScope;
-    this.suspendedNamespaceScope = this.namespaceScope;
-
-    // Stop connections without resetting data
-    if (this.clusterConnection) {
-      this.clusterConnection.stop(false);
-      this.clusterConnection = null;
-    }
-    if (this.namespaceConnection) {
-      this.namespaceConnection.stop(false);
-      this.namespaceConnection = null;
-    }
-  }
-
-  private resumeFromVisibility(): void {
-    if (!this.suspendedForVisibility) {
-      return;
-    }
-    this.suspendedForVisibility = false;
-
-    // Restore cluster stream if it was active
-    if (this.suspendedClusterScope) {
-      void this.startCluster(this.suspendedClusterScope);
-    }
-    this.suspendedClusterScope = null;
-
-    // Restore namespace stream if it was active
-    if (this.suspendedNamespaceScope) {
-      void this.startNamespace(this.suspendedNamespaceScope);
-    }
-    this.suspendedNamespaceScope = null;
-  }
-
-  private getNotificationKey(domain: string, scope?: string): string {
+  private streamKey(domain: string, scope?: string): string {
     return `${domain}::${scope ?? '__global__'}`;
   }
 
   private notifyStreamError(domain: string, scope: string | undefined, message: string): void {
-    const key = this.getNotificationKey(domain, scope);
-    if (this.lastNotifiedErrors.get(key) === message) {
-      return;
-    }
-    this.lastNotifiedErrors.set(key, message);
-    errorHandler.handle(new Error(message), {
+    this.errorNotifier.notify({
       source: 'refresh-event-stream',
       domain,
       scope: scope ?? 'global',
+      message,
     });
   }
 
   private clearStreamError(domain: string, scope?: string): void {
-    const key = this.getNotificationKey(domain, scope);
-    if (this.lastNotifiedErrors.has(key)) {
-      this.lastNotifiedErrors.delete(key);
-    }
-    this.consecutiveErrors.delete(key);
+    this.errorNotifier.clear(domain, scope);
+    this.consecutiveErrors.delete(this.streamKey(domain, scope));
   }
 
   async startCluster(scope: string = CLUSTER_SCOPE): Promise<void> {
@@ -497,7 +480,7 @@ export class EventStreamManager {
   }
 
   handleStreamError(domain: string, scope: string, message: string): void {
-    const key = this.getNotificationKey(domain, scope);
+    const key = this.streamKey(domain, scope);
     const attempts = (this.consecutiveErrors.get(key) ?? 0) + 1;
     this.consecutiveErrors.set(key, attempts);
     const isTerminal = attempts >= STREAM_ERROR_NOTIFY_THRESHOLD;

@@ -8,7 +8,6 @@ import { fetchSnapshot, type Snapshot, type SnapshotStats } from '../client';
 import { setScopedDomainState } from '../store';
 import type { PermissionDeniedStatus } from '../types';
 import { stripClusterScope } from '../clusterScope';
-import { errorHandler } from '@utils/errorHandler';
 import { eventBus, type AppEvents } from '@/core/events';
 import {
   APP_LOG_SOURCES,
@@ -31,6 +30,8 @@ import {
   resourceStreamSubscriptionKey,
   type StreamSubscription,
 } from './resourceStreamSubscriptions';
+import { StreamErrorNotifier } from './streamErrorNotifier';
+import { StreamVisibilityController } from './streamVisibilityController';
 
 export {
   normalizeResourceScope,
@@ -257,9 +258,20 @@ export class ResourceStreamManager {
   private connectionEpoch = 0;
   private lastConnectionError = '';
   private streamHealth = new Map<string, ResourceStreamHealthPayload>();
-  private lastNotifiedErrors = new Map<string, string>();
+  private errorNotifier = new StreamErrorNotifier();
   private consecutiveErrors = new Map<string, number>();
-  private suspendedForVisibility = false;
+  private visibility = new StreamVisibilityController<StreamSubscription>({
+    captureActive: () => Array.from(this.subscriptions.values()),
+    suspendActive: () => {
+      this.markConnectionError('visibility hidden');
+      this.connection?.pause();
+    },
+    resumeItems: () => Array.from(this.subscriptions.values()),
+    resumeItem: (subscription) => {
+      this.markResyncing(subscription);
+      void this.resyncSubscription(subscription, 'visibility resume');
+    },
+  });
   private streamTelemetry = new Map<string, StreamTelemetry>();
 
   constructor() {
@@ -460,24 +472,12 @@ export class ResourceStreamManager {
   }
 
   private suspendForVisibility(): void {
-    if (this.suspendedForVisibility) {
-      return;
-    }
-    this.suspendedForVisibility = true;
-    this.markConnectionError('visibility hidden');
-    this.connection?.pause();
+    this.visibility.suspend();
   }
 
   private resumeFromVisibility(): void {
-    if (!this.suspendedForVisibility) {
-      return;
-    }
-    this.suspendedForVisibility = false;
     this.connection?.resume();
-    this.subscriptions.forEach((subscription) => {
-      this.markResyncing(subscription);
-      void this.resyncSubscription(subscription, 'visibility resume');
-    });
+    this.visibility.resume();
   }
 
   private ensureSubscriptions(domain: ResourceDomain, scope: string): StreamSubscription[] {
@@ -1019,374 +1019,25 @@ export class ResourceStreamManager {
 
   private markResyncComplete(subscription: StreamSubscription): void {
     const now = Date.now();
-    if (subscription.domain === 'pods') {
-      setScopedDomainState('pods', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'namespace-workloads') {
-      setScopedDomainState('namespace-workloads', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'namespace-config') {
-      setScopedDomainState('namespace-config', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'namespace-network') {
-      setScopedDomainState('namespace-network', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'namespace-rbac') {
-      setScopedDomainState('namespace-rbac', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'namespace-custom') {
-      setScopedDomainState('namespace-custom', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'namespace-helm') {
-      setScopedDomainState('namespace-helm', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'namespace-autoscaling') {
-      setScopedDomainState('namespace-autoscaling', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'namespace-quotas') {
-      setScopedDomainState('namespace-quotas', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'namespace-storage') {
-      setScopedDomainState('namespace-storage', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'cluster-rbac') {
-      setScopedDomainState('cluster-rbac', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'cluster-storage') {
-      setScopedDomainState('cluster-storage', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'cluster-config') {
-      setScopedDomainState('cluster-config', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'cluster-crds') {
-      setScopedDomainState('cluster-crds', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'cluster-custom') {
-      setScopedDomainState('cluster-custom', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
-    if (subscription.domain === 'nodes') {
-      setScopedDomainState('nodes', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-    }
+    setScopedDomainState(subscription.domain, subscription.reportScope, (previous) => ({
+      ...previous,
+      status: previous.data ? 'ready' : 'idle',
+      error: null,
+      lastUpdated: previous.lastUpdated ?? now,
+      lastAutoRefresh: now,
+      scope: subscription.reportScope,
+    }));
+    this.clearStreamError(subscription.clusterId);
   }
 
   private markResyncing(subscription: StreamSubscription): void {
     const message = RESYNC_MESSAGE;
-    if (subscription.domain === 'pods') {
-      setScopedDomainState('pods', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'namespace-workloads') {
-      setScopedDomainState('namespace-workloads', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'namespace-config') {
-      setScopedDomainState('namespace-config', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'namespace-network') {
-      setScopedDomainState('namespace-network', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'namespace-rbac') {
-      setScopedDomainState('namespace-rbac', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'namespace-custom') {
-      setScopedDomainState('namespace-custom', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'namespace-helm') {
-      setScopedDomainState('namespace-helm', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'namespace-autoscaling') {
-      setScopedDomainState('namespace-autoscaling', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'namespace-quotas') {
-      setScopedDomainState('namespace-quotas', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'namespace-storage') {
-      setScopedDomainState('namespace-storage', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'cluster-rbac') {
-      setScopedDomainState('cluster-rbac', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'cluster-storage') {
-      setScopedDomainState('cluster-storage', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'cluster-config') {
-      setScopedDomainState('cluster-config', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'cluster-crds') {
-      setScopedDomainState('cluster-crds', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'cluster-custom') {
-      setScopedDomainState('cluster-custom', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
-    if (subscription.domain === 'nodes') {
-      setScopedDomainState('nodes', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-    }
+    setScopedDomainState(subscription.domain, subscription.reportScope, (previous) => ({
+      ...previous,
+      status: previous.data ? 'updating' : 'initialising',
+      error: message,
+      scope: subscription.reportScope,
+    }));
   }
 
   private setStreamError(subscription: StreamSubscription, message: string): void {
@@ -1396,119 +1047,12 @@ export class ResourceStreamManager {
     this.consecutiveErrors.set(key, attempts);
     const isTerminal = attempts >= STREAM_ERROR_NOTIFY_THRESHOLD;
 
-    if (subscription.domain === 'pods') {
-      setScopedDomainState('pods', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'namespace-workloads') {
-      setScopedDomainState('namespace-workloads', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'namespace-config') {
-      setScopedDomainState('namespace-config', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'namespace-network') {
-      setScopedDomainState('namespace-network', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'namespace-rbac') {
-      setScopedDomainState('namespace-rbac', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'namespace-custom') {
-      setScopedDomainState('namespace-custom', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'namespace-helm') {
-      setScopedDomainState('namespace-helm', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'cluster-rbac') {
-      setScopedDomainState('cluster-rbac', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'cluster-storage') {
-      setScopedDomainState('cluster-storage', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'cluster-config') {
-      setScopedDomainState('cluster-config', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'cluster-crds') {
-      setScopedDomainState('cluster-crds', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'cluster-custom') {
-      setScopedDomainState('cluster-custom', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'namespace-autoscaling') {
-      setScopedDomainState('namespace-autoscaling', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'namespace-quotas') {
-      setScopedDomainState('namespace-quotas', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'namespace-storage') {
-      setScopedDomainState('namespace-storage', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'nodes') {
-      setScopedDomainState('nodes', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    }
+    setScopedDomainState(subscription.domain, subscription.reportScope, (previous) => ({
+      ...previous,
+      status: isTerminal ? 'error' : previous.status,
+      error: isTerminal ? message : previous.error,
+      scope: subscription.reportScope,
+    }));
 
     if (isTerminal) {
       this.notifyStreamError(subscription.clusterId, message);
@@ -1517,10 +1061,7 @@ export class ResourceStreamManager {
   }
 
   private clearStreamError(clusterId: string): void {
-    const keys = Array.from(this.lastNotifiedErrors.keys()).filter((key) =>
-      key.startsWith(clusterId)
-    );
-    keys.forEach((key) => this.lastNotifiedErrors.delete(key));
+    this.errorNotifier.clear('resource-stream', clusterId);
     const errorKeys = Array.from(this.consecutiveErrors.keys()).filter((key) =>
       key.startsWith(clusterId)
     );
@@ -1528,18 +1069,16 @@ export class ResourceStreamManager {
   }
 
   private clearAllStreamErrors(): void {
-    this.lastNotifiedErrors.clear();
+    this.errorNotifier.clearAll();
     this.consecutiveErrors.clear();
   }
 
   private notifyStreamError(clusterId: string, message: string): void {
-    const key = `${clusterId}::resource-stream`;
-    if (this.lastNotifiedErrors.get(key) === message) {
-      return;
-    }
-    this.lastNotifiedErrors.set(key, message);
-    errorHandler.handle(new Error(message), {
+    this.errorNotifier.notify({
       source: 'resource-stream',
+      domain: 'resource-stream',
+      scope: clusterId || 'global',
+      message,
     });
   }
 
@@ -1553,7 +1092,7 @@ export class ResourceStreamManager {
     this.connectionEpoch = 0;
     this.lastConnectionError = '';
     this.streamHealth.clear();
-    this.lastNotifiedErrors.clear();
+    this.errorNotifier.clearAll();
     this.consecutiveErrors.clear();
     this.streamTelemetry.clear();
   }

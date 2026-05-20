@@ -104,7 +104,7 @@ export interface DomainInventoryEntry {
   cachePolicy: RefreshCachePolicy;
   streamSemantics: RefreshStreamSemantic[];
   coverageContract: RefreshCoverageContract;
-  coverageStatus: 'enforced' | 'planned';
+  coverageStatus: 'enforced';
 }
 
 export interface RefreshDomainContractEntry<D extends RefreshDomain = RefreshDomain> {
@@ -136,7 +136,6 @@ export interface StreamDomainContractEntry {
   scopeKind: 'pod' | 'namespace' | 'cluster';
   metricsDependency: boolean;
   completeIsScopeLevel: boolean;
-  legacyIdentityFallback: boolean;
   rowProjection?: 'scope-level-complete-only';
   primaryResources: StreamResourceContractRecord[];
   relatedResources: StreamResourceContractRecord[];

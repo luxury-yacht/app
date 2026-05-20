@@ -4,19 +4,18 @@ package resourcestream
 // stream domain. The descriptor is intentionally metadata-only; stream
 // registration stays behavior-specific so Kubernetes edge cases remain visible.
 type ProjectionDescriptor struct {
-	Domain                 string
-	ScopeKind              string
-	SelectorShape          string
-	RowIdentity            string
-	UpdateIdentity         string
-	PrimaryResources       []ResourceDescriptor
-	RelatedResources       []ResourceDescriptor
-	MetricsDependency      bool
-	Projection             string
-	AffectedRowResolver    string
-	StaleScopeResolver     string
-	CompleteIsScopeLevel   bool
-	LegacyIdentityFallback bool
+	Domain               string
+	ScopeKind            string
+	SelectorShape        string
+	RowIdentity          string
+	UpdateIdentity       string
+	PrimaryResources     []ResourceDescriptor
+	RelatedResources     []ResourceDescriptor
+	MetricsDependency    bool
+	Projection           string
+	AffectedRowResolver  string
+	StaleScopeResolver   string
+	CompleteIsScopeLevel bool
 }
 
 type ResourceDescriptor struct {
@@ -38,26 +37,25 @@ func ProjectionDescriptors() map[string]ProjectionDescriptor {
 
 var projectionDescriptors = map[string]ProjectionDescriptor{
 	domainPods: {
-		Domain:                 domainPods,
-		ScopeKind:              "pod",
-		SelectorShape:          "clusterId + namespace/name or namespace:*",
-		RowIdentity:            "clusterId + /v1 Pod namespace/name",
-		UpdateIdentity:         "ref (full ResourceRef)",
-		PrimaryResources:       []ResourceDescriptor{core("v1", "Pod", "pods")},
-		RelatedResources:       []ResourceDescriptor{apps("ReplicaSet", "replicasets")},
-		MetricsDependency:      true,
-		Projection:             "snapshot.BuildPodSummary",
-		AffectedRowResolver:    "pod event -> pod row, workload row, node row",
-		StaleScopeResolver:     "stalePodScopes",
-		CompleteIsScopeLevel:   true,
-		LegacyIdentityFallback: false,
+		Domain:               domainPods,
+		ScopeKind:            "pod",
+		SelectorShape:        "clusterId + namespace/name or namespace:*",
+		RowIdentity:          "clusterId + /v1 Pod namespace/name",
+		UpdateIdentity:       "ref (full ResourceRef)",
+		PrimaryResources:     []ResourceDescriptor{core("v1", "Pod", "pods")},
+		RelatedResources:     []ResourceDescriptor{apps("ReplicaSet", "replicasets")},
+		MetricsDependency:    true,
+		Projection:           "snapshot.BuildPodSummary",
+		AffectedRowResolver:  "pod event -> pod row, workload row, node row",
+		StaleScopeResolver:   "stalePodScopes",
+		CompleteIsScopeLevel: true,
 	},
 	domainWorkloads: {
 		Domain:         domainWorkloads,
 		ScopeKind:      "namespace",
 		SelectorShape:  "clusterId + namespace",
 		RowIdentity:    "clusterId + full workload GVK namespace/name",
-		UpdateIdentity:         "ref (full ResourceRef)",
+		UpdateIdentity: "ref (full ResourceRef)",
 		PrimaryResources: []ResourceDescriptor{
 			apps("Deployment", "deployments"),
 			apps("StatefulSet", "statefulsets"),
@@ -71,12 +69,11 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 			apps("ReplicaSet", "replicasets"),
 			autoscaling("HorizontalPodAutoscaler", "horizontalpodautoscalers"),
 		},
-		MetricsDependency:      true,
-		Projection:             "snapshot.BuildWorkloadSummary / snapshot.BuildStandalonePodWorkloadSummary",
-		AffectedRowResolver:    "workload, pod, HPA, ReplicaSet event resolvers",
-		StaleScopeResolver:     "ReplicaSet and pod stale owner/scope resolvers",
-		CompleteIsScopeLevel:   true,
-		LegacyIdentityFallback: false,
+		MetricsDependency:    true,
+		Projection:           "snapshot.BuildWorkloadSummary / snapshot.BuildStandalonePodWorkloadSummary",
+		AffectedRowResolver:  "workload, pod, HPA, ReplicaSet event resolvers",
+		StaleScopeResolver:   "ReplicaSet and pod stale owner/scope resolvers",
+		CompleteIsScopeLevel: true,
 	},
 	domainNamespaceConfig: namespaceDescriptor(
 		domainNamespaceConfig,
@@ -89,7 +86,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		ScopeKind:      "namespace",
 		SelectorShape:  "clusterId + namespace",
 		RowIdentity:    "clusterId + full network GVK namespace/name",
-		UpdateIdentity:         "ref (full ResourceRef)",
+		UpdateIdentity: "ref (full ResourceRef)",
 		PrimaryResources: []ResourceDescriptor{
 			core("v1", "Service", "services"),
 			discovery("EndpointSlice", "endpointslices"),
@@ -103,12 +100,11 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 			gateway("ReferenceGrant", "referencegrants"),
 			gateway("BackendTLSPolicy", "backendtlspolicies"),
 		},
-		RelatedResources:       []ResourceDescriptor{discovery("EndpointSlice", "endpointslices")},
-		Projection:             "snapshot.Build*NetworkSummary",
-		AffectedRowResolver:    "network object and EndpointSlice->Service resolvers",
-		StaleScopeResolver:     "EndpointSlice old/new service resolver",
-		CompleteIsScopeLevel:   true,
-		LegacyIdentityFallback: false,
+		RelatedResources:     []ResourceDescriptor{discovery("EndpointSlice", "endpointslices")},
+		Projection:           "snapshot.Build*NetworkSummary",
+		AffectedRowResolver:  "network object and EndpointSlice->Service resolvers",
+		StaleScopeResolver:   "EndpointSlice old/new service resolver",
+		CompleteIsScopeLevel: true,
 	},
 	domainNamespaceRBAC: namespaceDescriptor(
 		domainNamespaceRBAC,
@@ -121,35 +117,33 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		[]ResourceDescriptor{},
 	),
 	domainNamespaceCustom: {
-		Domain:                 domainNamespaceCustom,
-		ScopeKind:              "namespace",
-		SelectorShape:          "clusterId + namespace",
-		RowIdentity:            "clusterId + CRD-backed GVK namespace/name",
-		UpdateIdentity:         "ref (full ResourceRef)",
-		PrimaryResources:       []ResourceDescriptor{},
-		RelatedResources:       []ResourceDescriptor{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
-		Projection:             "snapshot.BuildNamespaceCustomSummary",
-		AffectedRowResolver:    "dynamic custom informer and CRD signature resolver",
-		StaleScopeResolver:     "CRD custom stream signature resolver",
-		CompleteIsScopeLevel:   true,
-		LegacyIdentityFallback: false,
+		Domain:               domainNamespaceCustom,
+		ScopeKind:            "namespace",
+		SelectorShape:        "clusterId + namespace",
+		RowIdentity:          "clusterId + CRD-backed GVK namespace/name",
+		UpdateIdentity:       "ref (full ResourceRef)",
+		PrimaryResources:     []ResourceDescriptor{},
+		RelatedResources:     []ResourceDescriptor{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
+		Projection:           "snapshot.BuildNamespaceCustomSummary",
+		AffectedRowResolver:  "dynamic custom informer and CRD signature resolver",
+		StaleScopeResolver:   "CRD custom stream signature resolver",
+		CompleteIsScopeLevel: true,
 	},
 	domainNamespaceHelm: {
 		Domain:         domainNamespaceHelm,
 		ScopeKind:      "namespace",
 		SelectorShape:  "clusterId + namespace",
 		RowIdentity:    "clusterId + helm.sh/v3 HelmRelease namespace/name",
-		UpdateIdentity:         "ref (full ResourceRef)",
+		UpdateIdentity: "ref (full ResourceRef)",
 		PrimaryResources: []ResourceDescriptor{
 			core("v1", "Secret", "secrets"),
 			core("v1", "ConfigMap", "configmaps"),
 		},
-		RelatedResources:       []ResourceDescriptor{core("v1", "Secret", "secrets"), core("v1", "ConfigMap", "configmaps")},
-		Projection:             "snapshot.mapHelmReleases",
-		AffectedRowResolver:    "Secret/ConfigMap old/new Helm release identity resolver",
-		StaleScopeResolver:     "scope-level COMPLETE for affected namespaces",
-		CompleteIsScopeLevel:   true,
-		LegacyIdentityFallback: false,
+		RelatedResources:     []ResourceDescriptor{core("v1", "Secret", "secrets"), core("v1", "ConfigMap", "configmaps")},
+		Projection:           "snapshot.mapHelmReleases",
+		AffectedRowResolver:  "Secret/ConfigMap old/new Helm release identity resolver",
+		StaleScopeResolver:   "scope-level COMPLETE for affected namespaces",
+		CompleteIsScopeLevel: true,
 	},
 	domainNamespaceAutoscaling: namespaceDescriptor(
 		domainNamespaceAutoscaling,
@@ -200,66 +194,62 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		[]ResourceDescriptor{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
 	),
 	domainClusterCustom: {
-		Domain:                 domainClusterCustom,
-		ScopeKind:              "cluster",
-		SelectorShape:          "clusterId",
-		RowIdentity:            "clusterId + CRD-backed GVK name",
-		UpdateIdentity:         "ref (full ResourceRef)",
-		PrimaryResources:       []ResourceDescriptor{},
-		RelatedResources:       []ResourceDescriptor{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
-		Projection:             "snapshot.BuildClusterCustomSummary",
-		AffectedRowResolver:    "dynamic custom informer and CRD signature resolver",
-		StaleScopeResolver:     "CRD custom stream signature resolver",
-		CompleteIsScopeLevel:   true,
-		LegacyIdentityFallback: false,
+		Domain:               domainClusterCustom,
+		ScopeKind:            "cluster",
+		SelectorShape:        "clusterId",
+		RowIdentity:          "clusterId + CRD-backed GVK name",
+		UpdateIdentity:       "ref (full ResourceRef)",
+		PrimaryResources:     []ResourceDescriptor{},
+		RelatedResources:     []ResourceDescriptor{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
+		Projection:           "snapshot.BuildClusterCustomSummary",
+		AffectedRowResolver:  "dynamic custom informer and CRD signature resolver",
+		StaleScopeResolver:   "CRD custom stream signature resolver",
+		CompleteIsScopeLevel: true,
 	},
 	domainNodes: {
-		Domain:                 domainNodes,
-		ScopeKind:              "cluster",
-		SelectorShape:          "clusterId",
-		RowIdentity:            "clusterId + /v1 Node name",
-		UpdateIdentity:         "ref (full ResourceRef)",
-		PrimaryResources:       []ResourceDescriptor{core("v1", "Node", "nodes")},
-		RelatedResources:       []ResourceDescriptor{core("v1", "Pod", "pods")},
-		MetricsDependency:      true,
-		Projection:             "snapshot.BuildNodeSummary",
-		AffectedRowResolver:    "node and pod->node resolvers",
-		StaleScopeResolver:     "pod old/new node resolver",
-		CompleteIsScopeLevel:   true,
-		LegacyIdentityFallback: false,
+		Domain:               domainNodes,
+		ScopeKind:            "cluster",
+		SelectorShape:        "clusterId",
+		RowIdentity:          "clusterId + /v1 Node name",
+		UpdateIdentity:       "ref (full ResourceRef)",
+		PrimaryResources:     []ResourceDescriptor{core("v1", "Node", "nodes")},
+		RelatedResources:     []ResourceDescriptor{core("v1", "Pod", "pods")},
+		MetricsDependency:    true,
+		Projection:           "snapshot.BuildNodeSummary",
+		AffectedRowResolver:  "node and pod->node resolvers",
+		StaleScopeResolver:   "pod old/new node resolver",
+		CompleteIsScopeLevel: true,
 	},
 }
 
 func namespaceDescriptor(domain, projection string, primary, related []ResourceDescriptor) ProjectionDescriptor {
 	return ProjectionDescriptor{
-		Domain:                 domain,
-		ScopeKind:              "namespace",
-		SelectorShape:          "clusterId + namespace",
-		RowIdentity:            "clusterId + full GVK namespace/name",
-		UpdateIdentity:         "ref (full ResourceRef)",
-		PrimaryResources:       primary,
-		RelatedResources:       related,
-		Projection:             projection,
-		AffectedRowResolver:    "direct object event resolver",
-		StaleScopeResolver:     "none",
-		CompleteIsScopeLevel:   true,
-		LegacyIdentityFallback: false,
+		Domain:               domain,
+		ScopeKind:            "namespace",
+		SelectorShape:        "clusterId + namespace",
+		RowIdentity:          "clusterId + full GVK namespace/name",
+		UpdateIdentity:       "ref (full ResourceRef)",
+		PrimaryResources:     primary,
+		RelatedResources:     related,
+		Projection:           projection,
+		AffectedRowResolver:  "direct object event resolver",
+		StaleScopeResolver:   "none",
+		CompleteIsScopeLevel: true,
 	}
 }
 
 func clusterDescriptor(domain, projection string, primary []ResourceDescriptor) ProjectionDescriptor {
 	return ProjectionDescriptor{
-		Domain:                 domain,
-		ScopeKind:              "cluster",
-		SelectorShape:          "clusterId",
-		RowIdentity:            "clusterId + full GVK name",
-		UpdateIdentity:         "ref (full ResourceRef)",
-		PrimaryResources:       primary,
-		Projection:             projection,
-		AffectedRowResolver:    "direct object event resolver",
-		StaleScopeResolver:     "none",
-		CompleteIsScopeLevel:   true,
-		LegacyIdentityFallback: false,
+		Domain:               domain,
+		ScopeKind:            "cluster",
+		SelectorShape:        "clusterId",
+		RowIdentity:          "clusterId + full GVK name",
+		UpdateIdentity:       "ref (full ResourceRef)",
+		PrimaryResources:     primary,
+		Projection:           projection,
+		AffectedRowResolver:  "direct object event resolver",
+		StaleScopeResolver:   "none",
+		CompleteIsScopeLevel: true,
 	}
 }
 

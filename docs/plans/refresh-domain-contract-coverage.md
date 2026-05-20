@@ -220,6 +220,11 @@ High-value consolidation targets:
   permission-error parsing, health telemetry, visibility pause/resume, and
   cleanup. Keep event, catalog, and log payload reducers separate unless their
   state semantics actually match.
+- Resource stream lifecycle state: resource WebSocket connection mechanics,
+  subscription bookkeeping, row math, resync state transitions, health, and
+  error notification should each have one owner. Do not repeat per-domain store
+  status transitions inside `ResourceStreamManager`; per-domain differences
+  should live in resource-stream descriptors and row projectors.
 - Frontend scoped-domain plumbing: snapshot domains should use one shared path
   for scope enablement, refresh requests, cache-bypass/manual refresh behavior,
   error handling, and diagnostics rows. Domain-specific code should start at
@@ -266,7 +271,7 @@ thin behavior adapters.
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Snapshot payload domains       | `namespaces`, `object-details`, `object-yaml`, `object-helm-manifest`, `object-helm-values`, `object-events`, `object-map`, `object-maintenance`, `catalog-diff`                                                                                                               | shared snapshot registration metadata plus optional provider/service gates                                         | shared scoped snapshot lifecycle, diagnostics, cache-bypass/manual refresh, and optional keyed merge reuse | payload builder/validator per class: table, detail, Helm content, event snapshot, graph, operation state, catalog query |
 | Aggregate snapshot domains     | `cluster-overview`                                                                                                                                                                                                                                                             | shared `listWatch` registration with declarative list fallback metadata                                            | shared scoped snapshot lifecycle                                                                           | aggregate builder with metrics/resource fallback and partial-permission semantics                                       |
-| Resource row stream domains    | `pods`, `nodes`, `cluster-config`, `cluster-crds`, `cluster-custom`, `cluster-rbac`, `cluster-storage`, `namespace-workloads`, `namespace-autoscaling`, `namespace-config`, `namespace-custom`, `namespace-network`, `namespace-quotas`, `namespace-rbac`, `namespace-storage` | shared resource-stream registration, permission compatibility, selector parsing, and snapshot/stream parity proofs | shared WebSocket subscription lifecycle and row-store mutation helpers                                     | per-domain row projector, related-resource mapping, metrics handling, and custom-domain COMPLETE triggers               |
+| Resource row stream domains    | `pods`, `nodes`, `cluster-config`, `cluster-crds`, `cluster-custom`, `cluster-rbac`, `cluster-storage`, `namespace-workloads`, `namespace-autoscaling`, `namespace-config`, `namespace-custom`, `namespace-network`, `namespace-quotas`, `namespace-rbac`, `namespace-storage` | shared resource-stream registration, permission compatibility, selector parsing, and snapshot/stream parity proofs | shared WebSocket subscription lifecycle, row-store mutation helpers, resync state transitions, health, and error notification | per-domain row projector, related-resource mapping, metrics handling, and custom-domain COMPLETE triggers               |
 | Complete-resync stream domains | `namespace-helm`                                                                                                                                                                                                                                                               | shared resource-stream registration with `rowProjection: scope-level-complete-only` contract                       | shared WebSocket subscription lifecycle with COMPLETE-only adapter                                         | Helm release snapshot builder and COMPLETE-only resync behavior                                                         |
 | SSE append/merge streams       | `cluster-events`, `namespace-events`                                                                                                                                                                                                                                           | shared event stream endpoint and permission requirements                                                           | shared SSE transport lifecycle plus event reducer adapter                                                  | event ordering, dedupe, resume-token, and involved-object identity                                                      |
 | SSE catalog stream             | `catalog`                                                                                                                                                                                                                                                                      | shared catalog snapshot builder plus catalog SSE endpoint metadata                                                 | shared SSE transport lifecycle plus catalog reducer adapter                                                | catalog readiness, pagination/filter identity, stale/delete handling                                                    |
@@ -323,7 +328,7 @@ coverage, not replace behavior-specific registration code.
 
 `coverageContract` is a test-enforced enum, not just prose. Phase 1 added a
 small coverage registry in backend and frontend tests that maps each coverage
-contract to a proof function or an explicit temporary `planned` status.
+contract to a proof function.
 
 Examples:
 
@@ -354,9 +359,8 @@ Examples:
 - `aggregate-snapshot-permission-fallback` proves aggregate snapshots handle
   partial permissions and metrics/resource fallbacks.
 
-During migration, classes not yet reached may use `coverageStatus: "planned"`.
-Completion requires removing all planned statuses, so future domains fail closed
-unless they supply an enforced coverage contract.
+All current domains must use `coverageStatus: "enforced"`, so future domains
+fail closed unless they supply an enforced coverage contract.
 
 ## Phase 1: Inventory And Guardrails
 
@@ -387,8 +391,8 @@ unless they supply an enforced coverage contract.
 - [x] Add permission compatibility tests that prove `runtime`, `exempt`, and
       `stream-specific` domains join to the existing requirement maps or
       explicit exemption paths, including permission-denied placeholder behavior.
-- [x] Add the coverage-contract enforcement registry, with `planned` status only
-      for classes scheduled for later phases.
+- [x] Add the coverage-contract enforcement registry, and remove temporary
+      `planned` statuses once later phases supply proofs.
 - [x] Add a consolidation assessment for shared frontend SSE transport,
       snapshot-domain plumbing, backend registration gates, permission
       compatibility helpers, and scope normalization helpers. Phase 1 identified
@@ -420,8 +424,7 @@ Validation:
       including list-watch registration, list-only fallback, metrics fallback,
       partial-permission behavior, and object-reference identity in drill-down
       data.
-- [x] Add coverage proofs for both classes before later phases remove
-      `coverageStatus: "planned"`.
+- [x] Add coverage proofs for both classes and move them to enforced coverage.
 
 Validation:
 
@@ -631,6 +634,9 @@ end-state matrix and must delete the duplicated local path it replaces.
       collection field and stable key without hiding payload-specific behavior.
       Initial candidates are `namespaces`, `catalog-diff`, and
       `object-maintenance`.
+- [x] Consolidate resource-stream store status transitions and user-visible
+      stream error dedupe so resource-stream domains do not repeat identical
+      ready/resync/error branches per domain.
 - [x] Consolidate backend registration metadata/helpers for `list`,
       `listWatch`, list fallback, provider/service-gated direct registrations,
       and dynamic-client requirements while preserving distinct registration
@@ -657,19 +663,27 @@ Progress:
 
 - 2026-05-20: Phase 9 consolidated infrastructure only where Phases 2-8 had
   behavior tests to protect the reducers. Event, catalog, and log stream
-  managers now share `sseStreamTransport` for EventSource creation, listener
-  cleanup, and reconnect delay calculation while keeping event ordering,
-  catalog merge/fallback, and log buffering separate. Snapshot polling merge
-  reuse is dispatched through a domain-keyed handler table for `namespaces`,
-  `catalog-diff`, and `object-maintenance`, leaving payload-specific stable
-  keys explicit. Backend registration dependency gates now use shared
-  `withSkipUnless` and `requireAvailable` helpers, while list/listWatch
-  behavior remains explicit in the registration table. Permission compatibility
-  checks now flow through one domain-id helper that covers runtime,
-  resource-stream, stream-specific, and exempt domains. Backend and frontend
-  coverage proof registries are behavior-class driven, so adding a domain with
-  an enforced coverage status must match the class contract instead of adding a
-  parallel one-off list.
+  managers now share `sseStreamTransport` for EventSource creation and listener
+  cleanup. SSE and resource WebSocket reconnects share `streamTiming` for
+  exponential backoff while preserving their existing jitter policies. SSE and
+  resource streams share `streamVisibilityController` for visibility
+  suspend/resume; resource streams use it for WebSocket pause/resume/resync.
+  Stream error notification/suppression is shared while keeping event ordering,
+  catalog merge/fallback, log buffering, and resource row updates separate.
+  Snapshot polling merge reuse is declared through a domain-keyed descriptor
+  table for `namespaces`,
+  `catalog-diff`, and `object-maintenance`, leaving collection fields and
+  payload-specific stable keys explicit. Backend registration dependency gates
+  now use shared `withSkipUnless` and `requireAvailable` helpers, while
+  list/listWatch behavior remains explicit in the registration table.
+  Permission compatibility checks now flow through one domain-id helper that
+  covers runtime, resource-stream, stream-specific, and exempt domains. Backend
+  and frontend coverage proof registries are behavior-class driven, so adding a
+  domain with an enforced coverage status must match the class contract instead
+  of adding a parallel one-off list. Resource-stream resync-ready,
+  resync-in-progress, and terminal-error store transitions now use one generic
+  domain-id path, and resource-stream user-visible error dedupe uses the shared
+  `streamErrorNotifier`.
 
 ## Phase 10: Runtime Smoke Checklist
 
@@ -694,7 +708,7 @@ Validation:
   class and required contract metadata.
 - Contract tests fail when a domain is added without class-specific coverage.
 - All temporary `coverageStatus: "planned"` entries have been removed or
-  converted to enforced coverage.
+  converted to enforced coverage; contract tests now require `enforced`.
 - Consolidation opportunities identified in Phase 1 are either implemented in
   Phase 9 or deliberately deferred to a named follow-up with the behavior tests
   that make the deferral safe.

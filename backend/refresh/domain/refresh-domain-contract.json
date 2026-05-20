@@ -495,7 +495,6 @@
         "scopeKind": "pod",
         "metricsDependency": true,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [{"group": "", "version": "v1", "kind": "Pod", "resource": "pods"}],
         "relatedResources": [{"group": "apps", "version": "v1", "kind": "ReplicaSet", "resource": "replicasets"}]
       },
@@ -503,7 +502,6 @@
         "scopeKind": "namespace",
         "metricsDependency": true,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [
           {"group": "apps", "version": "v1", "kind": "Deployment", "resource": "deployments"},
           {"group": "apps", "version": "v1", "kind": "StatefulSet", "resource": "statefulsets"},
@@ -522,7 +520,6 @@
         "scopeKind": "namespace",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [
           {"group": "", "version": "v1", "kind": "ConfigMap", "resource": "configmaps"},
           {"group": "", "version": "v1", "kind": "Secret", "resource": "secrets"}
@@ -533,7 +530,6 @@
         "scopeKind": "namespace",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [
           {"group": "", "version": "v1", "kind": "Service", "resource": "services"},
           {"group": "discovery.k8s.io", "version": "v1", "kind": "EndpointSlice", "resource": "endpointslices"},
@@ -553,7 +549,6 @@
         "scopeKind": "namespace",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [
           {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "Role", "resource": "roles"},
           {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "RoleBinding", "resource": "rolebindings"},
@@ -565,7 +560,6 @@
         "scopeKind": "namespace",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [],
         "relatedResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}]
       },
@@ -573,7 +567,6 @@
         "scopeKind": "namespace",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "rowProjection": "scope-level-complete-only",
         "primaryResources": [
           {"group": "", "version": "v1", "kind": "Secret", "resource": "secrets"},
@@ -589,7 +582,6 @@
         "scopeKind": "namespace",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [{"group": "autoscaling", "version": "v1", "kind": "HorizontalPodAutoscaler", "resource": "horizontalpodautoscalers"}],
         "relatedResources": []
       },
@@ -597,7 +589,6 @@
         "scopeKind": "namespace",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [
           {"group": "", "version": "v1", "kind": "ResourceQuota", "resource": "resourcequotas"},
           {"group": "", "version": "v1", "kind": "LimitRange", "resource": "limitranges"},
@@ -609,7 +600,6 @@
         "scopeKind": "namespace",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [{"group": "", "version": "v1", "kind": "PersistentVolumeClaim", "resource": "persistentvolumeclaims"}],
         "relatedResources": []
       },
@@ -617,7 +607,6 @@
         "scopeKind": "cluster",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [
           {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "ClusterRole", "resource": "clusterroles"},
           {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "ClusterRoleBinding", "resource": "clusterrolebindings"}
@@ -628,7 +617,6 @@
         "scopeKind": "cluster",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [{"group": "", "version": "v1", "kind": "PersistentVolume", "resource": "persistentvolumes"}],
         "relatedResources": []
       },
@@ -636,7 +624,6 @@
         "scopeKind": "cluster",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [
           {"group": "storage.k8s.io", "version": "v1", "kind": "StorageClass", "resource": "storageclasses"},
           {"group": "networking.k8s.io", "version": "v1", "kind": "IngressClass", "resource": "ingressclasses"},
@@ -650,7 +637,6 @@
         "scopeKind": "cluster",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}],
         "relatedResources": []
       },
@@ -658,7 +644,6 @@
         "scopeKind": "cluster",
         "metricsDependency": false,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [],
         "relatedResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}]
       },
@@ -666,7 +651,6 @@
         "scopeKind": "cluster",
         "metricsDependency": true,
         "completeIsScopeLevel": true,
-        "legacyIdentityFallback": false,
         "primaryResources": [{"group": "", "version": "v1", "kind": "Node", "resource": "nodes"}],
         "relatedResources": [{"group": "", "version": "v1", "kind": "Pod", "resource": "pods"}]
       }

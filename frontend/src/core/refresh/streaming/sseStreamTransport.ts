@@ -53,20 +53,3 @@ export const closeRefreshEventSource = (
   source.onerror = null;
   source.close();
 };
-
-export const sseReconnectDelay = (
-  attempt: number,
-  options: {
-    baseMs?: number;
-    maxMs?: number;
-    minMs?: number;
-    jitterMs?: number;
-  } = {}
-): number => {
-  const baseMs = options.baseMs ?? 1000;
-  const maxMs = options.maxMs ?? 30_000;
-  const minMs = options.minMs ?? 0;
-  const backoff = Math.min(maxMs, baseMs * Math.pow(2, attempt));
-  const jitter = options.jitterMs ? Math.random() * options.jitterMs : 0;
-  return Math.max(minMs, backoff + jitter);
-};

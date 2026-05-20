@@ -132,7 +132,9 @@ from separate per-cluster domain state above the refresh store.
 snapshot resync, drift detection, health, telemetry, and fallback decisions.
 Keep connection lifecycle in `ResourceStreamConnection`, subscription mechanics
 in `ResourceStreamSubscriptionStore`, and pure row math in
-`resourceStreamRows.ts`.
+`resourceStreamRows.ts`. Ready/resync/error store status transitions should use
+one domain-id path; do not add copied branches per streamed domain. Terminal
+stream error notification should use `streamErrorNotifier.ts`.
 
 Resource stream row updates and deletes carry identity only through the
 top-level `ref` (`resourcemodel.ResourceRef`). Legacy top-level identity fields
@@ -193,9 +195,15 @@ Four stream types use the refresh HTTP server, with different transports:
 | Container logs | SSE (EventSource) | `backend/refresh/containerlogsstream/`       | `frontend/src/core/refresh/streaming/containerLogsStreamManager.ts` |
 
 Frontend SSE managers share `frontend/src/core/refresh/streaming/sseStreamTransport.ts`
-for EventSource URL creation, listener cleanup, and reconnect delay calculation.
-Keep event, catalog, and log reducers separate unless tests prove their state
-semantics are identical.
+for EventSource URL creation and listener cleanup. Reconnect delay calculation
+lives in `frontend/src/core/refresh/streaming/streamTiming.ts`, and visibility
+suspend/resume lives in
+`frontend/src/core/refresh/streaming/streamVisibilityController.ts`. Stream
+error notification and kubeconfig-change suppression live in
+`frontend/src/core/refresh/streaming/streamErrorNotifier.ts`. The resource
+WebSocket manager also uses the shared timing, visibility, and terminal-error
+notification helpers. Keep event, catalog, log, and resource reducers separate
+unless tests prove their state semantics are identical.
 
 **Event stream resume:** Backend buffers recent events in a circular buffer per scope. On reconnect, frontend sends `?since=<sequence>` to resume. If the buffer overflowed, resume returns empty and the client must re-snapshot. **Resume is not guaranteed.**
 

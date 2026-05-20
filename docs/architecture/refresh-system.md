@@ -324,17 +324,29 @@ Streaming behavior is registered per domain in the orchestrator:
 
 Frontend SSE streams share transport primitives in
 `frontend/src/core/refresh/streaming/sseStreamTransport.ts`. Event, catalog, and
-container-log managers use that helper for EventSource URL creation, listener
-cleanup, and reconnect delay calculation. Keep their reducers separate: event
-streams own ordering/dedupe/resume tokens, catalog streams own snapshot-shaped
-merge/fallback behavior, and log streams own line buffers, warnings, filters,
-and fallback polling.
+container-log managers use that helper for EventSource URL creation and
+listener cleanup. They share reconnect delay calculation through
+`streamTiming.ts` and visibility suspend/resume through
+`streamVisibilityController.ts`. The resource WebSocket path uses the same
+reconnect timing helper and visibility controller for
+pause/resume and resync after the app becomes visible again. Stream error
+notification and short kubeconfig-change suppression are centralized in
+`streamErrorNotifier.ts`; the resource WebSocket path uses the same notifier for
+terminal stream errors. Keep reducers separate: event streams own
+ordering/dedupe/resume tokens, catalog streams own snapshot-shaped
+merge/fallback behavior, log streams own line buffers, warnings, filters, and
+fallback polling, and resource streams own row update/delete/COMPLETE resync
+semantics.
 
 Resource stream safety rules:
 
 - Descriptors in `resourceStreamDomains.ts` describe row behavior only: scope
   kind, row collection access, row identity, drift keys, sorting, and metrics
   preservation. They must not encode multi-cluster capability flags.
+- `ResourceStreamManager` applies ready/resync/error store status transitions
+  through one domain-id path. Do not reintroduce copied branches for each
+  resource-stream domain; per-domain differences belong in descriptors,
+  snapshot builders, or row projectors.
 - Row updates and row deletes carry a top-level `ref` with the full
   `resourcemodel.ResourceRef` identity. Row identity flows only through `ref`;
   the legacy top-level fields (`uid`, `name`, `namespace`, `kind`, `apiGroup`,
@@ -494,10 +506,10 @@ cache/singleflight path, and filters drain state by `clusterId`. Logs use
 `container-logs` streaming with fallback polling in the log viewer.
 
 Polling snapshot merge reuse is centralized in
-`frontend/src/core/refresh/snapshotMerge.ts`. A domain may opt in only when it
-can name a collection field and a stable full-identity key without hiding
-payload-specific semantics. Current opt-ins are `namespaces`, `catalog-diff`,
-and `object-maintenance`.
+`frontend/src/core/refresh/snapshotMerge.ts` as a domain-keyed descriptor table.
+A domain may opt in only when it can name a collection field and a stable
+full-identity key without hiding payload-specific semantics. Current opt-ins are
+`namespaces`, `catalog-diff`, and `object-maintenance`.
 
 ## Adding Or Updating Domains
 

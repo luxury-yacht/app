@@ -366,14 +366,10 @@ describe('refresh domain contract', () => {
         expect(STREAM_SEMANTICS.has(semantic), `${domain} stream semantic`).toBe(true);
       }
       expect(COVERAGE_CONTRACTS.has(inventory.coverageContract), `${domain} coverage`).toBe(true);
-      expect(['enforced', 'planned']).toContain(inventory.coverageStatus);
-      if (inventory.coverageStatus === 'enforced') {
-        const proof = coverageProofs[inventory.coverageContract];
-        expect(proof, `${domain} enforced proof`).toBeDefined();
-        expect(proof.has(domain as RefreshDomain), `${domain} enforced proof membership`).toBe(
-          true
-        );
-      }
+      expect(inventory.coverageStatus).toBe('enforced');
+      const proof = coverageProofs[inventory.coverageContract];
+      expect(proof, `${domain} enforced proof`).toBeDefined();
+      expect(proof.has(domain as RefreshDomain), `${domain} enforced proof membership`).toBe(true);
     }
   });
 

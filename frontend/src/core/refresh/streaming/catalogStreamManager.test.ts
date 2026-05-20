@@ -32,6 +32,7 @@ vi.mock('../RefreshManager', () => ({
 }));
 
 import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
+import { eventBus } from '@/core/events';
 
 class MockEventSource {
   static instances: MockEventSource[] = [];
@@ -513,7 +514,7 @@ describe('catalogStreamManager', () => {
     await manager.start('limit=25');
 
     errorHandlerMock.handle.mockReset();
-    (manager as unknown as { suppressErrorsUntil: number }).suppressErrorsUntil = Date.now() + 5000;
+    eventBus.emit('kubeconfig:changing', 'test-config');
 
     MockEventSource.instances[0].onerror?.(new Event('error'));
     expect(errorHandlerMock.handle).not.toHaveBeenCalled();
