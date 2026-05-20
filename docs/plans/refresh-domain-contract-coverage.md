@@ -71,19 +71,19 @@ other non-row domains have different lifecycle and correctness contracts.
 
 ## Canonical Owners
 
-| Concern | Canonical Owner |
-| --- | --- |
-| Domain metadata and registration inventory | `backend/refresh/domain/refresh-domain-contract.json` |
-| Kubernetes identity, status, facts, links | `backend/resourcemodel` |
-| Discovery, browse identity, object existence, namespace and cluster listings | `backend/objectcatalog` |
-| Runtime permission requirement resources | `backend/refresh/snapshot/permission_checks.go` and `backend/refresh/resourcestream/permission_contract.go` |
-| Table/list snapshot payloads | `backend/refresh/snapshot` |
-| Resource row stream delivery | `backend/refresh/resourcestream` and `frontend/src/core/refresh/streaming` |
-| Event stream ordering/resume/merge behavior | `backend/refresh/eventstream` and `eventStreamManager.ts` |
-| Catalog streaming and browse snapshots | `backend/objectcatalog`, `backend/refresh/snapshot/catalog*`, and `catalogStreamManager.ts` |
-| Container log stream lifecycle | `backend/refresh/containerlogsstream` and `containerLogsStreamManager.ts` |
-| Operation state | Operation-specific backend services plus their refresh snapshot domain |
-| Frontend refresh scheduling and store writes | `frontend/src/core/refresh` |
+| Concern                                                                      | Canonical Owner                                                                                             |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Domain metadata and registration inventory                                   | `backend/refresh/domain/refresh-domain-contract.json`                                                       |
+| Kubernetes identity, status, facts, links                                    | `backend/resourcemodel`                                                                                     |
+| Discovery, browse identity, object existence, namespace and cluster listings | `backend/objectcatalog`                                                                                     |
+| Runtime permission requirement resources                                     | `backend/refresh/snapshot/permission_checks.go` and `backend/refresh/resourcestream/permission_contract.go` |
+| Table/list snapshot payloads                                                 | `backend/refresh/snapshot`                                                                                  |
+| Resource row stream delivery                                                 | `backend/refresh/resourcestream` and `frontend/src/core/refresh/streaming`                                  |
+| Event stream ordering/resume/merge behavior                                  | `backend/refresh/eventstream` and `eventStreamManager.ts`                                                   |
+| Catalog streaming and browse snapshots                                       | `backend/objectcatalog`, `backend/refresh/snapshot/catalog*`, and `catalogStreamManager.ts`                 |
+| Container log stream lifecycle                                               | `backend/refresh/containerlogsstream` and `containerLogsStreamManager.ts`                                   |
+| Operation state                                                              | Operation-specific backend services plus their refresh snapshot domain                                      |
+| Frontend refresh scheduling and store writes                                 | `frontend/src/core/refresh`                                                                                 |
 
 ## Contract Shape
 
@@ -143,21 +143,21 @@ Phase 1 must add backend and frontend tests that assert:
 Extend the shared domain contract so every domain declares one behavior class.
 Initial classes:
 
-| Class | Examples | Contract Shape |
-| --- | --- | --- |
-| `snapshot-table` | `namespaces` and simple list/table snapshot-only domains | Snapshot payload only; no stream parity requirement unless it has row projectors |
-| `aggregate-snapshot` | `cluster-overview` | Snapshot payload assembled from multiple resource families, metrics, and permission-aware fallbacks |
-| `resource-stream-table` | `pods`, `nodes`, `namespace-workloads`, namespace/cluster resource tables | Snapshot row projection plus resource-stream row/update/delete parity |
-| `complete-resync-stream` | `namespace-helm` | Stream emits scope-level `COMPLETE`; no row-update contract |
-| `catalog-stream` | `catalog` | Object catalog snapshot/stream consistency, discovery identity, pagination/filter behavior, stream health diagnostics |
-| `catalog-snapshot` | `catalog-diff` | Object catalog query snapshot for diff workflows; pagination/filter identity and snapshot merge behavior without stream diagnostics or resume semantics |
-| `event-stream` | `cluster-events`, `namespace-events` | SSE event identity, ordering, dedupe, resume, involved-object identity |
-| `event-snapshot` | `object-events` | Snapshot payload for one fully identified object; event identity and involved-object refs without SSE resume semantics |
-| `log-stream` | `container-logs` | Line ordering, reconnect/fallback, cluster/object/container scoping |
-| `detail-payload` | `object-details`, `object-yaml` | Full object reference input, cache/invalidation behavior, payload shape tests |
-| `helm-content-payload` | `object-helm-manifest`, `object-helm-values` | Helm release namespace/name input, rendered content shape, related resource links, cache/invalidation behavior |
-| `graph-payload` | `object-map` | Node/edge identity, relationship refs, layout/debug snapshot behavior |
-| `operation-state` | `object-maintenance` | State transitions, cache bypass, lifecycle cleanup, long-running operation behavior |
+| Class                    | Examples                                                                  | Contract Shape                                                                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `snapshot-table`         | `namespaces` and simple list/table snapshot-only domains                  | Snapshot payload only; no stream parity requirement unless it has row projectors                                                                        |
+| `aggregate-snapshot`     | `cluster-overview`                                                        | Snapshot payload assembled from multiple resource families, metrics, and permission-aware fallbacks                                                     |
+| `resource-stream-table`  | `pods`, `nodes`, `namespace-workloads`, namespace/cluster resource tables | Snapshot row projection plus resource-stream row/update/delete parity                                                                                   |
+| `complete-resync-stream` | `namespace-helm`                                                          | Stream emits scope-level `COMPLETE`; no row-update contract                                                                                             |
+| `catalog-stream`         | `catalog`                                                                 | Object catalog snapshot/stream consistency, discovery identity, pagination/filter behavior, stream health diagnostics                                   |
+| `catalog-snapshot`       | `catalog-diff`                                                            | Object catalog query snapshot for diff workflows; pagination/filter identity and snapshot merge behavior without stream diagnostics or resume semantics |
+| `event-stream`           | `cluster-events`, `namespace-events`                                      | SSE event identity, ordering, dedupe, resume, involved-object identity                                                                                  |
+| `event-snapshot`         | `object-events`                                                           | Snapshot payload for one fully identified object; event identity and involved-object refs without SSE resume semantics                                  |
+| `log-stream`             | `container-logs`                                                          | Line ordering, reconnect/fallback, cluster/object/container scoping                                                                                     |
+| `detail-payload`         | `object-details`, `object-yaml`                                           | Full object reference input, cache/invalidation behavior, payload shape tests                                                                           |
+| `helm-content-payload`   | `object-helm-manifest`, `object-helm-values`                              | Helm release namespace/name input, rendered content shape, related resource links, cache/invalidation behavior                                          |
+| `graph-payload`          | `object-map`                                                              | Node/edge identity, relationship refs, layout/debug snapshot behavior                                                                                   |
+| `operation-state`        | `object-maintenance`                                                      | State transitions, cache bypass, lifecycle cleanup, long-running operation behavior                                                                     |
 
 Class names may change during implementation, but every domain must map to
 exactly one class.
@@ -168,41 +168,113 @@ This matrix is the completeness backstop for the plan. Phase 1 should encode
 these decisions in `domainInventory` and replace this prose matrix with
 test-enforced contract data.
 
-| Domain | Class | Backend / Frontend Path | Scope Contract | Cache / Stream Contract | Coverage | Phase |
-| --- | --- | --- | --- | --- | --- | --- |
-| `namespaces` | `snapshot-table` | `direct` snapshot / snapshot orchestrator | cluster-prefixed empty or namespace scope | snapshot cache plus frontend snapshot merge reuse | `snapshot-table-payload` | 2 |
-| `cluster-overview` | `aggregate-snapshot` | `listWatch` with list fallback / snapshot orchestrator | cluster-prefixed empty scope | snapshot cache; metrics and permission-aware fallbacks | `aggregate-snapshot-permission-fallback` | 2 |
-| `catalog` | `catalog-stream` | service-gated direct snapshot plus catalog SSE / catalog stream orchestrator | cluster-prefixed catalog query scope | object catalog canonical cache plus catalog stream updates | `catalog-consistency` | 5 |
-| `catalog-diff` | `catalog-snapshot` | service-gated direct snapshot / snapshot orchestrator | cluster-prefixed catalog query scope | object catalog query snapshot plus frontend snapshot merge reuse | `catalog-snapshot-query` | 5 |
-| `nodes` | `resource-stream-table` | `listWatch` with list fallback / resource stream orchestrator | cluster resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `cluster-config` | `resource-stream-table` | `list` with partial resource permissions / resource stream orchestrator | cluster resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `cluster-crds` | `resource-stream-table` | `listWatch` / resource stream orchestrator | cluster resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `cluster-custom` | `resource-stream-table` | `list` with dynamic client requirement / resource stream orchestrator | cluster resource-stream selector | snapshot cache plus row update/delete and CRD-triggered COMPLETE | `resource-stream-row-parity` | 3 |
-| `cluster-events` | `event-stream` | direct event snapshot registration plus event SSE / event stream orchestrator | cluster event stream scope | append/merge SSE with ordering, dedupe, and resume | `event-resume-merge` | 6 |
-| `cluster-rbac` | `resource-stream-table` | `list` with partial resource permissions / resource stream orchestrator | cluster resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `cluster-storage` | `resource-stream-table` | `listWatch` / resource stream orchestrator | cluster resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `namespace-workloads` | `resource-stream-table` | `list` with partial resource permissions / resource stream orchestrator | namespace resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `namespace-autoscaling` | `resource-stream-table` | `direct` snapshot / resource stream orchestrator | namespace resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `namespace-config` | `resource-stream-table` | `list` with partial resource permissions / resource stream orchestrator | namespace resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `namespace-custom` | `resource-stream-table` | `list` with dynamic client requirement / resource stream orchestrator | namespace resource-stream selector | snapshot cache plus row update/delete and CRD-triggered COMPLETE | `resource-stream-row-parity` | 3 |
-| `namespace-events` | `event-stream` | direct event snapshot registration plus event SSE / event stream orchestrator | namespace event stream scope | append/merge SSE with ordering, dedupe, and resume | `event-resume-merge` | 6 |
-| `namespace-helm` | `complete-resync-stream` | direct snapshot / resource stream orchestrator | namespace resource-stream selector | snapshot cache plus scope-level COMPLETE only | `complete-resync-only` | 4 |
-| `namespace-network` | `resource-stream-table` | `list` with partial resource permissions / resource stream orchestrator | namespace resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `namespace-quotas` | `resource-stream-table` | `list` with partial resource permissions / resource stream orchestrator | namespace resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `namespace-rbac` | `resource-stream-table` | `list` with partial resource permissions / resource stream orchestrator | namespace resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `namespace-storage` | `resource-stream-table` | `direct` snapshot / resource stream orchestrator | namespace resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `pods` | `resource-stream-table` | `direct` snapshot / resource stream orchestrator | namespace, node, or workload resource-stream selector | snapshot cache plus row update/delete and scope COMPLETE | `resource-stream-row-parity` | 3 |
-| `object-details` | `detail-payload` | `direct` snapshot / snapshot orchestrator | cluster-prefixed full object scope via `ParseObjectScope` | snapshot cache and object-details provider cache/invalidation | `detail-payload-shape` | 8 |
-| `object-yaml` | `detail-payload` | provider-gated direct snapshot / snapshot orchestrator | cluster-prefixed full object scope via `ParseObjectScope` | snapshot cache and YAML provider cache/invalidation | `detail-payload-shape` | 8 |
-| `object-helm-manifest` | `helm-content-payload` | provider-gated direct snapshot / snapshot orchestrator | cluster-prefixed Helm `namespace:name` scope | snapshot cache plus Helm content provider cache/invalidation | `helm-content-shape` | 8 |
-| `object-helm-values` | `helm-content-payload` | provider-gated direct snapshot / snapshot orchestrator | cluster-prefixed Helm `namespace:name` scope | snapshot cache plus Helm content provider cache/invalidation | `helm-content-shape` | 8 |
-| `object-events` | `event-snapshot` | `direct` snapshot / snapshot orchestrator | cluster-prefixed full object scope via `ParseObjectScope` | snapshot cache; event payload without SSE resume | `event-snapshot-payload` | 6 |
-| `object-map` | `graph-payload` | `direct` snapshot / snapshot orchestrator | cluster-prefixed object-map scope via `parseObjectMapScope` | snapshot cache; graph/debug payload | `graph-payload-identity` | 8 |
-| `object-maintenance` | `operation-state` | `direct` snapshot / snapshot orchestrator | cluster-prefixed aggregate or `node:<name>` scope | cache and singleflight bypass; frontend snapshot merge reuse | `operation-state-transitions` | 8 |
-| `container-logs` | `log-stream` | stream-only `/api/v2/stream/container-logs` / container logs stream orchestrator | cluster-prefixed full object scope plus log query filters | line stream with fallback polling; no snapshot-domain cache | `log-stream-lifecycle` | 7 |
+| Domain                  | Class                    | Backend Path                                      | Frontend Path                      | Scope Contract                                              | Cache / Stream Contract                                          | Coverage                                 | Phase |
+| ----------------------- | ------------------------ | ------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------- | ----- |
+| `namespaces`            | `snapshot-table`         | `direct` snapshot                                 | snapshot orchestrator              | cluster-prefixed empty or namespace scope                   | snapshot cache plus frontend snapshot merge reuse                | `snapshot-table-payload`                 | 2     |
+| `cluster-overview`      | `aggregate-snapshot`     | `listWatch` with list fallback                    | snapshot orchestrator              | cluster-prefixed empty scope                                | snapshot cache; metrics and permission-aware fallbacks           | `aggregate-snapshot-permission-fallback` | 2     |
+| `catalog`               | `catalog-stream`         | service-gated direct snapshot plus catalog SSE    | catalog stream orchestrator        | cluster-prefixed catalog query scope                        | object catalog canonical cache plus catalog stream updates       | `catalog-consistency`                    | 5     |
+| `catalog-diff`          | `catalog-snapshot`       | service-gated direct snapshot                     | snapshot orchestrator              | cluster-prefixed catalog query scope                        | object catalog query snapshot plus frontend snapshot merge reuse | `catalog-snapshot-query`                 | 5     |
+| `nodes`                 | `resource-stream-table`  | `listWatch` with list fallback                    | resource stream orchestrator       | cluster resource-stream selector                            | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `cluster-config`        | `resource-stream-table`  | `list` with partial resource permissions          | resource stream orchestrator       | cluster resource-stream selector                            | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `cluster-crds`          | `resource-stream-table`  | `listWatch`                                       | resource stream orchestrator       | cluster resource-stream selector                            | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `cluster-custom`        | `resource-stream-table`  | `list` with dynamic client requirement            | resource stream orchestrator       | cluster resource-stream selector                            | snapshot cache plus row update/delete and CRD-triggered COMPLETE | `resource-stream-row-parity`             | 3     |
+| `cluster-events`        | `event-stream`           | direct event snapshot registration plus event SSE | event stream orchestrator          | cluster event stream scope                                  | append/merge SSE with ordering, dedupe, and resume               | `event-resume-merge`                     | 6     |
+| `cluster-rbac`          | `resource-stream-table`  | `list` with partial resource permissions          | resource stream orchestrator       | cluster resource-stream selector                            | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `cluster-storage`       | `resource-stream-table`  | `listWatch`                                       | resource stream orchestrator       | cluster resource-stream selector                            | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `namespace-workloads`   | `resource-stream-table`  | `list` with partial resource permissions          | resource stream orchestrator       | namespace resource-stream selector                          | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `namespace-autoscaling` | `resource-stream-table`  | `direct` snapshot                                 | resource stream orchestrator       | namespace resource-stream selector                          | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `namespace-config`      | `resource-stream-table`  | `list` with partial resource permissions          | resource stream orchestrator       | namespace resource-stream selector                          | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `namespace-custom`      | `resource-stream-table`  | `list` with dynamic client requirement            | resource stream orchestrator       | namespace resource-stream selector                          | snapshot cache plus row update/delete and CRD-triggered COMPLETE | `resource-stream-row-parity`             | 3     |
+| `namespace-events`      | `event-stream`           | direct event snapshot registration plus event SSE | event stream orchestrator          | namespace event stream scope                                | append/merge SSE with ordering, dedupe, and resume               | `event-resume-merge`                     | 6     |
+| `namespace-helm`        | `complete-resync-stream` | `direct` snapshot                                 | resource stream orchestrator       | namespace resource-stream selector                          | snapshot cache plus scope-level COMPLETE only                    | `complete-resync-only`                   | 4     |
+| `namespace-network`     | `resource-stream-table`  | `list` with partial resource permissions          | resource stream orchestrator       | namespace resource-stream selector                          | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `namespace-quotas`      | `resource-stream-table`  | `list` with partial resource permissions          | resource stream orchestrator       | namespace resource-stream selector                          | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `namespace-rbac`        | `resource-stream-table`  | `list` with partial resource permissions          | resource stream orchestrator       | namespace resource-stream selector                          | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `namespace-storage`     | `resource-stream-table`  | `direct` snapshot                                 | resource stream orchestrator       | namespace resource-stream selector                          | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `pods`                  | `resource-stream-table`  | `direct` snapshot                                 | resource stream orchestrator       | namespace, node, or workload resource-stream selector       | snapshot cache plus row update/delete and scope COMPLETE         | `resource-stream-row-parity`             | 3     |
+| `object-details`        | `detail-payload`         | `direct` snapshot                                 | snapshot orchestrator              | cluster-prefixed full object scope via `ParseObjectScope`   | snapshot cache and object-details provider cache/invalidation    | `detail-payload-shape`                   | 8     |
+| `object-yaml`           | `detail-payload`         | provider-gated direct snapshot                    | snapshot orchestrator              | cluster-prefixed full object scope via `ParseObjectScope`   | snapshot cache and YAML provider cache/invalidation              | `detail-payload-shape`                   | 8     |
+| `object-helm-manifest`  | `helm-content-payload`   | provider-gated direct snapshot                    | snapshot orchestrator              | cluster-prefixed Helm `namespace:name` scope                | snapshot cache plus Helm content provider cache/invalidation     | `helm-content-shape`                     | 8     |
+| `object-helm-values`    | `helm-content-payload`   | provider-gated direct snapshot                    | snapshot orchestrator              | cluster-prefixed Helm `namespace:name` scope                | snapshot cache plus Helm content provider cache/invalidation     | `helm-content-shape`                     | 8     |
+| `object-events`         | `event-snapshot`         | `direct` snapshot                                 | snapshot orchestrator              | cluster-prefixed full object scope via `ParseObjectScope`   | snapshot cache; event payload without SSE resume                 | `event-snapshot-payload`                 | 6     |
+| `object-map`            | `graph-payload`          | `direct` snapshot                                 | snapshot orchestrator              | cluster-prefixed object-map scope via `parseObjectMapScope` | snapshot cache; graph/debug payload                              | `graph-payload-identity`                 | 8     |
+| `object-maintenance`    | `operation-state`        | `direct` snapshot                                 | snapshot orchestrator              | cluster-prefixed aggregate or `node:<name>` scope           | cache and singleflight bypass; frontend snapshot merge reuse     | `operation-state-transitions`            | 8     |
+| `container-logs`        | `log-stream`             | stream-only `/api/v2/stream/container-logs`       | container logs stream orchestrator | cluster-prefixed full object scope plus log query filters   | line stream with fallback polling; no snapshot-domain cache      | `log-stream-lifecycle`                   | 7     |
 
 The matrix must remain exhaustive: it has 30 rows, matching the 30 domain ids in
 `refresh-domain-contract.json`.
+
+## Consolidation Opportunities
+
+The matrix should not be read as approval for 30 bespoke implementations. Keep
+the domain inventory exhaustive, but look for consolidation at shared
+infrastructure boundaries.
+
+High-value consolidation targets:
+
+- Frontend transport lifecycle: `event-stream`, `catalog-stream`, and
+  `container-logs-stream` are all SSE-based. They should be evaluated for a
+  shared EventSource transport layer that owns connection setup, reconnect,
+  permission-error parsing, health telemetry, visibility pause/resume, and
+  cleanup. Keep event, catalog, and log payload reducers separate unless their
+  state semantics actually match.
+- Frontend scoped-domain plumbing: snapshot domains should use one shared path
+  for scope enablement, refresh requests, cache-bypass/manual refresh behavior,
+  error handling, and diagnostics rows. Domain-specific code should start at
+  payload interpretation, not at lifecycle wiring.
+- Frontend snapshot merge reuse: `namespaces`, `catalog-diff`, and
+  `object-maintenance` already have keyed merge reuse behavior. Move that to a
+  small domain-configured helper if the inventory can name the collection field
+  and stable key without hiding payload-specific behavior.
+- Backend registration gates: `list`, `listWatch`, list fallback,
+  provider/service-gated direct registrations, and dynamic-client requirements
+  should remain distinct behavior, but their metadata and compatibility tests
+  should be generated from a common registration inventory instead of local
+  conventions.
+- Permission compatibility: snapshot runtime requirements, resource-stream
+  requirements, stream-specific permissions, and explicit exemptions should be
+  reconciled through one test helper keyed by domain id.
+- Scope normalization: cluster-prefix handling, object-scope construction,
+  resource-stream selector parsing, catalog query scopes, Helm release scopes,
+  and node-maintenance scopes should each have named parser/builder owners in
+  `scopeContract`. Reuse shared cluster-prefix helpers everywhere instead of
+  reimplementing prefix handling.
+- Coverage proof plumbing: many domains share the same coverage family. The
+  enforcement registry should prove membership by behavior class and domain id
+  instead of repeating one-off assertions per row.
+
+Do not consolidate by erasing behavior differences. The following reducers and
+contracts should stay separate unless implementation work proves they can share
+code without weakening correctness:
+
+- resource table row update/delete/COMPLETE handling
+- event append/order/dedupe/resume handling
+- catalog discovery/readiness/pagination/stale-delete handling
+- log line buffering, filtering, target limits, and fallback polling
+- whole-payload snapshot replacement and payload-specific merge reuse
+
+## Desired End-State Matrix
+
+The desired end state is fewer infrastructure paths than behavior classes. The
+inventory remains exhaustive per domain, but runtime code should converge on
+shared backend registration helpers, shared frontend lifecycle transports, and
+thin behavior adapters.
+
+| Target Group                   | Domains                                                                                                                                                                                                                                                                        | Backend End State                                                                                                  | Frontend End State                                                                                         | Behavior Adapter That Remains                                                                                           |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Snapshot payload domains       | `namespaces`, `object-details`, `object-yaml`, `object-helm-manifest`, `object-helm-values`, `object-events`, `object-map`, `object-maintenance`, `catalog-diff`                                                                                                               | shared snapshot registration metadata plus optional provider/service gates                                         | shared scoped snapshot lifecycle, diagnostics, cache-bypass/manual refresh, and optional keyed merge reuse | payload builder/validator per class: table, detail, Helm content, event snapshot, graph, operation state, catalog query |
+| Aggregate snapshot domains     | `cluster-overview`                                                                                                                                                                                                                                                             | shared `listWatch` registration with declarative list fallback metadata                                            | shared scoped snapshot lifecycle                                                                           | aggregate builder with metrics/resource fallback and partial-permission semantics                                       |
+| Resource row stream domains    | `pods`, `nodes`, `cluster-config`, `cluster-crds`, `cluster-custom`, `cluster-rbac`, `cluster-storage`, `namespace-workloads`, `namespace-autoscaling`, `namespace-config`, `namespace-custom`, `namespace-network`, `namespace-quotas`, `namespace-rbac`, `namespace-storage` | shared resource-stream registration, permission compatibility, selector parsing, and snapshot/stream parity proofs | shared WebSocket subscription lifecycle and row-store mutation helpers                                     | per-domain row projector, related-resource mapping, metrics handling, and custom-domain COMPLETE triggers               |
+| Complete-resync stream domains | `namespace-helm`                                                                                                                                                                                                                                                               | shared resource-stream registration with `rowProjection: scope-level-complete-only` contract                       | shared WebSocket subscription lifecycle with COMPLETE-only adapter                                         | Helm release snapshot builder and COMPLETE-only resync behavior                                                         |
+| SSE append/merge streams       | `cluster-events`, `namespace-events`                                                                                                                                                                                                                                           | shared event stream endpoint and permission requirements                                                           | shared SSE transport lifecycle plus event reducer adapter                                                  | event ordering, dedupe, resume-token, and involved-object identity                                                      |
+| SSE catalog stream             | `catalog`                                                                                                                                                                                                                                                                      | shared catalog snapshot builder plus catalog SSE endpoint metadata                                                 | shared SSE transport lifecycle plus catalog reducer adapter                                                | catalog readiness, pagination/filter identity, stale/delete handling                                                    |
+| SSE log stream                 | `container-logs`                                                                                                                                                                                                                                                               | stream-only endpoint metadata with stream-specific permission contract                                             | shared SSE transport lifecycle plus log reducer/fallback adapter                                           | line buffering, target selection, log filters, warnings, and fallback polling                                           |
+
+Phase 1 should decide whether these target groups are represented directly in
+`domainInventory` or derived from `behaviorClass`, backend registration, and
+frontend orchestrator fields. The important outcome is that tests can prove a
+domain joins the intended shared infrastructure group without duplicating
+metadata from the existing contract homes.
 
 ## Required Contract Fields
 
@@ -316,6 +388,11 @@ unless they supply an enforced coverage contract.
       explicit exemption paths, including permission-denied placeholder behavior.
 - [ ] Add the coverage-contract enforcement registry, with `planned` status only
       for classes scheduled for later phases.
+- [ ] Add a consolidation assessment for shared frontend SSE transport,
+      snapshot-domain plumbing, backend registration gates, permission
+      compatibility helpers, and scope normalization helpers. Phase 1 should
+      identify the shared seams; later phases should only consolidate when tests
+      already prove behavior parity.
 - [ ] Edit the existing architecture sections in
       `docs/architecture/refresh-system.md` to explain behavior classes and
       canonical owners. Do not append a competing section that forks the current
