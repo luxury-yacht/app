@@ -29,6 +29,84 @@ export type RefreshOrchestratorKind =
   | 'catalog-stream'
   | 'container-logs-stream';
 
+export type RefreshBehaviorClass =
+  | 'snapshot-table'
+  | 'aggregate-snapshot'
+  | 'resource-stream-table'
+  | 'complete-resync-stream'
+  | 'catalog-stream'
+  | 'catalog-snapshot'
+  | 'event-stream'
+  | 'event-snapshot'
+  | 'log-stream'
+  | 'detail-payload'
+  | 'helm-content-payload'
+  | 'graph-payload'
+  | 'operation-state';
+
+export type RefreshScopeContractKind =
+  | 'cluster'
+  | 'optional-namespace'
+  | 'catalog-query'
+  | 'resource-stream-selector'
+  | 'event-stream-scope'
+  | 'object-ref'
+  | 'helm-release'
+  | 'object-map'
+  | 'node-maintenance'
+  | 'log-stream-selector';
+
+export type RefreshCachePolicy =
+  | 'snapshot-cache'
+  | 'snapshot-cache-with-merge'
+  | 'snapshot-cache-bypass'
+  | 'snapshot-cache-plus-provider-cache'
+  | 'external-catalog-cache'
+  | 'external-catalog-cache-with-merge'
+  | 'stream-only';
+
+export type RefreshStreamSemantic =
+  | 'row-update'
+  | 'complete-resync'
+  | 'append-merge'
+  | 'snapshot-replace'
+  | 'line-stream'
+  | 'none';
+
+export type RefreshCoverageContract =
+  | 'snapshot-table-payload'
+  | 'resource-stream-row-parity'
+  | 'complete-resync-only'
+  | 'catalog-consistency'
+  | 'catalog-snapshot-query'
+  | 'event-resume-merge'
+  | 'event-snapshot-payload'
+  | 'log-stream-lifecycle'
+  | 'detail-payload-shape'
+  | 'helm-content-shape'
+  | 'graph-payload-identity'
+  | 'operation-state-transitions'
+  | 'aggregate-snapshot-permission-fallback';
+
+export interface ScopeContract {
+  kind: RefreshScopeContractKind;
+  clusterPrefix: 'required';
+  parser: string;
+  frontendBuilder: string;
+  acceptedEncodings: string[];
+}
+
+export interface DomainInventoryEntry {
+  behaviorClass: RefreshBehaviorClass;
+  scopeContract: ScopeContract;
+  singleCluster: true;
+  payloadOwner: string;
+  cachePolicy: RefreshCachePolicy;
+  streamSemantics: RefreshStreamSemantic[];
+  coverageContract: RefreshCoverageContract;
+  coverageStatus: 'enforced' | 'planned';
+}
+
 export interface RefreshDomainContractEntry<D extends RefreshDomain = RefreshDomain> {
   domain: D;
   category: DomainCategory;
@@ -67,6 +145,7 @@ export interface StreamDomainContractEntry {
 
 export interface RefreshDomainContract {
   version: 2;
+  domainInventory: Record<RefreshDomain, DomainInventoryEntry>;
   resourceStream: {
     updateIdentity: {
       rowUpdates: 'ref';

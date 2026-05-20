@@ -115,6 +115,71 @@ const registeredDomains = (): Map<RefreshDomain, RegisteredDomain> =>
   (refreshOrchestrator as unknown as { configs: Map<RefreshDomain, RegisteredDomain> }).configs;
 
 const EVENT_STREAM_DOMAINS = new Set<RefreshDomain>(['cluster-events', 'namespace-events']);
+const BEHAVIOR_CLASSES = new Set([
+  'snapshot-table',
+  'aggregate-snapshot',
+  'resource-stream-table',
+  'complete-resync-stream',
+  'catalog-stream',
+  'catalog-snapshot',
+  'event-stream',
+  'event-snapshot',
+  'log-stream',
+  'detail-payload',
+  'helm-content-payload',
+  'graph-payload',
+  'operation-state',
+]);
+const SCOPE_KINDS = new Set([
+  'cluster',
+  'optional-namespace',
+  'catalog-query',
+  'resource-stream-selector',
+  'event-stream-scope',
+  'object-ref',
+  'helm-release',
+  'object-map',
+  'node-maintenance',
+  'log-stream-selector',
+]);
+const CACHE_POLICIES = new Set([
+  'snapshot-cache',
+  'snapshot-cache-with-merge',
+  'snapshot-cache-bypass',
+  'snapshot-cache-plus-provider-cache',
+  'external-catalog-cache',
+  'external-catalog-cache-with-merge',
+  'stream-only',
+]);
+const STREAM_SEMANTICS = new Set([
+  'row-update',
+  'complete-resync',
+  'append-merge',
+  'snapshot-replace',
+  'line-stream',
+  'none',
+]);
+const COVERAGE_CONTRACTS = new Set([
+  'snapshot-table-payload',
+  'resource-stream-row-parity',
+  'complete-resync-only',
+  'catalog-consistency',
+  'catalog-snapshot-query',
+  'event-resume-merge',
+  'event-snapshot-payload',
+  'log-stream-lifecycle',
+  'detail-payload-shape',
+  'helm-content-shape',
+  'graph-payload-identity',
+  'operation-state-transitions',
+  'aggregate-snapshot-permission-fallback',
+]);
+const ENFORCED_COVERAGE_PROOFS: Record<string, Set<RefreshDomain>> = {
+  'resource-stream-row-parity': new Set(
+    RESOURCE_STREAM_DOMAINS.filter((domain) => domain !== 'namespace-helm')
+  ),
+  'complete-resync-only': new Set(['namespace-helm']),
+};
 
 describe('refresh domain contract', () => {
   it('keeps the authored contract within supported frontend values', () => {
@@ -218,6 +283,92 @@ describe('refresh domain contract', () => {
           expect(resourceStreamDomains.has(entry.domain)).toBe(false);
           expect(entry.domain).toBe('container-logs');
           expect(entry.frontend.diagnosticsStream).toBe('container-logs');
+          break;
+        default:
+          expect.fail(`Unknown orchestrator kind ${entry.frontend.orchestrator}`);
+      }
+    }
+  });
+
+  it('covers every domain with inventory metadata and known enum values', () => {
+    const contractDomains = refreshDomainContract.domains.map((entry) => entry.domain);
+    const inventoryDomains = Object.keys(refreshDomainContract.domainInventory).sort();
+    expect(inventoryDomains).toEqual([...contractDomains].sort());
+
+    for (const [domain, inventory] of Object.entries(refreshDomainContract.domainInventory)) {
+      expect(BEHAVIOR_CLASSES.has(inventory.behaviorClass), `${domain} behaviorClass`).toBe(true);
+      expect(SCOPE_KINDS.has(inventory.scopeContract.kind), `${domain} scope kind`).toBe(true);
+      expect(inventory.scopeContract.clusterPrefix).toBe('required');
+      expect(inventory.scopeContract.parser, `${domain} parser`).toEqual(expect.any(String));
+      expect(inventory.scopeContract.parser).not.toHaveLength(0);
+      expect(inventory.scopeContract.frontendBuilder, `${domain} frontendBuilder`).toEqual(
+        expect.any(String)
+      );
+      expect(inventory.scopeContract.frontendBuilder).not.toHaveLength(0);
+      expect(inventory.scopeContract.acceptedEncodings.length).toBeGreaterThan(0);
+      expect(inventory.singleCluster).toBe(true);
+      expect(inventory.payloadOwner, `${domain} payloadOwner`).toEqual(expect.any(String));
+      expect(inventory.payloadOwner).not.toHaveLength(0);
+      expect(CACHE_POLICIES.has(inventory.cachePolicy), `${domain} cachePolicy`).toBe(true);
+      expect(inventory.streamSemantics.length).toBeGreaterThan(0);
+      for (const semantic of inventory.streamSemantics) {
+        expect(STREAM_SEMANTICS.has(semantic), `${domain} stream semantic`).toBe(true);
+      }
+      expect(COVERAGE_CONTRACTS.has(inventory.coverageContract), `${domain} coverage`).toBe(true);
+      expect(['enforced', 'planned']).toContain(inventory.coverageStatus);
+      if (inventory.coverageStatus === 'enforced') {
+        const proof = ENFORCED_COVERAGE_PROOFS[inventory.coverageContract];
+        expect(proof, `${domain} enforced proof`).toBeDefined();
+        expect(proof.has(domain as RefreshDomain), `${domain} enforced proof membership`).toBe(
+          true
+        );
+      }
+    }
+  });
+
+  it('keeps inventory behavior compatible with existing contract homes', () => {
+    const resourceStreamDomains = new Set<RefreshDomain>(RESOURCE_STREAM_DOMAINS);
+    const resourceStreamContractDomains = new Set<RefreshDomain>(
+      Object.keys(refreshDomainContract.resourceStream.domains) as RefreshDomain[]
+    );
+
+    for (const entry of refreshDomainContract.domains) {
+      const inventory = refreshDomainContract.domainInventory[entry.domain];
+      expect(resourceStreamContractDomains.has(entry.domain)).toBe(entry.backend.resourceStream);
+
+      if (entry.backend.resourceStream) {
+        expect(resourceStreamDomains.has(entry.domain)).toBe(true);
+        expect(['resource-stream-table', 'complete-resync-stream']).toContain(
+          inventory.behaviorClass
+        );
+        expect(inventory.scopeContract.kind).toBe('resource-stream-selector');
+      } else {
+        expect(resourceStreamDomains.has(entry.domain)).toBe(false);
+        expect(['resource-stream-table', 'complete-resync-stream']).not.toContain(
+          inventory.behaviorClass
+        );
+      }
+
+      switch (entry.frontend.orchestrator) {
+        case 'resource-stream':
+          expect(['resource-stream-table', 'complete-resync-stream']).toContain(
+            inventory.behaviorClass
+          );
+          break;
+        case 'event-stream':
+          expect(inventory.behaviorClass).toBe('event-stream');
+          break;
+        case 'catalog-stream':
+          expect(inventory.behaviorClass).toBe('catalog-stream');
+          break;
+        case 'container-logs-stream':
+          expect(inventory.behaviorClass).toBe('log-stream');
+          expect(inventory.cachePolicy).toBe('stream-only');
+          break;
+        case 'snapshot':
+          expect(['resource-stream-table', 'complete-resync-stream', 'log-stream']).not.toContain(
+            inventory.behaviorClass
+          );
           break;
         default:
           expect.fail(`Unknown orchestrator kind ${entry.frontend.orchestrator}`);

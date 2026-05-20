@@ -1,25 +1,30 @@
 package system
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"strings"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
 
 // These tests guard the registration table ordering and dependency checks.
 
 type refreshDomainContract struct {
-	Version        int `json:"version"`
-	ResourceStream struct {
+	Version         int                             `json:"version"`
+	DomainInventory map[string]domainInventoryEntry `json:"domainInventory"`
+	ResourceStream  struct {
 		UpdateIdentity struct {
 			RowUpdates                  string   `json:"rowUpdates"`
 			RowDeletes                  string   `json:"rowDeletes"`
@@ -30,6 +35,25 @@ type refreshDomainContract struct {
 		Domains map[string]streamDomainContract `json:"domains"`
 	} `json:"resourceStream"`
 	Domains []refreshDomainRecord `json:"domains"`
+}
+
+type domainInventoryEntry struct {
+	BehaviorClass    string        `json:"behaviorClass"`
+	ScopeContract    scopeContract `json:"scopeContract"`
+	SingleCluster    bool          `json:"singleCluster"`
+	PayloadOwner     string        `json:"payloadOwner"`
+	CachePolicy      string        `json:"cachePolicy"`
+	StreamSemantics  []string      `json:"streamSemantics"`
+	CoverageContract string        `json:"coverageContract"`
+	CoverageStatus   string        `json:"coverageStatus"`
+}
+
+type scopeContract struct {
+	Kind              string   `json:"kind"`
+	ClusterPrefix     string   `json:"clusterPrefix"`
+	Parser            string   `json:"parser"`
+	FrontendBuilder   string   `json:"frontendBuilder"`
+	AcceptedEncodings []string `json:"acceptedEncodings"`
 }
 
 type streamDomainContract struct {
@@ -97,6 +121,128 @@ func TestDomainRegistrationsMatchAuthoredContract(t *testing.T) {
 
 	for _, registration := range registrations {
 		require.Containsf(t, contractDomains, registration.name, "backend domain %q is missing from refresh-domain-contract.json", registration.name)
+	}
+}
+
+func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T) {
+	contract := loadRefreshDomainContract(t)
+	require.Len(t, contract.DomainInventory, len(contract.Domains))
+
+	domainIDs := make(map[string]struct{}, len(contract.Domains))
+	for _, domain := range contract.Domains {
+		domainIDs[domain.Domain] = struct{}{}
+	}
+
+	behaviorClasses := setOf(
+		"snapshot-table",
+		"aggregate-snapshot",
+		"resource-stream-table",
+		"complete-resync-stream",
+		"catalog-stream",
+		"catalog-snapshot",
+		"event-stream",
+		"event-snapshot",
+		"log-stream",
+		"detail-payload",
+		"helm-content-payload",
+		"graph-payload",
+		"operation-state",
+	)
+	scopeKinds := setOf(
+		"cluster",
+		"optional-namespace",
+		"catalog-query",
+		"resource-stream-selector",
+		"event-stream-scope",
+		"object-ref",
+		"helm-release",
+		"object-map",
+		"node-maintenance",
+		"log-stream-selector",
+	)
+	cachePolicies := setOf(
+		"snapshot-cache",
+		"snapshot-cache-with-merge",
+		"snapshot-cache-bypass",
+		"snapshot-cache-plus-provider-cache",
+		"external-catalog-cache",
+		"external-catalog-cache-with-merge",
+		"stream-only",
+	)
+	streamSemantics := setOf("row-update", "complete-resync", "append-merge", "snapshot-replace", "line-stream", "none")
+	coverageContracts := setOf(
+		"snapshot-table-payload",
+		"resource-stream-row-parity",
+		"complete-resync-only",
+		"catalog-consistency",
+		"catalog-snapshot-query",
+		"event-resume-merge",
+		"event-snapshot-payload",
+		"log-stream-lifecycle",
+		"detail-payload-shape",
+		"helm-content-shape",
+		"graph-payload-identity",
+		"operation-state-transitions",
+		"aggregate-snapshot-permission-fallback",
+	)
+	coverageStatuses := setOf("enforced", "planned")
+	enforcedProofs := enforcedCoverageProofs(t)
+
+	for domainID, inventory := range contract.DomainInventory {
+		require.Containsf(t, domainIDs, domainID, "inventory domain %q is not present in domains[]", domainID)
+		require.Containsf(t, behaviorClasses, inventory.BehaviorClass, "domain %q behaviorClass", domainID)
+		require.Containsf(t, scopeKinds, inventory.ScopeContract.Kind, "domain %q scope kind", domainID)
+		require.Equalf(t, "required", inventory.ScopeContract.ClusterPrefix, "domain %q cluster prefix", domainID)
+		require.NotEmptyf(t, inventory.ScopeContract.Parser, "domain %q parser owner", domainID)
+		require.NotEmptyf(t, inventory.ScopeContract.FrontendBuilder, "domain %q frontend builder owner", domainID)
+		requireSourcePathExists(t, inventory.ScopeContract.Parser)
+		requireSourcePathExists(t, inventory.ScopeContract.FrontendBuilder)
+		require.NotEmptyf(t, inventory.ScopeContract.AcceptedEncodings, "domain %q accepted encodings", domainID)
+		require.Truef(t, inventory.SingleCluster, "domain %q must stay single-cluster at refresh boundary", domainID)
+		require.NotEmptyf(t, inventory.PayloadOwner, "domain %q payload owner", domainID)
+		require.Containsf(t, cachePolicies, inventory.CachePolicy, "domain %q cachePolicy", domainID)
+		require.NotEmptyf(t, inventory.StreamSemantics, "domain %q streamSemantics", domainID)
+		for _, semantic := range inventory.StreamSemantics {
+			require.Containsf(t, streamSemantics, semantic, "domain %q stream semantic", domainID)
+		}
+		require.Containsf(t, coverageContracts, inventory.CoverageContract, "domain %q coverageContract", domainID)
+		require.Containsf(t, coverageStatuses, inventory.CoverageStatus, "domain %q coverageStatus", domainID)
+		if inventory.CoverageStatus == "enforced" {
+			domains, ok := enforcedProofs[inventory.CoverageContract]
+			require.Truef(t, ok, "enforced coverage contract %q has no proof registry", inventory.CoverageContract)
+			require.Containsf(t, domains, domainID, "domain %q marked enforced without coverage proof", domainID)
+		}
+	}
+}
+
+func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
+	contract := loadRefreshDomainContract(t)
+	domainByID := make(map[string]refreshDomainRecord, len(contract.Domains))
+	for _, domain := range contract.Domains {
+		domainByID[domain.Domain] = domain
+	}
+
+	for domainID, inventory := range contract.DomainInventory {
+		domain := domainByID[domainID]
+		switch domain.Backend.ResourceStream {
+		case true:
+			require.Containsf(t, contract.ResourceStream.Domains, domainID, "resource-stream domain %q must join resourceStream.domains", domainID)
+			require.Containsf(t, setOf("resource-stream-table", "complete-resync-stream"), inventory.BehaviorClass, "resource-stream domain %q behavior class", domainID)
+			require.Equalf(t, "resource-stream-selector", inventory.ScopeContract.Kind, "resource-stream domain %q scope kind", domainID)
+		case false:
+			require.NotContainsf(t, contract.ResourceStream.Domains, domainID, "non-resource-stream domain %q must not join resourceStream.domains", domainID)
+			require.NotContainsf(t, setOf("resource-stream-table", "complete-resync-stream"), inventory.BehaviorClass, "non-resource-stream domain %q behavior class", domainID)
+		}
+
+		switch domain.Backend.Registration {
+		case "streamOnly":
+			require.Equal(t, "log-stream", inventory.BehaviorClass)
+			require.Equal(t, "stream-only", inventory.CachePolicy)
+		case "direct", "list", "listWatch":
+			require.NotEqualf(t, "stream-only", inventory.CachePolicy, "snapshot-capable domain %q must not use stream-only cache policy", domainID)
+		default:
+			require.Failf(t, "unknown registration", "domain=%s registration=%s", domainID, domain.Backend.Registration)
+		}
 	}
 }
 
@@ -235,6 +381,31 @@ func TestDomainRegistrationRequiresDependencies(t *testing.T) {
 	require.NoError(t, helmWithDeps.require())
 }
 
+func TestDomainRegistrationProviderAndServiceGatesAreExplicit(t *testing.T) {
+	missing := domainRegistrations(registrationDeps{
+		cfg: Config{
+			ObjectDetailsProvider: noopObjectDetailProvider{},
+		},
+	})
+	require.True(t, findRegistration(t, missing, "catalog").skipIf())
+	require.True(t, findRegistration(t, missing, "catalog-diff").skipIf())
+	require.True(t, findRegistration(t, missing, "object-yaml").skipIf())
+	require.True(t, findRegistration(t, missing, "object-helm-manifest").skipIf())
+	require.True(t, findRegistration(t, missing, "object-helm-values").skipIf())
+
+	withProviders := domainRegistrations(registrationDeps{
+		cfg: Config{
+			ObjectCatalogService:  func() *objectcatalog.Service { return &objectcatalog.Service{} },
+			ObjectDetailsProvider: fullObjectDetailProvider{},
+		},
+	})
+	require.False(t, findRegistration(t, withProviders, "catalog").skipIf())
+	require.False(t, findRegistration(t, withProviders, "catalog-diff").skipIf())
+	require.False(t, findRegistration(t, withProviders, "object-yaml").skipIf())
+	require.False(t, findRegistration(t, withProviders, "object-helm-manifest").skipIf())
+	require.False(t, findRegistration(t, withProviders, "object-helm-values").skipIf())
+}
+
 // findRegistration locates a registration entry by name.
 func findRegistration(t *testing.T, registrations []domainRegistration, name string) domainRegistration {
 	t.Helper()
@@ -253,6 +424,55 @@ func requirementKeys(reqs []permissions.ResourceRequirement) map[string]struct{}
 		keys[permissions.ResourceKey(req.Group, req.Resource)] = struct{}{}
 	}
 	return keys
+}
+
+func enforcedCoverageProofs(t *testing.T) map[string]map[string]struct{} {
+	t.Helper()
+	resourceStreamDomains := setOf(contractResourceStreamDomains(t)...)
+	delete(resourceStreamDomains, "namespace-helm")
+
+	return map[string]map[string]struct{}{
+		"resource-stream-row-parity": resourceStreamDomains,
+		"complete-resync-only":       setOf("namespace-helm"),
+	}
+}
+
+func setOf(values ...string) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		result[value] = struct{}{}
+	}
+	return result
+}
+
+func requireSourcePathExists(t *testing.T, owner string) {
+	t.Helper()
+	path, _, ok := strings.Cut(owner, ":")
+	require.Truef(t, ok, "source owner %q must be formatted as path:symbol", owner)
+	require.NotEmpty(t, path)
+	_, filename, _, ok := goruntime.Caller(0)
+	require.True(t, ok)
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
+	_, err := os.Stat(filepath.Join(repoRoot, path))
+	require.NoErrorf(t, err, "source owner %q must reference an existing file", owner)
+}
+
+type fullObjectDetailProvider struct{}
+
+func (fullObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (interface{}, string, error) {
+	return nil, "", nil
+}
+
+func (fullObjectDetailProvider) FetchObjectYAML(context.Context, schema.GroupVersionKind, string, string) (string, error) {
+	return "", nil
+}
+
+func (fullObjectDetailProvider) FetchHelmManifest(context.Context, string, string) (string, int, error) {
+	return "", 0, nil
+}
+
+func (fullObjectDetailProvider) FetchHelmValues(context.Context, string, string) (map[string]interface{}, int, error) {
+	return nil, 0, nil
 }
 
 func loadRefreshDomainContract(t *testing.T) refreshDomainContract {

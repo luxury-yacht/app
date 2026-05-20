@@ -126,7 +126,7 @@ parallel alias. If a class name or domain id changes during implementation,
 rename it by search-and-replace and keep contract tests enforcing that no old
 alias remains.
 
-Phase 1 must add backend and frontend tests that assert:
+Phase 1 added backend and frontend tests that assert:
 
 - `domainInventory` keys equal the ids in `domains[]`.
 - Frontend `RefreshDomain` / domain registry ids equal the contract ids.
@@ -164,9 +164,11 @@ exactly one class.
 
 ## Domain Reconciliation Matrix
 
-This matrix is the completeness backstop for the plan. Phase 1 should encode
-these decisions in `domainInventory` and replace this prose matrix with
-test-enforced contract data.
+This matrix is the explanatory backstop for the plan. The authoritative
+per-domain mapping now lives in `domainInventory`, with backend and frontend
+tests enforcing that every domain joins the expected contract homes by domain
+id. Keep this table aligned with the contract when the plan changes, but do not
+treat it as a separate source of truth.
 
 | Domain                  | Class                    | Backend Path                                      | Frontend Path                      | Scope Contract                                              | Cache / Stream Contract                                          | Coverage                                 | Phase |
 | ----------------------- | ------------------------ | ------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------- | ----- |
@@ -270,11 +272,11 @@ thin behavior adapters.
 | SSE catalog stream             | `catalog`                                                                                                                                                                                                                                                                      | shared catalog snapshot builder plus catalog SSE endpoint metadata                                                 | shared SSE transport lifecycle plus catalog reducer adapter                                                | catalog readiness, pagination/filter identity, stale/delete handling                                                    |
 | SSE log stream                 | `container-logs`                                                                                                                                                                                                                                                               | stream-only endpoint metadata with stream-specific permission contract                                             | shared SSE transport lifecycle plus log reducer/fallback adapter                                           | line buffering, target selection, log filters, warnings, and fallback polling                                           |
 
-Phase 1 should decide whether these target groups are represented directly in
-`domainInventory` or derived from `behaviorClass`, backend registration, and
-frontend orchestrator fields. The important outcome is that tests can prove a
-domain joins the intended shared infrastructure group without duplicating
-metadata from the existing contract homes.
+Phase 1 kept these target groups derived from `behaviorClass`, backend
+registration, and frontend orchestrator fields instead of duplicating
+orchestrator, diagnostics, registration, permission, or resource-stream row
+metadata in `domainInventory`. The tests prove a domain joins the intended
+shared infrastructure group by domain id.
 
 ## Required Contract Fields
 
@@ -319,10 +321,9 @@ coverage, not replace behavior-specific registration code.
 
 ## Coverage Contract Enforcement
 
-`coverageContract` must be a test-enforced enum, not just prose. Phase 1 should
-add a small coverage registry in backend and frontend tests that maps each
-coverage contract to a proof function or an explicit temporary `planned`
-status.
+`coverageContract` is a test-enforced enum, not just prose. Phase 1 added a
+small coverage registry in backend and frontend tests that maps each coverage
+contract to a proof function or an explicit temporary `planned` status.
 
 Examples:
 
@@ -359,45 +360,45 @@ unless they supply an enforced coverage contract.
 
 ## Phase 1: Inventory And Guardrails
 
-- [ ] Add `domainInventory` to `refresh-domain-contract.json` for every current
+- [x] Add `domainInventory` to `refresh-domain-contract.json` for every current
       domain, leaving existing nested homes intact.
-- [ ] Make the inventory exhaustive in the JSON itself. Tables in this plan are
+- [x] Make the inventory exhaustive in the JSON itself. Tables in this plan are
       explanatory examples; the contract must contain the exact class and
       coverage mapping for every current domain.
-- [ ] Update frontend contract types in `domainRegistry.ts`.
-- [ ] Add backend and frontend domain-id parity tests for contract ids, backend
+- [x] Update frontend contract types in `domainRegistry.ts`.
+- [x] Add backend and frontend domain-id parity tests for contract ids, backend
       domain registrations, frontend domain registry ids, and resource-stream
       subset ids.
-- [ ] Account for registration paths explicitly: normal snapshot domains,
+- [x] Account for registration paths explicitly: normal snapshot domains,
       resource-stream domains, event/catalog/container-log stream endpoints,
       and service/provider-gated domains such as catalog, object YAML, and Helm
       content.
-- [ ] Add backend and frontend contract tests that fail when a domain lacks
+- [x] Add backend and frontend contract tests that fail when a domain lacks
       inventory metadata, accepted scope contract, cache policy, stream
       semantics, or coverage contract.
-- [ ] Lock the enum vocabulary for `scopeContract.kind`, `cachePolicy`, and
+- [x] Lock the enum vocabulary for `scopeContract.kind`, `cachePolicy`, and
       `streamSemantics`; do not allow free-form per-domain strings.
-- [ ] Assert each `scopeContract` points to a real backend parser/canonicalizer
+- [x] Assert each `scopeContract` points to a real backend parser/canonicalizer
       and frontend builder/normalizer when one exists.
-- [ ] Add compatibility tests that derive frontend orchestrator, diagnostics
+- [x] Add compatibility tests that derive frontend orchestrator, diagnostics
       stream, registration kind, permission policy, and resource-stream row
       metadata from their existing homes rather than duplicating them in
       `domainInventory`.
-- [ ] Add permission compatibility tests that prove `runtime`, `exempt`, and
+- [x] Add permission compatibility tests that prove `runtime`, `exempt`, and
       `stream-specific` domains join to the existing requirement maps or
       explicit exemption paths, including permission-denied placeholder behavior.
-- [ ] Add the coverage-contract enforcement registry, with `planned` status only
+- [x] Add the coverage-contract enforcement registry, with `planned` status only
       for classes scheduled for later phases.
-- [ ] Add a consolidation assessment for shared frontend SSE transport,
+- [x] Add a consolidation assessment for shared frontend SSE transport,
       snapshot-domain plumbing, backend registration gates, permission
-      compatibility helpers, and scope normalization helpers. Phase 1 should
-      identify the shared seams; later phases should only consolidate when tests
-      already prove behavior parity.
-- [ ] Edit the existing architecture sections in
+      compatibility helpers, and scope normalization helpers. Phase 1 identified
+      the shared seams; later phases should only consolidate when tests already
+      prove behavior parity.
+- [x] Edit the existing architecture sections in
       `docs/architecture/refresh-system.md` to explain behavior classes and
       canonical owners. Do not append a competing section that forks the current
       architecture doc.
-- [ ] Keep runtime behavior unchanged.
+- [x] Keep runtime behavior unchanged.
 
 Validation:
 
@@ -532,7 +533,48 @@ Validation:
 - `npm run test --prefix frontend -- ObjectPanel objectMap useNodeMaintenanceActions`
 - `mage qc:prerelease` before reporting the implementation phase complete
 
-## Phase 9: Runtime Smoke Checklist
+## Phase 9: Infrastructure Consolidation
+
+Do this only after Phases 2-8 have enforced the relevant behavior contracts.
+The goal is fewer lifecycle and registration paths, not fewer correctness
+models. Each consolidation must keep the behavior adapters named in the desired
+end-state matrix and must delete the duplicated local path it replaces.
+
+- [ ] Consolidate shared frontend SSE transport lifecycle for event, catalog,
+      and log streams: EventSource creation, reconnect/backoff, permission-error
+      parsing, health telemetry, visibility pause/resume, and cleanup. Keep
+      event, catalog, and log reducers separate unless tests prove identical
+      state semantics.
+- [ ] Consolidate frontend scoped snapshot lifecycle for snapshot payload
+      domains: scope enablement, refresh requests, cache-bypass/manual refresh,
+      error handling, diagnostics rows, and optional keyed merge reuse.
+- [ ] Extract keyed snapshot merge reuse for domains that can declare a
+      collection field and stable key without hiding payload-specific behavior.
+      Initial candidates are `namespaces`, `catalog-diff`, and
+      `object-maintenance`.
+- [ ] Consolidate backend registration metadata/helpers for `list`,
+      `listWatch`, list fallback, provider/service-gated direct registrations,
+      and dynamic-client requirements while preserving distinct registration
+      behavior.
+- [ ] Replace separate permission compatibility assertions with one domain-id
+      keyed helper covering snapshot runtime requirements, resource-stream
+      requirements, stream-specific permissions, and explicit exemptions.
+- [ ] Reuse shared cluster-prefix normalization helpers across scope builders
+      and parsers while keeping object, resource-stream, catalog, Helm, and
+      node-maintenance scope parsers explicit.
+- [ ] Keep coverage proof plumbing behavior-class-driven so future domains fail
+      closed through the inventory instead of requiring one-off assertions.
+- [ ] Remove any superseded duplicate lifecycle, registration, permission, or
+      merge helpers in the touched paths.
+
+Validation:
+
+- `go test ./backend/refresh/... ./backend/objectcatalog ./backend/nodemaintenance`
+- `npm run test --prefix frontend -- refresh streaming domainContract domainRegistry`
+- `npm run typecheck --prefix frontend`
+- `mage qc:prerelease` before reporting the implementation phase complete
+
+## Phase 10: Runtime Smoke Checklist
 
 - [ ] Write `docs/workflows/refresh-smoke.md` as a manual pre-release checklist
       for multi-cluster stream reconnects, restricted-RBAC partial access,
@@ -556,6 +598,9 @@ Validation:
 - Contract tests fail when a domain is added without class-specific coverage.
 - All temporary `coverageStatus: "planned"` entries have been removed or
   converted to enforced coverage.
+- Consolidation opportunities identified in Phase 1 are either implemented in
+  Phase 9 or deliberately deferred to a named follow-up with the behavior tests
+  that make the deferral safe.
 - All open questions that affect class assignment, coverage enforcement, or
   scope encoding are resolved in the implementation or moved to a separate
   non-blocking follow-up with an explicit compatibility test.
@@ -574,5 +619,3 @@ Validation:
   identity remain a separate contract?
 - Which runtime smoke checks should be automated in CI versus documented for
   manual pre-release validation?
-- Should `domainInventory` live only in JSON, or should Go/TypeScript enums
-  provide stricter compile-time checks?

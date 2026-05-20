@@ -69,10 +69,36 @@ Frontend domain registrations live in
 `backend/refresh/domain/refresh-domain-contract.json` is the authored metadata
 contract for domain category, frontend refresher name, timing, diagnostics
 stream, orchestrator kind, backend registration kind, runtime permission policy,
-and resource-stream participation. `frontend/src/core/refresh/domainRegistry.ts`
+resource-stream participation, and `domainInventory` behavior metadata.
+`domainInventory` is keyed by the same domain id as `domains[]` and names each
+domain's behavior class, scope contract, cache policy, stream semantics,
+payload owner, and coverage contract. `frontend/src/core/refresh/domainRegistry.ts`
 imports that contract directly and derives the frontend descriptor maps from it.
 Backend and frontend refresh-domain tests validate that explicit registration
 and behavior code still matches the contract.
+
+The domain id is the join key across all refresh contract homes. Do not add
+parallel aliases for renamed domains. If a domain or behavior class changes,
+rename it through the JSON, backend/frontend registrations, and tests in one
+change so stale names fail contract checks.
+
+Behavior classes describe correctness rules, not implementation inheritance:
+
+- `snapshot-table` and `aggregate-snapshot` are whole-payload snapshot domains.
+- `resource-stream-table` domains use snapshot baselines plus row
+  update/delete and scope-level COMPLETE stream semantics.
+- `complete-resync-stream` domains, currently `namespace-helm`, share the
+  resource stream transport but use COMPLETE as a scope-level change detector
+  instead of row updates.
+- `catalog-stream`, `event-stream`, and `log-stream` use stream-specific
+  reducers on top of catalog/event/log transports.
+- `catalog-snapshot`, `event-snapshot`, `detail-payload`,
+  `helm-content-payload`, `graph-payload`, and `operation-state` are scoped
+  snapshot payloads with class-specific payload and cache rules.
+
+Keep shared lifecycle plumbing consolidated where behavior allows it, but do
+not collapse class-specific reducers into a generic stream or snapshot handler
+when their identity, merge, cache, or recovery semantics differ.
 
 Current frontend domains are fully scoped and single-cluster by contract. The
 orchestrator normalizes every scope with `buildClusterScope` from
