@@ -19,6 +19,8 @@ Here are some of the things that Luxury Yacht offers that you might not find in 
 
 - **Maybe the best log viewer you've ever used.** Highlight your search text. Invert to only show lines without the search text. Use regular expressions. Show system timestamps for logs without their own timestamps, or logs that have indecipherable formats like unix epoch time. Customize the timestamp format. Show times in UTC or your local time zone. Toggle support for ASCII color codes. Make JSON logs readable in pretty-print format, or even as a table.
 
+- **Object Maps.** Visualize the relationships between objects in your clusters. View a node-level map, an namespace-level map, or drill down to specific objects.
+
 - **Flexible panel layouts.** Organize your info however you like. Dock info panels to the right, bottom, or float them as a resizable window. Open multiple object tabs in each panel. Drag tabs between panels, or drag out to create a new floating panel.
 
 - **Object Diff.** Can't understand why a deployment is working correctly in one cluster, but not the other? Open both deployments in the Diff Objects panel to see exactly what the differences are.
@@ -31,7 +33,7 @@ Here are some of the things that Luxury Yacht offers that you might not find in 
 
 - **Zero-touch setup.** Luxury Yacht uses your existing kubeconfig files. It reads `~/.kube` and loads your clusters into a dropdown menu. Select a cluster from the dropdown to get started. Open Settings to add or change which directories Luxury Yacht scans for kubeconfig files.
 
-- **Node maintenance.** Cordon, drain, and delete nodes with ease. Simply open a node's panel and select the Maintenance tab.
+- **Node maintenance.** Cordon, drain, and delete nodes with ease.
 
 - **Simple port forwarding.** Right-click on a workload, pod, or service and click Port Forward. Select a port and click Start. That's it. Run multiple port forwards simultaneously, and easily track them in a centralized status console.
 
