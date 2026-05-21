@@ -29,16 +29,15 @@ behavior, frontend infrastructure, or workflow-specific code.
 
 ## Workflows
 
-| Question                                     | Start here                                                               |
-| -------------------------------------------- | ------------------------------------------------------------------------ |
-| How does the object relationship map work?   | [workflows/object-map.md](workflows/object-map.md)                       |
-| How are live shell, port-forward, and drain operations tracked and cleaned up? | [workflows/operation-lifecycle.md](workflows/operation-lifecycle.md) |
-| How should refresh runtime behavior be smoked before release? | [workflows/refresh-smoke.md](workflows/refresh-smoke.md) |
-| How do shell exec and debug containers work? | [workflows/shell-debug.md](workflows/shell-debug.md)                     |
-| Which logs doc should I use?                 | [workflows/logs/overview.md](workflows/logs/overview.md)                 |
-| How do container/pod/workload logs work?     | [workflows/logs/container-logs.md](workflows/logs/container-logs.md)     |
-| How do node logs work?                       | [workflows/logs/node-logs.md](workflows/logs/node-logs.md)               |
-| How do app diagnostic logs work?             | [workflows/logs/application-logs.md](workflows/logs/application-logs.md) |
+| Question                                                                       | Start here                                                               |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| How does the object relationship map work?                                     | [workflows/object-map.md](workflows/object-map.md)                       |
+| How are live shell, port-forward, and drain operations tracked and cleaned up? | [workflows/operation-lifecycle.md](workflows/operation-lifecycle.md)     |
+| How do shell exec and debug containers work?                                   | [workflows/shell-debug.md](workflows/shell-debug.md)                     |
+| Which logs doc should I use?                                                   | [workflows/logs/overview.md](workflows/logs/overview.md)                 |
+| How do container/pod/workload logs work?                                       | [workflows/logs/container-logs.md](workflows/logs/container-logs.md)     |
+| How do node logs work?                                                         | [workflows/logs/node-logs.md](workflows/logs/node-logs.md)               |
+| How do app diagnostic logs work?                                               | [workflows/logs/application-logs.md](workflows/logs/application-logs.md) |
 
 ## Plans And Release Notes
 

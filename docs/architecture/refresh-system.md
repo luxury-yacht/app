@@ -5,7 +5,6 @@ streaming endpoints, and a frontend orchestrator that scopes every request to
 exactly one relevant cluster.
 
 See [README.md](README.md) for the architecture doc map.
-Use [refresh-smoke.md](../workflows/refresh-smoke.md) for manual runtime smoke
 checks before releases or after high-risk refresh subsystem changes.
 
 ## Quick Model
@@ -385,7 +384,7 @@ Resource stream safety rules:
   `TestResourceStreamDomainsMatchProjectionDescriptors` locks the JSON to
   `resourcestream.ProjectionDescriptors()`; the frontend test
   `resource stream domain descriptors > matches the backend-authored projection
-  contract` locks `resourceStreamDomainDescriptors.scopeKind` /
+contract` locks `resourceStreamDomainDescriptors.scopeKind` /
   `.preserveMetrics` / `.isClusterScoped` to the same JSON.
 - Metric-bearing projectors (`BuildPodSummary`, `BuildWorkloadSummary`,
   `BuildNodeSummary`) accept the latest usage snapshot as parameters rather
