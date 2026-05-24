@@ -60,6 +60,34 @@ const deleteYamlPath = (doc: YAML.Document, path: (string | number)[]) => {
   }
 };
 
+const GENERATED_METADATA_ANNOTATIONS = [
+  'deployment.kubernetes.io/revision',
+  'deployment.kubernetes.io/desired-replicas',
+  'deployment.kubernetes.io/max-replicas',
+  'kubectl.kubernetes.io/last-applied-configuration',
+] as const;
+
+const isEmptyYamlCollection = (value: unknown): boolean => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  if (YAML.isMap(value) || YAML.isSeq(value)) {
+    return value.items.length === 0;
+  }
+  return false;
+};
+
+const pruneEmptyYamlCollection = (doc: YAML.Document, path: (string | number)[]) => {
+  try {
+    const value = doc.getIn(path);
+    if (isEmptyYamlCollection(value)) {
+      doc.deleteIn(path);
+    }
+  } catch {
+    // Ignore invalid paths so comparison stays best-effort.
+  }
+};
+
 export const sanitizeYamlForSemanticCompare = (raw: string): string => {
   try {
     const doc = YAML.parseDocument(raw);
@@ -75,6 +103,11 @@ export const sanitizeYamlForSemanticCompare = (raw: string): string => {
     deleteYamlPath(doc, ['metadata', 'deletionGracePeriodSeconds']);
     deleteYamlPath(doc, ['metadata', 'generation']);
     deleteYamlPath(doc, ['metadata', 'selfLink']);
+    GENERATED_METADATA_ANNOTATIONS.forEach((annotation) => {
+      deleteYamlPath(doc, ['metadata', 'annotations', annotation]);
+    });
+    pruneEmptyYamlCollection(doc, ['metadata', 'annotations']);
+    pruneEmptyYamlCollection(doc, ['metadata']);
     deleteYamlPath(doc, ['status']);
 
     return doc.toString(YAML_STRINGIFY_OPTIONS);

@@ -277,6 +277,21 @@ spec:
       image: demo:v2
 `.trim();
 
+const VERIFIED_APPLIED_YAML_WITH_GENERATED_ANNOTATION = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  resourceVersion: "789"
+  annotations:
+    deployment.kubernetes.io/revision: "3"
+spec:
+  containers:
+    - name: demo
+      image: demo:v2
+`.trim();
+
 const SECOND_VERIFIED_APPLIED_YAML = `
 apiVersion: v1
 kind: Pod
@@ -763,6 +778,36 @@ describe('YamlTab', () => {
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
       action: 'loadLatestObjectYAML',
     });
+
+    await unmount();
+  });
+
+  it('does not warn when the final live object only differs by generated annotations', async () => {
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(
+      VERIFIED_APPLIED_YAML_WITH_GENERATED_ANNOTATION
+    );
+
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = getIconButton(container, 'Edit YAML');
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+
+    const saveButton = getIconButton(container, 'Save YAML');
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    expect(container.querySelector('.yaml-post-apply-notice')).toBeNull();
+    expect(codeMirrorState.value).toContain('deployment.kubernetes.io/revision: "3"');
 
     await unmount();
   });
