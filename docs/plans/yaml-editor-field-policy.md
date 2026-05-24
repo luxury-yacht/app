@@ -159,8 +159,8 @@ cannot drift from frontend editor protection and semantic comparison.
 
 ### 2. Reusable YAML Editor Surface
 
-Before wiring protected ranges into `YamlTab`, extract the reusable `YamlEditor`
-component described in `docs/plans/yaml-editor-component.md` so the same editor
+Before wiring protected ranges into `YamlTab`, use the reusable `YamlEditor`
+component documented in `docs/frontend/yaml-editor.md` so the same editor
 surface can be used by live-object editing, future object creation, and
 read-only YAML surfaces.
 
@@ -357,11 +357,11 @@ The compare path should:
 
 ### Phase 2: Protected Range Prototype
 
-- [ ] Extract reusable YAML editor surface before adding protected-range editor
+- [x] Extract reusable YAML editor surface before adding protected-range editor
       behavior to `YamlTab`
-- [ ] Follow `docs/plans/yaml-editor-component.md` and name the component
+- [x] Follow `docs/frontend/yaml-editor.md` and name the component
       `YamlEditor`
-- [ ] Keep object-panel load/edit/save/reload-merge behavior in `YamlTab`, not in
+- [x] Keep object-panel load/edit/save/reload-merge behavior in `YamlTab`, not in
       the reusable editor surface
 - [ ] Prototype YAML path-to-source-range resolver before integrating CodeMirror
 - [ ] Cover metadata scalar fields, annotation keys, `managedFields`, and

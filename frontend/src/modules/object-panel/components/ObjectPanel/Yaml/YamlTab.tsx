@@ -3,19 +3,12 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { yaml as yamlLang } from '@codemirror/lang-yaml';
-import { EditorView, keymap, type KeyBinding } from '@codemirror/view';
-import { EditorSelection, type Extension } from '@codemirror/state';
 import * as YAML from 'yaml';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
-import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
-import { CaseSensitiveIcon, CloseIcon } from '@shared/components/icons/SharedIcons';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
-import { deriveCopyText } from '@ui/shortcuts/context';
-import { useKeyboardSurface, useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
+import { useShortcut } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import { readObjectYAMLByGVK, requestData, requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
@@ -29,20 +22,7 @@ import { formatTooLargeDiffMessage } from '@shared/components/diff/diffUtils';
 import './YamlTab.css';
 import { parseObjectIdentity, validateYamlDraft, type ObjectIdentity } from './yamlValidation';
 import { parseObjectYamlError } from './yamlErrors';
-import { buildCodeTheme } from '@/core/codemirror/theme';
-import {
-  copyCodeMirrorSelection,
-  getCodeMirrorSelectedText,
-  selectCodeMirrorContent,
-} from '@/core/codemirror/nativeActions';
-import { createSearchExtensions, closeSearchPanel } from '@/core/codemirror/search';
-import {
-  SearchQuery,
-  findNext,
-  findPrevious,
-  getSearchQuery,
-  setSearchQuery,
-} from '@codemirror/search';
+import { YamlEditor, type YamlEditorHandle } from '@shared/components/yaml';
 
 // Import from extracted modules
 import type { YamlTabProps } from './yamlTabTypes';
@@ -64,8 +44,6 @@ import {
   YamlCancelIcon,
   YamlEditIcon,
   YamlManagedFieldsIcon,
-  YamlNextIcon,
-  YamlPreviousIcon,
   YamlSaveIcon,
 } from '@shared/components/icons/YamlIcons';
 
@@ -91,16 +69,6 @@ type VerifiedPostApplyState = {
 type RecentVerifiedSemanticEntry = {
   reference: string;
   semanticYaml: string;
-};
-
-type YamlSearchState = {
-  caseSensitiveMatches: boolean;
-  regexMatches: boolean;
-};
-
-const DEFAULT_YAML_SEARCH_STATE: YamlSearchState = {
-  caseSensitiveMatches: false,
-  regexMatches: false,
 };
 
 const isSameObjectReference = (left: ObjectIdentity, right: ObjectIdentity): boolean =>
@@ -258,42 +226,15 @@ const YamlTab: React.FC<YamlTabProps> = ({
     yaml: string;
     resourceVersion: string | null;
   } | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchState, setSearchState] = useState<YamlSearchState>(DEFAULT_YAML_SEARCH_STATE);
   const [hasServerYamlError, setHasServerYamlError] = useState(false);
   const [expandedDiffs, setExpandedDiffs] = useState<Record<string, boolean>>({});
-  const [contextMenu, setContextMenu] = useState<{
-    position: { x: number; y: number };
-    items: ContextMenuItem[];
-  } | null>(null);
 
-  const editorRef = useRef<ReactCodeMirrorRef>(null);
-  const editorViewRef = useRef<EditorView | null>(null);
-  const editorSurfaceRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const yamlEditorRef = useRef<YamlEditorHandle>(null);
   const recentVerifiedSemanticYamlsRef = useRef<RecentVerifiedSemanticEntry[]>([]);
 
   const effectiveScope = scope ?? INACTIVE_SCOPE;
   const snapshot = useRefreshScopedDomain('object-yaml', effectiveScope);
   const resolvedClusterId = clusterId?.trim() ?? '';
-
-  const [isDarkMode, setIsDarkMode] = useState(
-    () => document.documentElement.getAttribute('data-appearance-mode') === 'dark'
-  );
-
-  useEffect(() => {
-    const checkAppearanceMode = () => {
-      setIsDarkMode(document.documentElement.getAttribute('data-appearance-mode') === 'dark');
-    };
-
-    const observer = new MutationObserver(checkAppearanceMode);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-appearance-mode', 'class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   // Enable/disable the scoped domain based on tab activity. While editing,
   // pause the background refresher so routine controller updates do not keep
@@ -476,131 +417,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     return buildYamlTabDiff(latestYaml, draftYaml);
   }, [backendDriftCurrentYaml, displayYaml, draftYaml, driftForced, hasRemoteDrift, isEditing]);
 
-  const { theme: codeMirrorTheme, highlight: highlightExtension } = useMemo(
-    () => buildCodeTheme(isDarkMode),
-    [isDarkMode]
-  );
-
-  const searchExtensions = useMemo<Extension[]>(
-    () => createSearchExtensions({ enableKeymap: false }),
-    []
-  );
-
-  const baseEditorExtensions = useMemo<Extension[]>(() => {
-    return [yamlLang(), EditorView.lineWrapping, highlightExtension, ...searchExtensions];
-  }, [highlightExtension, searchExtensions]);
-
-  const applySearchQuery = useCallback(
-    (view: EditorView | null, term: string) => {
-      if (!view) {
-        return;
-      }
-      const current = getSearchQuery(view.state);
-      const query = new SearchQuery({
-        search: term,
-        caseSensitive: searchState.caseSensitiveMatches,
-        literal: !searchState.regexMatches,
-        regexp: searchState.regexMatches,
-        wholeWord: current.wholeWord,
-        replace: current.replace,
-      });
-      view.dispatch({ effects: setSearchQuery.of(query) });
-    },
-    [searchState.caseSensitiveMatches, searchState.regexMatches]
-  );
-
-  const focusSearchInput = useCallback(
-    (useSelection: boolean): boolean => {
-      if (!isActive) {
-        return false;
-      }
-      const view = editorViewRef.current;
-      if (!view) {
-        return false;
-      }
-      if (useSelection) {
-        const selection = view.state.sliceDoc(
-          view.state.selection.main.from,
-          view.state.selection.main.to
-        );
-        if (selection && !selection.includes('\n')) {
-          setSearchTerm(selection);
-          applySearchQuery(view, selection);
-        }
-      }
-      searchInputRef.current?.focus();
-      searchInputRef.current?.select();
-      return true;
-    },
-    [applySearchQuery, isActive]
-  );
-
-  const handleSearchChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const value = event.target.value;
-      const view = editorViewRef.current;
-      setSearchTerm(value);
-      if (view) {
-        view.dispatch({
-          selection: EditorSelection.cursor(value ? 0 : view.state.selection.main.from),
-        });
-      }
-      applySearchQuery(view, value);
-      if (view && value) {
-        findNext(view);
-      }
-    },
-    [applySearchQuery]
-  );
-
-  const handleFindNext = useCallback(() => {
-    const view = editorViewRef.current;
-    if (!view || !searchTerm) {
-      return;
-    }
-    findNext(view);
-    view.focus();
-  }, [searchTerm]);
-
-  const handleFindPrevious = useCallback(() => {
-    const view = editorViewRef.current;
-    if (!view || !searchTerm) {
-      return;
-    }
-    findPrevious(view);
-    view.focus();
-  }, [searchTerm]);
-
-  const handleSearchKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
-        event.preventDefault();
-        event.currentTarget.select();
-        return;
-      }
-
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        if (event.shiftKey) {
-          handleFindPrevious();
-        } else {
-          handleFindNext();
-        }
-      } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-        event.preventDefault();
-        handleFindPrevious();
-      } else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-        event.preventDefault();
-        handleFindNext();
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        searchInputRef.current?.blur();
-        editorViewRef.current?.focus();
-      }
-    },
-    [handleFindNext, handleFindPrevious]
-  );
-
   const toggleDiffExpansion = useCallback((diffKey: string) => {
     setExpandedDiffs((current) => ({
       ...current,
@@ -706,83 +522,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
     [resolvedClusterId]
   );
 
-  const handleEditorCreated = useCallback(
-    (view: EditorView) => {
-      editorViewRef.current = view;
-      setSearchTerm('');
-      applySearchQuery(view, '');
-      closeSearchPanel(view);
-      if (isEditing) {
-        window.requestAnimationFrame(() => view.focus());
-      }
-    },
-    [applySearchQuery, isEditing]
-  );
-
-  useEffect(() => {
-    const view = editorRef.current?.view;
-    if (view) {
-      editorViewRef.current = view;
-      setSearchTerm('');
-      applySearchQuery(view, '');
-      closeSearchPanel(view);
-    }
-  }, [activeYaml, applySearchQuery]);
-
-  useEffect(() => {
-    applySearchQuery(editorViewRef.current, searchTerm);
-  }, [applySearchQuery, searchTerm]);
-
-  useSearchShortcutTarget({
-    isActive,
-    focus: () => focusSearchInput(true),
-    priority: 30,
-    label: 'YAML tab search',
-  });
-
-  useKeyboardSurface({
-    kind: 'editor',
-    rootRef: editorSurfaceRef,
-    active: isActive,
-    onEscape: () => {
-      if (!isEditing || isSaving) {
-        return false;
-      }
-      handleCancelClick();
-      return true;
-    },
-    onNativeAction: ({ action, text }) => {
-      if (action === 'copy') {
-        return copyCodeMirrorSelection(editorViewRef.current);
-      }
-      if (action === 'selectAll') {
-        return selectCodeMirrorContent(editorViewRef.current);
-      }
-      if (action !== 'paste' || !isEditing || isSaving || typeof text !== 'string') {
-        return false;
-      }
-      const view = editorViewRef.current;
-      if (!view) {
-        return false;
-      }
-      const { from, to } = view.state.selection.main;
-      view.dispatch({
-        changes: { from, to, insert: text },
-        selection: EditorSelection.cursor(from + text.length),
-      });
-      view.focus();
-      return true;
-    },
-  });
-
   useEffect(() => {
     if (!isEditing) {
       return;
     }
-    const view = editorViewRef.current;
-    if (view) {
-      window.requestAnimationFrame(() => view.focus());
-    }
+    window.requestAnimationFrame(() => yamlEditorRef.current?.focus());
   }, [isEditing]);
 
   const previousShowManagedRef = useRef(showManagedFields);
@@ -861,13 +605,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     latestObjectIdentity,
     objectIdentity,
   ]);
-
-  useEffect(
-    () => () => {
-      editorViewRef.current = null;
-    },
-    []
-  );
 
   const handleEditorChange = useCallback(
     (value: string) => {
@@ -1225,146 +962,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     verifiedPostApply,
   ]);
 
-  const editorKeyBindings = useMemo<KeyBinding[]>(() => {
-    const bindings: KeyBinding[] = [
-      {
-        key: 'Mod-f',
-        run: () => focusSearchInput(true),
-      },
-      {
-        key: 'Shift-Mod-f',
-        run: () => focusSearchInput(true),
-      },
-      {
-        key: 'Mod-s',
-        preventDefault: true,
-        run: () => {
-          if (!isEditing || isSaving) {
-            return false;
-          }
-          handleSaveClick();
-          return true;
-        },
-      },
-      {
-        key: 'Escape',
-        run: () => {
-          if (!isEditing || isSaving) {
-            return false;
-          }
-          handleCancelClick();
-          return true;
-        },
-      },
-    ];
-    return bindings;
-  }, [focusSearchInput, handleCancelClick, handleSaveClick, isEditing, isSaving]);
-
-  const editorKeymapExtension = useMemo<Extension>(
-    () => keymap.of(editorKeyBindings),
-    [editorKeyBindings]
-  );
-
-  // --- Right-click context menu for the CodeMirror editor ---
-  // Use a ref so the CM extension callback always sees the latest isEditing value.
-  const isEditingRef = useRef(isEditing);
-  useEffect(() => {
-    isEditingRef.current = isEditing;
-  }, [isEditing]);
-
-  const handleContextMenuClose = useCallback(() => setContextMenu(null), []);
-
-  const contextMenuExtension = useMemo<Extension>(
-    () =>
-      EditorView.domEventHandlers({
-        contextmenu: (event: MouseEvent, view: EditorView) => {
-          event.preventDefault();
-
-          // Snapshot selected text before the menu steals focus.
-          const selectedText =
-            getCodeMirrorSelectedText(view) || deriveCopyText(window.getSelection()) || '';
-          const hasSelection = !!selectedText;
-          const editing = isEditingRef.current;
-
-          const items: ContextMenuItem[] = [];
-
-          if (editing) {
-            items.push({
-              label: 'Cut',
-              disabled: !hasSelection,
-              onClick: () => {
-                if (!selectedText) return;
-                navigator.clipboard.writeText(selectedText);
-                const { from, to } = view.state.selection.main;
-                if (from !== to) {
-                  view.dispatch({ changes: { from, to, insert: '' } });
-                }
-              },
-            });
-          }
-
-          items.push({
-            label: 'Copy',
-            disabled: !hasSelection,
-            onClick: () => {
-              if (selectedText) {
-                navigator.clipboard.writeText(selectedText);
-              }
-            },
-          });
-
-          if (editing) {
-            items.push({
-              label: 'Paste',
-              onClick: () => {
-                navigator.clipboard
-                  .readText()
-                  .then((text) => {
-                    if (!text) return;
-                    const { from, to } = view.state.selection.main;
-                    view.dispatch({
-                      changes: { from, to, insert: text },
-                      selection: EditorSelection.cursor(from + text.length),
-                    });
-                    view.focus();
-                  })
-                  .catch(() => {});
-              },
-            });
-          }
-
-          items.push({ divider: true });
-
-          items.push({
-            label: 'Select All',
-            onClick: () => {
-              // Use DOM selection so it works in both read-only and edit modes.
-              const cmContent = view.contentDOM;
-              const sel = window.getSelection();
-              if (sel && cmContent) {
-                sel.removeAllRanges();
-                const range = document.createRange();
-                range.selectNodeContents(cmContent);
-                sel.addRange(range);
-              }
-            },
-          });
-
-          setContextMenu({
-            position: { x: event.clientX, y: event.clientY },
-            items,
-          });
-          return true;
-        },
-      }),
-    []
-  );
-
-  const editorExtensions = useMemo<Extension[]>(
-    () => [...baseEditorExtensions, editorKeymapExtension, contextMenuExtension],
-    [baseEditorExtensions, editorKeymapExtension, contextMenuExtension]
-  );
-
   useShortcut({
     key: 's',
     modifiers: { meta: true },
@@ -1414,59 +1011,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
 
   const hasYamlError = Boolean(lintError) || hasServerYamlError;
   const disableSave = isSaving || hasYamlError;
-  const searchIconBarItems = useMemo<IconBarItem[]>(
+  const yamlToolbarItems = useMemo<IconBarItem[]>(
     () => [
-      {
-        type: 'action',
-        id: 'search-previous',
-        icon: <YamlPreviousIcon width={16} height={16} />,
-        onClick: handleFindPrevious,
-        title: 'Previous match',
-        ariaLabel: 'Previous match',
-        disabled: !searchTerm,
-      },
-      {
-        type: 'action',
-        id: 'search-next',
-        icon: <YamlNextIcon width={16} height={16} />,
-        onClick: handleFindNext,
-        title: 'Next match',
-        ariaLabel: 'Next match',
-        disabled: !searchTerm,
-      },
-      {
-        type: 'toggle',
-        id: 'case-sensitive-search',
-        icon: <CaseSensitiveIcon width={18} height={18} />,
-        active: searchState.caseSensitiveMatches,
-        onClick: () =>
-          setSearchState((current) =>
-            current.regexMatches
-              ? current
-              : {
-                  ...current,
-                  caseSensitiveMatches: !current.caseSensitiveMatches,
-                }
-          ),
-        title: 'Case-sensitive search',
-        ariaLabel: 'Case-sensitive search',
-        disabled: searchState.regexMatches,
-      },
-      {
-        type: 'toggle',
-        id: 'regex-search',
-        icon: <RegexSearchIcon width={16} height={16} />,
-        active: searchState.regexMatches,
-        onClick: () =>
-          setSearchState((current) => ({
-            ...current,
-            regexMatches: !current.regexMatches,
-            caseSensitiveMatches: !current.regexMatches ? false : current.caseSensitiveMatches,
-          })),
-        title: 'Enable regular expression search',
-        ariaLabel: 'Enable regular expression search',
-      },
-      { type: 'separator' },
       {
         type: 'toggle',
         id: 'managed-fields',
@@ -1528,14 +1074,10 @@ const YamlTab: React.FC<YamlTabProps> = ({
       editDisabledReason,
       handleCancelClick,
       handleEnterEdit,
-      handleFindNext,
-      handleFindPrevious,
       handleSaveClick,
       handleToggleManagedFields,
       isEditing,
       isSaving,
-      searchTerm,
-      searchState,
       showManagedFields,
     ]
   );
@@ -1585,34 +1127,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
   return (
     <div className="object-panel-tab-content">
       <div className="yaml-display">
-        <div className="yaml-header">
-          <div className="yaml-search-controls">
-            <div className="find-controls">
-              <input
-                ref={searchInputRef}
-                className="find-input"
-                type="text"
-                placeholder="Find…"
-                value={searchTerm}
-                onChange={handleSearchChange}
-                onKeyDown={handleSearchKeyDown}
-              />
-            </div>
-            <IconBar items={searchIconBarItems} />
-          </div>
-          {isEditing && hasRemoteDrift && (
-            <div className="yaml-controls">
-              <button
-                className="button secondary"
-                type="button"
-                onClick={handleReloadAndMerge}
-                disabled={isSaving}
-              >
-                Reload &amp; merge
-              </button>
-            </div>
-          )}
-        </div>
         {isEditing && (lintError || actionError || showReloadMergeConflict) && (
           <div className="yaml-validation-message">
             {showReloadMergeConflict && (
@@ -1693,39 +1207,45 @@ const YamlTab: React.FC<YamlTabProps> = ({
             )}
           </div>
         )}
-        <div className="yaml-content">
-          {isLargeManifest && (
-            <div className="yaml-editor-notice">
-              Large manifest detected. Editor performance may be reduced while editing.
-            </div>
-          )}
-          <div ref={editorSurfaceRef} className="codemirror-shell">
-            <CodeMirror
-              ref={editorRef}
-              value={isEditing ? draftYaml : (displayYaml ?? '')}
-              height="100%"
-              editable={isEditing && !isSaving}
-              basicSetup={{
-                highlightActiveLine: true,
-                highlightActiveLineGutter: true,
-                lineNumbers: true,
-                foldGutter: false,
-                searchKeymap: false,
-              }}
-              theme={codeMirrorTheme}
-              extensions={editorExtensions}
-              onChange={handleEditorChange}
-              onCreateEditor={handleEditorCreated}
-            />
-          </div>
-          {contextMenu && (
-            <ContextMenu
-              items={contextMenu.items}
-              position={contextMenu.position}
-              onClose={handleContextMenuClose}
-            />
-          )}
-        </div>
+        <YamlEditor
+          ref={yamlEditorRef}
+          value={isEditing ? draftYaml : (displayYaml ?? '')}
+          onChange={handleEditorChange}
+          editable={isEditing}
+          disabled={isSaving}
+          active={isActive}
+          shortcutLabel="YAML tab search"
+          shortcutPriority={30}
+          ariaLabel="Object YAML editor"
+          showSearchOptions
+          largeDocumentNotice={
+            isLargeManifest
+              ? 'Large manifest detected. Editor performance may be reduced while editing.'
+              : null
+          }
+          toolbarActions={
+            <>
+              <IconBar items={yamlToolbarItems} />
+              {isEditing && hasRemoteDrift && (
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={handleReloadAndMerge}
+                  disabled={isSaving}
+                >
+                  Reload &amp; merge
+                </button>
+              )}
+            </>
+          }
+          onEscape={() => {
+            if (!isEditing || isSaving) {
+              return false;
+            }
+            handleCancelClick();
+            return true;
+          }}
+        />
       </div>
     </div>
   );

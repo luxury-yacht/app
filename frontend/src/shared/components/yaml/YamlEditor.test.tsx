@@ -1,0 +1,421 @@
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { YamlEditorProps } from './YamlEditor';
+
+const shortcutMocks = vi.hoisted(() => ({
+  useKeyboardSurface: vi.fn(),
+  useSearchShortcutTarget: vi.fn(),
+}));
+
+const nativeActionMocks = vi.hoisted(() => ({
+  copyCodeMirrorSelection: vi.fn(() => true),
+  getCodeMirrorSelectedText: vi.fn(() => 'selected'),
+  selectCodeMirrorContent: vi.fn(() => true),
+}));
+
+const searchMocks = vi.hoisted(() => {
+  class SearchQuery {
+    search!: string;
+
+    constructor(options: Record<string, unknown>) {
+      Object.assign(this, options);
+    }
+  }
+
+  return {
+    SearchQuery,
+    findNext: vi.fn(),
+    findPrevious: vi.fn(),
+    getSearchQuery: vi.fn(() => ({
+      search: '',
+      caseSensitive: false,
+      literal: true,
+      regexp: false,
+      wholeWord: false,
+      replace: '',
+    })),
+    setSearchQuery: { of: vi.fn((query: unknown) => query) },
+  };
+});
+
+const codeMirrorState = vi.hoisted(() => ({
+  props: null as any,
+  editorView: {
+    state: {
+      selection: { main: { from: 0, to: 0 } },
+      sliceDoc: vi.fn(() => ''),
+    },
+    dispatch: vi.fn(),
+    focus: vi.fn(),
+  },
+  contextMenuHandler: null as ((event: MouseEvent, view: unknown) => boolean) | null,
+  transactionFilters: [] as Array<(transaction: any) => unknown>,
+  decorationRanges: [] as Array<{ from: number; to: number; spec: Record<string, unknown> }>,
+}));
+
+vi.mock('@uiw/react-codemirror', async () => {
+  const ReactModule = await vi.importActual<typeof import('react')>('react');
+  const CodeMirrorMock = ReactModule.forwardRef((_props: any, ref) => {
+    const props = _props;
+    codeMirrorState.props = props;
+    codeMirrorState.contextMenuHandler =
+      props.extensions?.find((extension: unknown) => {
+        return Boolean(
+          extension &&
+          typeof extension === 'object' &&
+          'contextmenu' in extension &&
+          typeof (extension as { contextmenu?: unknown }).contextmenu === 'function'
+        );
+      })?.contextmenu ?? null;
+
+    if (ref && typeof ref === 'object') {
+      (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
+        view: codeMirrorState.editorView,
+      };
+    }
+
+    ReactModule.useEffect(() => {
+      props.onCreateEditor?.(codeMirrorState.editorView);
+    }, [props]);
+
+    return ReactModule.createElement(
+      'div',
+      {
+        'data-testid': 'code-mirror',
+        'aria-label': props['aria-label'],
+        onContextMenu: (event: React.MouseEvent) => {
+          codeMirrorState.contextMenuHandler?.(event.nativeEvent, codeMirrorState.editorView);
+        },
+      },
+      props.value
+    );
+  });
+  CodeMirrorMock.displayName = 'CodeMirrorMock';
+
+  return {
+    __esModule: true,
+    default: CodeMirrorMock,
+  };
+});
+
+vi.mock('@codemirror/lang-yaml', () => ({
+  yaml: () => 'yaml-extension',
+}));
+
+vi.mock('@codemirror/view', () => ({
+  Decoration: {
+    mark: (spec: Record<string, unknown>) => ({
+      range: (from: number, to: number) => {
+        const range = { from, to, spec };
+        codeMirrorState.decorationRanges.push(range);
+        return range;
+      },
+    }),
+    set: (ranges: unknown[]) => ranges,
+  },
+  EditorView: class {
+    static decorations = {
+      of: (decorations: unknown) => ({ type: 'decorations', decorations }),
+    };
+
+    static domEventHandlers(handlers: unknown) {
+      return handlers;
+    }
+
+    static lineWrapping = 'lineWrapping';
+  },
+  keymap: {
+    of: (bindings: unknown) => ({ type: 'keymap', bindings }),
+  },
+}));
+
+vi.mock('@codemirror/state', () => ({
+  EditorSelection: {
+    cursor: (position: number) => ({ cursor: position }),
+  },
+  EditorState: {
+    transactionFilter: {
+      of: (filter: (transaction: any) => unknown) => {
+        codeMirrorState.transactionFilters.push(filter);
+        return { type: 'transactionFilter', filter };
+      },
+    },
+  },
+}));
+
+vi.mock('@codemirror/search', () => ({
+  SearchQuery: searchMocks.SearchQuery,
+  findNext: searchMocks.findNext,
+  findPrevious: searchMocks.findPrevious,
+  getSearchQuery: searchMocks.getSearchQuery,
+  setSearchQuery: searchMocks.setSearchQuery,
+}));
+
+vi.mock('@/core/codemirror/theme', () => ({
+  buildCodeTheme: () => ({ theme: 'theme-extension', highlight: 'highlight-extension' }),
+}));
+
+vi.mock('@/core/codemirror/search', () => ({
+  createSearchExtensions: () => ['search-extension'],
+  closeSearchPanel: vi.fn(),
+}));
+
+vi.mock('@/core/codemirror/nativeActions', () => nativeActionMocks);
+
+vi.mock('@ui/shortcuts', () => ({
+  useKeyboardSurface: (config: unknown) => shortcutMocks.useKeyboardSurface(config),
+  useSearchShortcutTarget: (config: unknown) => shortcutMocks.useSearchShortcutTarget(config),
+}));
+
+vi.mock('@ui/shortcuts/context', () => ({
+  deriveCopyText: () => '',
+}));
+
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
+}));
+
+const renderYamlEditor = async (props: Partial<YamlEditorProps> = {}) => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOM.createRoot(container);
+
+  await act(async () => {
+    const { default: YamlEditor } = await import('./YamlEditor');
+    root.render(<YamlEditor value="kind: ConfigMap\n" ariaLabel="YAML editor" {...props} />);
+  });
+
+  return {
+    container,
+    unmount: async () => {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    },
+  };
+};
+
+describe('YamlEditor', () => {
+  beforeEach(() => {
+    shortcutMocks.useKeyboardSurface.mockClear();
+    shortcutMocks.useSearchShortcutTarget.mockClear();
+    nativeActionMocks.copyCodeMirrorSelection.mockClear();
+    nativeActionMocks.getCodeMirrorSelectedText.mockClear();
+    nativeActionMocks.selectCodeMirrorContent.mockClear();
+    searchMocks.findNext.mockClear();
+    searchMocks.findPrevious.mockClear();
+    codeMirrorState.props = null;
+    codeMirrorState.editorView.dispatch.mockClear();
+    codeMirrorState.editorView.focus.mockClear();
+    codeMirrorState.editorView.state.sliceDoc.mockClear();
+    codeMirrorState.contextMenuHandler = null;
+    codeMirrorState.transactionFilters = [];
+    codeMirrorState.decorationRanges = [];
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn(() => Promise.resolve()),
+        readText: vi.fn(() => Promise.resolve('pasted')),
+      },
+    });
+  });
+
+  afterEach(() => {
+    document.body.textContent = '';
+  });
+
+  it('renders view-only YAML and suppresses changes', async () => {
+    const onChange = vi.fn();
+    const { container, unmount } = await renderYamlEditor({
+      value: 'metadata:\n  name: demo\n',
+      editable: false,
+      onChange,
+    });
+
+    expect(container.textContent).toContain('metadata:');
+
+    await act(async () => {
+      codeMirrorState.props.onChange('changed');
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+    await unmount();
+  });
+
+  it('calls onChange only when editable and enabled', async () => {
+    const onChange = vi.fn();
+    const { unmount } = await renderYamlEditor({ editable: true, onChange });
+
+    await act(async () => {
+      codeMirrorState.props.onChange('changed');
+    });
+
+    expect(onChange).toHaveBeenCalledWith('changed');
+    await unmount();
+
+    onChange.mockClear();
+    const disabled = await renderYamlEditor({ editable: true, disabled: true, onChange });
+
+    await act(async () => {
+      codeMirrorState.props.onChange('ignored');
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+    await disabled.unmount();
+  });
+
+  it('registers search and native-action ownership with caller activation metadata', async () => {
+    const { unmount } = await renderYamlEditor({
+      active: false,
+      shortcutLabel: 'Helm manifest search',
+      shortcutPriority: 20,
+    });
+
+    expect(shortcutMocks.useSearchShortcutTarget).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isActive: false,
+        label: 'Helm manifest search',
+        priority: 20,
+      })
+    );
+    expect(shortcutMocks.useKeyboardSurface).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'editor',
+        active: false,
+        priority: 20,
+      })
+    );
+
+    await unmount();
+  });
+
+  it('handles native copy, select-all, and editable paste through the editor surface', async () => {
+    const { unmount } = await renderYamlEditor({ editable: true });
+    const surfaceCalls = shortcutMocks.useKeyboardSurface.mock.calls;
+    const surfaceConfig = surfaceCalls[surfaceCalls.length - 1]?.[0] as {
+      onNativeAction: (event: { action: string; text?: string }) => boolean;
+    };
+
+    expect(surfaceConfig.onNativeAction({ action: 'copy' })).toBe(true);
+    expect(nativeActionMocks.copyCodeMirrorSelection).toHaveBeenCalledWith(
+      codeMirrorState.editorView
+    );
+    expect(surfaceConfig.onNativeAction({ action: 'selectAll' })).toBe(true);
+    expect(nativeActionMocks.selectCodeMirrorContent).toHaveBeenCalledWith(
+      codeMirrorState.editorView
+    );
+    expect(surfaceConfig.onNativeAction({ action: 'paste', text: 'abc' })).toBe(true);
+    expect(codeMirrorState.editorView.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        changes: { from: 0, to: 0, insert: 'abc' },
+      })
+    );
+
+    await unmount();
+  });
+
+  it('suppresses paste when disabled', async () => {
+    const { unmount } = await renderYamlEditor({ editable: true, disabled: true });
+    const surfaceCalls = shortcutMocks.useKeyboardSurface.mock.calls;
+    const surfaceConfig = surfaceCalls[surfaceCalls.length - 1]?.[0] as {
+      onNativeAction: (event: { action: string; text?: string }) => boolean;
+    };
+
+    codeMirrorState.editorView.dispatch.mockClear();
+
+    expect(surfaceConfig.onNativeAction({ action: 'paste', text: 'abc' })).toBe(false);
+    expect(codeMirrorState.editorView.dispatch).not.toHaveBeenCalled();
+
+    await unmount();
+  });
+
+  it('renders toolbar actions and focuses search with the current selection', async () => {
+    const { container, unmount } = await renderYamlEditor({
+      toolbarActions: <button type="button">Save</button>,
+    });
+    expect(container.textContent).toContain('Save');
+
+    codeMirrorState.editorView.dispatch.mockClear();
+    codeMirrorState.editorView.state.sliceDoc.mockReturnValue('kind');
+    const searchCalls = shortcutMocks.useSearchShortcutTarget.mock.calls;
+    const searchConfig = searchCalls[searchCalls.length - 1]?.[0] as { focus: () => boolean };
+
+    await act(async () => {
+      expect(searchConfig.focus()).toBe(true);
+    });
+
+    expect(codeMirrorState.editorView.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        effects: expect.objectContaining({ search: 'kind' }),
+      })
+    );
+    await unmount();
+  });
+
+  it('limits context-menu mutation actions to editable mode', async () => {
+    const viewOnly = await renderYamlEditor({ editable: false });
+
+    await act(async () => {
+      viewOnly.container
+        .querySelector('[data-testid="code-mirror"]')
+        ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    });
+
+    expect(document.body.textContent).toContain('Copy');
+    expect(document.body.textContent).toContain('Select All');
+    expect(document.body.textContent).not.toContain('Cut');
+    expect(document.body.textContent).not.toContain('Paste');
+    await viewOnly.unmount();
+
+    const editable = await renderYamlEditor({ editable: true });
+
+    await act(async () => {
+      editable.container
+        .querySelector('[data-testid="code-mirror"]')
+        ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    });
+
+    expect(document.body.textContent).toContain('Cut');
+    expect(document.body.textContent).toContain('Paste');
+    await editable.unmount();
+  });
+
+  it('decorates protected ranges and rejects edits that touch them', async () => {
+    const onProtectedEditBlocked = vi.fn();
+    const { unmount } = await renderYamlEditor({
+      value: 'kind: ConfigMap\nmetadata:\n',
+      editable: true,
+      protectedRanges: [{ from: 0, to: 4, blockedMessage: 'kind is read-only' }],
+      onProtectedEditBlocked,
+    });
+
+    expect(codeMirrorState.decorationRanges).toEqual([
+      expect.objectContaining({
+        from: 0,
+        to: 4,
+        spec: expect.objectContaining({ class: 'cm-yaml-protected-range' }),
+      }),
+    ]);
+
+    const transactionFilter =
+      codeMirrorState.transactionFilters[codeMirrorState.transactionFilters.length - 1];
+    const blocked = transactionFilter?.({
+      docChanged: true,
+      startState: { doc: { toString: () => 'kind: ConfigMap\nmetadata:\n' } },
+      changes: { iterChanges: (callback: (from: number, to: number) => void) => callback(1, 2) },
+    });
+
+    expect(blocked).toEqual([]);
+    expect(onProtectedEditBlocked).toHaveBeenCalledWith('kind is read-only');
+
+    const allowedTransaction = {
+      docChanged: true,
+      startState: { doc: { toString: () => 'kind: ConfigMap\nmetadata:\n' } },
+      changes: { iterChanges: (callback: (from: number, to: number) => void) => callback(12, 12) },
+    };
+
+    expect(transactionFilter?.(allowedTransaction)).toBe(allowedTransaction);
+    await unmount();
+  });
+});

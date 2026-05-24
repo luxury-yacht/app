@@ -27,6 +27,7 @@ behavior, frontend infrastructure, or workflow-specific code.
 | How should blocking modals be built?                           | [frontend/modals.md](frontend/modals.md)                           |
 | How do shared tabs and tab drag/drop work?                     | [frontend/tabs.md](frontend/tabs.md)                               |
 | How do dockable object panels and panel tab groups work?       | [frontend/dockable-panels.md](frontend/dockable-panels.md)         |
+| How should shared YAML viewing/editing surfaces be built?      | [frontend/yaml-editor.md](frontend/yaml-editor.md)                 |
 
 ## Workflows
 

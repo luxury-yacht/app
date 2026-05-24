@@ -164,9 +164,8 @@ Editors register as `editor` surfaces.
 
 Current examples:
 
-- YAML tab
-- Helm manifest tab
-- Helm values tab
+- YAML tab, Helm manifest tab, and Helm values tab through
+  [YamlEditor](yaml-editor.md)
 
 Default rule:
 
@@ -234,9 +233,7 @@ Search target infrastructure lives in:
 Current search-target users include:
 
 - GridTable filters
-- YAML tab
-- Helm manifest tab
-- Helm values tab
+- YAML editor surfaces
 - log viewer filter
 
 When changing keyboard behavior, preserve:
