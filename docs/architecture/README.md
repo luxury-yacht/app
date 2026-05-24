@@ -5,6 +5,7 @@ Use these docs by ownership area:
 | Doc                                                  | Use When                                                                                                                           |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | [data-access.md](data-access.md)                     | Choosing frontend read paths, brokers, adapters, request reasons, and paused-read behavior.                                        |
+| [shared-contracts.md](shared-contracts.md)           | Adding cross-layer policy, schema, descriptor, or registry contracts consumed by more than one layer.                              |
 | [refresh-system.md](refresh-system.md)               | Changing refresh domains, snapshot builders, stream managers, refresh scopes, or row construction shared by snapshots and streams. |
 | [catalog.md](catalog.md)                             | Working on object identity, discovery, catalog lookup/query behavior, browse ownership, or catalog freshness.                      |
 | [large-data.md](large-data.md)                       | Touching table caps, pagination/load-more, virtualization, metadata sourcing, diagnostics, or high-volume UI performance.          |

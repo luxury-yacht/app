@@ -11,6 +11,7 @@ behavior, frontend infrastructure, or workflow-specific code.
 | How do snapshots, streams, refresh domains, and diagnostics work? | [architecture/refresh-system.md](architecture/refresh-system.md)               |
 | What owns object identity, discovery, and existence?              | [architecture/catalog.md](architecture/catalog.md)                             |
 | What owns resource status, lifecycle, links, and facts?           | [architecture/shared-resource-model.md](architecture/shared-resource-model.md) |
+| Where should cross-layer policy/schema contracts live?            | [architecture/shared-contracts.md](architecture/shared-contracts.md)           |
 | How should frontend reads flow through brokers and transports?    | [architecture/data-access.md](architecture/data-access.md)                     |
 | How do refresh permissions and UI action permissions work?        | [architecture/permissions.md](architecture/permissions.md)                     |
 | How are auth failures detected and recovered per cluster?         | [architecture/auth.md](architecture/auth.md)                                   |
@@ -55,6 +56,8 @@ behavior, frontend infrastructure, or workflow-specific code.
 - Object references crossing boundaries must carry `clusterId`, `group`,
   `version`, `kind`, plus `namespace` and `name` for concrete objects; see
   [architecture/shared-resource-model.md](architecture/shared-resource-model.md).
+- Shared contracts are code-owned by the enforcing subsystem, not stored under
+  docs; see [architecture/shared-contracts.md](architecture/shared-contracts.md).
 - The object catalog owns identity and existence; typed views add richer
   projections, not competing identity systems; see
   [architecture/catalog.md](architecture/catalog.md).
