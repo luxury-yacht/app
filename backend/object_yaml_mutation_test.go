@@ -355,6 +355,55 @@ func TestApplyObjectYamlPatchesAgainstLatestObject(t *testing.T) {
 	}
 }
 
+func TestBuildKubectlEditPatchRejectsMetadataManagedFieldsChanges(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		gvk  schema.GroupVersionKind
+	}{
+		{
+			name: "strategic built-in",
+			gvk:  schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+		},
+		{
+			name: "json merge custom resource",
+			gvk:  schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": tc.gvk.GroupVersion().String(),
+				"kind":       tc.gvk.Kind,
+				"metadata": map[string]interface{}{
+					"name":      "demo",
+					"namespace": "default",
+				},
+			}}
+			desired := base.DeepCopy()
+			if err := unstructured.SetNestedSlice(
+				desired.Object,
+				[]interface{}{
+					map[string]interface{}{
+						"manager":   "other-controller",
+						"operation": "Update",
+					},
+				},
+				"metadata",
+				"managedFields",
+			); err != nil {
+				t.Fatalf("failed to set managedFields: %v", err)
+			}
+
+			_, _, err := buildKubectlEditPatch(tc.gvk, base, desired)
+			if err == nil {
+				t.Fatalf("expected managedFields precondition error")
+			}
+			if !strings.Contains(err.Error(), "managedFields") {
+				t.Fatalf("expected managedFields error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestMergeObjectYamlWithLatestStrategicMergesBuiltInLists(t *testing.T) {
 	app, dynamicClient, clusterID := setupYAMLTestApp(t)
 	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")

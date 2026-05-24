@@ -130,7 +130,7 @@ const computeCapabilityDescriptors = (
   add(
     {
       id: 'edit-yaml',
-      verb: 'update',
+      verb: 'patch',
       group: objectGroup,
       version: objectVersion,
       resourceKind,

@@ -231,6 +231,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
   scope,
   isActive = false,
   canEdit = false,
+  editDisabledReason = null,
   clusterId,
 }) => {
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
@@ -1507,11 +1508,24 @@ const YamlTab: React.FC<YamlTabProps> = ({
                 ariaLabel: 'Edit YAML',
               },
             ]
-          : []),
+          : editDisabledReason
+            ? [
+                {
+                  type: 'action' as const,
+                  id: 'edit-yaml-disabled',
+                  icon: <YamlEditIcon width={16} height={16} />,
+                  onClick: () => undefined,
+                  title: editDisabledReason,
+                  ariaLabel: `Edit YAML unavailable: ${editDisabledReason}`,
+                  disabled: true,
+                },
+              ]
+            : []),
     ],
     [
       canEdit,
       disableSave,
+      editDisabledReason,
       handleCancelClick,
       handleEnterEdit,
       handleFindNext,

@@ -127,6 +127,12 @@ describe('useObjectPanelCapabilities', () => {
     );
     expect(descriptors).toContainEqual(
       expect.objectContaining({
+        id: 'edit-yaml',
+        verb: 'patch',
+      })
+    );
+    expect(descriptors).toContainEqual(
+      expect.objectContaining({
         id: 'scale',
         verb: 'update',
         subresource: 'scale',

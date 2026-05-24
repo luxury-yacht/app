@@ -373,6 +373,7 @@ const renderYamlTab = async (
     scope: string | null;
     isActive: boolean;
     canEdit: boolean;
+    editDisabledReason: string | null;
     clusterId: string;
   }> = {}
 ) => {
@@ -455,6 +456,24 @@ describe('YamlTab', () => {
     await waitForUpdates();
 
     expect(codeMirrorState.value).toContain('managedFields');
+
+    await unmount();
+  });
+
+  it('shows the YAML edit denial reason when editing is not allowed', async () => {
+    const { container, unmount } = await renderYamlTab({
+      canEdit: false,
+      editDisabledReason: 'permission denied for patch pods/demo',
+    });
+
+    expect(getIconButton(container, 'Edit YAML')).toBeNull();
+    const disabledEditButton = getIconButton(
+      container,
+      'Edit YAML unavailable: permission denied for patch pods/demo'
+    );
+    expect(disabledEditButton).toBeTruthy();
+    expect(disabledEditButton?.disabled).toBe(true);
+    expect(disabledEditButton?.title).toBe('permission denied for patch pods/demo');
 
     await unmount();
   });

@@ -325,7 +325,7 @@ func buildKubectlEditPatch(
 		mergepatch.RequireKeyUnchanged("apiVersion"),
 		mergepatch.RequireKeyUnchanged("kind"),
 		mergepatch.RequireMetadataKeyUnchanged("name"),
-		mergepatch.RequireKeyUnchanged("managedFields"),
+		mergepatch.RequireMetadataKeyUnchanged("managedFields"),
 	}
 
 	versionedObject, err := kubescheme.Scheme.New(gvk)
