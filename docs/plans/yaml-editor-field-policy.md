@@ -52,6 +52,10 @@ The frontend also has separate behavior today:
   toggle can replace an active draft.
 - `validateYamlDraft` rejects multi-document YAML, so protected range work only
   needs to support one Kubernetes object document.
+- `YamlTab` owns the CodeMirror instance, search controls, context menu, object
+  YAML loading, edit state, drift detection, reload/merge, save, post-apply
+  verification, and object-panel capability wiring in one component. The editor
+  surface is not currently reusable for object creation.
 
 ## Desired Contract
 
@@ -65,6 +69,7 @@ Each policy entry should describe:
 - whether the field is editable
 - whether the field is ignored in post-save semantic comparison
 - backend behavior: `reject`, `strip`, `preserve`, or `allow`
+- workflow scope, for example live-object edit, object creation, or both
 - short user-facing explanation for protected fields
 
 Use these policy defaults:
@@ -152,7 +157,53 @@ load the JSON contract and verify the Go table is in parity for every field with
 enforced field must exist in the JSON contract so backend-only protected fields
 cannot drift from frontend editor protection and semantic comparison.
 
-### 2. YAML AST Path Resolution
+### 2. Reusable YAML Editor Surface
+
+Before wiring protected ranges into `YamlTab`, extract the reusable `YamlEditor`
+component described in `docs/plans/yaml-editor-component.md` so the same editor
+surface can be used by live-object editing, future object creation, and
+read-only YAML surfaces.
+
+The reusable component should own only editor mechanics:
+
+- CodeMirror rendering
+- YAML language mode and shared theme
+- search input/buttons
+- editor context menu
+- keyboard bindings passed in by the workflow
+- protected-range decorations and transaction filtering
+- local protected-edit feedback
+
+The reusable component must not own object-panel workflow state:
+
+- refresh domain subscription
+- object identity resolution
+- edit capability checks
+- live-object drift detection
+- reload/merge
+- apply/save calls
+- post-save verification and diff notices
+- managedFields read-only viewing toggle
+
+`YamlTab` should become the live-object workflow wrapper around `YamlEditor`. A
+future create-object workflow should be able to pass an empty
+or template YAML value, creation-specific validation, create-specific save
+handling, and no live-object drift/reload/merge behavior.
+
+Creation-mode implications:
+
+- there is no baseline object or `resourceVersion`
+- protected server-owned fields are generally absent, but if a user pastes them
+  into a new manifest the policy helpers should still be able to identify and
+  reject or strip them according to the contract
+- `metadata.name`, `metadata.namespace`, `apiVersion`, and `kind` are editable
+  in creation workflows even though they are protected identity fields in
+  live-object edit workflows
+- field policy entries therefore need an explicit workflow scope, such as
+  `appliesTo: ["edit"]` or `appliesTo: ["edit", "create"]`, instead of assuming
+  one policy behavior fits both workflows
+
+### 3. YAML AST Path Resolution
 
 Use the existing `yaml` package to parse documents and locate source ranges for
 configured paths. The range resolver must handle:
@@ -174,7 +225,7 @@ Do this as a spike first against representative real objects, including at least
 a Deployment with `managedFields` and a Service with dotted/slashed annotation
 keys. Confirm the source ranges before committing to the CodeMirror UX.
 
-### 3. CodeMirror Protected Ranges
+### 4. CodeMirror Protected Ranges
 
 Add a CodeMirror extension for protected YAML ranges.
 
@@ -202,7 +253,32 @@ Transaction behavior:
 The blocked-edit message should be transient and local to the YAML tab, not a
 global app error.
 
-### 4. Edit Mode Behavior
+Protected-field visual treatment:
+
+- keep protected fields as normal YAML text in the same editor
+- use a faint cool-gray background on protected lines/blocks
+- slightly mute protected text while preserving normal readability
+- add a thin left accent bar beside protected lines/blocks
+- do not add lock icons, chips, badges, inline buttons, overlays, split panes, or
+  hidden text
+- keep cursor movement, selection, copy, and search behavior working inside
+  protected ranges
+- show this tooltip on hover/focus: "Managed by Kubernetes. Shown for context and
+  cannot be edited."
+- show this local blocked-edit message when a transaction is rejected: "Managed
+  Kubernetes fields cannot be edited."
+
+Range rendering rules:
+
+- scalar protected fields decorate the full YAML line containing the key/value
+- map/list protected fields decorate the full subtree, including the key line
+- generated annotation entries decorate only the matching annotation key/value
+  line or subtree
+- missing protected fields create no decoration
+- unresolved protected ranges create no decoration and rely on backend
+  enforcement
+
+### 5. Edit Mode Behavior
 
 In edit mode:
 
@@ -219,7 +295,7 @@ ManagedFields behavior:
 - edit mode: always show it as protected when it exists
 - do not let the toggle rebuild or replace the user’s active draft
 
-### 5. Backend Enforcement
+### 6. Backend Enforcement
 
 Frontend protection is UX only. Backend mutation must still enforce protected
 fields.
@@ -237,7 +313,7 @@ Backend work:
 
 Do not rely on frontend protected ranges for correctness.
 
-### 6. Semantic Compare
+### 7. Semantic Compare
 
 Use the same frontend policy for post-save semantic comparison.
 
@@ -281,6 +357,12 @@ The compare path should:
 
 ### Phase 2: Protected Range Prototype
 
+- [ ] Extract reusable YAML editor surface before adding protected-range editor
+      behavior to `YamlTab`
+- [ ] Follow `docs/plans/yaml-editor-component.md` and name the component
+      `YamlEditor`
+- [ ] Keep object-panel load/edit/save/reload-merge behavior in `YamlTab`, not in
+      the reusable editor surface
 - [ ] Prototype YAML path-to-source-range resolver before integrating CodeMirror
 - [ ] Cover metadata scalar fields, annotation keys, `managedFields`, and
       `status`
