@@ -59,6 +59,21 @@ vi.mock('@uiw/react-codemirror', async () => {
   const CodeMirrorMock = ReactModule.forwardRef((_props: any, ref) => {
     const props = _props;
     codeMirrorState.props = props;
+    codeMirrorState.decorationRanges = [];
+    props.extensions?.forEach((extension: unknown) => {
+      if (
+        extension &&
+        typeof extension === 'object' &&
+        'compute' in extension &&
+        typeof (extension as { compute?: unknown }).compute === 'function'
+      ) {
+        (extension as { compute: (state: { doc: { toString: () => string } }) => unknown }).compute(
+          {
+            doc: { toString: () => props.value },
+          }
+        );
+      }
+    });
     codeMirrorState.contextMenuHandler =
       props.extensions?.find((extension: unknown) => {
         return Boolean(
@@ -112,11 +127,22 @@ vi.mock('@codemirror/view', () => ({
         return range;
       },
     }),
-    set: (ranges: unknown[]) => ranges,
+    set: (ranges: Array<{ from: number; to: number }>) => {
+      for (let index = 1; index < ranges.length; index += 1) {
+        if (ranges[index - 1].from > ranges[index].from) {
+          throw new Error('Ranges must be added sorted by `from` position and `startSide`');
+        }
+      }
+      return ranges;
+    },
   },
   EditorView: class {
     static decorations = {
       of: (decorations: unknown) => ({ type: 'decorations', decorations }),
+      compute: (_dependencies: unknown, compute: unknown) => ({
+        type: 'computedDecorations',
+        compute,
+      }),
     };
 
     static domEventHandlers(handlers: unknown) {
@@ -409,6 +435,39 @@ describe('YamlEditor', () => {
     expect(blocked).toEqual([]);
     expect(onProtectedEditBlocked).toHaveBeenCalledWith('kind is read-only');
 
+    const wholeDocumentReplacement = transactionFilter?.({
+      docChanged: true,
+      startState: { doc: { toString: () => 'kind: ConfigMap\nmetadata:\n' } },
+      changes: {
+        iterChanges: (callback: (from: number, to: number) => void) => callback(0, 26),
+      },
+    });
+
+    expect(wholeDocumentReplacement).toEqual([]);
+    expect(onProtectedEditBlocked).toHaveBeenCalledTimes(2);
+
+    const startBoundaryInsertion = transactionFilter?.({
+      docChanged: true,
+      startState: { doc: { toString: () => 'kind: ConfigMap\nmetadata:\n' } },
+      changes: {
+        iterChanges: (callback: (from: number, to: number) => void) => callback(0, 0),
+      },
+    });
+
+    expect(startBoundaryInsertion).toEqual([]);
+    expect(onProtectedEditBlocked).toHaveBeenCalledTimes(3);
+
+    const endBoundaryInsertion = transactionFilter?.({
+      docChanged: true,
+      startState: { doc: { toString: () => 'kind: ConfigMap\nmetadata:\n' } },
+      changes: {
+        iterChanges: (callback: (from: number, to: number) => void) => callback(4, 4),
+      },
+    });
+
+    expect(endBoundaryInsertion).toEqual([]);
+    expect(onProtectedEditBlocked).toHaveBeenCalledTimes(4);
+
     const allowedTransaction = {
       docChanged: true,
       startState: { doc: { toString: () => 'kind: ConfigMap\nmetadata:\n' } },
@@ -416,6 +475,115 @@ describe('YamlEditor', () => {
     };
 
     expect(transactionFilter?.(allowedTransaction)).toBe(allowedTransaction);
+    await unmount();
+  });
+
+  it('sorts protected ranges before creating CodeMirror decorations', async () => {
+    const { unmount } = await renderYamlEditor({
+      value: 'kind: ConfigMap\nmetadata:\n  name: demo\n',
+      editable: true,
+      protectedRanges: [
+        { from: 16, to: 25, blockedMessage: 'metadata is read-only' },
+        { from: 0, to: 4, blockedMessage: 'kind is read-only' },
+      ],
+    });
+
+    expect(codeMirrorState.decorationRanges.map((range) => range.from)).toEqual([0, 16]);
+
+    const transactionFilter =
+      codeMirrorState.transactionFilters[codeMirrorState.transactionFilters.length - 1];
+    const blocked = transactionFilter?.({
+      docChanged: true,
+      startState: { doc: { toString: () => 'kind: ConfigMap\nmetadata:\n  name: demo\n' } },
+      changes: { iterChanges: (callback: (from: number, to: number) => void) => callback(17, 18) },
+    });
+
+    expect(blocked).toEqual([]);
+    await unmount();
+  });
+
+  it('trims protected decorations to visible line text without weakening edit blocking', async () => {
+    const value = 'metadata:\n  generation: 5\n  labels:\n    app: demo\n';
+    const onProtectedEditBlocked = vi.fn();
+    const { unmount } = await renderYamlEditor({
+      value,
+      editable: true,
+      protectedRanges: [
+        {
+          from: value.indexOf('  generation:'),
+          to: value.indexOf('\n  labels:'),
+          blockedMessage: 'generation is read-only',
+        },
+      ],
+      onProtectedEditBlocked,
+    });
+
+    expect(codeMirrorState.decorationRanges).toEqual([
+      expect.objectContaining({
+        from: value.indexOf('generation:'),
+        to: value.indexOf('\n  labels:'),
+      }),
+    ]);
+
+    const transactionFilter =
+      codeMirrorState.transactionFilters[codeMirrorState.transactionFilters.length - 1];
+    const blockedIndentEdit = transactionFilter?.({
+      docChanged: true,
+      startState: { doc: { toString: () => value } },
+      changes: {
+        iterChanges: (callback: (from: number, to: number) => void) =>
+          callback(value.indexOf('  generation:'), value.indexOf('  generation:') + 1),
+      },
+    });
+
+    expect(blockedIndentEdit).toEqual([]);
+    expect(onProtectedEditBlocked).toHaveBeenCalledWith('generation is read-only');
+
+    await unmount();
+  });
+
+  it('computes protected decorations from the current editor document', async () => {
+    const staleValue = [
+      'metadata:',
+      '  managedFields:',
+      '    - manager: controller',
+      '  uid: 696db572-efed-40ba-b6a2-3dff614374c0',
+      '',
+    ].join('\n');
+    const currentDocument = ['metadata:', '  uid: 696db572-efed-40ba-b6a2-3dff614374c0', ''].join(
+      '\n'
+    );
+    const managedFieldsStart = staleValue.indexOf('  managedFields:');
+    const resolver = vi.fn((text: string) =>
+      text.includes('managedFields')
+        ? [
+            {
+              from: managedFieldsStart,
+              to: staleValue.indexOf('\n  uid:'),
+              tooltip: 'Kubernetes records field ownership in managedFields.',
+            },
+          ]
+        : []
+    );
+    const { unmount } = await renderYamlEditor({
+      value: staleValue,
+      editable: true,
+      protectedRangeResolver: resolver,
+    });
+
+    const computedDecorations = (
+      codeMirrorState.props.extensions as Array<Record<string, unknown>>
+    ).find((extension) => extension.type === 'computedDecorations') as
+      | { compute: (state: { doc: { toString: () => string } }) => unknown }
+      | undefined;
+    expect(computedDecorations).toBeTruthy();
+
+    codeMirrorState.decorationRanges = [];
+    computedDecorations?.compute({ doc: { toString: () => currentDocument } });
+
+    expect(resolver).toHaveBeenLastCalledWith(currentDocument);
+    expect(codeMirrorState.decorationRanges).toEqual([]);
+
     await unmount();
   });
 });

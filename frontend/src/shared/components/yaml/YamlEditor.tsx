@@ -108,7 +108,8 @@ const rangesForDocument = (
       from: Math.max(0, Math.min(text.length, range.from)),
       to: Math.max(0, Math.min(text.length, range.to)),
     }))
-    .filter((range) => range.to > range.from);
+    .filter((range) => range.to > range.from)
+    .sort((left, right) => left.from - right.from || left.to - right.to);
 };
 
 const changeTouchesRange = (
@@ -118,24 +119,64 @@ const changeTouchesRange = (
 ): ProtectedYamlRange | null => {
   for (const range of ranges) {
     if (from === to) {
-      if (from > range.from && from < range.to) {
+      if (from >= range.from && from <= range.to) {
         return range;
       }
       continue;
     }
-    if (from < range.to && to > range.from) {
+    if (from <= range.to && to > range.from) {
       return range;
     }
   }
   return null;
 };
 
-const buildProtectedRangeExtension = (
+const visualRangesForDocument = (
+  text: string,
+  ranges: ProtectedYamlRange[]
+): ProtectedYamlRange[] => {
+  const visualRanges: ProtectedYamlRange[] = [];
+
+  ranges.forEach((range) => {
+    let position = range.from;
+    while (position < range.to) {
+      const lineBreak = text.indexOf('\n', position);
+      const lineEnd = lineBreak === -1 ? text.length : Math.min(lineBreak, range.to);
+      let from = position;
+      let to = lineEnd;
+
+      while (from < to && /\s/.test(text[from])) {
+        from += 1;
+      }
+      while (to > from && /\s/.test(text[to - 1])) {
+        to -= 1;
+      }
+
+      if (to > from) {
+        visualRanges.push({
+          ...range,
+          from,
+          to,
+        });
+      }
+
+      if (lineBreak === -1 || lineBreak >= range.to) {
+        break;
+      }
+      position = lineBreak + 1;
+    }
+  });
+
+  return visualRanges;
+};
+
+const buildProtectedDecorationSet = (
+  text: string,
   ranges: ProtectedYamlRange[],
   defaultTooltip: string
-): Extension => {
-  const decorations = Decoration.set(
-    ranges.map((range) =>
+): DecorationSet => {
+  return Decoration.set(
+    visualRangesForDocument(text, ranges).map((range) =>
       Decoration.mark({
         class: 'cm-yaml-protected-range',
         attributes: {
@@ -144,7 +185,6 @@ const buildProtectedRangeExtension = (
       }).range(range.from, range.to)
     )
   ) as DecorationSet;
-  return EditorView.decorations.of(decorations);
 };
 
 const insertTextAtSelection = (view: EditorView | null, text: string): boolean => {
@@ -362,15 +402,14 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
         return [];
       }
 
-      const protectedRangesForValue = rangesForDocument(
-        value,
-        protectedRanges,
-        protectedRangeResolver
-      );
-      const protectedDecorationExtension = buildProtectedRangeExtension(
-        protectedRangesForValue,
-        protectedTooltip
-      );
+      const protectedDecorationExtension = EditorView.decorations.compute(['doc'], (state) => {
+        const currentText = state.doc.toString();
+        return buildProtectedDecorationSet(
+          currentText,
+          rangesForDocument(currentText, protectedRanges, protectedRangeResolver),
+          protectedTooltip
+        );
+      });
       const protectedTransactionExtension = EditorState.transactionFilter.of((transaction) => {
         if (!transaction.docChanged) {
           return transaction;
@@ -402,7 +441,6 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
       protectedRangeResolver,
       protectedRanges,
       protectedTooltip,
-      value,
     ]);
 
     const editorKeyBindings = useMemo<KeyBinding[]>(

@@ -104,6 +104,43 @@ includes type, paste, cut, delete, undo, redo, select-all delete, and
 whole-object replacement. Rejected transactions leave the document unchanged and
 call `onProtectedEditBlocked`.
 
+## Live Object Policy
+
+Live Kubernetes object editing uses the backend-owned field policy contract at
+`backend/object-yaml-field-policy-contract.json`. The frontend imports that
+contract through `yamlFieldPolicy.ts` and uses it for:
+
+- protected editor ranges
+- protected edit messages
+- post-save semantic diff suppression
+
+The backend owns correctness. Backend mutation code still rejects or preserves
+protected fields even if a caller bypasses the editor UI. Keep the Go
+enforcement table and JSON contract aligned with `TestYAMLFieldPolicyContract`.
+
+For existing-object edit mode:
+
+- `apiVersion`, `kind`, `metadata.name`, and `metadata.namespace` are visible
+  but read-only because object identity cannot be changed in place.
+- Kubernetes-owned metadata such as `managedFields`, `resourceVersion`, `uid`,
+  timestamps, `generation`, and `selfLink` is visible but read-only when present.
+- `status` is visible but read-only because controllers own observed state.
+- exact generated annotation keys listed in the policy are visible but read-only.
+- `metadata.resourceVersion` is preserved from the authoritative live object
+  rather than treated as user intent.
+- the managedFields toolbar toggle affects read-only viewing only; edit mode
+  always shows managedFields as protected when it exists and never rebuilds the
+  active draft because the toggle changed.
+
+The protected-field message is local to the YAML tab. It is not a global app
+error and should clear when the user makes an accepted edit, reloads, exits edit
+mode, or starts saving.
+
+Object creation should reuse `YamlEditor`, but it must pass a creation-specific
+policy scope. Existing-object identity fields that are protected during edit,
+such as `apiVersion`, `kind`, and `metadata.name`, are expected to be editable
+in creation workflows.
+
 ## Diff Surfaces
 
 `ObjectDiffModal` and `RollbackModal` use `DiffViewer`, not `YamlEditor`.

@@ -55,6 +55,12 @@ export default defineConfig({
       '@contexts': path.resolve(__dirname, './src/core/contexts'),
       '@assets': path.resolve(__dirname, './src/assets'),
       '@wailsjs': path.resolve(__dirname, './wailsjs'),
+
+      // Backend-owned shared contracts
+      '@yaml-field-policy-contract': path.resolve(
+        __dirname,
+        '../backend/object-yaml-field-policy-contract.json'
+      ),
     },
   },
   test: {

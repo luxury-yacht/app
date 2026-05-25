@@ -22,6 +22,7 @@ import { formatTooLargeDiffMessage } from '@shared/components/diff/diffUtils';
 import './YamlTab.css';
 import { parseObjectIdentity, validateYamlDraft, type ObjectIdentity } from './yamlValidation';
 import { parseObjectYamlError } from './yamlErrors';
+import { resolveProtectedYamlRanges } from './yamlFieldPolicy';
 import { YamlEditor, type YamlEditorHandle } from '@shared/components/yaml';
 
 // Import from extracted modules
@@ -209,6 +210,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const [lintError, setLintError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionDetails, setActionDetails] = useState<string[]>([]);
+  const [protectedEditMessage, setProtectedEditMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [baselineIdentity, setBaselineIdentity] = useState<ObjectIdentity | null>(null);
   const [baselineResourceVersion, setBaselineResourceVersion] = useState<string | null>(null);
@@ -548,12 +550,12 @@ const YamlTab: React.FC<YamlTabProps> = ({
       skipNextOverrideDraftSyncRef.current = false;
       return;
     }
-    if (!showChanged && !overrideChanged) {
+    if (!overrideChanged) {
       return;
     }
-    const sourceYaml = manualYamlOverride?.yaml ?? displayYaml ?? '';
-    setDraftYaml(prepareDraftYaml(sourceYaml, showManagedFields));
-  }, [displayYaml, isEditing, manualYamlOverride, showManagedFields]);
+    const sourceYaml = manualYamlOverride?.yaml ?? effectiveYamlContent ?? displayYaml ?? '';
+    setDraftYaml(prepareDraftYaml(sourceYaml, true));
+  }, [displayYaml, effectiveYamlContent, isEditing, manualYamlOverride, showManagedFields]);
 
   useEffect(() => {
     if (!isEditing) {
@@ -614,6 +616,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       setDraftYaml(value);
       setActionError(null);
       setActionDetails([]);
+      setProtectedEditMessage(null);
       setHasServerYamlError(false);
     },
     [isEditing]
@@ -634,8 +637,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
       return;
     }
 
-    const seedYaml = manualYamlOverride?.yaml ?? displayYaml ?? '';
-    const preparedDraft = prepareDraftYaml(normalizeYamlString(seedYaml), showManagedFields);
+    const seedYaml = manualYamlOverride?.yaml ?? effectiveYamlContent ?? displayYaml ?? '';
+    const preparedDraft = prepareDraftYaml(normalizeYamlString(seedYaml), true);
 
     setDraftYaml(preparedDraft);
     setBaselineIdentity(identityForEditing);
@@ -644,6 +647,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     setLintError(null);
     setActionError(null);
     setActionDetails([]);
+    setProtectedEditMessage(null);
     setHasRemoteDrift(false);
     setDriftForced(false);
     setBackendDriftCurrentYaml(null);
@@ -663,10 +667,10 @@ const YamlTab: React.FC<YamlTabProps> = ({
   }, [
     canEdit,
     displayYaml,
+    effectiveYamlContent,
     latestObjectIdentity,
     manualYamlOverride,
     objectIdentity,
-    showManagedFields,
   ]);
 
   const exitEditMode = useCallback(() => {
@@ -723,8 +727,10 @@ const YamlTab: React.FC<YamlTabProps> = ({
       const mergeBaseYaml =
         baselineMergeYaml ||
         prepareDraftYaml(
-          normalizeYamlString(manualYamlOverride?.yaml ?? displayYaml ?? ''),
-          showManagedFields
+          normalizeYamlString(
+            manualYamlOverride?.yaml ?? effectiveYamlContent ?? displayYaml ?? ''
+          ),
+          true
         );
       const mergeResult = await mergeYamlWithLatestOnServer(
         resolvedClusterId,
@@ -733,11 +739,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
         effectiveIdentity
       );
       const normalizedLatestYaml = normalizeYamlString(mergeResult.currentYAML);
-      const preparedLatestYaml = prepareDraftYaml(normalizedLatestYaml, showManagedFields);
-      const mergedDraftYaml = prepareDraftYaml(
-        normalizeYamlString(mergeResult.mergedYAML),
-        showManagedFields
-      );
+      const preparedLatestYaml = prepareDraftYaml(normalizedLatestYaml, true);
+      const mergedDraftYaml = prepareDraftYaml(normalizeYamlString(mergeResult.mergedYAML), true);
       const parsedIdentity = parseObjectIdentity(normalizedLatestYaml);
       const latestIdentity: ObjectIdentity = parsedIdentity
         ? {
@@ -766,6 +769,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       setLintError(null);
       setActionError(null);
       setActionDetails([]);
+      setProtectedEditMessage(null);
       setHasRemoteDrift(false);
       setDriftForced(false);
       setBackendDriftCurrentYaml(null);
@@ -791,7 +795,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
         setHasServerYamlError(false);
         if (objectYamlError.currentYaml) {
           setBackendDriftCurrentYaml(
-            prepareDraftYaml(normalizeYamlString(objectYamlError.currentYaml), showManagedFields)
+            prepareDraftYaml(normalizeYamlString(objectYamlError.currentYaml), true)
           );
         }
       } else {
@@ -806,11 +810,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
     displayYaml,
     draftYaml,
     effectiveIdentity,
+    effectiveYamlContent,
     isSaving,
     manualYamlOverride,
     resolvedClusterId,
     scope,
-    showManagedFields,
   ]);
 
   const handleSaveClick = useCallback(async () => {
@@ -832,12 +836,13 @@ const YamlTab: React.FC<YamlTabProps> = ({
     const baselineYaml =
       baselineMergeYaml ||
       prepareDraftYaml(
-        normalizeYamlString(manualYamlOverride?.yaml ?? displayYaml ?? ''),
-        showManagedFields
+        normalizeYamlString(manualYamlOverride?.yaml ?? effectiveYamlContent ?? displayYaml ?? ''),
+        true
       );
 
     setIsSaving(true);
     setActionError(null);
+    setProtectedEditMessage(null);
 
     try {
       const snapshotYamlBeforeSave = normalizeYamlString(yamlContent);
@@ -949,6 +954,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     baselineResourceVersion,
     displayYaml,
     draftYaml,
+    effectiveYamlContent,
     effectiveIdentity,
     exitEditMode,
     hydrateLatestObject,
@@ -957,7 +963,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     manualYamlOverride,
     resolvedClusterId,
     scope,
-    showManagedFields,
     yamlContent,
     verifiedPostApply,
   ]);
@@ -1013,15 +1018,19 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const disableSave = isSaving || hasYamlError;
   const yamlToolbarItems = useMemo<IconBarItem[]>(
     () => [
-      {
-        type: 'toggle',
-        id: 'managed-fields',
-        icon: <YamlManagedFieldsIcon width={16} height={16} />,
-        active: showManagedFields,
-        onClick: handleToggleManagedFields,
-        title: showManagedFields ? 'Hide managedFields' : 'Show managedFields',
-        ariaLabel: showManagedFields ? 'Hide managedFields' : 'Show managedFields',
-      },
+      ...(!isEditing
+        ? [
+            {
+              type: 'toggle' as const,
+              id: 'managed-fields',
+              icon: <YamlManagedFieldsIcon width={16} height={16} />,
+              active: showManagedFields,
+              onClick: handleToggleManagedFields,
+              title: showManagedFields ? 'Hide managedFields' : 'Show managedFields',
+              ariaLabel: showManagedFields ? 'Hide managedFields' : 'Show managedFields',
+            },
+          ]
+        : []),
       ...(isEditing
         ? [
             {
@@ -1127,46 +1136,48 @@ const YamlTab: React.FC<YamlTabProps> = ({
   return (
     <div className="object-panel-tab-content">
       <div className="yaml-display">
-        {isEditing && (lintError || actionError || showReloadMergeConflict) && (
-          <div className="yaml-validation-message">
-            {showReloadMergeConflict && (
-              <>
-                <div className="yaml-notice-header">
-                  <p>
-                    Reload &amp; merge could not reconcile your draft with the latest YAML. Your
-                    draft is unchanged. Save will still patch your edited fields onto the live
-                    object, like kubectl edit.
-                  </p>
+        {isEditing &&
+          (lintError || actionError || protectedEditMessage || showReloadMergeConflict) && (
+            <div className="yaml-validation-message">
+              {showReloadMergeConflict && (
+                <>
+                  <div className="yaml-notice-header">
+                    <p>
+                      Reload &amp; merge could not reconcile your draft with the latest YAML. Your
+                      draft is unchanged. Save will still patch your edited fields onto the live
+                      object, like kubectl edit.
+                    </p>
+                    {driftDiff &&
+                      renderYamlDiffToggle(
+                        driftDiff,
+                        driftDiffKey,
+                        Boolean(expandedDiffs[driftDiffKey]),
+                        toggleDiffExpansion
+                      )}
+                  </div>
                   {driftDiff &&
-                    renderYamlDiffToggle(
-                      driftDiff,
-                      driftDiffKey,
-                      Boolean(expandedDiffs[driftDiffKey]),
-                      toggleDiffExpansion
-                    )}
-                </div>
-                {driftDiff &&
-                  renderYamlDiff(driftDiff, driftDiffKey, Boolean(expandedDiffs[driftDiffKey]))}
-                {driftDiff?.tooLarge && (
-                  <p className="yaml-drift-warning">
-                    {driftDiff.tooLargeMessage ??
-                      'This diff is too large to display in the current view.'}{' '}
-                    Reload the YAML to review the latest version before retrying.
-                  </p>
-                )}
-              </>
-            )}
-            {lintError && <p>{lintError}</p>}
-            {actionError && (!lintError || actionError !== lintError) && <p>{actionError}</p>}
-            {actionDetails.length > 0 && (
-              <ul className="yaml-error-details">
-                {actionDetails.map((detail, index) => (
-                  <li key={`detail-${index}`}>{detail}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+                    renderYamlDiff(driftDiff, driftDiffKey, Boolean(expandedDiffs[driftDiffKey]))}
+                  {driftDiff?.tooLarge && (
+                    <p className="yaml-drift-warning">
+                      {driftDiff.tooLargeMessage ??
+                        'This diff is too large to display in the current view.'}{' '}
+                      Reload the YAML to review the latest version before retrying.
+                    </p>
+                  )}
+                </>
+              )}
+              {lintError && <p>{lintError}</p>}
+              {protectedEditMessage && <p>{protectedEditMessage}</p>}
+              {actionError && (!lintError || actionError !== lintError) && <p>{actionError}</p>}
+              {actionDetails.length > 0 && (
+                <ul className="yaml-error-details">
+                  {actionDetails.map((detail, index) => (
+                    <li key={`detail-${index}`}>{detail}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         {!isEditing && postApplyNotice && (
           <div
             className={`yaml-post-apply-notice yaml-post-apply-notice-${postApplyNotice.kind}`}
@@ -1218,6 +1229,10 @@ const YamlTab: React.FC<YamlTabProps> = ({
           shortcutPriority={30}
           ariaLabel="Object YAML editor"
           showSearchOptions
+          protectedRangeResolver={
+            isEditing ? (value) => resolveProtectedYamlRanges(value, 'edit') : undefined
+          }
+          onProtectedEditBlocked={setProtectedEditMessage}
           largeDocumentNotice={
             isLargeManifest
               ? 'Large manifest detected. Editor performance may be reduced while editing.'

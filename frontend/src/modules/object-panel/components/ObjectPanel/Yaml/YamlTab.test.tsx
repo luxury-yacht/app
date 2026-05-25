@@ -150,20 +150,40 @@ vi.mock('@codemirror/lang-yaml', () => ({
 }));
 
 vi.mock('@codemirror/view', () => ({
+  Decoration: {
+    mark: () => ({
+      range: (from: number, to: number) => ({ from, to }),
+    }),
+    set: (ranges: unknown[]) => ranges,
+  },
   EditorView: class {
+    static decorations = {
+      of: (decorations: unknown) => decorations,
+      compute: (_dependencies: unknown, compute: unknown) => ({
+        type: 'computedDecorations',
+        compute,
+      }),
+    };
+
     static domEventHandlers(handlers: unknown) {
       return handlers;
     }
+
+    static lineWrapping = 'lineWrapping';
   },
   keymap: {
     of: (bindings: unknown) => bindings,
   },
-  lineWrapping: 'lineWrapping',
 }));
 
 vi.mock('@codemirror/state', () => ({
   EditorSelection: {
     cursor: (position: number) => ({ cursor: position }),
+  },
+  EditorState: {
+    transactionFilter: {
+      of: (filter: unknown) => filter,
+    },
   },
 }));
 
@@ -654,7 +674,7 @@ describe('YamlTab', () => {
       })
     );
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).toContain('image: demo:v1');
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).not.toContain('managedFields');
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).toContain('managedFields');
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).toContain('image: demo:v2');
     expect(wailsMocks.ValidateObjectYaml).not.toHaveBeenCalled();
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
@@ -665,6 +685,66 @@ describe('YamlTab', () => {
 
     const editButtonAfterSave = getIconButton(container, 'Edit YAML');
     expect(editButtonAfterSave).toBeTruthy();
+
+    await unmount();
+  });
+
+  it('blocks protected field edits with a local message while editing', async () => {
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = getIconButton(container, 'Edit YAML');
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const transactionFilter = codeMirrorState.latestProps.current.extensions.find(
+      (extension: unknown) => typeof extension === 'function'
+    ) as
+      | ((transaction: {
+          docChanged: boolean;
+          startState: { doc: { toString: () => string } };
+          changes: { iterChanges: (callback: (from: number, to: number) => void) => void };
+        }) => unknown)
+      | undefined;
+    expect(transactionFilter).toBeTruthy();
+
+    let blockedResult: unknown;
+    await act(async () => {
+      blockedResult = transactionFilter?.({
+        docChanged: true,
+        startState: { doc: { toString: () => codeMirrorState.value } },
+        changes: { iterChanges: (callback) => callback(0, 'apiVersion'.length) },
+      });
+    });
+
+    expect(blockedResult).toEqual([]);
+    expect(container.textContent).toContain(
+      'apiVersion is managed by Kubernetes and cannot be edited.'
+    );
+
+    const kindIndex = codeMirrorState.value.indexOf('kind:');
+    await act(async () => {
+      blockedResult = transactionFilter?.({
+        docChanged: true,
+        startState: { doc: { toString: () => codeMirrorState.value } },
+        changes: { iterChanges: (callback) => callback(kindIndex, kindIndex + 'kind'.length) },
+      });
+    });
+
+    expect(blockedResult).toEqual([]);
+    expect(container.textContent).toContain('kind is managed by Kubernetes and cannot be edited.');
+
+    const imageIndex = codeMirrorState.value.indexOf('image: demo:v1');
+    const allowedTransaction = {
+      docChanged: true,
+      startState: { doc: { toString: () => codeMirrorState.value } },
+      changes: {
+        iterChanges: (callback: (from: number, to: number) => void) =>
+          callback(imageIndex, imageIndex),
+      },
+    };
+
+    expect(transactionFilter?.(allowedTransaction)).toBe(allowedTransaction);
 
     await unmount();
   });

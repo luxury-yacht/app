@@ -260,6 +260,11 @@ func prepareMutationContextWithDependencies(
 		return nil, fmt.Errorf("live object namespace %s does not match YAML namespace %s", namespaceLabel(current.GetNamespace()), namespaceLabel(desired.GetNamespace()))
 	}
 
+	if err := enforceObjectYAMLFieldPolicy(base, desired); err != nil {
+		return nil, err
+	}
+	preserveObjectYAMLFields(base, desired, current)
+
 	patch, patchType, err := buildKubectlEditPatch(gvk, base, desired)
 	if err != nil {
 		return nil, err

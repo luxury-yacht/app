@@ -40,12 +40,12 @@ executable policy look like explanatory material.
 
 Use the narrowest contract form that preserves one source of truth:
 
-| Form                         | Use When                                                                                 |
-| ---------------------------- | ---------------------------------------------------------------------------------------- |
-| Backend-authored JSON        | Both backend tests and frontend runtime need the same table or policy data.              |
-| Backend Go DTO + Wails model | The contract is an RPC payload or app-state shape already exposed through Wails.         |
+| Form                         | Use When                                                                                  |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| Backend-authored JSON        | Both backend tests and frontend runtime need the same table or policy data.               |
+| Backend Go DTO + Wails model | The contract is an RPC payload or app-state shape already exposed through Wails.          |
 | Generated code from schema   | The contract is large or type-heavy enough that hand-maintained Go/TypeScript will drift. |
-| Frontend TypeScript module   | The contract is frontend-only and has no backend enforcement or backend test consumer.   |
+| Frontend TypeScript module   | The contract is frontend-only and has no backend enforcement or backend test consumer.    |
 
 Do not introduce a generic shared directory unless it is a real build-supported
 package or generated artifact home. A folder named `shared` is not a contract
@@ -100,8 +100,9 @@ page with:
 
 ## Existing Examples
 
-| Contract                                           | Owner             | Consumers                         | Notes                                                                 |
-| -------------------------------------------------- | ----------------- | --------------------------------- | --------------------------------------------------------------------- |
-| `backend/refresh/domain/refresh-domain-contract.json` | Refresh backend   | Frontend refresh registry, backend tests | Authored JSON contract imported directly by frontend registry code.    |
-| Backend resource/type DTOs                         | Backend resources | Wails generated frontend models   | Use Wails generation/typecheck rather than separate TypeScript tables. |
-| `backend/refresh/resourcestream/permission_contract.go` | Resource streams  | Backend refresh tests             | Backend-only contract; no frontend runtime consumer today.             |
+| Contract                                                | Owner                 | Consumers                                        | Notes                                                                                                                     |
+| ------------------------------------------------------- | --------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `backend/refresh/domain/refresh-domain-contract.json`   | Refresh backend       | Frontend refresh registry, backend tests         | Authored JSON contract imported directly by frontend registry code.                                                       |
+| `backend/object-yaml-field-policy-contract.json`        | YAML mutation backend | YAML editor policy helpers, backend policy tests | Backend-owned field policy for live-object YAML protection, backend mutation behavior, and post-save semantic comparison. |
+| Backend resource/type DTOs                              | Backend resources     | Wails generated frontend models                  | Use Wails generation/typecheck rather than separate TypeScript tables.                                                    |
+| `backend/refresh/resourcestream/permission_contract.go` | Resource streams      | Backend refresh tests                            | Backend-only contract; no frontend runtime consumer today.                                                                |
