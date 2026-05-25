@@ -319,6 +319,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
     }
   }, [effectiveYamlContent, showManagedFields]);
 
+  const prepareVisibleDraftYaml = useCallback(
+    (rawYaml: string) => prepareDraftYaml(rawYaml, showManagedFields),
+    [showManagedFields]
+  );
+
   const objectIdentity = useMemo(
     () => parseObjectIdentity(effectiveYamlContent),
     [effectiveYamlContent]
@@ -554,8 +559,15 @@ const YamlTab: React.FC<YamlTabProps> = ({
       return;
     }
     const sourceYaml = manualYamlOverride?.yaml ?? effectiveYamlContent ?? displayYaml ?? '';
-    setDraftYaml(prepareDraftYaml(sourceYaml, true));
-  }, [displayYaml, effectiveYamlContent, isEditing, manualYamlOverride, showManagedFields]);
+    setDraftYaml(prepareVisibleDraftYaml(sourceYaml));
+  }, [
+    displayYaml,
+    effectiveYamlContent,
+    isEditing,
+    manualYamlOverride,
+    prepareVisibleDraftYaml,
+    showManagedFields,
+  ]);
 
   useEffect(() => {
     if (!isEditing) {
@@ -638,7 +650,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     }
 
     const seedYaml = manualYamlOverride?.yaml ?? effectiveYamlContent ?? displayYaml ?? '';
-    const preparedDraft = prepareDraftYaml(normalizeYamlString(seedYaml), true);
+    const preparedDraft = prepareVisibleDraftYaml(normalizeYamlString(seedYaml));
 
     setDraftYaml(preparedDraft);
     setBaselineIdentity(identityForEditing);
@@ -671,6 +683,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     latestObjectIdentity,
     manualYamlOverride,
     objectIdentity,
+    prepareVisibleDraftYaml,
   ]);
 
   const exitEditMode = useCallback(() => {
@@ -726,11 +739,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
     try {
       const mergeBaseYaml =
         baselineMergeYaml ||
-        prepareDraftYaml(
-          normalizeYamlString(
-            manualYamlOverride?.yaml ?? effectiveYamlContent ?? displayYaml ?? ''
-          ),
-          true
+        prepareVisibleDraftYaml(
+          normalizeYamlString(manualYamlOverride?.yaml ?? effectiveYamlContent ?? displayYaml ?? '')
         );
       const mergeResult = await mergeYamlWithLatestOnServer(
         resolvedClusterId,
@@ -739,8 +749,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
         effectiveIdentity
       );
       const normalizedLatestYaml = normalizeYamlString(mergeResult.currentYAML);
-      const preparedLatestYaml = prepareDraftYaml(normalizedLatestYaml, true);
-      const mergedDraftYaml = prepareDraftYaml(normalizeYamlString(mergeResult.mergedYAML), true);
+      const preparedLatestYaml = prepareVisibleDraftYaml(normalizedLatestYaml);
+      const mergedDraftYaml = prepareVisibleDraftYaml(normalizeYamlString(mergeResult.mergedYAML));
       const parsedIdentity = parseObjectIdentity(normalizedLatestYaml);
       const latestIdentity: ObjectIdentity = parsedIdentity
         ? {
@@ -795,7 +805,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
         setHasServerYamlError(false);
         if (objectYamlError.currentYaml) {
           setBackendDriftCurrentYaml(
-            prepareDraftYaml(normalizeYamlString(objectYamlError.currentYaml), true)
+            prepareVisibleDraftYaml(normalizeYamlString(objectYamlError.currentYaml))
           );
         }
       } else {
@@ -813,6 +823,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     effectiveYamlContent,
     isSaving,
     manualYamlOverride,
+    prepareVisibleDraftYaml,
     resolvedClusterId,
     scope,
   ]);
@@ -835,9 +846,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
 
     const baselineYaml =
       baselineMergeYaml ||
-      prepareDraftYaml(
-        normalizeYamlString(manualYamlOverride?.yaml ?? effectiveYamlContent ?? displayYaml ?? ''),
-        true
+      prepareVisibleDraftYaml(
+        normalizeYamlString(manualYamlOverride?.yaml ?? effectiveYamlContent ?? displayYaml ?? '')
       );
 
     setIsSaving(true);
@@ -961,6 +971,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     isEditing,
     isSaving,
     manualYamlOverride,
+    prepareVisibleDraftYaml,
     resolvedClusterId,
     scope,
     yamlContent,

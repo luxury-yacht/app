@@ -495,6 +495,41 @@ describe('YamlTab', () => {
     await unmount();
   });
 
+  it('uses the managedFields visibility setting when entering edit mode', async () => {
+    const { container, unmount } = await renderYamlTab();
+
+    await act(async () => {
+      getIconButton(container, 'Edit YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+
+    expect(codeMirrorState.value).not.toContain('managedFields');
+
+    await act(async () => {
+      getIconButton(container, 'Cancel edit')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+
+    await act(async () => {
+      getIconButton(container, 'Show managedFields')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+    await waitForUpdates();
+
+    await act(async () => {
+      getIconButton(container, 'Edit YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+
+    expect(codeMirrorState.value).toContain('managedFields');
+
+    await unmount();
+  });
+
   it('shows the YAML edit denial reason when editing is not allowed', async () => {
     const { container, unmount } = await renderYamlTab({
       canEdit: false,
@@ -674,8 +709,9 @@ describe('YamlTab', () => {
       })
     );
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).toContain('image: demo:v1');
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).toContain('managedFields');
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).not.toContain('managedFields');
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).toContain('image: demo:v2');
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).not.toContain('managedFields');
     expect(wailsMocks.ValidateObjectYaml).not.toHaveBeenCalled();
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',

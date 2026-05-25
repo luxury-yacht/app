@@ -33,7 +33,11 @@
 }
 
 .codemirror-shell .cm-yaml-protected-range {
-  background: color-mix(in srgb, var(--color-bg-secondary) 78%, var(--color-border));
-  color: var(--color-text-secondary);
-  box-shadow: inset 2px 0 0 var(--color-border-strong, var(--color-border));
+  opacity: 0.5;
+  font-style: italic;
+  cursor: not-allowed;
+}
+
+.codemirror-shell .cm-yaml-protected-range * {
+  color: inherit;
 }
