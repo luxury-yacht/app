@@ -1,4 +1,4 @@
-package backend
+package objectyaml
 
 import (
 	"fmt"
@@ -82,7 +82,7 @@ func isSimpleObjectYAMLFieldPathPart(part string) bool {
 	return true
 }
 
-func enforceObjectYAMLFieldPolicy(baseObj, desiredObj *unstructured.Unstructured) error {
+func EnforceFieldPolicy(baseObj, desiredObj *unstructured.Unstructured) error {
 	for _, rule := range objectYAMLFieldPolicyRules {
 		switch rule.behavior {
 		case objectYAMLBackendReject:
@@ -110,7 +110,7 @@ func protectedObjectYAMLFieldChanged(baseObj, desiredObj *unstructured.Unstructu
 	return !reflect.DeepEqual(baseValue, desiredValue)
 }
 
-func preserveObjectYAMLFields(baseObj, desiredObj, currentObj *unstructured.Unstructured) {
+func PreserveFields(baseObj, desiredObj, currentObj *unstructured.Unstructured) {
 	for _, rule := range objectYAMLFieldPolicyRules {
 		if rule.behavior != objectYAMLBackendPreserve {
 			continue

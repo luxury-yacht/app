@@ -91,9 +91,8 @@ stay valid after accepted edits outside protected blocks.
 
 Protected-field visual treatment is intentionally plain:
 
-- faint cool-gray background on protected lines or blocks
-- slightly muted but readable text
-- thin left accent bar beside protected lines or blocks
+- slightly dimmed but readable text, implemented with range opacity so syntax
+  colors remain recognizable
 - no lock icons, badges, chips, overlays, split panes, or hidden text
 
 Cursor movement, selection, copy, and search must continue to work inside
@@ -107,7 +106,7 @@ call `onProtectedEditBlocked`.
 ## Live Object Policy
 
 Live Kubernetes object editing uses the backend-owned field policy contract at
-`backend/object-yaml-field-policy-contract.json`. The frontend imports that
+`backend/objectyaml/field-policy-contract.json`. The frontend imports that
 contract through `yamlFieldPolicy.ts` and uses it for:
 
 - protected editor ranges
@@ -122,15 +121,16 @@ For existing-object edit mode:
 
 - `apiVersion`, `kind`, `metadata.name`, and `metadata.namespace` are visible
   but read-only because object identity cannot be changed in place.
-- Kubernetes-owned metadata such as `managedFields`, `resourceVersion`, `uid`,
-  timestamps, `generation`, and `selfLink` is visible but read-only when present.
+- Kubernetes-owned metadata such as `resourceVersion`, `uid`, timestamps,
+  `generation`, and `selfLink` is visible but read-only when present.
 - `status` is visible but read-only because controllers own observed state.
 - exact generated annotation keys listed in the policy are visible but read-only.
 - `metadata.resourceVersion` is preserved from the authoritative live object
   rather than treated as user intent.
-- the managedFields toolbar toggle affects read-only viewing only; edit mode
-  always shows managedFields as protected when it exists and never rebuilds the
-  active draft because the toggle changed.
+- the managedFields toolbar toggle controls whether `metadata.managedFields` is
+  present when entering edit mode. If shown, it is read-only and protected; if
+  hidden, it is omitted from both the draft and baseline so saving does not treat
+  it as a deletion. The toggle is not available while an edit draft is active.
 
 The protected-field message is local to the YAML tab. It is not a global app
 error and should clear when the user makes an accepted edit, reloads, exits edit

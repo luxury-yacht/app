@@ -11,6 +11,7 @@ import (
 
 	"github.com/evanphx/json-patch/v5"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/objectyaml"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -260,10 +261,10 @@ func prepareMutationContextWithDependencies(
 		return nil, fmt.Errorf("live object namespace %s does not match YAML namespace %s", namespaceLabel(current.GetNamespace()), namespaceLabel(desired.GetNamespace()))
 	}
 
-	if err := enforceObjectYAMLFieldPolicy(base, desired); err != nil {
+	if err := objectyaml.EnforceFieldPolicy(base, desired); err != nil {
 		return nil, err
 	}
-	preserveObjectYAMLFields(base, desired, current)
+	objectyaml.PreserveFields(base, desired, current)
 
 	patch, patchType, err := buildKubectlEditPatch(gvk, base, desired)
 	if err != nil {

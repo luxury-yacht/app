@@ -3,7 +3,7 @@
 ### Changed
 
 - YAML, Helm manifest, and Helm values views now share the same editor component, keeping search, copy/select-all, paste handling, and context-menu behavior consistent across those YAML surfaces.
-- Existing-object YAML edit mode now shows Kubernetes-owned fields such as `managedFields`, `resourceVersion`, and `status` in context as read-only protected YAML instead of hiding them from the draft.
+- Existing-object YAML edit mode now shows Kubernetes-owned fields such as `resourceVersion` and `status` in context as read-only protected YAML instead of hiding them from the draft. `managedFields` follows the existing toolbar toggle when entering edit mode.
 
 ### Fixed
 

@@ -59,7 +59,7 @@ export default defineConfig({
       // Backend-owned shared contracts
       '@yaml-field-policy-contract': path.resolve(
         __dirname,
-        '../backend/object-yaml-field-policy-contract.json'
+        '../backend/objectyaml/field-policy-contract.json'
       ),
     },
   },

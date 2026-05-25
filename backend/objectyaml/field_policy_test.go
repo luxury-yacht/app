@@ -1,4 +1,4 @@
-package backend
+package objectyaml
 
 import (
 	"encoding/json"
@@ -15,7 +15,7 @@ type objectYAMLFieldPolicyContract struct {
 }
 
 func TestYAMLFieldPolicyContract(t *testing.T) {
-	payload, err := os.ReadFile("object-yaml-field-policy-contract.json")
+	payload, err := os.ReadFile("field-policy-contract.json")
 	if err != nil {
 		t.Fatalf("failed to read YAML field policy contract: %v", err)
 	}

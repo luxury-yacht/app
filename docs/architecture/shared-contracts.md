@@ -24,10 +24,9 @@ Examples:
 
 - Refresh domain metadata is enforced by the refresh backend, so its authored
   contract lives at `backend/refresh/domain/refresh-domain-contract.json`.
-- YAML mutation field policy is enforced by backend mutation code, so its
-  authored contract should live beside the backend YAML mutation implementation,
-  for example `backend/object-yaml-field-policy-contract.json` while that code
-  lives in the root backend package.
+- YAML mutation field policy is enforced by backend YAML policy code, so its
+  authored contract lives beside that policy implementation at
+  `backend/objectyaml/field-policy-contract.json`.
 - Wire DTOs exposed through Wails are backend-owned Go types and are projected to
   frontend generated bindings.
 - Pure frontend persistence/view contracts may live in frontend code when the
@@ -103,6 +102,6 @@ page with:
 | Contract                                                | Owner                 | Consumers                                        | Notes                                                                                                                     |
 | ------------------------------------------------------- | --------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | `backend/refresh/domain/refresh-domain-contract.json`   | Refresh backend       | Frontend refresh registry, backend tests         | Authored JSON contract imported directly by frontend registry code.                                                       |
-| `backend/object-yaml-field-policy-contract.json`        | YAML mutation backend | YAML editor policy helpers, backend policy tests | Backend-owned field policy for live-object YAML protection, backend mutation behavior, and post-save semantic comparison. |
+| `backend/objectyaml/field-policy-contract.json`         | YAML mutation backend | YAML editor policy helpers, backend policy tests | Backend-owned field policy for live-object YAML protection, backend mutation behavior, and post-save semantic comparison. |
 | Backend resource/type DTOs                              | Backend resources     | Wails generated frontend models                  | Use Wails generation/typecheck rather than separate TypeScript tables.                                                    |
 | `backend/refresh/resourcestream/permission_contract.go` | Resource streams      | Backend refresh tests                            | Backend-only contract; no frontend runtime consumer today.                                                                |
