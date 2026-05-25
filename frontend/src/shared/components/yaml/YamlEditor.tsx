@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import CodeMirror, { ExternalChange, type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { yaml as yamlLang } from '@codemirror/lang-yaml';
 import {
   Decoration,
@@ -412,6 +412,12 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
       });
       const protectedTransactionExtension = EditorState.transactionFilter.of((transaction) => {
         if (!transaction.docChanged) {
+          return transaction;
+        }
+        if (
+          typeof transaction.annotation === 'function' &&
+          transaction.annotation(ExternalChange)
+        ) {
           return transaction;
         }
         const ranges = rangesForDocument(

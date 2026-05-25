@@ -56,6 +56,9 @@ const codeMirrorState = vi.hoisted(() => ({
 
 vi.mock('@uiw/react-codemirror', async () => {
   const ReactModule = await vi.importActual<typeof import('react')>('react');
+  const ExternalChange = {
+    of: (value: boolean) => ({ type: 'externalChange', value }),
+  };
   const CodeMirrorMock = ReactModule.forwardRef((_props: any, ref) => {
     const props = _props;
     codeMirrorState.props = props;
@@ -111,6 +114,7 @@ vi.mock('@uiw/react-codemirror', async () => {
   return {
     __esModule: true,
     default: CodeMirrorMock,
+    ExternalChange,
   };
 });
 
@@ -468,8 +472,21 @@ describe('YamlEditor', () => {
     expect(endBoundaryInsertion).toEqual([]);
     expect(onProtectedEditBlocked).toHaveBeenCalledTimes(4);
 
+    const externalDocumentSync = {
+      docChanged: true,
+      annotation: () => true,
+      startState: { doc: { toString: () => 'kind: ConfigMap\nmetadata:\n' } },
+      changes: {
+        iterChanges: (callback: (from: number, to: number) => void) => callback(0, 26),
+      },
+    };
+
+    expect(transactionFilter?.(externalDocumentSync)).toBe(externalDocumentSync);
+    expect(onProtectedEditBlocked).toHaveBeenCalledTimes(4);
+
     const allowedTransaction = {
       docChanged: true,
+      annotation: () => false,
       startState: { doc: { toString: () => 'kind: ConfigMap\nmetadata:\n' } },
       changes: { iterChanges: (callback: (from: number, to: number) => void) => callback(12, 12) },
     };
