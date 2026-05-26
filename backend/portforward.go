@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
@@ -120,16 +119,8 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 		cancel:    sessionCancel,
 	}
 
-	// Register session before starting.
-	a.portForwardSessionsMu.Lock()
-	a.portForwardSessions[sessionID] = session
-	a.portForwardSessionsMu.Unlock()
-	a.registerRuntimeOperation(runtimeOperationFromPortForward(session), func(reason string) error {
-		return a.stopPortForwardForRuntime(sessionID, reason)
-	})
-
-	// Emit initial status.
-	a.emitPortForwardStatus(session)
+	lifecycle := a.portForwardLifecycle()
+	lifecycle.registerStarting(session)
 
 	// Start the forwarder in a goroutine.
 	go a.runPortForwarder(sessionCtx, session)
@@ -138,18 +129,11 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 	select {
 	case err := <-session.readyChan:
 		if err != nil {
-			// Initial connection failed - remove session and return error.
-			a.removePortForwardSession(sessionID)
-			a.unregisterRuntimeOperation(sessionID)
-			a.emitPortForwardList()
+			lifecycle.finishStartFailure(sessionID)
 			return "", fmt.Errorf("failed to start port forward: %w", err)
 		}
 	case <-time.After(config.PortForwardConnectTimeout):
-		// Timeout waiting for connection.
-		a.removePortForwardSession(sessionID)
-		a.unregisterRuntimeOperation(sessionID)
-		session.close()
-		a.emitPortForwardList()
+		lifecycle.finishStartTimeout(sessionID)
 		return "", fmt.Errorf("timeout waiting for port forward to connect")
 	}
 
@@ -158,115 +142,34 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 
 // StopPortForward terminates a specific port forwarding session.
 func (a *App) StopPortForward(sessionID string) error {
-	session := a.removePortForwardSession(sessionID)
-	if session == nil {
-		return fmt.Errorf("port forward session %q not found", sessionID)
-	}
-	session.close()
-
-	session.mu.Lock()
-	session.Status = "stopped"
-	session.StatusReason = "user stopped"
-	session.mu.Unlock()
-
-	a.emitPortForwardStatus(session)
-	a.emitPortForwardList()
-	a.unregisterRuntimeOperation(sessionID)
-	return nil
+	return a.portForwardLifecycle().stopByUser(sessionID)
 }
 
 func (a *App) stopPortForwardForRuntime(sessionID, reason string) error {
-	session := a.removePortForwardSession(sessionID)
-	if session == nil {
-		return nil
-	}
-	session.close()
-
-	session.mu.Lock()
-	session.Status = "stopped"
-	if strings.TrimSpace(reason) == "" {
-		reason = "cluster disconnected"
-	}
-	session.StatusReason = reason
-	session.mu.Unlock()
-
-	a.emitPortForwardStatus(session)
-	a.emitPortForwardList()
-	return nil
+	return a.portForwardLifecycle().stopForRuntime(sessionID, reason)
 }
 
 // StopClusterPortForwards terminates all port forwards for a specific cluster.
 // Called when a cluster is disconnected to clean up resources.
 func (a *App) StopClusterPortForwards(clusterID string) error {
-	a.portForwardSessionsMu.Lock()
-	var toRemove []*portForwardSessionInternal
-	for _, session := range a.portForwardSessions {
-		if session.ClusterID == clusterID {
-			toRemove = append(toRemove, session)
-		}
-	}
-	for _, session := range toRemove {
-		delete(a.portForwardSessions, session.ID)
-	}
-	a.portForwardSessionsMu.Unlock()
-
-	// Close all sessions outside the lock.
-	for _, session := range toRemove {
-		session.close()
-		session.mu.Lock()
-		session.Status = "stopped"
-		session.StatusReason = "cluster disconnected"
-		session.mu.Unlock()
-		a.emitPortForwardStatus(session)
-		a.unregisterRuntimeOperation(session.ID)
-	}
-
-	if len(toRemove) > 0 {
-		a.emitPortForwardList()
-	}
+	a.portForwardLifecycle().stopCluster(clusterID)
 	return nil
 }
 
 // ListPortForwards returns all active port forwarding sessions.
 func (a *App) ListPortForwards() []PortForwardSession {
-	a.portForwardSessionsMu.Lock()
-	defer a.portForwardSessionsMu.Unlock()
-
-	sessions := make([]PortForwardSession, 0, len(a.portForwardSessions))
-	for _, session := range a.portForwardSessions {
-		session.mu.Lock()
-		sessions = append(sessions, session.PortForwardSession)
-		session.mu.Unlock()
-	}
-
-	// Sort by start time for consistent ordering.
-	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].StartedAt < sessions[j].StartedAt
-	})
-
-	return sessions
+	return a.portForwardLifecycle().list()
 }
 
 // GetClusterPortForwardCount returns the number of active port forwards for a cluster.
 func (a *App) GetClusterPortForwardCount(clusterID string) int {
-	a.portForwardSessionsMu.Lock()
-	defer a.portForwardSessionsMu.Unlock()
-
-	count := 0
-	for _, session := range a.portForwardSessions {
-		if session.ClusterID == clusterID {
-			count++
-		}
-	}
-	return count
+	return a.portForwardLifecycle().countCluster(clusterID)
 }
 
 // runPortForwarder manages the port forwarding connection and handles reconnection.
 func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionInternal) {
 	defer func() {
-		a.removePortForwardSession(session.ID)
-		a.unregisterRuntimeOperation(session.ID)
-		a.emitPortForwardList()
+		a.portForwardLifecycle().finishTerminal(session.ID)
 	}()
 
 	isFirstAttempt := true
@@ -306,7 +209,7 @@ func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionI
 			session.Status = "error"
 			session.StatusReason = err.Error()
 			session.mu.Unlock()
-			a.emitPortForwardStatus(session)
+			a.portForwardLifecycle().emitStatus(session)
 			return
 		}
 
@@ -317,14 +220,14 @@ func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionI
 		session.Status = "reconnecting"
 		session.StatusReason = fmt.Sprintf("attempt %d/%d: %s", attempt, config.PortForwardMaxReconnectAttempts, err.Error())
 		session.mu.Unlock()
-		a.emitPortForwardStatus(session)
+		a.portForwardLifecycle().emitStatus(session)
 
 		if attempt > config.PortForwardMaxReconnectAttempts {
 			session.mu.Lock()
 			session.Status = "error"
 			session.StatusReason = "max reconnect attempts exceeded"
 			session.mu.Unlock()
-			a.emitPortForwardStatus(session)
+			a.portForwardLifecycle().emitStatus(session)
 			return
 		}
 
@@ -430,17 +333,7 @@ func (a *App) executePortForward(ctx context.Context, session *portForwardSessio
 
 	// Update session with actual local port.
 	if len(forwardedPorts) > 0 {
-		session.mu.Lock()
-		session.LocalPort = int(forwardedPorts[0].Local)
-		session.Status = "active"
-		session.StatusReason = ""
-		session.reconnectAttempt = 0
-		session.mu.Unlock()
-		a.registerRuntimeOperation(runtimeOperationFromPortForward(session), func(reason string) error {
-			return a.stopPortForwardForRuntime(session.ID, reason)
-		})
-		a.emitPortForwardStatus(session)
-		a.emitPortForwardList()
+		a.portForwardLifecycle().markActive(session, int(forwardedPorts[0].Local))
 
 		// Signal success on readyChan (non-blocking).
 		select {
@@ -515,51 +408,6 @@ func (a *App) reresolvePod(ctx context.Context, session *portForwardSessionInter
 	session.PodName = podName
 	session.mu.Unlock()
 	return nil
-}
-
-// removePortForwardSession removes and returns a session from the map.
-func (a *App) removePortForwardSession(sessionID string) *portForwardSessionInternal {
-	a.portForwardSessionsMu.Lock()
-	defer a.portForwardSessionsMu.Unlock()
-
-	session, ok := a.portForwardSessions[sessionID]
-	if ok {
-		delete(a.portForwardSessions, sessionID)
-	}
-	return session
-}
-
-// getPortForwardSession returns a session by ID.
-func (a *App) getPortForwardSession(sessionID string) *portForwardSessionInternal {
-	a.portForwardSessionsMu.Lock()
-	defer a.portForwardSessionsMu.Unlock()
-	return a.portForwardSessions[sessionID]
-}
-
-// emitPortForwardStatus sends a status update event for a session.
-func (a *App) emitPortForwardStatus(session *portForwardSessionInternal) {
-	if session == nil {
-		return
-	}
-
-	session.mu.Lock()
-	event := PortForwardStatusEvent{
-		SessionID:    session.ID,
-		ClusterID:    session.ClusterID,
-		Status:       session.Status,
-		StatusReason: session.StatusReason,
-		LocalPort:    session.LocalPort,
-		PodName:      session.PodName,
-	}
-	session.mu.Unlock()
-
-	a.emitEvent(portForwardStatusEventName, event)
-}
-
-// emitPortForwardList sends the current list of port forwards.
-func (a *App) emitPortForwardList() {
-	sessions := a.ListPortForwards()
-	a.emitEvent(portForwardListEventName, sessions)
 }
 
 func runtimeOperationFromPortForward(session *portForwardSessionInternal) RuntimeOperation {

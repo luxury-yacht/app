@@ -320,6 +320,112 @@ func TestStopPortForward_Success(t *testing.T) {
 	}
 }
 
+func TestPortForwardLifecycleFinishTerminalIsIdempotent(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+
+	portForwardListEvents := 0
+	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+		if name == portForwardListEventName {
+			portForwardListEvents++
+		}
+	}
+
+	session := &portForwardSessionInternal{
+		PortForwardSession: PortForwardSession{
+			ID:            "session-terminal-cleanup",
+			ClusterID:     "cluster-1",
+			ClusterName:   "Cluster 1",
+			Namespace:     "default",
+			PodName:       "pod-1",
+			ContainerPort: 8080,
+			LocalPort:     9000,
+			TargetKind:    "Pod",
+			TargetVersion: "v1",
+			TargetName:    "pod-1",
+			Status:        "active",
+			StartedAt:     time.Now().Format(time.RFC3339),
+		},
+		stopChan: make(chan struct{}),
+	}
+	app.portForwardSessions[session.ID] = session
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(session), nil)
+	portForwardListEvents = 0
+
+	lifecycle := app.portForwardLifecycle()
+	if removed := lifecycle.finishTerminal(session.ID); !removed {
+		t.Fatal("expected first terminal cleanup to remove session")
+	}
+	if removed := lifecycle.finishTerminal(session.ID); removed {
+		t.Fatal("expected second terminal cleanup to be a no-op")
+	}
+
+	if got := lifecycle.get(session.ID); got != nil {
+		t.Fatal("expected terminal cleanup to remove session")
+	}
+	if operations := app.ListRuntimeOperations(); len(operations) != 0 {
+		t.Fatalf("expected terminal cleanup to unregister runtime operation, got %+v", operations)
+	}
+	if portForwardListEvents != 1 {
+		t.Fatalf("expected one port-forward list event, got %d", portForwardListEvents)
+	}
+}
+
+func TestPortForwardLifecycleStopForRuntimeIsIdempotent(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+
+	var statusEvents []PortForwardStatusEvent
+	portForwardListEvents := 0
+	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+		switch name {
+		case portForwardStatusEventName:
+			if len(args) == 1 {
+				if ev, ok := args[0].(PortForwardStatusEvent); ok {
+					statusEvents = append(statusEvents, ev)
+				}
+			}
+		case portForwardListEventName:
+			portForwardListEvents++
+		}
+	}
+
+	session := &portForwardSessionInternal{
+		PortForwardSession: PortForwardSession{
+			ID:        "session-runtime-cleanup",
+			ClusterID: "cluster-1",
+			Status:    "active",
+		},
+		stopChan: make(chan struct{}),
+	}
+	app.portForwardSessions[session.ID] = session
+
+	if err := app.stopPortForwardForRuntime(session.ID, "cluster disconnected"); err != nil {
+		t.Fatalf("unexpected cleanup error: %v", err)
+	}
+	if err := app.stopPortForwardForRuntime(session.ID, "cluster disconnected"); err != nil {
+		t.Fatalf("expected repeated runtime cleanup to be ignored, got %v", err)
+	}
+
+	if got := app.portForwardLifecycle().get(session.ID); got != nil {
+		t.Fatal("expected runtime cleanup to remove session")
+	}
+	if len(statusEvents) != 1 {
+		t.Fatalf("expected one status event, got %d", len(statusEvents))
+	}
+	if statusEvents[0].Status != "stopped" {
+		t.Fatalf("expected stopped status, got %s", statusEvents[0].Status)
+	}
+	if statusEvents[0].StatusReason != "cluster disconnected" {
+		t.Fatalf("expected cluster disconnected reason, got %q", statusEvents[0].StatusReason)
+	}
+	if portForwardListEvents != 1 {
+		t.Fatalf("expected one port-forward list event, got %d", portForwardListEvents)
+	}
+}
+
 func TestRunPortForwarderUnregistersRuntimeOperationOnTerminalError(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
@@ -392,6 +498,9 @@ func TestStopClusterPortForwards(t *testing.T) {
 	app.portForwardSessions["session-1"] = session1
 	app.portForwardSessions["session-2"] = session2
 	app.portForwardSessions["session-3"] = session3
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(session1), nil)
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(session2), nil)
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(session3), nil)
 
 	// Stop all forwards for cluster-1.
 	err := app.StopClusterPortForwards("cluster-1")
@@ -410,6 +519,13 @@ func TestStopClusterPortForwards(t *testing.T) {
 	// Verify cluster-2 session remains.
 	if _, exists := app.portForwardSessions["session-3"]; !exists {
 		t.Fatal("expected session-3 to remain")
+	}
+	operations := app.ListRuntimeOperations()
+	if len(operations) != 1 {
+		t.Fatalf("expected one runtime operation to remain, got %+v", operations)
+	}
+	if operations[0].ID != "session-3" {
+		t.Fatalf("expected session-3 runtime operation to remain, got %+v", operations)
 	}
 }
 
@@ -561,15 +677,16 @@ func TestEmitPortForwardStatusGuards(t *testing.T) {
 	}
 
 	// Nil session should not emit.
-	app.emitPortForwardStatus(nil)
+	app.portForwardLifecycle().emitStatus(nil)
 	if calls != 0 {
 		t.Fatalf("expected no events for nil session, got %d", calls)
 	}
 }
 
-func TestRemoveAndGetPortForwardSession(t *testing.T) {
+func TestPortForwardLifecycleRemoveAndGetSession(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	lifecycle := app.portForwardLifecycle()
 
 	session := &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{
@@ -580,29 +697,32 @@ func TestRemoveAndGetPortForwardSession(t *testing.T) {
 	app.portForwardSessions["session-1"] = session
 
 	// Get existing session.
-	got := app.getPortForwardSession("session-1")
+	got := lifecycle.get("session-1")
 	if got == nil || got.ID != "session-1" {
 		t.Fatal("expected to get session-1")
 	}
 
 	// Get nonexistent session.
-	if got := app.getPortForwardSession("nonexistent"); got != nil {
+	if got := lifecycle.get("nonexistent"); got != nil {
 		t.Fatal("expected nil for nonexistent session")
 	}
 
 	// Remove existing session.
-	removed := app.removePortForwardSession("session-1")
+	removed, ok := lifecycle.remove("session-1")
 	if removed == nil || removed.ID != "session-1" {
 		t.Fatal("expected to remove session-1")
 	}
+	if !ok {
+		t.Fatal("expected remove to report session-1 existed")
+	}
 
 	// Verify it's gone.
-	if got := app.getPortForwardSession("session-1"); got != nil {
+	if got := lifecycle.get("session-1"); got != nil {
 		t.Fatal("expected session-1 to be removed")
 	}
 
 	// Remove nonexistent session.
-	if removed := app.removePortForwardSession("nonexistent"); removed != nil {
+	if removed, ok := lifecycle.remove("nonexistent"); removed != nil || ok {
 		t.Fatal("expected nil for removing nonexistent session")
 	}
 }
