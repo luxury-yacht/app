@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -179,7 +178,7 @@ func (w *shellEventWriter) Write(p []byte) (int, error) {
 		w.session.touchActivity()
 		w.session.appendBacklog(chunk)
 	}
-	w.app.emitShellOutput(w.sessionID, w.clusterID, w.stream, chunk)
+	w.app.shellSessionLifecycle().emitOutput(w.sessionID, w.clusterID, w.stream, chunk)
 	return len(p), nil
 }
 
@@ -310,26 +309,13 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 		sess.clusterName = clusterID
 	}
 
-	a.shellSessionsMu.Lock()
-	a.shellSessions[sessionID] = sess
-	a.shellSessionsMu.Unlock()
-	a.registerRuntimeOperation(runtimeOperationFromShellSession(sess), func(reason string) error {
-		return a.closeShellSessionForRuntime(sessionID, reason)
-	})
-	a.emitShellList()
+	lifecycle := a.shellSessionLifecycle()
+	lifecycle.register(sess)
 
 	// Start timeout monitor goroutine
 	go a.monitorShellTimeout(sessionCtx, sess)
 
 	go func() {
-		defer func() {
-			sess.Close()
-			if a.removeShellSession(sessionID) != nil {
-				a.unregisterRuntimeOperation(sessionID)
-				a.emitShellList()
-			}
-		}()
-
 		streamErr := executor.StreamWithContext(sessionCtx, remotecommand.StreamOptions{
 			Stdin:             stdinReader,
 			Stdout:            &shellEventWriter{app: a, sessionID: sessionID, clusterID: clusterID, stream: "stdout", session: sess},
@@ -339,13 +325,13 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 		})
 
 		if streamErr != nil {
-			a.emitShellStatus(sessionID, clusterID, "error", streamErr.Error())
+			lifecycle.finishStream(sessionID, "error", streamErr.Error())
 		} else {
-			a.emitShellStatus(sessionID, clusterID, "closed", "")
+			lifecycle.finishStream(sessionID, "closed", "")
 		}
 	}()
 
-	a.emitShellStatus(sessionID, clusterID, "open", "")
+	lifecycle.emitStatus(sessionID, clusterID, "open", "")
 
 	containers := make([]string, 0, len(pod.Spec.Containers)+len(pod.Spec.EphemeralContainers))
 	for _, c := range pod.Spec.Containers {
@@ -370,7 +356,7 @@ func (a *App) SendShellInput(sessionID string, data string) error {
 	if data == "" {
 		return nil
 	}
-	sess := a.getShellSession(sessionID)
+	sess := a.shellSessionLifecycle().get(sessionID)
 	if sess == nil {
 		return fmt.Errorf("shell session %q not found", sessionID)
 	}
@@ -389,7 +375,7 @@ func (a *App) ResizeShellSession(sessionID string, columns, rows int) error {
 	if columns > maxTerminalDimension || rows > maxTerminalDimension {
 		return fmt.Errorf("columns and rows must be less than or equal to %d", maxTerminalDimension)
 	}
-	sess := a.getShellSession(sessionID)
+	sess := a.shellSessionLifecycle().get(sessionID)
 	if sess == nil {
 		return fmt.Errorf("shell session %q not found", sessionID)
 	}
@@ -399,77 +385,26 @@ func (a *App) ResizeShellSession(sessionID string, columns, rows int) error {
 
 // CloseShellSession terminates an active shell session.
 func (a *App) CloseShellSession(sessionID string) error {
-	if !a.closeShellSessionByID(sessionID, "closed", "terminated", true) {
-		return fmt.Errorf("shell session %q not found", sessionID)
-	}
-	return nil
+	return a.shellSessionLifecycle().closeByUser(sessionID)
 }
 
 func (a *App) closeShellSessionForRuntime(sessionID, reason string) error {
-	if strings.TrimSpace(reason) == "" {
-		reason = "cluster disconnected"
-	}
-	a.closeShellSessionByID(sessionID, "closed", reason, true)
-	return nil
+	return a.shellSessionLifecycle().closeForRuntime(sessionID, reason)
 }
 
 // ListShellSessions returns all active shell exec sessions.
 func (a *App) ListShellSessions() []ShellSessionInfo {
-	a.shellSessionsMu.Lock()
-	defer a.shellSessionsMu.Unlock()
-
-	sessions := make([]ShellSessionInfo, 0, len(a.shellSessions))
-	for _, sess := range a.shellSessions {
-		sessions = append(sessions, ShellSessionInfo{
-			SessionID:   sess.id,
-			ClusterID:   sess.clusterID,
-			ClusterName: sess.clusterName,
-			Namespace:   sess.namespace,
-			PodName:     sess.podName,
-			Container:   sess.container,
-			Command:     append([]string(nil), sess.command...),
-			StartedAt:   metav1.NewTime(sess.startedAt),
-		})
-	}
-
-	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].StartedAt.Before(&sessions[j].StartedAt)
-	})
-	return sessions
+	return a.shellSessionLifecycle().list()
 }
 
 // GetClusterShellSessionCount returns the number of active shell sessions for a cluster.
 func (a *App) GetClusterShellSessionCount(clusterID string) int {
-	a.shellSessionsMu.Lock()
-	defer a.shellSessionsMu.Unlock()
-
-	count := 0
-	for _, sess := range a.shellSessions {
-		if sess.clusterID == clusterID {
-			count++
-		}
-	}
-	return count
+	return a.shellSessionLifecycle().countCluster(clusterID)
 }
 
 // StopClusterShellSessions terminates all shell sessions for a specific cluster.
 func (a *App) StopClusterShellSessions(clusterID string) error {
-	a.shellSessionsMu.Lock()
-	toStop := make([]*shellSession, 0)
-	for _, sess := range a.shellSessions {
-		if sess.clusterID == clusterID {
-			toStop = append(toStop, sess)
-			delete(a.shellSessions, sess.id)
-		}
-	}
-	a.shellSessionsMu.Unlock()
-
-	for _, sess := range toStop {
-		a.closeRemovedShellSession(sess, "closed", "cluster disconnected", false)
-	}
-	if len(toStop) > 0 {
-		a.emitShellList()
-	}
+	a.shellSessionLifecycle().stopCluster(clusterID)
 	return nil
 }
 
@@ -495,76 +430,11 @@ func runtimeOperationFromShellSession(sess *shellSession) RuntimeOperation {
 
 // GetShellSessionBacklog returns buffered shell output for replaying on reattach.
 func (a *App) GetShellSessionBacklog(sessionID string) (string, error) {
-	sess := a.getShellSession(sessionID)
+	sess := a.shellSessionLifecycle().get(sessionID)
 	if sess == nil {
 		return "", fmt.Errorf("shell session %q not found", sessionID)
 	}
 	return sess.snapshotBacklog(), nil
-}
-
-func (a *App) getShellSession(sessionID string) *shellSession {
-	a.shellSessionsMu.Lock()
-	defer a.shellSessionsMu.Unlock()
-	return a.shellSessions[sessionID]
-}
-
-func (a *App) removeShellSession(sessionID string) *shellSession {
-	a.shellSessionsMu.Lock()
-	defer a.shellSessionsMu.Unlock()
-	sess, ok := a.shellSessions[sessionID]
-	if ok {
-		delete(a.shellSessions, sessionID)
-	}
-	return sess
-}
-
-func (a *App) closeShellSessionByID(sessionID, status, reason string, emitList bool) bool {
-	sess := a.removeShellSession(sessionID)
-	if sess == nil {
-		return false
-	}
-	a.closeRemovedShellSession(sess, status, reason, emitList)
-	return true
-}
-
-func (a *App) closeRemovedShellSession(sess *shellSession, status, reason string, emitList bool) {
-	if sess == nil {
-		return
-	}
-	sess.Close()
-	a.emitShellStatus(sess.id, sess.clusterID, status, reason)
-	if emitList {
-		a.emitShellList()
-	}
-	a.unregisterRuntimeOperation(sess.id)
-}
-
-func (a *App) emitShellOutput(sessionID, clusterID, stream, data string) {
-	if sessionID == "" || data == "" {
-		return
-	}
-	a.emitEvent(shellOutputEventName, ShellOutputEvent{
-		SessionID: sessionID,
-		ClusterID: clusterID,
-		Stream:    stream,
-		Data:      data,
-	})
-}
-
-func (a *App) emitShellStatus(sessionID, clusterID, status, reason string) {
-	if sessionID == "" || status == "" {
-		return
-	}
-	a.emitEvent(shellStatusEventName, ShellStatusEvent{
-		SessionID: sessionID,
-		ClusterID: clusterID,
-		Status:    status,
-		Reason:    reason,
-	})
-}
-
-func (a *App) emitShellList() {
-	a.emitEvent(shellListEventName, a.ListShellSessions())
 }
 
 func hasContainer(containers []corev1.Container, name string) bool {
@@ -615,5 +485,5 @@ func (a *App) monitorShellTimeout(ctx context.Context, sess *shellSession) {
 
 // terminateShellWithReason closes a shell session and emits a status with the given reason.
 func (a *App) terminateShellWithReason(sessionID, status, reason string) {
-	a.closeShellSessionByID(sessionID, status, reason, true)
+	a.shellSessionLifecycle().terminate(sessionID, status, reason)
 }

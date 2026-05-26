@@ -108,7 +108,7 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 	if err := app.CloseShellSession("sess"); err != nil {
 		t.Fatalf("CloseShellSession error: %v", err)
 	}
-	if app.getShellSession("sess") != nil {
+	if app.shellSessionLifecycle().get("sess") != nil {
 		t.Fatalf("expected session to be removed")
 	}
 	if len(events) != 1 || events[0].Status != "closed" || events[0].ClusterID != "cluster1" {
@@ -139,11 +139,113 @@ func TestTerminateShellWithReasonUnregistersRuntimeOperation(t *testing.T) {
 
 	app.terminateShellWithReason(sess.id, "timeout", "session idle timeout")
 
-	if app.getShellSession(sess.id) != nil {
+	if app.shellSessionLifecycle().get(sess.id) != nil {
 		t.Fatalf("expected session to be removed")
 	}
 	if operations := app.ListRuntimeOperations(); len(operations) != 0 {
 		t.Fatalf("expected runtime operation to be unregistered, got %+v", operations)
+	}
+}
+
+func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+	app.shellSessions = make(map[string]*shellSession)
+
+	var statusEvents []ShellStatusEvent
+	listEvents := 0
+	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+		switch name {
+		case shellStatusEventName:
+			if len(args) == 1 {
+				if ev, ok := args[0].(ShellStatusEvent); ok {
+					statusEvents = append(statusEvents, ev)
+				}
+			}
+		case shellListEventName:
+			listEvents++
+		}
+	}
+
+	sess := &shellSession{
+		id:        "sess-stream",
+		clusterID: "cluster1",
+		namespace: "default",
+		podName:   "pod-a",
+		container: "app",
+		command:   []string{"/bin/sh"},
+		startedAt: time.Now(),
+	}
+	app.shellSessions[sess.id] = sess
+	app.registerRuntimeOperation(runtimeOperationFromShellSession(sess), nil)
+	listEvents = 0
+
+	lifecycle := app.shellSessionLifecycle()
+	if finished := lifecycle.finishStream(sess.id, "closed", ""); !finished {
+		t.Fatal("expected first stream finish to remove session")
+	}
+	if finished := lifecycle.finishStream(sess.id, "closed", ""); finished {
+		t.Fatal("expected repeated stream finish to be ignored")
+	}
+
+	if lifecycle.get(sess.id) != nil {
+		t.Fatal("expected stream finish to remove session")
+	}
+	if operations := app.ListRuntimeOperations(); len(operations) != 0 {
+		t.Fatalf("expected stream finish to unregister runtime operation, got %+v", operations)
+	}
+	if len(statusEvents) != 1 {
+		t.Fatalf("expected one status event, got %d", len(statusEvents))
+	}
+	if statusEvents[0].Status != "closed" || statusEvents[0].ClusterID != "cluster1" {
+		t.Fatalf("unexpected status event %+v", statusEvents[0])
+	}
+	if listEvents != 1 {
+		t.Fatalf("expected one list event, got %d", listEvents)
+	}
+}
+
+func TestShellSessionLifecycleCloseForRuntimeIsIdempotent(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+	app.shellSessions = make(map[string]*shellSession)
+
+	var statusEvents []ShellStatusEvent
+	listEvents := 0
+	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+		switch name {
+		case shellStatusEventName:
+			if len(args) == 1 {
+				if ev, ok := args[0].(ShellStatusEvent); ok {
+					statusEvents = append(statusEvents, ev)
+				}
+			}
+		case shellListEventName:
+			listEvents++
+		}
+	}
+
+	sess := &shellSession{id: "sess-runtime", clusterID: "cluster1"}
+	app.shellSessions[sess.id] = sess
+
+	if err := app.closeShellSessionForRuntime(sess.id, "cluster disconnected"); err != nil {
+		t.Fatalf("unexpected cleanup error: %v", err)
+	}
+	if err := app.closeShellSessionForRuntime(sess.id, "cluster disconnected"); err != nil {
+		t.Fatalf("expected repeated runtime cleanup to be ignored, got %v", err)
+	}
+
+	if app.shellSessionLifecycle().get(sess.id) != nil {
+		t.Fatal("expected runtime cleanup to remove session")
+	}
+	if len(statusEvents) != 1 {
+		t.Fatalf("expected one status event, got %d", len(statusEvents))
+	}
+	if statusEvents[0].Status != "closed" || statusEvents[0].Reason != "cluster disconnected" {
+		t.Fatalf("unexpected status event %+v", statusEvents[0])
+	}
+	if listEvents != 1 {
+		t.Fatalf("expected one list event, got %d", listEvents)
 	}
 }
 
@@ -225,10 +327,37 @@ func TestStopClusterShellSessions(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
 	app.shellSessions = map[string]*shellSession{
-		"s1": {id: "s1", clusterID: "cluster-a"},
-		"s2": {id: "s2", clusterID: "cluster-a"},
-		"s3": {id: "s3", clusterID: "cluster-b"},
+		"s1": {
+			id:        "s1",
+			clusterID: "cluster-a",
+			namespace: "default",
+			podName:   "pod-a",
+			container: "app",
+			command:   []string{"/bin/sh"},
+			startedAt: time.Now().Add(-3 * time.Minute),
+		},
+		"s2": {
+			id:        "s2",
+			clusterID: "cluster-a",
+			namespace: "default",
+			podName:   "pod-b",
+			container: "app",
+			command:   []string{"/bin/sh"},
+			startedAt: time.Now().Add(-2 * time.Minute),
+		},
+		"s3": {
+			id:        "s3",
+			clusterID: "cluster-b",
+			namespace: "default",
+			podName:   "pod-c",
+			container: "app",
+			command:   []string{"/bin/sh"},
+			startedAt: time.Now().Add(-1 * time.Minute),
+		},
 	}
+	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["s1"]), nil)
+	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["s2"]), nil)
+	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["s3"]), nil)
 
 	statusEvents := make([]ShellStatusEvent, 0)
 	listEvents := make([][]ShellSessionInfo, 0)
@@ -251,11 +380,18 @@ func TestStopClusterShellSessions(t *testing.T) {
 	if err := app.StopClusterShellSessions("cluster-a"); err != nil {
 		t.Fatalf("StopClusterShellSessions error: %v", err)
 	}
-	if app.getShellSession("s1") != nil || app.getShellSession("s2") != nil {
+	if app.shellSessionLifecycle().get("s1") != nil || app.shellSessionLifecycle().get("s2") != nil {
 		t.Fatalf("expected cluster-a sessions removed")
 	}
-	if app.getShellSession("s3") == nil {
+	if app.shellSessionLifecycle().get("s3") == nil {
 		t.Fatalf("expected cluster-b session to remain")
+	}
+	operations := app.ListRuntimeOperations()
+	if len(operations) != 1 {
+		t.Fatalf("expected one runtime operation to remain, got %+v", operations)
+	}
+	if operations[0].ID != "s3" {
+		t.Fatalf("expected s3 runtime operation to remain, got %+v", operations)
 	}
 	if len(statusEvents) != 2 {
 		t.Fatalf("expected 2 status events, got %d", len(statusEvents))
@@ -309,17 +445,17 @@ func TestEmitShellEventsGuards(t *testing.T) {
 	}
 
 	// guard cases
-	app.emitShellOutput("", "cluster1", "stdout", "data")
-	app.emitShellOutput("id", "cluster1", "stdout", "")
-	app.emitShellStatus("", "cluster1", "open", "")
-	app.emitShellStatus("id", "cluster1", "", "")
+	app.shellSessionLifecycle().emitOutput("", "cluster1", "stdout", "data")
+	app.shellSessionLifecycle().emitOutput("id", "cluster1", "stdout", "")
+	app.shellSessionLifecycle().emitStatus("", "cluster1", "open", "")
+	app.shellSessionLifecycle().emitStatus("id", "cluster1", "", "")
 	if calls != 0 {
 		t.Fatalf("expected no events for guarded inputs, got %d", calls)
 	}
 
 	// happy paths
-	app.emitShellOutput("id", "cluster1", "stdout", "line")
-	app.emitShellStatus("id", "cluster1", "open", "reason")
+	app.shellSessionLifecycle().emitOutput("id", "cluster1", "stdout", "line")
+	app.shellSessionLifecycle().emitStatus("id", "cluster1", "open", "reason")
 	if calls != 2 {
 		t.Fatalf("expected 2 events emitted, got %d", calls)
 	}
