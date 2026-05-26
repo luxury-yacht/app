@@ -313,7 +313,16 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       };
 
   // Get catalog data
-  const { items, loading, hasLoadedOnce, filterOptions, totalCount } = useBrowseCatalog({
+  const {
+    items,
+    loading,
+    hasLoadedOnce,
+    continueToken,
+    isRequestingMore,
+    handleLoadMore,
+    filterOptions,
+    totalCount,
+  } = useBrowseCatalog({
     clusterId: selectedClusterId,
     pinnedNamespaces,
     clusterScopedOnly,
@@ -389,6 +398,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         enableContextMenu
         getCustomContextMenuItems={getContextMenuItems}
         emptyMessage={resolvedEmptyMessage}
+        hasMore={Boolean(continueToken)}
+        isRequestingMore={isRequestingMore}
+        onRequestMore={continueToken ? handleLoadMore : undefined}
       />
       {objectActions.modals}
     </>

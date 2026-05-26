@@ -10,7 +10,7 @@ import { requestRefreshDomain } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { getMaxTableRows } from '@/core/settings/appPreferences';
-import { getScopedDomainState, setScopedDomainState } from '@/core/refresh/store';
+import { getScopedDomainState } from '@/core/refresh/store';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -28,8 +28,6 @@ import {
   upsertByUID,
 } from '@modules/browse/utils/browseUtils';
 import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
-
-type PageRequestMode = 'reset' | 'append' | null;
 
 /**
  * Filter state for the Browse table.
@@ -106,8 +104,6 @@ export function useBrowseCatalog({
   const [pageLimit, setPageLimit] = useState<number>(() => getMaxTableRows());
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
-  const requestModeRef = useRef<PageRequestMode>(null);
-  const lastAppliedScopeRef = useRef<string>('');
   const itemsRef = useRef<CatalogItem[]>([]);
   const indexByUidRef = useRef<Map<string, number>>(new Map());
   const hasLoadedOnceRef = useRef(false);
@@ -257,8 +253,7 @@ export function useBrowseCatalog({
     const scopeIdentityChanged = previousScopeIdentityRef.current !== scopeIdentityKey;
     previousScopeIdentityRef.current = scopeIdentityKey;
 
-    // Reset pagination state on query change
-    requestModeRef.current = 'reset';
+    // Reset pagination state on query change.
     setIsRequestingMore(false);
     setContinueToken(null);
     // Preserve the current dataset while filter-only queries refresh so the
@@ -271,7 +266,6 @@ export function useBrowseCatalog({
       setItems([]);
     }
 
-    lastAppliedScopeRef.current = catalogScope;
     void requestRefreshDomain({
       domain: 'catalog',
       scope: catalogScope,
@@ -318,44 +312,23 @@ export function useBrowseCatalog({
     }
 
     const payload = domain.data as CatalogSnapshotPayload;
-    const mode = requestModeRef.current;
-    requestModeRef.current = null;
-
-    if (mode === 'append') {
-      // Append mode (load-more pagination): merge new items into the existing list.
-      const { nextItems, changed } = upsertByUID(
-        itemsRef.current,
-        indexByUidRef.current,
-        payload.items ?? []
-      );
-      if (changed || itemsRef.current.length === 0) {
-        itemsRef.current = nextItems;
-        setItems(nextItems);
-      }
+    // The active catalog scope is the full replacement baseline. Explicit
+    // load-more pages are applied from their own temporary scope in
+    // handleLoadMore, so this path can reflect additions, updates, deletions,
+    // and reordering from snapshots or the catalog stream.
+    const { nextItems, changed } = reconcileByUID(itemsRef.current, payload.items ?? []);
+    const nextIndexByUid = rebuildIndexByUID(nextItems);
+    if (changed || itemsRef.current.length === 0) {
+      itemsRef.current = nextItems;
+      indexByUidRef.current = nextIndexByUid;
+      setItems(nextItems);
     } else {
-      // Reset or streaming refresh (mode === 'reset' or null): replace all items
-      // so that additions, deletions, and updates are reflected immediately,
-      // while still reusing unchanged item references by UID/resourceVersion.
-      const { nextItems, changed } = reconcileByUID(itemsRef.current, payload.items ?? []);
-      const nextIndexByUid = rebuildIndexByUID(nextItems);
-      if (changed || itemsRef.current.length === 0) {
-        itemsRef.current = nextItems;
-        indexByUidRef.current = nextIndexByUid;
-        setItems(nextItems);
-      } else {
-        indexByUidRef.current = nextIndexByUid;
-      }
+      indexByUidRef.current = nextIndexByUid;
     }
 
     setContinueToken(parseContinueToken(payload.continue));
     setTotalCount(payload.total ?? 0);
     setIsRequestingMore(false);
-
-    // After a load-more request, the base scope is already set via catalogScope;
-    // no need to manually override the domain scope since we use scoped domains.
-    if (mode === 'append') {
-      lastAppliedScopeRef.current = catalogScope;
-    }
   }, [
     domain.data,
     domain.scope,
@@ -376,8 +349,9 @@ export function useBrowseCatalog({
   }, [domain.data, hasLoadedOnce]);
 
   // Load more handler.
-  // Fetches the next page using a paginated scope (with continueToken), then
-  // copies the result to the base catalogScope so the domain watcher sees it.
+  // Fetches the next page using a paginated scope and applies that exact
+  // scoped result locally. The refresh store remains scoped by the request that
+  // produced the data; Browse owns assembly of base query + loaded pages.
   const catalogScopeRef = useRef(catalogScope);
   catalogScopeRef.current = catalogScope;
 
@@ -385,7 +359,6 @@ export function useBrowseCatalog({
     if (!continueToken || isRequestingMore) {
       return;
     }
-    requestModeRef.current = 'append';
     setIsRequestingMore(true);
 
     const pageScope = buildCatalogScope({
@@ -401,25 +374,48 @@ export function useBrowseCatalog({
       buildClusterScope(clusterId ?? undefined, pageScope);
     // Enable the paginated scope and fetch it directly.
     refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, true);
-    lastAppliedScopeRef.current = normalizedScope;
-    void requestRefreshDomain({
-      domain: 'catalog',
-      scope: normalizedScope,
-      reason: 'user',
-    }).then(() => {
-      // The fetch wrote results to the paginated scope. Copy to the base
-      // scope so the domain watcher (useRefreshScopedDomain) sees the update.
-      const pageResult = getScopedDomainState('catalog', normalizedScope);
-      if (pageResult.data) {
-        const baseScope = catalogScopeRef.current;
-        setScopedDomainState('catalog', baseScope, () => ({
-          ...pageResult,
-          scope: baseScope,
-        }));
+    const baseScopeAtRequest = catalogScopeRef.current;
+    void (async () => {
+      try {
+        const result = await requestRefreshDomain({
+          domain: 'catalog',
+          scope: normalizedScope,
+          reason: 'user',
+        });
+        if (result.status !== 'executed' || catalogScopeRef.current !== baseScopeAtRequest) {
+          return;
+        }
+
+        const pageResult = getScopedDomainState('catalog', normalizedScope);
+        const payload = pageResult.data as CatalogSnapshotPayload | null;
+        if (!payload || (pageResult.status !== 'ready' && pageResult.status !== 'updating')) {
+          return;
+        }
+
+        const { nextItems, changed } = upsertByUID(
+          itemsRef.current,
+          indexByUidRef.current,
+          payload.items ?? []
+        );
+        if (changed || itemsRef.current.length === 0) {
+          itemsRef.current = nextItems;
+          setItems(nextItems);
+        }
+        setContinueToken(parseContinueToken(payload.continue));
+        setTotalCount(payload.total ?? 0);
+        if (!hasLoadedOnceRef.current) {
+          hasLoadedOnceRef.current = true;
+          setHasLoadedOnce(true);
+        }
+      } catch (error) {
+        console.error('Failed to load additional catalog page', error);
+      } finally {
+        refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, false);
+        if (catalogScopeRef.current === baseScopeAtRequest) {
+          setIsRequestingMore(false);
+        }
       }
-      // Clean up the temporary paginated scope.
-      refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, false);
-    });
+    })();
   }, [
     continueToken,
     isRequestingMore,
