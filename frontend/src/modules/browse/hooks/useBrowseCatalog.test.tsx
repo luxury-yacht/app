@@ -164,6 +164,8 @@ describe('useBrowseCatalog', () => {
     await act(async () => {
       result?.handleLoadMore();
       await Promise.resolve();
+    });
+    await act(async () => {
       await Promise.resolve();
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
