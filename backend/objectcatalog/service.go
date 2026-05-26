@@ -60,6 +60,7 @@ type Service struct {
 	items     map[string]Summary
 	lastSeen  map[string]time.Time
 	resources map[string]resourceDescriptor
+	identity  *resourceIdentityResolver
 	// cached views to accelerate queries without per-request sorting/filter rebuilds
 	sortedChunks          []*summaryChunk
 	cachedKinds           []KindInfo
@@ -157,6 +158,7 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		items:             make(map[string]Summary),
 		lastSeen:          make(map[string]time.Time),
 		resources:         make(map[string]resourceDescriptor),
+		identity:          newResourceIdentityResolver(deps.Common, deps.Logger),
 		promoted:          make(map[string]*promotedDescriptor),
 		health:            healthStatus{State: HealthStateUnknown},
 		doneCh:            make(chan struct{}),

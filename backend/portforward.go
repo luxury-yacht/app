@@ -85,6 +85,7 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 	}
 
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Version:     "v1",
 		Kind:        "Pod",
 		Namespace:   target.Namespace,
 		Name:        resolved.PodName,

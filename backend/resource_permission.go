@@ -117,21 +117,24 @@ func resolvePermissionGVR(ctx context.Context, deps common.Dependencies, check r
 
 	group := strings.TrimSpace(check.Group)
 	version := strings.TrimSpace(check.Version)
-	if version != "" {
-		if resource, ok := lookupBuiltinResourceByGVK(group, version, kind); ok {
-			return resource.GVR(), resource.Namespaced, nil
-		}
-		return common.ResolveGVRForGVK(ctx, deps, schema.GroupVersionKind{
-			Group:   group,
-			Version: version,
-			Kind:    kind,
-		})
+	if version == "" {
+		return schema.GroupVersionResource{}, false, fmt.Errorf("apiVersion is required for %s permission checks", kind)
 	}
-
-	if resource, ok := lookupBuiltinResourceByKind(kind); ok {
-		return resource.GVR(), resource.Namespaced, nil
+	if deps.ResourceResolver == nil {
+		return schema.GroupVersionResource{}, false, fmt.Errorf("resource resolver not initialized")
 	}
-	return schema.GroupVersionResource{}, false, fmt.Errorf("apiVersion is required for %s permission checks", kind)
+	resolved, ok, err := deps.ResourceResolver.ResolveResourceForGVK(ctx, schema.GroupVersionKind{
+		Group:   group,
+		Version: version,
+		Kind:    kind,
+	})
+	if err != nil {
+		return schema.GroupVersionResource{}, false, err
+	}
+	if !ok {
+		return schema.GroupVersionResource{}, false, fmt.Errorf("unable to resolve resource for %s/%s", version, kind)
+	}
+	return resolved.GVR(), resolved.Namespaced, nil
 }
 
 func permissionCheckID(kind string, attrs *authorizationv1.ResourceAttributes) string {

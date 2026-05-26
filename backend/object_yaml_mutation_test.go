@@ -143,9 +143,8 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 		},
 	}
 
-	// discovery.Resources above advertises apps/v1 Deployment so
-	// getGVRForGVKWithDependencies (via common.ResolveGVRForGVK) can
-	// resolve the GVR without needing a GVR cache to seed.
+	// discovery.Resources above advertises apps/v1 Deployment so the injected
+	// resource resolver can resolve the GVR without needing a GVR cache to seed.
 
 	return app, dynamicClient, clusterID
 }

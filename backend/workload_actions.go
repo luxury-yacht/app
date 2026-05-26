@@ -442,6 +442,8 @@ func (a *App) triggerCronJobInternal(clusterID, namespace, name string) (string,
 		return "", fmt.Errorf("cannot trigger suspended cronjob %s/%s", namespace, name)
 	}
 	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+		Group:     "batch",
+		Version:   "v1",
 		Kind:      "Job",
 		Namespace: namespace,
 		Verb:      "create",
@@ -538,6 +540,8 @@ func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend 
 	}
 
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Group:     "batch",
+		Version:   "v1",
 		Kind:      "CronJob",
 		Namespace: namespace,
 		Name:      name,

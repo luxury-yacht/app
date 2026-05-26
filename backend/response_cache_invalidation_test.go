@@ -131,7 +131,7 @@ func TestInvalidateResponseCacheSkipsKindsOnUpdate(t *testing.T) {
 	}
 }
 
-func TestInvalidateResponseCacheForGVKEvictsExactCustomResource(t *testing.T) {
+func TestInvalidateResponseCacheForGVKEvictsExactAndLegacyKindKeys(t *testing.T) {
 	app := NewApp()
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
@@ -154,8 +154,8 @@ func TestInvalidateResponseCacheForGVKEvictsExactCustomResource(t *testing.T) {
 	if _, ok := app.responseCacheLookup(selectionKey, coreGVKKey); !ok {
 		t.Fatalf("expected built-in GVK cache entry with colliding kind to remain")
 	}
-	if _, ok := app.responseCacheLookup(selectionKey, coreKindKey); !ok {
-		t.Fatalf("expected built-in kind cache entry with colliding kind to remain")
+	if _, ok := app.responseCacheLookup(selectionKey, coreKindKey); ok {
+		t.Fatalf("expected legacy kind cache entry with colliding kind to be evicted")
 	}
 }
 

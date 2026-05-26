@@ -7,6 +7,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
@@ -15,59 +16,13 @@ const (
 	helmReleaseKind  = "helmrelease"
 )
 
-// builtinDetailCachePermissionKinds is response-cache policy, not resource
-// identity. It is intentionally narrower than builtinResourceCatalog because
-// cached detail reads are checked only for built-in kinds whose cached payloads
-// are guarded by a simple Kubernetes "get" permission check.
-var builtinDetailCachePermissionKinds = map[string]struct{}{
-	"pod":                            {},
-	"configmap":                      {},
-	"secret":                         {},
-	"service":                        {},
-	"serviceaccount":                 {},
-	"persistentvolumeclaim":          {},
-	"persistentvolume":               {},
-	"namespace":                      {},
-	"node":                           {},
-	"resourcequota":                  {},
-	"limitrange":                     {},
-	"deployment":                     {},
-	"replicaset":                     {},
-	"daemonset":                      {},
-	"statefulset":                    {},
-	"job":                            {},
-	"cronjob":                        {},
-	"ingress":                        {},
-	"ingressclass":                   {},
-	"networkpolicy":                  {},
-	"endpointslice":                  {},
-	"gateway":                        {},
-	"httproute":                      {},
-	"grpcroute":                      {},
-	"tlsroute":                       {},
-	"listenerset":                    {},
-	"backendtlspolicy":               {},
-	"referencegrant":                 {},
-	"gatewayclass":                   {},
-	"storageclass":                   {},
-	"role":                           {},
-	"rolebinding":                    {},
-	"clusterrole":                    {},
-	"clusterrolebinding":             {},
-	"horizontalpodautoscaler":        {},
-	"poddisruptionbudget":            {},
-	"customresourcedefinition":       {},
-	"mutatingwebhookconfiguration":   {},
-	"validatingwebhookconfiguration": {},
-}
-
 // canServeCachedResponse guards cached detail/helm responses against RBAC changes.
 // It returns true when permissions are allowed or cannot be checked, and false on explicit deny.
 func (a *App) canServeCachedResponse(
 	ctx context.Context,
 	deps common.Dependencies,
 	selectionKey string,
-	kind string,
+	gvk schema.GroupVersionKind,
 	namespace string,
 	name string,
 ) bool {
@@ -78,7 +33,7 @@ func (a *App) canServeCachedResponse(
 	if checker == nil {
 		return true
 	}
-	group, resource, verb, ok := cachedPermissionAttributes(kind)
+	group, resource, verb, ok := cachedPermissionAttributes(ctx, deps, gvk)
 	if !ok {
 		return true
 	}
@@ -93,7 +48,7 @@ func (a *App) canServeCachedResponse(
 		// objectYAMLCacheKey was retired with App.GetObjectYAML — the
 		// GVK-aware fetch path does not populate the response cache,
 		// so there is nothing to evict here for YAML.
-		a.responseCacheDelete(selectionKey, objectDetailCacheKey(kind, namespace, name))
+		a.responseCacheDelete(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, name))
 	}
 	return decision.Allowed
 }
@@ -115,20 +70,12 @@ func (a *App) permissionCheckerForSelection(selectionKey string, deps common.Dep
 	return permissions.NewChecker(deps.KubernetesClient, selectionKey, 0)
 }
 
-// cachedPermissionAttributes resolves the (group, resource, verb) tuple
-// needed to validate cached responses. Looks up the kind against a
-// central built-in resource catalog. The response cache only ever stores
-// payloads for kinds that objectDetailFetchers knows how to fetch, so this
-// function first checks the response-cache allowlist. A kind missing from
-// the allowlist or catalog returns ok=false, which canServeCachedResponse
-// treats as "can't check, serve the cached response optimistically".
-//
-// This used to route through the legacy getGVRForDependencies resolver
-// (first-match-wins discovery) which was the source of the
-// kind-only-objects bug. The static table is strictly bounded to
-// built-ins that never collide across groups.
-func cachedPermissionAttributes(kind string) (string, string, string, bool) {
-	normalized := strings.ToLower(strings.TrimSpace(kind))
+// cachedPermissionAttributes resolves the (group, resource, verb) tuple needed
+// to validate cached responses. Kubernetes object identity goes through the
+// configured resource resolver; Helm release data is synthetic and is gated by
+// the Secret storage driver.
+func cachedPermissionAttributes(ctx context.Context, deps common.Dependencies, gvk schema.GroupVersionKind) (string, string, string, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(gvk.Kind))
 	if normalized == "" {
 		return "", "", "", false
 	}
@@ -136,24 +83,18 @@ func cachedPermissionAttributes(kind string) (string, string, string, bool) {
 		// Helm release data uses the "secret" storage driver, so secrets gate access.
 		return "", "secrets", "get", true
 	}
-	if !isBuiltinDetailCachePermissionKind(normalized) {
+	if deps.ResourceResolver == nil {
 		return "", "", "", false
 	}
-	info, ok := lookupBuiltinResourceByKind(normalized)
+	resolved, ok, err := deps.ResourceResolver.ResolveResourceForGVK(ctx, gvk)
+	if err != nil {
+		return "", "", "", false
+	}
 	if !ok {
 		return "", "", "", false
 	}
-	gr := info.GR()
-	return gr.Group, gr.Resource, "get", true
-}
-
-func isBuiltinDetailCachePermissionKind(kind string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(kind))
-	if normalized == "" {
-		return false
-	}
-	_, ok := builtinDetailCachePermissionKinds[normalized]
-	return ok
+	gvr := resolved.GVR()
+	return gvr.Group, gvr.Resource, "get", true
 }
 
 // permissionCheckContext ensures SSAR calls have a bounded timeout.

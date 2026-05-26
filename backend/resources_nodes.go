@@ -163,34 +163,37 @@ func requireNodeActionTarget(action string, target ObjectActionTargetRef) error 
 
 func (a *App) requireNodeMaintenancePermission(deps common.Dependencies, nodeName string) error {
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind: "Node",
-		Name: nodeName,
-		Verb: "get",
+		Version: "v1",
+		Kind:    "Node",
+		Name:    nodeName,
+		Verb:    "get",
 	}); err != nil {
 		return err
 	}
 	return a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind: "Node",
-		Name: nodeName,
-		Verb: "patch",
+		Version: "v1",
+		Kind:    "Node",
+		Name:    nodeName,
+		Verb:    "patch",
 	})
 }
 
 func (a *App) requireDrainPodPermission(deps common.Dependencies, options DrainNodeOptions) error {
 	podCheck := resourcePermissionCheck{
+		Version:     "v1",
 		Kind:        "Pod",
 		Verb:        "create",
 		Subresource: "eviction",
 	}
 	if options.DisableEviction {
-		podCheck = resourcePermissionCheck{Kind: "Pod", Verb: "delete"}
+		podCheck = resourcePermissionCheck{Version: "v1", Kind: "Pod", Verb: "delete"}
 	} else {
 		evictionGroupVersion, err := kubectldrain.CheckEvictionSupport(deps.KubernetesClient)
 		if err != nil {
 			return fmt.Errorf("failed to check eviction support: %w", err)
 		}
 		if evictionGroupVersion.Empty() {
-			podCheck = resourcePermissionCheck{Kind: "Pod", Verb: "delete"}
+			podCheck = resourcePermissionCheck{Version: "v1", Kind: "Pod", Verb: "delete"}
 		}
 	}
 	return a.requireResourcePermission(deps.Context, deps, podCheck)
@@ -294,6 +297,7 @@ func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryRespo
 		return NodeLogDiscoveryResponse{Reason: err.Error()}
 	}
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Version:     "v1",
 		Kind:        "Node",
 		Name:        nodeName,
 		Verb:        "get",
@@ -313,6 +317,7 @@ func (a *App) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest)
 		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
 	}
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Version:     "v1",
 		Kind:        "Node",
 		Name:        nodeName,
 		Verb:        "get",

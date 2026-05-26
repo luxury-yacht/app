@@ -6,8 +6,8 @@
  * call sites. This is the "first match wins" walk that the kind-only
  * objects bug is fundamentally about — it exists for backwards
  * compatibility with callers that don't yet supply a full GVK. New code
- * should use ResolveGVRForGVK instead, which is strict and disambiguates
- * colliding kinds.
+ * should use Dependencies.ResourceResolver instead, which is strict and
+ * disambiguates colliding kinds.
  *
  * Folding both legacy resolvers into this single canonical implementation
  * removes ~150 lines of duplicated discovery walks across the backend
@@ -36,7 +36,8 @@ import (
 // share a Kind across different API groups, the result depends on the
 // order discovery yields them, which can vary between API server
 // versions and partial-discovery responses. New code MUST prefer
-// ResolveGVRForGVK, which takes a fully-qualified GroupVersionKind.
+// Dependencies.ResourceResolver, which takes a fully-qualified
+// GroupVersionKind.
 //
 // Falls back to the apiextensions CRD list (also kind-only) when
 // discovery doesn't surface the kind. Returns an error when neither

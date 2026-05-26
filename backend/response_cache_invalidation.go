@@ -17,7 +17,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/system"
-	resourcecommon "github.com/luxury-yacht/app/backend/resources/common"
 )
 
 const (
@@ -308,9 +307,6 @@ func (a *App) invalidateResponseCacheForObjectEvent(
 	if shouldSkipWarmupInvalidation(guard, eventType, metaObj) {
 		return
 	}
-	if strings.EqualFold(kind, "CustomResourceDefinition") {
-		resourcecommon.ClearGVRCacheForCluster(selectionKey)
-	}
 	name := strings.TrimSpace(metaObj.GetName())
 	if name == "" {
 		return
@@ -328,18 +324,14 @@ func (a *App) invalidateResponseCacheForResource(selectionKey, kind, namespace, 
 	a.invalidateResponseCache(selectionKey, kind, namespace, name)
 }
 
-// invalidateResponseCacheForGVK drops the exact cached detail entry for a
-// fully-qualified resource. Built-ins also retain their legacy kind-only detail
-// key, so evict both forms for those resources.
+// invalidateResponseCacheForGVK drops the exact GVK detail entry and the
+// legacy kind-only detail key used by typed detail fetchers.
 func (a *App) invalidateResponseCacheForGVK(selectionKey string, gvk schema.GroupVersionKind, namespace, name string) {
 	if strings.TrimSpace(gvk.Kind) == "" || strings.TrimSpace(name) == "" {
 		return
 	}
-	if info, ok := lookupBuiltinResourceByGVK(gvk.Group, gvk.Version, gvk.Kind); ok {
-		a.invalidateResponseCache(selectionKey, info.Kind, namespace, name)
-		return
-	}
 	a.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, name))
+	a.responseCacheDelete(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, name))
 }
 
 // invalidateResponseCache drops the cached detail entry for the resource.
@@ -347,12 +339,8 @@ func (a *App) invalidateResponseCacheForGVK(selectionKey string, gvk schema.Grou
 // the GVK-aware fetch path doesn't write to the response cache.)
 func (a *App) invalidateResponseCache(selectionKey, kind, namespace, name string) {
 	a.responseCacheDelete(selectionKey, objectDetailCacheKey(kind, namespace, name))
-	if info, ok := lookupBuiltinResourceByKind(kind); ok {
-		a.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(schema.GroupVersionKind{
-			Group:   info.Group,
-			Version: info.Version,
-			Kind:    info.Kind,
-		}, namespace, name))
+	if gvk, ok := objectDetailFetcherGVKs[strings.ToLower(strings.TrimSpace(kind))]; ok {
+		a.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, name))
 	}
 }
 

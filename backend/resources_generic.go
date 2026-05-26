@@ -20,8 +20,8 @@ import (
 // fully-qualified apiVersion + kind. apiVersion must be in the standard
 // Kubernetes "group/version" form (or just "version" for core resources
 // like "v1"). Unlike DeleteResource, this path resolves the GVR strictly
-// through the shared common.ResolveGVRForGVK helper so two CRDs that
-// share a Kind don't get conflated.
+// through the cluster's resource resolver so two CRDs that share a Kind don't
+// get conflated.
 func (a *App) deleteResourceByGVK(clusterID, apiVersion, kind, namespace, name string) error {
 	gvk := schema.FromAPIVersionAndKind(strings.TrimSpace(apiVersion), strings.TrimSpace(kind))
 	if gvk.Kind == "" {

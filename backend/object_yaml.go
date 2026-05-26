@@ -8,10 +8,9 @@ package backend
 // target the wrong CRD whenever two CRDs shared a Kind across different
 // API groups.
 //
-// Everything has been retired. New callers resolve GVKs strictly via
-// common.ResolveGVRForGVK and fetch YAML via App.GetObjectYAMLByGVK
+// Everything has been retired. New callers resolve GVKs strictly through the
+// cluster's injected resource resolver and fetch YAML via App.GetObjectYAMLByGVK
 // (backend/object_yaml_by_gvk.go). The mutation path uses
-// getGVRForGVKWithDependencies (backend/object_yaml_mutation.go), which
-// falls back to common.DiscoverGVRByKind only as a partial-discovery
-// safety net and validates the result against the requested GVK before
-// accepting it.
+// getGVRForGVKWithDependencies (backend/object_yaml_mutation.go), which falls
+// back to common.DiscoverGVRByKind only as a partial-discovery safety net and
+// validates the result against the requested GVK before accepting it.

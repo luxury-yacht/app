@@ -32,16 +32,37 @@ export type RuntimeScopeStateChange = {
   changed: boolean;
 };
 
+export type RuntimeScopeEnableResult = RuntimeScopeStateChange & {
+  staleScopes: string[];
+};
+
+// Most domains should only keep one enabled scope per cluster runtime. Domains
+// listed here have real concurrent consumers, such as browse data plus
+// metadata, object-diff panes, or namespace table plus object-panel pod lists.
+const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
+  'catalog',
+  'catalog-diff',
+  'container-logs',
+  'object-details',
+  'object-events',
+  'object-helm-manifest',
+  'object-helm-values',
+  'object-maintenance',
+  'object-map',
+  'object-yaml',
+  'pods',
+]);
+
 export class ClusterRefreshRuntime {
-  readonly inFlight = new Map<string, InFlightRequest>();
-  readonly streamingCleanup = new Map<string, () => void>();
-  readonly pendingStreaming = new Map<string, Promise<(() => void) | void>>();
-  readonly streamingReady = new Map<string, Promise<void>>();
-  readonly cancelledStreaming = new Set<string>();
-  readonly streamHealth = new Map<string, AppEvents['refresh:resource-stream-health']>();
-  readonly blockedStreaming = new Set<string>();
-  readonly lastMetricsRefreshAt = new Map<string, number>();
-  readonly scopedEnabledState = new Map<RefreshDomain, Map<string, boolean>>();
+  private readonly inFlight = new Map<string, InFlightRequest>();
+  private readonly streamingCleanup = new Map<string, () => void>();
+  private readonly pendingStreaming = new Map<string, Promise<(() => void) | void>>();
+  private readonly streamingReady = new Map<string, Promise<void>>();
+  private readonly cancelledStreaming = new Set<string>();
+  private readonly streamHealth = new Map<string, AppEvents['refresh:resource-stream-health']>();
+  private readonly blockedStreaming = new Set<string>();
+  private readonly lastMetricsRefreshAt = new Map<string, number>();
+  private readonly scopedEnabledState = new Map<RefreshDomain, Map<string, boolean>>();
 
   constructor(readonly clusterId: string) {}
 
@@ -53,10 +74,6 @@ export class ClusterRefreshRuntime {
 
   deleteDomain(domain: RefreshDomain): void {
     this.scopedEnabledState.delete(domain);
-  }
-
-  getDomainScopes(domain: RefreshDomain): Map<string, boolean> | undefined {
-    return this.scopedEnabledState.get(domain);
   }
 
   getKnownScopes(domain: RefreshDomain): string[] {
@@ -117,7 +134,20 @@ export class ClusterRefreshRuntime {
     return { previous, changed: true };
   }
 
-  disableOtherEnabledScopes(domain: RefreshDomain, activeScope: string): string[] {
+  applyScopedDomainEnabled(
+    domain: RefreshDomain,
+    scope: string,
+    enabled: boolean
+  ): RuntimeScopeEnableResult {
+    const staleScopes =
+      enabled && !MULTI_ACTIVE_SCOPE_DOMAINS.has(domain)
+        ? this.disableOtherEnabledScopes(domain, scope)
+        : [];
+    const change = this.setScopedDomainEnabled(domain, scope, enabled);
+    return { ...change, staleScopes };
+  }
+
+  private disableOtherEnabledScopes(domain: RefreshDomain, activeScope: string): string[] {
     const scopedMap = this.scopedEnabledState.get(domain);
     if (!scopedMap) {
       return [];

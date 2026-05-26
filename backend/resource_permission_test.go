@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	appsv1 "k8s.io/api/apps/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -184,11 +185,13 @@ func TestDrainPodPermissionFollowsEvictionSupport(t *testing.T) {
 			})
 
 			app := NewApp()
-			err := app.requireDrainPodPermission(common.Dependencies{
+			deps := common.Dependencies{
 				Context:          context.Background(),
 				KubernetesClient: client,
 				ClusterID:        "cluster-a",
-			}, DrainNodeOptions{DisableEviction: tc.disableEviction})
+			}
+			deps.ResourceResolver = objectcatalog.NewResourceResolver(deps, nil)
+			err := app.requireDrainPodPermission(deps, DrainNodeOptions{DisableEviction: tc.disableEviction})
 			if err != nil {
 				t.Fatalf("requireDrainPodPermission: %v", err)
 			}

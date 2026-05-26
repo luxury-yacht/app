@@ -234,10 +234,10 @@ func TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs(t *testing.T) {
 // (removed) used to characterize the first-match-wins behavior of the
 // legacy getGVRForDependencies resolver. That resolver was deleted as
 // part of the kind-only-objects fix — every production caller now
-// routes through common.ResolveGVRForGVK (strict) or
-// common.DiscoverGVRByKind (explicitly documented as non-deterministic
-// for colliding kinds, used only as a partial-discovery safety net in
-// the mutation path). The GVK-aware disambiguation is covered by
+// routes through the injected resource resolver (strict) or
+// common.DiscoverGVRByKind (explicitly documented as non-deterministic for
+// colliding kinds, used only as a partial-discovery safety net in the mutation
+// path). The GVK-aware disambiguation is covered by
 // TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs above.
 
 // TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances is the RED test

@@ -48,6 +48,7 @@ type Dependencies struct {
 	DynamicClient          dynamic.Interface
 	APIExtensionsClient    clientset.Interface
 	RestConfig             *rest.Config
+	ResourceResolver       ResourceResolver
 	EnsureClient           EnsureClientFunc
 	EnsureAPIExtensions    EnsureAPIExtensionsFunc
 	SelectedKubeconfig     string

@@ -42,6 +42,15 @@ allowed descriptors, first-batch latency, and health state.
 Catalog rows are discovery summaries. They are not rich details, YAML, Helm
 content, status overviews, metrics, logs, or action payloads.
 
+Resource identity resolution is catalog-backed. Backend callers that need to
+resolve `group/version/kind` to a Kubernetes resource use the shared
+`ResourceResolver` contract, and app code supplies the per-cluster object
+catalog implementation. The catalog seeds standard Kubernetes resources so
+startup paths can resolve common objects before the first full sync, then
+hydrates the same identity store from Kubernetes discovery and CRDs. Callers do
+not choose between built-ins, cached descriptors, and discovery; those are
+catalog implementation details.
+
 ## Service Lifecycle
 
 The backend starts one catalog service per selected cluster in

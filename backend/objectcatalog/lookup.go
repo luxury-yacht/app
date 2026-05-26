@@ -1,6 +1,12 @@
 package objectcatalog
 
-import "strings"
+import (
+	"context"
+	"strings"
+
+	"github.com/luxury-yacht/app/backend/resources/common"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+)
 
 // FindExactMatch resolves a single catalog item by canonical identity within
 // this cluster's catalog snapshot.
@@ -65,6 +71,19 @@ func (s *Service) FindByUID(uid string) (Summary, bool) {
 	}
 
 	return Summary{}, false
+}
+
+// ResolveResourceForGVK resolves discovery metadata captured by the catalog.
+// It implements common.ResourceResolver without exposing catalog internals to
+// dynamic action, permission, or YAML callers.
+func (s *Service) ResolveResourceForGVK(ctx context.Context, gvk schema.GroupVersionKind) (common.ResolvedResource, bool, error) {
+	if s == nil {
+		return common.ResolvedResource{}, false, nil
+	}
+	if s.identity == nil {
+		return common.ResolvedResource{}, false, nil
+	}
+	return s.identity.ResolveResourceForGVK(ctx, gvk)
 }
 
 func normalizeLookupNamespace(namespace string) string {

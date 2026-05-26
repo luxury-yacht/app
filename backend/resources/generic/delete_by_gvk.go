@@ -6,9 +6,8 @@
  * Unlike Service.Delete, which accepts a bare kind string and uses a
  * first-match-wins discovery walk to resolve the GVR, DeleteByGVK takes a
  * fully-qualified GroupVersionKind and resolves strictly through the
- * shared common.ResolveGVRForGVK helper. That avoids the package-cycle
- * problem: the resolver lives in backend/resources/common, which both
- * this package and the backend package already import.
+ * injected common.ResourceResolver. That keeps resource identity behind
+ * one object-catalog-backed resolver without a package cycle.
  */
 
 package generic
@@ -17,7 +16,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/luxury-yacht/app/backend/resources/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -38,11 +36,21 @@ func (s *Service) DeleteByGVK(gvk schema.GroupVersionKind, namespace, name strin
 		return fmt.Errorf("name is required")
 	}
 
-	gvr, isNamespaced, err := common.ResolveGVRForGVK(s.context(), s.deps, gvk)
+	if s.deps.ResourceResolver == nil {
+		return fmt.Errorf("resource resolver not initialized")
+	}
+	resolved, ok, err := s.deps.ResourceResolver.ResolveResourceForGVK(s.context(), gvk)
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to resolve GVR for %s: %v", gvk.String(), err))
 		return fmt.Errorf("failed to resolve %s: %w", gvk.String(), err)
 	}
+	if !ok {
+		err := fmt.Errorf("unable to resolve resource for %s", gvk.String())
+		s.logError(fmt.Sprintf("Failed to resolve GVR for %s: %v", gvk.String(), err))
+		return fmt.Errorf("failed to resolve %s: %w", gvk.String(), err)
+	}
+	gvr := resolved.GVR()
+	isNamespaced := resolved.Namespaced
 
 	dynamicClient, err := s.dynamicClient()
 	if err != nil {

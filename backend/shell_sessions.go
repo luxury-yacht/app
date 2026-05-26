@@ -228,6 +228,7 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 
 	if err := a.requireAnyResourcePermission(deps.Context, deps,
 		resourcePermissionCheck{
+			Version:     "v1",
 			Kind:        "Pod",
 			Namespace:   req.Namespace,
 			Name:        req.PodName,
@@ -235,6 +236,7 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 			Subresource: "exec",
 		},
 		resourcePermissionCheck{
+			Version:     "v1",
 			Kind:        "Pod",
 			Namespace:   req.Namespace,
 			Name:        req.PodName,

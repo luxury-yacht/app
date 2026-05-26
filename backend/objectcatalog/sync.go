@@ -237,6 +237,9 @@ func (s *Service) sync(ctx context.Context) error {
 		s.recordTelemetry(prevItemCount, prevResourceCount, elapsed, err)
 		return err
 	}
+	if s.identity != nil {
+		s.identity.replaceDiscovered(descriptors)
+	}
 	if s.deps.Logger != nil {
 		s.logInfo(fmt.Sprintf("catalog discovered %d descriptor(s)", len(descriptors)))
 	}

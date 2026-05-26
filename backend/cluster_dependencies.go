@@ -1,11 +1,60 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+type appResourceResolver struct {
+	app       *App
+	clusterID string
+}
+
+func (r appResourceResolver) ResolveResourceForGVK(ctx context.Context, gvk schema.GroupVersionKind) (common.ResolvedResource, bool, error) {
+	if r.app == nil {
+		return common.ResolvedResource{}, false, nil
+	}
+	svc := r.app.objectCatalogServiceForCluster(r.clusterID)
+	if svc == nil {
+		resolver, ok := r.app.fallbackResourceResolverForCluster(r.clusterID)
+		if !ok {
+			return common.ResolvedResource{}, false, nil
+		}
+		return resolver.ResolveResourceForGVK(ctx, gvk)
+	}
+	return svc.ResolveResourceForGVK(ctx, gvk)
+}
+
+func (a *App) fallbackResourceResolverForCluster(clusterID string) (common.ResourceResolver, bool) {
+	if a == nil || strings.TrimSpace(clusterID) == "" {
+		return nil, false
+	}
+	a.clusterClientsMu.Lock()
+	defer a.clusterClientsMu.Unlock()
+
+	clients := a.clusterClients[clusterID]
+	if clients == nil {
+		return nil, false
+	}
+	if clients.fallbackResourceResolver != nil {
+		return clients.fallbackResourceResolver, true
+	}
+
+	selection := kubeconfigSelection{
+		Path:    clients.kubeconfigPath,
+		Context: clients.kubeconfigContext,
+	}
+	deps := a.resourceDependenciesForSelection(selection, clients, clusterID)
+	deps.ResourceResolver = nil
+	resolver := objectcatalog.NewResourceResolver(deps, deps.Logger)
+	clients.fallbackResourceResolver = resolver
+	return resolver, true
+}
 
 // resourceDependenciesForClusterID resolves dependencies for a specific cluster selection.
 func (a *App) resourceDependenciesForClusterID(clusterID string) (common.Dependencies, bool) {

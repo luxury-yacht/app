@@ -554,19 +554,16 @@ func (a *App) getGVRForGVK(ctx context.Context, clusterID string, gvk schema.Gro
 }
 
 // getGVRForGVKWithDependencies is the YAML mutation path's GVK resolver.
-// As of step 7 of the kind-only-objects fix it delegates the strict
-// group/version/kind walk to the shared common.ResolveGVRForGVK helper —
-// the canonical resolver that lives in backend/resources/common so both
-// the backend and generic packages can call it without a package cycle.
+// It calls the injected cluster resource resolver directly so object identity
+// has one authority: the object-catalog-backed common.ResourceResolver.
 //
-// This wrapper still exists (rather than the mutation path calling
-// common.ResolveGVRForGVK directly) because it adds one mutation-specific
-// behaviour: a kind-only fallback through common.DiscoverGVRByKind for
-// the rare case where strict discovery fails (partial API server
-// responses, stale caches). The fallback's result is validated against
-// the requested GVK before being returned, so it can never silently
-// target a wrong-group CRD — if discovery yields a different group
-// than what the caller asked for, the mismatch surfaces as an error.
+// This wrapper still exists because it adds one mutation-specific behaviour:
+// a kind-only fallback through common.DiscoverGVRByKind for the rare case where
+// strict discovery fails (partial API server responses, stale caches). The
+// fallback's result is validated against the requested GVK before being
+// returned, so it can never silently target a wrong-group CRD — if discovery
+// yields a different group than what the caller asked for, the mismatch
+// surfaces as an error.
 //
 // The selectionKey parameter used to drive a legacy response-cache
 // lookup that has since been retired; it is kept in the signature for
@@ -577,9 +574,18 @@ func getGVRForGVKWithDependencies(
 	_ string,
 	gvk schema.GroupVersionKind,
 ) (schema.GroupVersionResource, bool, error) {
-	gvr, namespaced, err := common.ResolveGVRForGVK(ctx, deps, gvk)
+	if strings.TrimSpace(gvk.Version) == "" || strings.TrimSpace(gvk.Kind) == "" {
+		return schema.GroupVersionResource{}, false, fmt.Errorf("apiVersion and kind are required for GVK resolution")
+	}
+	if deps.ResourceResolver == nil {
+		return schema.GroupVersionResource{}, false, fmt.Errorf("resource resolver not initialized")
+	}
+	resolved, ok, err := deps.ResourceResolver.ResolveResourceForGVK(ctx, gvk)
 	if err == nil {
-		return gvr, namespaced, nil
+		if ok {
+			return resolved.GVR(), resolved.Namespaced, nil
+		}
+		err = fmt.Errorf("unable to resolve resource for %s", gvk.String())
 	}
 
 	// Strict resolver could not find the GVK. Try the canonical kind-only
@@ -589,11 +595,9 @@ func getGVRForGVKWithDependencies(
 	// error so the caller sees an actionable failure rather than a
 	// misleading kind-only success.
 	//
-	// Group/version comparison is case-sensitive (==) to match the strict
-	// resolver in common.ResolveGVRForGVK — Kubernetes API group and
-	// version names are RFC 1123 DNS labels, never case-insensitive. This
-	// guard's whole purpose is to prevent silent wrong-group hits, so it
-	// must be at least as strict as the primary resolver.
+	// Group/version comparison is case-sensitive (==) to match Kubernetes API
+	// group and version names. This guard's whole purpose is to prevent silent
+	// wrong-group hits, so it must be at least as strict as the primary resolver.
 	if fallbackGVR, fallbackNamespaced, fallbackErr := common.DiscoverGVRByKind(ctx, deps, gvk.Kind); fallbackErr == nil {
 		if (gvk.Group == "" || fallbackGVR.Group == gvk.Group) &&
 			(gvk.Version == "" || fallbackGVR.Version == gvk.Version) {

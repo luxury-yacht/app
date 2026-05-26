@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -15,19 +16,26 @@ import (
 )
 
 func (s *Service) discoverResources(ctx context.Context) ([]resourceDescriptor, error) {
+	return discoverResourceDescriptors(ctx, s.deps.Common, s.deps.Logger)
+}
+
+func discoverResourceDescriptors(ctx context.Context, deps common.Dependencies, logger Logger) ([]resourceDescriptor, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	default:
 	}
-	discoveryClient := s.deps.Common.KubernetesClient.Discovery()
-	if cfg := s.deps.Common.RestConfig; cfg != nil {
+	if deps.KubernetesClient == nil {
+		return nil, errors.New("discovery client not available")
+	}
+	discoveryClient := deps.KubernetesClient.Discovery()
+	if cfg := deps.RestConfig; cfg != nil {
 		cfgCopy := rest.CopyConfig(cfg)
 		cfgCopy.Timeout = config.ObjectCatalogDiscoveryRequestTimeout
 		if dc, err := discovery.NewDiscoveryClientForConfig(cfgCopy); err == nil {
 			discoveryClient = dc
-		} else if s.deps.Logger != nil {
-			s.logDebug(fmt.Sprintf("catalog discovery client fallback: %v", err))
+		} else if logger != nil {
+			logger.Debug(fmt.Sprintf("catalog discovery client fallback: %v", err), componentName)
 		}
 	}
 	if discoveryClient == nil {
@@ -38,6 +46,11 @@ func (s *Service) discoverResources(ctx context.Context) ([]resourceDescriptor, 
 	if err != nil && len(resourceLists) == 0 {
 		return nil, err
 	}
+	if len(resourceLists) == 0 {
+		if _, lists, altErr := discoveryClient.ServerGroupsAndResources(); altErr == nil && len(lists) > 0 {
+			resourceLists = lists
+		}
+	}
 
 	select {
 	case <-ctx.Done():
@@ -45,10 +58,14 @@ func (s *Service) discoverResources(ctx context.Context) ([]resourceDescriptor, 
 	default:
 	}
 
-	return s.extractDescriptors(resourceLists), nil
+	return extractResourceDescriptors(resourceLists), nil
 }
 
 func (s *Service) extractDescriptors(resourceLists []*metav1.APIResourceList) []resourceDescriptor {
+	return extractResourceDescriptors(resourceLists)
+}
+
+func extractResourceDescriptors(resourceLists []*metav1.APIResourceList) []resourceDescriptor {
 	exported := ExtractDescriptors(resourceLists)
 	result := make([]resourceDescriptor, 0, len(exported))
 	for _, desc := range exported {

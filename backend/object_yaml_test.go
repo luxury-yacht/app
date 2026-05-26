@@ -9,8 +9,7 @@ func registerTestClusterWithClients(app *App, clusterID string, cc *clusterClien
 // TestLoadGVRCachedEvictsExpiredEntry and TestGetGVRFallsBackToCRD
 // (both removed) used to exercise the legacy App.getGVR and its
 // backing gvrCache. That cache and the resolver were retired as part
-// of the kind-only-objects fix — no production caller remains, and
-// the strict GVK resolver (common.ResolveGVRForGVK) reaches discovery
-// on every call with its own short-lived client. The CRD fallback
-// behaviour is still covered by TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs
-// and the common.ResolveGVRForGVK tests.
+// of the kind-only-objects fix — no production caller remains. Strict
+// GVK resolution now delegates to the object-catalog-backed resource
+// resolver, whose discovery and CRD hydration are covered by objectcatalog
+// resolver tests.

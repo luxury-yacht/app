@@ -13,6 +13,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -127,6 +128,7 @@ func TestServiceDeleteByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 			testsupport.WithDepsKubeClient(kubeClient),
 			testsupport.WithDepsDynamicClient(dynamicClient),
 		)
+		deps.ResourceResolver = objectcatalog.NewResourceResolver(deps, nil)
 		service := NewService(deps)
 
 		err := service.DeleteByGVK(schema.GroupVersionKind{
@@ -159,6 +161,7 @@ func TestServiceDeleteByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 			testsupport.WithDepsKubeClient(kubeClient),
 			testsupport.WithDepsDynamicClient(dynamicClient),
 		)
+		deps.ResourceResolver = objectcatalog.NewResourceResolver(deps, nil)
 		service := NewService(deps)
 
 		err := service.DeleteByGVK(schema.GroupVersionKind{

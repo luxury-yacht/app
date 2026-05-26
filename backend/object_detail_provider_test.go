@@ -19,6 +19,7 @@ import (
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -107,14 +108,25 @@ func TestObjectDetailProviderRejectsKnownKindWithWrongGVK(t *testing.T) {
 	app := NewApp()
 	app.Ctx = context.Background()
 	clusterID := "config:ctx"
+	client := fake.NewClientset(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
+	})
+	discoveryClient := client.Discovery().(*fakediscovery.FakeDiscovery)
+	discoveryClient.Resources = []*metav1.APIResourceList{{
+		GroupVersion: "example.com/v1",
+		APIResources: []metav1.APIResource{{
+			Name:       "configmaps",
+			Kind:       "ConfigMap",
+			Namespaced: true,
+			Verbs:      metav1.Verbs{"get", "list"},
+		}},
+	}}
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
-			client: fake.NewClientset(&corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
-			}),
+			client:            client,
 		},
 	}
 
@@ -129,6 +141,26 @@ func TestObjectDetailProviderRejectsKnownKindWithWrongGVK(t *testing.T) {
 	}, "default", "demo")
 	if err != snapshot.ErrObjectDetailNotImplemented {
 		t.Fatalf("expected mismatched GVK to be rejected as not implemented, got %v", err)
+	}
+}
+
+func TestObjectDetailFetchersHaveExactGVKPolicy(t *testing.T) {
+	for kind := range objectDetailFetchers {
+		if kind == helmReleaseKind {
+			continue
+		}
+		gvk, ok := objectDetailFetcherGVKs[kind]
+		if !ok {
+			t.Fatalf("object detail fetcher %q is missing exact GVK policy", kind)
+		}
+		if strings.TrimSpace(gvk.Version) == "" || strings.TrimSpace(gvk.Kind) == "" {
+			t.Fatalf("object detail fetcher %q has incomplete GVK policy: %#v", kind, gvk)
+		}
+	}
+	for kind := range objectDetailFetcherGVKs {
+		if _, ok := objectDetailFetchers[kind]; !ok {
+			t.Fatalf("object detail GVK policy %q has no fetcher", kind)
+		}
 	}
 }
 

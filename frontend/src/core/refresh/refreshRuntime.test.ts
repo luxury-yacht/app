@@ -24,11 +24,35 @@ describe('ClusterRefreshRuntime', () => {
       'cluster-a|namespace:kube-system',
     ]);
 
-    expect(runtime.disableOtherEnabledScopes('pods', 'cluster-a|namespace:kube-system')).toEqual([
+    expect(
+      runtime.applyScopedDomainEnabled('cluster-config', 'cluster-a|namespace:default', true)
+    ).toEqual({
+      previous: undefined,
+      changed: true,
+      staleScopes: [],
+    });
+    expect(
+      runtime.applyScopedDomainEnabled('cluster-config', 'cluster-a|namespace:kube-system', true)
+    ).toEqual({
+      previous: undefined,
+      changed: true,
+      staleScopes: ['cluster-a|namespace:default'],
+    });
+    expect(runtime.getEnabledScopes('cluster-config')).toEqual(['cluster-a|namespace:kube-system']);
+    expect(runtime.isScopedDomainEnabled('cluster-config', 'cluster-a|namespace:default')).toBe(
+      false
+    );
+
+    expect(runtime.applyScopedDomainEnabled('pods', 'cluster-a|namespace:prod', true)).toEqual({
+      previous: undefined,
+      changed: true,
+      staleScopes: [],
+    });
+    expect(runtime.getEnabledScopes('pods')).toEqual([
       'cluster-a|namespace:default',
+      'cluster-a|namespace:kube-system',
+      'cluster-a|namespace:prod',
     ]);
-    expect(runtime.getEnabledScopes('pods')).toEqual(['cluster-a|namespace:kube-system']);
-    expect(runtime.isScopedDomainEnabled('pods', 'cluster-a|namespace:default')).toBe(false);
   });
 
   it('owns async streaming lifecycle bookkeeping', async () => {

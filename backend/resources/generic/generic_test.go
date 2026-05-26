@@ -11,6 +11,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -27,9 +28,8 @@ func TestServiceDeleteByGVKCoreResource(t *testing.T) {
 	dynamicClient := testsupport.NewDynamicClient(t, scheme, pod.DeepCopyObject())
 	kubeClient := fake.NewClientset(pod.DeepCopy())
 
-	// DeleteByGVK goes through common.ResolveGVRForGVK which hits discovery
-	// to learn the resource plural name and namespace scope, so the fake
-	// needs to advertise Pod.
+	// DeleteByGVK goes through the object-catalog resource resolver, which
+	// hydrates from discovery on a miss, so the fake needs to advertise Pod.
 	testsupport.SeedAPIResources(t, kubeClient, testsupport.NewAPIResourceList("v1", metav1.APIResource{
 		Name:         "pods",
 		SingularName: "pod",
@@ -43,6 +43,7 @@ func TestServiceDeleteByGVKCoreResource(t *testing.T) {
 		testsupport.WithDepsKubeClient(kubeClient),
 		testsupport.WithDepsDynamicClient(dynamicClient),
 	)
+	deps.ResourceResolver = objectcatalog.NewResourceResolver(deps, nil)
 	service := NewService(deps)
 
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
@@ -103,6 +104,7 @@ func TestServiceDeleteByGVKCustomResource(t *testing.T) {
 		testsupport.WithDepsKubeClient(kubeClient),
 		testsupport.WithDepsDynamicClient(dynamicClient),
 	)
+	deps.ResourceResolver = objectcatalog.NewResourceResolver(deps, nil)
 	service := NewService(deps)
 
 	gvk := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"}

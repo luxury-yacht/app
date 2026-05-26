@@ -47,6 +47,10 @@ type clusterClients struct {
 	// authFailedOnInit is true if the pre-flight credential check failed
 	// during client initialization. Used to skip subsystem creation.
 	authFailedOnInit bool
+	// fallbackResourceResolver is used only before the object catalog service is
+	// available. It avoids rebuilding the built-in identity seed on every
+	// cold-start lookup.
+	fallbackResourceResolver common.ResourceResolver
 }
 
 func (a *App) clusterClientsForID(clusterID string) *clusterClients {

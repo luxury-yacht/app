@@ -237,7 +237,7 @@ Cluster-scoped resources (Nodes, PVs, StorageClasses, ClusterRoles, etc.) are ro
 | `backend/capabilities/query.go`                         | `PermissionQuery`, `PermissionResult`, `NamespaceDiagnostics`, `QueryPermissionsResponse` types. `PermissionQuery` carries explicit `Group`/`Version` fields. |
 | `backend/capabilities/rules.go`                         | SSRR cache (TTL + stale grace, singleflight), SSRR fetch, rule matching engine                                                                                |
 | `backend/app_permissions.go`                            | `QueryPermissions` Wails endpoint. `resolveGVRForPermissionQuery` routes each query through the strict GVK resolver; SSRR matching; SSAR fallback             |
-| `backend/resources/common/gvk.go`                       | `ResolveGVRForGVK` — the canonical strict group+version+kind resolver. Case-sensitive group/version match, no kind-only fallback.                             |
+| `backend/resources/common/resource_identity.go`         | `ResourceResolver` / `ResolvedResource` — the canonical strict group+version+kind resolver contract. Case-sensitive group/version match, no kind-only fallback. |
 | `backend/resources/common/discover.go`                  | `DiscoverGVRByKind` — a kind-only walker retained only for the mutation path's partial-discovery safety net. Explicitly documented as non-deterministic.      |
 | `backend/internal/config/config.go`                     | `SSRRFetchTimeout` constant                                                                                                                                   |
 | `frontend/src/core/capabilities/permissionStore.ts`     | Frontend permission store — calls `QueryPermissions`, caches results, periodic refresh. Owns the GVK-aware permission key format.                             |
@@ -255,7 +255,7 @@ Each `PermissionQuery` carries a fully-qualified `(Group, Version, Kind)` — em
 
 For each permission check in a batch:
 
-1. `resolveGVRForPermissionQuery` calls `common.ResolveGVRForGVK` to turn the query's `(Group, Version, Kind)` into a `GroupVersionResource`. Group and version are matched **strictly** (case-sensitive, no wildcards); there is no kind-only fallback. A query with `Version == ""` returns an error rather than silently picking whichever GVR discovery yielded first.
+1. `resolveGVRForPermissionQuery` calls the injected `ResourceResolver` to turn the query's `(Group, Version, Kind)` into a `GroupVersionResource`. Group and version are matched **strictly** (case-sensitive, no wildcards); there is no kind-only fallback. A query with `Version == ""` returns an error rather than silently picking whichever GVR discovery yielded first.
 2. If the resolved resource is non-namespaced (cluster-scoped), route directly to SSAR.
 3. If namespaced, look up cached SSRR rules for `(clusterId, namespace)`. Fetch SSRR if not cached.
 4. Match against the SSRR rules (apiGroup, resource, verb, subresource, resourceNames — with wildcard handling).

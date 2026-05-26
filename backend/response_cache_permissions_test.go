@@ -8,6 +8,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
@@ -25,7 +26,7 @@ func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
 	app.responseCacheStore(selectionKey, detailKey, "manifest")
 
 	deps := common.Dependencies{Context: context.Background()}
-	if allowed := app.canServeCachedResponse(context.Background(), deps, selectionKey, "HelmManifest", "default", "demo"); allowed {
+	if allowed := app.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmManifest"}, "default", "demo"); allowed {
 		t.Fatalf("expected permission denial to block cached response")
 	}
 	if _, ok := app.responseCacheLookup(selectionKey, detailKey); ok {
@@ -48,7 +49,7 @@ func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
 	app.responseCacheStore(selectionKey, detailKey, "values")
 
 	deps := common.Dependencies{Context: context.Background()}
-	if allowed := app.canServeCachedResponse(context.Background(), deps, selectionKey, "HelmValues", "default", "demo"); !allowed {
+	if allowed := app.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmValues"}, "default", "demo"); !allowed {
 		t.Fatalf("expected permission allow to serve cached response")
 	}
 	if _, ok := app.responseCacheLookup(selectionKey, detailKey); !ok {
@@ -56,8 +57,14 @@ func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
 	}
 }
 
-func TestCachedPermissionAttributesUsesBuiltinCatalog(t *testing.T) {
-	group, resource, verb, ok := cachedPermissionAttributes("Pod")
+func TestCachedPermissionAttributesUsesResourceResolver(t *testing.T) {
+	deps := common.Dependencies{
+		ResourceResolver: &testCachePermissionResolver{
+			result: common.ResolvedResource{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespaced: true},
+			ok:     true,
+		},
+	}
+	group, resource, verb, ok := cachedPermissionAttributes(context.Background(), deps, schema.GroupVersionKind{Version: "v1", Kind: "Pod"})
 	if !ok {
 		t.Fatalf("expected Pod cache permission attributes")
 	}
@@ -65,7 +72,7 @@ func TestCachedPermissionAttributesUsesBuiltinCatalog(t *testing.T) {
 		t.Fatalf("unexpected Pod permission attributes: group=%q resource=%q verb=%q", group, resource, verb)
 	}
 
-	group, resource, verb, ok = cachedPermissionAttributes("HelmManifest")
+	group, resource, verb, ok = cachedPermissionAttributes(context.Background(), common.Dependencies{}, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmManifest"})
 	if !ok {
 		t.Fatalf("expected Helm cache permission attributes")
 	}
@@ -73,25 +80,14 @@ func TestCachedPermissionAttributesUsesBuiltinCatalog(t *testing.T) {
 		t.Fatalf("unexpected Helm permission attributes: group=%q resource=%q verb=%q", group, resource, verb)
 	}
 
-	group, resource, verb, ok = cachedPermissionAttributes("Gateway")
-	if !ok {
-		t.Fatalf("expected Gateway cache permission attributes")
-	}
-	if group != "gateway.networking.k8s.io" || resource != "gateways" || verb != "get" {
-		t.Fatalf("unexpected Gateway permission attributes: group=%q resource=%q verb=%q", group, resource, verb)
-	}
 }
 
-func TestBuiltinObjectDetailFetchersHaveCachePermissionPolicy(t *testing.T) {
-	for kind := range objectDetailFetchers {
-		if kind == helmReleaseKind {
-			continue
-		}
-		if _, ok := lookupBuiltinResourceByKind(kind); !ok {
-			continue
-		}
-		if !isBuiltinDetailCachePermissionKind(kind) {
-			t.Fatalf("built-in object detail kind %q is missing cache permission policy", kind)
-		}
-	}
+type testCachePermissionResolver struct {
+	result common.ResolvedResource
+	ok     bool
+	err    error
+}
+
+func (r *testCachePermissionResolver) ResolveResourceForGVK(context.Context, schema.GroupVersionKind) (common.ResolvedResource, bool, error) {
+	return r.result, r.ok, r.err
 }

@@ -4,10 +4,10 @@
  * GVK-aware object YAML fetch.
  *
  * Unlike the legacy App.GetObjectYAML, this entry point takes a full
- * apiVersion + kind from the caller and resolves through the strict
- * common.ResolveGVRForGVK helper. That lets the caller choose which of
- * several colliding CRDs to read, instead of getting whichever one the
- * discovery client happens to yield first.
+ * apiVersion + kind from the caller and resolves through the cluster's
+ * injected resource resolver. That lets the caller choose which of several
+ * colliding CRDs to read, instead of getting whichever one the discovery
+ * client happens to yield first.
  *
  * The core fetch logic is extracted into fetchObjectYAMLByGVK so the
  * refresh-domain provider (backend/object_detail_provider.go) can share it
@@ -73,10 +73,18 @@ func fetchObjectYAMLByGVK(ctx context.Context, deps common.Dependencies, gvk sch
 		}
 	}
 
-	gvr, isNamespaced, err := common.ResolveGVRForGVK(ctx, deps, gvk)
+	if deps.ResourceResolver == nil {
+		return "", fmt.Errorf("resource resolver not initialized")
+	}
+	resolved, ok, err := deps.ResourceResolver.ResolveResourceForGVK(ctx, gvk)
 	if err != nil {
 		return "", err
 	}
+	if !ok {
+		return "", fmt.Errorf("unable to resolve resource for %s", gvk.String())
+	}
+	gvr := resolved.GVR()
+	isNamespaced := resolved.Namespaced
 
 	var obj *unstructured.Unstructured
 	if isNamespaced {

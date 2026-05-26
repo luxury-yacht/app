@@ -72,23 +72,6 @@ const logWarning = (message: string, cluster?: AppLogsClusterMeta): void => {
   logAppLogsWarn(message, APP_LOG_SOURCES.RefreshOrchestrator, cluster);
 };
 
-// Most domains should only keep one enabled scope per cluster runtime. These
-// domains have real concurrent consumers, such as browse data plus metadata,
-// object-diff left/right panes, or namespace table plus object-panel pod lists.
-const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
-  'catalog',
-  'catalog-diff',
-  'container-logs',
-  'object-details',
-  'object-events',
-  'object-helm-manifest',
-  'object-helm-values',
-  'object-maintenance',
-  'object-map',
-  'object-yaml',
-  'pods',
-]);
-
 class RefreshOrchestrator {
   private configs = new Map<RefreshDomain, DomainRegistration<RefreshDomain>>();
   private unsubscriptions = new Map<RefreshDomain, () => void>();
@@ -328,21 +311,21 @@ class RefreshOrchestrator {
 
     const runtime = this.getRuntimeForScope(domain, normalizedScope);
 
-    if (enabled && !MULTI_ACTIVE_SCOPE_DOMAINS.has(domain)) {
-      const staleScopes = runtime.disableOtherEnabledScopes(domain, normalizedScope);
-      staleScopes.forEach((staleScope) => {
-        this.cancelInFlightForScopedDomain(domain, staleScope);
-        if (config.streaming) {
-          this.getRuntimeForScope(domain, staleScope).clearStreamingReady(domain, staleScope);
-          this.stopStreamingScope(domain, staleScope, config.streaming, true);
-        } else {
-          resetScopedDomainState(domain, staleScope);
-        }
-      });
-    }
-
     const wasActive = this.hasEnabledScopedSources(domain);
-    const { changed } = runtime.setScopedDomainEnabled(domain, normalizedScope, enabled);
+    const { changed, staleScopes } = runtime.applyScopedDomainEnabled(
+      domain,
+      normalizedScope,
+      enabled
+    );
+    staleScopes.forEach((staleScope) => {
+      this.cancelInFlightForScopedDomain(domain, staleScope);
+      if (config.streaming) {
+        this.getRuntimeForScope(domain, staleScope).clearStreamingReady(domain, staleScope);
+        this.stopStreamingScope(domain, staleScope, config.streaming, true);
+      } else {
+        resetScopedDomainState(domain, staleScope);
+      }
+    });
     if (!changed) {
       this.updateMetricsDemand();
       return;

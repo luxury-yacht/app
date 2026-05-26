@@ -375,6 +375,8 @@ func (a *App) rollbackWorkloadInternal(clusterID, namespace, group, version, wor
 		return fmt.Errorf("revision %d not found for %s %s/%s", toRevision, workloadKind, namespace, name)
 	}
 	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+		Group:     group,
+		Version:   version,
 		Kind:      workloadKind,
 		Namespace: namespace,
 		Name:      name,

@@ -294,9 +294,54 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 }
 
+// objectDetailFetcherGVKs maps typed detail fetchers to the exact GVK each
+// fetcher handles. It is fetcher capability metadata, not a resource identity
+// source; dynamic resource identity still resolves through the object catalog.
+var objectDetailFetcherGVKs = map[string]schema.GroupVersionKind{
+	"pod":                            {Version: "v1", Kind: "Pod"},
+	"deployment":                     {Group: "apps", Version: "v1", Kind: "Deployment"},
+	"replicaset":                     {Group: "apps", Version: "v1", Kind: "ReplicaSet"},
+	"daemonset":                      {Group: "apps", Version: "v1", Kind: "DaemonSet"},
+	"statefulset":                    {Group: "apps", Version: "v1", Kind: "StatefulSet"},
+	"job":                            {Group: "batch", Version: "v1", Kind: "Job"},
+	"cronjob":                        {Group: "batch", Version: "v1", Kind: "CronJob"},
+	"configmap":                      {Version: "v1", Kind: "ConfigMap"},
+	"secret":                         {Version: "v1", Kind: "Secret"},
+	"service":                        {Version: "v1", Kind: "Service"},
+	"ingress":                        {Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
+	"gateway":                        {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "Gateway"},
+	"httproute":                      {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "HTTPRoute"},
+	"grpcroute":                      {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "GRPCRoute"},
+	"tlsroute":                       {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "TLSRoute"},
+	"listenerset":                    {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "ListenerSet"},
+	"referencegrant":                 {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "ReferenceGrant"},
+	"backendtlspolicy":               {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "BackendTLSPolicy"},
+	"networkpolicy":                  {Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
+	"endpointslice":                  {Group: "discovery.k8s.io", Version: "v1", Kind: "EndpointSlice"},
+	"persistentvolumeclaim":          {Version: "v1", Kind: "PersistentVolumeClaim"},
+	"persistentvolume":               {Version: "v1", Kind: "PersistentVolume"},
+	"storageclass":                   {Group: "storage.k8s.io", Version: "v1", Kind: "StorageClass"},
+	"serviceaccount":                 {Version: "v1", Kind: "ServiceAccount"},
+	"role":                           {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
+	"rolebinding":                    {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
+	"clusterrole":                    {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
+	"clusterrolebinding":             {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
+	"resourcequota":                  {Version: "v1", Kind: "ResourceQuota"},
+	"limitrange":                     {Version: "v1", Kind: "LimitRange"},
+	"horizontalpodautoscaler":        {Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler"},
+	"poddisruptionbudget":            {Group: "policy", Version: "v1", Kind: "PodDisruptionBudget"},
+	"namespace":                      {Version: "v1", Kind: "Namespace"},
+	"node":                           {Version: "v1", Kind: "Node"},
+	"ingressclass":                   {Group: "networking.k8s.io", Version: "v1", Kind: "IngressClass"},
+	"gatewayclass":                   {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "GatewayClass"},
+	"customresourcedefinition":       {Group: "apiextensions.k8s.io", Version: "v1", Kind: "CustomResourceDefinition"},
+	"mutatingwebhookconfiguration":   {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "MutatingWebhookConfiguration"},
+	"validatingwebhookconfiguration": {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "ValidatingWebhookConfiguration"},
+}
+
 // lookupObjectDetailFetcher returns the configured fetcher for the supplied
-// complete GVK. Built-ins must match the concrete resource the fetcher knows
-// how to retrieve; HelmRelease uses the app's synthetic helm.sh/v3 identity.
+// complete GVK. Typed fetchers must match the concrete resource they know how
+// to retrieve; HelmRelease uses the app's synthetic helm.sh/v3 identity.
 func lookupObjectDetailFetcher(gvk schema.GroupVersionKind) (objectDetailFetcher, bool) {
 	normalized := strings.ToLower(strings.TrimSpace(gvk.Kind))
 	fetcher, ok := objectDetailFetchers[normalized]
@@ -306,10 +351,17 @@ func lookupObjectDetailFetcher(gvk schema.GroupVersionKind) (objectDetailFetcher
 	if isHelmReleaseGVK(gvk) {
 		return fetcher, true
 	}
-	if _, ok := lookupBuiltinResourceByGVK(gvk.Group, gvk.Version, gvk.Kind); !ok {
+	supported, ok := objectDetailFetcherGVKs[normalized]
+	if !ok || !sameGVK(supported, gvk) {
 		return objectDetailFetcher{}, false
 	}
 	return fetcher, true
+}
+
+func sameGVK(a, b schema.GroupVersionKind) bool {
+	return strings.TrimSpace(a.Group) == strings.TrimSpace(b.Group) &&
+		strings.TrimSpace(a.Version) == strings.TrimSpace(b.Version) &&
+		strings.EqualFold(strings.TrimSpace(a.Kind), strings.TrimSpace(b.Kind))
 }
 
 func isHelmReleaseGVK(gvk schema.GroupVersionKind) bool {
@@ -321,19 +373,25 @@ func isHelmReleaseGVK(gvk schema.GroupVersionKind) bool {
 // FetchObjectDetails retrieves the details of a Kubernetes object.
 func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (interface{}, string, error) {
 	resolved := p.resolveDetailContext(ctx)
-	fetcher, ok := lookupObjectDetailFetcher(gvk)
-	if !ok {
+	if _, ok := objectDetailFetchers[strings.ToLower(strings.TrimSpace(gvk.Kind))]; !ok {
+		return nil, "", snapshot.ErrObjectDetailNotImplemented
+	}
+	if !isHelmReleaseGVK(gvk) && strings.TrimSpace(gvk.Version) == "" {
 		return nil, "", snapshot.ErrObjectDetailNotImplemented
 	}
 	if !resolved.scoped {
 		return nil, "", fmt.Errorf("cluster scope is required")
+	}
+	fetcher, ok := lookupObjectDetailFetcher(gvk)
+	if !ok {
+		return nil, "", snapshot.ErrObjectDetailNotImplemented
 	}
 
 	cacheKey := objectDetailCacheKeyForGVK(gvk, namespace, name)
 	if p != nil && p.app != nil {
 		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
 			// Avoid serving cached details when permission checks deny access.
-			if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk.Kind, namespace, name) {
+			if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk, namespace, name) {
 				return cached, "", nil
 			}
 			p.app.responseCacheDelete(resolved.selectionKey, cacheKey)
@@ -388,7 +446,7 @@ func (p *objectDetailProvider) resolveDetailContext(ctx context.Context) resolve
 // FetchObjectYAML retrieves the YAML representation of a Kubernetes object.
 //
 // The caller MUST supply a fully-qualified GVK (group, version, and kind).
-// Resolution goes through the shared common.ResolveGVRForGVK helper so
+// Resolution goes through the cluster's injected resource resolver so
 // colliding kinds from different groups disambiguate correctly. The
 // kind-only fallback that used to live here was the source of the
 // kind-only-objects bug — see the hard-error guard below
@@ -430,7 +488,7 @@ func (p *objectDetailProvider) FetchHelmManifest(ctx context.Context, namespace,
 		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, manifestCacheKey); ok {
 			if manifest, ok := cached.(string); ok {
 				// Avoid serving cached Helm data when permission checks deny access.
-				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, "HelmManifest", namespace, name) {
+				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmManifest"}, namespace, name) {
 					revision, err := p.helmReleaseRevisionWithCache(resolved, service, namespace, name)
 					if err != nil {
 						return manifest, 0, nil
@@ -468,7 +526,7 @@ func (p *objectDetailProvider) FetchHelmValues(ctx context.Context, namespace, n
 		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, valuesCacheKey); ok {
 			if values, ok := cached.(map[string]interface{}); ok {
 				// Avoid serving cached Helm data when permission checks deny access.
-				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, "HelmValues", namespace, name) {
+				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmValues"}, namespace, name) {
 					revision, err := p.helmReleaseRevisionWithCache(resolved, service, namespace, name)
 					if err != nil {
 						return values, 0, nil
@@ -504,7 +562,7 @@ func (p *objectDetailProvider) helmReleaseRevisionWithCache(
 		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, detailsCacheKey); ok {
 			if details, ok := cached.(*HelmReleaseDetails); ok && details != nil {
 				// Avoid serving cached Helm data when permission checks deny access.
-				if p.app.canServeCachedResponse(resolved.deps.Context, resolved.deps, resolved.selectionKey, "HelmRelease", namespace, name) {
+				if p.app.canServeCachedResponse(resolved.deps.Context, resolved.deps, resolved.selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmRelease"}, namespace, name) {
 					return details.Revision, nil
 				}
 			}

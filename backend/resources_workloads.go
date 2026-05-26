@@ -94,6 +94,7 @@ func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, cl
 		DynamicClient:       nil,
 		APIExtensionsClient: nil,
 		RestConfig:          nil,
+		ResourceResolver:    appResourceResolver{app: a, clusterID: clusterID},
 		SelectedKubeconfig:  selection.Path,
 		SelectedContext:     selection.Context,
 		ClusterID:           clusterID,

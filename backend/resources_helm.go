@@ -77,11 +77,13 @@ func (a *App) deleteHelmReleaseAction(target ObjectActionTargetRef) error {
 	}
 	if err := a.requireAnyResourcePermission(deps.Context, deps,
 		resourcePermissionCheck{
+			Version:   "v1",
 			Kind:      "Secret",
 			Namespace: target.Namespace,
 			Verb:      "delete",
 		},
 		resourcePermissionCheck{
+			Version:   "v1",
 			Kind:      "ConfigMap",
 			Namespace: target.Namespace,
 			Verb:      "delete",

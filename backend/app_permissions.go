@@ -20,17 +20,14 @@ import (
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
-	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
 // resolveGVRForPermissionQuery resolves a permission query to the concrete
-// resource used by Kubernetes RBAC. Built-in Kubernetes resources resolve from
-// a static table so permission checks do not hit discovery on first load.
-// Custom resources route through strict common.ResolveGVRForGVK. Every
-// frontend caller now populates PermissionQuery.Group/Version; a missing
-// Version here is a programming bug, so we fail loud rather than falling back
-// to the retired kind-only resolver, which was first-match-wins across
-// colliding CRDs.
+// resource used by Kubernetes RBAC. Resolution goes through the cluster's
+// object-catalog-backed resolver. Every frontend caller now populates
+// PermissionQuery.Group/Version; a missing Version here is a programming bug,
+// so we fail loud rather than falling back to the retired kind-only resolver,
+// which was first-match-wins across colliding CRDs.
 func (a *App) resolveGVRForPermissionQuery(ctx context.Context, q capabilities.PermissionQuery) (schema.GroupVersionResource, bool, error) {
 	if q.Version == "" {
 		return schema.GroupVersionResource{}, false, fmt.Errorf(
@@ -38,21 +35,25 @@ func (a *App) resolveGVRForPermissionQuery(ctx context.Context, q capabilities.P
 			q.ResourceKind,
 		)
 	}
-	if resolved, ok := lookupBuiltinResourceByGVK(q.Group, q.Version, q.ResourceKind); ok {
-		if _, _, err := a.resolveClusterDependencies(q.ClusterId); err != nil {
-			return schema.GroupVersionResource{}, false, err
-		}
-		return resolved.GVR(), resolved.Namespaced, nil
-	}
 	deps, _, err := a.resolveClusterDependencies(q.ClusterId)
 	if err != nil {
 		return schema.GroupVersionResource{}, false, err
 	}
-	return common.ResolveGVRForGVK(ctx, deps, schema.GroupVersionKind{
+	if deps.ResourceResolver == nil {
+		return schema.GroupVersionResource{}, false, fmt.Errorf("resource resolver not initialized")
+	}
+	resolved, ok, err := deps.ResourceResolver.ResolveResourceForGVK(ctx, schema.GroupVersionKind{
 		Group:   q.Group,
 		Version: q.Version,
 		Kind:    q.ResourceKind,
 	})
+	if err != nil {
+		return schema.GroupVersionResource{}, false, err
+	}
+	if !ok {
+		return schema.GroupVersionResource{}, false, fmt.Errorf("unable to resolve resource for %s/%s", q.Version, q.ResourceKind)
+	}
+	return resolved.GVR(), resolved.Namespaced, nil
 }
 
 // ssarItem tracks a single check that needs SSAR fallback evaluation.
@@ -146,9 +147,8 @@ func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabil
 			continue
 		}
 
-		// Resolve the GVR to get API group, resource name, and scope.
-		// Built-in GVKs resolve from a static table. Custom resources route
-		// through strict discovery so colliding kinds disambiguate by group/version.
+		// Resolve the GVR through the cluster resource resolver so colliding
+		// kinds disambiguate by group/version.
 		resolveStart := time.Now()
 		gvr, isNamespaced, err := a.resolveGVRForPermissionQueryCached(ctx, q, resolutionCache)
 		resolveDuration += time.Since(resolveStart)
