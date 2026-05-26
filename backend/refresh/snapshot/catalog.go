@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -112,54 +111,9 @@ func (b *catalogBuilder) Build(ctx context.Context, scope string) (*refresh.Snap
 		return nil, errors.New("object catalog service unavailable")
 	}
 
-	result := svc.Query(opts.toQueryOptions())
-	health := svc.Health()
-	cachesReady := svc.CachesReady()
-
 	meta := ClusterMetaFromContext(ctx)
-	payload, truncated := buildCatalogSnapshot(result, opts, health, cachesReady, cachesReady)
-	payload.ClusterMeta = meta
-	payload.NamespaceGroups = buildCatalogNamespaceGroups(svc, meta, b.namespaceGroups, opts.Namespaces)
-	if cachesReady && payload.Total > 0 {
-		// Streaming caches are warm, but we still honour pagination when the client
-		// requested limited scopes. Preserve the continue token so UI callers can
-		// keep fetching additional pages after readiness flips to true.
-		if payload.Continue == "" {
-			payload.IsFinal = true
-			if payload.TotalBatches == 0 {
-				payload.TotalBatches = 1
-			}
-		} else {
-			payload.IsFinal = false
-		}
-		payload.BatchSize = len(payload.Items)
-	}
-
-	if latency := svc.FirstBatchLatency(); latency > 0 {
-		payload.FirstBatchLatencyMs = latency.Milliseconds()
-	}
-
-	snapshot := &refresh.Snapshot{
-		Domain:  b.domain,
-		Scope:   scope,
-		Version: uint64(time.Now().UnixNano()),
-		Payload: payload,
-		Stats: refresh.SnapshotStats{
-			ItemCount:    len(payload.Items),
-			TotalItems:   result.TotalItems,
-			Truncated:    truncated,
-			BatchIndex:   payload.BatchIndex,
-			BatchSize:    payload.BatchSize,
-			TotalBatches: payload.TotalBatches,
-			IsFinalBatch: payload.IsFinal,
-		},
-	}
-
-	if payload.FirstBatchLatencyMs > 0 {
-		snapshot.Stats.TimeToFirstRowMs = payload.FirstBatchLatencyMs
-	}
-
-	return snapshot, nil
+	adapter := newCatalogRefreshAdapter(svc, meta, b.namespaceGroups)
+	return adapter.BuildSnapshot(b.domain, scope, opts), nil
 }
 
 func buildCatalogSnapshot(

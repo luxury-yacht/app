@@ -280,6 +280,79 @@ func TestCatalogSnapshotAndStreamUseSameCatalogQueryContract(t *testing.T) {
 	}
 }
 
+func TestCatalogRefreshAdapterBuildsSnapshotAndStreamFromSharedAssembly(t *testing.T) {
+	summaries := []objectcatalog.Summary{
+		{
+			Kind:            "Deployment",
+			Group:           "apps",
+			Version:         "v1",
+			Resource:        "deployments",
+			Namespace:       "default",
+			Name:            "alpha",
+			UID:             "uid-alpha",
+			ResourceVersion: "1",
+			Scope:           objectcatalog.ScopeNamespace,
+		},
+		{
+			Kind:            "Deployment",
+			Group:           "apps",
+			Version:         "v1",
+			Resource:        "deployments",
+			Namespace:       "default",
+			Name:            "bravo",
+			UID:             "uid-bravo",
+			ResourceVersion: "2",
+			Scope:           objectcatalog.ScopeNamespace,
+		},
+	}
+	svc := seedCatalogService(t, summaries)
+	markCatalogCachesReady(t, svc, summaries)
+
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
+	groups := []CatalogNamespaceGroup{{
+		ClusterMeta: meta,
+		Namespaces:  []string{"default", "kube-system"},
+	}}
+	adapter := newCatalogRefreshAdapter(svc, meta, func() []CatalogNamespaceGroup {
+		return groups
+	})
+	opts, err := parseBrowseScope("cluster-a|kind=Deployment&namespace=default&limit=1")
+	if err != nil {
+		t.Fatalf("parseBrowseScope returned error: %v", err)
+	}
+
+	snap := adapter.BuildSnapshot(catalogDomain, "cluster-a|kind=Deployment&namespace=default&limit=1", opts)
+	payload, ok := snap.Payload.(CatalogSnapshot)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", snap.Payload)
+	}
+	event := adapter.BuildStreamEvent(opts, false, true, 11)
+
+	if !reflect.DeepEqual(event.Snapshot.Items, payload.Items) {
+		t.Fatalf("stream items diverged from snapshot items: stream=%+v snapshot=%+v", event.Snapshot.Items, payload.Items)
+	}
+	if event.Snapshot.Total != payload.Total ||
+		event.Snapshot.Continue != payload.Continue ||
+		event.Snapshot.ResourceCount != payload.ResourceCount ||
+		!reflect.DeepEqual(event.Snapshot.Kinds, payload.Kinds) ||
+		!reflect.DeepEqual(event.Snapshot.Namespaces, payload.Namespaces) {
+		t.Fatalf("stream query metadata diverged from snapshot: stream=%+v snapshot=%+v", event.Snapshot, payload)
+	}
+	if snap.Stats.ItemCount != len(payload.Items) ||
+		snap.Stats.TotalItems != payload.Total ||
+		snap.Stats.Truncated != (payload.Continue != "") {
+		t.Fatalf("snapshot stats diverged from payload: stats=%+v payload=%+v", snap.Stats, payload)
+	}
+	if event.Stats.ItemCount != len(event.Snapshot.Items) ||
+		event.Stats.TotalItems != event.Snapshot.Total ||
+		event.Stats.Truncated != (event.Snapshot.Continue != "") {
+		t.Fatalf("stream stats diverged from payload: stats=%+v payload=%+v", event.Stats, event.Snapshot)
+	}
+	if len(payload.NamespaceGroups) != 1 || len(event.Snapshot.NamespaceGroups) != 1 {
+		t.Fatalf("expected namespace groups on both payloads: snapshot=%+v stream=%+v", payload.NamespaceGroups, event.Snapshot.NamespaceGroups)
+	}
+}
+
 func TestCatalogDiffBuildUsesCatalogSnapshotQueryContract(t *testing.T) {
 	summaries := []objectcatalog.Summary{
 		{

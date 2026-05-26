@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -124,15 +123,15 @@ func (h *catalogStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 type catalogStreamEvent struct {
-	Reset        bool                                `json:"reset,omitempty"`
-	Ready        bool                                `json:"ready"`
-	CacheReady   bool                                `json:"cacheReady"`
-	Truncated    bool                                `json:"truncated"`
+	Reset        bool                      `json:"reset,omitempty"`
+	Ready        bool                      `json:"ready"`
+	CacheReady   bool                      `json:"cacheReady"`
+	Truncated    bool                      `json:"truncated"`
 	SnapshotMode catalogStreamSnapshotMode `json:"snapshotMode"`
-	Snapshot     CatalogSnapshot                     `json:"snapshot"`
-	Stats        refresh.SnapshotStats               `json:"stats"`
-	GeneratedAt  int64                               `json:"generatedAt"`
-	Sequence     uint64                              `json:"sequence"`
+	Snapshot     CatalogSnapshot           `json:"snapshot"`
+	Stats        refresh.SnapshotStats     `json:"stats"`
+	GeneratedAt  int64                     `json:"generatedAt"`
+	Sequence     uint64                    `json:"sequence"`
 }
 
 func (h *catalogStreamHandler) writeSnapshot(
@@ -144,49 +143,8 @@ func (h *catalogStreamHandler) writeSnapshot(
 	reset bool,
 	sequence uint64,
 ) error {
-	result := svc.Query(opts.toQueryOptions())
-	health := svc.Health()
-	cachesReady := svc.CachesReady()
-
-	payload, truncated := buildCatalogSnapshot(result, opts, health, cachesReady, ready)
-	// Ensure streaming payloads include stable cluster identifiers.
-	payload.ClusterMeta = h.clusterMeta
-	payload.NamespaceGroups = buildCatalogNamespaceGroups(svc, h.clusterMeta, nil, opts.Namespaces)
-	if payload.FirstBatchLatencyMs == 0 {
-		if latency := svc.FirstBatchLatency(); latency > 0 {
-			payload.FirstBatchLatencyMs = latency.Milliseconds()
-		}
-	}
-
-	stats := refresh.SnapshotStats{
-		ItemCount:    len(payload.Items),
-		TotalItems:   result.TotalItems,
-		Truncated:    truncated,
-		BatchIndex:   payload.BatchIndex,
-		BatchSize:    payload.BatchSize,
-		TotalBatches: payload.TotalBatches,
-		IsFinalBatch: payload.IsFinal,
-	}
-	if payload.FirstBatchLatencyMs > 0 {
-		stats.TimeToFirstRowMs = payload.FirstBatchLatencyMs
-	}
-
-	snapshotMode := catalogStreamSnapshotFull
-	if !payload.IsFinal || truncated {
-		snapshotMode = catalogStreamSnapshotPartial
-	}
-
-	event := catalogStreamEvent{
-		Reset:        reset,
-		Ready:        ready && payload.IsFinal,
-		CacheReady:   cachesReady,
-		Truncated:    truncated,
-		SnapshotMode: snapshotMode,
-		Snapshot:     payload,
-		Stats:        stats,
-		GeneratedAt:  time.Now().UnixMilli(),
-		Sequence:     sequence,
-	}
+	adapter := newCatalogRefreshAdapter(svc, h.clusterMeta, nil)
+	event := adapter.BuildStreamEvent(opts, ready, reset, sequence)
 
 	body, err := json.Marshal(event)
 	if err != nil {
