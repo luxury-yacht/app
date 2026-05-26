@@ -1029,19 +1029,24 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const disableSave = isSaving || hasYamlError;
   const yamlToolbarItems = useMemo<IconBarItem[]>(
     () => [
-      ...(!isEditing
-        ? [
-            {
-              type: 'toggle' as const,
-              id: 'managed-fields',
-              icon: <YamlManagedFieldsIcon width={16} height={16} />,
-              active: showManagedFields,
-              onClick: handleToggleManagedFields,
-              title: showManagedFields ? 'Hide managedFields' : 'Show managedFields',
-              ariaLabel: showManagedFields ? 'Hide managedFields' : 'Show managedFields',
-            },
-          ]
-        : []),
+      {
+        type: 'toggle' as const,
+        id: 'managed-fields',
+        icon: <YamlManagedFieldsIcon width={16} height={16} />,
+        active: showManagedFields && !isEditing,
+        onClick: handleToggleManagedFields,
+        title: isEditing
+          ? 'managedFields unavailable while editing'
+          : showManagedFields
+            ? 'Hide managedFields'
+            : 'Show managedFields',
+        ariaLabel: isEditing
+          ? 'managedFields toggle unavailable while editing'
+          : showManagedFields
+            ? 'Hide managedFields'
+            : 'Show managedFields',
+        disabled: isEditing,
+      },
       ...(isEditing
         ? [
             {
