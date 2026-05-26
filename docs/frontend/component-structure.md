@@ -92,6 +92,7 @@ Current areas:
 | `shared/components/tabs`       | Shared tab primitives                     | `Tabs/`                                     |
 | `shared/components/IconBar`    | Shared icon-bar UI                        | `IconBar.tsx`                               |
 | `shared/components/diff`       | Shared diff viewer pieces                 |                                             |
+| `shared/components/yaml`       | Shared single-document YAML editor        | `YamlEditor.tsx`                            |
 | `shared/hooks`                 | Reusable hooks                            | `useNavigateToView.ts`                      |
 | `shared/constants`             | Shared constants                          | `builtinGroupVersions.ts`                   |
 | `shared/utils`                 | Shared helpers                            | `metricsAvailability.ts`                    |

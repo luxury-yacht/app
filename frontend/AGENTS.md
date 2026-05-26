@@ -57,6 +57,7 @@ Applies to React/TypeScript code under `frontend/`.
 - Shared tab component and drag coordinator: `docs/frontend/tabs.md`.
 - Dockable object panels and grouped panel tabs:
   `docs/frontend/dockable-panels.md`.
+- Shared YAML editor surfaces: `docs/frontend/yaml-editor.md`.
 - Log viewers: `docs/workflows/logs/overview.md`.
 - Object map UI: `docs/workflows/object-map.md`.
 

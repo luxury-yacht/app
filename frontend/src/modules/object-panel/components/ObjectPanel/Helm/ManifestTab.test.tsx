@@ -110,8 +110,16 @@ vi.mock('@codemirror/lang-yaml', () => ({
 }));
 
 vi.mock('@codemirror/view', () => ({
-  EditorView: class {},
-  lineWrapping: 'lineWrapping',
+  EditorView: class {
+    static domEventHandlers(handlers: unknown) {
+      return handlers;
+    }
+
+    static lineWrapping = 'lineWrapping';
+  },
+  keymap: {
+    of: (bindings: unknown) => bindings,
+  },
 }));
 
 vi.mock('@codemirror/search', () => ({

@@ -17,10 +17,11 @@ Read:
 2. `backend/AGENTS.md` for backend detail/action changes
 3. `frontend/AGENTS.md` for frontend panel changes
 4. `docs/frontend/dockable-panels.md`
-5. `docs/architecture/shared-resource-model.md` for identity, status, links,
+5. `docs/frontend/yaml-editor.md` for YAML editor surfaces
+6. `docs/architecture/shared-resource-model.md` for identity, status, links,
    facts, or lifecycle
-6. `docs/architecture/data-access.md` for frontend reads
-7. Workflow docs for the specific tab: `docs/workflows/logs/overview.md`,
+7. `docs/architecture/data-access.md` for frontend reads
+8. Workflow docs for the specific tab: `docs/workflows/logs/overview.md`,
    `docs/workflows/shell-debug.md`, or `docs/workflows/object-map.md`
 
 ## Backend Entry Points
@@ -46,6 +47,7 @@ GVK/object identity. Rich detail and imperative operations belong in
 - `frontend/src/modules/object-panel/components/ObjectPanel/Logs`
 - `frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs`
 - `frontend/src/modules/object-panel/hooks`
+- `frontend/src/shared/components/yaml` for shared YAML editor mechanics
 - `frontend/src/ui/dockable`
 - `frontend/src/shared/components/modals`
 - `frontend/wailsjs/go/models.ts` when Go DTOs change
@@ -60,6 +62,13 @@ transport-specific wiring in the container or node shell, and put shared search,
 CSV export, parsed JSON, ANSI rendering, scroll restoration, and terminal theme
 behavior in the shared log viewer utilities/components.
 
+YAML editor mechanics live in `frontend/src/shared/components/yaml/YamlEditor`.
+Use that shared component for single-document YAML viewing/editing instead of
+adding new CodeMirror/search/context-menu stacks inside object-panel tabs. Keep
+workflow state such as refresh, object identity, permissions, save/cancel,
+reload/merge, drift, managedFields policy, and post-save notices in the
+object-panel wrapper.
+
 ## Checklist
 
 - [ ] Object references include `clusterId`, `group`, `version`, `kind`, and
@@ -70,6 +79,8 @@ behavior in the shared log viewer utilities/components.
       reasons where applicable.
 - [ ] Docked panel state, refresh behavior, and cluster/namespace changes remain
       consistent.
+- [ ] YAML surfaces use `YamlEditor` for editor mechanics and keep workflow
+      state in the caller.
 - [ ] Tests cover the changed tab, action, or identity flow.
 - [ ] Non-doc changes pass `mage qc:prerelease`.
 

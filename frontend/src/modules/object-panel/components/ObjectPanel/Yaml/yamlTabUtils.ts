@@ -10,6 +10,7 @@ import { ApplyObjectYaml, MergeObjectYamlWithLatest } from '@wailsjs/go/backend/
 import type { ObjectIdentity } from './yamlValidation';
 import type { ObjectYamlMutationResponse } from './yamlErrors';
 import { YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
+export { sanitizeYamlForSemanticCompare } from './yamlFieldPolicy';
 
 export const normalizeYamlString = (raw: string): string => {
   try {
@@ -49,37 +50,6 @@ export const applyResourceVersionToYaml = (yamlText: string, resourceVersion: st
     return doc.toString(YAML_STRINGIFY_OPTIONS);
   } catch {
     return yamlText;
-  }
-};
-
-const deleteYamlPath = (doc: YAML.Document, path: (string | number)[]) => {
-  try {
-    doc.deleteIn(path);
-  } catch {
-    // Ignore invalid paths so comparison stays best-effort.
-  }
-};
-
-export const sanitizeYamlForSemanticCompare = (raw: string): string => {
-  try {
-    const doc = YAML.parseDocument(raw);
-    if (doc.errors.length > 0) {
-      throw doc.errors[0];
-    }
-
-    deleteYamlPath(doc, ['metadata', 'managedFields']);
-    deleteYamlPath(doc, ['metadata', 'resourceVersion']);
-    deleteYamlPath(doc, ['metadata', 'uid']);
-    deleteYamlPath(doc, ['metadata', 'creationTimestamp']);
-    deleteYamlPath(doc, ['metadata', 'deletionTimestamp']);
-    deleteYamlPath(doc, ['metadata', 'deletionGracePeriodSeconds']);
-    deleteYamlPath(doc, ['metadata', 'generation']);
-    deleteYamlPath(doc, ['metadata', 'selfLink']);
-    deleteYamlPath(doc, ['status']);
-
-    return doc.toString(YAML_STRINGIFY_OPTIONS);
-  } catch {
-    return raw;
   }
 };
 

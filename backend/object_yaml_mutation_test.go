@@ -355,6 +355,141 @@ func TestApplyObjectYamlPatchesAgainstLatestObject(t *testing.T) {
 	}
 }
 
+func TestBuildKubectlEditPatchRejectsMetadataManagedFieldsChanges(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		gvk  schema.GroupVersionKind
+	}{
+		{
+			name: "strategic built-in",
+			gvk:  schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+		},
+		{
+			name: "json merge custom resource",
+			gvk:  schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": tc.gvk.GroupVersion().String(),
+				"kind":       tc.gvk.Kind,
+				"metadata": map[string]interface{}{
+					"name":      "demo",
+					"namespace": "default",
+				},
+			}}
+			desired := base.DeepCopy()
+			if err := unstructured.SetNestedSlice(
+				desired.Object,
+				[]interface{}{
+					map[string]interface{}{
+						"manager":   "other-controller",
+						"operation": "Update",
+					},
+				},
+				"metadata",
+				"managedFields",
+			); err != nil {
+				t.Fatalf("failed to set managedFields: %v", err)
+			}
+
+			_, _, err := buildKubectlEditPatch(tc.gvk, base, desired)
+			if err == nil {
+				t.Fatalf("expected managedFields precondition error")
+			}
+			if !strings.Contains(err.Error(), "managedFields") {
+				t.Fatalf("expected managedFields error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateObjectYamlRejectsProtectedFieldBypassAttempts(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		editedYAML  string
+		expectedErr string
+	}{
+		{
+			name: "status",
+			editedYAML: baseYAML() + `status:
+  replicas: 99
+`,
+			expectedErr: "status",
+		},
+		{
+			name: "generated annotation",
+			editedYAML: strings.Replace(
+				baseYAML(),
+				"metadata:\n  name: demo\n",
+				"metadata:\n  name: demo\n  annotations:\n    deployment.kubernetes.io/revision: \"9\"\n",
+				1,
+			),
+			expectedErr: "deployment.kubernetes.io/revision",
+		},
+		{
+			name: "generation",
+			editedYAML: strings.Replace(
+				baseYAML(),
+				"  resourceVersion: \"42\"\n",
+				"  resourceVersion: \"42\"\n  generation: 7\n",
+				1,
+			),
+			expectedErr: "generation",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app, _, clusterID := setupYAMLTestApp(t)
+			request := ObjectYAMLMutationRequest{
+				BaseYAML:        baseYAML(),
+				YAML:            tc.editedYAML,
+				Kind:            "Deployment",
+				APIVersion:      "apps/v1",
+				Namespace:       "default",
+				Name:            "demo",
+				UID:             "demo-uid",
+				ResourceVersion: "42",
+			}
+
+			_, err := app.ValidateObjectYaml(clusterID, request)
+			if err == nil {
+				t.Fatalf("expected protected field validation error")
+			}
+			if !strings.Contains(err.Error(), tc.expectedErr) {
+				t.Fatalf("expected error to mention %q, got %v", tc.expectedErr, err)
+			}
+		})
+	}
+}
+
+func TestApplyObjectYamlPreservesAuthoritativeResourceVersion(t *testing.T) {
+	app, _, clusterID := setupYAMLTestApp(t)
+
+	request := ObjectYAMLMutationRequest{
+		BaseYAML: baseYAML(),
+		YAML: strings.Replace(
+			baseYAML(),
+			"  resourceVersion: \"42\"\n",
+			"  resourceVersion: \"999\"\n",
+			1,
+		),
+		Kind:            "Deployment",
+		APIVersion:      "apps/v1",
+		Namespace:       "default",
+		Name:            "demo",
+		UID:             "demo-uid",
+		ResourceVersion: "42",
+	}
+
+	response, err := app.ApplyObjectYaml(clusterID, request)
+	if err != nil {
+		t.Fatalf("expected edited resourceVersion to be preserved, got error: %v", err)
+	}
+	if response.ResourceVersion != "43" {
+		t.Fatalf("expected live resourceVersion to advance from 42 to 43, got %q", response.ResourceVersion)
+	}
+}
+
 func TestMergeObjectYamlWithLatestStrategicMergesBuiltInLists(t *testing.T) {
 	app, dynamicClient, clusterID := setupYAMLTestApp(t)
 	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")

@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "fields": [
+    {
+      "path": ["apiVersion"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": false,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes object identity is fixed while editing an existing object."
+    },
+    {
+      "path": ["kind"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": false,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes object identity is fixed while editing an existing object."
+    },
+    {
+      "path": ["metadata", "name"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": false,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes object names cannot be changed in place."
+    },
+    {
+      "path": ["metadata", "namespace"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": false,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes object namespaces cannot be changed in place."
+    },
+    {
+      "path": ["metadata", "managedFields"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes records field ownership in managedFields."
+    },
+    {
+      "path": ["metadata", "resourceVersion"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "preserve",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes owns resourceVersion for concurrency control."
+    },
+    {
+      "path": ["metadata", "uid"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes assigns object UIDs."
+    },
+    {
+      "path": ["metadata", "creationTimestamp"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes records object creation time."
+    },
+    {
+      "path": ["metadata", "deletionTimestamp"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes records deletion lifecycle state."
+    },
+    {
+      "path": ["metadata", "deletionGracePeriodSeconds"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes records deletion lifecycle state."
+    },
+    {
+      "path": ["metadata", "generation"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes updates generation when desired state changes."
+    },
+    {
+      "path": ["metadata", "selfLink"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes owns legacy selfLink metadata."
+    },
+    {
+      "path": ["status"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes controllers own object status."
+    },
+    {
+      "path": ["metadata", "annotations", "deployment.kubernetes.io/revision"],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes deployment controllers maintain this generated annotation."
+    },
+    {
+      "path": [
+        "metadata",
+        "annotations",
+        "deployment.kubernetes.io/desired-replicas"
+      ],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes deployment controllers maintain this generated annotation."
+    },
+    {
+      "path": [
+        "metadata",
+        "annotations",
+        "deployment.kubernetes.io/max-replicas"
+      ],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "Kubernetes deployment controllers maintain this generated annotation."
+    },
+    {
+      "path": [
+        "metadata",
+        "annotations",
+        "kubectl.kubernetes.io/last-applied-configuration"
+      ],
+      "visibleInReadOnly": true,
+      "visibleInEdit": true,
+      "editable": false,
+      "ignoreInSemanticCompare": true,
+      "backendBehavior": "reject",
+      "appliesTo": ["edit"],
+      "reason": "kubectl owns the last-applied-configuration annotation."
+    }
+  ]
+}

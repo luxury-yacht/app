@@ -150,20 +150,40 @@ vi.mock('@codemirror/lang-yaml', () => ({
 }));
 
 vi.mock('@codemirror/view', () => ({
+  Decoration: {
+    mark: () => ({
+      range: (from: number, to: number) => ({ from, to }),
+    }),
+    set: (ranges: unknown[]) => ranges,
+  },
   EditorView: class {
+    static decorations = {
+      of: (decorations: unknown) => decorations,
+      compute: (_dependencies: unknown, compute: unknown) => ({
+        type: 'computedDecorations',
+        compute,
+      }),
+    };
+
     static domEventHandlers(handlers: unknown) {
       return handlers;
     }
+
+    static lineWrapping = 'lineWrapping';
   },
   keymap: {
     of: (bindings: unknown) => bindings,
   },
-  lineWrapping: 'lineWrapping',
 }));
 
 vi.mock('@codemirror/state', () => ({
   EditorSelection: {
     cursor: (position: number) => ({ cursor: position }),
+  },
+  EditorState: {
+    transactionFilter: {
+      of: (filter: unknown) => filter,
+    },
   },
 }));
 
@@ -277,6 +297,21 @@ spec:
       image: demo:v2
 `.trim();
 
+const VERIFIED_APPLIED_YAML_WITH_GENERATED_ANNOTATION = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  resourceVersion: "789"
+  annotations:
+    deployment.kubernetes.io/revision: "3"
+spec:
+  containers:
+    - name: demo
+      image: demo:v2
+`.trim();
+
 const SECOND_VERIFIED_APPLIED_YAML = `
 apiVersion: v1
 kind: Pod
@@ -373,6 +408,7 @@ const renderYamlTab = async (
     scope: string | null;
     isActive: boolean;
     canEdit: boolean;
+    editDisabledReason: string | null;
     clusterId: string;
   }> = {}
 ) => {
@@ -455,6 +491,59 @@ describe('YamlTab', () => {
     await waitForUpdates();
 
     expect(codeMirrorState.value).toContain('managedFields');
+
+    await unmount();
+  });
+
+  it('uses the managedFields visibility setting when entering edit mode', async () => {
+    const { container, unmount } = await renderYamlTab();
+
+    await act(async () => {
+      getIconButton(container, 'Edit YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+
+    expect(codeMirrorState.value).not.toContain('managedFields');
+
+    await act(async () => {
+      getIconButton(container, 'Cancel edit')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+
+    await act(async () => {
+      getIconButton(container, 'Show managedFields')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+    await waitForUpdates();
+
+    await act(async () => {
+      getIconButton(container, 'Edit YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+
+    expect(codeMirrorState.value).toContain('managedFields');
+
+    await unmount();
+  });
+
+  it('shows the YAML edit denial reason when editing is not allowed', async () => {
+    const { container, unmount } = await renderYamlTab({
+      canEdit: false,
+      editDisabledReason: 'permission denied for patch pods/demo',
+    });
+
+    expect(getIconButton(container, 'Edit YAML')).toBeNull();
+    const disabledEditButton = getIconButton(
+      container,
+      'Edit YAML unavailable: permission denied for patch pods/demo'
+    );
+    expect(disabledEditButton).toBeTruthy();
+    expect(disabledEditButton?.disabled).toBe(true);
+    expect(disabledEditButton?.title).toBe('permission denied for patch pods/demo');
 
     await unmount();
   });
@@ -622,6 +711,7 @@ describe('YamlTab', () => {
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).toContain('image: demo:v1');
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).not.toContain('managedFields');
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).toContain('image: demo:v2');
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).not.toContain('managedFields');
     expect(wailsMocks.ValidateObjectYaml).not.toHaveBeenCalled();
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
@@ -631,6 +721,66 @@ describe('YamlTab', () => {
 
     const editButtonAfterSave = getIconButton(container, 'Edit YAML');
     expect(editButtonAfterSave).toBeTruthy();
+
+    await unmount();
+  });
+
+  it('blocks protected field edits with a local message while editing', async () => {
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = getIconButton(container, 'Edit YAML');
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const transactionFilter = codeMirrorState.latestProps.current.extensions.find(
+      (extension: unknown) => typeof extension === 'function'
+    ) as
+      | ((transaction: {
+          docChanged: boolean;
+          startState: { doc: { toString: () => string } };
+          changes: { iterChanges: (callback: (from: number, to: number) => void) => void };
+        }) => unknown)
+      | undefined;
+    expect(transactionFilter).toBeTruthy();
+
+    let blockedResult: unknown;
+    await act(async () => {
+      blockedResult = transactionFilter?.({
+        docChanged: true,
+        startState: { doc: { toString: () => codeMirrorState.value } },
+        changes: { iterChanges: (callback) => callback(0, 'apiVersion'.length) },
+      });
+    });
+
+    expect(blockedResult).toEqual([]);
+    expect(container.textContent).toContain(
+      'apiVersion is managed by Kubernetes and cannot be edited.'
+    );
+
+    const kindIndex = codeMirrorState.value.indexOf('kind:');
+    await act(async () => {
+      blockedResult = transactionFilter?.({
+        docChanged: true,
+        startState: { doc: { toString: () => codeMirrorState.value } },
+        changes: { iterChanges: (callback) => callback(kindIndex, kindIndex + 'kind'.length) },
+      });
+    });
+
+    expect(blockedResult).toEqual([]);
+    expect(container.textContent).toContain('kind is managed by Kubernetes and cannot be edited.');
+
+    const imageIndex = codeMirrorState.value.indexOf('image: demo:v1');
+    const allowedTransaction = {
+      docChanged: true,
+      startState: { doc: { toString: () => codeMirrorState.value } },
+      changes: {
+        iterChanges: (callback: (from: number, to: number) => void) =>
+          callback(imageIndex, imageIndex),
+      },
+    };
+
+    expect(transactionFilter?.(allowedTransaction)).toBe(allowedTransaction);
 
     await unmount();
   });
@@ -744,6 +894,36 @@ describe('YamlTab', () => {
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
       action: 'loadLatestObjectYAML',
     });
+
+    await unmount();
+  });
+
+  it('does not warn when the final live object only differs by generated annotations', async () => {
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(
+      VERIFIED_APPLIED_YAML_WITH_GENERATED_ANNOTATION
+    );
+
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = getIconButton(container, 'Edit YAML');
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+
+    const saveButton = getIconButton(container, 'Save YAML');
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    expect(container.querySelector('.yaml-post-apply-notice')).toBeNull();
+    expect(codeMirrorState.value).toContain('deployment.kubernetes.io/revision: "3"');
 
     await unmount();
   });
