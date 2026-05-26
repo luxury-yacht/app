@@ -221,7 +221,7 @@ class RefreshOrchestrator {
       this.setScopedDomainEnabled(domain, scope, enabled);
     });
     if (scopes.length === 0) {
-      this.coordinatorRuntime.scopedEnabledState.set(domain, new Map<string, boolean>());
+      this.coordinatorRuntime.markDomainKnown(domain);
     }
     this.updateMetricsDemand();
   }
@@ -237,8 +237,7 @@ class RefreshOrchestrator {
     }
 
     const runtime = this.getRuntimeForScope(domain, normalizedScope);
-    const readyKey = makeInFlightKey(domain, normalizedScope);
-    if (runtime.streamingReady.has(readyKey)) {
+    if (runtime.hasStreamingReady(domain, normalizedScope)) {
       return;
     }
 
@@ -271,48 +270,29 @@ class RefreshOrchestrator {
         this.notifyRefreshError(domain, notificationScope, message);
       })
       .finally(() => {
-        runtime.streamingReady.delete(readyKey);
+        runtime.clearStreamingReady(domain, normalizedScope);
       });
 
-    runtime.streamingReady.set(readyKey, readyTask);
+    runtime.setStreamingReady(domain, normalizedScope, readyTask);
   }
 
   private hasEnabledScopedSources(domain: RefreshDomain): boolean {
     for (const runtime of this.getAllRuntimes()) {
-      const scopedMap = runtime.scopedEnabledState.get(domain);
-      if (!scopedMap) {
-        continue;
-      }
-      for (const enabled of scopedMap.values()) {
-        if (enabled) {
-          return true;
-        }
+      if (runtime.hasEnabledScopedSources(domain)) {
+        return true;
       }
     }
     return false;
   }
 
   private getEnabledScopes(domain: RefreshDomain): string[] {
-    const scopes: string[] = [];
-    this.getAllRuntimes().forEach((runtime) => {
-      const scopedMap = runtime.scopedEnabledState.get(domain);
-      if (!scopedMap) {
-        return;
-      }
-      scopedMap.forEach((enabled, scope) => {
-        if (enabled) {
-          scopes.push(scope);
-        }
-      });
-    });
-    return scopes;
+    return this.getAllRuntimes().flatMap((runtime) => runtime.getEnabledScopes(domain));
   }
 
   private getKnownScopes(domain: RefreshDomain): string[] {
     const scopes = new Set<string>();
     this.getAllRuntimes().forEach((runtime) => {
-      const scopedMap = runtime.scopedEnabledState.get(domain);
-      scopedMap?.forEach((_enabled, scope) => scopes.add(scope));
+      runtime.getKnownScopes(domain).forEach((scope) => scopes.add(scope));
     });
     return Array.from(scopes);
   }
@@ -347,27 +327,13 @@ class RefreshOrchestrator {
     }
 
     const runtime = this.getRuntimeForScope(domain, normalizedScope);
-    let scopedMap = runtime.scopedEnabledState.get(domain);
-    if (!scopedMap) {
-      scopedMap = new Map<string, boolean>();
-      runtime.scopedEnabledState.set(domain, scopedMap);
-    }
 
     if (enabled && !MULTI_ACTIVE_SCOPE_DOMAINS.has(domain)) {
-      const staleScopes: string[] = [];
-      scopedMap.forEach((scopeEnabled, existingScope) => {
-        if (!scopeEnabled || existingScope === normalizedScope) {
-          return;
-        }
-        staleScopes.push(existingScope);
-      });
+      const staleScopes = runtime.disableOtherEnabledScopes(domain, normalizedScope);
       staleScopes.forEach((staleScope) => {
-        scopedMap!.set(staleScope, false);
         this.cancelInFlightForScopedDomain(domain, staleScope);
         if (config.streaming) {
-          this.getRuntimeForScope(domain, staleScope).streamingReady.delete(
-            makeInFlightKey(domain, staleScope)
-          );
+          this.getRuntimeForScope(domain, staleScope).clearStreamingReady(domain, staleScope);
           this.stopStreamingScope(domain, staleScope, config.streaming, true);
         } else {
           resetScopedDomainState(domain, staleScope);
@@ -376,13 +342,11 @@ class RefreshOrchestrator {
     }
 
     const wasActive = this.hasEnabledScopedSources(domain);
-    const previous = scopedMap.get(normalizedScope);
-    if (previous === enabled) {
+    const { changed } = runtime.setScopedDomainEnabled(domain, normalizedScope, enabled);
+    if (!changed) {
       this.updateMetricsDemand();
       return;
     }
-
-    scopedMap.set(normalizedScope, enabled);
 
     const isActive = this.hasEnabledScopedSources(domain);
 
@@ -401,25 +365,20 @@ class RefreshOrchestrator {
     const resetOnDisable = !preserveState;
 
     if (config.streaming) {
-      const readyKey = makeInFlightKey(domain, normalizedScope);
       const shouldStream = this.shouldStreamScope(domain, normalizedScope);
       if (enabled && shouldStream) {
-        runtime.streamingReady.delete(readyKey);
+        runtime.clearStreamingReady(domain, normalizedScope);
         if (!preserveState) {
           resetScopedDomainState(domain, normalizedScope);
         }
         this.scheduleStreamingStart(domain, normalizedScope, config.streaming);
       } else if (!enabled) {
-        runtime.streamingReady.delete(readyKey);
+        runtime.clearStreamingReady(domain, normalizedScope);
         this.stopStreamingScope(domain, normalizedScope, config.streaming, resetOnDisable);
         this.cancelInFlightForScopedDomain(domain, normalizedScope);
       } else if (!shouldStream) {
-        if (
-          runtime.streamingCleanup.has(readyKey) ||
-          runtime.pendingStreaming.has(readyKey) ||
-          runtime.streamingReady.has(readyKey)
-        ) {
-          runtime.streamingReady.delete(readyKey);
+        if (runtime.hasStreamingBookkeeping(domain, normalizedScope)) {
+          runtime.clearStreamingReady(domain, normalizedScope);
           this.stopStreamingScope(domain, normalizedScope, config.streaming, false);
         }
       }
@@ -616,11 +575,7 @@ class RefreshOrchestrator {
   }
 
   private stopRuntimeStreaming(runtime: ClusterRefreshRuntime, reset: boolean): void {
-    const keys = new Set<string>();
-    runtime.streamingCleanup.forEach((_cleanup, key) => keys.add(key));
-    runtime.pendingStreaming.forEach((_promise, key) => keys.add(key));
-
-    keys.forEach((key) => {
+    runtime.getStreamingLifecycleKeys().forEach((key) => {
       const [domainPart, scopePart] = key.split('::');
       const domain = domainPart as RefreshDomain;
       const scope = scopePart === '*' ? '' : scopePart;
@@ -635,9 +590,7 @@ class RefreshOrchestrator {
     });
 
     if (reset) {
-      runtime.streamingCleanup.clear();
-      runtime.pendingStreaming.clear();
-      runtime.cancelledStreaming.clear();
+      runtime.clearAllStreaming(reset);
     }
   }
 
@@ -650,24 +603,22 @@ class RefreshOrchestrator {
       return Promise.resolve();
     }
     const runtime = this.getRuntimeForScope(domain, scope);
-    const key = makeInFlightKey(domain, scope);
-    if (runtime.streamingCleanup.has(key) || runtime.pendingStreaming.has(key)) {
+    if (runtime.isStreamingStartingOrActive(domain, scope)) {
       return Promise.resolve();
     }
 
-    runtime.cancelledStreaming.delete(key);
     const startResult = streaming.start(scope);
     const startPromise = Promise.resolve(startResult);
-    runtime.pendingStreaming.set(key, startPromise);
+    runtime.beginStreamingStart(domain, scope, startPromise);
 
     startPromise
       .then((cleanup) => {
-        runtime.pendingStreaming.delete(key);
         if (
           !this.isScopedDomainEnabledInternal(domain, scope) ||
-          runtime.cancelledStreaming.has(key)
+          runtime.isStreamingCancelled(domain, scope)
         ) {
-          runtime.cancelledStreaming.delete(key);
+          runtime.failStreamingStart(domain, scope);
+          runtime.clearStreamingCancelled(domain, scope);
           if (typeof cleanup === 'function') {
             try {
               cleanup();
@@ -678,14 +629,10 @@ class RefreshOrchestrator {
           return;
         }
 
-        if (typeof cleanup === 'function') {
-          runtime.streamingCleanup.set(key, cleanup);
-        } else {
-          runtime.streamingCleanup.set(key, noopStreamingCleanup);
-        }
+        runtime.finishStreamingStart(domain, scope, cleanup ?? noopStreamingCleanup);
       })
       .catch((error) => {
-        runtime.pendingStreaming.delete(key);
+        runtime.failStreamingStart(domain, scope);
         const message = error instanceof Error ? error.message : String(error);
         console.error(`Failed to start streaming domain ${domain}::${scope}`, error);
         // All domains are scoped — write error to scoped store.
@@ -709,11 +656,8 @@ class RefreshOrchestrator {
     reset: boolean
   ): void {
     const runtime = this.getRuntimeForScope(domain, scope);
-    const key = makeInFlightKey(domain, scope);
-    runtime.cancelledStreaming.add(key);
-    runtime.streamingReady.delete(key);
+    const pending = runtime.cancelStreamingStart(domain, scope);
 
-    const pending = runtime.pendingStreaming.get(key);
     if (pending) {
       pending
         .then((cleanup) => {
@@ -726,21 +670,21 @@ class RefreshOrchestrator {
           }
         })
         .finally(() => {
-          runtime.pendingStreaming.delete(key);
-          runtime.cancelledStreaming.delete(key);
+          runtime.failStreamingStart(domain, scope);
+          runtime.clearStreamingCancelled(domain, scope);
         });
     }
 
-    const cleanup = runtime.streamingCleanup.get(key);
+    const cleanup = runtime.getStreamingCleanup(domain, scope);
     if (cleanup) {
       try {
         cleanup();
       } catch (error) {
         console.error(`Failed to stop streaming domain ${domain}::${scope}`, error);
       }
-      runtime.streamingCleanup.delete(key);
+      runtime.deleteStreamingCleanup(domain, scope);
     }
-    runtime.streamHealth.delete(key);
+    runtime.clearStreamHealth(domain, scope);
     streaming.stop?.(scope, { reset });
     if (reset) {
       resetScopedDomainState(domain, scope);
@@ -831,35 +775,31 @@ class RefreshOrchestrator {
   }
 
   private deleteDomainFromAllRuntimes(domain: RefreshDomain): void {
-    this.forEachRuntime((runtime) => runtime.scopedEnabledState.delete(domain));
+    this.forEachRuntime((runtime) => runtime.deleteDomain(domain));
   }
 
   private abortAllInFlight(): void {
     this.forEachRuntime((runtime) => {
-      runtime.inFlight.forEach((details, key) => {
+      runtime.forEachInFlight((details, key) => {
         this.teardownInFlight(runtime, key, details);
       });
     });
   }
 
   private clearAllBlockedStreaming(): void {
-    this.forEachRuntime((runtime) => runtime.blockedStreaming.clear());
+    this.forEachRuntime((runtime) => runtime.clearBlockedStreaming());
   }
 
   private clearAllMetricsRefreshTracking(): void {
-    this.forEachRuntime((runtime) => runtime.lastMetricsRefreshAt.clear());
+    this.forEachRuntime((runtime) => runtime.clearMetricsRefreshTracking());
   }
 
   private clearAllAsyncStreamingBookkeeping(): void {
-    this.forEachRuntime((runtime) => {
-      runtime.pendingStreaming.clear();
-      runtime.cancelledStreaming.clear();
-      runtime.streamingReady.clear();
-    });
+    this.forEachRuntime((runtime) => runtime.clearAsyncStreamingBookkeeping());
   }
 
   private clearAllStreamHealth(): void {
-    this.forEachRuntime((runtime) => runtime.streamHealth.clear());
+    this.forEachRuntime((runtime) => runtime.clearAllStreamHealth());
   }
 
   private pruneRemovedClusterRuntimes(connectedClusterIds: string[]): void {
@@ -873,19 +813,11 @@ class RefreshOrchestrator {
       }
 
       this.stopRuntimeStreaming(runtime, true);
-      runtime.inFlight.forEach((details, key) => {
+      runtime.forEachInFlight((details, key) => {
         this.teardownInFlight(runtime, key, details);
       });
-      runtime.scopedEnabledState.forEach((scopedMap, domain) => {
-        scopedMap.forEach((_enabled, scope) => resetScopedDomainState(domain, scope));
-      });
-      runtime.scopedEnabledState.clear();
-      runtime.blockedStreaming.clear();
-      runtime.lastMetricsRefreshAt.clear();
-      runtime.streamHealth.clear();
-      runtime.pendingStreaming.clear();
-      runtime.cancelledStreaming.clear();
-      runtime.streamingReady.clear();
+      runtime.forEachScopedDomain((domain, scope) => resetScopedDomainState(domain, scope));
+      runtime.resetAllState();
       this.clusterRuntimes.delete(clusterId);
     });
   }
@@ -1029,7 +961,7 @@ class RefreshOrchestrator {
     const runtime = this.getRuntimeForScope(domain, normalizedScope);
     const contextVersion = this.contextVersion;
     const inFlightKey = makeInFlightKey(domain, normalizedScope);
-    const currentInFlight = runtime.inFlight.get(inFlightKey);
+    const currentInFlight = runtime.getInFlight(domain, normalizedScope);
 
     if (currentInFlight) {
       if (options.isManual && !currentInFlight.isManual) {
@@ -1067,7 +999,7 @@ class RefreshOrchestrator {
       cleanup = () => options.signal?.removeEventListener('abort', abortListener);
     }
 
-    runtime.inFlight.set(inFlightKey, {
+    runtime.setInFlight({
       controller,
       isManual: options.isManual,
       requestId,
@@ -1174,10 +1106,10 @@ class RefreshOrchestrator {
       }));
       this.notifyRefreshError(domain, normalizedScope, message);
     } finally {
-      const tracked = runtime.inFlight.get(inFlightKey);
+      const tracked = runtime.getInFlight(domain, normalizedScope);
       if (tracked && tracked.requestId === requestId) {
         tracked.cleanup?.();
-        runtime.inFlight.delete(inFlightKey);
+        runtime.deleteInFlight(domain, normalizedScope);
       }
 
       markPendingRequest(-1);
@@ -1192,8 +1124,7 @@ class RefreshOrchestrator {
     scope?: string,
     allowDisabledRetainedScope = false
   ): void {
-    const inFlightKey = makeInFlightKey(domain, scope);
-    const tracked = this.getRuntimeForScope(domain, scope).inFlight.get(inFlightKey);
+    const tracked = this.getRuntimeForScope(domain, scope).getInFlight(domain, scope);
     if (tracked && tracked.contextVersion !== this.contextVersion) {
       return;
     }
@@ -1255,12 +1186,7 @@ class RefreshOrchestrator {
   }
 
   private isScopedDomainEnabledInternal(domain: RefreshDomain, scope: string): boolean {
-    const scopedMap = this.getRuntimeForScope(domain, scope).scopedEnabledState.get(domain);
-    if (!scopedMap) {
-      return true;
-    }
-    const value = scopedMap.get(scope);
-    return value ?? true;
+    return this.getRuntimeForScope(domain, scope).isScopedDomainEnabled(domain, scope);
   }
 
   private teardownInFlight(
@@ -1268,9 +1194,7 @@ class RefreshOrchestrator {
     key: string,
     details: { controller: AbortController; cleanup?: () => void; contextVersion: number }
   ): void {
-    details.controller.abort();
-    details.cleanup?.();
-    runtime.inFlight.delete(key);
+    runtime.teardownInFlight(key, details);
   }
 
   private incrementContextVersion(): void {
@@ -1280,7 +1204,7 @@ class RefreshOrchestrator {
   private cancelInFlightForScopedDomain(domain: RefreshDomain, scope: string): void {
     const runtime = this.getRuntimeForScope(domain, scope);
     const key = makeInFlightKey(domain, scope);
-    const details = runtime.inFlight.get(key);
+    const details = runtime.getInFlight(domain, scope);
     if (details) {
       this.teardownInFlight(runtime, key, details);
     }
@@ -1296,13 +1220,9 @@ class RefreshOrchestrator {
     // Disable streaming for drifted scopes so snapshots remain the source of truth.
     const domain = payload.domain as RefreshDomain;
     const runtime = this.getRuntimeForScope(domain, scope);
-    const key = makeInFlightKey(domain, scope);
-    if (runtime.blockedStreaming.has(key)) {
+    if (!runtime.blockStreaming(domain, scope)) {
       return;
     }
-    runtime.blockedStreaming.add(key);
-    runtime.streamingReady.delete(key);
-    runtime.pendingStreaming.delete(key);
 
     const config = this.configs.get(domain);
     if (config?.streaming) {
@@ -1323,10 +1243,7 @@ class RefreshOrchestrator {
       return;
     }
     const domain = payload.domain as RefreshDomain;
-    this.getRuntimeForScope(domain, scope).streamHealth.set(
-      makeInFlightKey(domain, scope),
-      payload
-    );
+    this.getRuntimeForScope(domain, scope).setStreamHealth(domain, scope, payload);
   };
 
   private handleClusterAuthFailed = (payload: { clusterId: string }) => {
@@ -1414,27 +1331,17 @@ class RefreshOrchestrator {
       }
 
       this.getAllRuntimes().forEach((runtime) => {
-        const scopedMap = runtime.scopedEnabledState.get(domain);
-        if (!scopedMap) {
-          return;
-        }
-        scopedMap.forEach((enabled, scope) => {
-          if (!enabled) {
-            return;
-          }
-          const readyKey = makeInFlightKey(domain, scope);
+        runtime.forEachEnabledScope(domain, (scope) => {
           const shouldStream = this.shouldStreamScope(domain, scope);
           const scopeRuntime = this.getRuntimeForScope(domain, scope);
-          const alreadyStreaming =
-            scopeRuntime.streamingCleanup.has(readyKey) ||
-            scopeRuntime.pendingStreaming.has(readyKey);
+          const alreadyStreaming = scopeRuntime.isStreamingStartingOrActive(domain, scope);
 
           if (shouldStream && !alreadyStreaming) {
             // Context now allows streaming for this scope — start it.
             this.scheduleStreamingStart(domain, scope, config.streaming!);
           } else if (!shouldStream && alreadyStreaming) {
             // Context no longer allows streaming — stop it.
-            scopeRuntime.streamingReady.delete(readyKey);
+            scopeRuntime.clearStreamingReady(domain, scope);
             this.stopStreamingScope(domain, scope, config.streaming!, false);
           }
         });

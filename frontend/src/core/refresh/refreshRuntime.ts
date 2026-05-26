@@ -27,6 +27,11 @@ type StreamingFetchDecisionInput = {
 export const makeInFlightKey = (domain: RefreshDomain, scope?: string) =>
   `${domain}::${scope ?? '*'}`;
 
+export type RuntimeScopeStateChange = {
+  previous: boolean | undefined;
+  changed: boolean;
+};
+
 export class ClusterRefreshRuntime {
   readonly inFlight = new Map<string, InFlightRequest>();
   readonly streamingCleanup = new Map<string, () => void>();
@@ -40,12 +45,263 @@ export class ClusterRefreshRuntime {
 
   constructor(readonly clusterId: string) {}
 
+  markDomainKnown(domain: RefreshDomain): void {
+    if (!this.scopedEnabledState.has(domain)) {
+      this.scopedEnabledState.set(domain, new Map<string, boolean>());
+    }
+  }
+
+  deleteDomain(domain: RefreshDomain): void {
+    this.scopedEnabledState.delete(domain);
+  }
+
+  getDomainScopes(domain: RefreshDomain): Map<string, boolean> | undefined {
+    return this.scopedEnabledState.get(domain);
+  }
+
+  getKnownScopes(domain: RefreshDomain): string[] {
+    const scopedMap = this.scopedEnabledState.get(domain);
+    if (!scopedMap) {
+      return [];
+    }
+    return Array.from(scopedMap.keys());
+  }
+
+  getEnabledScopes(domain: RefreshDomain): string[] {
+    const scopedMap = this.scopedEnabledState.get(domain);
+    if (!scopedMap) {
+      return [];
+    }
+    const scopes: string[] = [];
+    scopedMap.forEach((enabled, scope) => {
+      if (enabled) {
+        scopes.push(scope);
+      }
+    });
+    return scopes;
+  }
+
+  hasEnabledScopedSources(domain: RefreshDomain): boolean {
+    const scopedMap = this.scopedEnabledState.get(domain);
+    if (!scopedMap) {
+      return false;
+    }
+    for (const enabled of scopedMap.values()) {
+      if (enabled) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  isScopedDomainEnabled(domain: RefreshDomain, scope: string): boolean {
+    const scopedMap = this.scopedEnabledState.get(domain);
+    if (!scopedMap) {
+      return true;
+    }
+    return scopedMap.get(scope) ?? true;
+  }
+
+  setScopedDomainEnabled(
+    domain: RefreshDomain,
+    scope: string,
+    enabled: boolean
+  ): RuntimeScopeStateChange {
+    const scopedMap = this.scopedEnabledState.get(domain) ?? new Map<string, boolean>();
+    this.scopedEnabledState.set(domain, scopedMap);
+    const previous = scopedMap.get(scope);
+    if (previous === enabled) {
+      return { previous, changed: false };
+    }
+    scopedMap.set(scope, enabled);
+    return { previous, changed: true };
+  }
+
+  disableOtherEnabledScopes(domain: RefreshDomain, activeScope: string): string[] {
+    const scopedMap = this.scopedEnabledState.get(domain);
+    if (!scopedMap) {
+      return [];
+    }
+    const staleScopes: string[] = [];
+    scopedMap.forEach((enabled, scope) => {
+      if (enabled && scope !== activeScope) {
+        staleScopes.push(scope);
+      }
+    });
+    staleScopes.forEach((scope) => scopedMap.set(scope, false));
+    return staleScopes;
+  }
+
+  forEachEnabledScope(domain: RefreshDomain, callback: (scope: string) => void): void {
+    this.getEnabledScopes(domain).forEach(callback);
+  }
+
+  forEachScopedDomain(callback: (domain: RefreshDomain, scope: string) => void): void {
+    this.scopedEnabledState.forEach((scopedMap, domain) => {
+      scopedMap.forEach((_enabled, scope) => callback(domain, scope));
+    });
+  }
+
+  getInFlight(domain: RefreshDomain, scope?: string): InFlightRequest | undefined {
+    return this.inFlight.get(makeInFlightKey(domain, scope));
+  }
+
+  setInFlight(request: InFlightRequest): string {
+    const key = makeInFlightKey(request.domain, request.scope);
+    this.inFlight.set(key, request);
+    return key;
+  }
+
+  teardownInFlight(key: string, request: Pick<InFlightRequest, 'controller' | 'cleanup'>): void {
+    request.controller.abort();
+    request.cleanup?.();
+    this.inFlight.delete(key);
+  }
+
+  deleteInFlight(domain: RefreshDomain, scope?: string): void {
+    this.inFlight.delete(makeInFlightKey(domain, scope));
+  }
+
+  forEachInFlight(callback: (request: InFlightRequest, key: string) => void): void {
+    Array.from(this.inFlight.entries()).forEach(([key, request]) => callback(request, key));
+  }
+
   isStreamingBlocked(domain: RefreshDomain, scope: string): boolean {
     return this.blockedStreaming.has(makeInFlightKey(domain, scope));
   }
 
+  blockStreaming(domain: RefreshDomain, scope: string): boolean {
+    const key = makeInFlightKey(domain, scope);
+    if (this.blockedStreaming.has(key)) {
+      return false;
+    }
+    this.blockedStreaming.add(key);
+    this.clearStreamingReady(domain, scope);
+    this.pendingStreaming.delete(key);
+    return true;
+  }
+
+  clearBlockedStreaming(): void {
+    this.blockedStreaming.clear();
+  }
+
   isStreamingActive(domain: RefreshDomain, scope: string): boolean {
     return this.streamingCleanup.has(makeInFlightKey(domain, scope));
+  }
+
+  hasPendingStreaming(domain: RefreshDomain, scope: string): boolean {
+    return this.pendingStreaming.has(makeInFlightKey(domain, scope));
+  }
+
+  isStreamingStartingOrActive(domain: RefreshDomain, scope: string): boolean {
+    const key = makeInFlightKey(domain, scope);
+    return this.streamingCleanup.has(key) || this.pendingStreaming.has(key);
+  }
+
+  getStreamingLifecycleKeys(): string[] {
+    const keys = new Set<string>();
+    this.streamingCleanup.forEach((_cleanup, key) => keys.add(key));
+    this.pendingStreaming.forEach((_promise, key) => keys.add(key));
+    return Array.from(keys);
+  }
+
+  hasStreamingBookkeeping(domain: RefreshDomain, scope: string): boolean {
+    const key = makeInFlightKey(domain, scope);
+    return (
+      this.streamingCleanup.has(key) ||
+      this.pendingStreaming.has(key) ||
+      this.streamingReady.has(key)
+    );
+  }
+
+  hasStreamingReady(domain: RefreshDomain, scope: string): boolean {
+    return this.streamingReady.has(makeInFlightKey(domain, scope));
+  }
+
+  setStreamingReady(domain: RefreshDomain, scope: string, task: Promise<void>): void {
+    this.streamingReady.set(makeInFlightKey(domain, scope), task);
+  }
+
+  clearStreamingReady(domain: RefreshDomain, scope: string): void {
+    this.streamingReady.delete(makeInFlightKey(domain, scope));
+  }
+
+  beginStreamingStart(
+    domain: RefreshDomain,
+    scope: string,
+    startPromise: Promise<(() => void) | void>
+  ): void {
+    const key = makeInFlightKey(domain, scope);
+    this.cancelledStreaming.delete(key);
+    this.pendingStreaming.set(key, startPromise);
+  }
+
+  finishStreamingStart(domain: RefreshDomain, scope: string, cleanup: (() => void) | void): void {
+    const key = makeInFlightKey(domain, scope);
+    this.pendingStreaming.delete(key);
+    if (typeof cleanup === 'function') {
+      this.streamingCleanup.set(key, cleanup);
+      return;
+    }
+    this.streamingCleanup.set(key, () => {});
+  }
+
+  failStreamingStart(domain: RefreshDomain, scope: string): void {
+    this.pendingStreaming.delete(makeInFlightKey(domain, scope));
+  }
+
+  cancelStreamingStart(domain: RefreshDomain, scope: string): Promise<(() => void) | void> | null {
+    const key = makeInFlightKey(domain, scope);
+    this.cancelledStreaming.add(key);
+    this.clearStreamingReady(domain, scope);
+    return this.pendingStreaming.get(key) ?? null;
+  }
+
+  isStreamingCancelled(domain: RefreshDomain, scope: string): boolean {
+    return this.cancelledStreaming.has(makeInFlightKey(domain, scope));
+  }
+
+  clearStreamingCancelled(domain: RefreshDomain, scope: string): void {
+    this.cancelledStreaming.delete(makeInFlightKey(domain, scope));
+  }
+
+  getStreamingCleanup(domain: RefreshDomain, scope: string): (() => void) | undefined {
+    return this.streamingCleanup.get(makeInFlightKey(domain, scope));
+  }
+
+  deleteStreamingCleanup(domain: RefreshDomain, scope: string): void {
+    this.streamingCleanup.delete(makeInFlightKey(domain, scope));
+  }
+
+  clearStreamHealth(domain: RefreshDomain, scope: string): void {
+    this.streamHealth.delete(makeInFlightKey(domain, scope));
+  }
+
+  setStreamHealth(
+    domain: RefreshDomain,
+    scope: string,
+    payload: AppEvents['refresh:resource-stream-health']
+  ): void {
+    this.streamHealth.set(makeInFlightKey(domain, scope), payload);
+  }
+
+  clearAllStreamHealth(): void {
+    this.streamHealth.clear();
+  }
+
+  clearAsyncStreamingBookkeeping(): void {
+    this.pendingStreaming.clear();
+    this.cancelledStreaming.clear();
+    this.streamingReady.clear();
+  }
+
+  clearAllStreaming(reset: boolean): void {
+    this.streamingCleanup.clear();
+    this.pendingStreaming.clear();
+    this.cancelledStreaming.clear();
+    if (reset) {
+      this.streamingReady.clear();
+    }
   }
 
   resolveStreamingFetchMode(input: StreamingFetchDecisionInput): StreamingFetchMode {
@@ -73,6 +329,26 @@ export class ClusterRefreshRuntime {
 
   recordMetricsRefresh(domain: RefreshDomain, scope: string, now = Date.now()): void {
     this.lastMetricsRefreshAt.set(makeInFlightKey(domain, scope), now);
+  }
+
+  clearMetricsRefreshTracking(): void {
+    this.lastMetricsRefreshAt.clear();
+  }
+
+  resetTransientState(): void {
+    this.blockedStreaming.clear();
+    this.lastMetricsRefreshAt.clear();
+    this.streamHealth.clear();
+    this.pendingStreaming.clear();
+    this.cancelledStreaming.clear();
+    this.streamingReady.clear();
+  }
+
+  resetAllState(): void {
+    this.inFlight.clear();
+    this.streamingCleanup.clear();
+    this.scopedEnabledState.clear();
+    this.resetTransientState();
   }
 
   private isMetricsRefreshFresh(
