@@ -18,7 +18,10 @@ The same backend session manager powers both flows.
 ### Backend
 
 - `backend/shell_sessions.go`
-  - Shell session creation, input/output streaming, resize, close, list, replay backlog.
+  - Shell session creation, input/output streaming, resize, close, and replay backlog.
+- `backend/shell_sessions_lifecycle.go`
+  - Shell session registration, runtime-operation registration, list/status
+    events, cluster cleanup, and count/list helpers.
 - `backend/resources_pods.go`
   - App-level wrappers:
     - `GetPodContainers(clusterID, namespace, podName)`
@@ -50,6 +53,9 @@ The same backend session manager powers both flows.
   - Header runtime operation panel for shell sessions and port forwards. It
     reads `runtime-operations:list` for shell/port-forward presence and uses
     workflow lists for shell/port-forward row details.
+- `frontend/src/ui/status/runtimeOperationStatusAdapter.ts`
+  - Pure reducer and row selector for merging runtime-operation, shell, and
+    port-forward events into the Sessions status rows.
 - `frontend/src/ui/layout/ClusterTabs.tsx`
   - Delegates close intent to `KubeconfigContext`; the shared frontend
     selection transition persists the new selected set, and backend selection
@@ -91,7 +97,8 @@ node maintenance.
 
 ### 3) Session lifecycle, timeouts, replay
 
-Session behavior in `backend/shell_sessions.go`:
+Session behavior in `backend/shell_sessions.go` and
+`backend/shell_sessions_lifecycle.go`:
 
 - Idle timeout: `30m` (`shellIdleTimeout`)
 - Hard max duration: `8h` (`shellMaxDuration`)
@@ -232,9 +239,10 @@ lifecycle cleanup. The registry entry uses a full Pod target reference:
 `clusterId`, empty group, `v1`, `Pod`, namespace, and pod name.
 
 Cluster removal, kubeconfig clearing, explicit cluster-tab close, and app
-shutdown all use the same backend cleanup path. That path is idempotent and also
-cleans up unregistered legacy shell sessions so older in-memory state cannot
-survive a cluster disconnect.
+shutdown all use the same backend cleanup path. That path is idempotent:
+runtime cleanup removes the registry entry before invoking the shell cleanup
+hook, so repeated close/remove paths do not double-report or resurrect a
+closed session.
 
 ## Gotchas and maintenance notes
 

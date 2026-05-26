@@ -432,6 +432,125 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 	require.Equal(t, 1, app.GetClusterShellSessionCount(clusterB))
 	require.Equal(t, 0, app.GetClusterPortForwardCount(clusterA))
 	require.Equal(t, 1, app.GetClusterPortForwardCount(clusterB))
+
+	remainingOperations := app.ListRuntimeOperations()
+	require.Len(t, remainingOperations, 2)
+	for _, operation := range remainingOperations {
+		require.Equal(t, clusterB, operation.ClusterID, "runtime operation cleanup must stay cluster-scoped")
+	}
+}
+
+func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	// Keep selection updates on the in-place refresh reconciliation path.
+	app.refreshCtx = context.Background()
+	app.refreshHTTPServer = &http.Server{}
+	app.refreshAggregates = &refreshAggregateHandlers{}
+
+	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
+	selectionB := kubeconfigSelection{Path: "/path/b", Context: "ctx-b"}
+
+	app.availableKubeconfigs = []KubeconfigInfo{
+		{Name: "config-a", Path: selectionA.Path, Context: selectionA.Context},
+		{Name: "config-b", Path: selectionB.Path, Context: selectionB.Context},
+	}
+	clusterA := app.clusterMetaForSelection(selectionA).ID
+	clusterB := app.clusterMetaForSelection(selectionB).ID
+	app.selectedKubeconfigs = []string{selectionA.String(), selectionB.String()}
+	app.clusterClients = map[string]*clusterClients{
+		clusterA: {
+			meta:              ClusterMeta{ID: clusterA, Name: "ctx-a"},
+			kubeconfigPath:    selectionA.Path,
+			kubeconfigContext: selectionA.Context,
+			client:            cgofake.NewClientset(),
+		},
+		clusterB: {
+			meta:              ClusterMeta{ID: clusterB, Name: "ctx-b"},
+			kubeconfigPath:    selectionB.Path,
+			kubeconfigContext: selectionB.Context,
+			client:            cgofake.NewClientset(),
+		},
+	}
+	app.refreshSubsystems = map[string]*system.Subsystem{
+		clusterA: {},
+		clusterB: {},
+	}
+
+	doneA := make(chan struct{})
+	close(doneA)
+	doneB := make(chan struct{})
+	close(doneB)
+	canceledA := false
+	canceledB := false
+	app.objectCatalogEntries = map[string]*objectCatalogEntry{
+		clusterA: {
+			done:   doneA,
+			cancel: func() { canceledA = true },
+			meta:   ClusterMeta{ID: clusterA, Name: "ctx-a"},
+		},
+		clusterB: {
+			done:   doneB,
+			cancel: func() { canceledB = true },
+			meta:   ClusterMeta{ID: clusterB, Name: "ctx-b"},
+		},
+	}
+
+	app.shellSessions = map[string]*shellSession{
+		"shell-a": {id: "shell-a", clusterID: clusterA},
+		"shell-b": {id: "shell-b", clusterID: clusterB},
+	}
+	app.portForwardSessions = map[string]*portForwardSessionInternal{
+		"pf-a": {
+			PortForwardSession: PortForwardSession{
+				ID:        "pf-a",
+				ClusterID: clusterA,
+			},
+			stopChan: make(chan struct{}),
+		},
+		"pf-b": {
+			PortForwardSession: PortForwardSession{
+				ID:        "pf-b",
+				ClusterID: clusterB,
+			},
+			stopChan: make(chan struct{}),
+		},
+	}
+	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["shell-a"]), func(reason string) error {
+		return app.closeShellSessionForRuntime("shell-a", reason)
+	})
+	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["shell-b"]), func(reason string) error {
+		return app.closeShellSessionForRuntime("shell-b", reason)
+	})
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-a"]), func(reason string) error {
+		return app.stopPortForwardForRuntime("pf-a", reason)
+	})
+	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-b"]), func(reason string) error {
+		return app.stopPortForwardForRuntime("pf-b", reason)
+	})
+
+	require.NoError(t, app.SetSelectedKubeconfigs(nil))
+
+	require.Empty(t, app.GetSelectedKubeconfigs())
+
+	app.clusterClientsMu.Lock()
+	require.Empty(t, app.clusterClients, "clearing selection should remove all cluster clients")
+	app.clusterClientsMu.Unlock()
+
+	require.Empty(t, app.refreshSubsystems, "clearing selection should remove all refresh subsystems")
+
+	app.objectCatalogMu.Lock()
+	require.Empty(t, app.objectCatalogEntries, "clearing selection should stop all object catalogs")
+	app.objectCatalogMu.Unlock()
+	require.True(t, canceledA, "cluster A object catalog should be canceled")
+	require.True(t, canceledB, "cluster B object catalog should be canceled")
+
+	require.Equal(t, 0, app.GetClusterShellSessionCount(clusterA))
+	require.Equal(t, 0, app.GetClusterShellSessionCount(clusterB))
+	require.Equal(t, 0, app.GetClusterPortForwardCount(clusterA))
+	require.Equal(t, 0, app.GetClusterPortForwardCount(clusterB))
+	require.Empty(t, app.ListRuntimeOperations(), "clearing selection should remove all runtime operations")
 }
 
 func TestSetSelectedKubeconfigsKeepsResponseCacheClusterScopedDuringChurn(t *testing.T) {

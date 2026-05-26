@@ -8,5 +8,6 @@
 - Improved port-forward reliability so stopped sessions, failed starts, and cluster disconnects update the session list and status indicators consistently.
 - Improved shell session reliability so terminal sessions close cleanly, disappear from session indicators promptly, and do not report duplicate close events after user or cluster cleanup.
 - Improved the Sessions indicator so shell sessions and port forwards stay visible while startup data loads, then clear stale rows consistently after sessions stop or clusters disconnect.
+- Improved cluster disconnect cleanup so closing or clearing clusters more reliably removes the right sessions and port forwards without affecting other active clusters.
 
 ### Fixed

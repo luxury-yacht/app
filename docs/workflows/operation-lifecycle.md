@@ -27,8 +27,12 @@ Current runtime operation types:
 
 Workflow-owned details stay in their existing stores:
 
-- Shell backlog, terminal IO, and reattach data stay in `backend/shell_sessions.go`.
-- Port-forward local port and reconnect status stay in `backend/portforward.go`.
+- Shell backlog, terminal IO, and reattach data stay in `backend/shell_sessions.go`;
+  shell registration, list/status emission, and runtime cleanup hooks stay in
+  `backend/shell_sessions_lifecycle.go`.
+- Port-forward local port and reconnect status stay in `backend/portforward.go`;
+  port-forward registration, list/status emission, and runtime cleanup hooks
+  stay in `backend/portforward_lifecycle.go`.
 - Drain history and event details stay in `backend/nodemaintenance` and the
   `object-maintenance` refresh domain.
 - `DrainNodeModal` owns drain result presentation. The active or most recent
@@ -83,20 +87,25 @@ Cleanup behavior:
   `runtime-operations:list` for shell and port-forward presence plus
   removed-cluster cleanup. It does not render drain detail rows.
 - `frontend/src/ui/status/runtimeOperationStatus.ts` reduces
+  Wails startup reads and live events into status state.
+- `frontend/src/ui/status/runtimeOperationStatusAdapter.ts` owns the pure
+  reducer and row selector for
   `runtime-operations:list`, `object-shell:list`, `portforward:list`, and
   `portforward:status` events into the shell/port-forward rows shown by the
-  status UI. Runtime operations decide presence; workflow events only add
-  details.
+  status UI.
+- Before the initial runtime-operation list loads, workflow list events may
+  supply visible shell and port-forward rows for the selected cluster so the
+  Sessions indicator is not blank during startup. After
+  `runtime-operations:list` loads, runtime operations become the authoritative
+  active-operation envelope; workflow events only add row details and cannot
+  resurrect operations that the registry has removed.
 - Shell and port-forward rows may still use workflow-specific list events for
   details such as container, command, pod name, local port, and status reason.
-- Active drains stay visible to lifecycle cleanup and cluster-close warnings,
-  but drain progress, history, and detail presentation remain owned by the node
-  maintenance workflow.
+- Active drains stay visible to lifecycle cleanup, but drain progress, history,
+  and detail presentation remain owned by the node maintenance workflow.
 - `frontend/src/ui/layout/ClusterTabs.tsx` delegates close intent to
   `closeKubeconfig(...)` instead of directly stopping shell sessions, port
   forwards, drains, or calling generated backend commands.
-- Cluster close confirmation may use the runtime operation list for total
-  active-operation counts and type breakdowns, including active drain jobs.
 
 ## Validation
 
@@ -105,7 +114,7 @@ Focused checks:
 ```sh
 go test ./backend ./backend/resources/nodes ./backend/nodemaintenance
 go test ./backend/refresh/snapshot
-npm run test --prefix frontend -- SessionsStatus ClusterTabs port-forward drain
+npm run test --prefix frontend -- runtimeOperationStatus SessionsStatus ClusterTabs port-forward drain
 npm run test --prefix frontend -- orchestrator
 npm run typecheck --prefix frontend
 ```
