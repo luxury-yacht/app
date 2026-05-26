@@ -51,6 +51,23 @@ hydrates the same identity store from Kubernetes discovery and CRDs. Callers do
 not choose between built-ins, cached descriptors, and discovery; those are
 catalog implementation details.
 
+The implementation split is intentional:
+
+- `backend/objectcatalog/identity.go` owns the built-in seed list, discovery/CRD
+  hydration, and `ResolveResourceForGVK` behavior.
+- `backend/resources/common/resource_identity.go` owns only the small
+  `ResourceResolver` / `ResolvedResource` contract shared by backend packages.
+- `backend/cluster_dependencies.go` adapts app callers to the per-cluster
+  catalog service and uses a cached per-cluster fallback resolver only before
+  the service is available.
+- `backend/object_detail_provider.go` has separate exact-GVK capability
+  metadata for typed detail fetchers. That map says which typed fetcher can
+  serve a detail payload; it is not a resource identity source.
+
+If discovery is degraded, identity hydration should still try the CRD API before
+returning a discovery error. This keeps YAML, permissions, and actions working
+for CRDs when preferred discovery is temporarily incomplete.
+
 ## Service Lifecycle
 
 The backend starts one catalog service per selected cluster in
@@ -83,6 +100,8 @@ Catalog API surfaces are intentionally narrow:
   metadata.
 - `Descriptors()` returns discovered/allowed resource descriptors.
 - `Health()` returns sync health for diagnostics.
+- `ResolveResourceForGVK(ctx, gvk)` resolves a full GVK to GVR/scope through the
+  catalog identity store.
 - `FindExactMatch(namespace, group, version, kind, name)` resolves one object by
   canonical identity within a cluster.
 - `FindByUID(uid)` resolves one object by UID within a cluster.

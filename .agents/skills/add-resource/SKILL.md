@@ -164,6 +164,10 @@ Add an entry to the `objectDetailFetchers` map:
 
 The key must be lowercase (e.g., `"cronjob"`, `"ingress"`). The `lookupObjectDetailFetcher` function normalizes input to lowercase.
 
+Also add the exact GVK to `objectDetailFetcherGVKs`. That map is typed-fetcher
+capability metadata, not resource identity. It prevents a custom resource with a
+colliding built-in kind from being served by the wrong typed fetcher.
+
 Do not add per-kind raw-object fallbacks in
 `backend/refresh/snapshot/object_details.go`. That snapshot builder delegates
 rich detail resolution to the app-level `ObjectDetailProvider` and already
@@ -192,7 +196,20 @@ Add the new details type to `DetailsTabProps` and thread it through:
   `useOverviewData.ts`.
 - Add or update focused tests around the payload switch and overview mapping.
 
-### 6. Built-In Frontend Identity (When Promoting a Built-In Kind) — MODIFY
+### 6. Backend Catalog Identity (When Adding A Built-In Kind) — MODIFY
+
+**File:** `backend/objectcatalog/identity.go`
+
+If this is a built-in Kubernetes kind that must resolve before the first catalog
+sync, add its canonical group/version/resource/scope to `builtinResourceCatalog`.
+Do not add custom resources here; CRDs must hydrate through discovery/CRD data
+and carry their real group/version.
+
+The shared interface in `backend/resources/common/resource_identity.go` should
+remain only a contract. Do not add another resolver table or kind-only fallback
+there.
+
+### 7. Built-In Frontend Identity (When Promoting a Built-In Kind) — MODIFY
 
 **File:** `frontend/src/shared/constants/builtinGroupVersions.ts`
 
@@ -200,7 +217,7 @@ If this is a built-in Kubernetes kind with a first-class frontend view, add its
 canonical group/version to the built-in lookup. Do not add custom resources
 here; custom resources must carry group/version from catalog or API data.
 
-### 7. Frontend Overview Component — CREATE or REUSE
+### 8. Frontend Overview Component — CREATE or REUSE
 
 **Directory:** `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/`
 
@@ -216,7 +233,7 @@ const is<Kind> = normalizedKind.toLowerCase() === '<kind-lowercase>';
 
 If the resource is substantially different, create a new `<Kind>Overview.tsx` component following the same prop pattern as `WorkloadOverview.tsx`.
 
-### 8. Overview Registry — MODIFY
+### 9. Overview Registry — MODIFY
 
 **File:** `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/registry.ts`
 
@@ -233,7 +250,7 @@ overviewRegistry.register({
 Do not rely on registry `capabilities` as the source of truth for object-panel
 actions or tabs; current feature support is driven by `RESOURCE_CAPABILITIES`.
 
-### 9. Object Panel Capabilities — MODIFY
+### 10. Object Panel Capabilities — MODIFY
 
 **File:** `frontend/src/modules/object-panel/components/ObjectPanel/constants.ts`
 
@@ -252,7 +269,7 @@ group/version, kind, namespace, and name in
 If a new action kind needs different verbs, subresources, or target resources,
 update that hook and the backend permission/action path together.
 
-### 10. Refresh Table/List Surface (When Needed) — MODIFY
+### 11. Refresh Table/List Surface (When Needed) — MODIFY
 
 If the resource appears in a table/list refresh surface, update the refresh
 contract together:
@@ -283,7 +300,7 @@ separate single-cluster requests.
 For larger table/list work, use `.agents/skills/browse-tables/SKILL.md` and
 `.agents/skills/refresh-subsystem/SKILL.md` alongside this skill.
 
-### 11. Backend Tests — CREATE
+### 12. Backend Tests — CREATE
 
 **File:** `backend/resources/<category>/<resource>_test.go`
 
@@ -317,7 +334,7 @@ func Test<Kind>Service<Kind>(t *testing.T) {
 
 Check `backend/test/testsupport/` for available fixture helpers and option functions.
 
-### 12. Streaming Priority (Optional) — MODIFY
+### 13. Streaming Priority (Optional) — MODIFY
 
 **File:** `backend/objectcatalog/service.go`
 
@@ -333,10 +350,14 @@ Before marking done:
 - [ ] Detail struct defined in `types.go` with display-ready fields
 - [ ] Primary status comes from the shared resource model and projects `statusPresentation`
 - [ ] Relationship links use `resourcemodel.ResourceLink` constructors and are validated
-- [ ] Detail provider dispatches to the new service
+- [ ] Detail provider dispatches to the new service and has exact-GVK
+      `objectDetailFetcherGVKs` metadata
 - [ ] Wails bindings/type definitions reflect backend DTO changes
 - [ ] Frontend detail payload is wired through `ObjectPanel.tsx`, `DetailsTabProps`, `DetailsTab.tsx`, and `useOverviewData.ts`
-- [ ] Built-in GVK lookup updated if a built-in kind was promoted to first-class frontend support
+- [ ] Backend catalog built-in identity seed updated if the built-in must
+      resolve before catalog sync
+- [ ] Frontend built-in GVK lookup updated if a built-in kind was promoted to
+      first-class frontend support
 - [ ] Overview component renders resource-specific fields
 - [ ] Overview registry maps the kind to the component
 - [ ] `RESOURCE_CAPABILITIES` reflects supported object-panel actions/tabs

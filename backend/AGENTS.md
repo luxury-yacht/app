@@ -24,6 +24,10 @@ Applies to Go code under `backend/`.
 
 - Service lives in `backend/objectcatalog` (`Service`, `Summary`), started in `backend/app_object_catalog.go`.
 - Browse snapshots are exposed through the `catalog` refresh domain in `backend/refresh/snapshot/catalog.go`.
+- Resource identity resolution is owned by `backend/objectcatalog/identity.go`.
+  `backend/resources/common/resource_identity.go` contains only the shared
+  resolver interface/result contract; do not add parallel GVK/GVR resolver
+  tables or kind-only fallbacks outside the catalog.
 - Catalog identity and typed-view boundaries are documented in
   `docs/architecture/catalog.md`.
 

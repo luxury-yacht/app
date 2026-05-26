@@ -40,6 +40,11 @@ GVK/object identity. Rich detail and imperative operations belong in
 `backend/resources`; list/table snapshot payloads belong in
 `backend/refresh/snapshot`.
 
+When adding a typed detail fetcher in `backend/object_detail_provider.go`, also
+add exact-GVK capability metadata in `objectDetailFetcherGVKs`. That map
+declares which concrete built-in GVK the typed fetcher can serve; it is not a
+resource identity source and must not be used as a catalog replacement.
+
 ## Frontend Entry Points
 
 - `frontend/src/modules/object-panel`

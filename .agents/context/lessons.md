@@ -22,6 +22,9 @@ sessions. Keep it short, durable, and tied to code contracts.
 - Do not turn kind-only, name-only, or namespace/name-only values into object
   references across module, API, cache, action, event, or navigation
   boundaries.
+- Backend GVK/GVR/scope resolution belongs behind the object catalog
+  `ResourceResolver`; `backend/objectcatalog/identity.go` owns the built-in
+  seed list and discovery/CRD hydration.
 - Frontend status styling should consume backend `statusPresentation`; missing
   presentation should stay visible as `unknown` during tests.
 - Relationship navigation should use backend-provided `ResourceLink.ref` and

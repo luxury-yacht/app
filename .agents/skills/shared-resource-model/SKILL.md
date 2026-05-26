@@ -41,8 +41,10 @@ refresh rows, streams, object panel details, and object map nodes/edges.
 
 - [ ] Object refs crossing boundaries include `clusterId`, group, version, kind,
       and namespace/name for concrete objects.
-- [ ] Built-ins use their real group/version; CRDs preserve group/version from
-      discovery, catalog, owner refs, HPA targets, events, or manifests.
+- [ ] Backend GVK/GVR/scope lookups use the object catalog `ResourceResolver`.
+      Built-ins use their real group/version from the catalog seed; CRDs
+      preserve group/version from discovery, catalog, owner refs, HPA targets,
+      events, or manifests.
 - [ ] Primary status is computed once in backend model code and projected as
       `status`, `statusState`, `statusPresentation`, and optional
       `statusReason`.

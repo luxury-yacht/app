@@ -47,8 +47,8 @@ gating, delete/scale/restart/trigger/suspend actions, or restricted-RBAC tests.
 
 - [ ] Capability descriptors include `clusterId`, group, version, kind,
       namespace, and name when checking a concrete object.
-- [ ] Do not guess `resource` from kind; use GVK/discovery/catalog-backed
-      resolution.
+- [ ] Do not guess `resource` from kind; use the injected catalog-backed
+      `ResourceResolver` for GVK/GVR/scope resolution.
 - [ ] Backend write/action paths check permission before mutating cluster state.
 - [ ] Resource-stream permission contracts stay aligned with snapshot runtime
       permission requirements.

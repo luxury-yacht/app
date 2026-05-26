@@ -124,10 +124,13 @@ navigation, or refresh boundary must carry:
 - `kind`
 - `namespace` and `name` when the reference points to a concrete object
 
-Do not pass kind-only, name-only, or namespace/name-only references. For
-built-ins, resolve the real group/version from the built-in mapping. For CRDs,
-thread the actual group/version from discovery, owner references, HPA targets,
-event involved objects, CRDs, Helm manifests, or the object catalog.
+Do not pass kind-only, name-only, or namespace/name-only references. Backend
+GVK/GVR/scope resolution goes through the object catalog's `ResourceResolver`;
+its built-in seed list lives in `backend/objectcatalog/identity.go` and hydrates
+from discovery and CRDs. Frontend built-in permission/view keys use
+`frontend/src/shared/constants/builtinGroupVersions.ts`. For CRDs, thread the
+actual group/version from discovery, owner references, HPA targets, event
+involved objects, CRDs, Helm manifests, or the object catalog.
 
 The Kubernetes plural `resource` field is useful descriptor metadata and is
 required for RBAC permission attributes, but it must not be guessed from `kind`.
