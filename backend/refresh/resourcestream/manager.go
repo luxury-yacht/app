@@ -627,10 +627,23 @@ func (m *Manager) Subscribe(domain, scope string) (*Subscription, error) {
 	if m == nil {
 		return nil, errors.New("resource stream not initialised")
 	}
-	normalized, err := normalizeScopeForDomain(domain, scope)
+	selector, err := ParseStreamSelector(m.clusterMeta.ClusterID, domain, scope)
 	if err != nil {
 		return nil, err
 	}
+	return m.SubscribeSelector(selector)
+}
+
+// SubscribeSelector registers a new subscriber for the supplied typed selector.
+func (m *Manager) SubscribeSelector(selector StreamSelector) (*Subscription, error) {
+	if m == nil {
+		return nil, errors.New("resource stream not initialised")
+	}
+	if selector.ClusterID != "" && selector.ClusterID != m.clusterMeta.ClusterID {
+		return nil, errors.New("cluster mismatch")
+	}
+	domain := selector.Domain
+	normalized := selector.CanonicalScope()
 	// Avoid pre-checking permissions so partial streams can still deliver updates.
 
 	m.mu.Lock()
@@ -698,7 +711,22 @@ func (m *Manager) Resume(domain, scope string, since uint64) ([]Update, bool) {
 	if m == nil || since == 0 {
 		return nil, false
 	}
-	key := bufferKey(domain, scope)
+	selector, err := ParseStreamSelector(m.clusterMeta.ClusterID, domain, scope)
+	if err != nil {
+		return nil, false
+	}
+	return m.ResumeSelector(selector, since)
+}
+
+// ResumeSelector returns buffered updates after the provided sequence token.
+func (m *Manager) ResumeSelector(selector StreamSelector, since uint64) ([]Update, bool) {
+	if m == nil || since == 0 {
+		return nil, false
+	}
+	if selector.ClusterID != "" && selector.ClusterID != m.clusterMeta.ClusterID {
+		return nil, false
+	}
+	key := bufferKey(selector.Domain, selector.CanonicalScope())
 	m.mu.RLock()
 	buffer := m.buffers[key]
 	if buffer == nil {

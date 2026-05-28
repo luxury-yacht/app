@@ -28,18 +28,20 @@ type wsConn interface {
 	Close() error
 }
 
-// Adapter provides domain-specific subscription and scope normalization logic.
-type Adapter interface {
-	NormalizeScope(domain, scope string) (string, error)
-	Subscribe(domain, scope string) (*Subscription, error)
-	Resume(domain, scope string, since uint64) ([]ServerMessage, bool)
+// Selector is the typed subscription identity produced by an adapter after the
+// websocket boundary resolves cluster routing and strips transport-only cluster
+// prefixes from the scope string.
+type Selector interface {
+	Cluster() string
+	DomainName() string
+	CanonicalScope() string
 }
 
-// ClusterAdapter allows multiplexing subscriptions across clusters.
-type ClusterAdapter interface {
-	Adapter
-	SubscribeCluster(clusterID, domain, scope string) (*Subscription, error)
-	ResumeCluster(clusterID, domain, scope string, since uint64) ([]ServerMessage, bool)
+// Adapter provides domain-specific selector parsing and subscription logic.
+type Adapter interface {
+	ParseSelector(clusterID, domain, scope string) (Selector, error)
+	Subscribe(selector Selector) (*Subscription, error)
+	Resume(selector Selector, since uint64) ([]ServerMessage, bool)
 }
 
 // Config captures the dependencies for a websocket stream multiplexer.
@@ -261,19 +263,20 @@ func (s *session) handleSubscribe(msg ClientMessage) {
 	clusterName := s.clusterNameFor(clusterID)
 
 	_, trimmed := refresh.SplitClusterScope(msg.Scope)
-	normalized, err := s.adapter.NormalizeScope(msg.Domain, trimmed)
+	selector, err := s.adapter.ParseSelector(clusterID, msg.Domain, trimmed)
+	if err != nil {
+		s.sendError(clusterID, msg.Domain, msg.Scope, err)
+		return
+	}
+	normalized := selector.CanonicalScope()
+
+	sub, err := s.adapter.Subscribe(selector)
 	if err != nil {
 		s.sendError(clusterID, msg.Domain, msg.Scope, err)
 		return
 	}
 
-	sub, err := s.subscribe(clusterID, msg.Domain, normalized)
-	if err != nil {
-		s.sendError(clusterID, msg.Domain, msg.Scope, err)
-		return
-	}
-
-	key := subscriptionKey(clusterID, msg.Domain, normalized)
+	key := subscriptionKey(selector)
 	s.storeSubscription(key, sub, clusterID, clusterName)
 
 	resumeToken := parseResumeToken(msg.ResumeToken)
@@ -281,7 +284,7 @@ func (s *session) handleSubscribe(msg ClientMessage) {
 	resumeOK := false
 	resumeHighWater := uint64(0)
 	if resumeToken > 0 {
-		resumeUpdates, resumeOK = s.resume(clusterID, msg.Domain, normalized, resumeToken)
+		resumeUpdates, resumeOK = s.adapter.Resume(selector, resumeToken)
 		if !resumeOK {
 			s.logger.Warn(fmt.Sprintf("stream mux: resume token expired for %s/%s", msg.Domain, normalized), logsources.StreamMux)
 		}
@@ -327,13 +330,13 @@ func (s *session) handleCancel(msg ClientMessage) {
 	}
 
 	_, trimmed := refresh.SplitClusterScope(msg.Scope)
-	normalized, err := s.adapter.NormalizeScope(msg.Domain, trimmed)
+	selector, err := s.adapter.ParseSelector(clusterID, msg.Domain, trimmed)
 	if err != nil {
 		s.sendError(clusterID, msg.Domain, msg.Scope, err)
 		return
 	}
 
-	key := subscriptionKey(clusterID, msg.Domain, normalized)
+	key := subscriptionKey(selector)
 	s.mu.Lock()
 	sub := s.subs[key]
 	delete(s.subs, key)
@@ -547,30 +550,6 @@ func (s *session) withClusterInfo(msg ServerMessage, clusterID, clusterName stri
 	return msg
 }
 
-// subscribe routes subscriptions through a cluster-aware adapter when configured.
-func (s *session) subscribe(clusterID, domain, scope string) (*Subscription, error) {
-	if s.allowClusterScopedRequest {
-		adapter, ok := s.adapter.(ClusterAdapter)
-		if !ok {
-			return nil, errors.New("cluster-scoped subscriptions are not supported")
-		}
-		return adapter.SubscribeCluster(clusterID, domain, scope)
-	}
-	return s.adapter.Subscribe(domain, scope)
-}
-
-// resume routes resume buffers through a cluster-aware adapter when configured.
-func (s *session) resume(clusterID, domain, scope string, since uint64) ([]ServerMessage, bool) {
-	if s.allowClusterScopedRequest {
-		adapter, ok := s.adapter.(ClusterAdapter)
-		if !ok {
-			return nil, false
-		}
-		return adapter.ResumeCluster(clusterID, domain, scope, since)
-	}
-	return s.adapter.Resume(domain, scope, since)
-}
-
 func (s *session) sendError(clusterID, domain, scope string, err error) {
 	if err == nil {
 		err = errors.New("stream error")
@@ -599,8 +578,8 @@ func (s *session) sendError(clusterID, domain, scope string, err error) {
 	s.enqueue(msg)
 }
 
-func subscriptionKey(clusterID, domain, scope string) string {
-	return strings.TrimSpace(clusterID) + "|" + strings.TrimSpace(domain) + "|" + strings.TrimSpace(scope)
+func subscriptionKey(selector Selector) string {
+	return strings.TrimSpace(selector.Cluster()) + "|" + strings.TrimSpace(selector.DomainName()) + "|" + strings.TrimSpace(selector.CanonicalScope())
 }
 
 // parseResumeToken converts client tokens into sequence numbers, defaulting to zero on errors.

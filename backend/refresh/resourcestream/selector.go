@@ -44,6 +44,18 @@ type StreamSelector struct {
 	Workload  *WorkloadSelector
 }
 
+func (s StreamSelector) Cluster() string {
+	return s.ClusterID
+}
+
+func (s StreamSelector) DomainName() string {
+	return s.Domain
+}
+
+func (s StreamSelector) CanonicalScope() string {
+	return s.String()
+}
+
 // WorkloadSelector identifies a single workload referenced by a
 // `workload:` scope. The full GVK is required because kind/name alone
 // can collide across CRDs.
@@ -207,4 +219,9 @@ func parseNamespaceSelector(selector StreamSelector, scope string) (StreamSelect
 	selector.ScopeKind = StreamScopeNamespace
 	selector.Namespace = value
 	return selector, nil
+}
+
+func isAllNamespace(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	return normalized == "all" || normalized == "*"
 }

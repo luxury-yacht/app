@@ -103,29 +103,26 @@ func TestParseStreamSelectorRejectsInvalid(t *testing.T) {
 	}
 }
 
-// TestNormalizeScopeUsesTypedSelector keeps the WebSocket boundary
-// normalizer on the same typed parser used by selector-aware routing.
-func TestNormalizeScopeAgreesWithTypedSelector(t *testing.T) {
+func TestStreamSelectorCanonicalScope(t *testing.T) {
 	cases := []struct {
 		domain string
 		scope  string
+		want   string
 	}{
-		{domainPods, "namespace:default"},
-		{domainPods, "namespace:all"},
-		{domainPods, "node:n1"},
-		{domainPods, "workload:prod:apps:v1:Deployment:web"},
-		{domainWorkloads, "namespace:prod"},
-		{domainWorkloads, "namespace:all"},
-		{domainClusterRBAC, ""},
-		{domainNodes, ""},
+		{domainPods, "namespace:default", "namespace:default"},
+		{domainPods, "namespace:all", "namespace:all"},
+		{domainPods, "node:n1", "node:n1"},
+		{domainPods, "workload:prod:apps:v1:Deployment:web", "workload:prod:apps:v1:Deployment:web"},
+		{domainWorkloads, "prod", "namespace:prod"},
+		{domainWorkloads, "namespace:all", "namespace:all"},
+		{domainClusterRBAC, "", ""},
+		{domainNodes, "", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.domain+"/"+tc.scope, func(t *testing.T) {
-			legacy, legacyErr := normalizeScopeForDomain(tc.domain, tc.scope)
-			require.NoError(t, legacyErr)
-			typed, typedErr := ParseStreamSelector("c1", tc.domain, tc.scope)
-			require.NoError(t, typedErr)
-			require.Equal(t, legacy, typed.String(), "legacy normalized scope must equal typed selector encoding")
+			selector, err := ParseStreamSelector("c1", tc.domain, tc.scope)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, selector.CanonicalScope())
 		})
 	}
 }

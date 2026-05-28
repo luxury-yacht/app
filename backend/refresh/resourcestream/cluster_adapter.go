@@ -16,40 +16,36 @@ func NewClusterAdapter(managers map[string]*Manager) *ClusterAdapter {
 	return &ClusterAdapter{managers: managers}
 }
 
-// NormalizeScope applies resource scope normalization shared across clusters.
-func (a *ClusterAdapter) NormalizeScope(domain, scope string) (string, error) {
-	return normalizeScopeForDomain(domain, scope)
+// ParseSelector converts the websocket transport scope into the typed resource
+// stream selector used below the adapter seam.
+func (a *ClusterAdapter) ParseSelector(clusterID, domain, scope string) (streammux.Selector, error) {
+	return ParseStreamSelector(clusterID, domain, scope)
 }
 
-// Subscribe registers a subscription without a cluster identifier.
-func (a *ClusterAdapter) Subscribe(domain, scope string) (*streammux.Subscription, error) {
-	return nil, errors.New("cluster id is required for resource stream subscriptions")
-}
-
-// Resume is unsupported without a cluster identifier.
-func (a *ClusterAdapter) Resume(domain, scope string, since uint64) ([]streammux.ServerMessage, bool) {
-	return nil, false
-}
-
-// SubscribeCluster registers a subscription against the requested cluster manager.
-func (a *ClusterAdapter) SubscribeCluster(clusterID, domain, scope string) (*streammux.Subscription, error) {
-	manager, err := a.managerFor(clusterID)
+// Subscribe registers a subscription against the selector's cluster manager.
+func (a *ClusterAdapter) Subscribe(selector streammux.Selector) (*streammux.Subscription, error) {
+	resourceSelector, err := resourceStreamSelector(selector)
 	if err != nil {
 		return nil, err
 	}
-	return manager.Subscribe(domain, scope)
+	manager, err := a.managerFor(resourceSelector.ClusterID)
+	if err != nil {
+		return nil, err
+	}
+	return manager.SubscribeSelector(resourceSelector)
 }
 
-// ResumeCluster returns buffered updates for the requested cluster manager.
-func (a *ClusterAdapter) ResumeCluster(
-	clusterID, domain, scope string,
-	since uint64,
-) ([]streammux.ServerMessage, bool) {
-	manager, err := a.managerFor(clusterID)
+// Resume returns buffered updates for the selector's cluster manager.
+func (a *ClusterAdapter) Resume(selector streammux.Selector, since uint64) ([]streammux.ServerMessage, bool) {
+	resourceSelector, err := resourceStreamSelector(selector)
 	if err != nil {
 		return nil, false
 	}
-	return manager.Resume(domain, scope, since)
+	manager, err := a.managerFor(resourceSelector.ClusterID)
+	if err != nil {
+		return nil, false
+	}
+	return manager.ResumeSelector(resourceSelector, since)
 }
 
 func (a *ClusterAdapter) managerFor(clusterID string) (*Manager, error) {

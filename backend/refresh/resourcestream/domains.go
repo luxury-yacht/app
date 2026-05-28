@@ -1,7 +1,7 @@
 package resourcestream
 
 // SupportedDomains returns the refresh domains served by the resource
-// WebSocket stream. Keep this list aligned with normalizeScopeForDomain and
+// WebSocket stream. Keep this list aligned with ParseStreamSelector and
 // the frontend resource stream domain descriptors.
 func SupportedDomains() []string {
 	return append([]string(nil), supportedDomains...)

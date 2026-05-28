@@ -16,23 +16,40 @@ func NewAdapter(manager *Manager) *Adapter {
 	return &Adapter{manager: manager}
 }
 
-// NormalizeScope ensures resource scopes follow domain-specific rules.
-func (a *Adapter) NormalizeScope(domain, scope string) (string, error) {
-	return normalizeScopeForDomain(domain, scope)
+// ParseSelector converts the websocket transport scope into the typed resource
+// stream selector used below the adapter seam.
+func (a *Adapter) ParseSelector(clusterID, domain, scope string) (streammux.Selector, error) {
+	return ParseStreamSelector(clusterID, domain, scope)
 }
 
 // Subscribe registers a resource stream subscription and exposes it to the mux.
-func (a *Adapter) Subscribe(domain, scope string) (*streammux.Subscription, error) {
+func (a *Adapter) Subscribe(selector streammux.Selector) (*streammux.Subscription, error) {
 	if a.manager == nil {
 		return nil, errors.New("resource stream manager is required")
 	}
-	return a.manager.Subscribe(domain, scope)
+	resourceSelector, err := resourceStreamSelector(selector)
+	if err != nil {
+		return nil, err
+	}
+	return a.manager.SubscribeSelector(resourceSelector)
 }
 
 // Resume returns buffered updates after the provided resume token.
-func (a *Adapter) Resume(domain, scope string, since uint64) ([]streammux.ServerMessage, bool) {
+func (a *Adapter) Resume(selector streammux.Selector, since uint64) ([]streammux.ServerMessage, bool) {
 	if a.manager == nil {
 		return nil, false
 	}
-	return a.manager.Resume(domain, scope, since)
+	resourceSelector, err := resourceStreamSelector(selector)
+	if err != nil {
+		return nil, false
+	}
+	return a.manager.ResumeSelector(resourceSelector, since)
+}
+
+func resourceStreamSelector(selector streammux.Selector) (StreamSelector, error) {
+	resourceSelector, ok := selector.(StreamSelector)
+	if !ok {
+		return StreamSelector{}, errors.New("resource stream selector is required")
+	}
+	return resourceSelector, nil
 }

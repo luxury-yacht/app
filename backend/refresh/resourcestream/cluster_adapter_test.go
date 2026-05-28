@@ -2,27 +2,35 @@ package resourcestream
 
 import "testing"
 
-func TestClusterAdapterNormalizeScope(t *testing.T) {
+func TestClusterAdapterParsesSelector(t *testing.T) {
 	adapter := NewClusterAdapter(nil)
-	scope, err := adapter.NormalizeScope("namespace-workloads", "default")
+	selector, err := adapter.ParseSelector("cluster-a", "namespace-workloads", "default")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if scope != "namespace:default" {
-		t.Fatalf("expected normalized scope, got %q", scope)
+	if selector.Cluster() != "cluster-a" || selector.DomainName() != "namespace-workloads" || selector.CanonicalScope() != "namespace:default" {
+		t.Fatalf("unexpected selector: %#v", selector)
 	}
 }
 
-func TestClusterAdapterSubscribeClusterRequiresManager(t *testing.T) {
+func TestClusterAdapterSubscribeRequiresManager(t *testing.T) {
 	adapter := NewClusterAdapter(map[string]*Manager{})
-	if _, err := adapter.SubscribeCluster("cluster-a", "pods", "namespace:default"); err == nil {
+	selector, err := adapter.ParseSelector("cluster-a", "pods", "namespace:default")
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	if _, err := adapter.Subscribe(selector); err == nil {
 		t.Fatalf("expected error for missing manager")
 	}
 }
 
-func TestClusterAdapterResumeClusterRequiresManager(t *testing.T) {
+func TestClusterAdapterResumeRequiresManager(t *testing.T) {
 	adapter := NewClusterAdapter(map[string]*Manager{})
-	if _, ok := adapter.ResumeCluster("cluster-a", "pods", "namespace:default", 1); ok {
+	selector, err := adapter.ParseSelector("cluster-a", "pods", "namespace:default")
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	if _, ok := adapter.Resume(selector, 1); ok {
 		t.Fatalf("expected resume to fail without manager")
 	}
 }

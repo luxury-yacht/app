@@ -18,9 +18,22 @@ func (stubConn) Close() error                     { return nil }
 // stubAdapter satisfies the stream Adapter interface for tests.
 type stubAdapter struct{}
 
-func (stubAdapter) NormalizeScope(_, scope string) (string, error) { return scope, nil }
-func (stubAdapter) Subscribe(_, _ string) (*Subscription, error)   { return nil, nil }
-func (stubAdapter) Resume(_, _ string, _ uint64) ([]ServerMessage, bool) {
+type stubSelector struct {
+	clusterID string
+	domain    string
+	scope     string
+}
+
+func (s stubSelector) Cluster() string        { return s.clusterID }
+func (s stubSelector) DomainName() string     { return s.domain }
+func (s stubSelector) CanonicalScope() string { return s.scope }
+
+func (stubAdapter) ParseSelector(clusterID, domain, scope string) (Selector, error) {
+	return stubSelector{clusterID: clusterID, domain: domain, scope: scope}, nil
+}
+
+func (stubAdapter) Subscribe(Selector) (*Subscription, error) { return nil, nil }
+func (stubAdapter) Resume(Selector, uint64) ([]ServerMessage, bool) {
 	return nil, false
 }
 
