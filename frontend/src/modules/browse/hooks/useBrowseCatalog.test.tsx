@@ -23,6 +23,7 @@ vi.mock('@/core/refresh', () => ({
 
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: (...args: unknown[]) => mocks.requestRefreshDomain(...args),
+  useScopedRefreshDomainLifecycle: vi.fn(),
 }));
 
 vi.mock('@/core/refresh/store', () => ({

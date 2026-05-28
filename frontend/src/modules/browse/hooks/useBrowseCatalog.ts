@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { requestRefreshDomain } from '@/core/data-access';
+import { requestRefreshDomain, useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { getMaxTableRows } from '@/core/settings/appPreferences';
@@ -122,36 +122,16 @@ export function useBrowseCatalog({
   );
   useCatalogDiagnostics(domain, diagnosticLabel);
 
-  // Enable catalog domain on mount, disable on unmount.
-  // Re-run when catalogScope changes so we enable the new scope and disable the old one.
-  const prevCatalogScopeRef = useRef<string>(catalogScope);
-  useEffect(() => {
-    const prevScope = prevCatalogScopeRef.current;
-    if (prevScope && prevScope !== catalogScope) {
-      refreshOrchestrator.setScopedDomainEnabled('catalog', prevScope, false);
-    }
-    prevCatalogScopeRef.current = catalogScope;
-    refreshOrchestrator.setScopedDomainEnabled('catalog', catalogScope, true);
-    return () => {
-      refreshOrchestrator.setScopedDomainEnabled('catalog', catalogScope, false);
-    };
-  }, [catalogScope]);
-
-  const prevMetadataScopeRef = useRef<string>(metadataScope);
-  useEffect(() => {
-    if (metadataUsesActiveScope) {
-      return;
-    }
-    const prevScope = prevMetadataScopeRef.current;
-    if (prevScope && prevScope !== metadataScope) {
-      refreshOrchestrator.setScopedDomainEnabled('catalog', prevScope, false);
-    }
-    prevMetadataScopeRef.current = metadataScope;
-    refreshOrchestrator.setScopedDomainEnabled('catalog', metadataScope, true);
-    return () => {
-      refreshOrchestrator.setScopedDomainEnabled('catalog', metadataScope, false);
-    };
-  }, [metadataScope, metadataUsesActiveScope]);
+  useScopedRefreshDomainLifecycle({
+    domain: 'catalog',
+    scope: catalogScope,
+    enabled: true,
+  });
+  useScopedRefreshDomainLifecycle({
+    domain: metadataUsesActiveScope ? null : 'catalog',
+    scope: metadataUsesActiveScope ? null : metadataScope,
+    enabled: true,
+  });
 
   // Apply query scope and refresh page 0 when the query changes
   const previousScopeIdentityRef = useRef(plan.scopeIdentityKey);

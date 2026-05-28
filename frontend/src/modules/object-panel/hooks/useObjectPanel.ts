@@ -9,7 +9,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { useDockablePanelContext } from '@ui/dockable';
-import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
+import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import {
   assertObjectRefHasRequiredIdentity,
   type KubernetesObjectReference,

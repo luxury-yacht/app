@@ -26,7 +26,7 @@ import {
   appendWorkloadTokens,
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,

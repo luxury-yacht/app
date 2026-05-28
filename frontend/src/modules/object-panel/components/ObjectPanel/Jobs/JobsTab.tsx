@@ -23,7 +23,7 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useObjectPanelResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import { useObjectPanelResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,

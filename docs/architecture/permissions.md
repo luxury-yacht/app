@@ -254,7 +254,8 @@ Cluster-scoped resources (Nodes, PVs, StorageClasses, ClusterRoles, etc.) are ro
 | `frontend/src/core/capabilities/hooks.ts`               | `useCapabilities()` hook (ad-hoc queries), `useCapabilityDiagnostics()` hook                                                                                  |
 | `frontend/src/core/capabilities/bootstrap.ts`           | Thin delegation layer — `initializeUserPermissionsBootstrap`, `useUserPermissions`, `getPermissionKey`                                                        |
 | `frontend/src/shared/actions/objectActionPermissionMatrix.ts` | UI-visible mutating action matrix mapping action ids to frontend permission descriptors, Wails methods, backend checks, and denied reasons |
-| `frontend/src/shared/constants/builtinGroupVersions.ts` | `resolveBuiltinGroupVersion(kind)` — single source of truth for built-in K8s Kind → GroupVersion. Plus `parseApiVersion` / `formatBuiltinApiVersion` helpers. |
+| `backend/objectcatalog/builtin-resource-identities.json` | Backend-owned source of truth for built-in K8s Kind → GroupVersion/Resource/scope. |
+| `frontend/src/shared/constants/builtinGroupVersions.ts` | `resolveBuiltinGroupVersion(kind)` — frontend adapter over the backend-owned built-in identity contract. Plus `parseApiVersion` / `formatBuiltinApiVersion` helpers. |
 
 ### How `QueryPermissions` works
 
@@ -335,7 +336,7 @@ ${clusterId}|${group}/${version}|${resourceKind}|${verb}|${namespace_or_'cluster
 - Null namespace becomes the literal string `'cluster'`. Empty subresource becomes `''`.
 - Empty `group` (for core resources like Pods, Services) renders as a leading slash: `|/v1|pod|...`. Two core resources can't share a Kind, but the segment format stays uniform.
 
-When the frontend caller doesn't supply `group`/`version`, `resolvePermissionGVK` auto-resolves from the frontend built-in lookup table (so `resolveBuiltinGroupVersion('Pod')` returns `{ group: '', version: 'v1' }`). CRD callers supply explicit values — the same group/version they'd use to write an apiVersion string.
+When the frontend caller doesn't supply `group`/`version`, `resolvePermissionGVK` auto-resolves from the backend-owned built-in identity contract via the frontend adapter (so `resolveBuiltinGroupVersion('Pod')` returns `{ group: '', version: 'v1' }`). CRD callers supply explicit values — the same group/version they'd use to write an apiVersion string.
 
 The GVK segment was added as part of the kind-only-objects fix. Before it, the cache was keyed by `resourceKind` alone, and two CRDs from different groups sharing a Kind would overwrite each other's permission entries. A user viewing an ACK `DBInstance` might see a delete button reflecting the permission the user had for the db-operator `DBInstance` in the same namespace — security-relevant.
 
@@ -391,7 +392,7 @@ cluster state. For example:
 
 ### Guidelines for the UI permission system
 
-**Adding permissions for a new built-in resource kind** — Add a `PermissionSpec` entry to the appropriate list in `permissionSpecs.ts`. Leave `group` and `version` off; `resolvePermissionGVK` will auto-resolve from `resolveBuiltinGroupVersion(kind)`. If the kind is brand new, also add it to the `BUILTIN_GROUP_VERSIONS` table in `frontend/src/shared/constants/builtinGroupVersions.ts`.
+**Adding permissions for a new built-in resource kind** — Add a `PermissionSpec` entry to the appropriate list in `permissionSpecs.ts`. Leave `group` and `version` off; `resolvePermissionGVK` will auto-resolve from `resolveBuiltinGroupVersion(kind)`. If the kind is brand new, add it to `backend/objectcatalog/builtin-resource-identities.json` and `builtinResourceCatalog` in `backend/objectcatalog/identity.go`; the parity tests keep the frontend adapter aligned.
 
 **Adding permissions for a CRD** — CRD specs MUST carry explicit `group` and `version`. The backend's strict resolver hard-errors on missing `Version`. In practice, CRD-scoped views use `queryKindPermissions(kind, namespace, clusterId, group, version)` rather than static `PermissionSpec` entries — see `NsViewCustom.getContextMenuItems` and `ClusterViewCustom.getContextMenuItems` for the canonical pattern.
 

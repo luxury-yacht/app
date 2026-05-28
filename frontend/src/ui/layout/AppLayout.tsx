@@ -16,7 +16,7 @@ import { DebugOverlay } from '@ui/layout/DebugOverlay';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
+import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { eventBus } from '@/core/events';
 // Content Components
 import AppHeader from '@ui/layout/AppHeader';

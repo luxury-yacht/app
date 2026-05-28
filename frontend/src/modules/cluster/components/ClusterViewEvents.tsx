@@ -20,7 +20,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import { useClusterResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import {
   canResolveEventObjectReference,
   resolveEventObjectReference,

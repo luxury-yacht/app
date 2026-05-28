@@ -4,7 +4,36 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { parseApiVersion } from './builtinGroupVersions';
+import builtinResourceIdentityContract from '@builtin-resource-identities';
+
+import { parseApiVersion, resolveBuiltinGroupVersion } from './builtinGroupVersions';
+
+describe('resolveBuiltinGroupVersion', () => {
+  it('resolves every backend-owned built-in resource identity', () => {
+    const latestByKind = new Map<string, { group: string; version: string }>();
+    for (const resource of builtinResourceIdentityContract.resources) {
+      latestByKind.set(resource.kind, {
+        group: resource.group,
+        version: resource.version,
+      });
+    }
+    for (const [kind, groupVersion] of latestByKind) {
+      expect(resolveBuiltinGroupVersion(kind)).toEqual(groupVersion);
+    }
+  });
+
+  it('uses the newest backend-owned default for built-ins with multiple versions', () => {
+    expect(resolveBuiltinGroupVersion('HorizontalPodAutoscaler')).toEqual({
+      group: 'autoscaling',
+      version: 'v2',
+    });
+  });
+
+  it('resolves kinds case-insensitively', () => {
+    expect(resolveBuiltinGroupVersion('pod')).toEqual({ group: '', version: 'v1' });
+    expect(resolveBuiltinGroupVersion('deployment')).toEqual({ group: 'apps', version: 'v1' });
+  });
+});
 
 describe('parseApiVersion', () => {
   it('returns an empty object for null/undefined/empty input', () => {

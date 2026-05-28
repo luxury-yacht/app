@@ -58,9 +58,13 @@ const {
   };
 });
 
-vi.mock('@/core/data-access', () => ({
-  requestRefreshDomain: (...args: unknown[]) => dataAccessMocks.requestRefreshDomain(...args),
-}));
+vi.mock('@/core/data-access', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    requestRefreshDomain: (...args: unknown[]) => dataAccessMocks.requestRefreshDomain(...args),
+  };
+});
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: orchestrator,

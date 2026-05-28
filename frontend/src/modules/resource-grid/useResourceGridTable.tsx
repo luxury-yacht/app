@@ -21,7 +21,6 @@ import type {
   ResourceGridTableResult,
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
-
 export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
   viewId,
   data,

@@ -34,6 +34,7 @@ var builtinResourceCatalog = []resourceDescriptor{
 	builtinDescriptor("", "v1", "Event", "events", true),
 	builtinDescriptor("", "v1", "LimitRange", "limitranges", true),
 	builtinDescriptor("", "v1", "ResourceQuota", "resourcequotas", true),
+	builtinDescriptor("", "v1", "Endpoints", "endpoints", true),
 	builtinDescriptor("", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", true),
 	builtinDescriptor("", "v1", "Namespace", "namespaces", false),
 	builtinDescriptor("", "v1", "Node", "nodes", false),
@@ -73,9 +74,14 @@ var builtinResourceCatalog = []resourceDescriptor{
 	builtinDescriptor("policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets", true),
 
 	builtinDescriptor("storage.k8s.io", "v1", "StorageClass", "storageclasses", false),
+	builtinDescriptor("storage.k8s.io", "v1", "CSIDriver", "csidrivers", false),
+	builtinDescriptor("storage.k8s.io", "v1", "CSINode", "csinodes", false),
+	builtinDescriptor("storage.k8s.io", "v1", "VolumeAttachment", "volumeattachments", false),
 
 	builtinDescriptor("admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", false),
 	builtinDescriptor("admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", false),
+
+	builtinDescriptor("coordination.k8s.io", "v1", "Lease", "leases", true),
 
 	builtinDescriptor("apiextensions.k8s.io", "v1", "CustomResourceDefinition", "customresourcedefinitions", false),
 }

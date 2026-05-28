@@ -19,7 +19,7 @@ import React, {
 } from 'react';
 import { errorHandler } from '@/utils/errorHandler';
 import { type ResourceDataReturn } from '@hooks/resources';
-import { requestRefreshDomain } from '@/core/data-access';
+import { requestRefreshDomain, useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import type {
   NamespaceAutoscalingSnapshotPayload,
   NamespaceAutoscalingSummary,
@@ -118,8 +118,6 @@ const PERMISSIONS_BY_RESOURCE: Partial<Record<NamespaceViewType, PermissionSpecL
   events: [EVENT_PERMISSIONS],
 };
 
-const PRESERVE_SCOPED_STATE = { preserveState: true };
-
 // Filter merged namespace payloads to the active cluster tab.
 const filterByClusterId = <T extends { clusterId?: string | null }>(
   items: T[] | null | undefined,
@@ -202,6 +200,13 @@ const useNamespacePodsResource = (
 
   const scopedStates = useRefreshScopedDomainStates('pods');
   const domainState = scope ? scopedStates[scope] : undefined;
+
+  useScopedRefreshDomainLifecycle({
+    domain: 'pods',
+    scope,
+    enabled,
+    preserveState: true,
+  });
 
   const refresh = useCallback(async () => {
     if (!enabled || !scope) {
@@ -315,6 +320,13 @@ function useRefreshBackedResource<T>(
   );
   const domainState = useRefreshScopedDomain(domain, namespaceScope ?? '');
   const domainData = domainState.data;
+
+  useScopedRefreshDomainLifecycle({
+    domain,
+    scope: namespaceScope,
+    enabled,
+    preserveState: true,
+  });
 
   const load = useCallback(
     async (_showSpinner: boolean = true) => {
@@ -737,74 +749,6 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       selectedNamespaceClusterId: currentNamespace ? (namespaceClusterId ?? undefined) : undefined,
     });
   }, [currentNamespace, isNamespaceView, namespaceClusterId]);
-
-  useEffect(() => {
-    const namespaceScope = normalizeNamespaceScope(currentNamespace, namespaceClusterId);
-    const entries = Object.entries(DOMAIN_BY_RESOURCE) as Array<
-      [NamespaceViewType, RefreshDomain | null]
-    >;
-
-    entries.forEach(([resourceKey, domain]) => {
-      if (!domain) {
-        return;
-      }
-
-      const shouldEnable =
-        Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === resourceKey;
-      if (namespaceScope) {
-        refreshOrchestrator.setScopedDomainEnabled(
-          domain,
-          namespaceScope,
-          shouldEnable,
-          PRESERVE_SCOPED_STATE
-        );
-      }
-
-      if (!shouldEnable && !currentNamespace) {
-        refreshOrchestrator.resetDomain(domain);
-      }
-    });
-    if (namespaceScope) {
-      refreshOrchestrator.setScopedDomainEnabled(
-        'pods',
-        namespaceScope,
-        podsEnabled,
-        PRESERVE_SCOPED_STATE
-      );
-    }
-  }, [
-    activeNamespaceView,
-    currentNamespace,
-    isNamespaceView,
-    podsEnabled,
-    pods,
-    namespaceClusterId,
-  ]);
-
-  useEffect(() => {
-    const domains = Object.values(DOMAIN_BY_RESOURCE).filter(Boolean) as RefreshDomain[];
-    // Capture scope for cleanup closure.
-    const cleanupScope = normalizeNamespaceScope(currentNamespace, namespaceClusterId);
-
-    return () => {
-      if (cleanupScope) {
-        domains.forEach((domain) => {
-          refreshOrchestrator.setScopedDomainEnabled(
-            domain,
-            cleanupScope,
-            false,
-            PRESERVE_SCOPED_STATE
-          );
-        });
-        refreshOrchestrator.setScopedDomainEnabled(
-          'pods',
-          cleanupScope,
-          false,
-          PRESERVE_SCOPED_STATE
-        );
-      }
-    };
-  }, [currentNamespace, namespaceClusterId]);
 
   useEffect(() => {
     const nextNamespace = propNamespace ?? null;

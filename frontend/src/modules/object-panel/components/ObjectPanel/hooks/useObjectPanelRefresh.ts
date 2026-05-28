@@ -7,8 +7,12 @@
  */
 import { useCallback, useEffect, useMemo } from 'react';
 
-import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
-import { refreshManager, refreshOrchestrator } from '@/core/refresh';
+import {
+  requestRefreshDomain,
+  useScopedRefreshDomainLifecycle,
+  type DataRequestReason,
+} from '@/core/data-access';
+import { refreshManager } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
@@ -85,24 +89,12 @@ export const useObjectPanelRefresh = ({
     [detailScope]
   );
 
-  useEffect(() => {
-    if (!detailScope) {
-      return;
-    }
-
-    const enabled = isOpen && !resourceDeleted;
-    refreshOrchestrator.setScopedDomainEnabled('object-details', detailScope, enabled);
-    return () => {
-      // Stop refreshing this scope but preserve the cached snapshot so a
-      // remount (e.g. cluster switch round-trip) renders instantly from
-      // cache while the next fetch catches up. Eviction happens in
-      // ObjectPanelStateContext.closePanel when the user actually closes
-      // the panel — see Tier 1 of the responsiveness fix.
-      refreshOrchestrator.setScopedDomainEnabled('object-details', detailScope, false, {
-        preserveState: true,
-      });
-    };
-  }, [detailScope, isOpen, resourceDeleted]);
+  useScopedRefreshDomainLifecycle({
+    domain: 'object-details',
+    scope: detailScope,
+    enabled: isOpen && !resourceDeleted,
+    preserveState: true,
+  });
 
   const detailRefresherName = useMemo(
     () => getObjectDetailsRefresherName(objectKind),

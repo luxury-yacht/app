@@ -128,6 +128,7 @@ Do not pass kind-only, name-only, or namespace/name-only references. Backend
 GVK/GVR/scope resolution goes through the object catalog's `ResourceResolver`;
 its built-in seed list lives in `backend/objectcatalog/identity.go` and hydrates
 from discovery and CRDs. Frontend built-in permission/view keys use
+`backend/objectcatalog/builtin-resource-identities.json`, consumed by
 `frontend/src/shared/constants/builtinGroupVersions.ts`. For CRDs, thread the
 actual group/version from discovery, owner references, HPA targets, event
 involved objects, CRDs, Helm manifests, or the object catalog.

@@ -1,5 +1,5 @@
 /**
- * frontend/src/core/contexts/ObjectPanelStateContext.tsx
+ * frontend/src/modules/object-panel/contexts/ObjectPanelStateContext.tsx
  *
  * Manages object panel state for multi-tab object panels.
  * Each opened object gets its own tab with a unique panelId derived from its identity.

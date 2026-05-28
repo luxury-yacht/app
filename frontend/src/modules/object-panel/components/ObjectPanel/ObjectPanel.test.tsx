@@ -84,7 +84,7 @@ const defaultClusterId = 'alpha:ctx';
 // The active tab map lives in React state so calling setObjectPanelActiveTab
 // re-renders the consuming ObjectPanel — matching the real provider's
 // useState-backed updates that trigger a render when the tab changes.
-vi.mock('@/core/contexts/ObjectPanelStateContext', () => ({
+vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
   useObjectPanelState: () => {
     const [activeTabs, setActiveTabs] = useState<Map<string, string>>(() => new Map());
     const getObjectPanelActiveTab = useCallback(
@@ -418,7 +418,8 @@ describe('ObjectPanel tab availability', () => {
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'object-details',
       detailScope,
-      true
+      true,
+      { preserveState: true }
     );
 
     await act(async () => {

@@ -215,10 +215,10 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
-vi.mock('@/core/contexts/ObjectPanelStateContext', async () => {
-  const actual = await vi.importActual<typeof import('@/core/contexts/ObjectPanelStateContext')>(
-    '@/core/contexts/ObjectPanelStateContext'
-  );
+vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', async () => {
+  const actual = await vi.importActual<
+    typeof import('@modules/object-panel/contexts/ObjectPanelStateContext')
+  >('@modules/object-panel/contexts/ObjectPanelStateContext');
   return {
     ...actual,
     useObjectPanelState: () => ({

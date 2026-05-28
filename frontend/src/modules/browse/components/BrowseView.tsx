@@ -42,7 +42,7 @@ import {
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
-import { useQueryResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 
 const VIRTUALIZATION_THRESHOLD = 80;
 

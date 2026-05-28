@@ -21,7 +21,7 @@ import React, {
   ReactNode,
 } from 'react';
 import type { ResourceDataReturn } from '@hooks/resources';
-import { requestRefreshDomain } from '@/core/data-access';
+import { requestRefreshDomain, useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -212,9 +212,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     },
     []
   );
-
-  const defaultRefresher = activeView ? clusterViewToRefresher[activeView] : undefined;
-  const activeClusterRefresherRef = useRef<ClusterRefresherName | null>(defaultRefresher ?? null);
 
   const { selectedClusterId } = useKubeconfig();
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
@@ -502,52 +499,37 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     [clusterScope, clusterEventsScope]
   );
 
+  const activeClusterDomain = useMemo(() => {
+    const refresher = activeResourceType ? clusterViewToRefresher[activeResourceType] : null;
+    return refresher ? (CLUSTER_REFRESHER_TO_DOMAIN[refresher] ?? null) : null;
+  }, [activeResourceType]);
+  const activeClusterScope = activeClusterDomain ? getScopeForDomain(activeClusterDomain) : null;
+  const activeClusterDomainEnabled = Boolean(
+    activeClusterDomain && !domainPermissionDenied[activeClusterDomain]
+  );
+
+  useScopedRefreshDomainLifecycle({
+    domain: activeClusterDomain,
+    scope: activeClusterScope,
+    enabled: activeClusterDomainEnabled,
+    preserveState: true,
+  });
+
   useEffect(() => {
-    const nextRefresher = activeResourceType ? clusterViewToRefresher[activeResourceType] : null;
-    const previousRefresher = activeClusterRefresherRef.current;
-
-    if (previousRefresher && previousRefresher !== nextRefresher) {
-      const previousDomain = CLUSTER_REFRESHER_TO_DOMAIN[previousRefresher];
-      if (previousDomain) {
-        const scope = getScopeForDomain(previousDomain);
-        refreshOrchestrator.setScopedDomainEnabled(
-          previousDomain,
-          scope,
-          false,
-          PRESERVE_SCOPED_STATE
-        );
-      }
+    if (!activeClusterDomain || !activeClusterScope || !activeClusterDomainEnabled) {
+      return;
     }
-
-    if (nextRefresher) {
-      const nextDomain = CLUSTER_REFRESHER_TO_DOMAIN[nextRefresher];
-      if (!nextDomain) {
-        activeClusterRefresherRef.current = null;
-        return;
-      }
-      const scope = getScopeForDomain(nextDomain);
-      if (domainPermissionDenied[nextDomain]) {
-        refreshOrchestrator.setScopedDomainEnabled(nextDomain, scope, false, undefined);
-        activeClusterRefresherRef.current = null;
-        return;
-      }
-      // Allow fetches even while permissions are pending to avoid delaying the view.
-
-      refreshOrchestrator.setScopedDomainEnabled(nextDomain, scope, true, PRESERVE_SCOPED_STATE);
-      const state = domainStateRef.current[nextDomain];
-      if (state && !state.data && state.status === 'idle') {
-        // fetchScopedDomain handles streaming domains internally — it will
-        // start a stream if appropriate, or fall back to a snapshot fetch.
-        void requestRefreshDomain({
-          domain: nextDomain,
-          scope,
-          reason: 'startup',
-        });
-      }
+    const state = domainStateRef.current[activeClusterDomain];
+    if (state && !state.data && state.status === 'idle') {
+      // fetchScopedDomain handles streaming domains internally — it will
+      // start a stream if appropriate, or fall back to a snapshot fetch.
+      void requestRefreshDomain({
+        domain: activeClusterDomain,
+        scope: activeClusterScope,
+        reason: 'startup',
+      });
     }
-
-    activeClusterRefresherRef.current = nextRefresher ?? null;
-  }, [activeResourceType, domainPermissionDenied, getScopeForDomain]);
+  }, [activeClusterDomain, activeClusterDomainEnabled, activeClusterScope]);
 
   useEffect(() => {
     // Capture scope values for cleanup to avoid stale closure issues.
@@ -570,7 +552,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     };
 
     const handleKubeconfigChanged = () => {
-      activeClusterRefresherRef.current = null;
       setActiveResourceTypeWithCallback(null);
     };
 

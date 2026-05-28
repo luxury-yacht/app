@@ -19,7 +19,7 @@ import { DockablePanel, useDockablePanelContext } from '@ui/dockable';
 import { getDefaultObjectPanelPosition } from '@core/settings/appPreferences';
 import { errorHandler } from '@utils/errorHandler';
 import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';
-import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
+import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { queryNamespacePermissions } from '@/core/capabilities';
 import {
   clearRequestedObjectPanelTab,

@@ -61,6 +61,10 @@ export default defineConfig({
         __dirname,
         '../backend/objectyaml/field-policy-contract.json'
       ),
+      '@builtin-resource-identities': path.resolve(
+        __dirname,
+        '../backend/objectcatalog/builtin-resource-identities.json'
+      ),
     },
   },
   test: {

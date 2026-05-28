@@ -7,7 +7,10 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ObjectPanelStateProvider, objectPanelId } from '@/core/contexts/ObjectPanelStateContext';
+import {
+  ObjectPanelStateProvider,
+  objectPanelId,
+} from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
 
 // Mock dockable panel context (replaces the old useDockablePanelState mock).

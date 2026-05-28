@@ -28,6 +28,24 @@ export const OBJECT_ACTION_IDS = {
 
 export type ObjectActionId = (typeof OBJECT_ACTION_IDS)[keyof typeof OBJECT_ACTION_IDS];
 
+export const MUTATING_OBJECT_ACTION_IDS = [
+  OBJECT_ACTION_IDS.restart,
+  OBJECT_ACTION_IDS.rollback,
+  OBJECT_ACTION_IDS.scale,
+  OBJECT_ACTION_IDS.scaleToZero,
+  OBJECT_ACTION_IDS.resumeFromZero,
+  OBJECT_ACTION_IDS.triggerNow,
+  OBJECT_ACTION_IDS.suspend,
+  OBJECT_ACTION_IDS.resume,
+  OBJECT_ACTION_IDS.portForward,
+  OBJECT_ACTION_IDS.cordon,
+  OBJECT_ACTION_IDS.uncordon,
+  OBJECT_ACTION_IDS.drain,
+  OBJECT_ACTION_IDS.delete,
+] as const satisfies readonly ObjectActionId[];
+
+export type MutatingObjectActionId = (typeof MUTATING_OBJECT_ACTION_IDS)[number];
+
 const OBJECT_ACTION_LABELS: Record<ObjectActionId, string> = {
   [OBJECT_ACTION_IDS.viewDetails]: 'Open Details',
   [OBJECT_ACTION_IDS.viewMap]: 'Open Map',

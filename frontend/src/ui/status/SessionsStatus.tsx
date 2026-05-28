@@ -22,7 +22,7 @@ import {
   getRequestedObjectPanelTab,
   requestObjectPanelTab,
 } from '@modules/object-panel/objectPanelTabRequests';
-import { objectPanelId } from '@/core/contexts/ObjectPanelStateContext';
+import { objectPanelId } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { useRuntimeOperationStatus, type ShellSessionInfo } from './runtimeOperationStatus';
 import '@modules/port-forward/PortForwardsPanel.css';

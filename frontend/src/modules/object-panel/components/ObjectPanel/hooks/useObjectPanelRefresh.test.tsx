@@ -151,7 +151,8 @@ describe('useObjectPanelRefresh', () => {
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'object-details',
       'team-a:deployment:api',
-      true
+      true,
+      { preserveState: true }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',

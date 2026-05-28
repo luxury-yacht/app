@@ -1,5 +1,5 @@
 /**
- * frontend/src/core/contexts/ObjectPanelStateContext.test.tsx
+ * frontend/src/modules/object-panel/contexts/ObjectPanelStateContext.test.tsx
  *
  * Test suite for ObjectPanelStateContext.
  * Ensures object panel state is scoped per cluster tab.
@@ -9,7 +9,10 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ObjectPanelStateProvider, useObjectPanelState } from './ObjectPanelStateContext';
+import {
+  ObjectPanelStateProvider,
+  useObjectPanelState,
+} from '@modules/object-panel/contexts/ObjectPanelStateContext';
 
 const clearPanelStateMock = vi.fn();
 const handoffLayoutBeforeCloseMock = vi.fn();

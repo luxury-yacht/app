@@ -63,7 +63,7 @@ vi.mock('@modules/object-panel/objectPanelTabRequests', () => ({
   requestObjectPanelTab: requestObjectPanelTabMock,
 }));
 
-vi.mock('@/core/contexts/ObjectPanelStateContext', () => ({
+vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
   objectPanelId: objectPanelIdMock,
 }));
 

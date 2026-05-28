@@ -28,7 +28,7 @@ import {
 } from '@/utils/resourceCalculations';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
-import { useClusterResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,

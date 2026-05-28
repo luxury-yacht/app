@@ -32,7 +32,10 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 // Import specialized contexts
 import { SidebarStateProvider, useSidebarState } from './SidebarStateContext';
-import { ObjectPanelStateProvider, useObjectPanelState } from './ObjectPanelStateContext';
+import {
+  ObjectPanelStateProvider,
+  useObjectPanelState,
+} from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { ModalStateProvider, useModalState } from './ModalStateContext';
 
 // Re-export types for backwards compatibility

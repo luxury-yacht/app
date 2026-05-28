@@ -3,14 +3,15 @@
  *
  * Lookup table from built-in Kubernetes Kind → GroupVersion.
  *
- * Built-in kinds (Pod, Deployment, etc.) are unambiguous: a given Kind
- * string uniquely identifies its API group and version. Custom resources,
- * in contrast, can share a Kind across multiple groups (the
- * kind-only-objects bug) and must carry their apiGroup/apiVersion from the
- * data source. Use this lookup at `openWithObject` call sites that
- * construct a reference from a built-in resource type, so the resulting
- * `KubernetesObjectReference` carries `group`/`version` consistently with
- * BrowseView (which reads them off `CatalogItem`) and CommandPalette.
+ * The inventory is owned by the backend object catalog contract. Built-in
+ * kinds (Pod, Deployment, etc.) are unambiguous: a given Kind string uniquely
+ * identifies its API group and version. Custom resources, in contrast, can
+ * share a Kind across multiple groups (the kind-only-objects bug) and must
+ * carry their apiGroup/apiVersion from the data source. Use this lookup at
+ * `openWithObject` call sites that construct a reference from a built-in
+ * resource type, so the resulting `KubernetesObjectReference` carries
+ * `group`/`version` consistently with BrowseView (which reads them off
+ * `CatalogItem`) and CommandPalette.
  *
  * Why this matters even though built-ins can't collide:
  *
@@ -24,6 +25,8 @@
  *     built-ins and the behavior is uniform.
  */
 
+import builtinResourceIdentityContract from '@builtin-resource-identities';
+
 export interface BuiltinGroupVersion {
   group: string;
   version: string;
@@ -34,81 +37,18 @@ export interface BuiltinGroupVersion {
  * PascalCase kind name (matching `metav1.TypeMeta.Kind`). Lookups are
  * case-insensitive — see `resolveBuiltinGroupVersion`.
  *
- * Only includes kinds that the app actually handles via a built-in view
- * component. Extensible — add new entries alongside new views.
+ * The backend object catalog is the source of truth for the resource list.
+ * When a kind has multiple built-in versions, the last entry in the contract is
+ * the preferred frontend default for kind-only callers.
  */
-const BUILTIN_KIND_GROUP_VERSIONS: Record<string, BuiltinGroupVersion> = {
-  // core/v1
-  Pod: { group: '', version: 'v1' },
-  Service: { group: '', version: 'v1' },
-  ConfigMap: { group: '', version: 'v1' },
-  Secret: { group: '', version: 'v1' },
-  Namespace: { group: '', version: 'v1' },
-  Node: { group: '', version: 'v1' },
-  PersistentVolume: { group: '', version: 'v1' },
-  PersistentVolumeClaim: { group: '', version: 'v1' },
-  ServiceAccount: { group: '', version: 'v1' },
-  Event: { group: '', version: 'v1' },
-  LimitRange: { group: '', version: 'v1' },
-  ResourceQuota: { group: '', version: 'v1' },
-  Endpoints: { group: '', version: 'v1' },
-
-  // apps/v1
-  Deployment: { group: 'apps', version: 'v1' },
-  StatefulSet: { group: 'apps', version: 'v1' },
-  DaemonSet: { group: 'apps', version: 'v1' },
-  ReplicaSet: { group: 'apps', version: 'v1' },
-
-  // batch/v1
-  Job: { group: 'batch', version: 'v1' },
-  CronJob: { group: 'batch', version: 'v1' },
-
-  // autoscaling/v2
-  HorizontalPodAutoscaler: { group: 'autoscaling', version: 'v2' },
-
-  // networking.k8s.io/v1
-  Ingress: { group: 'networking.k8s.io', version: 'v1' },
-  IngressClass: { group: 'networking.k8s.io', version: 'v1' },
-  NetworkPolicy: { group: 'networking.k8s.io', version: 'v1' },
-
-  // gateway.networking.k8s.io/v1
-  GatewayClass: { group: 'gateway.networking.k8s.io', version: 'v1' },
-  Gateway: { group: 'gateway.networking.k8s.io', version: 'v1' },
-  ListenerSet: { group: 'gateway.networking.k8s.io', version: 'v1' },
-  HTTPRoute: { group: 'gateway.networking.k8s.io', version: 'v1' },
-  GRPCRoute: { group: 'gateway.networking.k8s.io', version: 'v1' },
-  TLSRoute: { group: 'gateway.networking.k8s.io', version: 'v1' },
-  BackendTLSPolicy: { group: 'gateway.networking.k8s.io', version: 'v1' },
-  ReferenceGrant: { group: 'gateway.networking.k8s.io', version: 'v1' },
-
-  // rbac.authorization.k8s.io/v1
-  Role: { group: 'rbac.authorization.k8s.io', version: 'v1' },
-  RoleBinding: { group: 'rbac.authorization.k8s.io', version: 'v1' },
-  ClusterRole: { group: 'rbac.authorization.k8s.io', version: 'v1' },
-  ClusterRoleBinding: { group: 'rbac.authorization.k8s.io', version: 'v1' },
-
-  // policy/v1
-  PodDisruptionBudget: { group: 'policy', version: 'v1' },
-
-  // storage.k8s.io/v1
-  StorageClass: { group: 'storage.k8s.io', version: 'v1' },
-  CSIDriver: { group: 'storage.k8s.io', version: 'v1' },
-  CSINode: { group: 'storage.k8s.io', version: 'v1' },
-  VolumeAttachment: { group: 'storage.k8s.io', version: 'v1' },
-
-  // admissionregistration.k8s.io/v1
-  MutatingWebhookConfiguration: { group: 'admissionregistration.k8s.io', version: 'v1' },
-  ValidatingWebhookConfiguration: { group: 'admissionregistration.k8s.io', version: 'v1' },
-
-  // apiextensions.k8s.io/v1
-  CustomResourceDefinition: { group: 'apiextensions.k8s.io', version: 'v1' },
-
-  // discovery.k8s.io/v1
-  EndpointSlice: { group: 'discovery.k8s.io', version: 'v1' },
-
-  // coordination.k8s.io/v1
-  Lease: { group: 'coordination.k8s.io', version: 'v1' },
-};
+const BUILTIN_KIND_GROUP_VERSIONS: Record<string, BuiltinGroupVersion> =
+  builtinResourceIdentityContract.resources.reduce<Record<string, BuiltinGroupVersion>>(
+    (acc, resource) => {
+      acc[resource.kind] = { group: resource.group, version: resource.version };
+      return acc;
+    },
+    {}
+  );
 
 /**
  * Case-insensitive lookup of the built-in GroupVersion for a kind. Returns

@@ -14,7 +14,7 @@ The dockable system described here is implemented in:
 - Object panel integration points in:
   - `frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx`
   - `frontend/src/modules/object-panel/hooks/useObjectPanel.ts`
-  - `frontend/src/core/contexts/ObjectPanelStateContext.tsx`
+  - `frontend/src/modules/object-panel/contexts/ObjectPanelStateContext.tsx`
 
 `DockablePanel`, `DockableTabBar`, `useDockablePanelState`, and dockable context hooks must be used under `DockablePanelProvider`.
 

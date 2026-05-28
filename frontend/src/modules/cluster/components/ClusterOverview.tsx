@@ -44,7 +44,10 @@ import { buildConnectivityPresentation } from '@/core/connection/connectivityPre
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { formatAge } from '@/utils/ageFormatter';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { objectPanelId, useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
+import {
+  objectPanelId,
+  useObjectPanelState,
+} from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import type { RecentEventEntry } from '@/core/refresh/types';
 import {
   canResolveEventObjectReference,
