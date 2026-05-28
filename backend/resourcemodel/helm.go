@@ -242,6 +242,7 @@ func ResolveHelmManifestResourceIdentityWithResolver(ctx context.Context, resolv
 	}
 	if namespaceExplicit && namespace != "" {
 		identity.Scope = ResourceScopeNamespaced
+		identity.Openable = true
 	}
 	return identity
 }

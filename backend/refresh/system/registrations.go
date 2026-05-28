@@ -45,15 +45,18 @@ type domainMeta struct {
 
 // registerDomains registers refresh domains in a fixed order to preserve behavior.
 // The checker is used for a universal runtime permission check before each registration.
-func registerDomains(gate *permissionGate, checker *permissions.Checker, registrations []domainRegistration) error {
-	return runDomainRegistrations(gate, checker, registrations)
+func registerDomains(ctx context.Context, gate *permissionGate, checker *permissions.Checker, registrations []domainRegistration) error {
+	return runDomainRegistrations(ctx, gate, checker, registrations)
 }
 
 // runDomainRegistrations applies the registration table in-order.
 // Before each domain's gate logic, it checks runtime permissions through the
 // shared domain access adapter. If denied, a permission-denied placeholder is
 // registered instead of proceeding with the normal registration.
-func runDomainRegistrations(gate *permissionGate, checker *permissions.Checker, registrations []domainRegistration) error {
+func runDomainRegistrations(ctx context.Context, gate *permissionGate, checker *permissions.Checker, registrations []domainRegistration) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	access := domainpermissions.NewRuntimeAccess()
 	for _, registration := range registrations {
 		if registration.skipIf != nil && registration.skipIf() {
@@ -66,7 +69,7 @@ func runDomainRegistrations(gate *permissionGate, checker *permissions.Checker, 
 		}
 
 		if checker != nil {
-			decision, err := access.Check(context.Background(), registration.name, checker)
+			decision, err := access.Check(ctx, registration.name, checker)
 			if err == nil && !decision.Allowed {
 				if regErr := snapshot.RegisterPermissionDeniedDomain(gate.registry, registration.name, decision.DeniedReason); regErr != nil {
 					return regErr
@@ -186,6 +189,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 
 	yamlProvider, yamlOK := deps.cfg.ObjectDetailsProvider.(snapshot.ObjectYAMLProvider)
 	helmProvider, helmOK := deps.cfg.ObjectDetailsProvider.(snapshot.HelmContentProvider)
+	runtimeAccess := domainpermissions.NewRuntimeAccess()
 
 	return []domainRegistration{
 		directRegistration("namespaces", func() error {
@@ -282,7 +286,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					},
 				)
 			},
-			deniedReason: "cluster configuration resources",
+			deniedReason: runtimeDeniedReason(runtimeAccess, "cluster-config"),
 		}),
 
 		listWatchRegistration(applyListWatchMeta(listWatchDomainConfig{
@@ -333,7 +337,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					},
 				)
 			},
-			deniedReason: "rbac.authorization.k8s.io",
+			deniedReason: runtimeDeniedReason(runtimeAccess, "cluster-rbac"),
 		}),
 
 		listWatchRegistration(listWatchDomainConfig{
@@ -383,7 +387,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					},
 				)
 			},
-			deniedReason: "workload resources",
+			deniedReason: runtimeDeniedReason(runtimeAccess, "namespace-workloads"),
 		}),
 		directRegistration("namespace-autoscaling", func() error {
 			return snapshot.RegisterNamespaceAutoscalingDomain(
@@ -411,7 +415,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					},
 				)
 			},
-			deniedReason: "core/configmaps,secrets",
+			deniedReason: runtimeDeniedReason(runtimeAccess, "namespace-config"),
 		}),
 
 		withRequire(listRegistration(applyListMeta(listDomainConfig{
@@ -480,7 +484,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					},
 				)
 			},
-			deniedReason: "network resources",
+			deniedReason: runtimeDeniedReason(runtimeAccess, "namespace-network"),
 		}),
 		listRegistration(listDomainConfig{
 			name:          "namespace-quotas",
@@ -504,7 +508,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					},
 				)
 			},
-			deniedReason: "quota resources",
+			deniedReason: runtimeDeniedReason(runtimeAccess, "namespace-quotas"),
 		}),
 
 		listRegistration(listDomainConfig{
@@ -529,7 +533,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					},
 				)
 			},
-			deniedReason: "rbac.authorization.k8s.io/roles,rolebindings,serviceaccounts",
+			deniedReason: runtimeDeniedReason(runtimeAccess, "namespace-rbac"),
 		}),
 
 		directRegistration("namespace-storage", func() error {
@@ -604,6 +608,14 @@ func withSkipUnless(registration domainRegistration, available func() bool) doma
 func withRequire(registration domainRegistration, require func() error) domainRegistration {
 	registration.require = require
 	return registration
+}
+
+func runtimeDeniedReason(access domainpermissions.RuntimeAccess, domainName string) string {
+	reason, ok := access.DeniedReason(domainName)
+	if !ok {
+		panic(fmt.Sprintf("runtime denied reason missing for %s", domainName))
+	}
+	return reason
 }
 
 func requireAvailable(message string, available func() bool) func() error {

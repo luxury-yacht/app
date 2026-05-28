@@ -206,10 +206,12 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 
 	// PrimePermissions checks the initial set of permissions required for the subsystem.
 	ctx, cancel := context.WithTimeout(context.Background(), config.PermissionPreflightTimeout)
+	defer cancel()
 	_ = informerFactory.PrimePermissions(ctx, preflight)
-	cancel()
 
-	if err := registerDomains(gate, runtimePerms, registrations); err != nil {
+	// Registration reuses the preflight deadline; runtime checks should hit the
+	// just-primed permission cache instead of extending startup indefinitely.
+	if err := registerDomains(ctx, gate, runtimePerms, registrations); err != nil {
 		return nil, err
 	}
 

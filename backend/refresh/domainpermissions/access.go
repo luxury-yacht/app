@@ -23,6 +23,11 @@ func NewRuntimeAccess() RuntimeAccess {
 	return RuntimeAccess{policies: RuntimePoliciesByDomain()}
 }
 
+// IsEmpty reports whether the adapter has no runtime policies configured.
+func (a RuntimeAccess) IsEmpty() bool {
+	return len(a.policies) == 0
+}
+
 // Policies returns the runtime permission policies keyed by domain.
 func (a RuntimeAccess) Policies() map[string]Policy {
 	result := make(map[string]Policy, len(a.policies))
@@ -30,6 +35,15 @@ func (a RuntimeAccess) Policies() map[string]Policy {
 		result[domain] = copyPolicy(policy)
 	}
 	return result
+}
+
+// DeniedReason returns the runtime denial reason for a domain.
+func (a RuntimeAccess) DeniedReason(domainName string) (string, bool) {
+	policy, ok := a.policies[domainName]
+	if !ok || len(policy.Runtime) == 0 {
+		return "", false
+	}
+	return deniedReason(policy), true
 }
 
 // Check evaluates whether the current identity has runtime access to a domain.

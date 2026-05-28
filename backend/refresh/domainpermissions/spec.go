@@ -232,6 +232,9 @@ var policies = []Policy{
 		Domain:  "namespace-helm",
 		Mode:    ModeAll,
 		Runtime: []permissions.ResourceRequirement{list("", "secrets")},
+		// Runtime Helm list operations are secret-backed in the normal Helm
+		// storage path. Streams also watch ConfigMaps so configmap-backed Helm
+		// release storage can trigger namespace-level resyncs when permitted.
 		Stream: stream(
 			listWatch("", "secrets"),
 			listWatch("", "configmaps"),

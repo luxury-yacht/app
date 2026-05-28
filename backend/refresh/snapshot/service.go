@@ -60,7 +60,7 @@ func newService(
 	checker *permissions.Checker,
 	access domainpermissions.RuntimeAccess,
 ) *Service {
-	if checker != nil && len(access.Policies()) == 0 {
+	if checker != nil && access.IsEmpty() {
 		access = domainpermissions.NewRuntimeAccess()
 	}
 	return &Service{

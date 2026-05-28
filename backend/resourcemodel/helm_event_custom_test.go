@@ -200,6 +200,24 @@ func TestBuildHelmManifestResourceLinkKeepsUnknownDefaultNamespaceDisplayOnly(t 
 	require.Equal(t, "release-ns", link.Display.Namespace)
 }
 
+func TestBuildHelmManifestResourceLinkKeepsExplicitUnknownNamespaceOpenable(t *testing.T) {
+	link := BuildHelmManifestResourceLinkWithNamespaceSource(
+		"cluster-a",
+		"databases.example.com/v1alpha1",
+		"Database",
+		"release-ns",
+		"orders",
+		true,
+	)
+
+	require.NotNil(t, link.Ref)
+	require.Equal(t, "databases.example.com", link.Ref.Group)
+	require.Equal(t, "v1alpha1", link.Ref.Version)
+	require.Equal(t, "Database", link.Ref.Kind)
+	require.Equal(t, "release-ns", link.Ref.Namespace)
+	require.Equal(t, "orders", link.Ref.Name)
+}
+
 func TestBuildEventResourceModelInvolvedObjectLinks(t *testing.T) {
 	eventTime := metav1.NewMicroTime(time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC))
 	event := &corev1.Event{

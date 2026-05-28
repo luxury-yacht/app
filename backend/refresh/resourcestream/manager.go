@@ -622,18 +622,6 @@ func customCRDDomain(crd *apiextensionsv1.CustomResourceDefinition) string {
 	}
 }
 
-// Subscribe registers a new subscriber for the supplied domain/scope.
-func (m *Manager) Subscribe(domain, scope string) (*Subscription, error) {
-	if m == nil {
-		return nil, errors.New("resource stream not initialised")
-	}
-	selector, err := ParseStreamSelector(m.clusterMeta.ClusterID, domain, scope)
-	if err != nil {
-		return nil, err
-	}
-	return m.SubscribeSelector(selector)
-}
-
 // SubscribeSelector registers a new subscriber for the supplied typed selector.
 func (m *Manager) SubscribeSelector(selector StreamSelector) (*Subscription, error) {
 	if m == nil {
@@ -704,18 +692,6 @@ func (m *Manager) SubscribeSelector(selector StreamSelector) (*Subscription, err
 		Drops:   sub.drops,
 		Cancel:  cancel,
 	}, nil
-}
-
-// Resume returns buffered updates after the provided sequence token.
-func (m *Manager) Resume(domain, scope string, since uint64) ([]Update, bool) {
-	if m == nil || since == 0 {
-		return nil, false
-	}
-	selector, err := ParseStreamSelector(m.clusterMeta.ClusterID, domain, scope)
-	if err != nil {
-		return nil, false
-	}
-	return m.ResumeSelector(selector, since)
 }
 
 // ResumeSelector returns buffered updates after the provided sequence token.

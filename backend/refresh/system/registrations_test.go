@@ -521,6 +521,20 @@ func TestDomainRegistrationProviderAndServiceGatesAreExplicit(t *testing.T) {
 	require.False(t, findRegistration(t, withProviders, "object-helm-values").skipIf())
 }
 
+func TestPartialDataRegistrationDeniedReasonsUseRuntimeContract(t *testing.T) {
+	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	access := domainpermissions.NewRuntimeAccess()
+
+	for _, registration := range registrations {
+		if registration.list == nil || !registration.list.allowAny {
+			continue
+		}
+		expected, ok := access.DeniedReason(registration.name)
+		require.Truef(t, ok, "list-gated partial-data domain %s must have a runtime denied reason", registration.name)
+		require.Equal(t, expected, registration.list.deniedReason)
+	}
+}
+
 // findRegistration locates a registration entry by name.
 func findRegistration(t *testing.T, registrations []domainRegistration, name string) domainRegistration {
 	t.Helper()

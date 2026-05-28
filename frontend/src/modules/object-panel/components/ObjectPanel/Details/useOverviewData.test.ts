@@ -10,10 +10,25 @@
 import ReactDOM from 'react-dom/client';
 import React, { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { resourcemodel } from '@wailsjs/go/models';
 import { useOverviewData } from './useOverviewData';
 
 type Params = Parameters<typeof useOverviewData>[0];
 type Result = ReturnType<typeof useOverviewData>;
+
+function resourceRef(
+  overrides: Partial<resourcemodel.ResourceRef> = {}
+): resourcemodel.ResourceRef {
+  return {
+    clusterId: 'cluster-a',
+    group: 'rbac.authorization.k8s.io',
+    version: 'v1',
+    kind: 'ClusterRoleBinding',
+    resource: 'clusterrolebindings',
+    name: 'admin-binding',
+    ...overrides,
+  };
+}
 
 // Builds a params object where every detail field is null.
 function emptyParams(objectData: Params['objectData'] = null): Params {
@@ -235,7 +250,16 @@ describe('useOverviewData', () => {
       accessModes: ['ReadWriteOnce'],
       storageClass: 'standard',
       volumeMode: 'Filesystem',
-      mountedBy: ['db-0'],
+      mountedBy: [
+        resourceRef({
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          resource: 'pods',
+          namespace: 'data',
+          name: 'db-0',
+        }),
+      ],
       labels: {},
       annotations: {},
     } as any;
@@ -244,7 +268,16 @@ describe('useOverviewData', () => {
     expect(result!.kind).toBe('PersistentVolumeClaim');
     expect(result!.status).toBe('Bound');
     expect(result!.volumeName).toBe('pv-123');
-    expect(result!.mountedBy).toEqual(['db-0']);
+    expect(result!.mountedBy).toEqual([
+      resourceRef({
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        resource: 'pods',
+        namespace: 'data',
+        name: 'db-0',
+      }),
+    ]);
   });
 
   // -----------------------------------------------------------------------
@@ -258,7 +291,7 @@ describe('useOverviewData', () => {
       age: '90d',
       rules: [{ apiGroups: ['*'], resources: ['*'], verbs: ['*'] }],
       aggregationRule: null,
-      clusterRoleBindings: ['admin-binding'],
+      clusterRoleBindings: [resourceRef()],
       labels: {},
       annotations: {},
     } as any;
@@ -266,7 +299,7 @@ describe('useOverviewData', () => {
     const result = renderHook(params);
     expect(result!.kind).toBe('ClusterRole');
     expect(result!.policyRules).toEqual([{ apiGroups: ['*'], resources: ['*'], verbs: ['*'] }]);
-    expect(result!.clusterRoleBindings).toEqual(['admin-binding']);
+    expect(result!.clusterRoleBindings).toEqual([resourceRef()]);
   });
 
   // -----------------------------------------------------------------------

@@ -10,6 +10,7 @@ import (
 
 func TestRuntimeAccessAllowsUnknownDomain(t *testing.T) {
 	access := NewRuntimeAccess()
+	require.False(t, access.IsEmpty())
 	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
 		t.Fatalf("unexpected permission review for unknown domain")
 		return false, nil
@@ -19,6 +20,22 @@ func TestRuntimeAccessAllowsUnknownDomain(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, decision.Allowed)
 	require.Empty(t, decision.DeniedReason)
+}
+
+func TestRuntimeAccessZeroValueIsEmpty(t *testing.T) {
+	var access RuntimeAccess
+	require.True(t, access.IsEmpty())
+}
+
+func TestRuntimeAccessDeniedReason(t *testing.T) {
+	access := NewRuntimeAccess()
+
+	reason, ok := access.DeniedReason("namespace-config")
+	require.True(t, ok)
+	require.Equal(t, "core/configmaps,secrets", reason)
+
+	_, ok = access.DeniedReason("unknown")
+	require.False(t, ok)
 }
 
 func TestRuntimeAccessRequiresAllPolicyRequirements(t *testing.T) {

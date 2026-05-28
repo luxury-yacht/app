@@ -54,6 +54,24 @@ func requireNextUpdate(t *testing.T, sub *Subscription) Update {
 	}
 }
 
+func subscribeForTest(t *testing.T, manager *Manager, domain, scope string) (*Subscription, error) {
+	t.Helper()
+	selector, err := ParseStreamSelector(manager.clusterMeta.ClusterID, domain, scope)
+	if err != nil {
+		return nil, err
+	}
+	return manager.SubscribeSelector(selector)
+}
+
+func resumeForTest(t *testing.T, manager *Manager, domain, scope string, since uint64) ([]Update, bool) {
+	t.Helper()
+	selector, err := ParseStreamSelector(manager.clusterMeta.ClusterID, domain, scope)
+	if err != nil {
+		return nil, false
+	}
+	return manager.ResumeSelector(selector, since)
+}
+
 func TestManagerPodUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
@@ -61,7 +79,7 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainPods, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
 	require.NoError(t, err)
 
 	pod := &corev1.Pod{
@@ -101,7 +119,7 @@ func TestManagerConfigUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainNamespaceConfig, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceConfig, "namespace:default")
 	require.NoError(t, err)
 
 	cm := &corev1.ConfigMap{
@@ -139,7 +157,7 @@ func TestManagerRBACUpdateBroadcasts(t *testing.T) {
 		sequences:   make(map[string]uint64),
 	}
 
-	sub, err := manager.Subscribe(domainNamespaceRBAC, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceRBAC, "namespace:default")
 	require.NoError(t, err)
 
 	role := &rbacv1.Role{
@@ -174,7 +192,7 @@ func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
 		sequences:   make(map[string]uint64),
 	}
 	// Create a subscriber so the resume buffer is active for this scope.
-	sub, err := manager.Subscribe(domainPods, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
 	require.NoError(t, err)
 	defer sub.Cancel()
 
@@ -193,7 +211,7 @@ func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
 	manager.broadcast(domainPods, []string{"namespace:default"}, first)
 	manager.broadcast(domainPods, []string{"namespace:default"}, second)
 
-	updates, ok := manager.Resume(domainPods, "namespace:default", 1)
+	updates, ok := resumeForTest(t, manager, domainPods, "namespace:default", 1)
 	require.True(t, ok)
 	require.Len(t, updates, 1)
 	require.Equal(t, "2", updates[0].Sequence)
@@ -209,7 +227,7 @@ func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 		sequences:   make(map[string]uint64),
 	}
 
-	sub, err := manager.Subscribe(domainPods, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
 	require.NoError(t, err)
 
 	update := Update{
@@ -239,7 +257,7 @@ func TestManagerClusterRBACUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainClusterRBAC, "")
+	sub, err := subscribeForTest(t, manager, domainClusterRBAC, "")
 	require.NoError(t, err)
 
 	role := &rbacv1.ClusterRole{
@@ -271,7 +289,7 @@ func TestManagerQuotasUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainNamespaceQuotas, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceQuotas, "namespace:default")
 	require.NoError(t, err)
 
 	quota := &corev1.ResourceQuota{
@@ -304,7 +322,7 @@ func TestManagerNetworkUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainNamespaceNetwork, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceNetwork, "namespace:default")
 	require.NoError(t, err)
 
 	service := &corev1.Service{
@@ -341,7 +359,7 @@ func TestManagerClusterConfigUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainClusterConfig, "")
+	sub, err := subscribeForTest(t, manager, domainClusterConfig, "")
 	require.NoError(t, err)
 
 	storageClass := &storagev1.StorageClass{
@@ -374,7 +392,7 @@ func TestManagerStorageUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainNamespaceStorage, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceStorage, "namespace:default")
 	require.NoError(t, err)
 
 	pvc := &corev1.PersistentVolumeClaim{
@@ -410,7 +428,7 @@ func TestManagerClusterStorageUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainClusterStorage, "")
+	sub, err := subscribeForTest(t, manager, domainClusterStorage, "")
 	require.NoError(t, err)
 
 	pv := &corev1.PersistentVolume{
@@ -445,7 +463,7 @@ func TestManagerCustomUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainNamespaceCustom, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceCustom, "namespace:default")
 	require.NoError(t, err)
 
 	resource := &unstructured.Unstructured{}
@@ -490,7 +508,7 @@ func TestManagerCustomUpdateInvalidatesCache(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	_, err := manager.Subscribe(domainNamespaceCustom, "namespace:default")
+	_, err := subscribeForTest(t, manager, domainNamespaceCustom, "namespace:default")
 	require.NoError(t, err)
 
 	var called bool
@@ -570,7 +588,7 @@ func TestManagerCRDSignatureChangeCompletesCustomDomain(t *testing.T) {
 		logger:      noopLogger{},
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
-	sub, err := manager.Subscribe(domainNamespaceCustom, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceCustom, "namespace:default")
 	require.NoError(t, err)
 
 	oldCRD := customResourceDefinition("widgets.example.com", "example.com", "widgets", "Widget", apiextensionsv1.NamespaceScoped, "10")
@@ -600,7 +618,7 @@ func TestManagerClusterCustomCRDSignatureChangeCompletesCustomDomain(t *testing.
 		logger:      noopLogger{},
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
-	sub, err := manager.Subscribe(domainClusterCustom, "")
+	sub, err := subscribeForTest(t, manager, domainClusterCustom, "")
 	require.NoError(t, err)
 
 	oldCRD := customResourceDefinition("clusterwidgets.example.com", "example.com", "clusterwidgets", "ClusterWidget", apiextensionsv1.ClusterScoped, "10")
@@ -631,7 +649,7 @@ func TestManagerClusterCustomUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainClusterCustom, "")
+	sub, err := subscribeForTest(t, manager, domainClusterCustom, "")
 	require.NoError(t, err)
 
 	resource := &unstructured.Unstructured{}
@@ -675,7 +693,7 @@ func TestManagerClusterCRDUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainClusterCRDs, "")
+	sub, err := subscribeForTest(t, manager, domainClusterCRDs, "")
 	require.NoError(t, err)
 
 	crd := &apiextensionsv1.CustomResourceDefinition{
@@ -721,7 +739,7 @@ func TestManagerHelmUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainNamespaceHelm, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceHelm, "namespace:default")
 	require.NoError(t, err)
 
 	secret := &corev1.Secret{
@@ -776,7 +794,7 @@ func TestManagerSecretUpdateRefreshesOldHelmReleaseWhenRelationChanges(t *testin
 		logger:      noopLogger{},
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
-	sub, err := manager.Subscribe(domainNamespaceHelm, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceHelm, "namespace:default")
 	require.NoError(t, err)
 
 	manager.handleSecretEvent(oldSecret, newSecret, MessageTypeModified)
@@ -811,7 +829,7 @@ func TestManagerConfigMapUpdateRefreshesOldHelmReleaseWhenRelationChanges(t *tes
 		logger:      noopLogger{},
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
-	sub, err := manager.Subscribe(domainNamespaceHelm, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceHelm, "namespace:default")
 	require.NoError(t, err)
 
 	manager.handleConfigMapEvent(oldConfigMap, newConfigMap, MessageTypeModified)
@@ -834,7 +852,7 @@ func TestManagerAutoscalingUpdateBroadcasts(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainNamespaceAutoscaling, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceAutoscaling, "namespace:default")
 	require.NoError(t, err)
 
 	hpa := &autoscalingv1.HorizontalPodAutoscaler{
@@ -900,7 +918,7 @@ func TestManagerWorkloadStreamRowsIncludeHPAContext(t *testing.T) {
 		hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t, hpa),
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
 	}
-	sub, err := manager.Subscribe(domainWorkloads, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
 
 	manager.handleWorkload(deployment, MessageTypeModified)
@@ -938,7 +956,7 @@ func TestManagerHPADeleteRefreshesTargetWorkloadRow(t *testing.T) {
 		hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t),
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
 	}
-	sub, err := manager.Subscribe(domainWorkloads, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
 
 	manager.handleHPA(hpa, MessageTypeDeleted)
@@ -980,7 +998,7 @@ func TestManagerHPAUpdateRefreshesOldAndNewTargets(t *testing.T) {
 		hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t, newHPA),
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
 	}
-	sub, err := manager.Subscribe(domainWorkloads, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
 
 	manager.handleHPAEvent(oldHPA, newHPA, MessageTypeModified)
@@ -1016,7 +1034,7 @@ func TestManagerPodMoveRefreshesOldAndNewNodeRows(t *testing.T) {
 		nodeLister:  testsupport.NewNodeLister(t, nodeA, nodeB),
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
-	sub, err := manager.Subscribe(domainNodes, "")
+	sub, err := subscribeForTest(t, manager, domainNodes, "")
 	require.NoError(t, err)
 
 	manager.handlePodEvent(oldPod, newPod, MessageTypeModified)
@@ -1044,9 +1062,9 @@ func TestManagerPodMoveDeletesOldNodePodScope(t *testing.T) {
 		logger:      noopLogger{},
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
-	oldNodeSub, err := manager.Subscribe(domainPods, "node:node-a")
+	oldNodeSub, err := subscribeForTest(t, manager, domainPods, "node:node-a")
 	require.NoError(t, err)
-	newNodeSub, err := manager.Subscribe(domainPods, "node:node-b")
+	newNodeSub, err := subscribeForTest(t, manager, domainPods, "node:node-b")
 	require.NoError(t, err)
 
 	manager.handlePodEvent(oldPod, newPod, MessageTypeModified)
@@ -1083,7 +1101,7 @@ func TestManagerEndpointSliceRetargetRefreshesOldAndNewServices(t *testing.T) {
 		sliceLister:   testsupport.NewEndpointSliceLister(t, newSlice),
 		subscribers:   make(map[string]map[string]map[uint64]*subscription),
 	}
-	sub, err := manager.Subscribe(domainNamespaceNetwork, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainNamespaceNetwork, "namespace:default")
 	require.NoError(t, err)
 
 	manager.handleEndpointSliceEvent(oldSlice, newSlice, MessageTypeModified)
@@ -1139,11 +1157,11 @@ func TestManagerReplicaSetUpdateRefreshesOldAndNewPodOwnerScopes(t *testing.T) {
 		rsLister:    replicaSetListerWith(newRS),
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
-	oldSub, err := manager.Subscribe(domainPods, "workload:default:apps:v1:Deployment:web-old")
+	oldSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:Deployment:web-old")
 	require.NoError(t, err)
-	newSub, err := manager.Subscribe(domainPods, "workload:default:apps:v1:Deployment:web-new")
+	newSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:Deployment:web-new")
 	require.NoError(t, err)
-	namespaceSub, err := manager.Subscribe(domainPods, "namespace:default")
+	namespaceSub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
 	require.NoError(t, err)
 
 	manager.handleReplicaSetEvent(oldRS, newRS, MessageTypeModified)
@@ -1174,7 +1192,7 @@ func TestManagerBackpressureTriggersReset(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainPods, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
 	require.NoError(t, err)
 
 	update := Update{
@@ -1243,7 +1261,7 @@ func TestManagerWorkloadUpdateFromPod(t *testing.T) {
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainWorkloads, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
 
 	manager.handlePod(pod, MessageTypeModified)
@@ -1294,7 +1312,7 @@ func TestManagerWorkloadUpdateFromCompletedOwnedPod(t *testing.T) {
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainWorkloads, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
 
 	manager.handlePod(pod, MessageTypeModified)
@@ -1329,7 +1347,7 @@ func TestManagerDeletesStandaloneWorkloadRowWhenPodCompletes(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainWorkloads, "namespace:default")
+	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
 
 	manager.handlePod(pod, MessageTypeModified)
@@ -1361,7 +1379,7 @@ func TestManagerNodeUpdateFromPod(t *testing.T) {
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
-	sub, err := manager.Subscribe(domainNodes, "")
+	sub, err := subscribeForTest(t, manager, domainNodes, "")
 	require.NoError(t, err)
 
 	pod := &corev1.Pod{

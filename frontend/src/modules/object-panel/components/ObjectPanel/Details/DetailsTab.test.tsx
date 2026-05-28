@@ -5,6 +5,7 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { resourcemodel } from '@wailsjs/go/models';
 import type { DetailsTabProps } from './DetailsTab';
 
 const useShortcutMock = vi.fn();
@@ -13,6 +14,20 @@ const utilizationMock = vi.fn();
 const containersMock = vi.fn();
 const rbacRulesMock = vi.fn();
 const dataMock = vi.fn();
+
+function resourceRef(
+  overrides: Partial<resourcemodel.ResourceRef> = {}
+): resourcemodel.ResourceRef {
+  return {
+    clusterId: 'cluster-a',
+    group: 'rbac.authorization.k8s.io',
+    version: 'v1',
+    kind: 'ClusterRoleBinding',
+    resource: 'clusterrolebindings',
+    name: 'crb',
+    ...overrides,
+  };
+}
 
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (options: unknown) => useShortcutMock(options),
@@ -583,17 +598,51 @@ describe('DetailsTab', () => {
             name: 'builder',
             age: '8h',
             namespace: 'ci',
-            secrets: [{ name: 'token' }],
+            secrets: [
+              resourceRef({
+                group: '',
+                version: 'v1',
+                kind: 'Secret',
+                resource: 'secrets',
+                namespace: 'ci',
+                name: 'token',
+              }),
+            ],
             imagePullSecrets: [],
             automountServiceAccountToken: true,
-            usedByPods: ['pod-a'],
-            roleBindings: ['rb'],
-            clusterRoleBindings: ['crb'],
+            usedByPods: [
+              resourceRef({
+                group: '',
+                version: 'v1',
+                kind: 'Pod',
+                resource: 'pods',
+                namespace: 'ci',
+                name: 'pod-a',
+              }),
+            ],
+            roleBindings: [
+              resourceRef({
+                kind: 'RoleBinding',
+                resource: 'rolebindings',
+                namespace: 'ci',
+                name: 'rb',
+              }),
+            ],
+            clusterRoleBindings: [resourceRef()],
           } as any,
         },
         expectedOverview: {
           kind: 'ServiceAccount',
-          secrets: [{ name: 'token' }],
+          secrets: [
+            resourceRef({
+              group: '',
+              version: 'v1',
+              kind: 'Secret',
+              resource: 'secrets',
+              namespace: 'ci',
+              name: 'token',
+            }),
+          ],
         },
         expectUtilization: null,
       },
@@ -606,7 +655,14 @@ describe('DetailsTab', () => {
             age: '9h',
             namespace: 'ci',
             rules: [{ apiGroups: [''], resources: ['pods'], verbs: ['list'] }],
-            usedByRoleBindings: ['rb'],
+            usedByRoleBindings: [
+              resourceRef({
+                kind: 'RoleBinding',
+                resource: 'rolebindings',
+                namespace: 'ci',
+                name: 'rb',
+              }),
+            ],
           } as any,
         },
         expectedOverview: {
@@ -642,7 +698,7 @@ describe('DetailsTab', () => {
             age: '11h',
             rules: [],
             aggregationRule: { clusterRoleSelectors: [] },
-            clusterRoleBindings: ['crb'],
+            clusterRoleBindings: [resourceRef()],
           } as any,
         },
         expectedOverview: {
@@ -960,7 +1016,16 @@ describe('DetailsTab', () => {
             accessModes: ['ReadWriteOnce'],
             storageClass: 'sc',
             volumeMode: 'Filesystem',
-            mountedBy: ['pod'],
+            mountedBy: [
+              resourceRef({
+                group: '',
+                version: 'v1',
+                kind: 'Pod',
+                resource: 'pods',
+                namespace: 'storage',
+                name: 'pod',
+              }),
+            ],
           } as any,
         },
         expectedOverview: {
