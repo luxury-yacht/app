@@ -402,11 +402,12 @@ contract` locks `resourceStreamDomainDescriptors.scopeKind` /
   `backend/refresh/resourcestream/stream_registration_*.go`. Keep permission
   checks, direct object handlers, network/Gateway API handlers, and
   related-object handlers explicit when a generic table would hide behavior.
-- Resource-stream permission resources live in
-  `backend/refresh/resourcestream/permission_contract.go` and are checked
-  against snapshot runtime permissions by
-  `TestResourceStreamPermissionRequirementsStayAlignedWithSnapshotRuntime`.
-  When adding a resource-streamed domain or resource family, update the stream
+- Resource-stream permission resources live in the `Stream` side of
+  `backend/refresh/domainpermissions/spec.go` and are checked against
+  projection descriptors by `TestProjectionDescriptorsStayAlignedWithSupportedDomains`
+  and the authored domain contract by
+  `TestDomainPermissionContractsJoinExpectedRequirementSources`. When adding a
+  resource-streamed domain or resource family, update the shared permission
   contract with the resources the stream may wire.
 - Each domain/scope stream must deliver monotonic `resourceVersion` values.
   Missing or regressing versions trigger snapshot resync and temporarily block

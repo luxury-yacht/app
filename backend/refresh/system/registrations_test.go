@@ -368,7 +368,7 @@ func TestResourceStreamDomainsAreRegisteredRefreshDomains(t *testing.T) {
 
 func TestDomainPermissionContractsJoinExpectedRequirementSources(t *testing.T) {
 	sources := permissionContractSources{
-		runtime: snapshot.RuntimePermissionRequirements(),
+		runtime: domainpermissions.NewRuntimeAccess().Policies(),
 		stream:  domainpermissions.StreamRequirementsByDomain(),
 	}
 	for _, domain := range loadRefreshDomainContract(t).Domains {
@@ -550,7 +550,7 @@ func requirementVerbKeys(reqs []permissions.ResourceRequirement) map[string]stru
 }
 
 type permissionContractSources struct {
-	runtime map[string]snapshot.DomainPermissionRequirement
+	runtime map[string]domainpermissions.Policy
 	stream  map[string][]permissions.ResourceRequirement
 }
 
@@ -567,7 +567,7 @@ func requireDomainPermissionContract(t *testing.T, domain refreshDomainRecord, s
 			require.Truef(t, hasStream, "resource stream domain %q must declare stream permission requirements", domain.Domain)
 			streamKeys := requirementKeys(streamReqs)
 			streamVerbKeys := requirementVerbKeys(streamReqs)
-			for _, req := range runtimeReq.Requirements {
+			for _, req := range runtimeReq.Runtime {
 				require.Containsf(
 					t,
 					streamKeys,

@@ -50,11 +50,11 @@ func registerDomains(gate *permissionGate, checker *permissions.Checker, registr
 }
 
 // runDomainRegistrations applies the registration table in-order.
-// Before each domain's gate logic, it checks runtime permissions using
-// defaultPermissionChecks() as the single source of truth. If the domain's
-// required permissions are denied, a permission-denied placeholder is registered
-// instead of proceeding with the normal registration.
+// Before each domain's gate logic, it checks runtime permissions through the
+// shared domain access adapter. If denied, a permission-denied placeholder is
+// registered instead of proceeding with the normal registration.
 func runDomainRegistrations(gate *permissionGate, checker *permissions.Checker, registrations []domainRegistration) error {
+	access := domainpermissions.NewRuntimeAccess()
 	for _, registration := range registrations {
 		if registration.skipIf != nil && registration.skipIf() {
 			continue
@@ -65,14 +65,10 @@ func runDomainRegistrations(gate *permissionGate, checker *permissions.Checker, 
 			}
 		}
 
-		// Universal runtime permission check: use defaultPermissionChecks() to verify
-		// the user has access to this domain's resources before attempting registration.
-		// If denied, register a placeholder that returns 403 and skip further gate logic.
-		// If the check fails (e.g. SSAR error), fall through to existing gate logic.
 		if checker != nil {
-			allowed, deniedReason, err := snapshot.CheckDomainPermission(context.Background(), registration.name, checker)
-			if err == nil && !allowed {
-				if regErr := snapshot.RegisterPermissionDeniedDomain(gate.registry, registration.name, deniedReason); regErr != nil {
+			decision, err := access.Check(context.Background(), registration.name, checker)
+			if err == nil && !decision.Allowed {
+				if regErr := snapshot.RegisterPermissionDeniedDomain(gate.registry, registration.name, decision.DeniedReason); regErr != nil {
 					return regErr
 				}
 				continue
@@ -116,8 +112,8 @@ func runDomainRegistrations(gate *permissionGate, checker *permissions.Checker, 
 }
 
 // preflightRequests collects permission requests used to prime permission caches.
-// It merges requirements from the registration table, the runtime permission checks
-// (defaultPermissionChecks), and any extra requests (e.g. metrics).
+// It merges requirements from the registration table, the shared domain access
+// contract, and any extra requests such as metrics.
 func preflightRequests(registrations []domainRegistration, extra []informer.PermissionRequest) []informer.PermissionRequest {
 	requests := make([]informer.PermissionRequest, 0, len(extra))
 	seen := make(map[string]struct{})

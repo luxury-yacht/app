@@ -40,12 +40,13 @@ This section covers the backend refresh subsystem's permission checking, which g
 | ----------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `backend/refresh/permissions/resource_requirement.go` | Shared group/resource/verb descriptor helpers for refresh permission contracts |
 | `backend/refresh/permissions/checker.go`        | Issues SSAR calls, caches decisions, stale-while-revalidate logic                     |
-| `backend/refresh/snapshot/permission_checks.go` | Defines per-domain permission requirements (`requireAll` / `requireAny`)              |
+| `backend/refresh/domainpermissions/spec.go` | Defines per-domain runtime and stream permission requirements |
+| `backend/refresh/domainpermissions/access.go` | Evaluates runtime access for refresh domains |
 | `backend/refresh/snapshot/permission.go`        | Registers permission-denied placeholder domains                                       |
 | `backend/refresh/snapshot/service.go`           | `ensurePermissions()` -- runtime permission gate before every snapshot build          |
 | `backend/refresh/system/permission_gate.go`     | Startup permission gate for list / list+watch registration                            |
 | `backend/refresh/system/registrations.go`       | Domain registration table -- maps domains to permission checks and register functions |
-| `backend/refresh/resourcestream/permission_contract.go` | Resource-stream domain resource contract checked against snapshot permissions |
+| `backend/refresh/resourcestream/projection_descriptors_test.go` | Resource-stream domain resources checked against the shared permission contract |
 | `backend/internal/config/config.go`             | Timing constants (`PermissionCacheTTL`, `PermissionCacheStaleGracePeriod`, etc.)      |
 | `backend/refresh/types.go`                      | `DomainConfig` struct including the `PermissionDenied` flag                           |
 
@@ -77,7 +78,7 @@ NewSubsystemWithServices()
   -> PrimePermissions()         // pre-warm the SSAR cache for all known resources
   -> registerDomains()          // iterate the registration table
        for each domain:
-         1. Universal runtime check (CheckDomainPermission)
+         1. Universal runtime check (domainpermissions.RuntimeAccess)
             -> If denied: RegisterPermissionDeniedDomain() and skip
          2. Gate-specific check (listDomainConfig / listWatchDomainConfig)
             -> If denied: RegisterPermissionDeniedDomain() and skip
@@ -90,28 +91,28 @@ When a domain fails its permission checks at startup, `RegisterPermissionDeniedD
 
 At runtime, `ensurePermissions()` checks this flag and **short-circuits** -- it skips SSAR calls entirely for placeholder domains. The stub builder returns the correct `PermissionDeniedError` on its own. This eliminates redundant SSAR calls for every denied domain on every request once the 2-minute cache expires.
 
-### Runtime Permission Checks (`defaultPermissionChecks`)
+### Runtime Permission Checks (`domainpermissions.RuntimeAccess`)
 
-The function `defaultPermissionChecks()` in `permission_checks.go` is the single source of truth for which permissions each domain requires. It maps domain names to `permissionCheck` structs that specify:
+The policies in `domainpermissions/spec.go` are the single source of truth for which permissions each domain requires. `RuntimeAccess` evaluates those policies and returns an access decision with a denial reason.
 
 - A list of `permissions.ResourceRequirement` entries (group, resource, verb)
-- A mode: `requireAll` or `requireAny`
+- A mode: `ModeAll` or `ModeAny`
 
-#### `requireAll` vs `requireAny`
+#### `ModeAll` vs `ModeAny`
 
-- **`requireAll`** -- The domain is blocked unless every listed resource is accessible. Used for single-resource domains (e.g., `namespaces`, `pods`, `nodes`).
-- **`requireAny`** -- The domain is allowed if at least one resource is accessible. Used for multi-resource domains where partial data is useful (e.g., `namespace-workloads`, `namespace-config`, `cluster-rbac`).
+- **`ModeAll`** -- The domain is blocked unless every listed resource is accessible. Used for single-resource domains (e.g., `namespaces`, `pods`, `nodes`).
+- **`ModeAny`** -- The domain is allowed if at least one resource is accessible. Used for multi-resource domains where partial data is useful (e.g., `namespace-workloads`, `namespace-config`, `cluster-rbac`).
 
 #### Which Domains Use Which Mode
 
-**`requireAll` (single-resource or all-or-nothing)**:
+**`ModeAll` (single-resource or all-or-nothing)**:
 
 - `namespaces`, `pods`, `nodes`
 - `namespace-storage`, `namespace-autoscaling`, `namespace-helm`, `namespace-events`
 - `cluster-storage`, `cluster-crds`, `cluster-custom`, `cluster-events`
 - `object-events`
 
-**`requireAny` (multi-resource, partial data)**:
+**`ModeAny` (multi-resource, partial data)**:
 
 - `namespace-workloads` (pods, deployments, statefulsets, daemonsets, jobs, cronjobs)
 - `namespace-config` (configmaps, secrets)
@@ -124,7 +125,7 @@ The function `defaultPermissionChecks()` in `permission_checks.go` is the single
 
 ### Partial-Data Pattern For Multi-Resource Domains
 
-Multi-resource domains that use `requireAny` follow the `cluster-config` reference pattern:
+Multi-resource domains that use `ModeAny` follow the `cluster-config` reference pattern:
 
 1. **Permissions struct** -- Each domain defines a `*Permissions` struct with boolean fields for each resource (e.g., `NamespaceRBACPermissions.IncludeRoles`).
 2. **Conditional lister wiring** -- The `Register*Domain()` function accepts the permissions struct and only wires informer listers for permitted resources. Denied resources get `nil` listers.
@@ -134,13 +135,17 @@ Multi-resource domains that use `requireAny` follow the `cluster-config` referen
 #### Example: namespace-rbac
 
 ```go
-// permission_checks.go
-namespaceRBACDomainName: requireAny(
-    "rbac.authorization.k8s.io/roles,rolebindings,serviceaccounts",
-    listPermission("rbac.authorization.k8s.io", "roles"),
-    listPermission("rbac.authorization.k8s.io", "rolebindings"),
-    listPermission("", "serviceaccounts"),
-),
+// domainpermissions/spec.go
+{
+    Domain: "namespace-rbac",
+    Mode:   ModeAny,
+    Reason: "rbac.authorization.k8s.io/roles,rolebindings,serviceaccounts",
+    Runtime: []permissions.ResourceRequirement{
+        list("rbac.authorization.k8s.io", "roles"),
+        list("rbac.authorization.k8s.io", "rolebindings"),
+        list("", "serviceaccounts"),
+    },
+},
 
 // registrations.go
 listRegistration(listDomainConfig{
@@ -179,20 +184,20 @@ if b.roleLister != nil {
 2. Update `Register*Domain()` to accept the struct and conditionally wire listers.
 3. Guard every lister call in `Build()` with a nil check.
 4. In `registrations.go`, use `listRegistration` with `allowAny: true` and pass the `allowed` map to the permissions struct.
-5. In `permission_checks.go`, add a `requireAny` entry for the domain.
-6. If the domain is resource-streamed, add its resource list to `resourcestream.PermissionRequirementsByDomain()` so the stream contract remains aligned with snapshot runtime permissions.
+5. In `domainpermissions/spec.go`, add a `ModeAny` runtime policy for the domain.
+6. If the domain is resource-streamed, add its stream list/watch requirements to `domainpermissions/spec.go` so the stream contract remains aligned with snapshot runtime permissions.
 7. Add the domain's resources to `preflightRequests` (usually automatic from the registration checks).
 8. Update `TestDomainRegistrationOrder` in `registrations_test.go` if the domain is new.
 
 #### Adding A New Single-Resource Domain
 
-Use `requireAll` in `permission_checks.go` and `directRegistration` in `registrations.go`. No permissions struct is needed.
+Use `ModeAll` in `domainpermissions/spec.go` and `directRegistration` in `registrations.go`. No permissions struct is needed.
 
 #### Common Mistakes To Avoid
 
-- **Using `requireAll` for multi-resource domains** -- This blocks the entire domain when any single resource is denied, even when the user has valid access to other resources. Use `requireAny` with the partial-data pattern instead.
+- **Using `ModeAll` for multi-resource domains** -- This blocks the entire domain when any single resource is denied, even when the user has valid access to other resources. Use `ModeAny` with the partial-data pattern instead.
 - **Forgetting nil-lister guards** -- If a domain uses the partial-data pattern, every lister access in `Build()` must check for nil. Otherwise a nil pointer panic will crash the snapshot build.
-- **Mismatched keys between registrations.go and permission_checks.go** -- The `allowed` map keys use the format `group/resource` where the empty group is represented as `core` (e.g., `core/pods`, `rbac.authorization.k8s.io/roles`). The `permissionCheck` requirements use group/resource as-is (empty string for core). Make sure the keys in the `register` callback match what `listAllowedByKey` produces.
+- **Mismatched keys between registrations.go and domainpermissions/spec.go** -- The `allowed` map keys use the format `group/resource` where the empty group is represented as `core` (e.g., `core/pods`, `rbac.authorization.k8s.io/roles`). The shared policy requirements use the Kubernetes API group as-is (empty string for core). Make sure the keys in the `register` callback match what `listAllowedByKey` produces.
 - **Adding SSAR checks without considering cache pressure** -- Each new permission requirement adds SSAR calls at startup and potentially at runtime. Keep the number of resources per domain reasonable and rely on `preflightRequests` to pre-warm the cache.
 - **Modifying `PermissionCacheTTL` or `PermissionCacheStaleGracePeriod` without understanding the tradeoff** -- Shorter TTLs detect RBAC changes faster but increase SSAR load. The stale grace period must be shorter than the TTL to be meaningful. Current values: TTL=2m, grace=30s.
 
@@ -200,8 +205,9 @@ Use `requireAll` in `permission_checks.go` and `directRegistration` in `registra
 
 - **`registrations_test.go`** -- `TestDomainRegistrationOrder` must list every domain in the exact registration order. Update it when adding or reordering domains.
 - **`registrations_test.go`** -- `TestDomainRegistrationsHaveRuntimePermissionPolicyOrExemption` requires every registered refresh domain to have a runtime permission contract or a documented exemption.
-- **`registrations_test.go`** -- `TestResourceStreamPermissionRequirementsStayAlignedWithSnapshotRuntime` requires every resource-streamed domain to include the corresponding snapshot runtime resources.
-- **`service_test.go`** -- Tests the runtime permission gate. `TestServiceBuildBlocksPermissionDenied` must deny ALL resources for `requireAny` domains. `TestServiceBuildAllowsPartialPermissions` verifies that partial access works. `TestServiceBuildSkipsEnsureForPermissionDeniedDomain` verifies the SSAR skip optimization.
+- **`registrations_test.go`** -- `TestDomainPermissionContractsJoinExpectedRequirementSources` requires every resource-streamed domain to include the corresponding snapshot runtime resources.
+- **`domainpermissions/access_test.go`** -- Tests the shared runtime access adapter, including `ModeAll`, `ModeAny`, unknown domains, and denial reasons.
+- **`service_test.go`** -- Tests the snapshot runtime permission gate. `TestServiceBuildBlocksPermissionDenied` must deny ALL resources for `ModeAny` domains. `TestServiceBuildAllowsPartialPermissions` verifies that partial access works. `TestServiceBuildSkipsEnsureForPermissionDeniedDomain` verifies the SSAR skip optimization.
 - **`checker_test.go`** -- Tests cache behavior including stale-while-revalidate. `TestCheckerStaleWhileRevalidate` verifies stale returns + background refresh. `TestCheckerStaleGracePeriodExpired` verifies blocking fetch beyond grace.
 
 #### Timing Constants Reference

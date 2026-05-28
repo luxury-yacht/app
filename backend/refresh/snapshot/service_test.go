@@ -321,7 +321,7 @@ func TestServiceBuildBlocksPermissionDenied(t *testing.T) {
 	reg := domain.New()
 	called := false
 	// Use a real domain name so the default permission map is applied.
-	// namespace-config uses requireAny, so we must deny ALL resources to trigger denial.
+	// namespace-config uses ModeAny, so we must deny ALL resources to trigger denial.
 	if err := reg.Register(refresh.DomainConfig{
 		Name: namespaceConfigDomainName,
 		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
@@ -389,7 +389,7 @@ func TestServiceBuildBlocksNamespacesWithoutListPermission(t *testing.T) {
 func TestServiceBuildAllowsPartialPermissions(t *testing.T) {
 	reg := domain.New()
 	called := false
-	// namespace-config uses requireAny — if at least one resource is allowed, the domain should load.
+	// namespace-config uses ModeAny — if at least one resource is allowed, the domain should load.
 	if err := reg.Register(refresh.DomainConfig{
 		Name: namespaceConfigDomainName,
 		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
