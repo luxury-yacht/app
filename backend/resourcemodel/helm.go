@@ -1,10 +1,13 @@
 package resourcemodel
 
 import (
+	"context"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"helm.sh/helm/v3/pkg/release"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const helmSyntheticAPIGroup = "helm.sh"
@@ -135,12 +138,16 @@ func BuildHelmReleaseStatusPresentation(facts HelmReleaseFacts) ResourceStatusPr
 }
 
 func BuildHelmManifestResourceLinks(clusterID string, resources []HelmManifestResourceFacts) []ResourceLink {
+	return BuildHelmManifestResourceLinksWithResolver(context.Background(), nil, clusterID, resources)
+}
+
+func BuildHelmManifestResourceLinksWithResolver(ctx context.Context, resolver common.ResourceResolver, clusterID string, resources []HelmManifestResourceFacts) []ResourceLink {
 	if len(resources) == 0 {
 		return nil
 	}
 	links := make([]ResourceLink, 0, len(resources))
 	for _, resource := range resources {
-		link := BuildHelmManifestResourceLink(clusterID, resource.APIVersion, resource.Kind, resource.Namespace, resource.Name)
+		link := BuildHelmManifestResourceLinkWithResolver(ctx, resolver, clusterID, resource.APIVersion, resource.Kind, resource.Namespace, resource.Name)
 		if link.Ref != nil || link.Display != nil {
 			links = append(links, link)
 		}
@@ -166,64 +173,20 @@ type HelmManifestResourceIdentity struct {
 	Openable  bool
 }
 
-type helmManifestBuiltinResource struct {
-	group      string
-	version    string
-	kind       string
-	resource   string
-	namespaced bool
-}
-
-var helmManifestBuiltinResources = map[string]helmManifestBuiltinResource{
-	helmManifestBuiltinKey("", "v1", "Pod"):                                                        {version: "v1", kind: "Pod", resource: "pods", namespaced: true},
-	helmManifestBuiltinKey("", "v1", "Service"):                                                    {version: "v1", kind: "Service", resource: "services", namespaced: true},
-	helmManifestBuiltinKey("", "v1", "ConfigMap"):                                                  {version: "v1", kind: "ConfigMap", resource: "configmaps", namespaced: true},
-	helmManifestBuiltinKey("", "v1", "Secret"):                                                     {version: "v1", kind: "Secret", resource: "secrets", namespaced: true},
-	helmManifestBuiltinKey("", "v1", "ServiceAccount"):                                             {version: "v1", kind: "ServiceAccount", resource: "serviceaccounts", namespaced: true},
-	helmManifestBuiltinKey("", "v1", "Event"):                                                      {version: "v1", kind: "Event", resource: "events", namespaced: true},
-	helmManifestBuiltinKey("", "v1", "LimitRange"):                                                 {version: "v1", kind: "LimitRange", resource: "limitranges", namespaced: true},
-	helmManifestBuiltinKey("", "v1", "ResourceQuota"):                                              {version: "v1", kind: "ResourceQuota", resource: "resourcequotas", namespaced: true},
-	helmManifestBuiltinKey("", "v1", "PersistentVolumeClaim"):                                      {version: "v1", kind: "PersistentVolumeClaim", resource: "persistentvolumeclaims", namespaced: true},
-	helmManifestBuiltinKey("", "v1", "Namespace"):                                                  {version: "v1", kind: "Namespace", resource: "namespaces"},
-	helmManifestBuiltinKey("", "v1", "Node"):                                                       {version: "v1", kind: "Node", resource: "nodes"},
-	helmManifestBuiltinKey("", "v1", "PersistentVolume"):                                           {version: "v1", kind: "PersistentVolume", resource: "persistentvolumes"},
-	helmManifestBuiltinKey("apps", "v1", "Deployment"):                                             {group: "apps", version: "v1", kind: "Deployment", resource: "deployments", namespaced: true},
-	helmManifestBuiltinKey("apps", "v1", "StatefulSet"):                                            {group: "apps", version: "v1", kind: "StatefulSet", resource: "statefulsets", namespaced: true},
-	helmManifestBuiltinKey("apps", "v1", "DaemonSet"):                                              {group: "apps", version: "v1", kind: "DaemonSet", resource: "daemonsets", namespaced: true},
-	helmManifestBuiltinKey("apps", "v1", "ReplicaSet"):                                             {group: "apps", version: "v1", kind: "ReplicaSet", resource: "replicasets", namespaced: true},
-	helmManifestBuiltinKey("batch", "v1", "Job"):                                                   {group: "batch", version: "v1", kind: "Job", resource: "jobs", namespaced: true},
-	helmManifestBuiltinKey("batch", "v1", "CronJob"):                                               {group: "batch", version: "v1", kind: "CronJob", resource: "cronjobs", namespaced: true},
-	helmManifestBuiltinKey("autoscaling", "v1", "HorizontalPodAutoscaler"):                         {group: "autoscaling", version: "v1", kind: "HorizontalPodAutoscaler", resource: "horizontalpodautoscalers", namespaced: true},
-	helmManifestBuiltinKey("autoscaling", "v2", "HorizontalPodAutoscaler"):                         {group: "autoscaling", version: "v2", kind: "HorizontalPodAutoscaler", resource: "horizontalpodautoscalers", namespaced: true},
-	helmManifestBuiltinKey("networking.k8s.io", "v1", "Ingress"):                                   {group: "networking.k8s.io", version: "v1", kind: "Ingress", resource: "ingresses", namespaced: true},
-	helmManifestBuiltinKey("networking.k8s.io", "v1", "NetworkPolicy"):                             {group: "networking.k8s.io", version: "v1", kind: "NetworkPolicy", resource: "networkpolicies", namespaced: true},
-	helmManifestBuiltinKey("networking.k8s.io", "v1", "IngressClass"):                              {group: "networking.k8s.io", version: "v1", kind: "IngressClass", resource: "ingressclasses"},
-	helmManifestBuiltinKey("discovery.k8s.io", "v1", "EndpointSlice"):                              {group: "discovery.k8s.io", version: "v1", kind: "EndpointSlice", resource: "endpointslices", namespaced: true},
-	helmManifestBuiltinKey("gateway.networking.k8s.io", "v1", "Gateway"):                           {group: "gateway.networking.k8s.io", version: "v1", kind: "Gateway", resource: "gateways", namespaced: true},
-	helmManifestBuiltinKey("gateway.networking.k8s.io", "v1", "HTTPRoute"):                         {group: "gateway.networking.k8s.io", version: "v1", kind: "HTTPRoute", resource: "httproutes", namespaced: true},
-	helmManifestBuiltinKey("gateway.networking.k8s.io", "v1", "GRPCRoute"):                         {group: "gateway.networking.k8s.io", version: "v1", kind: "GRPCRoute", resource: "grpcroutes", namespaced: true},
-	helmManifestBuiltinKey("gateway.networking.k8s.io", "v1", "TLSRoute"):                          {group: "gateway.networking.k8s.io", version: "v1", kind: "TLSRoute", resource: "tlsroutes", namespaced: true},
-	helmManifestBuiltinKey("gateway.networking.k8s.io", "v1", "ListenerSet"):                       {group: "gateway.networking.k8s.io", version: "v1", kind: "ListenerSet", resource: "listenersets", namespaced: true},
-	helmManifestBuiltinKey("gateway.networking.k8s.io", "v1", "BackendTLSPolicy"):                  {group: "gateway.networking.k8s.io", version: "v1", kind: "BackendTLSPolicy", resource: "backendtlspolicies", namespaced: true},
-	helmManifestBuiltinKey("gateway.networking.k8s.io", "v1", "ReferenceGrant"):                    {group: "gateway.networking.k8s.io", version: "v1", kind: "ReferenceGrant", resource: "referencegrants", namespaced: true},
-	helmManifestBuiltinKey("gateway.networking.k8s.io", "v1", "GatewayClass"):                      {group: "gateway.networking.k8s.io", version: "v1", kind: "GatewayClass", resource: "gatewayclasses"},
-	helmManifestBuiltinKey("rbac.authorization.k8s.io", "v1", "Role"):                              {group: "rbac.authorization.k8s.io", version: "v1", kind: "Role", resource: "roles", namespaced: true},
-	helmManifestBuiltinKey("rbac.authorization.k8s.io", "v1", "RoleBinding"):                       {group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding", resource: "rolebindings", namespaced: true},
-	helmManifestBuiltinKey("rbac.authorization.k8s.io", "v1", "ClusterRole"):                       {group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole", resource: "clusterroles"},
-	helmManifestBuiltinKey("rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"):                {group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding", resource: "clusterrolebindings"},
-	helmManifestBuiltinKey("policy", "v1", "PodDisruptionBudget"):                                  {group: "policy", version: "v1", kind: "PodDisruptionBudget", resource: "poddisruptionbudgets", namespaced: true},
-	helmManifestBuiltinKey("storage.k8s.io", "v1", "StorageClass"):                                 {group: "storage.k8s.io", version: "v1", kind: "StorageClass", resource: "storageclasses"},
-	helmManifestBuiltinKey("admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration"):   {group: "admissionregistration.k8s.io", version: "v1", kind: "MutatingWebhookConfiguration", resource: "mutatingwebhookconfigurations"},
-	helmManifestBuiltinKey("admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration"): {group: "admissionregistration.k8s.io", version: "v1", kind: "ValidatingWebhookConfiguration", resource: "validatingwebhookconfigurations"},
-	helmManifestBuiltinKey("apiextensions.k8s.io", "v1", "CustomResourceDefinition"):               {group: "apiextensions.k8s.io", version: "v1", kind: "CustomResourceDefinition", resource: "customresourcedefinitions"},
-}
-
 func BuildHelmManifestResourceLink(clusterID, apiVersion, kind, namespace, name string) ResourceLink {
-	return BuildHelmManifestResourceLinkWithNamespaceSource(clusterID, apiVersion, kind, namespace, name, strings.TrimSpace(namespace) != "")
+	return BuildHelmManifestResourceLinkWithResolver(context.Background(), nil, clusterID, apiVersion, kind, namespace, name)
+}
+
+func BuildHelmManifestResourceLinkWithResolver(ctx context.Context, resolver common.ResourceResolver, clusterID, apiVersion, kind, namespace, name string) ResourceLink {
+	return BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(ctx, resolver, clusterID, apiVersion, kind, namespace, name, strings.TrimSpace(namespace) != "")
 }
 
 func BuildHelmManifestResourceLinkWithNamespaceSource(clusterID, apiVersion, kind, namespace, name string, namespaceExplicit bool) ResourceLink {
-	identity := ResolveHelmManifestResourceIdentity(apiVersion, kind, namespace, name, namespaceExplicit)
+	return BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(context.Background(), nil, clusterID, apiVersion, kind, namespace, name, namespaceExplicit)
+}
+
+func BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(ctx context.Context, resolver common.ResourceResolver, clusterID, apiVersion, kind, namespace, name string, namespaceExplicit bool) ResourceLink {
+	identity := ResolveHelmManifestResourceIdentityWithResolver(ctx, resolver, apiVersion, kind, namespace, name, namespaceExplicit)
 	if !identity.Openable {
 		return displayResourceLink(clusterID, identity.Group, identity.Version, identity.Kind, identity.Resource, identity.Namespace, identity.Name)
 	}
@@ -234,6 +197,13 @@ func BuildHelmManifestResourceLinkWithNamespaceSource(clusterID, apiVersion, kin
 }
 
 func ResolveHelmManifestResourceIdentity(apiVersion, kind, namespace, name string, namespaceExplicit bool) HelmManifestResourceIdentity {
+	return ResolveHelmManifestResourceIdentityWithResolver(context.Background(), nil, apiVersion, kind, namespace, name, namespaceExplicit)
+}
+
+func ResolveHelmManifestResourceIdentityWithResolver(ctx context.Context, resolver common.ResourceResolver, apiVersion, kind, namespace, name string, namespaceExplicit bool) HelmManifestResourceIdentity {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	group, version := splitAPIVersion(strings.TrimSpace(apiVersion))
 	kind = strings.TrimSpace(kind)
 	name = strings.TrimSpace(name)
@@ -248,27 +218,32 @@ func ResolveHelmManifestResourceIdentity(apiVersion, kind, namespace, name strin
 	if kind == "" || name == "" || version == "" {
 		return identity
 	}
-	if builtin, ok := helmManifestBuiltinResources[helmManifestBuiltinKey(group, version, kind)]; ok {
-		identity.Resource = builtin.resource
-		if builtin.namespaced {
-			identity.Scope = ResourceScopeNamespaced
-			identity.Openable = namespace != ""
+	if resolver != nil {
+		resolved, ok, err := resolver.ResolveResourceForGVK(ctx, schema.GroupVersionKind{
+			Group:   group,
+			Version: version,
+			Kind:    kind,
+		})
+		if err == nil && ok {
+			identity.Group = resolved.Group
+			identity.Version = resolved.Version
+			identity.Kind = resolved.Kind
+			identity.Resource = resolved.Resource
+			if resolved.Namespaced {
+				identity.Scope = ResourceScopeNamespaced
+				identity.Openable = namespace != ""
+				return identity
+			}
+			identity.Scope = ResourceScopeCluster
+			identity.Namespace = ""
+			identity.Openable = true
 			return identity
 		}
-		identity.Scope = ResourceScopeCluster
-		identity.Namespace = ""
-		identity.Openable = true
-		return identity
 	}
 	if namespaceExplicit && namespace != "" {
 		identity.Scope = ResourceScopeNamespaced
-		identity.Openable = true
 	}
 	return identity
-}
-
-func helmManifestBuiltinKey(group, version, kind string) string {
-	return strings.TrimSpace(group) + "/" + strings.TrimSpace(version) + "/" + strings.ToLower(strings.TrimSpace(kind))
 }
 
 func helmChartName(rel *release.Release) string {

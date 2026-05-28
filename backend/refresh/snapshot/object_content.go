@@ -11,6 +11,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
 const (
@@ -30,6 +31,10 @@ type ObjectYAMLProvider interface {
 type HelmContentProvider interface {
 	FetchHelmManifest(ctx context.Context, namespace, name string) (string, int, error)
 	FetchHelmValues(ctx context.Context, namespace, name string) (map[string]interface{}, int, error)
+}
+
+type HelmResourceResolverProvider interface {
+	ResourceResolver() common.ResourceResolver
 }
 
 // ObjectYAMLSnapshotPayload represents the YAML payload.
@@ -71,6 +76,9 @@ func RegisterObjectHelmManifestDomain(reg *domain.Registry, provider HelmContent
 		return fmt.Errorf("helm content provider is nil")
 	}
 	builder := &ObjectHelmManifestBuilder{provider: provider}
+	if resolverProvider, ok := provider.(HelmResourceResolverProvider); ok {
+		builder.resolver = resolverProvider.ResourceResolver()
+	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          objectHelmManifestDomain,
 		BuildSnapshot: builder.Build,
@@ -120,6 +128,7 @@ func (b *ObjectYAMLBuilder) Build(ctx context.Context, scope string) (*refresh.S
 // ObjectHelmManifestBuilder builds manifest snapshots.
 type ObjectHelmManifestBuilder struct {
 	provider HelmContentProvider
+	resolver common.ResourceResolver
 }
 
 func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
@@ -147,7 +156,7 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 			ClusterMeta: meta,
 			Manifest:    manifest,
 			Revision:    revision,
-			Resources:   extractHelmManifestResourceLinks(meta.ClusterID, manifest, namespace),
+			Resources:   extractHelmManifestResourceLinks(ctx, b.resolver, meta.ClusterID, manifest, namespace),
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: 1,
@@ -155,7 +164,7 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 	}, nil
 }
 
-func extractHelmManifestResourceLinks(clusterID, manifest, defaultNamespace string) []resourcemodel.ResourceLink {
+func extractHelmManifestResourceLinks(ctx context.Context, resolver common.ResourceResolver, clusterID, manifest, defaultNamespace string) []resourcemodel.ResourceLink {
 	var links []resourcemodel.ResourceLink
 	seen := map[string]struct{}{}
 	trimmed := strings.TrimPrefix(strings.TrimSpace(manifest), "---")
@@ -169,12 +178,14 @@ func extractHelmManifestResourceLinks(clusterID, manifest, defaultNamespace stri
 		if err := yaml.Unmarshal([]byte(doc), &obj); err != nil || obj == nil {
 			continue
 		}
-		appendManifestResourceLinks(&links, seen, clusterID, obj, defaultNamespace)
+		appendManifestResourceLinks(ctx, resolver, &links, seen, clusterID, obj, defaultNamespace)
 	}
 	return links
 }
 
 func appendManifestResourceLinks(
+	ctx context.Context,
+	resolver common.ResourceResolver,
 	links *[]resourcemodel.ResourceLink,
 	seen map[string]struct{},
 	clusterID string,
@@ -204,14 +215,16 @@ func appendManifestResourceLinks(
 			if itemAPIVersion == "" {
 				itemAPIVersion = apiVersion
 			}
-			appendSingleManifestResourceLink(links, seen, clusterID, itemAPIVersion, itemKind, itemMap, defaultNamespace)
+			appendSingleManifestResourceLink(ctx, resolver, links, seen, clusterID, itemAPIVersion, itemKind, itemMap, defaultNamespace)
 		}
 		return
 	}
-	appendSingleManifestResourceLink(links, seen, clusterID, apiVersion, kind, obj, defaultNamespace)
+	appendSingleManifestResourceLink(ctx, resolver, links, seen, clusterID, apiVersion, kind, obj, defaultNamespace)
 }
 
 func appendSingleManifestResourceLink(
+	ctx context.Context,
+	resolver common.ResourceResolver,
 	links *[]resourcemodel.ResourceLink,
 	seen map[string]struct{},
 	clusterID, apiVersion, kind string,
@@ -227,7 +240,7 @@ func appendSingleManifestResourceLink(
 		return
 	}
 	seen[key] = struct{}{}
-	link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSource(clusterID, apiVersion, kind, namespace, name, namespaceExplicit)
+	link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(ctx, resolver, clusterID, apiVersion, kind, namespace, name, namespaceExplicit)
 	*links = append(*links, link)
 }
 

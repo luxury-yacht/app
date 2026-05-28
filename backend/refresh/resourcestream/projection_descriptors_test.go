@@ -3,6 +3,7 @@ package resourcestream
 import (
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/stretchr/testify/require"
 )
@@ -11,7 +12,7 @@ func TestProjectionDescriptorsStayAlignedWithSupportedDomains(t *testing.T) {
 	descriptors := ProjectionDescriptors()
 	require.ElementsMatch(t, SupportedDomains(), descriptorDomains(descriptors))
 
-	permissionRequirements := PermissionRequirementsByDomain()
+	permissionRequirements := domainpermissions.StreamRequirementsByDomain()
 	for _, domain := range SupportedDomains() {
 		descriptor := descriptors[domain]
 		require.NotEmptyf(t, descriptor.ScopeKind, "domain %s must declare scope kind", domain)

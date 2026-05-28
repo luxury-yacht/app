@@ -64,7 +64,7 @@ type PersistentVolumeClaimDetails struct {
 	Conditions         []string          `json:"conditions,omitempty"`
 	Labels             map[string]string `json:"labels,omitempty"`
 	Annotations        map[string]string `json:"annotations,omitempty"`
-	MountedBy          []string          `json:"mountedBy,omitempty"`
+	MountedBy          []ObjectRef       `json:"mountedBy,omitempty"`
 }
 
 // DataSourceInfo represents the data source of a PVC.

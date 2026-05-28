@@ -138,7 +138,7 @@ func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolu
 	}
 
 	if facts != nil {
-		details.MountedBy = resourcemodel.ResourceLinkNames(facts.MountedBy)
+		details.MountedBy = types.ObjectRefsFromResourceLinks(facts.MountedBy)
 	}
 
 	storageClassInfo := "default"

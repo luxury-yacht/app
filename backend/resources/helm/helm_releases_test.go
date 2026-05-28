@@ -28,10 +28,33 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
+
+type testResourceResolver map[schema.GroupVersionKind]common.ResolvedResource
+
+func (r testResourceResolver) ResolveResourceForGVK(_ context.Context, gvk schema.GroupVersionKind) (common.ResolvedResource, bool, error) {
+	resolved, ok := r[gvk]
+	return resolved, ok, nil
+}
+
+var helmTestResourceResolver = testResourceResolver{
+	{Group: "", Version: "v1", Kind: "ConfigMap"}: {
+		Group: "", Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespaced: true,
+	},
+	{Group: "", Version: "v1", Kind: "Service"}: {
+		Group: "", Version: "v1", Kind: "Service", Resource: "services", Namespaced: true,
+	},
+	{Group: "apps", Version: "v1", Kind: "Deployment"}: {
+		Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespaced: true,
+	},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}: {
+		Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole", Resource: "clusterroles", Namespaced: false,
+	},
+}
 
 type fakeKubeClient struct{}
 
@@ -106,7 +129,7 @@ items:
 ---
 `
 
-	service := &Service{}
+	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
 	resources := service.extractResourcesFromManifest(manifest, "default")
 
 	require.Equal(t, []types.HelmResource{
@@ -146,7 +169,7 @@ items:
 ---
 `
 
-	service := &Service{}
+	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
 	resources := service.extractResourcesFromManifest(manifest, "team-default")
 
 	require.Equal(t, []types.HelmResource{
@@ -182,7 +205,7 @@ metadata:
 ---
 `
 
-	service := &Service{}
+	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
 	resources := service.extractResourcesFromManifest(manifest, "default")
 
 	require.Equal(t, []types.HelmResource{
@@ -208,7 +231,7 @@ metadata:
 ---
 `
 
-	service := &Service{}
+	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
 	resources := service.extractResourcesFromManifest(manifest, "release-ns")
 
 	require.Equal(t, []types.HelmResource{

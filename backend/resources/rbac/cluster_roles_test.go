@@ -56,6 +56,7 @@ func TestManagerClusterRolesIncludeBindings(t *testing.T) {
 		Context:          context.Background(),
 		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
+		ClusterID:        "cluster-a",
 	})
 
 	details, err := manager.ClusterRole("cluster-reader")
@@ -65,13 +66,15 @@ func TestManagerClusterRolesIncludeBindings(t *testing.T) {
 	if len(details.Rules) != 1 {
 		t.Fatalf("unexpected single fetch rules: %#v", details.Rules)
 	}
-	if len(details.ClusterRoleBindings) != 1 || details.ClusterRoleBindings[0] != "crb-1" {
+	if len(details.ClusterRoleBindings) != 1 {
 		t.Fatalf("expected single fetch to resolve cluster role bindings, got %#v",
 			details.ClusterRoleBindings)
 	}
-	if len(details.RoleBindings) != 1 || details.RoleBindings[0] != "rb-1" {
+	requireObjectRef(t, details.ClusterRoleBindings, 0, "ClusterRoleBinding", "", "crb-1")
+	if len(details.RoleBindings) != 1 {
 		t.Fatalf("expected single fetch to resolve role bindings, got %#v", details.RoleBindings)
 	}
+	requireObjectRef(t, details.RoleBindings, 0, "RoleBinding", "team-a", "rb-1")
 
 	all, err := manager.ClusterRoles()
 	if err != nil {
@@ -80,12 +83,14 @@ func TestManagerClusterRolesIncludeBindings(t *testing.T) {
 	if len(all) != 1 {
 		t.Fatalf("expected one cluster role, got %d", len(all))
 	}
-	if len(all[0].ClusterRoleBindings) != 1 || all[0].ClusterRoleBindings[0] != "crb-1" {
+	if len(all[0].ClusterRoleBindings) != 1 {
 		t.Fatalf("expected cluster role binding association, got %#v", all[0].ClusterRoleBindings)
 	}
-	if len(all[0].RoleBindings) != 1 || all[0].RoleBindings[0] != "rb-1" {
+	requireObjectRef(t, all[0].ClusterRoleBindings, 0, "ClusterRoleBinding", "", "crb-1")
+	if len(all[0].RoleBindings) != 1 {
 		t.Fatalf("expected role binding association, got %#v", all[0].RoleBindings)
 	}
+	requireObjectRef(t, all[0].RoleBindings, 0, "RoleBinding", "team-a", "rb-1")
 }
 
 func TestManagerClusterRolesAggregatesBindingsAndSelectors(t *testing.T) {
@@ -130,6 +135,7 @@ func TestManagerClusterRolesAggregatesBindingsAndSelectors(t *testing.T) {
 		Context:          context.Background(),
 		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
+		ClusterID:        "cluster-a",
 	})
 
 	roles, err := manager.ClusterRoles()
@@ -147,9 +153,10 @@ func TestManagerClusterRolesAggregatesBindingsAndSelectors(t *testing.T) {
 	if details.AggregationRule == nil || len(details.AggregationRule.ClusterRoleSelectors) != 1 {
 		t.Fatalf("expected aggregation selectors to be captured, got %#v", details.AggregationRule)
 	}
-	if len(details.ClusterRoleBindings) != 1 || details.ClusterRoleBindings[0] != "aggregator-binding" {
+	if len(details.ClusterRoleBindings) != 1 {
 		t.Fatalf("expected cluster role binding association, got %#v", details.ClusterRoleBindings)
 	}
+	requireObjectRef(t, details.ClusterRoleBindings, 0, "ClusterRoleBinding", "", "aggregator-binding")
 	if len(details.Rules) != 1 {
 		t.Fatalf("expected rules to be preserved, got %#v", details.Rules)
 	}

@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import type { resourcemodel } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
@@ -92,7 +93,7 @@ interface StorageOverviewProps {
   accessModes?: string[];
   storageClass?: string;
   volumeMode?: string;
-  mountedBy?: string[];
+  mountedBy?: resourcemodel.ResourceRef[];
   dataSource?: DataSourceLike;
   // PV fields
   claimRef?: any;
@@ -221,18 +222,15 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
               label="Mounted By"
               value={
                 <div>
-                  {props.mountedBy.map((podName, index) => (
-                    <div key={`${podName}-${index}`}>
+                  {props.mountedBy.map((podRef, index) => (
+                    <div
+                      key={`${podRef.clusterId}-${podRef.group}-${podRef.version}-${podRef.kind}-${podRef.namespace ?? ''}-${podRef.name ?? index}`}
+                    >
                       <ObjectPanelLink
-                        objectRef={buildRequiredObjectReference({
-                          kind: 'pod',
-                          name: podName,
-                          namespace: namespace,
-                          ...clusterMeta,
-                        })}
-                        title={`Click to view pod: ${podName}`}
+                        objectRef={{ ...podRef, group: podRef.group, version: podRef.version }}
+                        title={`Click to view pod: ${podRef.name ?? podRef.kind}`}
                       >
-                        {podName}
+                        {podRef.name ?? podRef.kind}
                       </ObjectPanelLink>
                     </div>
                   ))}

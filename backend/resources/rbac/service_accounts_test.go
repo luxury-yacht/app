@@ -78,6 +78,7 @@ func TestManagerServiceAccountAggregatesRelations(t *testing.T) {
 		Context:          context.Background(),
 		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
+		ClusterID:        "cluster-a",
 	})
 
 	details, err := manager.ServiceAccount("team-a", "builder")
@@ -87,21 +88,26 @@ func TestManagerServiceAccountAggregatesRelations(t *testing.T) {
 	if details == nil {
 		t.Fatalf("expected service account details")
 	}
-	if len(details.UsedByPods) != 1 || details.UsedByPods[0] != "builder-pod" {
+	if len(details.UsedByPods) != 1 {
 		t.Fatalf("expected UsedByPods to include builder-pod, got %#v", details.UsedByPods)
 	}
-	if len(details.RoleBindings) != 1 || details.RoleBindings[0] != "builder-rb" {
+	requireObjectRef(t, details.UsedByPods, 0, "Pod", "team-a", "builder-pod")
+	if len(details.RoleBindings) != 1 {
 		t.Fatalf("expected RoleBindings to include builder-rb, got %#v", details.RoleBindings)
 	}
-	if len(details.ClusterRoleBindings) != 1 || details.ClusterRoleBindings[0] != "builder-crb" {
+	requireObjectRef(t, details.RoleBindings, 0, "RoleBinding", "team-a", "builder-rb")
+	if len(details.ClusterRoleBindings) != 1 {
 		t.Fatalf("expected ClusterRoleBindings to include builder-crb, got %#v", details.ClusterRoleBindings)
 	}
-	if len(details.Secrets) != 1 || details.Secrets[0] != "builder-token" {
+	requireObjectRef(t, details.ClusterRoleBindings, 0, "ClusterRoleBinding", "", "builder-crb")
+	if len(details.Secrets) != 1 {
 		t.Fatalf("expected Secrets to contain builder-token, got %#v", details.Secrets)
 	}
-	if len(details.ImagePullSecrets) != 1 || details.ImagePullSecrets[0] != "registry-creds" {
+	requireObjectRef(t, details.Secrets, 0, "Secret", "team-a", "builder-token")
+	if len(details.ImagePullSecrets) != 1 {
 		t.Fatalf("expected ImagePullSecrets to contain registry-creds, got %#v", details.ImagePullSecrets)
 	}
+	requireObjectRef(t, details.ImagePullSecrets, 0, "Secret", "team-a", "registry-creds")
 	if !strings.Contains(details.Details, "Used by 1 pod") {
 		t.Fatalf("expected summary to mention pod usage, got %q", details.Details)
 	}

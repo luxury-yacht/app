@@ -32,3 +32,20 @@ func RefOrDisplaySliceFromResourceLinks(links []resourcemodel.ResourceLink) []Re
 	}
 	return refs
 }
+
+func ObjectRefsFromResourceLinks(links []resourcemodel.ResourceLink) []ObjectRef {
+	if len(links) == 0 {
+		return nil
+	}
+	refs := make([]ObjectRef, 0, len(links))
+	for _, link := range links {
+		if link.Ref == nil {
+			continue
+		}
+		refs = append(refs, ObjectRefFromResourceRef(*link.Ref))
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+	return refs
+}

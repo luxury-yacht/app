@@ -81,8 +81,8 @@ func (s *Service) buildClusterRoleDetails(cr *rbacv1.ClusterRole, clusterRoleBin
 		AggregationRule:     aggregationRuleFromFacts(facts.AggregationRule),
 		Labels:              cr.Labels,
 		Annotations:         cr.Annotations,
-		ClusterRoleBindings: resourcemodel.ResourceLinkNames(facts.ClusterRoleBindings),
-		RoleBindings:        resourcemodel.ResourceLinkNames(facts.RoleBindings),
+		ClusterRoleBindings: types.ObjectRefsFromResourceLinks(facts.ClusterRoleBindings),
+		RoleBindings:        types.ObjectRefsFromResourceLinks(facts.RoleBindings),
 	}
 	return details
 }

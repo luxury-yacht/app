@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
 
@@ -21,30 +22,6 @@ type permissionCheck struct {
 	requirements []permissionRequirement
 	mode         permissionCheckMode
 	resource     string
-}
-
-func listPermission(group, resource string) permissionRequirement {
-	return permissions.ListRequirement(group, resource)
-}
-
-func requireAll(reqs ...permissionRequirement) permissionCheck {
-	return permissionCheck{
-		requirements: reqs,
-		mode:         permissionCheckAll,
-		resource:     permissionResourceList(reqs),
-	}
-}
-
-func requireAny(label string, reqs ...permissionRequirement) permissionCheck {
-	resource := strings.TrimSpace(label)
-	if resource == "" {
-		resource = permissionResourceList(reqs)
-	}
-	return permissionCheck{
-		requirements: reqs,
-		mode:         permissionCheckAny,
-		resource:     resource,
-	}
 }
 
 // allows reports whether the runtime permission checker satisfies this domain's requirements.
@@ -133,22 +110,14 @@ func CheckDomainPermission(ctx context.Context, domainName string, checker *perm
 // RuntimePreflightRequirements returns all permission requirements from defaultPermissionChecks
 // for cache priming at startup. This ensures every runtime permission check is pre-warmed.
 func RuntimePreflightRequirements() []PreflightRequirement {
-	checks := defaultPermissionChecks()
-	var reqs []PreflightRequirement
-	seen := make(map[string]struct{})
-	for _, check := range checks {
-		for _, req := range check.requirements {
-			key := permissions.RequirementKey(req)
-			if _, ok := seen[key]; ok {
-				continue
-			}
-			seen[key] = struct{}{}
-			reqs = append(reqs, PreflightRequirement{
-				Group:    req.Group,
-				Resource: req.Resource,
-				Verb:     req.Verb,
-			})
-		}
+	requirements := domainpermissions.PreflightRequirements()
+	reqs := make([]PreflightRequirement, 0, len(requirements))
+	for _, req := range requirements {
+		reqs = append(reqs, PreflightRequirement{
+			Group:    req.Group,
+			Resource: req.Resource,
+			Verb:     req.Verb,
+		})
 	}
 	return reqs
 }
@@ -176,131 +145,22 @@ func RuntimePermissionRequirements() map[string]DomainPermissionRequirement {
 
 // defaultPermissionChecks maps snapshot domains to list permissions for per-request SSAR gating.
 func defaultPermissionChecks() map[string]permissionCheck {
-	return map[string]permissionCheck{
-		"namespaces": requireAll(
-			listPermission("", "namespaces"),
-		),
-		namespaceWorkloadsDomainName: requireAny(
-			"workload resources",
-			listPermission("", "pods"),
-			listPermission("apps", "deployments"),
-			listPermission("apps", "statefulsets"),
-			listPermission("apps", "daemonsets"),
-			listPermission("batch", "jobs"),
-			listPermission("batch", "cronjobs"),
-		),
-		namespaceConfigDomainName: requireAny(
-			"core/configmaps,secrets",
-			listPermission("", "configmaps"),
-			listPermission("", "secrets"),
-		),
-		namespaceNetworkDomainName: requireAny(
-			"network resources",
-			listPermission("", "services"),
-			listPermission("discovery.k8s.io", "endpointslices"),
-			listPermission("networking.k8s.io", "ingresses"),
-			listPermission("networking.k8s.io", "networkpolicies"),
-			listPermission("gateway.networking.k8s.io", "gateways"),
-			listPermission("gateway.networking.k8s.io", "httproutes"),
-			listPermission("gateway.networking.k8s.io", "grpcroutes"),
-			listPermission("gateway.networking.k8s.io", "tlsroutes"),
-			listPermission("gateway.networking.k8s.io", "listenersets"),
-			listPermission("gateway.networking.k8s.io", "referencegrants"),
-			listPermission("gateway.networking.k8s.io", "backendtlspolicies"),
-		),
-		namespaceStorageDomainName: requireAll(
-			listPermission("", "persistentvolumeclaims"),
-		),
-		namespaceAutoscalingDomainName: requireAll(
-			listPermission("autoscaling", "horizontalpodautoscalers"),
-		),
-		namespaceQuotasDomainName: requireAny(
-			"quota resources",
-			listPermission("", "resourcequotas"),
-			listPermission("", "limitranges"),
-			listPermission("policy", "poddisruptionbudgets"),
-		),
-		namespaceRBACDomainName: requireAny(
-			"rbac.authorization.k8s.io/roles,rolebindings,serviceaccounts",
-			listPermission("rbac.authorization.k8s.io", "roles"),
-			listPermission("rbac.authorization.k8s.io", "rolebindings"),
-			listPermission("", "serviceaccounts"),
-		),
-		namespaceCustomDomainName: requireAll(
-			listPermission("apiextensions.k8s.io", "customresourcedefinitions"),
-		),
-		namespaceHelmDomainName: requireAll(
-			listPermission("", "secrets"),
-		),
-		namespaceEventsDomainName: requireAll(
-			listPermission("", "events"),
-		),
-		podDomainName: requireAll(
-			listPermission("", "pods"),
-		),
-		"nodes": requireAll(
-			listPermission("", "nodes"),
-		),
-		clusterOverviewDomainName: requireAll(
-			listPermission("", "nodes"),
-		),
-		clusterRBACDomainName: requireAny(
-			"rbac.authorization.k8s.io",
-			listPermission("rbac.authorization.k8s.io", "clusterroles"),
-			listPermission("rbac.authorization.k8s.io", "clusterrolebindings"),
-		),
-		clusterStorageDomainName: requireAll(
-			listPermission("", "persistentvolumes"),
-		),
-		clusterConfigDomainName: requireAny(
-			"cluster configuration resources",
-			listPermission("storage.k8s.io", "storageclasses"),
-			listPermission("networking.k8s.io", "ingressclasses"),
-			listPermission("gateway.networking.k8s.io", "gatewayclasses"),
-			listPermission("admissionregistration.k8s.io", "validatingwebhookconfigurations"),
-			listPermission("admissionregistration.k8s.io", "mutatingwebhookconfigurations"),
-		),
-		clusterCRDDomainName: requireAll(
-			listPermission("apiextensions.k8s.io", "customresourcedefinitions"),
-		),
-		clusterCustomDomainName: requireAll(
-			listPermission("apiextensions.k8s.io", "customresourcedefinitions"),
-		),
-		clusterEventsDomainName: requireAll(
-			listPermission("", "events"),
-		),
-		objectEventsDomain: requireAll(
-			listPermission("", "events"),
-		),
-		objectMapDomain: requireAny(
-			"object map resources",
-			listPermission("", "pods"),
-			listPermission("", "services"),
-			listPermission("discovery.k8s.io", "endpointslices"),
-			listPermission("", "persistentvolumeclaims"),
-			listPermission("", "persistentvolumes"),
-			listPermission("storage.k8s.io", "storageclasses"),
-			listPermission("", "configmaps"),
-			listPermission("", "secrets"),
-			listPermission("", "serviceaccounts"),
-			listPermission("", "nodes"),
-			listPermission("apps", "deployments"),
-			listPermission("apps", "replicasets"),
-			listPermission("apps", "statefulsets"),
-			listPermission("apps", "daemonsets"),
-			listPermission("batch", "jobs"),
-			listPermission("batch", "cronjobs"),
-			listPermission("autoscaling", "horizontalpodautoscalers"),
-			listPermission("networking.k8s.io", "ingresses"),
-			listPermission("networking.k8s.io", "ingressclasses"),
-			listPermission("gateway.networking.k8s.io", "gatewayclasses"),
-			listPermission("gateway.networking.k8s.io", "gateways"),
-			listPermission("gateway.networking.k8s.io", "httproutes"),
-			listPermission("gateway.networking.k8s.io", "grpcroutes"),
-			listPermission("gateway.networking.k8s.io", "tlsroutes"),
-			listPermission("gateway.networking.k8s.io", "listenersets"),
-			listPermission("gateway.networking.k8s.io", "referencegrants"),
-			listPermission("gateway.networking.k8s.io", "backendtlspolicies"),
-		),
+	policies := domainpermissions.RuntimePoliciesByDomain()
+	checks := make(map[string]permissionCheck, len(policies))
+	for domain, policy := range policies {
+		mode := permissionCheckAll
+		if policy.Mode == domainpermissions.ModeAny {
+			mode = permissionCheckAny
+		}
+		resource := strings.TrimSpace(policy.Reason)
+		if resource == "" {
+			resource = permissionResourceList(policy.Runtime)
+		}
+		checks[domain] = permissionCheck{
+			requirements: append([]permissionRequirement(nil), policy.Runtime...),
+			mode:         mode,
+			resource:     resource,
+		}
 	}
+	return checks
 }

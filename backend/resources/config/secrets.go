@@ -85,7 +85,7 @@ func (s *Service) processSecretDetails(secret *corev1.Secret, relationships *res
 	}
 
 	if facts != nil {
-		details.UsedBy = resourcemodel.ResourceLinkNames(facts.UsedBy)
+		details.UsedBy = types.ObjectRefsFromResourceLinks(facts.UsedBy)
 	}
 
 	details.Details = fmt.Sprintf("%s, %d key(s)", details.SecretType, details.DataCount)

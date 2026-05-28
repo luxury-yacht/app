@@ -47,6 +47,7 @@ var builtinResourceCatalog = []resourceDescriptor{
 	builtinDescriptor("batch", "v1", "Job", "jobs", true),
 	builtinDescriptor("batch", "v1", "CronJob", "cronjobs", true),
 
+	builtinDescriptor("autoscaling", "v1", "HorizontalPodAutoscaler", "horizontalpodautoscalers", true),
 	builtinDescriptor("autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", true),
 
 	builtinDescriptor("networking.k8s.io", "v1", "Ingress", "ingresses", true),

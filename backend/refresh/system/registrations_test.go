@@ -13,6 +13,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
@@ -368,7 +369,7 @@ func TestResourceStreamDomainsAreRegisteredRefreshDomains(t *testing.T) {
 func TestDomainPermissionContractsJoinExpectedRequirementSources(t *testing.T) {
 	sources := permissionContractSources{
 		runtime: snapshot.RuntimePermissionRequirements(),
-		stream:  resourcestream.PermissionRequirementsByDomain(),
+		stream:  domainpermissions.StreamRequirementsByDomain(),
 	}
 	for _, domain := range loadRefreshDomainContract(t).Domains {
 		requireDomainPermissionContract(t, domain, sources)
@@ -540,6 +541,14 @@ func requirementKeys(reqs []permissions.ResourceRequirement) map[string]struct{}
 	return keys
 }
 
+func requirementVerbKeys(reqs []permissions.ResourceRequirement) map[string]struct{} {
+	keys := make(map[string]struct{}, len(reqs))
+	for _, req := range reqs {
+		keys[permissions.RequirementKey(req)] = struct{}{}
+	}
+	return keys
+}
+
 type permissionContractSources struct {
 	runtime map[string]snapshot.DomainPermissionRequirement
 	stream  map[string][]permissions.ResourceRequirement
@@ -557,12 +566,31 @@ func requireDomainPermissionContract(t *testing.T, domain refreshDomainRecord, s
 		if domain.Backend.ResourceStream {
 			require.Truef(t, hasStream, "resource stream domain %q must declare stream permission requirements", domain.Domain)
 			streamKeys := requirementKeys(streamReqs)
+			streamVerbKeys := requirementVerbKeys(streamReqs)
 			for _, req := range runtimeReq.Requirements {
 				require.Containsf(
 					t,
 					streamKeys,
 					permissions.ResourceKey(req.Group, req.Resource),
 					"stream domain %q must include snapshot resource %s",
+					domain.Domain,
+					permissions.ResourceKey(req.Group, req.Resource),
+				)
+			}
+			for _, req := range streamReqs {
+				require.Containsf(
+					t,
+					streamVerbKeys,
+					permissions.RequirementKey(permissions.ListRequirement(req.Group, req.Resource)),
+					"stream domain %q must include list for %s",
+					domain.Domain,
+					permissions.ResourceKey(req.Group, req.Resource),
+				)
+				require.Containsf(
+					t,
+					streamVerbKeys,
+					permissions.RequirementKey(permissions.WatchRequirement(req.Group, req.Resource)),
+					"stream domain %q must include watch for %s",
 					domain.Domain,
 					permissions.ResourceKey(req.Group, req.Resource),
 				)

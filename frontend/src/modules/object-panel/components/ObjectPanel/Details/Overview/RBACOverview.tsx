@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import type { resourcemodel } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
@@ -127,16 +128,16 @@ interface RBACOverviewProps {
   rules?: any[];
   policyRules?: any[];
   aggregationRule?: any;
-  usedByRoleBindings?: string[];
-  clusterRoleBindings?: string[];
+  usedByRoleBindings?: resourcemodel.ResourceRef[];
+  clusterRoleBindings?: resourcemodel.ResourceRef[];
   // RoleBinding/ClusterRoleBinding fields
   roleRef?: any;
   subjects?: any[];
   // ServiceAccount fields
-  secrets?: any[];
-  imagePullSecrets?: any[];
+  secrets?: resourcemodel.ResourceRef[];
+  imagePullSecrets?: resourcemodel.ResourceRef[];
   automountServiceAccountToken?: boolean;
-  roleBindings?: string[];
+  roleBindings?: resourcemodel.ResourceRef[];
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
 }
@@ -158,12 +159,10 @@ export const RBACOverview: React.FC<RBACOverviewProps> = (props) => {
     (props.aggregationRule?.clusterRoleSelectors as Array<Record<string, string>> | undefined) ??
     [];
 
-  const usedByBindings: string[] =
+  const usedByBindings: resourcemodel.ResourceRef[] =
     normalizedKind === 'clusterrole'
       ? (props.clusterRoleBindings ?? [])
       : (props.usedByRoleBindings ?? []);
-  const usedByKind: 'rolebinding' | 'clusterrolebinding' =
-    normalizedKind === 'clusterrole' ? 'clusterrolebinding' : 'rolebinding';
 
   return (
     <>
@@ -206,17 +205,16 @@ export const RBACOverview: React.FC<RBACOverviewProps> = (props) => {
             fullWidth
             value={
               <div className="overview-stacked">
-                {usedByBindings.map((bindingName) => (
+                {usedByBindings.map((bindingRef, index) => (
                   <ObjectPanelLink
-                    key={bindingName}
-                    objectRef={buildRequiredObjectReference({
-                      kind: usedByKind,
-                      name: bindingName,
-                      namespace: usedByKind === 'rolebinding' ? namespace : undefined,
-                      ...clusterMeta,
-                    })}
+                    key={`${bindingRef.clusterId}-${bindingRef.group}-${bindingRef.version}-${bindingRef.kind}-${bindingRef.namespace ?? ''}-${bindingRef.name ?? index}`}
+                    objectRef={{
+                      ...bindingRef,
+                      group: bindingRef.group,
+                      version: bindingRef.version,
+                    }}
                   >
-                    {bindingName}
+                    {bindingRef.name ?? bindingRef.kind}
                   </ObjectPanelLink>
                 ))}
               </div>

@@ -10,6 +10,15 @@ import { SecretOverview } from './SecretOverview';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
+const podRef = (name: string, namespace: string) => ({
+  clusterId: defaultClusterId,
+  group: '',
+  version: 'v1',
+  kind: 'Pod',
+  resource: 'pods',
+  namespace,
+  name,
+});
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
@@ -106,7 +115,7 @@ describe('SecretOverview', () => {
         age: '3h',
         secretType: 'kubernetes.io/service-account-token',
         dataKeys: ['token'],
-        usedBy: ['pod-x'],
+        usedBy: [podRef('pod-x', 'team')],
         labels: {},
         annotations: {},
       } as any,
@@ -120,10 +129,12 @@ describe('SecretOverview', () => {
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'pod',
+        kind: 'Pod',
         name: 'pod-x',
         namespace: 'team',
         clusterId: defaultClusterId,
+        group: '',
+        version: 'v1',
       })
     );
   });

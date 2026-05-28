@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -31,6 +32,13 @@ type stubHelmContentProvider struct {
 	valuesRevision    int
 	valuesNamespace   string
 	valuesName        string
+}
+
+type stubResourceResolver map[schema.GroupVersionKind]common.ResolvedResource
+
+func (r stubResourceResolver) ResolveResourceForGVK(_ context.Context, gvk schema.GroupVersionKind) (common.ResolvedResource, bool, error) {
+	resolved, ok := r[gvk]
+	return resolved, ok, nil
 }
 
 func (s *stubHelmContentProvider) FetchHelmManifest(_ context.Context, namespace, name string) (string, int, error) {
@@ -80,7 +88,15 @@ metadata:
   namespace: explicit
 `
 	provider := &stubHelmContentProvider{manifest: manifest, manifestRevision: 12}
-	builder := &ObjectHelmManifestBuilder{provider: provider}
+	resolver := stubResourceResolver{
+		{Group: "apps", Version: "v1", Kind: "Deployment"}: {
+			Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespaced: true,
+		},
+		{Group: "", Version: "v1", Kind: "Service"}: {
+			Group: "", Version: "v1", Kind: "Service", Resource: "services", Namespaced: true,
+		},
+	}
+	builder := &ObjectHelmManifestBuilder{provider: provider, resolver: resolver}
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
 	snapshot, err := builder.Build(ctx, "cluster-a|apps:checkout")
@@ -165,7 +181,15 @@ metadata:
 ---
 `
 
-	links := extractHelmManifestResourceLinks("cluster-a", manifest, "release-ns")
+	resolver := stubResourceResolver{
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}: {
+			Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole", Resource: "clusterroles", Namespaced: false,
+		},
+		{Group: "", Version: "v1", Kind: "ConfigMap"}: {
+			Group: "", Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespaced: true,
+		},
+	}
+	links := extractHelmManifestResourceLinks(context.Background(), resolver, "cluster-a", manifest, "release-ns")
 
 	require.Len(t, links, 3)
 	require.NotNil(t, links[0].Ref)

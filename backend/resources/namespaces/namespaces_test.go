@@ -62,8 +62,22 @@ func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 	require.Equal(t, "ready", detail.StatusPresentation)
 	require.Equal(t, "status.phase", detail.StatusReason)
 	require.True(t, detail.HasWorkloads)
-	require.Contains(t, detail.ResourceQuotas, "quota")
-	require.Contains(t, detail.LimitRanges, "limits")
+	require.Len(t, detail.ResourceQuotas, 1)
+	require.Equal(t, "cluster-a", detail.ResourceQuotas[0].ClusterID)
+	require.Equal(t, "", detail.ResourceQuotas[0].Group)
+	require.Equal(t, "v1", detail.ResourceQuotas[0].Version)
+	require.Equal(t, "ResourceQuota", detail.ResourceQuotas[0].Kind)
+	require.Equal(t, "resourcequotas", detail.ResourceQuotas[0].Resource)
+	require.Equal(t, "default", detail.ResourceQuotas[0].Namespace)
+	require.Equal(t, "quota", detail.ResourceQuotas[0].Name)
+	require.Len(t, detail.LimitRanges, 1)
+	require.Equal(t, "cluster-a", detail.LimitRanges[0].ClusterID)
+	require.Equal(t, "", detail.LimitRanges[0].Group)
+	require.Equal(t, "v1", detail.LimitRanges[0].Version)
+	require.Equal(t, "LimitRange", detail.LimitRanges[0].Kind)
+	require.Equal(t, "limitranges", detail.LimitRanges[0].Resource)
+	require.Equal(t, "default", detail.LimitRanges[0].Namespace)
+	require.Equal(t, "limits", detail.LimitRanges[0].Name)
 }
 
 func TestServiceNamespaceEnsureClientError(t *testing.T) {
@@ -104,5 +118,7 @@ func newNamespaceService(t testing.TB, client *fake.Clientset) *Service {
 		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
+	deps.ClusterID = "cluster-a"
+	deps.ClusterName = "Cluster A"
 	return NewService(deps)
 }

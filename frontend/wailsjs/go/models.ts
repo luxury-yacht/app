@@ -1590,8 +1590,8 @@ export namespace types {
 	    aggregationRule?: AggregationRule;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
-	    clusterRoleBindings?: string[];
-	    roleBindings?: string[];
+	    clusterRoleBindings?: resourcemodel.ResourceRef[];
+	    roleBindings?: resourcemodel.ResourceRef[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ClusterRoleDetails(source);
@@ -1607,8 +1607,8 @@ export namespace types {
 	        this.aggregationRule = this.convertValues(source["aggregationRule"], AggregationRule);
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
-	        this.clusterRoleBindings = source["clusterRoleBindings"];
-	        this.roleBindings = source["roleBindings"];
+	        this.clusterRoleBindings = this.convertValues(source["clusterRoleBindings"], resourcemodel.ResourceRef);
+	        this.roleBindings = this.convertValues(source["roleBindings"], resourcemodel.ResourceRef);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1642,7 +1642,7 @@ export namespace types {
 	    dataCount: number;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
-	    usedBy?: string[];
+	    usedBy?: resourcemodel.ResourceRef[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ConfigMapDetails(source);
@@ -1660,8 +1660,26 @@ export namespace types {
 	        this.dataCount = source["dataCount"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
-	        this.usedBy = source["usedBy"];
+	        this.usedBy = this.convertValues(source["usedBy"], resourcemodel.ResourceRef);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ContainerLogsEntry {
 	    timestamp: string;
@@ -3646,8 +3664,8 @@ export namespace types {
 	    workloadsUnknown?: boolean;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
-	    resourceQuotas?: string[];
-	    limitRanges?: string[];
+	    resourceQuotas?: resourcemodel.ResourceRef[];
+	    limitRanges?: resourcemodel.ResourceRef[];
 	
 	    static createFrom(source: any = {}) {
 	        return new NamespaceDetails(source);
@@ -3667,9 +3685,27 @@ export namespace types {
 	        this.workloadsUnknown = source["workloadsUnknown"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
-	        this.resourceQuotas = source["resourceQuotas"];
-	        this.limitRanges = source["limitRanges"];
+	        this.resourceQuotas = this.convertValues(source["resourceQuotas"], resourcemodel.ResourceRef);
+	        this.limitRanges = this.convertValues(source["limitRanges"], resourcemodel.ResourceRef);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class NetworkPolicyPort {
 	    protocol?: string;
@@ -4080,7 +4116,7 @@ export namespace types {
 	    conditions?: string[];
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
-	    mountedBy?: string[];
+	    mountedBy?: resourcemodel.ResourceRef[];
 	
 	    static createFrom(source: any = {}) {
 	        return new PersistentVolumeClaimDetails(source);
@@ -4107,7 +4143,7 @@ export namespace types {
 	        this.conditions = source["conditions"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
-	        this.mountedBy = source["mountedBy"];
+	        this.mountedBy = this.convertValues(source["mountedBy"], resourcemodel.ResourceRef);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -4692,7 +4728,7 @@ export namespace types {
 	    rules: PolicyRule[];
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
-	    usedByRoleBindings?: string[];
+	    usedByRoleBindings?: resourcemodel.ResourceRef[];
 	
 	    static createFrom(source: any = {}) {
 	        return new RoleDetails(source);
@@ -4708,7 +4744,7 @@ export namespace types {
 	        this.rules = this.convertValues(source["rules"], PolicyRule);
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
-	        this.usedByRoleBindings = source["usedByRoleBindings"];
+	        this.usedByRoleBindings = this.convertValues(source["usedByRoleBindings"], resourcemodel.ResourceRef);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -4834,7 +4870,7 @@ export namespace types {
 	    dataCount: number;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
-	    usedBy?: string[];
+	    usedBy?: resourcemodel.ResourceRef[];
 	
 	    static createFrom(source: any = {}) {
 	        return new SecretDetails(source);
@@ -4853,8 +4889,26 @@ export namespace types {
 	        this.dataCount = source["dataCount"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
-	        this.usedBy = source["usedBy"];
+	        this.usedBy = this.convertValues(source["usedBy"], resourcemodel.ResourceRef);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ServiceAccountDetails {
 	    kind: string;
@@ -4862,14 +4916,14 @@ export namespace types {
 	    namespace: string;
 	    age: string;
 	    details: string;
-	    secrets?: string[];
-	    imagePullSecrets?: string[];
+	    secrets?: resourcemodel.ResourceRef[];
+	    imagePullSecrets?: resourcemodel.ResourceRef[];
 	    automountServiceAccountToken?: boolean;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
-	    usedByPods?: string[];
-	    roleBindings?: string[];
-	    clusterRoleBindings?: string[];
+	    usedByPods?: resourcemodel.ResourceRef[];
+	    roleBindings?: resourcemodel.ResourceRef[];
+	    clusterRoleBindings?: resourcemodel.ResourceRef[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ServiceAccountDetails(source);
@@ -4882,15 +4936,33 @@ export namespace types {
 	        this.namespace = source["namespace"];
 	        this.age = source["age"];
 	        this.details = source["details"];
-	        this.secrets = source["secrets"];
-	        this.imagePullSecrets = source["imagePullSecrets"];
+	        this.secrets = this.convertValues(source["secrets"], resourcemodel.ResourceRef);
+	        this.imagePullSecrets = this.convertValues(source["imagePullSecrets"], resourcemodel.ResourceRef);
 	        this.automountServiceAccountToken = source["automountServiceAccountToken"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
-	        this.usedByPods = source["usedByPods"];
-	        this.roleBindings = source["roleBindings"];
-	        this.clusterRoleBindings = source["clusterRoleBindings"];
+	        this.usedByPods = this.convertValues(source["usedByPods"], resourcemodel.ResourceRef);
+	        this.roleBindings = this.convertValues(source["roleBindings"], resourcemodel.ResourceRef);
+	        this.clusterRoleBindings = this.convertValues(source["clusterRoleBindings"], resourcemodel.ResourceRef);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ServicePortDetails {
 	    name?: string;
@@ -5494,4 +5566,3 @@ export namespace v1 {
 	}
 
 }
-

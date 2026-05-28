@@ -21,6 +21,6 @@ type NamespaceDetails struct {
 	WorkloadsUnknown   bool              `json:"workloadsUnknown,omitempty"`
 	Labels             map[string]string `json:"labels,omitempty"`
 	Annotations        map[string]string `json:"annotations,omitempty"`
-	ResourceQuotas     []string          `json:"resourceQuotas,omitempty"`
-	LimitRanges        []string          `json:"limitRanges,omitempty"`
+	ResourceQuotas     []ObjectRef       `json:"resourceQuotas,omitempty"`
+	LimitRanges        []ObjectRef       `json:"limitRanges,omitempty"`
 }

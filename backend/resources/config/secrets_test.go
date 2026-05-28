@@ -58,7 +58,14 @@ func TestServiceSecretDetailsIncludesUsage(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Secret", detail.Kind)
 	require.Equal(t, 1, detail.DataCount)
-	require.Equal(t, []string{"api-0"}, detail.UsedBy)
+	require.Len(t, detail.UsedBy, 1)
+	require.Equal(t, "cluster-a", detail.UsedBy[0].ClusterID)
+	require.Equal(t, "", detail.UsedBy[0].Group)
+	require.Equal(t, "v1", detail.UsedBy[0].Version)
+	require.Equal(t, "Pod", detail.UsedBy[0].Kind)
+	require.Equal(t, "pods", detail.UsedBy[0].Resource)
+	require.Equal(t, "default", detail.UsedBy[0].Namespace)
+	require.Equal(t, "api-0", detail.UsedBy[0].Name)
 	require.Contains(t, detail.Details, "Opaque")
 }
 

@@ -273,7 +273,15 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 				if name == "" {
 					continue
 				}
-				identity := resourcemodel.ResolveHelmManifestResourceIdentity(itemAPIVersion, itemKind, namespace, name, namespaceExplicit)
+				identity := resourcemodel.ResolveHelmManifestResourceIdentityWithResolver(
+					s.deps.Common.Context,
+					s.deps.Common.ResourceResolver,
+					itemAPIVersion,
+					itemKind,
+					namespace,
+					name,
+					namespaceExplicit,
+				)
 				key := fmt.Sprintf("%s/%s/%s/%s", itemAPIVersion, itemKind, namespace, name)
 				if resourceMap[key] {
 					continue
@@ -294,7 +302,15 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 		if name == "" {
 			continue
 		}
-		identity := resourcemodel.ResolveHelmManifestResourceIdentity(apiVersion, kind, namespace, name, namespaceExplicit)
+		identity := resourcemodel.ResolveHelmManifestResourceIdentityWithResolver(
+			s.deps.Common.Context,
+			s.deps.Common.ResourceResolver,
+			apiVersion,
+			kind,
+			namespace,
+			name,
+			namespaceExplicit,
+		)
 
 		key := fmt.Sprintf("%s/%s/%s/%s", apiVersion, kind, namespace, name)
 		if resourceMap[key] {
@@ -369,7 +385,9 @@ func (s *Service) extractResourceLinksFromManifest(manifest, defaultNamespace st
 	}
 	links := make([]resourcemodel.ResourceLink, 0, len(resources))
 	for _, resource := range resources {
-		link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSource(
+		link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(
+			s.deps.Common.Context,
+			s.deps.Common.ResourceResolver,
 			s.deps.Common.ClusterID,
 			resource.APIVersion,
 			resource.Kind,

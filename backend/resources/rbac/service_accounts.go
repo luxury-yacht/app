@@ -82,14 +82,14 @@ func (s *Service) buildServiceAccountDetails(sa *corev1.ServiceAccount, pods *co
 		Namespace:                    sa.Namespace,
 		Age:                          common.FormatAge(sa.CreationTimestamp.Time),
 		Details:                      serviceAccountDetailsSummary(facts),
-		Secrets:                      resourcemodel.ResourceLinkNames(facts.Secrets),
-		ImagePullSecrets:             resourcemodel.ResourceLinkNames(facts.ImagePullSecrets),
+		Secrets:                      types.ObjectRefsFromResourceLinks(facts.Secrets),
+		ImagePullSecrets:             types.ObjectRefsFromResourceLinks(facts.ImagePullSecrets),
 		AutomountServiceAccountToken: facts.AutomountToken,
 		Labels:                       sa.Labels,
 		Annotations:                  sa.Annotations,
-		UsedByPods:                   resourcemodel.ResourceLinkNames(facts.UsedByPods),
-		RoleBindings:                 resourcemodel.ResourceLinkNames(facts.RoleBindings),
-		ClusterRoleBindings:          resourcemodel.ResourceLinkNames(facts.ClusterRoleBindings),
+		UsedByPods:                   types.ObjectRefsFromResourceLinks(facts.UsedByPods),
+		RoleBindings:                 types.ObjectRefsFromResourceLinks(facts.RoleBindings),
+		ClusterRoleBindings:          types.ObjectRefsFromResourceLinks(facts.ClusterRoleBindings),
 	}
 	return details
 }

@@ -77,6 +77,6 @@ func (s *Service) buildRoleDetails(role *rbacv1.Role, bindings *rbacv1.RoleBindi
 		Labels:      role.Labels,
 		Annotations: role.Annotations,
 	}
-	details.UsedByRoleBindings = resourcemodel.ResourceLinkNames(facts.UsedByRoleBindings)
+	details.UsedByRoleBindings = types.ObjectRefsFromResourceLinks(facts.UsedByRoleBindings)
 	return details
 }

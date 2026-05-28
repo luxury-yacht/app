@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -138,8 +139,8 @@ func preflightRequests(registrations []domainRegistration, extra []informer.Perm
 		add(req.Group, req.Resource, req.Verb)
 	}
 
-	// Add all runtime permission requirements so the universal check is pre-warmed.
-	for _, req := range snapshot.RuntimePreflightRequirements() {
+	// Add the shared domain permission contract so runtime and stream checks are pre-warmed.
+	for _, req := range domainpermissions.PreflightRequirements() {
 		add(req.Group, req.Resource, req.Verb)
 	}
 

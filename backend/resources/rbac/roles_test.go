@@ -56,6 +56,7 @@ func TestManagerRoleIncludesBindings(t *testing.T) {
 		Context:          context.Background(),
 		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
+		ClusterID:        "cluster-a",
 	})
 
 	details, err := manager.Role("team-a", "reader")
@@ -68,9 +69,10 @@ func TestManagerRoleIncludesBindings(t *testing.T) {
 	if len(details.Rules) != 1 {
 		t.Fatalf("expected a single policy rule, got %d", len(details.Rules))
 	}
-	if len(details.UsedByRoleBindings) != 1 || details.UsedByRoleBindings[0] != "reader-binding" {
+	if len(details.UsedByRoleBindings) != 1 {
 		t.Fatalf("expected role binding association, got %#v", details.UsedByRoleBindings)
 	}
+	requireObjectRef(t, details.UsedByRoleBindings, 0, "RoleBinding", "team-a", "reader-binding")
 	if details.Details == "" || details.Kind != "Role" {
 		t.Fatalf("expected summary string and kind Role, got details=%q kind=%q", details.Details, details.Kind)
 	}
@@ -93,6 +95,7 @@ func TestManagerRoleSkipsBindingsOnListFailure(t *testing.T) {
 		Context:          context.Background(),
 		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
+		ClusterID:        "cluster-a",
 	})
 
 	details, err := manager.Role("team-a", "orphan")

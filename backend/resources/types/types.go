@@ -648,7 +648,7 @@ type ConfigMapDetails struct {
 	DataCount   int               `json:"dataCount"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
-	UsedBy      []string          `json:"usedBy,omitempty"`
+	UsedBy      []ObjectRef       `json:"usedBy,omitempty"`
 }
 
 type SecretDetails struct {
@@ -663,7 +663,7 @@ type SecretDetails struct {
 	DataCount   int               `json:"dataCount"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
-	UsedBy      []string          `json:"usedBy,omitempty"`
+	UsedBy      []ObjectRef       `json:"usedBy,omitempty"`
 }
 
 type ServiceDetails struct {
@@ -973,7 +973,7 @@ type RoleDetails struct {
 	Rules              []PolicyRule      `json:"rules"`
 	Labels             map[string]string `json:"labels,omitempty"`
 	Annotations        map[string]string `json:"annotations,omitempty"`
-	UsedByRoleBindings []string          `json:"usedByRoleBindings,omitempty"`
+	UsedByRoleBindings []ObjectRef       `json:"usedByRoleBindings,omitempty"`
 }
 
 type PolicyRule struct {
@@ -1018,8 +1018,8 @@ type ClusterRoleDetails struct {
 	AggregationRule     *AggregationRule  `json:"aggregationRule,omitempty"`
 	Labels              map[string]string `json:"labels,omitempty"`
 	Annotations         map[string]string `json:"annotations,omitempty"`
-	ClusterRoleBindings []string          `json:"clusterRoleBindings,omitempty"`
-	RoleBindings        []string          `json:"roleBindings,omitempty"`
+	ClusterRoleBindings []ObjectRef       `json:"clusterRoleBindings,omitempty"`
+	RoleBindings        []ObjectRef       `json:"roleBindings,omitempty"`
 }
 
 type AggregationRule struct {
@@ -1043,14 +1043,14 @@ type ServiceAccountDetails struct {
 	Namespace                    string            `json:"namespace"`
 	Age                          string            `json:"age"`
 	Details                      string            `json:"details"`
-	Secrets                      []string          `json:"secrets,omitempty"`
-	ImagePullSecrets             []string          `json:"imagePullSecrets,omitempty"`
+	Secrets                      []ObjectRef       `json:"secrets,omitempty"`
+	ImagePullSecrets             []ObjectRef       `json:"imagePullSecrets,omitempty"`
 	AutomountServiceAccountToken *bool             `json:"automountServiceAccountToken,omitempty"`
 	Labels                       map[string]string `json:"labels,omitempty"`
 	Annotations                  map[string]string `json:"annotations,omitempty"`
-	UsedByPods                   []string          `json:"usedByPods,omitempty"`
-	RoleBindings                 []string          `json:"roleBindings,omitempty"`
-	ClusterRoleBindings          []string          `json:"clusterRoleBindings,omitempty"`
+	UsedByPods                   []ObjectRef       `json:"usedByPods,omitempty"`
+	RoleBindings                 []ObjectRef       `json:"roleBindings,omitempty"`
+	ClusterRoleBindings          []ObjectRef       `json:"clusterRoleBindings,omitempty"`
 }
 
 type PodMetricsSummary struct {

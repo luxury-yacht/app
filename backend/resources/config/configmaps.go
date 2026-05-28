@@ -84,7 +84,7 @@ func (s *Service) processConfigMapDetails(cm *corev1.ConfigMap, relationships *r
 	}
 
 	if facts != nil {
-		details.UsedBy = resourcemodel.ResourceLinkNames(facts.UsedBy)
+		details.UsedBy = types.ObjectRefsFromResourceLinks(facts.UsedBy)
 	}
 
 	details.Details = fmt.Sprintf("Data items: %d", details.DataCount)

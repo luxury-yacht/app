@@ -8,9 +8,7 @@ import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Detai
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip } from '@shared/components/StatusChip';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 
 interface SecretOverviewProps {
   secretDetails: types.SecretDetails | null;
@@ -42,12 +40,6 @@ const secretTypeTooltip = (type: string): string | undefined => {
 };
 
 export const SecretOverview: React.FC<SecretOverviewProps> = ({ secretDetails }) => {
-  const { objectData } = useObjectPanel();
-  const clusterMeta = {
-    clusterId: objectData?.clusterId ?? undefined,
-    clusterName: objectData?.clusterName ?? undefined,
-  };
-
   if (!secretDetails) return null;
 
   return (
@@ -84,18 +76,16 @@ export const SecretOverview: React.FC<SecretOverviewProps> = ({ secretDetails })
             <StatusChip variant="info">Not in use</StatusChip>
           ) : (
             <div>
-              {secretDetails.usedBy.map((podName: string, index: number) => (
-                <div key={`${podName}-${index}`} style={{ marginTop: index > 0 ? '4px' : 0 }}>
+              {secretDetails.usedBy.map((podRef, index) => (
+                <div
+                  key={`${podRef.clusterId}-${podRef.group}-${podRef.version}-${podRef.kind}-${podRef.namespace ?? ''}-${podRef.name ?? index}`}
+                  style={{ marginTop: index > 0 ? '4px' : 0 }}
+                >
                   <ObjectPanelLink
-                    objectRef={buildRequiredObjectReference({
-                      kind: 'pod',
-                      name: podName,
-                      namespace: secretDetails.namespace,
-                      ...clusterMeta,
-                    })}
-                    title={`Click to view pod: ${podName}`}
+                    objectRef={{ ...podRef, group: podRef.group, version: podRef.version }}
+                    title={`Click to view pod: ${podRef.name ?? podRef.kind}`}
                   >
-                    {podName}
+                    {podRef.name ?? podRef.kind}
                   </ObjectPanelLink>
                 </div>
               ))}

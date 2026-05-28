@@ -1,9 +1,11 @@
 package resourcemodel
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/release"
@@ -14,6 +16,25 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+type testResourceResolver map[schema.GroupVersionKind]common.ResolvedResource
+
+func (r testResourceResolver) ResolveResourceForGVK(ctx context.Context, gvk schema.GroupVersionKind) (common.ResolvedResource, bool, error) {
+	resolved, ok := r[gvk]
+	return resolved, ok, nil
+}
+
+var helmTestResolver = testResourceResolver{
+	{Group: "apps", Version: "v1", Kind: "Deployment"}: {
+		Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespaced: true,
+	},
+	{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}: {
+		Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole", Resource: "clusterroles", Namespaced: false,
+	},
+	{Group: "", Version: "v1", Kind: "ConfigMap"}: {
+		Group: "", Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespaced: true,
+	},
+}
 
 func TestBuildHelmReleaseResourceModelSyntheticIdentityAndFacts(t *testing.T) {
 	first := helmtime.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -41,7 +62,7 @@ func TestBuildHelmReleaseResourceModelSyntheticIdentityAndFacts(t *testing.T) {
 		Chart:   &chart.Chart{Metadata: &chart.Metadata{Name: "orders-chart", Version: "1.2.2"}},
 		Info:    &release.Info{Status: release.StatusSuperseded, LastDeployed: first},
 	}}
-	resources := []ResourceLink{BuildHelmManifestResourceLink("cluster-a", "apps/v1", "Deployment", "apps", "orders")}
+	resources := []ResourceLink{BuildHelmManifestResourceLinkWithResolver(context.Background(), helmTestResolver, "cluster-a", "apps/v1", "Deployment", "apps", "orders")}
 
 	model := BuildHelmReleaseResourceModel(
 		"cluster-a",
@@ -130,7 +151,9 @@ func TestBuildHelmManifestResourceLinkDoesNotGuessMissingAPIVersion(t *testing.T
 }
 
 func TestBuildHelmManifestResourceLinkRespectsBuiltinScope(t *testing.T) {
-	clusterRole := BuildHelmManifestResourceLinkWithNamespaceSource(
+	clusterRole := BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(
+		context.Background(),
+		helmTestResolver,
 		"cluster-a",
 		"rbac.authorization.k8s.io/v1",
 		"ClusterRole",
@@ -139,12 +162,14 @@ func TestBuildHelmManifestResourceLinkRespectsBuiltinScope(t *testing.T) {
 		false,
 	)
 	require.NotNil(t, clusterRole.Ref)
-	require.Equal(t, ResourceScopeCluster, ResolveHelmManifestResourceIdentity("rbac.authorization.k8s.io/v1", "ClusterRole", "release-ns", "reader", false).Scope)
+	require.Equal(t, ResourceScopeCluster, ResolveHelmManifestResourceIdentityWithResolver(context.Background(), helmTestResolver, "rbac.authorization.k8s.io/v1", "ClusterRole", "release-ns", "reader", false).Scope)
 	require.Equal(t, "ClusterRole", clusterRole.Ref.Kind)
 	require.Equal(t, "clusterroles", clusterRole.Ref.Resource)
 	require.Empty(t, clusterRole.Ref.Namespace)
 
-	configMap := BuildHelmManifestResourceLinkWithNamespaceSource(
+	configMap := BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(
+		context.Background(),
+		helmTestResolver,
 		"cluster-a",
 		"v1",
 		"ConfigMap",

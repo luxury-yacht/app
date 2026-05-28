@@ -10,6 +10,15 @@ import { StorageOverview } from './StorageOverview';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
+const podRef = (name: string, namespace: string) => ({
+  clusterId: defaultClusterId,
+  group: '',
+  version: 'v1',
+  kind: 'Pod',
+  resource: 'pods',
+  namespace,
+  name,
+});
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
@@ -104,7 +113,7 @@ describe('StorageOverview', () => {
       accessModes: ['ReadWriteOnce'],
       storageClass: 'standard',
       volumeMode: 'Filesystem',
-      mountedBy: ['pod-a', 'pod-b'],
+      mountedBy: [podRef('pod-a', 'storage'), podRef('pod-b', 'storage')],
       labels: { team: 'platform' },
       annotations: { owner: 'storage-admins' },
     });
@@ -150,10 +159,12 @@ describe('StorageOverview', () => {
     });
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'pod',
+        kind: 'Pod',
         name: 'pod-a',
         namespace: 'storage',
         clusterId: defaultClusterId,
+        group: '',
+        version: 'v1',
       })
     );
 

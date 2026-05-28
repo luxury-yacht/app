@@ -73,8 +73,8 @@ func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *types.Name
 		Annotations:        model.Metadata.Annotations,
 		HasWorkloads:       facts.HasWorkloads,
 		WorkloadsUnknown:   !facts.WorkloadsKnown,
-		ResourceQuotas:     resourcemodel.ResourceLinkNames(facts.ResourceQuotas),
-		LimitRanges:        resourcemodel.ResourceLinkNames(facts.LimitRanges),
+		ResourceQuotas:     types.ObjectRefsFromResourceLinks(facts.ResourceQuotas),
+		LimitRanges:        types.ObjectRefsFromResourceLinks(facts.LimitRanges),
 	}
 
 	detailParts := []string{fmt.Sprintf("Status: %s", details.Status)}
