@@ -141,42 +141,42 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	namespace := parsedScope.Namespace
 
 	var pods []*corev1.Pod
-	if b.podLister != nil {
+	if b.podLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "", "pods") {
 		pods, err = b.listPods(namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace workloads: failed to list pods: %w", err)
 		}
 	}
 	var deployments []*appsv1.Deployment
-	if b.deploymentLister != nil {
+	if b.deploymentLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "deployments") {
 		deployments, err = b.listDeployments(namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace workloads: failed to list deployments: %w", err)
 		}
 	}
 	var statefulSets []*appsv1.StatefulSet
-	if b.statefulLister != nil {
+	if b.statefulLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "statefulsets") {
 		statefulSets, err = b.listStatefulSets(namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace workloads: failed to list statefulsets: %w", err)
 		}
 	}
 	var daemonSets []*appsv1.DaemonSet
-	if b.daemonLister != nil {
+	if b.daemonLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "daemonsets") {
 		daemonSets, err = b.listDaemonSets(namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace workloads: failed to list daemonsets: %w", err)
 		}
 	}
 	var jobs []*batchv1.Job
-	if b.jobLister != nil {
+	if b.jobLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "jobs") {
 		jobs, err = b.listJobs(namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace workloads: failed to list jobs: %w", err)
 		}
 	}
 	var cronJobs []*batchv1.CronJob
-	if b.cronJobLister != nil {
+	if b.cronJobLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "cronjobs") {
 		cronJobs, err = b.listCronJobs(namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace workloads: failed to list cronjobs: %w", err)

@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
@@ -61,6 +62,46 @@ func TestNamespaceConfigBuilder(t *testing.T) {
 	for _, entry := range payload.Resources {
 		require.NotEmpty(t, entry.Age)
 	}
+}
+
+func TestNamespaceConfigBuilderHonorsRuntimeAllowedResources(t *testing.T) {
+	now := time.Now()
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "settings",
+			Namespace:         "default",
+			ResourceVersion:   "35",
+			CreationTimestamp: metav1.NewTime(now.Add(-45 * time.Minute)),
+		},
+		Data: map[string]string{"foo": "bar"},
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "creds",
+			Namespace:         "default",
+			ResourceVersion:   "36",
+			CreationTimestamp: metav1.NewTime(now.Add(-30 * time.Minute)),
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{"user": []byte("alice")},
+	}
+	builder := &NamespaceConfigBuilder{
+		configMaps: testsupport.NewConfigMapLister(t, configMap),
+		secrets:    testsupport.NewSecretLister(t, secret),
+	}
+	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceConfigDomainName, domainpermissions.AllowedResources{
+		"core/configmaps": false,
+		"core/secrets":    true,
+	})
+
+	snapshot, err := builder.Build(ctx, "namespace:default")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(NamespaceConfigSnapshot)
+	require.True(t, ok)
+	require.Len(t, payload.Resources, 1)
+	require.Equal(t, "Secret", payload.Resources[0].Kind)
+	require.Equal(t, []string{"Secret"}, payload.Kinds)
 }
 
 func TestNamespaceConfigBuilderAllNamespaces(t *testing.T) {

@@ -83,7 +83,7 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 	}
 
 	var configMaps []*corev1.ConfigMap
-	if b.configMaps != nil {
+	if b.configMaps != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "configmaps") {
 		configMaps, err = b.listConfigMaps(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace config: failed to list configmaps: %w", err)
@@ -91,7 +91,7 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 	}
 
 	var secrets []*corev1.Secret
-	if b.secrets != nil {
+	if b.secrets != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "secrets") {
 		secrets, err = b.listSecrets(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace config: failed to list secrets: %w", err)

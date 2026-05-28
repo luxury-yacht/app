@@ -115,7 +115,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 	var version uint64
 	entries := make([]ClusterConfigEntry, 0, 64)
 
-	if b.storageClassLister != nil {
+	if b.storageClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "storage.k8s.io", "storageclasses") {
 		storageClasses, err := b.storageClassLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -137,7 +137,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 	}
 
-	if b.ingressClassLister != nil {
+	if b.ingressClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "networking.k8s.io", "ingressclasses") {
 		ingressClasses, err := b.ingressClassLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -153,7 +153,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 	}
 
-	if b.gatewayClassLister != nil {
+	if b.gatewayClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "gateway.networking.k8s.io", "gatewayclasses") {
 		gatewayClasses, err := b.gatewayClassLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -169,7 +169,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 	}
 
-	if b.validatingWebhookLister != nil {
+	if b.validatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "validatingwebhookconfigurations") {
 		validatingWebhooks, err := b.validatingWebhookLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -185,7 +185,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 	}
 
-	if b.mutatingWebhookLister != nil {
+	if b.mutatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "mutatingwebhookconfigurations") {
 		mutatingWebhooks, err := b.mutatingWebhookLister.List(labels.Everything())
 		if err != nil {
 			return nil, err

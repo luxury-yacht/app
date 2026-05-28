@@ -311,21 +311,28 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       Boolean(permission && permission.entry?.status === 'ready' && !permission.allowed),
     []
   );
+  const areAllPermissionsDenied = useCallback(
+    (...permissions: Array<PermissionStatus | null | undefined>): boolean =>
+      permissions.length > 0 && permissions.every((permission) => isPermissionDenied(permission)),
+    [isPermissionDenied]
+  );
 
   const domainPermissionDenied = useMemo(() => {
-    const configDenied =
-      isPermissionDenied(configStorageClassPermission) ||
-      isPermissionDenied(configIngressClassPermission) ||
-      isPermissionDenied(configGatewayClassPermission) ||
-      isPermissionDenied(configMutatingWebhookPermission) ||
-      isPermissionDenied(configValidatingWebhookPermission);
+    const configDenied = areAllPermissionsDenied(
+      configStorageClassPermission,
+      configIngressClassPermission,
+      configGatewayClassPermission,
+      configMutatingWebhookPermission,
+      configValidatingWebhookPermission
+    );
 
     return {
       nodes: isPermissionDenied(nodeListPermission),
       'cluster-storage': isPermissionDenied(storageListPermission),
-      'cluster-rbac':
-        isPermissionDenied(rbacClusterRolePermission) ||
-        isPermissionDenied(rbacClusterRoleBindingPermission),
+      'cluster-rbac': areAllPermissionsDenied(
+        rbacClusterRolePermission,
+        rbacClusterRoleBindingPermission
+      ),
       'cluster-config': configDenied,
       'cluster-crds': isPermissionDenied(crdListPermission),
       'cluster-custom': isPermissionDenied(crdListPermission),
@@ -339,6 +346,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     configValidatingWebhookPermission,
     crdListPermission,
     eventListPermission,
+    areAllPermissionsDenied,
     isPermissionDenied,
     nodeListPermission,
     rbacClusterRoleBindingPermission,

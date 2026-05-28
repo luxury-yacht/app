@@ -21,9 +21,11 @@ const {
   scopedStates,
   contextRef,
   autoRefreshLoadingState,
+  permissionStates,
   createDomainState,
 } = vi.hoisted(() => {
   const scopedStateBag: Record<string, any> = {};
+  const permissionStateBag: Record<string, any> = {};
   const contextHolder: { current: ReturnType<typeof useClusterResources> | null } = {
     current: null,
   };
@@ -52,6 +54,7 @@ const {
       setScopedDomainEnabled: vi.fn(),
     },
     scopedStates: scopedStateBag,
+    permissionStates: permissionStateBag,
     contextRef: contextHolder,
     autoRefreshLoadingState: autoRefreshState,
     createDomainState: createState,
@@ -81,7 +84,8 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 }));
 
 vi.mock('@/core/capabilities', () => ({
-  useUserPermission: () => ({ allowed: true, pending: false, entry: { status: 'ready' } }),
+  useUserPermission: (kind: string) =>
+    permissionStates[kind] ?? { allowed: true, pending: false, entry: { status: 'ready' } },
 }));
 
 const TestConsumer: React.FC = () => {
@@ -103,6 +107,7 @@ describe('ClusterResourcesProvider', () => {
     root = ReactDOM.createRoot(container);
 
     Object.keys(scopedStates).forEach((key) => delete scopedStates[key]);
+    Object.keys(permissionStates).forEach((key) => delete permissionStates[key]);
     contextRef.current = null;
     dataAccessMocks.requestRefreshDomain.mockClear();
     Object.values(orchestrator).forEach((value) => value.mockClear());
@@ -229,5 +234,79 @@ describe('ClusterResourcesProvider', () => {
       false,
       { preserveState: true }
     );
+  });
+
+  it('keeps partial-data cluster domains enabled when at least one resource permission is allowed', async () => {
+    permissionStates.StorageClass = {
+      allowed: true,
+      pending: false,
+      entry: { status: 'ready' },
+    };
+    permissionStates.IngressClass = {
+      allowed: false,
+      pending: false,
+      entry: { status: 'ready' },
+    };
+    permissionStates.GatewayClass = {
+      allowed: false,
+      pending: false,
+      entry: { status: 'ready' },
+    };
+    permissionStates.MutatingWebhookConfiguration = {
+      allowed: false,
+      pending: false,
+      entry: { status: 'ready' },
+    };
+    permissionStates.ValidatingWebhookConfiguration = {
+      allowed: false,
+      pending: false,
+      entry: { status: 'ready' },
+    };
+    scopedStates[`cluster-config:${testClusterScope}`] = createDomainState({
+      scope: testClusterScope,
+    });
+
+    await render();
+
+    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'cluster-config',
+      testClusterScope,
+      true,
+      { preserveState: true }
+    );
+    expect(dataAccessMocks.requestRefreshDomain).toHaveBeenCalledWith({
+      domain: 'cluster-config',
+      scope: testClusterScope,
+      reason: 'startup',
+    });
+  });
+
+  it('disables partial-data cluster domains only when every resource permission is denied', async () => {
+    for (const kind of [
+      'StorageClass',
+      'IngressClass',
+      'GatewayClass',
+      'MutatingWebhookConfiguration',
+      'ValidatingWebhookConfiguration',
+    ]) {
+      permissionStates[kind] = {
+        allowed: false,
+        pending: false,
+        entry: { status: 'ready' },
+      };
+    }
+    scopedStates[`cluster-config:${testClusterScope}`] = createDomainState({
+      scope: testClusterScope,
+    });
+
+    await render();
+
+    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'cluster-config',
+      testClusterScope,
+      false,
+      { preserveState: true }
+    );
+    expect(dataAccessMocks.requestRefreshDomain).not.toHaveBeenCalled();
   });
 });

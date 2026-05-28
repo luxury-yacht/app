@@ -101,21 +101,21 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 	}
 
 	var quotas []*corev1.ResourceQuota
-	if b.quotaLister != nil {
+	if b.quotaLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "", "resourcequotas") {
 		quotas, err = b.listResourceQuotas(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace quotas: failed to list resourcequotas: %w", err)
 		}
 	}
 	var limits []*corev1.LimitRange
-	if b.limitLister != nil {
+	if b.limitLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "", "limitranges") {
 		limits, err = b.listLimitRanges(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace quotas: failed to list limitranges: %w", err)
 		}
 	}
 	var pdbs []*policyv1.PodDisruptionBudget
-	if b.pdbLister != nil {
+	if b.pdbLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "policy", "poddisruptionbudgets") {
 		pdbs, err = b.listPodDisruptionBudgets(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace quotas: failed to list poddisruptionbudgets: %w", err)

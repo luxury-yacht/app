@@ -74,7 +74,7 @@ func RegisterClusterRBACDomain(
 func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	var roles []*rbacv1.ClusterRole
-	if b.roleLister != nil {
+	if b.roleLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterroles") {
 		var err error
 		roles, err = b.roleLister.List(labels.Everything())
 		if err != nil {
@@ -82,7 +82,7 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		}
 	}
 	var bindings []*rbacv1.ClusterRoleBinding
-	if b.bindingLister != nil {
+	if b.bindingLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterrolebindings") {
 		var err error
 		bindings, err = b.bindingLister.List(labels.Everything())
 		if err != nil {

@@ -148,34 +148,34 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	}
 
 	var services []*corev1.Service
-	if b.serviceLister != nil {
+	if b.serviceLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "", "services") {
 		services, err = b.listServices(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list services: %w", err)
 		}
 	}
 	var slices []*discoveryv1.EndpointSlice
-	if b.endpointSliceLister != nil {
+	if b.endpointSliceLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "discovery.k8s.io", "endpointslices") {
 		slices, err = b.listEndpointSlices(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list endpoint slices: %w", err)
 		}
 	}
 	var ingresses []*networkingv1.Ingress
-	if b.ingressLister != nil {
+	if b.ingressLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "networking.k8s.io", "ingresses") {
 		ingresses, err = b.listIngresses(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list ingresses: %w", err)
 		}
 	}
 	var policies []*networkingv1.NetworkPolicy
-	if b.policyLister != nil {
+	if b.policyLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "networking.k8s.io", "networkpolicies") {
 		policies, err = b.listNetworkPolicies(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list network policies: %w", err)
 		}
 	}
-	gatewayItems, err := b.listGatewayAPIResources(parsedScope.Namespace)
+	gatewayItems, err := b.listGatewayAPIResources(ctx, parsedScope.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -223,10 +223,10 @@ type gatewayAPIResources struct {
 	backendTLSPolicies []*gatewayv1.BackendTLSPolicy
 }
 
-func (b *NamespaceNetworkBuilder) listGatewayAPIResources(namespace string) (gatewayAPIResources, error) {
+func (b *NamespaceNetworkBuilder) listGatewayAPIResources(ctx context.Context, namespace string) (gatewayAPIResources, error) {
 	var out gatewayAPIResources
 	var err error
-	if b.gatewayLister != nil {
+	if b.gatewayLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "gateway.networking.k8s.io", "gateways") {
 		if namespace == "" {
 			out.gateways, err = b.gatewayLister.List(labels.Everything())
 		} else {
@@ -236,7 +236,7 @@ func (b *NamespaceNetworkBuilder) listGatewayAPIResources(namespace string) (gat
 			return out, fmt.Errorf("namespace network: failed to list gateways: %w", err)
 		}
 	}
-	if b.httpRouteLister != nil {
+	if b.httpRouteLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "gateway.networking.k8s.io", "httproutes") {
 		if namespace == "" {
 			out.httpRoutes, err = b.httpRouteLister.List(labels.Everything())
 		} else {
@@ -246,7 +246,7 @@ func (b *NamespaceNetworkBuilder) listGatewayAPIResources(namespace string) (gat
 			return out, fmt.Errorf("namespace network: failed to list http routes: %w", err)
 		}
 	}
-	if b.grpcRouteLister != nil {
+	if b.grpcRouteLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "gateway.networking.k8s.io", "grpcroutes") {
 		if namespace == "" {
 			out.grpcRoutes, err = b.grpcRouteLister.List(labels.Everything())
 		} else {
@@ -256,7 +256,7 @@ func (b *NamespaceNetworkBuilder) listGatewayAPIResources(namespace string) (gat
 			return out, fmt.Errorf("namespace network: failed to list grpc routes: %w", err)
 		}
 	}
-	if b.tlsRouteLister != nil {
+	if b.tlsRouteLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "gateway.networking.k8s.io", "tlsroutes") {
 		if namespace == "" {
 			out.tlsRoutes, err = b.tlsRouteLister.List(labels.Everything())
 		} else {
@@ -266,7 +266,7 @@ func (b *NamespaceNetworkBuilder) listGatewayAPIResources(namespace string) (gat
 			return out, fmt.Errorf("namespace network: failed to list tls routes: %w", err)
 		}
 	}
-	if b.listenerSetLister != nil {
+	if b.listenerSetLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "gateway.networking.k8s.io", "listenersets") {
 		if namespace == "" {
 			out.listenerSets, err = b.listenerSetLister.List(labels.Everything())
 		} else {
@@ -276,7 +276,7 @@ func (b *NamespaceNetworkBuilder) listGatewayAPIResources(namespace string) (gat
 			return out, fmt.Errorf("namespace network: failed to list listener sets: %w", err)
 		}
 	}
-	if b.referenceGrantLister != nil {
+	if b.referenceGrantLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "gateway.networking.k8s.io", "referencegrants") {
 		if namespace == "" {
 			out.referenceGrants, err = b.referenceGrantLister.List(labels.Everything())
 		} else {
@@ -286,7 +286,7 @@ func (b *NamespaceNetworkBuilder) listGatewayAPIResources(namespace string) (gat
 			return out, fmt.Errorf("namespace network: failed to list reference grants: %w", err)
 		}
 	}
-	if b.backendTLSPolicyLister != nil {
+	if b.backendTLSPolicyLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "gateway.networking.k8s.io", "backendtlspolicies") {
 		if namespace == "" {
 			out.backendTLSPolicies, err = b.backendTLSPolicyLister.List(labels.Everything())
 		} else {

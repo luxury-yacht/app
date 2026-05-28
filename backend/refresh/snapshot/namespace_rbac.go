@@ -95,38 +95,38 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 	)
 
 	if isAll {
-		if b.roleLister != nil {
+		if b.roleLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "roles") {
 			roles, err = b.roleLister.List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.bindingLister != nil {
+		if b.bindingLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "rolebindings") {
 			bindings, err = b.bindingLister.List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.saLister != nil {
+		if b.saLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "", "serviceaccounts") {
 			serviceAccounts, err = b.saLister.List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
 	} else {
-		if b.roleLister != nil {
+		if b.roleLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "roles") {
 			roles, err = b.roleLister.Roles(namespace).List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.bindingLister != nil {
+		if b.bindingLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "rolebindings") {
 			bindings, err = b.bindingLister.RoleBindings(namespace).List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.saLister != nil {
+		if b.saLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "", "serviceaccounts") {
 			serviceAccounts, err = b.saLister.ServiceAccounts(namespace).List(labels.Everything())
 			if err != nil {
 				return nil, err

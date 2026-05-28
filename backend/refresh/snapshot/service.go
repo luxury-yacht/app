@@ -77,10 +77,16 @@ func newService(
 // Build returns a snapshot for the requested domain/scope.
 func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh.Snapshot, error) {
 	ctx = WithClusterMeta(ctx, s.cluster)
-	if err := s.ensurePermissions(ctx, domainName, scope); err != nil {
+	permissionCacheKey := ""
+	var err error
+	ctx, permissionCacheKey, err = s.ensurePermissions(ctx, domainName, scope)
+	if err != nil {
 		return nil, err
 	}
 	cacheKey := s.cacheKey(domainName, scope)
+	if permissionCacheKey != "" {
+		cacheKey += ":permissions:" + permissionCacheKey
+	}
 	groupKey := cacheKey
 	if refresh.HasCacheBypass(ctx) {
 		// Keep cache-bypass builds isolated from cached singleflight requests.
@@ -158,17 +164,21 @@ func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh
 // ensurePermissions blocks snapshot builds when the current identity no longer has list access.
 // Permission-denied placeholder domains are skipped — their BuildSnapshot stub already
 // returns the correct PermissionDeniedError, so firing SSAR calls is redundant.
-func (s *Service) ensurePermissions(ctx context.Context, domainName, scope string) error {
+func (s *Service) ensurePermissions(ctx context.Context, domainName, scope string) (context.Context, string, error) {
 	if s == nil || s.permissionChecker == nil {
-		return nil
+		return ctx, "", nil
 	}
 	// Skip SSAR checks for domains already registered as permission-denied placeholders.
 	// The domain's BuildSnapshot will return a PermissionDeniedError on its own.
 	if s.registry != nil && s.registry.IsPermissionDenied(domainName) {
-		return nil
+		return ctx, "", nil
 	}
 	start := time.Now()
 	decision, err := s.runtimeAccess.Check(ctx, domainName, s.permissionChecker)
+	permissionCacheKey := domainpermissions.AllowedResourcesFingerprint(decision.AllowedResources)
+	if len(decision.AllowedResources) > 0 {
+		ctx = domainpermissions.WithAllowedResources(ctx, domainName, decision.AllowedResources)
+	}
 	if err != nil {
 		duration := time.Since(start)
 		s.recordTelemetry(
@@ -185,10 +195,10 @@ func (s *Service) ensurePermissions(ctx context.Context, domainName, scope strin
 			true,
 			duration.Milliseconds(),
 		)
-		return err
+		return ctx, permissionCacheKey, err
 	}
 	if decision.Allowed {
-		return nil
+		return ctx, permissionCacheKey, nil
 	}
 	denied := refresh.NewPermissionDeniedError(domainName, decision.DeniedReason)
 	duration := time.Since(start)
@@ -206,7 +216,7 @@ func (s *Service) ensurePermissions(ctx context.Context, domainName, scope strin
 		true,
 		duration.Milliseconds(),
 	)
-	return denied
+	return ctx, permissionCacheKey, denied
 }
 
 func (s *Service) recordTelemetry(
