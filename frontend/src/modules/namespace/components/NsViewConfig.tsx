@@ -20,10 +20,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
-import {
-  buildRequiredCanonicalObjectRowKey,
-  buildRequiredObjectReference,
-} from '@shared/utils/objectIdentity';
+import { useResourceGridObjectIdentity } from '@shared/hooks/useResourceGridObjectIdentity';
 
 // Data interface for configuration resources (ConfigMaps, Secrets)
 export interface ConfigData {
@@ -65,38 +62,30 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<ConfigData>('config');
 
-    const handleResourceClick = useCallback(
-      (resource: ConfigData) => {
-        const resolvedKind = resource.kind || resource.kindAlias;
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: resolvedKind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId }
-          )
-        );
-      },
-      [openWithObject, selectedClusterId]
+    const getResourceIdentity = useCallback(
+      (resource: ConfigData) => ({
+        kind: resource.kind || resource.kindAlias,
+        name: resource.name,
+        namespace: resource.namespace,
+        clusterId: resource.clusterId,
+        clusterName: resource.clusterName ?? undefined,
+      }),
+      []
     );
 
-    const keyExtractor = useCallback(
-      (resource: ConfigData) =>
-        buildRequiredCanonicalObjectRowKey(
-          {
-            kind: resource.kind,
-            name: resource.name,
-            namespace: resource.namespace,
-            clusterId: resource.clusterId,
-          },
-          { fallbackClusterId: selectedClusterId }
-        ),
-      [selectedClusterId]
-    );
+    const resourceIdentity = useResourceGridObjectIdentity({
+      fallbackClusterId: selectedClusterId,
+      getObject: getResourceIdentity,
+      openWithObject,
+      navigateToView,
+    });
+    const {
+      key: resourceKey,
+      ref: resourceRef,
+      open: openResource,
+      navigate: navigateResource,
+      rowIdentity: resourceRowIdentity,
+    } = resourceIdentity;
 
     const columns: GridColumnDefinition<ConfigData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<ConfigData>[] = [
@@ -105,36 +94,12 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           getKind: (resource) => resource.kind,
           getAlias: (resource) => resource.kindAlias,
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
-          onClick: handleResourceClick,
-          onAltClick: (resource) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: resource.kind,
-                  name: resource.name,
-                  namespace: resource.namespace,
-                  clusterId: resource.clusterId,
-                  clusterName: resource.clusterName ?? undefined,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
+          onClick: openResource,
+          onAltClick: navigateResource,
         }),
         cf.createTextColumn<ConfigData>('name', 'Name', {
-          onClick: handleResourceClick,
-          onAltClick: (resource) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: resource.kind,
-                  name: resource.name,
-                  namespace: resource.namespace,
-                  clusterId: resource.clusterId,
-                  clusterName: resource.clusterName ?? undefined,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
+          onClick: openResource,
+          onAltClick: navigateResource,
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn<ConfigData>(
@@ -170,10 +135,9 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
 
       return baseColumns;
     }, [
-      handleResourceClick,
       namespaceColumnLink,
-      navigateToView,
-      selectedClusterId,
+      navigateResource,
+      openResource,
       showNamespaceColumn,
       useShortResourceNames,
     ]);
@@ -188,7 +152,8 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       namespace,
       columns,
       data,
-      keyExtractor,
+      keyExtractor: resourceKey,
+      rowIdentity: resourceRowIdentity,
       defaultSort: { key: 'name', direction: 'asc' },
       availableKinds: kindOptions,
       showKindDropdown: true,
@@ -204,20 +169,9 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (resource: ConfigData): ContextMenuItem[] => {
-        return objectActions.getMenuItems(
-          buildRequiredObjectReference(
-            {
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            },
-            { fallbackClusterId: selectedClusterId }
-          )
-        );
+        return objectActions.getMenuItems(resourceRef(resource));
       },
-      [objectActions, selectedClusterId]
+      [objectActions, resourceRef]
     );
 
     const emptyMessage = useMemo(
@@ -240,8 +194,8 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
           loading={loading}
-          keyExtractor={keyExtractor}
-          onRowClick={handleResourceClick}
+          keyExtractor={resourceKey}
+          onRowClick={openResource}
           tableClassName="ns-config-table"
           enableContextMenu={true}
           getCustomContextMenuItems={getContextMenuItems}

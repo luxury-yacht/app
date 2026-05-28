@@ -62,7 +62,7 @@ func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "team-a")
 	require.NoError(t, err)
 	require.Equal(t, namespaceEventsDomainName, snapshot.Domain)
-	require.Equal(t, "team-a", snapshot.Scope)
+	require.Equal(t, "namespace:team-a", snapshot.Scope)
 
 	payload, ok := snapshot.Payload.(NamespaceEventsSnapshot)
 	require.True(t, ok)

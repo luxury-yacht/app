@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -80,25 +79,18 @@ type NamespaceHelmBuilder struct {
 
 func (b *NamespaceHelmBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	trimmed = strings.TrimSpace(trimmed)
-	if trimmed == "" {
-		return nil, fmt.Errorf("namespace scope is required")
+	parsedScope, err := parseNamespaceSnapshotScope(scope, "namespace scope is required")
+	if err != nil {
+		return nil, err
 	}
 
-	isAll := isAllNamespaceScope(trimmed)
-	if isAll {
-		return b.buildAllNamespaces(ctx, clusterID, meta)
+	if parsedScope.AllNamespaces {
+		return b.buildAllNamespaces(ctx, parsedScope.CanonicalScope, meta)
 	}
-
-	namespace := normalizeNamespaceScope(trimmed)
-	if namespace == "" {
-		return nil, fmt.Errorf("namespace scope is required")
-	}
-	return b.buildSingleNamespace(clusterID, meta, namespace)
+	return b.buildSingleNamespace(parsedScope.CanonicalScope, meta, parsedScope.Namespace)
 }
 
-func (b *NamespaceHelmBuilder) buildSingleNamespace(clusterID string, meta ClusterMeta, namespace string) (*refresh.Snapshot, error) {
+func (b *NamespaceHelmBuilder) buildSingleNamespace(snapshotScope string, meta ClusterMeta, namespace string) (*refresh.Snapshot, error) {
 	actionCfg, err := b.factory(namespace)
 	if err != nil {
 		return nil, err
@@ -115,7 +107,7 @@ func (b *NamespaceHelmBuilder) buildSingleNamespace(clusterID string, meta Clust
 
 	return &refresh.Snapshot{
 		Domain:  namespaceHelmDomainName,
-		Scope:   refresh.JoinClusterScope(clusterID, namespace),
+		Scope:   snapshotScope,
 		Version: version,
 		Payload: NamespaceHelmSnapshot{ClusterMeta: meta, Releases: summaries},
 		Stats: refresh.SnapshotStats{
@@ -126,7 +118,7 @@ func (b *NamespaceHelmBuilder) buildSingleNamespace(clusterID string, meta Clust
 
 func (b *NamespaceHelmBuilder) buildAllNamespaces(
 	ctx context.Context,
-	clusterID string,
+	snapshotScope string,
 	meta ClusterMeta,
 ) (*refresh.Snapshot, error) {
 	if b.namespaceLister == nil {
@@ -142,7 +134,7 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(
 	if len(namespaces) == 0 {
 		return &refresh.Snapshot{
 			Domain:  namespaceHelmDomainName,
-			Scope:   refresh.JoinClusterScope(clusterID, "namespace:all"),
+			Scope:   snapshotScope,
 			Version: 0,
 			Payload: NamespaceHelmSnapshot{ClusterMeta: meta, Releases: []NamespaceHelmSummary{}},
 			Stats: refresh.SnapshotStats{
@@ -219,7 +211,7 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(
 
 	return &refresh.Snapshot{
 		Domain:  namespaceHelmDomainName,
-		Scope:   refresh.JoinClusterScope(clusterID, "namespace:all"),
+		Scope:   snapshotScope,
 		Version: version,
 		Payload: NamespaceHelmSnapshot{ClusterMeta: meta, Releases: summaries},
 		Stats: refresh.SnapshotStats{

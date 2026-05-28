@@ -10,98 +10,61 @@
  */
 
 import { useMemo } from 'react';
-import type { types } from '@wailsjs/go/models';
+import type { DetailSlots } from './objectDetailModel';
 
 // Using a permissive return type since different resource kinds have different fields
 type OverviewData = Record<string, unknown>;
 
 interface UseOverviewDataParams {
   objectData: any;
-  podDetails: types.PodDetailInfo | null;
-  deploymentDetails: types.DeploymentDetails | null;
-  replicaSetDetails: types.ReplicaSetDetails | null;
-  daemonSetDetails: types.DaemonSetDetails | null;
-  statefulSetDetails: types.StatefulSetDetails | null;
-  jobDetails: types.JobDetails | null;
-  cronJobDetails: types.CronJobDetails | null;
-  configMapDetails: types.ConfigMapDetails | null;
-  secretDetails: types.SecretDetails | null;
-  helmReleaseDetails: types.HelmReleaseDetails | null;
-  serviceDetails: types.ServiceDetails | null;
-  ingressDetails: types.IngressDetails | null;
-  networkPolicyDetails: types.NetworkPolicyDetails | null;
-  endpointSliceDetails: types.EndpointSliceDetails | null;
-  gatewayDetails?: types.GatewayDetails | null;
-  httpRouteDetails?: types.RouteDetails | null;
-  grpcRouteDetails?: types.RouteDetails | null;
-  tlsRouteDetails?: types.RouteDetails | null;
-  listenerSetDetails?: types.ListenerSetDetails | null;
-  referenceGrantDetails?: types.ReferenceGrantDetails | null;
-  backendTLSPolicyDetails?: types.BackendTLSPolicyDetails | null;
-  pvcDetails: types.PersistentVolumeClaimDetails | null;
-  pvDetails: types.PersistentVolumeDetails | null;
-  storageClassDetails: types.StorageClassDetails | null;
-  serviceAccountDetails: types.ServiceAccountDetails | null;
-  roleDetails: types.RoleDetails | null;
-  roleBindingDetails: types.RoleBindingDetails | null;
-  clusterRoleDetails: types.ClusterRoleDetails | null;
-  clusterRoleBindingDetails: types.ClusterRoleBindingDetails | null;
-  hpaDetails: types.HorizontalPodAutoscalerDetails | null;
-  pdbDetails: types.PodDisruptionBudgetDetails | null;
-  resourceQuotaDetails: types.ResourceQuotaDetails | null;
-  limitRangeDetails: types.LimitRangeDetails | null;
-  nodeDetails: types.NodeDetails | null;
-  namespaceDetails: types.NamespaceDetails | null;
-  ingressClassDetails: types.IngressClassDetails | null;
-  gatewayClassDetails?: types.GatewayClassDetails | null;
-  crdDetails: types.CustomResourceDefinitionDetails | null;
-  mutatingWebhookDetails: types.MutatingWebhookConfigurationDetails | null;
-  validatingWebhookDetails: types.ValidatingWebhookConfigurationDetails | null;
+  slots: DetailSlots;
 }
 
 export function useOverviewData(params: UseOverviewDataParams): OverviewData | null {
   const {
     objectData,
-    podDetails,
-    deploymentDetails,
-    replicaSetDetails,
-    daemonSetDetails,
-    statefulSetDetails,
-    jobDetails,
-    cronJobDetails,
-    configMapDetails,
-    secretDetails,
-    helmReleaseDetails,
-    serviceDetails,
-    ingressDetails,
-    networkPolicyDetails,
-    endpointSliceDetails,
-    gatewayDetails,
-    httpRouteDetails,
-    grpcRouteDetails,
-    tlsRouteDetails,
-    listenerSetDetails,
-    referenceGrantDetails,
-    backendTLSPolicyDetails,
-    pvcDetails,
-    pvDetails,
-    storageClassDetails,
-    serviceAccountDetails,
-    roleDetails,
-    roleBindingDetails,
-    clusterRoleDetails,
-    clusterRoleBindingDetails,
-    hpaDetails,
-    pdbDetails,
-    resourceQuotaDetails,
-    limitRangeDetails,
-    nodeDetails,
-    namespaceDetails,
-    ingressClassDetails,
-    gatewayClassDetails,
-    crdDetails,
-    mutatingWebhookDetails,
-    validatingWebhookDetails,
+    slots: {
+      podDetails,
+      deploymentDetails,
+      replicaSetDetails,
+      daemonSetDetails,
+      statefulSetDetails,
+      jobDetails,
+      cronJobDetails,
+      configMapDetails,
+      secretDetails,
+      helmReleaseDetails,
+      serviceDetails,
+      ingressDetails,
+      networkPolicyDetails,
+      endpointSliceDetails,
+      gatewayDetails,
+      httpRouteDetails,
+      grpcRouteDetails,
+      tlsRouteDetails,
+      listenerSetDetails,
+      referenceGrantDetails,
+      backendTLSPolicyDetails,
+      pvcDetails,
+      pvDetails,
+      storageClassDetails,
+      serviceAccountDetails,
+      roleDetails,
+      roleBindingDetails,
+      clusterRoleDetails,
+      clusterRoleBindingDetails,
+      hpaDetails,
+      pdbDetails,
+      resourceQuotaDetails,
+      limitRangeDetails,
+      nodeDetails,
+      namespaceDetails,
+      ingressClassDetails,
+      gatewayClassDetails,
+      crdDetails,
+      mutatingWebhookDetails,
+      validatingWebhookDetails,
+    },
   } = params;
 
   const kind = objectData?.kind?.toLowerCase() ?? null;

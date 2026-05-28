@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -104,19 +103,9 @@ func RegisterNamespaceCustomDomain(
 
 func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	trimmed = strings.TrimSpace(trimmed)
-	if trimmed == "" {
-		return nil, fmt.Errorf("namespace scope is required")
-	}
-
-	isAll := isAllNamespaceScope(trimmed)
-	namespace := normalizeNamespaceScope(scope)
-	if isAll {
-		namespace = ""
-	}
-	if namespace == "" && !isAll {
-		return nil, fmt.Errorf("namespace scope is required")
+	parsedScope, err := parseNamespaceSnapshotScope(scope, "namespace scope is required")
+	if err != nil {
+		return nil, err
 	}
 
 	if b.crdLister == nil {
@@ -140,14 +129,9 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 		if b.logger != nil {
 			b.logger.Info("namespace-custom: no namespaced CRDs discovered", logsources.Refresh)
 		}
-		snapshotScope := namespace
-		if isAll {
-			snapshotScope = "namespace:all"
-		}
-		snapshotScope = refresh.JoinClusterScope(clusterID, snapshotScope)
 		return &refresh.Snapshot{
 			Domain:  namespaceCustomDomainName,
-			Scope:   snapshotScope,
+			Scope:   parsedScope.CanonicalScope,
 			Version: 0,
 			Payload: NamespaceCustomSnapshot{
 				ClusterMeta: meta,
@@ -199,8 +183,8 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 				Resource: crdCopy.Spec.Names.Plural,
 			}
 
-			listNamespace := namespace
-			if isAll {
+			listNamespace := parsedScope.Namespace
+			if parsedScope.AllNamespaces {
 				listNamespace = metav1.NamespaceAll
 			}
 			resourceList, err := b.dynamic.Resource(gvr).Namespace(listNamespace).List(ctx, metav1.ListOptions{})
@@ -243,7 +227,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 					gvr.Version,
 					crdCopy.Spec.Names.Kind,
 					crdCopy.Name,
-					namespace,
+					parsedScope.Namespace,
 				))
 				if v := resourceVersionOrTimestamp(item); v > snapshotVersion {
 					snapshotVersion = v
@@ -283,31 +267,13 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 		stats.Warnings = append(stats.Warnings, warnings...)
 	}
 
-	snapshotScope := namespace
-	if isAll {
-		snapshotScope = "namespace:all"
-	}
-	snapshotScope = refresh.JoinClusterScope(clusterID, snapshotScope)
-
 	return &refresh.Snapshot{
 		Domain:  namespaceCustomDomainName,
-		Scope:   snapshotScope,
+		Scope:   parsedScope.CanonicalScope,
 		Version: version,
 		Payload: payload,
 		Stats:   stats,
 	}, nil
-}
-
-func normalizeNamespaceScope(scope string) string {
-	_, scopeValue := refresh.SplitClusterScope(scope)
-	value := strings.TrimSpace(scopeValue)
-	if value == "" {
-		return ""
-	}
-	if after, ok := strings.CutPrefix(value, "namespace:"); ok {
-		value = after
-	}
-	return strings.TrimPrefix(value, ":")
 }
 
 func sortNamespaceCustomSummaries(resources []NamespaceCustomSummary) {

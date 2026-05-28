@@ -8,6 +8,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
+import { buildObjectDetailModel } from '@modules/object-panel/components/ObjectPanel/Details/objectDetailModel';
 
 const hoistedRefs = vi.hoisted(() => ({
   detailsTabProps: { current: null as DetailsTabProps | null },
@@ -87,11 +88,13 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Pods/PodsTab', () => ({
 describe('ObjectPanelContent', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
+  const objectData = { kind: 'Deployment', name: 'api', namespace: 'team-a' };
 
   const baseProps: React.ComponentProps<typeof ObjectPanelContent> = {
     activeTab: 'details',
     detailTabProps: {
-      objectData: { kind: 'Deployment', name: 'api', namespace: 'team-a' },
+      objectData,
+      detailModel: buildObjectDetailModel(objectData, 'deployment', null),
       isActive: true,
       detailsLoading: false,
       detailsError: null,
@@ -113,38 +116,6 @@ describe('ObjectPanelContent', () => {
       onScaleCancel: vi.fn(),
       onScaleReplicasChange: vi.fn(),
       onShowScaleInput: vi.fn(),
-      podDetails: null,
-      deploymentDetails: null,
-      replicaSetDetails: null,
-      daemonSetDetails: null,
-      statefulSetDetails: null,
-      jobDetails: null,
-      cronJobDetails: null,
-      configMapDetails: null,
-      secretDetails: null,
-      helmReleaseDetails: null,
-      serviceDetails: null,
-      ingressDetails: null,
-      networkPolicyDetails: null,
-      endpointSliceDetails: null,
-      pvcDetails: null,
-      pvDetails: null,
-      storageClassDetails: null,
-      serviceAccountDetails: null,
-      roleDetails: null,
-      roleBindingDetails: null,
-      clusterRoleDetails: null,
-      clusterRoleBindingDetails: null,
-      hpaDetails: null,
-      pdbDetails: null,
-      resourceQuotaDetails: null,
-      limitRangeDetails: null,
-      nodeDetails: null,
-      namespaceDetails: null,
-      ingressClassDetails: null,
-      crdDetails: null,
-      mutatingWebhookDetails: null,
-      validatingWebhookDetails: null,
     },
     isPanelOpen: true,
     capabilities: {

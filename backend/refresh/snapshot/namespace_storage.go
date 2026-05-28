@@ -2,10 +2,8 @@ package snapshot
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -68,34 +66,17 @@ func RegisterNamespaceStorageDomain(
 // Build assembles PVC summaries for the namespace.
 func (b *NamespaceStorageBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	trimmed = strings.TrimSpace(trimmed)
-	if trimmed == "" {
-		return nil, errors.New(errNamespaceStorageScopeRequired)
+	parsedScope, err := parseNamespaceSnapshotScope(scope, errNamespaceStorageScopeRequired)
+	if err != nil {
+		return nil, err
 	}
 
-	isAll := isAllNamespaceScope(trimmed)
-	var (
-		namespace  string
-		err        error
-		scopeLabel string
-	)
-	if isAll {
-		scopeLabel = refresh.JoinClusterScope(clusterID, "namespace:all")
-	} else {
-		namespace, err = parseAutoscalingNamespace(trimmed)
-		if err != nil {
-			return nil, errors.New(errNamespaceStorageScopeRequired)
-		}
-		scopeLabel = refresh.JoinClusterScope(clusterID, trimmed)
-	}
-
-	pvcs, err := b.listPVCs(namespace)
+	pvcs, err := b.listPVCs(parsedScope.Namespace)
 	if err != nil {
 		return nil, fmt.Errorf("namespace storage: failed to list pvcs: %w", err)
 	}
 
-	return b.buildSnapshot(meta, scopeLabel, pvcs)
+	return b.buildSnapshot(meta, parsedScope.CanonicalScope, pvcs)
 }
 
 func (b *NamespaceStorageBuilder) listPVCs(namespace string) ([]*corev1.PersistentVolumeClaim, error) {

@@ -4,7 +4,8 @@
  * Renders the content of the object panel based on the active tab and provided props.
  * Each tab is conditionally rendered and wrapped in an error boundary for robustness.
  */
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
+import type { types } from '@wailsjs/go/models';
 import { refreshOrchestrator } from '@/core/refresh';
 import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
@@ -41,6 +42,9 @@ const TabErrorFallback = ({ tabName, reset }: { tabName: string; reset: () => vo
     </div>
   </div>
 );
+
+const EMPTY_CONTAINERS: string[] = [];
+const EMPTY_JOBS: types.JobSimpleInfo[] = [];
 
 interface ObjectPanelContentProps {
   activeTab: ViewType;
@@ -205,57 +209,9 @@ export function ObjectPanelContent({
     };
   }, [mapScope, isPanelOpen]);
 
-  // Derive activePodNames from the nested pod arrays directly, not from
-  // `detailTabProps` itself. `detailTabProps` is a fresh object literal
-  // every render (built inline in ObjectPanel), so using it as a useMemo
-  // dep would invalidate the cache on every parent re-render — including
-  // every rAF tick of a panel drag/resize. That in turn would rebuild the
-  // `activePodNames` array on every frame and cascade re-renders through
-  // LogViewer, making the Logs tab janky during drag.
-  //
-  // The nested `*Details` objects, on the other hand, come from the
-  // memoized `detailsProps` in ObjectPanel and are referentially stable
-  // until the backend detail payload changes — so their `.pods` arrays
-  // are stable drag-safe deps.
-  const deploymentPods = detailTabProps?.deploymentDetails?.pods;
-  const daemonSetPods = detailTabProps?.daemonSetDetails?.pods;
-  const statefulSetPods = detailTabProps?.statefulSetDetails?.pods;
-  const jobPods = detailTabProps?.jobDetails?.pods;
-  const cronJobPods = detailTabProps?.cronJobDetails?.pods;
-  const activePodNames = useMemo(() => {
-    if (!detailTabProps) {
-      return null;
-    }
-
-    const extractPodNames = (pods?: Array<{ name?: string | null }>) => {
-      if (!pods || pods.length === 0) {
-        return null;
-      }
-      const names = pods
-        .map((pod) => (typeof pod.name === 'string' ? pod.name.trim() : ''))
-        .filter((name) => name.length > 0);
-      return names.length > 0 ? names : null;
-    };
-
-    return (
-      extractPodNames(deploymentPods ?? undefined) ??
-      extractPodNames(daemonSetPods ?? undefined) ??
-      extractPodNames(statefulSetPods ?? undefined) ??
-      extractPodNames(jobPods ?? undefined) ??
-      extractPodNames(cronJobPods ?? undefined) ??
-      null
-    );
-    // detailTabProps is only read for the null-check above; the actual
-    // pod arrays are the useMemo deps so drag-driven re-renders don't
-    // invalidate this.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deploymentPods, daemonSetPods, statefulSetPods, jobPods, cronJobPods]);
-
-  const availableContainers = useMemo(() => {
-    const containers =
-      detailTabProps?.podDetails?.containers?.map((container) => container.name?.trim()) ?? [];
-    return containers.filter((name): name is string => Boolean(name));
-  }, [detailTabProps?.podDetails?.containers]);
+  const activePodNames = detailTabProps?.detailModel.activePodNames ?? null;
+  const availableContainers = detailTabProps?.detailModel.availableContainers ?? EMPTY_CONTAINERS;
+  const cronJobDetails = detailTabProps?.detailModel.slots.cronJobDetails ?? null;
 
   if (resourceDeleted) {
     return (
@@ -378,8 +334,8 @@ export function ObjectPanelContent({
           fallback={(_, reset) => <TabErrorFallback tabName="Jobs" reset={reset} />}
         >
           <JobsTab
-            jobs={detailTabProps?.cronJobDetails?.jobs ?? []}
-            loading={!detailTabProps?.cronJobDetails && !!detailTabProps?.detailsLoading}
+            jobs={cronJobDetails?.jobs ?? EMPTY_JOBS}
+            loading={!cronJobDetails && !!detailTabProps?.detailsLoading}
             isActive={isPanelOpen && activeTab === 'jobs'}
             clusterId={objectData?.clusterId}
             clusterName={objectData?.clusterName}

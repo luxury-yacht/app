@@ -6,29 +6,26 @@
  */
 
 import { useMemo } from 'react';
-import type { types } from '@wailsjs/go/models';
 import type { UtilizationData } from './detailsTabTypes';
 import type { KubernetesObjectReference } from '@/types/view-state';
+import type { DetailSlots } from './objectDetailModel';
 
 interface UseUtilizationDataParams {
   objectData: KubernetesObjectReference | null | undefined;
-  podDetails: types.PodDetailInfo | null;
-  deploymentDetails: types.DeploymentDetails | null;
-  daemonSetDetails: types.DaemonSetDetails | null;
-  statefulSetDetails: types.StatefulSetDetails | null;
-  replicaSetDetails: types.ReplicaSetDetails | null;
-  nodeDetails: types.NodeDetails | null;
+  slots: DetailSlots;
 }
 
 export function useUtilizationData(params: UseUtilizationDataParams): UtilizationData | null {
   const {
     objectData,
-    podDetails,
-    deploymentDetails,
-    daemonSetDetails,
-    statefulSetDetails,
-    replicaSetDetails,
-    nodeDetails,
+    slots: {
+      podDetails,
+      deploymentDetails,
+      daemonSetDetails,
+      statefulSetDetails,
+      replicaSetDetails,
+      nodeDetails,
+    },
   } = params;
 
   const hasUtilization = (() => {

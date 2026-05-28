@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -82,26 +81,17 @@ func RegisterNamespaceRBACDomain(
 func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	_ = ctx
 	meta := ClusterMetaFromContext(ctx)
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	trimmed = strings.TrimSpace(trimmed)
-	if trimmed == "" {
-		return nil, fmt.Errorf("namespace scope is required")
+	parsedScope, err := parseNamespaceSnapshotScope(scope, "namespace scope is required")
+	if err != nil {
+		return nil, err
 	}
-
-	isAll := isAllNamespaceScope(trimmed)
-	var namespace string
-	if !isAll {
-		namespace = normalizeNamespaceScope(trimmed)
-		if namespace == "" {
-			return nil, fmt.Errorf("namespace scope is required")
-		}
-	}
+	isAll := parsedScope.AllNamespaces
+	namespace := parsedScope.Namespace
 
 	var (
 		roles           []*rbacv1.Role
 		bindings        []*rbacv1.RoleBinding
 		serviceAccounts []*corev1.ServiceAccount
-		err             error
 	)
 
 	if isAll {
@@ -144,14 +134,12 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 		}
 	}
 
-	return buildNamespaceRBACSnapshot(meta, clusterID, isAll, namespace, roles, bindings, serviceAccounts)
+	return buildNamespaceRBACSnapshot(meta, parsedScope.CanonicalScope, roles, bindings, serviceAccounts)
 }
 
 func buildNamespaceRBACSnapshot(
 	meta ClusterMeta,
-	clusterID string,
-	isAll bool,
-	namespace string,
+	scope string,
 	roles []*rbacv1.Role,
 	bindings []*rbacv1.RoleBinding,
 	serviceAccounts []*corev1.ServiceAccount,
@@ -194,12 +182,6 @@ func buildNamespaceRBACSnapshot(
 	}
 
 	sortRBACSummaries(resources)
-
-	scope := namespace
-	if isAll {
-		scope = "namespace:all"
-	}
-	scope = refresh.JoinClusterScope(clusterID, scope)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceRBACDomainName,

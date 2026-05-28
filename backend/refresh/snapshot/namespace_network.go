@@ -2,7 +2,6 @@ package snapshot
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -143,61 +142,47 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 // Build gathers services, endpoint slices, ingresses, and policies for the namespace.
 func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	trimmed = strings.TrimSpace(trimmed)
-	if trimmed == "" {
-		return nil, errors.New(errNamespaceNetworkScopeRequired)
-	}
-
-	isAll := isAllNamespaceScope(trimmed)
-	var namespace string
-	var err error
-	scopeLabel := refresh.JoinClusterScope(clusterID, trimmed)
-	if isAll {
-		scopeLabel = refresh.JoinClusterScope(clusterID, "namespace:all")
-	} else {
-		namespace, err = parseAutoscalingNamespace(trimmed)
-		if err != nil {
-			return nil, errors.New(errNamespaceNetworkScopeRequired)
-		}
+	parsedScope, err := parseNamespaceSnapshotScope(scope, errNamespaceNetworkScopeRequired)
+	if err != nil {
+		return nil, err
 	}
 
 	var services []*corev1.Service
 	if b.serviceLister != nil {
-		services, err = b.listServices(namespace)
+		services, err = b.listServices(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list services: %w", err)
 		}
 	}
 	var slices []*discoveryv1.EndpointSlice
 	if b.endpointSliceLister != nil {
-		slices, err = b.listEndpointSlices(namespace)
+		slices, err = b.listEndpointSlices(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list endpoint slices: %w", err)
 		}
 	}
 	var ingresses []*networkingv1.Ingress
 	if b.ingressLister != nil {
-		ingresses, err = b.listIngresses(namespace)
+		ingresses, err = b.listIngresses(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list ingresses: %w", err)
 		}
 	}
 	var policies []*networkingv1.NetworkPolicy
 	if b.policyLister != nil {
-		policies, err = b.listNetworkPolicies(namespace)
+		policies, err = b.listNetworkPolicies(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list network policies: %w", err)
 		}
 	}
-	gatewayItems, err := b.listGatewayAPIResources(namespace)
+	gatewayItems, err := b.listGatewayAPIResources(parsedScope.Namespace)
 	if err != nil {
 		return nil, err
 	}
 
 	slicesByService := groupEndpointSlicesByService(slices)
 
-	return b.buildSnapshot(meta, scopeLabel, services, slices, slicesByService, ingresses, policies, gatewayItems)
+	return b.buildSnapshot(meta, parsedScope.CanonicalScope, services, slices, slicesByService, ingresses, policies, gatewayItems)
 }
 
 func (b *NamespaceNetworkBuilder) listServices(namespace string) ([]*corev1.Service, error) {

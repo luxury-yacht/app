@@ -5,62 +5,13 @@
  * Defines shared interfaces and payload shapes for the object panel feature.
  */
 
-import { types } from '@wailsjs/go/models';
 import type { KubernetesObjectReference } from '@/types/view-state';
+import type { ObjectDetailModel } from './objectDetailModel';
 
 export interface DetailsTabProps {
   objectData?: KubernetesObjectReference | null;
+  detailModel: ObjectDetailModel;
   isActive?: boolean;
-  // Workloads
-  podDetails: types.PodDetailInfo | null;
-  deploymentDetails: types.DeploymentDetails | null;
-  replicaSetDetails: types.ReplicaSetDetails | null;
-  daemonSetDetails: types.DaemonSetDetails | null;
-  statefulSetDetails: types.StatefulSetDetails | null;
-  jobDetails: types.JobDetails | null;
-  cronJobDetails: types.CronJobDetails | null;
-  // Configuration
-  configMapDetails: types.ConfigMapDetails | null;
-  secretDetails: types.SecretDetails | null;
-  // Helm
-  helmReleaseDetails: types.HelmReleaseDetails | null;
-  // Network
-  serviceDetails: types.ServiceDetails | null;
-  ingressDetails: types.IngressDetails | null;
-  networkPolicyDetails: types.NetworkPolicyDetails | null;
-  endpointSliceDetails: types.EndpointSliceDetails | null;
-  gatewayDetails?: types.GatewayDetails | null;
-  httpRouteDetails?: types.RouteDetails | null;
-  grpcRouteDetails?: types.RouteDetails | null;
-  tlsRouteDetails?: types.RouteDetails | null;
-  listenerSetDetails?: types.ListenerSetDetails | null;
-  referenceGrantDetails?: types.ReferenceGrantDetails | null;
-  backendTLSPolicyDetails?: types.BackendTLSPolicyDetails | null;
-  // Storage
-  pvcDetails: types.PersistentVolumeClaimDetails | null;
-  pvDetails: types.PersistentVolumeDetails | null;
-  storageClassDetails: types.StorageClassDetails | null;
-  // RBAC
-  serviceAccountDetails: types.ServiceAccountDetails | null;
-  roleDetails: types.RoleDetails | null;
-  roleBindingDetails: types.RoleBindingDetails | null;
-  clusterRoleDetails: types.ClusterRoleDetails | null;
-  clusterRoleBindingDetails: types.ClusterRoleBindingDetails | null;
-  // Autoscaling
-  hpaDetails: types.HorizontalPodAutoscalerDetails | null;
-  // Policy
-  pdbDetails: types.PodDisruptionBudgetDetails | null;
-  resourceQuotaDetails: types.ResourceQuotaDetails | null;
-  limitRangeDetails: types.LimitRangeDetails | null;
-  // Cluster Resources
-  nodeDetails: types.NodeDetails | null;
-  namespaceDetails: types.NamespaceDetails | null;
-  ingressClassDetails: types.IngressClassDetails | null;
-  gatewayClassDetails?: types.GatewayClassDetails | null;
-  // CRDs and Webhooks
-  crdDetails: types.CustomResourceDefinitionDetails | null;
-  mutatingWebhookDetails: types.MutatingWebhookConfigurationDetails | null;
-  validatingWebhookDetails: types.ValidatingWebhookConfigurationDetails | null;
   detailsLoading: boolean;
   detailsError: string | null;
   resourceDeleted?: boolean;

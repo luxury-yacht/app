@@ -7,6 +7,7 @@ import { act } from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { resourcemodel } from '@wailsjs/go/models';
 import type { DetailsTabProps } from './DetailsTab';
+import { createObjectDetailModelFromSlots, type DetailSlots } from './objectDetailModel';
 
 const useShortcutMock = vi.fn();
 const overviewMock = vi.fn();
@@ -95,9 +96,55 @@ const renderDetailsTab = async (props: DetailsTabProps) => {
   };
 };
 
-const createBaseProps = (overrides: Partial<DetailsTabProps> = {}): DetailsTabProps => ({
-  objectData: { kind: 'Pod', name: 'pod-1', namespace: 'default', age: '1h', status: 'Running' },
-  isActive: true,
+const SLOT_KEYS = [
+  'podDetails',
+  'deploymentDetails',
+  'replicaSetDetails',
+  'daemonSetDetails',
+  'statefulSetDetails',
+  'jobDetails',
+  'cronJobDetails',
+  'configMapDetails',
+  'secretDetails',
+  'helmReleaseDetails',
+  'serviceDetails',
+  'ingressDetails',
+  'networkPolicyDetails',
+  'endpointSliceDetails',
+  'gatewayDetails',
+  'httpRouteDetails',
+  'grpcRouteDetails',
+  'tlsRouteDetails',
+  'listenerSetDetails',
+  'referenceGrantDetails',
+  'backendTLSPolicyDetails',
+  'pvcDetails',
+  'pvDetails',
+  'storageClassDetails',
+  'serviceAccountDetails',
+  'roleDetails',
+  'roleBindingDetails',
+  'clusterRoleDetails',
+  'clusterRoleBindingDetails',
+  'hpaDetails',
+  'pdbDetails',
+  'resourceQuotaDetails',
+  'limitRangeDetails',
+  'nodeDetails',
+  'namespaceDetails',
+  'ingressClassDetails',
+  'gatewayClassDetails',
+  'crdDetails',
+  'mutatingWebhookDetails',
+  'validatingWebhookDetails',
+] as const satisfies readonly (keyof DetailSlots)[];
+
+type DetailsTabTestOverrides = Partial<Omit<DetailsTabProps, 'detailModel'>> &
+  Partial<DetailSlots> & {
+    detailModel?: DetailsTabProps['detailModel'];
+  };
+
+const createEmptySlots = (overrides: Partial<DetailSlots> = {}): DetailSlots => ({
   podDetails: null,
   deploymentDetails: null,
   replicaSetDetails: null,
@@ -130,33 +177,67 @@ const createBaseProps = (overrides: Partial<DetailsTabProps> = {}): DetailsTabPr
   crdDetails: null,
   mutatingWebhookDetails: null,
   validatingWebhookDetails: null,
-  detailsLoading: false,
-  detailsError: null,
-  resourceDeleted: false,
-  deletedResourceName: '',
-  canRestart: true,
-  canScale: true,
-  canDelete: true,
-  restartDisabledReason: undefined,
-  scaleDisabledReason: undefined,
-  deleteDisabledReason: undefined,
-  actionLoading: false,
-  actionError: null,
-  scaleReplicas: 2,
-  showScaleInput: false,
-  onRestartClick: vi.fn(),
-  onDeleteClick: vi.fn(),
-  onScaleClick: vi.fn(),
-  onScaleCancel: vi.fn(),
-  onScaleReplicasChange: vi.fn(),
-  onShowScaleInput: vi.fn(),
   ...overrides,
 });
+
+const splitTestOverrides = (
+  overrides: DetailsTabTestOverrides
+): { propOverrides: Partial<DetailsTabProps>; slots: DetailSlots } => {
+  const propOverrides = { ...overrides } as Record<string, unknown>;
+  const slots = createEmptySlots();
+  for (const key of SLOT_KEYS) {
+    if (key in propOverrides) {
+      (slots as Record<keyof DetailSlots, unknown>)[key] = propOverrides[key];
+      delete propOverrides[key];
+    }
+  }
+  return { propOverrides: propOverrides as Partial<DetailsTabProps>, slots };
+};
+
+const createBaseProps = (overrides: DetailsTabTestOverrides = {}): DetailsTabProps => {
+  const { propOverrides, slots } = splitTestOverrides(overrides);
+  const objectData = propOverrides.objectData ?? {
+    kind: 'Pod',
+    name: 'pod-1',
+    namespace: 'default',
+    age: '1h',
+    status: 'Running',
+  };
+
+  return {
+    objectData,
+    detailModel:
+      propOverrides.detailModel ??
+      createObjectDetailModelFromSlots(objectData, objectData?.kind?.toLowerCase(), slots),
+    isActive: true,
+    detailsLoading: false,
+    detailsError: null,
+    resourceDeleted: false,
+    deletedResourceName: '',
+    canRestart: true,
+    canScale: true,
+    canDelete: true,
+    restartDisabledReason: undefined,
+    scaleDisabledReason: undefined,
+    deleteDisabledReason: undefined,
+    actionLoading: false,
+    actionError: null,
+    scaleReplicas: 2,
+    showScaleInput: false,
+    onRestartClick: vi.fn(),
+    onDeleteClick: vi.fn(),
+    onScaleClick: vi.fn(),
+    onScaleCancel: vi.fn(),
+    onScaleReplicasChange: vi.fn(),
+    onShowScaleInput: vi.fn(),
+    ...propOverrides,
+  };
+};
 
 type OverviewScenario = {
   name: string;
   objectData: Record<string, unknown>;
-  extraProps: Partial<DetailsTabProps>;
+  extraProps: DetailsTabTestOverrides;
   expectedOverview: Record<string, unknown>;
   expectUtilization?: Record<string, unknown> | null;
   expectContainers?: boolean;
@@ -164,10 +245,15 @@ type OverviewScenario = {
 };
 
 const buildScenarioProps = (scenario: OverviewScenario): DetailsTabProps => {
-  const base = createBaseProps();
-  base.objectData = { ...base.objectData, ...scenario.objectData };
-  Object.assign(base, scenario.extraProps);
-  return base;
+  const objectData = {
+    kind: 'Pod',
+    name: 'pod-1',
+    namespace: 'default',
+    age: '1h',
+    status: 'Running',
+    ...scenario.objectData,
+  };
+  return createBaseProps({ ...scenario.extraProps, objectData });
 };
 
 describe('DetailsTab', () => {

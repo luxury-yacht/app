@@ -13,6 +13,29 @@ type AccessDecision struct {
 	DeniedReason string
 }
 
+// AllowedResources reports which resources passed registration-time access checks.
+type AllowedResources map[string]bool
+
+// Allows reports whether a resource was allowed, using the same canonical key
+// format as Policy requirements.
+func (a AllowedResources) Allows(group, resource string) bool {
+	return a[permissions.ResourceKey(group, resource)]
+}
+
+// RegistrationAccessPlan is the registration-time view of a domain policy.
+type RegistrationAccessPlan struct {
+	Domain       string
+	Mode         Mode
+	DeniedReason string
+	Requirements []permissions.ResourceRequirement
+}
+
+// AllowAny reports whether the plan allows partial registration when any
+// requirement is permitted.
+func (p RegistrationAccessPlan) AllowAny() bool {
+	return p.Mode == ModeAny
+}
+
 // RuntimeAccess evaluates refresh-domain runtime permission policies.
 type RuntimeAccess struct {
 	policies map[string]Policy
@@ -44,6 +67,20 @@ func (a RuntimeAccess) DeniedReason(domainName string) (string, bool) {
 		return "", false
 	}
 	return deniedReason(policy), true
+}
+
+// RegistrationPlan returns the registration-time access policy for a domain.
+func (a RuntimeAccess) RegistrationPlan(domainName string) (RegistrationAccessPlan, bool) {
+	policy, ok := a.policies[domainName]
+	if !ok || len(policy.Runtime) == 0 {
+		return RegistrationAccessPlan{}, false
+	}
+	return RegistrationAccessPlan{
+		Domain:       policy.Domain,
+		Mode:         policy.Mode,
+		DeniedReason: deniedReason(policy),
+		Requirements: append([]permissions.ResourceRequirement(nil), policy.Runtime...),
+	}, true
 }
 
 // Check evaluates whether the current identity has runtime access to a domain.

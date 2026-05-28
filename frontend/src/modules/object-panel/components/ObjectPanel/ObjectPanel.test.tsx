@@ -913,9 +913,7 @@ describe('ObjectPanel tab availability', () => {
         },
       });
 
-      expect((detailsTabPropsRef.current as Record<string, unknown>)[property]).toEqual(
-        detailsPayload
-      );
+      expect(detailsTabPropsRef.current.detailModel.slots[property]).toEqual(detailsPayload);
     }
   );
 
@@ -931,7 +929,7 @@ describe('ObjectPanel tab availability', () => {
       },
     });
 
-    expect(detailsTabPropsRef.current).toMatchObject({
+    expect(detailsTabPropsRef.current.detailModel.slots).toMatchObject({
       podDetails: null,
       deploymentDetails: null,
     });

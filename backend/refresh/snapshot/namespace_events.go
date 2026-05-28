@@ -69,32 +69,21 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	_ = ctx
 	meta := ClusterMetaFromContext(ctx)
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	trimmed = strings.TrimSpace(trimmed)
-	if trimmed == "" {
-		return nil, fmt.Errorf("namespace scope is required")
-	}
-
-	isAll := isAllNamespaceScope(trimmed)
-	var namespace string
-	if !isAll {
-		namespace = normalizeNamespaceScope(trimmed)
-		if namespace == "" {
-			return nil, fmt.Errorf("namespace scope is required")
-		}
+	parsedScope, err := parseNamespaceSnapshotScope(scope, "namespace scope is required")
+	if err != nil {
+		return nil, err
 	}
 
 	var (
 		events []*corev1.Event
-		err    error
 	)
-	if isAll {
+	if parsedScope.AllNamespaces {
 		events, err = b.eventLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		events, err = b.eventLister.Events(namespace).List(labels.Everything())
+		events, err = b.eventLister.Events(parsedScope.Namespace).List(labels.Everything())
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +98,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		if eventNamespace == "" {
 			continue
 		}
-		if !isAll && eventNamespace != namespace {
+		if !parsedScope.AllNamespaces && eventNamespace != parsedScope.Namespace {
 			continue
 		}
 		filtered = append(filtered, event)
@@ -127,12 +116,6 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 
 	summaries := make([]EventSummary, 0, len(events))
 	var version uint64
-
-	scopeValue := namespace
-	if isAll {
-		scopeValue = "namespace:all"
-	}
-	scopeValue = refresh.JoinClusterScope(clusterID, scopeValue)
 
 	for _, event := range events {
 		if event == nil {
@@ -180,7 +163,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 
 	return &refresh.Snapshot{
 		Domain:  namespaceEventsDomainName,
-		Scope:   scopeValue,
+		Scope:   parsedScope.CanonicalScope,
 		Version: version,
 		Payload: NamespaceEventsSnapshot{ClusterMeta: meta, Events: summaries},
 		Stats:   stats,

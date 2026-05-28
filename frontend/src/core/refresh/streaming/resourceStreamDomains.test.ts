@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { refreshDomainContract } from '../domainRegistry';
 import {
   COMPLETE_RESYNC_STREAM_DOMAINS,
   RESOURCE_STREAM_DOMAINS,
@@ -46,6 +47,12 @@ const CLUSTER_SCOPED_DOMAINS = new Set<ResourceDomain>([
   'cluster-custom',
   'nodes',
 ]);
+
+const REPRESENTATIVE_DOMAIN_BY_SCOPE_KIND = {
+  pod: 'pods',
+  namespace: 'namespace-workloads',
+  cluster: 'nodes',
+} satisfies Record<'pod' | 'namespace' | 'cluster', ResourceDomain>;
 
 const samplePayloads: Record<ResourceDomain, unknown> = {
   pods: {
@@ -495,6 +502,24 @@ describe('resource stream domain descriptors', () => {
       expect(descriptor.isClusterScoped, `${descriptor.domain} isClusterScoped`).toBe(
         clusterScoped
       );
+    }
+  });
+
+  it('normalizes scopes from the backend-authored executable examples', () => {
+    const examples = refreshDomainContract.resourceStream.scopeExamples;
+
+    for (const [scopeKind, cases] of Object.entries(examples) as Array<
+      [keyof typeof REPRESENTATIVE_DOMAIN_BY_SCOPE_KIND, (typeof examples)[keyof typeof examples]]
+    >) {
+      const domain = REPRESENTATIVE_DOMAIN_BY_SCOPE_KIND[scopeKind];
+
+      for (const example of cases.valid) {
+        expect(normalizeResourceScope(domain, example.scope)).toBe(example.canonical);
+      }
+
+      for (const example of cases.invalid) {
+        expect(() => normalizeResourceScope(domain, example.scope)).toThrow(example.errorContains);
+      }
     }
   });
 });

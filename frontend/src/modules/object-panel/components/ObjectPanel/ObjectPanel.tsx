@@ -10,7 +10,6 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
-import { types } from '@wailsjs/go/models';
 import {
   buildObjectActionTarget,
   runCronJobSuspend,
@@ -52,94 +51,7 @@ import type { KubernetesObjectReference } from '@/types/view-state';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import type { DockPosition } from '@ui/dockable';
-
-// Tab configuration
-type DetailsSnapshotProps = Pick<
-  DetailsTabProps,
-  | 'podDetails'
-  | 'deploymentDetails'
-  | 'replicaSetDetails'
-  | 'daemonSetDetails'
-  | 'statefulSetDetails'
-  | 'jobDetails'
-  | 'cronJobDetails'
-  | 'configMapDetails'
-  | 'secretDetails'
-  | 'helmReleaseDetails'
-  | 'serviceDetails'
-  | 'ingressDetails'
-  | 'networkPolicyDetails'
-  | 'endpointSliceDetails'
-  | 'gatewayDetails'
-  | 'httpRouteDetails'
-  | 'grpcRouteDetails'
-  | 'tlsRouteDetails'
-  | 'listenerSetDetails'
-  | 'referenceGrantDetails'
-  | 'backendTLSPolicyDetails'
-  | 'pvcDetails'
-  | 'pvDetails'
-  | 'storageClassDetails'
-  | 'serviceAccountDetails'
-  | 'roleDetails'
-  | 'roleBindingDetails'
-  | 'clusterRoleDetails'
-  | 'clusterRoleBindingDetails'
-  | 'hpaDetails'
-  | 'pdbDetails'
-  | 'resourceQuotaDetails'
-  | 'limitRangeDetails'
-  | 'nodeDetails'
-  | 'namespaceDetails'
-  | 'ingressClassDetails'
-  | 'gatewayClassDetails'
-  | 'crdDetails'
-  | 'mutatingWebhookDetails'
-  | 'validatingWebhookDetails'
->;
-
-const EMPTY_DETAILS: DetailsSnapshotProps = {
-  podDetails: null,
-  deploymentDetails: null,
-  replicaSetDetails: null,
-  daemonSetDetails: null,
-  statefulSetDetails: null,
-  jobDetails: null,
-  cronJobDetails: null,
-  configMapDetails: null,
-  secretDetails: null,
-  helmReleaseDetails: null,
-  serviceDetails: null,
-  ingressDetails: null,
-  networkPolicyDetails: null,
-  endpointSliceDetails: null,
-  gatewayDetails: null,
-  httpRouteDetails: null,
-  grpcRouteDetails: null,
-  tlsRouteDetails: null,
-  listenerSetDetails: null,
-  referenceGrantDetails: null,
-  backendTLSPolicyDetails: null,
-  pvcDetails: null,
-  pvDetails: null,
-  storageClassDetails: null,
-  serviceAccountDetails: null,
-  roleDetails: null,
-  roleBindingDetails: null,
-  clusterRoleDetails: null,
-  clusterRoleBindingDetails: null,
-  hpaDetails: null,
-  pdbDetails: null,
-  resourceQuotaDetails: null,
-  limitRangeDetails: null,
-  nodeDetails: null,
-  namespaceDetails: null,
-  ingressClassDetails: null,
-  gatewayClassDetails: null,
-  crdDetails: null,
-  mutatingWebhookDetails: null,
-  validatingWebhookDetails: null,
-};
+import { buildObjectDetailModel } from './Details/objectDetailModel';
 
 // ============================================================================
 // REDUCER
@@ -391,6 +303,13 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     fetchResourceDetails,
   });
 
+  // Keep DetailsTab props derived from this memoized model, not from the
+  // enclosing props object; ObjectPanelContent depends on that stability.
+  const detailModel = useMemo(
+    () => buildObjectDetailModel(objectData ?? null, objectKind, detailPayload),
+    [detailPayload, objectData, objectKind]
+  );
+
   // CronJob trigger handler
   const handleTriggerClick = useCallback(async () => {
     if (!objectData?.name || !objectData?.namespace) return;
@@ -412,8 +331,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   // CronJob suspend/resume handler
   const handleSuspendToggle = useCallback(async () => {
     if (!objectData?.name || !objectData?.namespace) return;
-    const cronJobDetails = detailPayload as types.CronJobDetails | null;
-    const isSuspended = cronJobDetails?.suspend ?? false;
+    const isSuspended = detailModel.cronJobSuspended;
     dispatch({ type: 'SET_ACTION_LOADING', payload: true });
     try {
       // Multi-cluster rule (AGENTS.md): every backend command must
@@ -437,7 +355,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     } finally {
       dispatch({ type: 'SET_ACTION_LOADING', payload: false });
     }
-  }, [objectData, detailPayload, dispatch, fetchResourceDetails]);
+  }, [detailModel, objectData, dispatch, fetchResourceDetails]);
 
   const handleTabSelect = useCallback(
     (tab: ViewType) => {
@@ -476,165 +394,10 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     });
   }, [applyRequestedTab, panelId]);
 
-  // Extract details props for DetailsTab - provide all required props with defaults
-  const detailsProps = useMemo<DetailsSnapshotProps>(() => {
-    if (!detailPayload || !objectKind) {
-      return EMPTY_DETAILS;
-    }
-
-    switch (objectKind) {
-      case 'pod':
-        return { ...EMPTY_DETAILS, podDetails: detailPayload as types.PodDetailInfo };
-      case 'deployment':
-        return { ...EMPTY_DETAILS, deploymentDetails: detailPayload as types.DeploymentDetails };
-      case 'replicaset':
-        return { ...EMPTY_DETAILS, replicaSetDetails: detailPayload as types.ReplicaSetDetails };
-      case 'daemonset':
-        return { ...EMPTY_DETAILS, daemonSetDetails: detailPayload as types.DaemonSetDetails };
-      case 'statefulset':
-        return {
-          ...EMPTY_DETAILS,
-          statefulSetDetails: detailPayload as types.StatefulSetDetails,
-        };
-      case 'job':
-        return { ...EMPTY_DETAILS, jobDetails: detailPayload as types.JobDetails };
-      case 'cronjob':
-        return { ...EMPTY_DETAILS, cronJobDetails: detailPayload as types.CronJobDetails };
-      case 'configmap':
-        return { ...EMPTY_DETAILS, configMapDetails: detailPayload as types.ConfigMapDetails };
-      case 'secret':
-        return { ...EMPTY_DETAILS, secretDetails: detailPayload as types.SecretDetails };
-      case 'helmrelease':
-        return {
-          ...EMPTY_DETAILS,
-          helmReleaseDetails: detailPayload as types.HelmReleaseDetails,
-        };
-      case 'service':
-        return { ...EMPTY_DETAILS, serviceDetails: detailPayload as types.ServiceDetails };
-      case 'ingress':
-        return { ...EMPTY_DETAILS, ingressDetails: detailPayload as types.IngressDetails };
-      case 'networkpolicy':
-        return {
-          ...EMPTY_DETAILS,
-          networkPolicyDetails: detailPayload as types.NetworkPolicyDetails,
-        };
-      case 'endpointslice':
-        return {
-          ...EMPTY_DETAILS,
-          endpointSliceDetails: detailPayload as types.EndpointSliceDetails,
-        };
-      case 'gateway':
-        return { ...EMPTY_DETAILS, gatewayDetails: detailPayload as types.GatewayDetails };
-      case 'httproute':
-        return { ...EMPTY_DETAILS, httpRouteDetails: detailPayload as types.RouteDetails };
-      case 'grpcroute':
-        return { ...EMPTY_DETAILS, grpcRouteDetails: detailPayload as types.RouteDetails };
-      case 'tlsroute':
-        return { ...EMPTY_DETAILS, tlsRouteDetails: detailPayload as types.RouteDetails };
-      case 'listenerset':
-        return {
-          ...EMPTY_DETAILS,
-          listenerSetDetails: detailPayload as types.ListenerSetDetails,
-        };
-      case 'referencegrant':
-        return {
-          ...EMPTY_DETAILS,
-          referenceGrantDetails: detailPayload as types.ReferenceGrantDetails,
-        };
-      case 'backendtlspolicy':
-        return {
-          ...EMPTY_DETAILS,
-          backendTLSPolicyDetails: detailPayload as types.BackendTLSPolicyDetails,
-        };
-      case 'persistentvolumeclaim':
-        return {
-          ...EMPTY_DETAILS,
-          pvcDetails: detailPayload as types.PersistentVolumeClaimDetails,
-        };
-      case 'persistentvolume':
-        return { ...EMPTY_DETAILS, pvDetails: detailPayload as types.PersistentVolumeDetails };
-      case 'storageclass':
-        return {
-          ...EMPTY_DETAILS,
-          storageClassDetails: detailPayload as types.StorageClassDetails,
-        };
-      case 'serviceaccount':
-        return {
-          ...EMPTY_DETAILS,
-          serviceAccountDetails: detailPayload as types.ServiceAccountDetails,
-        };
-      case 'role':
-        return { ...EMPTY_DETAILS, roleDetails: detailPayload as types.RoleDetails };
-      case 'rolebinding':
-        return {
-          ...EMPTY_DETAILS,
-          roleBindingDetails: detailPayload as types.RoleBindingDetails,
-        };
-      case 'clusterrole':
-        return {
-          ...EMPTY_DETAILS,
-          clusterRoleDetails: detailPayload as types.ClusterRoleDetails,
-        };
-      case 'clusterrolebinding':
-        return {
-          ...EMPTY_DETAILS,
-          clusterRoleBindingDetails: detailPayload as types.ClusterRoleBindingDetails,
-        };
-      case 'horizontalpodautoscaler':
-        return {
-          ...EMPTY_DETAILS,
-          hpaDetails: detailPayload as types.HorizontalPodAutoscalerDetails,
-        };
-      case 'poddisruptionbudget':
-        return {
-          ...EMPTY_DETAILS,
-          pdbDetails: detailPayload as types.PodDisruptionBudgetDetails,
-        };
-      case 'resourcequota':
-        return {
-          ...EMPTY_DETAILS,
-          resourceQuotaDetails: detailPayload as types.ResourceQuotaDetails,
-        };
-      case 'limitrange':
-        return { ...EMPTY_DETAILS, limitRangeDetails: detailPayload as types.LimitRangeDetails };
-      case 'node':
-        return { ...EMPTY_DETAILS, nodeDetails: detailPayload as types.NodeDetails };
-      case 'namespace':
-        return { ...EMPTY_DETAILS, namespaceDetails: detailPayload as types.NamespaceDetails };
-      case 'ingressclass':
-        return {
-          ...EMPTY_DETAILS,
-          ingressClassDetails: detailPayload as types.IngressClassDetails,
-        };
-      case 'gatewayclass':
-        return {
-          ...EMPTY_DETAILS,
-          gatewayClassDetails: detailPayload as types.GatewayClassDetails,
-        };
-      case 'customresourcedefinition':
-        return {
-          ...EMPTY_DETAILS,
-          crdDetails: detailPayload as types.CustomResourceDefinitionDetails,
-        };
-      case 'mutatingwebhookconfiguration':
-        return {
-          ...EMPTY_DETAILS,
-          mutatingWebhookDetails: detailPayload as types.MutatingWebhookConfigurationDetails,
-        };
-      case 'validatingwebhookconfiguration':
-        return {
-          ...EMPTY_DETAILS,
-          validatingWebhookDetails: detailPayload as types.ValidatingWebhookConfigurationDetails,
-        };
-      default:
-        return EMPTY_DETAILS;
-    }
-  }, [detailPayload, objectKind]);
-
   const detailTabProps: DetailsTabProps | null = objectData
     ? {
-        ...detailsProps,
         objectData,
+        detailModel,
         isActive: isOpen && visibleActiveTab === 'details',
         detailsLoading,
         detailsError,
@@ -664,22 +427,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         onScaleCancel: closeScaleInput,
         onScaleReplicasChange: setScaleReplicas,
         onShowScaleInput: () => {
-          const currentReplicas = (() => {
-            if (objectKind === 'deployment') {
-              const details = detailPayload as types.DeploymentDetails | null | undefined;
-              return details?.desiredReplicas ?? 0;
-            }
-            if (objectKind === 'statefulset') {
-              const details = detailPayload as types.StatefulSetDetails | null | undefined;
-              return details?.desiredReplicas ?? 0;
-            }
-            if (objectKind === 'replicaset') {
-              const details = detailPayload as types.ReplicaSetDetails | null | undefined;
-              return details?.desiredReplicas ?? 0;
-            }
-            return 0;
-          })();
-          openScaleInput(currentReplicas);
+          openScaleInput(detailModel.desiredScaleReplicas);
         },
         onTriggerClick: handleTriggerClick,
         onSuspendToggle: handleSuspendToggle,

@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.tsx
  */
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import Overview from '@modules/object-panel/components/ObjectPanel/Details/Overview';
 import Utilization from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization';
 import Containers from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabContainers';
@@ -19,67 +19,9 @@ import { useUtilizationData, useHasUtilization } from './useUtilizationData';
 
 export type { DetailsTabProps } from './detailsTabTypes';
 
-const NON_TCP_PORT_SUFFIX = /\/(UDP|SCTP)$/i;
-
-const hasForwardableContainerDetails = (
-  containers?: Array<{ ports?: string[] | null }> | null
-): boolean =>
-  containers?.some((container) =>
-    container.ports?.some((port) => !NON_TCP_PORT_SUFFIX.test(port))
-  ) ?? false;
-
 const DetailsTabContent: React.FC<DetailsTabProps> = ({
   objectData,
-  // Workloads
-  podDetails,
-  deploymentDetails,
-  replicaSetDetails,
-  daemonSetDetails,
-  statefulSetDetails,
-  jobDetails,
-  cronJobDetails,
-  // Configuration
-  configMapDetails,
-  secretDetails,
-  // Helm
-  helmReleaseDetails,
-  // Network
-  serviceDetails,
-  ingressDetails,
-  networkPolicyDetails,
-  endpointSliceDetails,
-  gatewayDetails,
-  httpRouteDetails,
-  grpcRouteDetails,
-  tlsRouteDetails,
-  listenerSetDetails,
-  referenceGrantDetails,
-  backendTLSPolicyDetails,
-  // Storage
-  pvcDetails,
-  pvDetails,
-  storageClassDetails,
-  // RBAC
-  serviceAccountDetails,
-  roleDetails,
-  roleBindingDetails,
-  clusterRoleDetails,
-  clusterRoleBindingDetails,
-  // Autoscaling
-  hpaDetails,
-  // Policy
-  pdbDetails,
-  resourceQuotaDetails,
-  limitRangeDetails,
-  // Cluster Resources
-  nodeDetails,
-  namespaceDetails,
-  ingressClassDetails,
-  gatewayClassDetails,
-  // CRDs and Webhooks
-  crdDetails,
-  mutatingWebhookDetails,
-  validatingWebhookDetails,
+  detailModel,
   detailsLoading,
   detailsError,
   resourceDeleted = false,
@@ -106,128 +48,23 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
   onTriggerClick,
   onSuspendToggle,
 }) => {
+  const model = detailModel;
   // Use extracted hooks for overview and utilization data
   const hasUtilization = useHasUtilization(objectData);
 
   const overviewData = useOverviewData({
     objectData,
-    podDetails,
-    deploymentDetails,
-    replicaSetDetails,
-    daemonSetDetails,
-    statefulSetDetails,
-    jobDetails,
-    cronJobDetails,
-    configMapDetails,
-    secretDetails,
-    helmReleaseDetails,
-    serviceDetails,
-    ingressDetails,
-    networkPolicyDetails,
-    endpointSliceDetails,
-    gatewayDetails,
-    httpRouteDetails,
-    grpcRouteDetails,
-    tlsRouteDetails,
-    listenerSetDetails,
-    referenceGrantDetails,
-    backendTLSPolicyDetails,
-    pvcDetails,
-    pvDetails,
-    storageClassDetails,
-    serviceAccountDetails,
-    roleDetails,
-    roleBindingDetails,
-    clusterRoleDetails,
-    clusterRoleBindingDetails,
-    hpaDetails,
-    pdbDetails,
-    resourceQuotaDetails,
-    limitRangeDetails,
-    nodeDetails,
-    namespaceDetails,
-    ingressClassDetails,
-    gatewayClassDetails,
-    crdDetails,
-    mutatingWebhookDetails,
-    validatingWebhookDetails,
+    slots: model.slots,
   });
 
-  // Extract data section (for ConfigMaps and Secrets)
-  const dataInfo = useMemo(() => {
-    if (!objectData) return null;
-
-    const objectKind = objectData.kind?.toLowerCase();
-
-    // Use configmap details if available
-    if (configMapDetails && objectKind === 'configmap') {
-      return {
-        data: configMapDetails.data,
-        binaryData: configMapDetails.binaryData,
-        isSecret: false,
-      };
-    }
-
-    // Use secret details if available
-    if (secretDetails && objectKind === 'secret') {
-      return {
-        data: secretDetails.data,
-        binaryData: undefined,
-        isSecret: true,
-      };
-    }
-
-    return null;
-  }, [objectData, configMapDetails, secretDetails]);
+  const dataInfo = model.dataSection;
 
   const utilizationData = useUtilizationData({
     objectData,
-    podDetails,
-    deploymentDetails,
-    daemonSetDetails,
-    statefulSetDetails,
-    replicaSetDetails,
-    nodeDetails,
+    slots: model.slots,
   });
 
-  const portForwardAvailable = useMemo(() => {
-    switch (objectData?.kind?.toLowerCase()) {
-      case 'pod':
-        return podDetails ? hasForwardableContainerDetails(podDetails.containers) : undefined;
-      case 'deployment':
-        return deploymentDetails
-          ? hasForwardableContainerDetails(deploymentDetails.containers)
-          : undefined;
-      case 'replicaset':
-        return replicaSetDetails
-          ? hasForwardableContainerDetails(replicaSetDetails.containers)
-          : undefined;
-      case 'daemonset':
-        return daemonSetDetails
-          ? hasForwardableContainerDetails(daemonSetDetails.containers)
-          : undefined;
-      case 'statefulset':
-        return statefulSetDetails
-          ? hasForwardableContainerDetails(statefulSetDetails.containers)
-          : undefined;
-      case 'service':
-        return serviceDetails
-          ? (serviceDetails.ports?.some(
-              (port) => !port.protocol || port.protocol.toUpperCase() === 'TCP'
-            ) ?? false)
-          : undefined;
-      default:
-        return undefined;
-    }
-  }, [
-    objectData?.kind,
-    podDetails,
-    deploymentDetails,
-    replicaSetDetails,
-    daemonSetDetails,
-    statefulSetDetails,
-    serviceDetails,
-  ]);
+  const portForwardAvailable = model.portForwardAvailable;
 
   return (
     <div className="object-panel-tab-content">
@@ -304,49 +141,13 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
 
         {/* Containers Section - Only for Pods and core Workloads (not Jobs/CronJobs) */}
         {(() => {
-          const kind = objectData?.kind?.toLowerCase();
-          const shouldShowContainers =
-            kind === 'pod' ||
-            kind === 'deployment' ||
-            kind === 'daemonset' ||
-            kind === 'statefulset' ||
-            kind === 'replicaset';
-
-          if (!shouldShowContainers) return null;
-
-          const initContainers =
-            podDetails?.initContainers ||
-            deploymentDetails?.initContainers ||
-            daemonSetDetails?.initContainers ||
-            statefulSetDetails?.initContainers ||
-            replicaSetDetails?.initContainers;
-
-          const hasContainers =
-            (podDetails &&
-              (podDetails.containers?.length > 0 ||
-                (podDetails.initContainers?.length ?? 0) > 0)) ||
-            (deploymentDetails?.containers?.length ?? 0) > 0 ||
-            (deploymentDetails?.initContainers?.length ?? 0) > 0 ||
-            (daemonSetDetails?.containers?.length ?? 0) > 0 ||
-            (daemonSetDetails?.initContainers?.length ?? 0) > 0 ||
-            (statefulSetDetails?.containers?.length ?? 0) > 0 ||
-            (statefulSetDetails?.initContainers?.length ?? 0) > 0 ||
-            (replicaSetDetails?.containers?.length ?? 0) > 0 ||
-            (replicaSetDetails?.initContainers?.length ?? 0) > 0;
-
-          if (!hasContainers) return null;
+          if (!model.containerSection) return null;
 
           return (
             <div className="details-section-spaced">
               <Containers
-                containers={
-                  podDetails?.containers ||
-                  deploymentDetails?.containers ||
-                  daemonSetDetails?.containers ||
-                  statefulSetDetails?.containers ||
-                  replicaSetDetails?.containers
-                }
-                initContainers={initContainers}
+                containers={model.containerSection.containers}
+                initContainers={model.containerSection.initContainers}
               />
             </div>
           );
@@ -355,7 +156,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
         {/* Rules Section - For Roles and ClusterRoles. Sibling to Overview;
             rules are the primary content of the resource. */}
         {(() => {
-          const rules = roleDetails?.rules ?? clusterRoleDetails?.rules;
+          const rules = model.roleRules;
           if (!rules || rules.length === 0) return null;
           return (
             <div className="details-section-spaced">

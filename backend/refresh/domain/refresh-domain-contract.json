@@ -490,6 +490,42 @@
       "completeSemantics": "scope-level-resync",
       "completeIdentity": "diagnostic-only"
     },
+    "scopeExamples": {
+      "pod": {
+        "valid": [
+          {"scope": "namespace:default", "canonical": "namespace:default"},
+          {"scope": "namespace:*", "canonical": "namespace:all"},
+          {"scope": "node:worker-1", "canonical": "node:worker-1"},
+          {"scope": "workload:prod:apps:v1:Deployment:web", "canonical": "workload:prod:apps:v1:Deployment:web"}
+        ],
+        "invalid": [
+          {"scope": "", "errorContains": "scope is required"},
+          {"scope": "node:", "errorContains": "node scope is required"},
+          {"scope": "workload:prod:apps", "errorContains": "namespace:group:version:kind:name"},
+          {"scope": "service:api", "errorContains": "unsupported pods scope"}
+        ]
+      },
+      "namespace": {
+        "valid": [
+          {"scope": "default", "canonical": "namespace:default"},
+          {"scope": "namespace:default", "canonical": "namespace:default"},
+          {"scope": "namespace:*", "canonical": "namespace:all"}
+        ],
+        "invalid": [
+          {"scope": "", "errorContains": "scope is required"},
+          {"scope": "namespace:", "errorContains": "scope is required"}
+        ]
+      },
+      "cluster": {
+        "valid": [
+          {"scope": "", "canonical": ""},
+          {"scope": "cluster", "canonical": ""}
+        ],
+        "invalid": [
+          {"scope": "namespace:default", "errorContains": "does not accept scope"}
+        ]
+      }
+    },
     "domains": {
       "pods": {
         "scopeKind": "pod",

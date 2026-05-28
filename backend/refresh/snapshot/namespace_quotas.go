@@ -95,51 +95,34 @@ func RegisterNamespaceQuotasDomain(
 // Build assembles quota summaries for the namespace.
 func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	trimmed = strings.TrimSpace(trimmed)
-	if trimmed == "" {
-		return nil, fmt.Errorf("namespace scope is required")
-	}
-
-	isAll := isAllNamespaceScope(trimmed)
-	var (
-		namespace  string
-		err        error
-		scopeLabel string
-	)
-	if isAll {
-		scopeLabel = refresh.JoinClusterScope(clusterID, "namespace:all")
-	} else {
-		namespace, err = parseAutoscalingNamespace(trimmed)
-		if err != nil {
-			return nil, err
-		}
-		scopeLabel = refresh.JoinClusterScope(clusterID, trimmed)
+	parsedScope, err := parseNamespaceSnapshotScope(scope, "namespace scope is required")
+	if err != nil {
+		return nil, err
 	}
 
 	var quotas []*corev1.ResourceQuota
 	if b.quotaLister != nil {
-		quotas, err = b.listResourceQuotas(namespace)
+		quotas, err = b.listResourceQuotas(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace quotas: failed to list resourcequotas: %w", err)
 		}
 	}
 	var limits []*corev1.LimitRange
 	if b.limitLister != nil {
-		limits, err = b.listLimitRanges(namespace)
+		limits, err = b.listLimitRanges(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace quotas: failed to list limitranges: %w", err)
 		}
 	}
 	var pdbs []*policyv1.PodDisruptionBudget
 	if b.pdbLister != nil {
-		pdbs, err = b.listPodDisruptionBudgets(namespace)
+		pdbs, err = b.listPodDisruptionBudgets(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace quotas: failed to list poddisruptionbudgets: %w", err)
 		}
 	}
 
-	return b.buildSnapshot(meta, scopeLabel, quotas, limits, pdbs)
+	return b.buildSnapshot(meta, parsedScope.CanonicalScope, quotas, limits, pdbs)
 }
 
 func (b *NamespaceQuotasBuilder) listResourceQuotas(namespace string) ([]*corev1.ResourceQuota, error) {

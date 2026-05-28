@@ -142,6 +142,23 @@ export interface StreamDomainContractEntry {
   syntheticRowKind?: StreamResourceContractRecord;
 }
 
+export interface StreamScopeExample {
+  scope: string;
+}
+
+export interface StreamScopeValidExample extends StreamScopeExample {
+  canonical: string;
+}
+
+export interface StreamScopeInvalidExample extends StreamScopeExample {
+  errorContains: string;
+}
+
+export interface StreamScopeExamples {
+  valid: StreamScopeValidExample[];
+  invalid: StreamScopeInvalidExample[];
+}
+
 export interface RefreshDomainContract {
   version: 2;
   domainInventory: Record<RefreshDomain, DomainInventoryEntry>;
@@ -153,6 +170,7 @@ export interface RefreshDomainContract {
       completeSemantics: 'scope-level-resync';
       completeIdentity: 'diagnostic-only';
     };
+    scopeExamples: Record<'pod' | 'namespace' | 'cluster', StreamScopeExamples>;
     domains: Record<string, StreamDomainContractEntry>;
   };
   domains: RefreshDomainContractEntry[];

@@ -2,12 +2,13 @@ package system
 
 import (
 	"errors"
-	"fmt"
 
 	"k8s.io/klog/v2"
 
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 )
 
@@ -38,8 +39,8 @@ type listDomainConfig struct {
 	logGroup      string
 	logResource   string
 	checks        []listCheck
-	allowAny      bool                           // When true, register if any check passes (not all).
-	register      func(allowed map[string]bool) error // Callback receives per-resource allow map.
+	allowAny      bool                                                   // When true, register if any check passes (not all).
+	register      func(allowed domainpermissions.AllowedResources) error // Callback receives per-resource allow map.
 	deniedReason  string
 }
 
@@ -183,14 +184,10 @@ func (g *permissionGate) allListWatchAllowed(results []listWatchCheckResult) (bo
 	return listOK, watchOK
 }
 
-func (g *permissionGate) listAllowedByKey(results []listCheckResult) map[string]bool {
-	allowed := make(map[string]bool, len(results))
+func (g *permissionGate) listAllowedByKey(results []listCheckResult) domainpermissions.AllowedResources {
+	allowed := make(domainpermissions.AllowedResources, len(results))
 	for _, result := range results {
-		group := result.check.group
-		if group == "" {
-			group = "core"
-		}
-		key := fmt.Sprintf("%s/%s", group, result.check.resource)
+		key := permissions.ResourceKey(result.check.group, result.check.resource)
 		allowed[key] = result.allowed
 	}
 	return allowed

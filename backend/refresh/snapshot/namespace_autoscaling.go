@@ -2,10 +2,8 @@ package snapshot
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
-	"strings"
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -57,20 +55,6 @@ type AutoscalingSummary struct {
 	Age              string `json:"age"`
 }
 
-func parseAutoscalingNamespace(scope string) (string, error) {
-	_, scopeValue := refresh.SplitClusterScope(scope)
-	namespace := strings.TrimSpace(scopeValue)
-	if strings.HasPrefix(namespace, "namespace:") {
-		namespace = strings.TrimPrefix(namespace, "namespace:")
-		namespace = strings.TrimLeft(namespace, ":")
-	}
-	namespace = strings.TrimSpace(namespace)
-	if namespace == "" {
-		return "", errors.New(errNamespaceAutoscalingScopeRequired)
-	}
-	return namespace, nil
-}
-
 // RegisterNamespaceAutoscalingDomain registers the autoscaling domain.
 func RegisterNamespaceAutoscalingDomain(
 	reg *domain.Registry,
@@ -91,34 +75,17 @@ func RegisterNamespaceAutoscalingDomain(
 // Build assembles HPA summaries for a namespace.
 func (b *NamespaceAutoscalingBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	trimmed = strings.TrimSpace(trimmed)
-	if trimmed == "" {
-		return nil, errors.New(errNamespaceAutoscalingScopeRequired)
+	parsedScope, err := parseNamespaceSnapshotScope(scope, errNamespaceAutoscalingScopeRequired)
+	if err != nil {
+		return nil, err
 	}
 
-	isAll := isAllNamespaceScope(trimmed)
-	var (
-		namespace  string
-		err        error
-		scopeLabel string
-	)
-	if isAll {
-		scopeLabel = refresh.JoinClusterScope(clusterID, "namespace:all")
-	} else {
-		namespace, err = parseAutoscalingNamespace(trimmed)
-		if err != nil {
-			return nil, err
-		}
-		scopeLabel = refresh.JoinClusterScope(clusterID, trimmed)
-	}
-
-	hpas, err := b.listHPAs(namespace)
+	hpas, err := b.listHPAs(parsedScope.Namespace)
 	if err != nil {
 		return nil, fmt.Errorf("namespace autoscaling: failed to list hpas: %w", err)
 	}
 
-	return b.buildSnapshot(meta, scopeLabel, hpas)
+	return b.buildSnapshot(meta, parsedScope.CanonicalScope, hpas)
 }
 
 func (b *NamespaceAutoscalingBuilder) listHPAs(namespace string) ([]*autoscalingv1.HorizontalPodAutoscaler, error) {
