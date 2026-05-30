@@ -233,7 +233,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           diagnosticsLabel="Cluster Events"
           diagnosticsMode="live"
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleEventClick}
           tableClassName="gridtable-cluster-events"
           enableContextMenu={true}

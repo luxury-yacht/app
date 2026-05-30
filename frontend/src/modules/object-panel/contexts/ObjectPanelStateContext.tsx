@@ -8,9 +8,9 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import type { KubernetesObjectReference } from '@/types/view-state';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { resetRefreshDomain } from '@/core/data-access';
 import { clearPanelState } from '@ui/dockable/useDockablePanelState';
 import { handoffLayoutBeforeClose } from '@ui/dockable/useDockablePanelState';
-import { refreshOrchestrator } from '@/core/refresh';
 import { clearLogViewerPrefs } from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
 import { clearContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
 import {
@@ -34,7 +34,7 @@ export { objectPanelId } from '@modules/object-panel/objectPanelRef';
  */
 const evictPanelScopes = (ref: KubernetesObjectReference): void => {
   getObjectPanelScopeEvictions(ref).forEach(({ domain, scope }) => {
-    refreshOrchestrator.resetScopedDomain(domain, scope);
+    resetRefreshDomain(domain, scope);
     if (domain === 'container-logs') {
       clearContainerLogsStreamScopeParams(scope);
     }

@@ -10,6 +10,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useCapabilities, useUserPermission, type CapabilityDescriptor } from '@/core/capabilities';
 import {
+  buildObjectActionCapabilityDescriptor,
+  OBJECT_ACTION_IDS,
+  type MutatingObjectActionId,
+} from '@shared/actions/objectActionContract';
+import {
   discoverNodeLogs,
   getCachedNodeLogDiscovery,
   type NodeLogSource,
@@ -113,6 +118,19 @@ const computeCapabilityDescriptors = (
       idMap[key] = descriptor.id;
     }
   };
+  const addObjectActionCapability = (actionId: MutatingObjectActionId, key: keyof typeof idMap) => {
+    const descriptor = buildObjectActionCapabilityDescriptor(actionId, {
+      clusterId,
+      group: objectGroup,
+      version: objectVersion,
+      kind: resourceKind,
+      namespace,
+      name: resourceName,
+    });
+    if (descriptor) {
+      add(descriptor, key);
+    }
+  };
 
   add(
     {
@@ -141,83 +159,23 @@ const computeCapabilityDescriptors = (
   );
 
   if (featureSupport.delete) {
-    add(
-      {
-        id: 'delete',
-        verb: 'delete',
-        group: objectGroup,
-        version: objectVersion,
-        resourceKind,
-        namespace,
-        name: resourceName,
-      },
-      'delete'
-    );
+    addObjectActionCapability(OBJECT_ACTION_IDS.delete, 'delete');
   }
 
   if (featureSupport.restart) {
-    // resourceKind is the original-case Kind from PanelObjectData (e.g.
-    // "Deployment"). The previous fallback through WORKLOAD_KIND_API_NAMES
-    // existed only as a casing safety net for callers that supplied
-    // lowercase kinds; that map is retired now that every entry point
-    // threads PascalCase kinds via the data source.
-    add(
-      {
-        id: 'restart',
-        verb: 'patch',
-        group: objectGroup,
-        version: objectVersion,
-        resourceKind,
-        namespace,
-        name: resourceName,
-      },
-      'restart'
-    );
+    addObjectActionCapability(OBJECT_ACTION_IDS.restart, 'restart');
   }
 
   if (featureSupport.scale) {
-    add(
-      {
-        id: 'scale',
-        verb: 'update',
-        group: objectGroup,
-        version: objectVersion,
-        resourceKind,
-        namespace,
-        name: resourceName,
-        subresource: 'scale',
-      },
-      'scale'
-    );
+    addObjectActionCapability(OBJECT_ACTION_IDS.scale, 'scale');
   }
 
   if (featureSupport.trigger) {
-    add(
-      {
-        id: 'trigger',
-        verb: 'create',
-        group: 'batch',
-        version: 'v1',
-        resourceKind: 'Job',
-        namespace,
-      },
-      'trigger'
-    );
+    addObjectActionCapability(OBJECT_ACTION_IDS.triggerNow, 'trigger');
   }
 
   if (featureSupport.suspend) {
-    add(
-      {
-        id: 'suspend',
-        verb: 'patch',
-        group: 'batch',
-        version: 'v1',
-        resourceKind: 'CronJob',
-        namespace,
-        name: resourceName,
-      },
-      'suspend'
-    );
+    addObjectActionCapability(OBJECT_ACTION_IDS.suspend, 'suspend');
   }
 
   if (featureSupport.objPanelLogs) {

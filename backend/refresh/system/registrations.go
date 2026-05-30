@@ -1,9 +1,12 @@
+// Package system wires refresh domains into the registry and keeps registration
+// gates aligned with the shared permission contracts.
 package system
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
@@ -35,7 +38,8 @@ type domainRegistration struct {
 	require            func() error           // Function to determine if registration is required
 }
 
-// domainMeta captures shared metadata for gated domain registrations.
+// domainMeta captures shared metadata for gated registrations that cannot use
+// the runtime permission contract directly.
 type domainMeta struct {
 	issueResource string
 	logGroup      string
@@ -259,10 +263,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		}),
 
 		accessListRegistration(runtimeAccess, listDomainConfig{
-			name:          "cluster-config",
-			issueResource: "storage.k8s.io/storageclasses,networking.k8s.io/ingressclasses,gateway.networking.k8s.io/gatewayclasses,admissionregistration.k8s.io/validatingwebhookconfigurations,admissionregistration.k8s.io/mutatingwebhookconfigurations",
-			logGroup:      "*",
-			logResource:   "storageclasses/ingressclasses/gatewayclasses/webhooks",
+			name: "cluster-config",
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterClusterConfigDomainWithGatewayAPI(
 					deps.registry,
@@ -290,7 +291,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			},
 		}, crdMeta)),
 
-		accessListRegistration(runtimeAccess, applyListMeta(listDomainConfig{
+		accessListRegistration(runtimeAccess, listDomainConfig{
 			name: "cluster-custom",
 			register: func(_ domainpermissions.AllowedResources) error {
 				return snapshot.RegisterClusterCustomDomain(
@@ -300,17 +301,14 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.cfg.Logger,
 				)
 			},
-		}, crdMeta)),
+		}),
 
 		directRegistration("cluster-events", func() error {
 			return snapshot.RegisterClusterEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory())
 		}),
 
 		accessListRegistration(runtimeAccess, listDomainConfig{
-			name:          "cluster-rbac",
-			issueResource: "rbac.authorization.k8s.io/clusterroles,clusterrolebindings",
-			logGroup:      "rbac.authorization.k8s.io",
-			logResource:   "clusterroles/clusterrolebindings",
+			name: "cluster-rbac",
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterClusterRBACDomain(
 					deps.registry,
@@ -341,10 +339,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		}),
 
 		accessListRegistration(runtimeAccess, listDomainConfig{
-			name:          "namespace-workloads",
-			issueResource: "core/pods,apps/deployments,apps/statefulsets,apps/daemonsets,batch/jobs,batch/cronjobs",
-			logGroup:      "*",
-			logResource:   "pods/deployments/statefulsets/daemonsets/jobs/cronjobs",
+			name: "namespace-workloads",
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceWorkloadsDomain(
 					deps.registry,
@@ -369,10 +364,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			)
 		}),
 		accessListRegistration(runtimeAccess, listDomainConfig{
-			name:          "namespace-config",
-			issueResource: "core/configmaps,secrets",
-			logGroup:      "",
-			logResource:   "configmaps/secrets",
+			name: "namespace-config",
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceConfigDomain(
 					deps.registry,
@@ -385,7 +377,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			},
 		}),
 
-		withRequire(accessListRegistration(runtimeAccess, applyListMeta(listDomainConfig{
+		withRequire(accessListRegistration(runtimeAccess, listDomainConfig{
 			name: "namespace-custom",
 			register: func(_ domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceCustomDomain(
@@ -395,7 +387,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.cfg.Logger,
 				)
 			},
-		}, crdMeta)), requireAvailable("dynamic client must be provided for namespace custom resources", func() bool {
+		}), requireAvailable("dynamic client must be provided for namespace custom resources", func() bool {
 			return deps.cfg.DynamicClient != nil
 		})),
 
@@ -412,10 +404,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			return deps.cfg.HelmFactory != nil
 		})),
 		accessListRegistration(runtimeAccess, listDomainConfig{
-			name:          "namespace-network",
-			issueResource: "core/services,discovery.k8s.io/endpointslices,networking.k8s.io/ingresses,networking.k8s.io/networkpolicies,gateway.networking.k8s.io",
-			logGroup:      "*",
-			logResource:   "services/endpointslices/ingresses/networkpolicies/gateway-api",
+			name: "namespace-network",
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceNetworkDomainWithGatewayAPI(
 					deps.registry,
@@ -438,10 +427,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			},
 		}),
 		accessListRegistration(runtimeAccess, listDomainConfig{
-			name:          "namespace-quotas",
-			issueResource: "core/resourcequotas,limitranges,policy/poddisruptionbudgets",
-			logGroup:      "*",
-			logResource:   "resourcequotas/limitranges/poddisruptionbudgets",
+			name: "namespace-quotas",
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceQuotasDomain(
 					deps.registry,
@@ -456,10 +442,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		}),
 
 		accessListRegistration(runtimeAccess, listDomainConfig{
-			name:          "namespace-rbac",
-			issueResource: "rbac.authorization.k8s.io/roles,rolebindings,core/serviceaccounts",
-			logGroup:      "rbac.authorization.k8s.io",
-			logResource:   "roles/rolebindings/serviceaccounts",
+			name: "namespace-rbac",
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceRBACDomain(
 					deps.registry,
@@ -533,8 +516,60 @@ func accessListRegistration(access domainpermissions.RuntimeAccess, cfg listDoma
 	}
 	cfg.checks = listChecksFromRegistrationPlan(plan)
 	cfg.allowAny = plan.AllowAny()
+	cfg = applyRegistrationPlanMeta(cfg, plan)
 	cfg.deniedReason = plan.DeniedReason
 	return listRegistration(cfg)
+}
+
+func applyRegistrationPlanMeta(cfg listDomainConfig, plan domainpermissions.RegistrationAccessPlan) listDomainConfig {
+	if cfg.issueResource == "" {
+		cfg.issueResource = permissionIssueResource(plan.Requirements)
+	}
+	if cfg.logResource == "" {
+		cfg.logResource = permissionLogResource(plan.Requirements)
+	}
+	if cfg.logGroup == "" {
+		cfg.logGroup = permissionLogGroup(plan.Requirements)
+	}
+	return cfg
+}
+
+func permissionIssueResource(reqs []permissions.ResourceRequirement) string {
+	parts := make([]string, 0, len(reqs))
+	for _, req := range reqs {
+		parts = append(parts, permissions.ResourceKey(req.Group, req.Resource))
+	}
+	return strings.Join(parts, ",")
+}
+
+func permissionLogResource(reqs []permissions.ResourceRequirement) string {
+	parts := make([]string, 0, len(reqs))
+	for _, req := range reqs {
+		if req.Resource == "" {
+			continue
+		}
+		parts = append(parts, req.Resource)
+	}
+	return strings.Join(parts, "/")
+}
+
+func permissionLogGroup(reqs []permissions.ResourceRequirement) string {
+	group := ""
+	hasGroup := false
+	for _, req := range reqs {
+		if req.Group == "" {
+			continue
+		}
+		if !hasGroup {
+			group = req.Group
+			hasGroup = true
+			continue
+		}
+		if req.Group != group {
+			return "*"
+		}
+	}
+	return group
 }
 
 func listChecksFromRegistrationPlan(plan domainpermissions.RegistrationAccessPlan) []listCheck {
@@ -576,15 +611,6 @@ func requireAvailable(message string, available func() bool) func() error {
 		}
 		return nil
 	}
-}
-
-// applyListMeta copies shared metadata into a list-gated registration config.
-func applyListMeta(cfg listDomainConfig, meta domainMeta) listDomainConfig {
-	cfg.issueResource = meta.issueResource
-	cfg.logGroup = meta.logGroup
-	cfg.logResource = meta.logResource
-	cfg.deniedReason = meta.deniedReason
-	return cfg
 }
 
 // applyListWatchMeta copies shared metadata into a list/watch-gated registration config.

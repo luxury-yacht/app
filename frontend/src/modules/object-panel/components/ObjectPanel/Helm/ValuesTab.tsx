@@ -2,22 +2,18 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.tsx
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import * as YAML from 'yaml';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { YamlEditor } from '@shared/components/yaml';
-import { requestRefreshDomain } from '@/core/data-access';
-import { refreshOrchestrator } from '@/core/refresh';
+import { useRefreshDomainHandle } from '@/core/data-access';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
-import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { errorHandler } from '@utils/errorHandler';
 import './ValuesTab.css';
 import '../Yaml/YamlTab.css';
-
-const INACTIVE_SCOPE = '__inactive__';
 
 /** A single Helm value: primitive, array, or nested object. */
 type HelmValue = string | number | boolean | null | HelmValue[] | HelmValueObject;
@@ -40,34 +36,13 @@ interface ValuesTabProps {
 const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const [showMode, setShowMode] = useState<'defaults' | 'overrides' | 'merged'>('defaults');
-  const effectiveScope = scope ?? INACTIVE_SCOPE;
-  const snapshot = useRefreshScopedDomain('object-helm-values', effectiveScope);
-
-  // Enable/disable the scoped domain based on tab activity. preserveState
-  // keeps the store entry alive when the tab unmounts so diagnostics can still
-  // see it. Full cleanup (reset) is handled by ObjectPanelContent when the
-  // panel closes.
-  useEffect(() => {
-    if (!scope) {
-      return undefined;
-    }
-
-    const enabled = isActive;
-    refreshOrchestrator.setScopedDomainEnabled('object-helm-values', scope, enabled);
-    if (enabled) {
-      void requestRefreshDomain({
-        domain: 'object-helm-values',
-        scope,
-        reason: 'startup',
-      });
-    }
-
-    return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-helm-values', scope, false, {
-        preserveState: true,
-      });
-    };
-  }, [scope, isActive]);
+  const { state: snapshot } = useRefreshDomainHandle({
+    domain: 'object-helm-values',
+    scope,
+    enabled: Boolean(isActive && scope),
+    preserveState: true,
+    fetchOnEnable: isActive && scope ? 'startup' : false,
+  });
 
   const valuesData = snapshot.data?.values as HelmValuesData | undefined;
   const valuesLoadingState = applyPassiveLoadingPolicy({

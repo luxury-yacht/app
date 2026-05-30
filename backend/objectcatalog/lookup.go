@@ -1,3 +1,9 @@
+/*
+ * backend/objectcatalog/lookup.go
+ *
+ * Provides indexed object lookup helpers for catalog consumers.
+ */
+
 package objectcatalog
 
 import (
@@ -26,27 +32,13 @@ func (s *Service) FindExactMatch(namespace, group, version, kind, name string) (
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	for _, item := range s.items {
-		if item.Namespace != normalizedNamespace {
-			continue
-		}
-		if item.Group != normalizedGroup {
-			continue
-		}
-		if item.Version != normalizedVersion {
-			continue
-		}
-		if item.Kind != normalizedKind {
-			continue
-		}
-		if item.Name != normalizedName {
-			continue
-		}
-		return item, true
-	}
-
-	return Summary{}, false
+	return s.catalogIndex.findExact(
+		normalizedNamespace,
+		normalizedGroup,
+		normalizedVersion,
+		normalizedKind,
+		normalizedName,
+	)
 }
 
 // FindByUID resolves a single catalog item by UID within this cluster's
@@ -63,14 +55,7 @@ func (s *Service) FindByUID(uid string) (Summary, bool) {
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	for _, item := range s.items {
-		if item.UID == normalizedUID {
-			return item, true
-		}
-	}
-
-	return Summary{}, false
+	return s.catalogIndex.findUID(normalizedUID)
 }
 
 // ResolveResourceForGVK resolves discovery metadata captured by the catalog.

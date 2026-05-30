@@ -25,6 +25,7 @@ export type {
   GridTableFilterConfig,
   GridTableFilterOptions,
   GridTableFilterState,
+  GridTableDiagnosticsMode,
   GridTableProps,
   GridTableVirtualizationOptions,
   InternalFilterOptions,

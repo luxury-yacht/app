@@ -1,3 +1,9 @@
+/*
+ * backend/objectcatalog/streaming_test.go
+ *
+ * Verifies object catalog streaming snapshots and update behavior.
+ */
+
 package objectcatalog
 
 import (
@@ -24,6 +30,7 @@ func TestCloneSetCopiesValues(t *testing.T) {
 func newTestServiceForStreaming() *Service {
 	return &Service{
 		now:               time.Now,
+		catalogIndex:      newCatalogIndex(),
 		streamSubscribers: make(map[int]chan StreamingUpdate),
 	}
 }

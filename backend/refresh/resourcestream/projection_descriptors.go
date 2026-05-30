@@ -1,3 +1,5 @@
+// Package resourcestream keeps projection metadata aligned with the shared
+// refresh-domain composition contract.
 package resourcestream
 
 import "github.com/luxury-yacht/app/backend/refresh/domainpermissions"
@@ -25,6 +27,13 @@ type ResourceDescriptor struct {
 	Version  string
 	Kind     string
 	Resource string
+}
+
+// SupportedDomains returns the refresh domains served by the resource
+// WebSocket stream. The domainpermissions composition table owns the resource
+// membership; stream registration and projections add behavior-specific wiring.
+func SupportedDomains() []string {
+	return domainpermissions.StreamDomains()
 }
 
 func ProjectionDescriptors() map[string]ProjectionDescriptor {
@@ -227,7 +236,11 @@ func clusterDescriptor(domain, projection string, primary []ResourceDescriptor) 
 }
 
 func streamResourceDescriptors(domain string) []ResourceDescriptor {
-	resources := domainpermissions.StreamResourcesByDomain()[domain]
+	composition, ok := domainpermissions.CompositionByDomain()[domain]
+	if !ok {
+		return nil
+	}
+	resources := composition.Stream
 	descriptors := make([]ResourceDescriptor, 0, len(resources))
 	for _, resource := range resources {
 		descriptors = append(descriptors, ResourceDescriptor{

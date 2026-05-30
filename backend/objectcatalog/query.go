@@ -26,11 +26,7 @@ func (s *Service) Query(opts QueryOptions) QueryResult {
 	hasNamespaceFilter := len(opts.Namespaces) > 0
 
 	s.mu.RLock()
-	chunks := make([]*summaryChunk, len(s.sortedChunks))
-	copy(chunks, s.sortedChunks)
-	cachedKinds := append([]KindInfo(nil), s.cachedKinds...)
-	cachedNamespaces := append([]string(nil), s.cachedNamespaces...)
-	cachedDescriptors := append([]Descriptor(nil), s.cachedDescriptors...)
+	chunks, cachedKinds, cachedNamespaces, cachedDescriptors := s.catalogIndex.cachedQueryState()
 	s.mu.RUnlock()
 
 	if len(chunks) == 0 {

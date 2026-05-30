@@ -86,6 +86,46 @@ export interface AppPreferenceMetadata<K extends AppPreferenceKey = AppPreferenc
   runtimeSideEffect: boolean;
 }
 
+export type PreferenceChange<K extends AppPreferenceKey = AppPreferenceKey> = {
+  key: K;
+  value: AppPreferences[K];
+};
+
+interface PreferenceMutationOptions {
+  persistAppearanceMode?: AppearanceMode;
+  persistAppearanceBootstrap?: boolean;
+}
+
+interface PreferenceMutation {
+  updates: Partial<AppPreferences>;
+  changes: PreferenceChange[];
+  options?: PreferenceMutationOptions;
+}
+
+export interface PreferenceWorkflow<T> {
+  commit: (input: T) => void;
+  commitDebounced: (input: T) => void;
+  cancelPending: () => void;
+}
+
+interface PreferenceWorkflowConfig<T> {
+  label: string;
+  debounceMs?: number;
+  buildMutation: (input: T) => PreferenceMutation;
+}
+
+export interface PaletteTintPreferenceInput {
+  mode: 'light' | 'dark';
+  hue: number;
+  saturation: number;
+  brightness?: number;
+}
+
+export interface ColorPreferenceInput {
+  mode: 'light' | 'dark';
+  color: string;
+}
+
 interface AppSettingsPayload {
   appearanceMode?: string;
   useShortResourceNames?: boolean;
@@ -506,6 +546,17 @@ export const normalizeIntegerPreferenceValue = (
   return floored;
 };
 
+export const commitIntegerPreferenceInput = (
+  key: AppPreferenceKey,
+  raw: string,
+  persist: (value: number) => void,
+  options?: { defaultOnNonPositive?: boolean }
+): number => {
+  const normalized = normalizeIntegerPreferenceValue(key, parseInt(raw, 10), options);
+  persist(normalized);
+  return normalized;
+};
+
 const normalizeEnumPreferenceValue = <T extends string>(
   key: AppPreferenceKey,
   value: string | undefined
@@ -734,9 +785,7 @@ const restoreLocalStorageSnapshot = (snapshot: LocalStorageSnapshot): void => {
   restoreLocalStorageValue(APPEARANCE_BOOTSTRAP_STORAGE_KEY, snapshot.appearanceBootstrap);
 };
 
-const persistPreferenceChanges = async (
-  changes: Array<{ key: keyof AppPreferences; value: unknown }>
-): Promise<void> => {
+const persistPreferenceChanges = async (changes: PreferenceChange[]): Promise<void> => {
   if (!wailsRuntimeAvailable()) {
     return;
   }
@@ -747,8 +796,8 @@ const persistPreferenceChanges = async (
 
 const optimisticPreferenceUpdate = async (
   updates: Partial<AppPreferences>,
-  changes: Array<{ key: keyof AppPreferences; value: unknown }>,
-  options?: { persistAppearanceMode?: AppearanceMode; persistAppearanceBootstrap?: boolean }
+  changes: PreferenceChange[],
+  options?: PreferenceMutationOptions
 ): Promise<void> => {
   const previousPreferences = { ...preferenceCache };
   const previousStorage = captureLocalStorageSnapshot();
@@ -774,12 +823,56 @@ const optimisticPreferenceUpdate = async (
 const fireAndForgetPreferenceUpdate = (
   label: string,
   updates: Partial<AppPreferences>,
-  changes: Array<{ key: keyof AppPreferences; value: unknown }>,
-  options?: { persistAppearanceMode?: AppearanceMode; persistAppearanceBootstrap?: boolean }
+  changes: PreferenceChange[],
+  options?: PreferenceMutationOptions
 ): void => {
   void optimisticPreferenceUpdate(updates, changes, options).catch((error) => {
     console.error(label, error);
   });
+};
+
+const commitPreferenceMutation = (label: string, mutation: PreferenceMutation): void => {
+  fireAndForgetPreferenceUpdate(label, mutation.updates, mutation.changes, mutation.options);
+};
+
+const singlePreferenceMutation = <K extends AppPreferenceKey>(
+  key: K,
+  value: AppPreferences[K],
+  options?: PreferenceMutationOptions
+): PreferenceMutation => ({
+  updates: { [key]: value } as Partial<AppPreferences>,
+  changes: [{ key, value }],
+  options,
+});
+
+const createPreferenceWorkflow = <T>({
+  label,
+  debounceMs = 300,
+  buildMutation,
+}: PreferenceWorkflowConfig<T>): PreferenceWorkflow<T> => {
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const cancelPending = () => {
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      pendingTimer = null;
+    }
+  };
+
+  const commit = (input: T) => {
+    cancelPending();
+    commitPreferenceMutation(label, buildMutation(input));
+  };
+
+  const commitDebounced = (input: T) => {
+    cancelPending();
+    pendingTimer = setTimeout(() => {
+      pendingTimer = null;
+      commitPreferenceMutation(label, buildMutation(input));
+    }, debounceMs);
+  };
+
+  return { commit, commitDebounced, cancelPending };
 };
 
 const fetchAppSettings = async (): Promise<AppSettingsPayload | null> => {
@@ -1076,14 +1169,25 @@ export const getAccentColor = (mode: 'light' | 'dark'): string => {
   return mode === 'light' ? preferenceCache.accentColorLight : preferenceCache.accentColorDark;
 };
 
+const buildAccentColorMutation = ({ mode, color }: ColorPreferenceInput): PreferenceMutation => {
+  const key = mode === 'light' ? 'accentColorLight' : 'accentColorDark';
+  return singlePreferenceMutation(key, color, { persistAppearanceBootstrap: true });
+};
+
+export const createAccentColorPreferenceWorkflow = (options?: {
+  debounceMs?: number;
+}): PreferenceWorkflow<ColorPreferenceInput> =>
+  createPreferenceWorkflow({
+    label: 'Failed to persist accent color:',
+    debounceMs: options?.debounceMs,
+    buildMutation: buildAccentColorMutation,
+  });
+
 // Persist accent color for a specific resolved appearance mode to backend via fire-and-forget.
 export const setAccentColor = (mode: 'light' | 'dark', color: string): void => {
-  const key = mode === 'light' ? 'accentColorLight' : 'accentColorDark';
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist accent color:',
-    { [key]: color },
-    [{ key, value: color }],
-    { persistAppearanceBootstrap: true }
+    buildAccentColorMutation({ mode, color })
   );
 };
 
@@ -1092,100 +1196,102 @@ export const getLinkColor = (mode: 'light' | 'dark'): string => {
   return mode === 'light' ? preferenceCache.linkColorLight : preferenceCache.linkColorDark;
 };
 
+const buildLinkColorMutation = ({ mode, color }: ColorPreferenceInput): PreferenceMutation => {
+  const key = mode === 'light' ? 'linkColorLight' : 'linkColorDark';
+  return singlePreferenceMutation(key, color, { persistAppearanceBootstrap: true });
+};
+
+export const createLinkColorPreferenceWorkflow = (options?: {
+  debounceMs?: number;
+}): PreferenceWorkflow<ColorPreferenceInput> =>
+  createPreferenceWorkflow({
+    label: 'Failed to persist link color:',
+    debounceMs: options?.debounceMs,
+    buildMutation: buildLinkColorMutation,
+  });
+
 // Persist link color for a specific resolved appearance mode to backend via fire-and-forget.
 export const setLinkColor = (mode: 'light' | 'dark', color: string): void => {
-  const key = mode === 'light' ? 'linkColorLight' : 'linkColorDark';
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist link color:',
-    { [key]: color },
-    [{ key, value: color }],
-    { persistAppearanceBootstrap: true }
+    buildLinkColorMutation({ mode, color })
   );
 };
 
 export const setAppearanceModePreference = async (mode: AppearanceMode): Promise<void> => {
   const normalized = normalizeAppearanceMode(mode);
-  await optimisticPreferenceUpdate(
-    { appearanceMode: normalized },
-    [{ key: 'appearanceMode', value: normalized }],
-    { persistAppearanceMode: normalized }
-  );
+  const mutation = singlePreferenceMutation('appearanceMode', normalized, {
+    persistAppearanceMode: normalized,
+  });
+  await optimisticPreferenceUpdate(mutation.updates, mutation.changes, mutation.options);
 };
 
 export const setUseShortResourceNames = async (useShort: boolean): Promise<void> => {
-  await optimisticPreferenceUpdate({ useShortResourceNames: useShort }, [
-    { key: 'useShortResourceNames', value: useShort },
-  ]);
+  const mutation = singlePreferenceMutation('useShortResourceNames', useShort);
+  await optimisticPreferenceUpdate(mutation.updates, mutation.changes, mutation.options);
 };
 
 export const setDimInactiveNamespaces = async (enabled: boolean): Promise<void> => {
-  await optimisticPreferenceUpdate({ dimInactiveNamespaces: enabled }, [
-    { key: 'dimInactiveNamespaces', value: enabled },
-  ]);
+  const mutation = singlePreferenceMutation('dimInactiveNamespaces', enabled);
+  await optimisticPreferenceUpdate(mutation.updates, mutation.changes, mutation.options);
 };
 
 export const setExclusiveNamespaces = async (enabled: boolean): Promise<void> => {
-  await optimisticPreferenceUpdate({ exclusiveNamespaces: enabled }, [
-    { key: 'exclusiveNamespaces', value: enabled },
-  ]);
+  const mutation = singlePreferenceMutation('exclusiveNamespaces', enabled);
+  await optimisticPreferenceUpdate(mutation.updates, mutation.changes, mutation.options);
 };
 
 export const setAutoRefreshEnabled = (enabled: boolean): void => {
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist auto-refresh preference:',
-    { autoRefreshEnabled: enabled },
-    [{ key: 'autoRefreshEnabled', value: enabled }]
+    singlePreferenceMutation('autoRefreshEnabled', enabled)
   );
 };
 
 export const setBackgroundRefreshEnabled = (enabled: boolean): void => {
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist background refresh preference:',
-    { refreshBackgroundClustersEnabled: enabled },
-    [{ key: 'refreshBackgroundClustersEnabled', value: enabled }]
+    singlePreferenceMutation('refreshBackgroundClustersEnabled', enabled)
   );
 };
 
 export const setObjPanelLogsBufferMaxSize = (size: number): void => {
   const normalized = normalizeObjPanelLogsBufferMaxSize(size);
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist Object Panel Logs Tab buffer max size:',
-    { objPanelLogsBufferMaxSize: normalized },
-    [{ key: 'objPanelLogsBufferMaxSize', value: normalized }]
+    singlePreferenceMutation('objPanelLogsBufferMaxSize', normalized)
   );
 };
 
 export const setMaxTableRows = (size: number): void => {
   const normalized = normalizeMaxTableRows(size);
-  fireAndForgetPreferenceUpdate('Failed to persist max table rows:', { maxTableRows: normalized }, [
-    { key: 'maxTableRows', value: normalized },
-  ]);
+  commitPreferenceMutation(
+    'Failed to persist max table rows:',
+    singlePreferenceMutation('maxTableRows', normalized)
+  );
 };
 
 export const setKubernetesClientQPS = (qps: number): void => {
   const normalized = normalizeKubernetesClientQPS(qps);
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist Kubernetes client QPS:',
-    { kubernetesClientQPS: normalized },
-    [{ key: 'kubernetesClientQPS', value: normalized }]
+    singlePreferenceMutation('kubernetesClientQPS', normalized)
   );
 };
 
 export const setKubernetesClientBurst = (burst: number): void => {
   const normalized = normalizeKubernetesClientBurst(burst);
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist Kubernetes client burst:',
-    { kubernetesClientBurst: normalized },
-    [{ key: 'kubernetesClientBurst', value: normalized }]
+    singlePreferenceMutation('kubernetesClientBurst', normalized)
   );
 };
 
 export const setPermissionSSRRFetchConcurrency = (limit: number): void => {
   const normalized = normalizePermissionSSRRFetchConcurrency(limit);
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist permission SSRR fetch concurrency:',
-    { permissionSSRRFetchConcurrency: normalized },
-    [{ key: 'permissionSSRRFetchConcurrency', value: normalized }]
+    singlePreferenceMutation('permissionSSRRFetchConcurrency', normalized)
   );
 };
 
@@ -1195,54 +1301,48 @@ export const setObjPanelLogsApiTimestampFormat = (format: string): void => {
     throw new Error(validationError);
   }
   const normalized = format.trim();
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist Object Panel Logs Tab API timestamp format:',
-    { objPanelLogsApiTimestampFormat: normalized },
-    [{ key: 'objPanelLogsApiTimestampFormat', value: normalized }]
+    singlePreferenceMutation('objPanelLogsApiTimestampFormat', normalized)
   );
 };
 
 export const setObjPanelLogsApiTimestampUseLocalTimeZone = (enabled: boolean): void => {
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist Object Panel Logs Tab API timestamp local timezone setting:',
-    { objPanelLogsApiTimestampUseLocalTimeZone: enabled },
-    [{ key: 'objPanelLogsApiTimestampUseLocalTimeZone', value: enabled }]
+    singlePreferenceMutation('objPanelLogsApiTimestampUseLocalTimeZone', enabled)
   );
 };
 
 export const setObjPanelLogsTargetPerScopeLimit = (limit: number): void => {
   const normalized = normalizeObjPanelLogsTargetPerScopeLimit(limit);
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist Object Panel Logs Tab target per-scope limit:',
-    { objPanelLogsTargetPerScopeLimit: normalized },
-    [{ key: 'objPanelLogsTargetPerScopeLimit', value: normalized }]
+    singlePreferenceMutation('objPanelLogsTargetPerScopeLimit', normalized)
   );
 };
 
 export const setObjPanelLogsTargetGlobalLimit = (limit: number): void => {
   const normalized = normalizeObjPanelLogsTargetGlobalLimit(limit);
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist Object Panel Logs Tab target global limit:',
-    { objPanelLogsTargetGlobalLimit: normalized },
-    [{ key: 'objPanelLogsTargetGlobalLimit', value: normalized }]
+    singlePreferenceMutation('objPanelLogsTargetGlobalLimit', normalized)
   );
 };
 
 export const setGridTablePersistenceMode = (mode: GridTablePersistenceMode): void => {
   const normalized = normalizeGridTableMode(mode);
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist grid table persistence mode:',
-    { gridTablePersistenceMode: normalized },
-    [{ key: 'gridTablePersistenceMode', value: normalized }]
+    singlePreferenceMutation('gridTablePersistenceMode', normalized)
   );
 };
 
 export const setDefaultObjectPanelPosition = (position: ObjectPanelPosition): void => {
   const normalized = normalizeObjectPanelPosition(position);
-  fireAndForgetPreferenceUpdate(
+  commitPreferenceMutation(
     'Failed to persist default object panel position:',
-    { defaultObjectPanelPosition: normalized },
-    [{ key: 'defaultObjectPanelPosition', value: normalized }]
+    singlePreferenceMutation('defaultObjectPanelPosition', normalized)
   );
 };
 
@@ -1277,9 +1377,8 @@ export const setObjectPanelLayoutDefaults = (layout: ObjectPanelLayoutDefaults):
       defaultOnNonPositive: true,
     }),
   };
-  fireAndForgetPreferenceUpdate(
-    'Failed to persist object panel layout defaults:',
-    {
+  commitPreferenceMutation('Failed to persist object panel layout defaults:', {
+    updates: {
       objectPanelDockedRightWidth: normalized.dockedRightWidth,
       objectPanelDockedBottomHeight: normalized.dockedBottomHeight,
       objectPanelFloatingWidth: normalized.floatingWidth,
@@ -1287,24 +1386,23 @@ export const setObjectPanelLayoutDefaults = (layout: ObjectPanelLayoutDefaults):
       objectPanelFloatingX: normalized.floatingX,
       objectPanelFloatingY: normalized.floatingY,
     },
-    [
+    changes: [
       { key: 'objectPanelDockedRightWidth', value: normalized.dockedRightWidth },
       { key: 'objectPanelDockedBottomHeight', value: normalized.dockedBottomHeight },
       { key: 'objectPanelFloatingWidth', value: normalized.floatingWidth },
       { key: 'objectPanelFloatingHeight', value: normalized.floatingHeight },
       { key: 'objectPanelFloatingX', value: normalized.floatingX },
       { key: 'objectPanelFloatingY', value: normalized.floatingY },
-    ]
-  );
+    ],
+  });
 };
 
-// Persist palette tint for a specific resolved appearance mode to backend via fire-and-forget.
-export const setPaletteTint = (
-  mode: 'light' | 'dark',
-  hue: number,
-  saturation: number,
-  brightness: number = 0
-): void => {
+const buildPaletteTintMutation = ({
+  mode,
+  hue,
+  saturation,
+  brightness = 0,
+}: PaletteTintPreferenceInput): PreferenceMutation => {
   const normalizedHue = normalizeIntegerPreferenceValue(
     mode === 'light' ? 'paletteHueLight' : 'paletteHueDark',
     hue
@@ -1341,9 +1439,33 @@ export const setPaletteTint = (
           { key: 'paletteSaturationDark' as const, value: normalizedSaturation },
           { key: 'paletteBrightnessDark' as const, value: normalizedBrightness },
         ];
-  fireAndForgetPreferenceUpdate('Failed to persist palette tint:', updates, changes, {
-    persistAppearanceBootstrap: true,
+  return {
+    updates,
+    changes,
+    options: { persistAppearanceBootstrap: true },
+  };
+};
+
+export const createPaletteTintPreferenceWorkflow = (options?: {
+  debounceMs?: number;
+}): PreferenceWorkflow<PaletteTintPreferenceInput> =>
+  createPreferenceWorkflow({
+    label: 'Failed to persist palette tint:',
+    debounceMs: options?.debounceMs,
+    buildMutation: buildPaletteTintMutation,
   });
+
+// Persist palette tint for a specific resolved appearance mode to backend via fire-and-forget.
+export const setPaletteTint = (
+  mode: 'light' | 'dark',
+  hue: number,
+  saturation: number,
+  brightness: number = 0
+): void => {
+  commitPreferenceMutation(
+    'Failed to persist palette tint:',
+    buildPaletteTintMutation({ mode, hue, saturation, brightness })
+  );
 };
 
 // --- Theme library helpers ---

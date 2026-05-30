@@ -6,44 +6,17 @@
  * to stop/remove them.
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { StopPortForward } from '@wailsjs/go/backend/App';
-import { EventsOn, BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { DockablePanel, useDockablePanelState } from '@ui/dockable';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
-import { readPortForwardSessions, requestAppState } from '@/core/app-state-access';
 import { errorHandler } from '@utils/errorHandler';
+import {
+  useRuntimeOperationStatus,
+  type PortForwardSession,
+} from '@/ui/status/runtimeOperationStatus';
 import './PortForwardsPanel.css';
-
-/**
- * Represents a port forward session.
- * Mirrors the backend PortForwardSession struct.
- */
-interface PortForwardSession {
-  id: string;
-  clusterId: string;
-  clusterName: string;
-  namespace: string;
-  podName: string;
-  containerPort: number;
-  localPort: number;
-  targetKind: string;
-  targetName: string;
-  status: string;
-  statusReason?: string;
-  startedAt: string;
-}
-
-/**
- * Status update event payload from the backend.
- */
-interface PortForwardStatusEvent {
-  sessionId: string;
-  status: string;
-  statusReason?: string;
-  localPort?: number;
-  podName?: string;
-}
 
 /**
  * Hook to access the port forwards panel state.
@@ -54,52 +27,26 @@ function usePortForwardsPanel() {
 }
 
 /**
- * Status priority for sorting sessions (lower = higher priority = displayed first)
- */
-function getStatusPriority(status: string): number {
-  switch (status) {
-    case 'active':
-      return 0;
-    case 'reconnecting':
-      return 1;
-    case 'error':
-      return 2;
-    case 'stopped':
-      return 3;
-    default:
-      return 4;
-  }
-}
-
-/**
  * Panel component for managing port forward sessions.
  * Displays sessions grouped by status with controls to stop/remove them.
  */
 function PortForwardsPanel() {
   const panelState = usePortForwardsPanel();
   const panelRef = useRef<HTMLDivElement>(null);
-  // All port forward sessions
-  const [sessions, setSessions] = useState<PortForwardSession[]>([]);
+  const handleRuntimeStatusReadError = useCallback((err: unknown, resource: string) => {
+    if (resource !== 'port-forward-sessions') {
+      return;
+    }
+    errorHandler.handle(err, { action: 'loadPortForwards' });
+  }, []);
+  const { portForwardSessions: sessions } = useRuntimeOperationStatus(null, {
+    readInitialState: panelState.isOpen,
+    onInitialReadError: handleRuntimeStatusReadError,
+  });
   // Set of session IDs currently being stopped (for button loading state)
   const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
   // Track previous session count for auto-open logic
   const prevSessionCountRef = useRef(0);
-
-  /**
-   * Load the initial list of port forward sessions from the backend.
-   */
-  const loadSessions = useCallback(async () => {
-    try {
-      const sessionList = await requestAppState({
-        resource: 'port-forward-sessions',
-        adapter: 'runtime-read',
-        read: () => readPortForwardSessions(),
-      });
-      setSessions(sessionList || []);
-    } catch (err) {
-      errorHandler.handle(err, { action: 'loadPortForwards' });
-    }
-  }, []);
 
   /**
    * Stop a port forward session.
@@ -134,57 +81,6 @@ function PortForwardsPanel() {
     },
   });
 
-  // Load sessions when panel opens
-  useEffect(() => {
-    if (!panelState.isOpen) {
-      return;
-    }
-
-    loadSessions();
-  }, [panelState.isOpen, loadSessions]);
-
-  // Subscribe to backend events for session updates
-  useEffect(() => {
-    /**
-     * Handler for full session list updates.
-     * Called when sessions are added or removed.
-     */
-    const handleListUpdate = (sessionList: PortForwardSession[]) => {
-      setSessions(sessionList || []);
-    };
-
-    /**
-     * Handler for individual session status updates.
-     * Updates the status of a single session in place.
-     */
-    const handleStatusUpdate = (event: PortForwardStatusEvent) => {
-      setSessions((prev) =>
-        prev.map((session) =>
-          session.id === event.sessionId
-            ? {
-                ...session,
-                status: event.status,
-                statusReason: event.statusReason,
-                // Update localPort and podName if provided (e.g., after reconnect)
-                ...(event.localPort !== undefined && { localPort: event.localPort }),
-                ...(event.podName !== undefined && { podName: event.podName }),
-              }
-            : session
-        )
-      );
-    };
-
-    // Use cancel functions instead of EventsOff to avoid removing
-    // listeners registered by other components.
-    const cancelList = EventsOn('portforward:list', handleListUpdate);
-    const cancelStatus = EventsOn('portforward:status', handleStatusUpdate);
-
-    return () => {
-      cancelList();
-      cancelStatus();
-    };
-  }, []);
-
   // Auto-open panel when first forward starts
   useEffect(() => {
     const currentCount = sessions.length;
@@ -197,17 +93,6 @@ function PortForwardsPanel() {
 
     prevSessionCountRef.current = currentCount;
   }, [sessions.length, panelState]);
-
-  /**
-   * Sort sessions by status priority (active first, then reconnecting, then errors).
-   */
-  const sortedSessions = useMemo(() => {
-    return [...sessions].sort((a, b) => {
-      const priorityA = getStatusPriority(a.status);
-      const priorityB = getStatusPriority(b.status);
-      return priorityA - priorityB;
-    });
-  }, [sessions]);
 
   /**
    * Render the status icon for a session.
@@ -257,18 +142,18 @@ function PortForwardsPanel() {
       panelRef={panelRef}
     >
       <div className="pf-sessions-container">
-        {sortedSessions.length === 0 ? (
+        {sessions.length === 0 ? (
           <div className="pf-empty">
             <span className="pf-empty-icon">⟷</span>
             <span className="pf-empty-text">No active port forwards</span>
           </div>
         ) : (
-          sortedSessions.map((session) => (
+          sessions.map((session) => (
             <div key={session.id} className={`pf-session-card pf-session-${session.status}`}>
               <div className="pf-session-header">
                 {renderStatusIcon(session.status)}
                 <span className="pf-target-port">
-                  {session.targetName}:{session.containerPort}
+                  {session.targetName || session.podName}:{session.containerPort}
                 </span>
                 {renderActionButton(session)}
               </div>

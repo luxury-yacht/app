@@ -248,7 +248,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleResourceClick}
           tableClassName="ns-rbac-table"
           enableContextMenu={true}

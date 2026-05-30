@@ -23,6 +23,8 @@ interface UseRefreshDomainHandleOptions<K extends RefreshDomain> {
   scope: string | null | undefined;
   enabled: boolean;
   preserveState?: boolean;
+  fetchOnEnable?: DataRequestReason | false;
+  onFetchError?: (error: unknown) => void;
 }
 
 export function useRefreshDomainHandle<K extends RefreshDomain = RefreshDomain>({
@@ -30,6 +32,8 @@ export function useRefreshDomainHandle<K extends RefreshDomain = RefreshDomain>(
   scope,
   enabled,
   preserveState = false,
+  fetchOnEnable = false,
+  onFetchError,
 }: UseRefreshDomainHandleOptions<K>) {
   const readDomain = (domain ?? 'namespaces') as K;
   const readScope = scope ?? '';
@@ -40,6 +44,8 @@ export function useRefreshDomainHandle<K extends RefreshDomain = RefreshDomain>(
     scope,
     enabled,
     preserveState,
+    fetchOnEnable,
+    onFetchError,
   });
 
   const setEnabled = useCallback(

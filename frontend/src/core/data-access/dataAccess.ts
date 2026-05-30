@@ -21,6 +21,8 @@ import type {
   DataRequestReason,
   DataRequestResult,
   RefreshDomainRequest,
+  RefreshDomainStateRequest,
+  RefreshDomainStateResult,
 } from './types';
 import type { RefreshDomain } from '@/core/refresh/types';
 
@@ -106,6 +108,36 @@ export const requestRefreshDomain = async ({
     status: result.status,
     blockedReason: result.blockedReason,
   };
+};
+
+export const requestRefreshDomainState = async <K extends RefreshDomain>({
+  domain,
+  scope,
+  reason,
+  label,
+  cleanup = true,
+  preserveState = false,
+}: RefreshDomainStateRequest<K>): Promise<RefreshDomainStateResult<K>> => {
+  setRefreshDomainEnabled({ domain, scope, enabled: true, preserveState });
+
+  try {
+    const result = await requestRefreshDomain({ domain, scope, reason, label });
+    if (result.status !== 'executed') {
+      return {
+        status: result.status,
+        blockedReason: result.blockedReason,
+      };
+    }
+
+    return {
+      status: 'executed',
+      data: readRefreshDomainState(domain, scope),
+    };
+  } finally {
+    if (cleanup) {
+      setRefreshDomainEnabled({ domain, scope, enabled: false, preserveState });
+    }
+  }
 };
 
 export const setRefreshDomainEnabled = ({

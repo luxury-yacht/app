@@ -1,22 +1,16 @@
+/**
+ * frontend/src/shared/actions/objectActionClient.ts
+ *
+ * Wraps backend RunObjectAction calls with full object identity payloads.
+ */
+
 import { RunObjectAction } from '@wailsjs/go/backend/App';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import type { ResourceRef } from '@core/refresh/types';
+import { OBJECT_ACTIONS } from './objectActionContract';
+import type { ObjectActionName } from './objectActionContract';
 
-export const OBJECT_ACTIONS = {
-  delete: 'delete',
-  restart: 'restart',
-  scale: 'scale',
-  trigger: 'trigger',
-  suspend: 'suspend',
-  cordon: 'cordon',
-  uncordon: 'uncordon',
-  startDrain: 'startDrain',
-  startPortForward: 'startPortForward',
-  createDebugContainer: 'createDebugContainer',
-  rollback: 'rollback',
-} as const;
-
-export type ObjectActionName = (typeof OBJECT_ACTIONS)[keyof typeof OBJECT_ACTIONS];
+export type { ObjectActionName } from './objectActionContract';
 
 export type ObjectActionTargetRef = Omit<ResourceRef, 'name'> & { name: string };
 

@@ -1,18 +1,28 @@
+/**
+ * frontend/src/modules/resource-grid/resourceGridTableTypes.ts
+ *
+ * Defines shared contracts for resource-grid table adapters and state.
+ */
+
 import type React from 'react';
 import type { SortConfig, SortDirection } from '@/hooks/useTableSort';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import type {
   ColumnWidthState,
   GridColumnDefinition,
+  GridTableDiagnosticsMode,
   GridTableFilterConfig,
   GridTableFilterOptions,
   GridTableFilterState,
   GridTableVirtualizationOptions,
 } from '@shared/components/tables/GridTable';
 import type { GridTableFilterPersistenceOptions } from '@shared/components/tables/persistence/gridTablePersistence';
+import type { ResourceGridObjectIdentityAdapter } from './useResourceGridObjectIdentity';
 
 export interface GridTableBindingProps<T> {
   data: T[];
+  keyExtractor: (item: T, index: number) => string;
   onSort: (key: string, targetDirection?: SortDirection) => void;
   sortConfig: SortConfig;
   filters?: GridTableFilterConfig<T>;
@@ -26,14 +36,21 @@ export interface GridTableBindingProps<T> {
 
 export interface ResourceGridTableRow {
   kind?: string | null;
+  kindAlias?: string | null;
+  name?: string | null;
   namespace?: string | null;
+  clusterId?: string | null;
+  clusterName?: string | null;
+  group?: string | null;
+  version?: string | null;
 }
 
 export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   viewId: string;
   data: T[];
   columns: GridColumnDefinition<T>[];
-  keyExtractor: (item: T, index: number) => string;
+  keyExtractor?: (item: T, index: number) => string;
+  objectIdentity?: ResourceGridObjectIdentityAdapter<T>;
   availableKinds?: string[];
   diagnosticsLabel?: string;
   filterAccessors?: GridTableFilterConfig<T>['accessors'];
@@ -96,6 +113,7 @@ export interface ResourceGridCommonParams<T extends ResourceGridTableRow> extend
   'viewId' | 'filterOptions'
 > {
   persistence: ResourceGridPersistence<T>;
+  keyExtractor: (item: T, index: number) => string;
   defaultSortKey?: string;
   defaultSortDirection?: SortDirection;
   namespace?: string;
@@ -107,10 +125,26 @@ export interface ResourceGridTableResult<T extends ResourceGridTableRow> {
   favModal: React.ReactNode;
 }
 
+export interface ObjectPanelResourceGridTableSurfaceProps<T extends ResourceGridTableRow> {
+  gridTableProps: GridTableBindingProps<T>;
+  columns: GridColumnDefinition<T>[];
+  diagnosticsLabel: string;
+  loading: boolean;
+  spinnerMessage: string;
+  updatingMessage: string;
+  diagnosticsMode?: GridTableDiagnosticsMode;
+  tableClassName?: string;
+  hideHeader?: boolean;
+  onRowClick?: (item: T) => void;
+  enableContextMenu?: boolean;
+  getCustomContextMenuItems?: (item: T, columnKey: string) => ContextMenuItem[];
+}
+
 export interface QueryResourceGridTableParams<T extends ResourceGridTableRow> {
   data: T[];
   columns: GridColumnDefinition<T>[];
   persistence: ResourceGridPersistence<T>;
+  keyExtractor?: (item: T, index: number) => string;
   defaultSortKey?: string;
   defaultSortDirection?: SortDirection;
   diagnosticsLabel?: string;

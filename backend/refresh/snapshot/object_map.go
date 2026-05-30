@@ -1,3 +1,5 @@
+// Package snapshot builds refresh-domain payloads, including the object-map
+// relationship graph.
 package snapshot
 
 import (
@@ -38,115 +40,6 @@ const (
 	maxObjectMapDepth     = 12
 	maxObjectMapNodes     = 1000
 )
-
-const (
-	objectMapEdgeOwner         = "owner"
-	objectMapEdgeSelector      = "selector"
-	objectMapEdgeEndpoint      = "endpoint"
-	objectMapEdgeRoutes        = "routes"
-	objectMapEdgeScales        = "scales"
-	objectMapEdgeGrants        = "grants"
-	objectMapEdgeBinds         = "binds"
-	objectMapEdgeAggregates    = "aggregates"
-	objectMapEdgeUses          = "uses"
-	objectMapEdgeMounts        = "mounts"
-	objectMapEdgeSchedules     = "schedules"
-	objectMapEdgeVolumeBinding = "volume-binding"
-	objectMapEdgeStorageClass  = "storage-class"
-)
-
-type objectMapReverseTraversalPolicy int
-
-const (
-	objectMapReverseNever objectMapReverseTraversalPolicy = iota
-	objectMapReverseAnyDepth
-	objectMapReverseSeedOnly
-	objectMapReverseDepthOne
-)
-
-type objectMapRelationship struct {
-	typ             string
-	label           string
-	reversePolicy   objectMapReverseTraversalPolicy
-	defaultTracedBy string
-}
-
-var objectMapRelationships = map[string]objectMapRelationship{
-	objectMapEdgeOwner: {
-		typ:           objectMapEdgeOwner,
-		label:         "owns",
-		reversePolicy: objectMapReverseAnyDepth,
-	},
-	objectMapEdgeSelector: {
-		typ:             objectMapEdgeSelector,
-		label:           "selects",
-		reversePolicy:   objectMapReverseAnyDepth,
-		defaultTracedBy: "spec.selector",
-	},
-	objectMapEdgeEndpoint: {
-		typ:           objectMapEdgeEndpoint,
-		label:         "has endpoints",
-		reversePolicy: objectMapReverseAnyDepth,
-	},
-	objectMapEdgeRoutes: {
-		typ:           objectMapEdgeRoutes,
-		label:         "routes to",
-		reversePolicy: objectMapReverseAnyDepth,
-	},
-	objectMapEdgeScales: {
-		typ:             objectMapEdgeScales,
-		label:           "scales",
-		reversePolicy:   objectMapReverseAnyDepth,
-		defaultTracedBy: "spec.scaleTargetRef",
-	},
-	objectMapEdgeGrants: {
-		typ:             objectMapEdgeGrants,
-		label:           "grants",
-		reversePolicy:   objectMapReverseAnyDepth,
-		defaultTracedBy: "roleRef",
-	},
-	objectMapEdgeBinds: {
-		typ:             objectMapEdgeBinds,
-		label:           "binds",
-		reversePolicy:   objectMapReverseAnyDepth,
-		defaultTracedBy: "subjects",
-	},
-	objectMapEdgeAggregates: {
-		typ:             objectMapEdgeAggregates,
-		label:           "aggregates",
-		reversePolicy:   objectMapReverseAnyDepth,
-		defaultTracedBy: "aggregationRule.clusterRoleSelectors",
-	},
-	objectMapEdgeUses: {
-		typ:           objectMapEdgeUses,
-		label:         "uses",
-		reversePolicy: objectMapReverseSeedOnly,
-	},
-	objectMapEdgeMounts: {
-		typ:             objectMapEdgeMounts,
-		label:           "mounts",
-		reversePolicy:   objectMapReverseSeedOnly,
-		defaultTracedBy: "volumes",
-	},
-	objectMapEdgeSchedules: {
-		typ:             objectMapEdgeSchedules,
-		label:           "scheduled on",
-		reversePolicy:   objectMapReverseSeedOnly,
-		defaultTracedBy: "spec.nodeName",
-	},
-	objectMapEdgeVolumeBinding: {
-		typ:             objectMapEdgeVolumeBinding,
-		label:           "binds volume",
-		reversePolicy:   objectMapReverseDepthOne,
-		defaultTracedBy: "spec.volumeName",
-	},
-	objectMapEdgeStorageClass: {
-		typ:             objectMapEdgeStorageClass,
-		label:           "uses class",
-		reversePolicy:   objectMapReverseSeedOnly,
-		defaultTracedBy: "spec.storageClassName",
-	},
-}
 
 // ObjectMapReference is the canonical identity for a graph node.
 type ObjectMapReference struct {
@@ -335,101 +228,19 @@ func (b *objectMapBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		return nil, fmt.Errorf("object-map scope for %s/%s is missing group/version", opts.identity.GVK.Kind, opts.identity.Name)
 	}
 
-	meta := ClusterMetaFromContext(ctx)
-	index := newObjectMapIndex(meta)
-	index.addCatalog(b.catalog())
-	index.collectTyped(ctx, b.client)
-	index.collectGatewayTyped(ctx, b.gatewayClient, b.gatewayPresence)
-	if err := index.listError(); err != nil {
+	assembler, err := b.newObjectMapAssembler(ctx)
+	if err != nil {
 		return nil, err
 	}
-	index.enrichActionFacts()
-
-	seed, ok := index.findIdentity(opts.identity.Namespace, opts.identity.GVK, opts.identity.Name)
-	if !ok {
-		return nil, fmt.Errorf("object-map seed not found: %s/%s %s/%s", opts.identity.GVK.Group, opts.identity.GVK.Version, opts.identity.GVK.Kind, opts.identity.Name)
-	}
-
-	graph := index.buildGraph(seed, opts.maxDepth, opts.maxNodes)
-	nodes := sortedObjectMapNodes(graph.nodes)
-	edges := sortedObjectMapEdges(graph.edges)
-	payload := ObjectMapSnapshotPayload{
-		ClusterMeta: meta,
-		Seed:        seed.ref,
-		Nodes:       nodes,
-		Edges:       edges,
-		MaxDepth:    opts.maxDepth,
-		MaxNodes:    opts.maxNodes,
-		Truncated:   graph.truncated,
-		Warnings:    index.warnings,
-	}
-
-	return &refresh.Snapshot{
-		Domain:  objectMapDomain,
-		Scope:   scope,
-		Version: 0,
-		Payload: payload,
-		Stats: refresh.SnapshotStats{
-			ItemCount:    len(nodes),
-			TotalItems:   len(nodes),
-			Truncated:    graph.truncated,
-			Warnings:     index.warnings,
-			IsFinalBatch: true,
-			BatchSize:    len(nodes),
-			TotalBatches: 1,
-		},
-	}, nil
+	return assembler.buildObjectSnapshot(scope, opts)
 }
 
 func (b *objectMapBuilder) buildNamespace(ctx context.Context, scope string, opts objectMapOptions) (*refresh.Snapshot, error) {
-	meta := ClusterMetaFromContext(ctx)
-	index := newObjectMapIndex(meta)
-	index.addCatalog(b.catalog())
-	index.collectTyped(ctx, b.client)
-	index.collectGatewayTyped(ctx, b.gatewayClient, b.gatewayPresence)
-	if err := index.listError(); err != nil {
+	assembler, err := b.newObjectMapAssembler(ctx)
+	if err != nil {
 		return nil, err
 	}
-	index.enrichActionFacts()
-
-	graph := index.buildNamespaceGraph(opts.namespace, opts.maxNodes)
-	nodes := sortedObjectMapNodes(graph.nodes)
-	edges := sortedObjectMapEdges(graph.edges)
-	seed := ObjectMapReference{
-		ClusterID:   meta.ClusterID,
-		ClusterName: meta.ClusterName,
-		Group:       "",
-		Version:     "v1",
-		Kind:        "Namespace",
-		Resource:    "namespaces",
-		Name:        opts.namespace,
-	}
-	payload := ObjectMapSnapshotPayload{
-		ClusterMeta: meta,
-		Seed:        seed,
-		Nodes:       nodes,
-		Edges:       edges,
-		MaxDepth:    opts.maxDepth,
-		MaxNodes:    opts.maxNodes,
-		Truncated:   graph.truncated,
-		Warnings:    index.warnings,
-	}
-
-	return &refresh.Snapshot{
-		Domain:  objectMapDomain,
-		Scope:   scope,
-		Version: 0,
-		Payload: payload,
-		Stats: refresh.SnapshotStats{
-			ItemCount:    len(nodes),
-			TotalItems:   len(nodes),
-			Truncated:    graph.truncated,
-			Warnings:     index.warnings,
-			IsFinalBatch: true,
-			BatchSize:    len(nodes),
-			TotalBatches: 1,
-		},
-	}, nil
+	return assembler.buildNamespaceSnapshot(scope, opts)
 }
 
 func (b *objectMapBuilder) catalog() *objectcatalog.Service {

@@ -6,10 +6,11 @@
  */
 
 export {
-  readRefreshDomainState,
   requestContextRefresh,
   requestData,
   requestRefreshDomain,
+  requestRefreshDomainState,
+  resetRefreshDomain,
   setRefreshDomainEnabled,
 } from './dataAccess';
 export { useRefreshDomainHandle } from './useRefreshDomainHandle';
@@ -24,4 +25,6 @@ export type {
   DataRequestReason,
   DataRequestResult,
   RefreshDomainRequest,
+  RefreshDomainStateRequest,
+  RefreshDomainStateResult,
 } from './types';

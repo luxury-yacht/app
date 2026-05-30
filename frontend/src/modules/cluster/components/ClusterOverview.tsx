@@ -14,8 +14,8 @@ import {
   formatMemoryValue,
 } from '@shared/utils/resourceCalculations';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
-import { requestRefreshDomain } from '@/core/data-access';
-import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import { useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import {
   canActivateClusterOverviewRefresh,
@@ -322,11 +322,11 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     }
 
     const enableOverview = () => {
-      refreshOrchestrator.setScopedDomainEnabled(
-        'cluster-overview',
-        overviewScope,
-        canActivateOverviewRefresh
-      );
+      setRefreshDomainEnabled({
+        domain: 'cluster-overview',
+        scope: overviewScope,
+        enabled: canActivateOverviewRefresh,
+      });
       if (!canActivateOverviewRefresh) {
         return;
       }

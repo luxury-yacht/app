@@ -7,11 +7,7 @@
  */
 import { useCallback, useEffect, useMemo } from 'react';
 
-import {
-  requestRefreshDomain,
-  useScopedRefreshDomainLifecycle,
-  type DataRequestReason,
-} from '@/core/data-access';
+import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
 import { refreshManager } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -20,6 +16,7 @@ import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 
 import { INACTIVE_SCOPE, getObjectDetailsRefresherName } from '../constants';
 import type { PanelObjectData } from '../types';
+import { useObjectPanelScopedDomainLifecycle } from './useObjectPanelScopedDomainLifecycle';
 
 interface UseObjectPanelRefreshArgs {
   detailScope: string | null;
@@ -89,11 +86,12 @@ export const useObjectPanelRefresh = ({
     [detailScope]
   );
 
-  useScopedRefreshDomainLifecycle({
+  useObjectPanelScopedDomainLifecycle({
     domain: 'object-details',
     scope: detailScope,
     enabled: isOpen && !resourceDeleted,
-    preserveState: true,
+    fetchOnEnable: 'startup',
+    preserveStateOnEnable: true,
   });
 
   const detailRefresherName = useMemo(
@@ -130,12 +128,6 @@ export const useObjectPanelRefresh = ({
     },
     enabled: refreshEnabled && !!objectData && !!detailRefresherName,
   });
-
-  useEffect(() => {
-    if (isOpen && detailScope && !resourceDeleted) {
-      void fetchResourceDetails('startup');
-    }
-  }, [detailScope, fetchResourceDetails, isOpen, resourceDeleted]);
 
   return {
     detailPayload,

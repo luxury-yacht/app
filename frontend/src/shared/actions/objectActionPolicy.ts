@@ -7,7 +7,11 @@
 
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import type { ResourceLink } from '@core/refresh/types';
-import { OBJECT_ACTION_IDS, type ObjectActionId } from './objectActionDescriptors';
+import {
+  isPortForwardTargetGVKSupported,
+  lookupPortForwardTargetCapability,
+} from '@modules/port-forward/targetCapabilities';
+import { OBJECT_ACTION_IDS, type ObjectActionId } from './objectActionContract';
 
 const WORKLOAD_KIND_MAP: Record<string, string> = {
   Deployment: 'Deployment',
@@ -128,14 +132,6 @@ export const SCALABLE_KINDS: readonly string[] = ['Deployment', 'StatefulSet', '
 const CORDONABLE_KINDS: readonly string[] = ['Node'];
 const DRAINABLE_KINDS: readonly string[] = ['Node'];
 
-const PORT_FORWARDABLE_TARGETS: Record<string, { group: string; version: string }> = {
-  Pod: { group: '', version: 'v1' },
-  Deployment: { group: 'apps', version: 'v1' },
-  StatefulSet: { group: 'apps', version: 'v1' },
-  DaemonSet: { group: 'apps', version: 'v1' },
-  Service: { group: '', version: 'v1' },
-};
-
 const permissionAllows = (status: PermissionStatus | null | undefined): boolean =>
   Boolean(status?.allowed && !status.pending);
 
@@ -144,22 +140,27 @@ const resolvePortForwardAvailability = (
   handlers: ObjectActionHandlerAvailability
 ): PortForwardAvailability => {
   const normalizedKind = normalizeKind(object.kind);
-  const expectedTarget = PORT_FORWARDABLE_TARGETS[normalizedKind];
   const actionId = OBJECT_ACTION_IDS.portForward;
 
-  if (!expectedTarget || !handlers.portForward) {
+  if (!lookupPortForwardTargetCapability(normalizedKind) || !handlers.portForward) {
     return { show: false, enabled: false, actionId };
   }
 
   const builtin = resolveBuiltinGroupVersion(object.kind);
-  const group = object.group ?? builtin.group;
-  const version = object.version ?? builtin.version;
+  const group = object.group ?? builtin.group ?? '';
+  const version = object.version ?? builtin.version ?? '';
 
   if (!object.clusterId || !object.namespace) {
     return { show: true, enabled: false, actionId };
   }
 
-  if (group !== expectedTarget.group || version !== expectedTarget.version) {
+  if (
+    !isPortForwardTargetGVKSupported({
+      kind: normalizedKind,
+      group,
+      version,
+    })
+  ) {
     return { show: true, enabled: false, actionId };
   }
 

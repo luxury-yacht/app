@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActionsMenu } from './ActionsMenu';
 import { eventBus } from '@/core/events';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
 const openWithObjectMock = vi.hoisted(() => vi.fn());
 

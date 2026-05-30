@@ -328,7 +328,6 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel="Cluster Custom"
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleResourceClick}
           tableClassName="cluster-custom-table"
           enableContextMenu={true}

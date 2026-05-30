@@ -389,7 +389,6 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           }
           diagnosticsMode="live"
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleResourceClick}
           tableClassName="ns-autoscaling-table"
           enableContextMenu={true}

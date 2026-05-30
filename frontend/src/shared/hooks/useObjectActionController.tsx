@@ -15,6 +15,12 @@ import {
   runObjectRestart,
   runObjectScale,
 } from '@shared/actions/objectActionClient';
+import {
+  buildNodeActionPermissionDescriptorMap,
+  buildObjectActionPermissionDescriptor,
+  OBJECT_ACTION_IDS,
+  type ObjectActionPermissionDescriptor,
+} from '@shared/actions/objectActionContract';
 import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import { errorHandler } from '@/utils/errorHandler';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
@@ -115,6 +121,16 @@ const actionTargetFor = (object: ObjectActionData, action: string) => {
   return buildObjectActionTarget(object, action);
 };
 
+const permissionKeyInput = (descriptor: ObjectActionPermissionDescriptor) => ({
+  resourceKind: descriptor.resourceKind,
+  verb: descriptor.verb,
+  namespace: descriptor.namespace ?? null,
+  subresource: descriptor.subresource ?? null,
+  clusterId: descriptor.clusterId ?? null,
+  group: descriptor.group ?? null,
+  version: descriptor.version ?? null,
+});
+
 export const useObjectActionController = ({
   context,
   actionLoading = false,
@@ -159,57 +175,76 @@ export const useObjectActionController = ({
       const group = object.group ?? null;
       const version = object.version ?? null;
       const normalizedKind = normalizeKind(object.kind);
-      const restartStatus =
-        permissionMap.get(
-          getPermissionKey(normalizedKind, 'patch', namespace, null, clusterId, group, version)
-        ) ?? null;
-      const rollbackStatus =
-        permissionMap.get(
-          getPermissionKey(normalizedKind, 'update', namespace, null, clusterId, group, version)
-        ) ?? null;
-      const deleteStatus =
-        permissionMap.get(
-          getPermissionKey(object.kind, 'delete', namespace, null, clusterId, group, version)
-        ) ?? null;
-      const scaleStatus =
-        permissionMap.get(
-          getPermissionKey(normalizedKind, 'update', namespace, 'scale', clusterId, group, version)
-        ) ?? null;
+      const actionPermissionSource = {
+        clusterId,
+        group,
+        version,
+        kind: normalizedKind,
+        namespace,
+        name: object.name,
+      };
+      const targetPermissionSource = {
+        ...actionPermissionSource,
+        kind: object.kind,
+      };
+      const permissionStatusFor = (descriptor: ObjectActionPermissionDescriptor | null) => {
+        if (!descriptor) return null;
+        const input = permissionKeyInput(descriptor);
+        return (
+          permissionMap.get(
+            getPermissionKey(
+              input.resourceKind,
+              input.verb,
+              input.namespace,
+              input.subresource,
+              input.clusterId,
+              input.group,
+              input.version
+            )
+          ) ?? null
+        );
+      };
+      const restartStatus = permissionStatusFor(
+        buildObjectActionPermissionDescriptor(OBJECT_ACTION_IDS.restart, actionPermissionSource)
+      );
+      const rollbackStatus = permissionStatusFor(
+        buildObjectActionPermissionDescriptor(OBJECT_ACTION_IDS.rollback, actionPermissionSource)
+      );
+      const deleteStatus = permissionStatusFor(
+        buildObjectActionPermissionDescriptor(OBJECT_ACTION_IDS.delete, targetPermissionSource)
+      );
+      const scaleStatus = permissionStatusFor(
+        buildObjectActionPermissionDescriptor(OBJECT_ACTION_IDS.scale, actionPermissionSource)
+      );
       const triggerStatus =
         normalizedKind === 'CronJob'
-          ? (permissionMap.get(
-              getPermissionKey('Job', 'create', namespace, null, clusterId, 'batch', 'v1')
-            ) ?? null)
+          ? permissionStatusFor(
+              buildObjectActionPermissionDescriptor(
+                OBJECT_ACTION_IDS.triggerNow,
+                actionPermissionSource
+              )
+            )
           : null;
       const suspendStatus =
         normalizedKind === 'CronJob'
-          ? (permissionMap.get(
-              getPermissionKey('CronJob', 'patch', namespace, null, clusterId, 'batch', 'v1')
-            ) ?? null)
+          ? permissionStatusFor(
+              buildObjectActionPermissionDescriptor(
+                OBJECT_ACTION_IDS.suspend,
+                actionPermissionSource
+              )
+            )
           : null;
-      const portForwardStatus =
-        permissionMap.get(
-          getPermissionKey('Pod', 'create', namespace, 'portforward', clusterId, '', 'v1')
-        ) ?? null;
+      const portForwardStatus = permissionStatusFor(
+        buildObjectActionPermissionDescriptor(OBJECT_ACTION_IDS.portForward, actionPermissionSource)
+      );
+      const nodeDescriptors = buildNodeActionPermissionDescriptorMap(actionPermissionSource);
       const nodeActionPermissions =
         normalizedKind === 'Node'
           ? resolveNodeActionPermissionStatuses({
-              nodeGet:
-                permissionMap.get(
-                  getPermissionKey('Node', 'get', null, null, clusterId, '', 'v1')
-                ) ?? null,
-              nodePatch:
-                permissionMap.get(
-                  getPermissionKey('Node', 'patch', null, null, clusterId, '', 'v1')
-                ) ?? null,
-              podEvictionCreate:
-                permissionMap.get(
-                  getPermissionKey('Pod', 'create', null, 'eviction', clusterId, '', 'v1')
-                ) ?? null,
-              podDelete:
-                permissionMap.get(
-                  getPermissionKey('Pod', 'delete', null, null, clusterId, '', 'v1')
-                ) ?? null,
+              nodeGet: permissionStatusFor(nodeDescriptors.nodeGet),
+              nodePatch: permissionStatusFor(nodeDescriptors.nodePatch),
+              podEvictionCreate: permissionStatusFor(nodeDescriptors.podEvictionCreate),
+              podDelete: permissionStatusFor(nodeDescriptors.podDelete),
             })
           : { cordon: null, drain: null };
 

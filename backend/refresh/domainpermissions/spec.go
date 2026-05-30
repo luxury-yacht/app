@@ -1,6 +1,13 @@
+// Package domainpermissions owns the shared refresh-domain resource contracts
+// used by runtime permission checks, registration gates, and resource streams.
 package domainpermissions
 
-import "github.com/luxury-yacht/app/backend/refresh/permissions"
+import (
+	"fmt"
+
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
+	"github.com/luxury-yacht/app/backend/resourcecontract"
+)
 
 // Mode describes how a domain's runtime permission requirements are evaluated.
 type Mode string
@@ -31,12 +38,58 @@ type Resource struct {
 	Resource string
 }
 
+// Composition is the Kubernetes resource composition for one refresh domain
+// before it is converted into verb-specific permission requirements.
+type Composition struct {
+	Domain  string
+	Mode    Mode
+	Reason  string
+	Runtime []Resource
+	Stream  []Resource
+}
+
 type policySpec struct {
 	Domain  string
 	Mode    Mode
 	Reason  string
 	Runtime []Resource
 	Stream  []Resource
+}
+
+// Compositions returns the shared resource composition for refresh domains.
+func Compositions() []Composition {
+	result := make([]Composition, 0, len(policySpecs))
+	for _, spec := range policySpecs {
+		result = append(result, Composition{
+			Domain:  spec.Domain,
+			Mode:    spec.Mode,
+			Reason:  spec.Reason,
+			Runtime: copyResources(spec.Runtime),
+			Stream:  copyResources(spec.Stream),
+		})
+	}
+	return result
+}
+
+// CompositionByDomain returns the resource composition keyed by domain.
+func CompositionByDomain() map[string]Composition {
+	result := make(map[string]Composition, len(policySpecs))
+	for _, composition := range Compositions() {
+		result[composition.Domain] = composition
+	}
+	return result
+}
+
+// StreamDomains returns the domains with resource-stream list/watch resources.
+func StreamDomains() []string {
+	result := make([]string, 0, len(policySpecs))
+	for _, spec := range policySpecs {
+		if len(spec.Stream) == 0 {
+			continue
+		}
+		result = append(result, spec.Domain)
+	}
+	return result
 }
 
 // Policies returns the shared permission contract for refresh domains.
@@ -71,11 +124,11 @@ func StreamRequirementsByDomain() map[string][]permissions.ResourceRequirement {
 // RuntimeResourcesByDomain returns the runtime resource composition keyed by domain.
 func RuntimeResourcesByDomain() map[string][]Resource {
 	result := make(map[string][]Resource)
-	for _, spec := range policySpecs {
-		if len(spec.Runtime) == 0 {
+	for _, composition := range Compositions() {
+		if len(composition.Runtime) == 0 {
 			continue
 		}
-		result[spec.Domain] = append([]Resource(nil), spec.Runtime...)
+		result[composition.Domain] = copyResources(composition.Runtime)
 	}
 	return result
 }
@@ -83,11 +136,11 @@ func RuntimeResourcesByDomain() map[string][]Resource {
 // StreamResourcesByDomain returns the resource stream composition keyed by domain.
 func StreamResourcesByDomain() map[string][]Resource {
 	result := make(map[string][]Resource)
-	for _, spec := range policySpecs {
-		if len(spec.Stream) == 0 {
+	for _, composition := range Compositions() {
+		if len(composition.Stream) == 0 {
 			continue
 		}
-		result[spec.Domain] = append([]Resource(nil), spec.Stream...)
+		result[composition.Domain] = copyResources(composition.Stream)
 	}
 	return result
 }
@@ -144,6 +197,10 @@ func copyPolicy(policy Policy) Policy {
 	return policy
 }
 
+func copyResources(src []Resource) []Resource {
+	return append([]Resource(nil), src...)
+}
+
 func listRequirements(resources []Resource) []permissions.ResourceRequirement {
 	result := make([]permissions.ResourceRequirement, 0, len(resources))
 	for _, resource := range resources {
@@ -172,51 +229,64 @@ func resources(groups ...[]Resource) []Resource {
 }
 
 func core(version, kind, resource string) Resource {
-	return Resource{Version: version, Kind: kind, Resource: resource}
+	return builtinResource("", version, kind, resource)
 }
 
 func apps(kind, resource string) Resource {
-	return Resource{Group: "apps", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("apps", "v1", kind, resource)
 }
 
 func batch(kind, resource string) Resource {
-	return Resource{Group: "batch", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("batch", "v1", kind, resource)
 }
 
 func autoscaling(kind, resource string) Resource {
-	return Resource{Group: "autoscaling", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("autoscaling", "v1", kind, resource)
 }
 
 func discovery(kind, resource string) Resource {
-	return Resource{Group: "discovery.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("discovery.k8s.io", "v1", kind, resource)
 }
 
 func networking(kind, resource string) Resource {
-	return Resource{Group: "networking.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("networking.k8s.io", "v1", kind, resource)
 }
 
 func gateway(kind, resource string) Resource {
-	return Resource{Group: "gateway.networking.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("gateway.networking.k8s.io", "v1", kind, resource)
 }
 
 func rbac(kind, resource string) Resource {
-	return Resource{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("rbac.authorization.k8s.io", "v1", kind, resource)
 }
 
 func policy(kind, resource string) Resource {
-	return Resource{Group: "policy", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("policy", "v1", kind, resource)
 }
 
 func storage(kind, resource string) Resource {
-	return Resource{Group: "storage.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("storage.k8s.io", "v1", kind, resource)
 }
 
 func admission(kind, resource string) Resource {
-	return Resource{Group: "admissionregistration.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("admissionregistration.k8s.io", "v1", kind, resource)
 }
 
 func apiextensions(kind, resource string) Resource {
-	return Resource{Group: "apiextensions.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("apiextensions.k8s.io", "v1", kind, resource)
+}
+
+func builtinResource(group, version, kind, resource string) Resource {
+	desc := resourcecontract.MustBuiltin(group, version, kind)
+	if desc.Resource != resource {
+		panic(fmt.Sprintf("resource contract mismatch for %s/%s/%s: got %q, want %q", group, version, kind, resource, desc.Resource))
+	}
+	return Resource{
+		Group:    desc.Group,
+		Version:  desc.Version,
+		Kind:     desc.Kind,
+		Resource: desc.Resource,
+	}
 }
 
 var policySpecs = []policySpec{

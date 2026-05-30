@@ -1,3 +1,10 @@
+/**
+ * frontend/vite.config.ts
+ *
+ * Configures the Vite dev/test build and frontend aliases, including
+ * backend-owned JSON contracts consumed by TypeScript.
+ */
+
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -63,7 +70,7 @@ export default defineConfig({
       ),
       '@builtin-resource-identities': path.resolve(
         __dirname,
-        '../backend/objectcatalog/builtin-resource-identities.json'
+        '../backend/resourcecontract/builtin-resource-identities.json'
       ),
     },
   },

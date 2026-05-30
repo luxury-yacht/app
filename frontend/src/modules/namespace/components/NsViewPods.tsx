@@ -615,7 +615,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           }
           diagnosticsMode="live"
           loading={loading && displayedPods.length === 0}
-          keyExtractor={keyExtractor}
           onRowClick={handlePodOpen}
           tableClassName={`gridtable-pods${showNamespaceColumn ? ' gridtable-pods--namespaced' : ''}`}
           enableContextMenu

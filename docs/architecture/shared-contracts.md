@@ -31,7 +31,7 @@ Use the lightest enforceable form:
 - Refresh domain metadata:
   `backend/refresh/domain/refresh-domain-contract.json`
 - Backend-owned resource identities:
-  `backend/objectcatalog/builtin-resource-identities.json`
+  `backend/resourcecontract/builtin-resource-identities.json`
 - Wails DTOs:
   `frontend/wailsjs/go/models.ts`
 - Frontend data access reader wrappers:

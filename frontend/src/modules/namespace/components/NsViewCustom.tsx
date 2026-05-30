@@ -378,7 +378,6 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleResourceClick}
           tableClassName="ns-custom-table"
           enableContextMenu={true}

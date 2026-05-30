@@ -282,7 +282,6 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           }
           diagnosticsMode="live"
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleEventClick}
           tableClassName="gridtable-ns-events"
           enableContextMenu={true}

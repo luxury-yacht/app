@@ -141,15 +141,18 @@ describe('EventsTab', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   let EventsTab: React.FC<any>;
+  let refreshOrchestrator: { setScopedDomainEnabled: any };
 
   beforeAll(async () => {
     ({ default: EventsTab } = await import('./EventsTab'));
+    ({ refreshOrchestrator } = await import('@/core/refresh'));
   });
 
   beforeEach(() => {
     mockOpenWithObject.mockClear();
     mockFindCatalogObjectByUID.mockReset();
     mockFetchScopedDomain.mockClear();
+    refreshOrchestrator.setScopedDomainEnabled.mockClear();
     refreshWatcherState.onRefresh = null;
     autoRefreshLoadingState.isPaused = false;
     autoRefreshLoadingState.isManualRefreshActive = false;
@@ -240,6 +243,37 @@ describe('EventsTab', () => {
     expect(mockFetchScopedDomain).toHaveBeenCalledWith('object-events', expect.any(String), {
       isManual: false,
     });
+  });
+
+  it('enables the exact events scope and preserves state on cleanup', async () => {
+    const eventsScope = 'parent-cluster|default:apps/v1:Deployment:my-deploy';
+
+    act(() => {
+      root.render(
+        <EventsTab objectData={parentObjectData} isActive={true} eventsScope={eventsScope} />
+      );
+    });
+
+    expect(refreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'object-events',
+      eventsScope,
+      true
+    );
+
+    refreshOrchestrator.setScopedDomainEnabled.mockClear();
+
+    act(() => {
+      root.render(
+        <EventsTab objectData={parentObjectData} isActive={false} eventsScope={eventsScope} />
+      );
+    });
+
+    expect(refreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'object-events',
+      eventsScope,
+      false,
+      { preserveState: true }
+    );
   });
 
   it('shows the paused message instead of a loading placeholder before first load', async () => {

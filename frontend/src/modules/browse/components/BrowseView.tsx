@@ -364,6 +364,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     defaultSortDirection: 'asc',
     diagnosticsLabel,
     filterOptions: gridFilterOptions,
+    keyExtractor,
     virtualization: virtualizationOptions,
   });
 
@@ -391,7 +392,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         columns={columns}
         diagnosticsLabel={diagnosticsLabel}
         diagnosticsMode="query"
-        keyExtractor={keyExtractor}
         onRowClick={handleOpen}
         tableClassName={resolvedTableClassName}
         useShortNames={useShortResourceNames}

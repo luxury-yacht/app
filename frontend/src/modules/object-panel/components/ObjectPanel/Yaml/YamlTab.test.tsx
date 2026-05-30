@@ -725,6 +725,51 @@ describe('YamlTab', () => {
     await unmount();
   });
 
+  it('preserves full backend mutation target identity when applying YAML', async () => {
+    snapshotState.current = {
+      status: 'ready',
+      data: { yaml: VERIFIED_APPLIED_YAML_WITH_UID },
+      error: null,
+    };
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '790' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(SECOND_VERIFIED_APPLIED_YAML);
+
+    const { container, unmount } = await renderYamlTab();
+
+    await act(async () => {
+      getIconButton(container, 'Edit YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(SECOND_UPDATED_YAML);
+    });
+
+    await act(async () => {
+      getIconButton(container, 'Save YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+
+    await waitForUpdates();
+
+    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[0]).toBe('alpha:ctx');
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        apiVersion: 'v1',
+        kind: 'Pod',
+        namespace: 'default',
+        name: 'demo',
+        uid: 'pod-uid-1',
+        resourceVersion: '789',
+      })
+    );
+
+    await unmount();
+  });
+
   it('blocks protected field edits with a local message while editing', async () => {
     const { container, unmount } = await renderYamlTab();
 

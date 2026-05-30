@@ -22,7 +22,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { errorHandler } from '@utils/errorHandler';
 import { queryNamespacePermissions } from '@/core/capabilities';
-import { requestRefreshDomain } from '@/core/data-access';
+import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
@@ -308,13 +308,13 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     const activeScopeSet = new Set(namespaceScopes);
     requestedNamespaceScopesRef.current.forEach((scope) => {
       if (!activeScopeSet.has(scope)) {
-        refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, false);
+        setRefreshDomainEnabled({ domain: 'namespaces', scope, enabled: false });
         requestedNamespaceScopesRef.current.delete(scope);
       }
     });
 
     namespaceScopes.forEach((scope) => {
-      refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, enabled);
+      setRefreshDomainEnabled({ domain: 'namespaces', scope, enabled });
     });
 
     if (!enabled) {
@@ -340,7 +340,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
     return () => {
       namespaceScopes.forEach((scope) => {
-        refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, false, {
+        setRefreshDomainEnabled({
+          domain: 'namespaces',
+          scope,
+          enabled: false,
           preserveState: true,
         });
       });
@@ -441,7 +444,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
     const handleKubeconfigChanging = () => {
       namespaceScopes.forEach((scope) => {
-        refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, false);
+        setRefreshDomainEnabled({ domain: 'namespaces', scope, enabled: false });
       });
       requestedNamespaceScopesRef.current.clear();
       refreshOrchestrator.resetDomain('namespaces');
@@ -451,7 +454,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
     const handleKubeconfigChanged = () => {
       namespaceScopes.forEach((scope) => {
-        refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, true);
+        setRefreshDomainEnabled({ domain: 'namespaces', scope, enabled: true });
         requestedNamespaceScopesRef.current.add(scope);
         void requestRefreshDomain({
           domain: 'namespaces',

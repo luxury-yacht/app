@@ -1,3 +1,9 @@
+/**
+ * frontend/src/shared/hooks/useObjectActions.test.tsx
+ *
+ * Verifies object action menu construction from the shared action contract.
+ */
+
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { eventBus } from '@/core/events';
@@ -6,7 +12,7 @@ import {
   OBJECT_ACTION_IDS,
   objectActionLabel,
   type ObjectActionId,
-} from '@shared/actions/objectActionDescriptors';
+} from '@shared/actions/objectActionContract';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 
 const findAction = (

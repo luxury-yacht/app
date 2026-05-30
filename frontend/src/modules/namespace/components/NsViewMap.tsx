@@ -6,8 +6,8 @@
  */
 import React, { useCallback, useEffect, useMemo } from 'react';
 import './NsViewMap.css';
-import { requestRefreshDomain } from '@/core/data-access';
-import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import { useRefreshScopedDomain } from '@/core/refresh';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@/core/refresh/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -50,9 +50,12 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
     if (!mapScope) {
       return;
     }
-    refreshOrchestrator.setScopedDomainEnabled('object-map', mapScope, true);
+    setRefreshDomainEnabled({ domain: 'object-map', scope: mapScope, enabled: true });
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-map', mapScope, false, {
+      setRefreshDomainEnabled({
+        domain: 'object-map',
+        scope: mapScope,
+        enabled: false,
         preserveState: true,
       });
     };

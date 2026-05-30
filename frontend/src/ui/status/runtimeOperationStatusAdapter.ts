@@ -1,3 +1,9 @@
+/**
+ * frontend/src/ui/status/runtimeOperationStatusAdapter.ts
+ *
+ * Reducer and selectors for shared runtime-operation status rows.
+ */
+
 export interface ShellSessionInfo {
   sessionId: string;
   clusterId: string;
@@ -18,6 +24,8 @@ export interface PortForwardSession {
   podName: string;
   containerPort: number;
   localPort: number;
+  targetKind?: string;
+  targetName?: string;
   status: string;
   statusReason?: string;
   startedAt: string;

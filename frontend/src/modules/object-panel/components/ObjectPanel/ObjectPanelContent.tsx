@@ -2,12 +2,11 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.tsx
  *
  * Routes the active object-panel tab to its concrete tab component and owns
- * tab-level cleanup for scoped refresh domains that should reset when panel
- * content is torn down.
+ * tab-level cleanup for scoped refresh domains that should pause and preserve
+ * cached state when panel content is torn down.
  */
-import { useEffect } from 'react';
+import { useMemo } from 'react';
 import type { types } from '@wailsjs/go/models';
-import { refreshOrchestrator } from '@/core/refresh';
 import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import LogViewer from '@modules/object-panel/components/ObjectPanel/Logs/LogViewer';
@@ -21,6 +20,10 @@ import NodeLogsTab from '@modules/object-panel/components/ObjectPanel/NodeLogs/N
 import { PodsTab } from '@modules/object-panel/components/ObjectPanel/Pods/PodsTab';
 import { JobsTab } from '@modules/object-panel/components/ObjectPanel/Jobs/JobsTab';
 import type { ObjectPanelPodsState } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods';
+import {
+  useObjectPanelScopedDomainCleanups,
+  type ObjectPanelScopedDomainRef,
+} from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelScopedDomainLifecycle';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 
 import type {
@@ -119,96 +122,21 @@ export function ObjectPanelContent({
   const showManifest = activeTab === 'manifest';
   const showValues = activeTab === 'values';
 
-  // eventsScope and containerLogsScope are produced upstream by getObjectPanelScopes
-  // and threaded in via props so the lifecycle effects below and the
-  // tabs that consume them (EventsTab, LogViewer) cannot disagree.
+  const scopedDomainCleanups = useMemo<readonly ObjectPanelScopedDomainRef[]>(
+    () => [
+      { domain: 'object-events', scope: eventsScope },
+      { domain: 'object-yaml', scope: detailScope },
+      { domain: 'object-helm-manifest', scope: helmScope },
+      { domain: 'object-helm-values', scope: helmScope },
+      { domain: 'container-logs', scope: containerLogsScope },
+      { domain: 'object-map', scope: mapScope },
+    ],
+    [containerLogsScope, detailScope, eventsScope, helmScope, mapScope]
+  );
 
-  // --- Scoped domain lifecycle for object panel tabs ---
-  // On unmount we stop refreshing/streaming each scope but preserve its
-  // cached snapshot via { preserveState: true }. That way a remount caused
-  // by a cluster switch (or any other transient unmount) reads cached
-  // entries instantly and the user sees content without a reload spinner
-  // while the next refresh/stream catches up. The cache is only fully
-  // evicted when the user closes the panel — see
-  // ObjectPanelStateContext.closePanel.
-
-  // object-events
-  useEffect(() => {
-    if (!eventsScope || !isPanelOpen) {
-      return;
-    }
-    return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-events', eventsScope, false, {
-        preserveState: true,
-      });
-    };
-  }, [eventsScope, isPanelOpen]);
-
-  // object-yaml
-  useEffect(() => {
-    if (!detailScope || !isPanelOpen) {
-      return;
-    }
-    return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-yaml', detailScope, false, {
-        preserveState: true,
-      });
-    };
-  }, [detailScope, isPanelOpen]);
-
-  // object-helm-manifest
-  useEffect(() => {
-    if (!helmScope || !isPanelOpen) {
-      return;
-    }
-    return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-helm-manifest', helmScope, false, {
-        preserveState: true,
-      });
-    };
-  }, [helmScope, isPanelOpen]);
-
-  // object-helm-values
-  useEffect(() => {
-    if (!helmScope || !isPanelOpen) {
-      return;
-    }
-    return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-helm-values', helmScope, false, {
-        preserveState: true,
-      });
-    };
-  }, [helmScope, isPanelOpen]);
-
-  // container-logs — LogViewer manages streaming start/stop. The disable call
-  // here stops the underlying stream while keeping the buffered entries in
-  // place; on remount the cache renders immediately and a new stream
-  // resumes appending fresh entries.
-  useEffect(() => {
-    if (!containerLogsScope || !isPanelOpen) {
-      return;
-    }
-    return () => {
-      refreshOrchestrator.setScopedDomainEnabled('container-logs', containerLogsScope, false, {
-        preserveState: true,
-      });
-    };
-  }, [containerLogsScope, isPanelOpen]);
-
-  // object-map — MapTab handles per-tab enable/disable; this guard mirrors
-  // the events/yaml pattern so closing the whole panel disables the
-  // domain (the eventual reset happens in evictPanelScopes when the
-  // panel ref is removed from openPanels).
-  useEffect(() => {
-    if (!mapScope || !isPanelOpen) {
-      return;
-    }
-    return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-map', mapScope, false, {
-        preserveState: true,
-      });
-    };
-  }, [mapScope, isPanelOpen]);
+  // Stops panel-owned scoped refresh domains during transient unmounts while
+  // preserving cached snapshots. Full eviction still belongs to panel close.
+  useObjectPanelScopedDomainCleanups(scopedDomainCleanups, isPanelOpen);
 
   const activePodNames = detailTabProps?.detailModel.activePodNames ?? null;
   const availableContainers = detailTabProps?.detailModel.availableContainers ?? EMPTY_CONTAINERS;

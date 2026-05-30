@@ -155,7 +155,7 @@ func (n *watchNotifier) flush(events []watchEvent) {
 
 	s.mu.Lock()
 	for _, evt := range events {
-		desc, ok := s.resources[evt.gvr]
+		desc, ok := s.catalogIndex.resource(evt.gvr)
 		if !ok {
 			continue
 		}
@@ -164,13 +164,10 @@ func (n *watchNotifier) flush(events []watchEvent) {
 			if evt.obj == nil {
 				continue
 			}
-			s.items[evt.key] = s.buildSummary(desc, evt.obj)
-			s.lastSeen[evt.key] = s.now()
+			s.catalogIndex.setItem(evt.key, s.buildSummary(desc, evt.obj), s.now())
 			changed = true
 		case watchEventDelete:
-			if _, exists := s.items[evt.key]; exists {
-				delete(s.items, evt.key)
-				delete(s.lastSeen, evt.key)
+			if s.catalogIndex.deleteItem(evt.key) {
 				changed = true
 			}
 		}
@@ -387,12 +384,7 @@ func registerWatchHandlers(
 func (s *Service) resolveGRToDescriptor(gr schema.GroupResource) (string, *resourceDescriptor) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for gvr, desc := range s.resources {
-		if desc.Group == gr.Group && desc.Resource == gr.Resource {
-			return gvr, &desc
-		}
-	}
-	return "", nil
+	return s.catalogIndex.resourceForGroupResource(gr.Group, gr.Resource)
 }
 
 func toMetaObject(obj interface{}) (metav1.Object, bool) {

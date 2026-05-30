@@ -1,3 +1,9 @@
+/*
+ * backend/objectcatalog/watch_test.go
+ *
+ * Verifies object catalog watcher registration and lifecycle behavior.
+ */
+
 package objectcatalog
 
 import (
@@ -28,9 +34,7 @@ func (l *recordingWatchLogger) Warn(msg string, _ ...string) {
 func newTestWatchService() *Service {
 	return &Service{
 		now:               time.Now,
-		items:             make(map[string]Summary),
-		lastSeen:          make(map[string]time.Time),
-		resources:         make(map[string]resourceDescriptor),
+		catalogIndex:      newCatalogIndex(),
 		streamSubscribers: make(map[int]chan StreamingUpdate),
 		promoted:          make(map[string]*promotedDescriptor),
 		health:            healthStatus{State: HealthStateUnknown},

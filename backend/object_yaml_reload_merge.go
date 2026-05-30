@@ -1,3 +1,10 @@
+/*
+ * backend/object_yaml_reload_merge.go
+ *
+ * Merges a local YAML draft onto the latest live object while preserving the
+ * selected object's full GVK identity.
+ */
+
 package backend
 
 import (

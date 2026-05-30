@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import ObjectMap from './ObjectMap';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
-import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionDescriptors';
+import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
 
 const useShortNamesMock = vi.hoisted(() => vi.fn(() => false));
 

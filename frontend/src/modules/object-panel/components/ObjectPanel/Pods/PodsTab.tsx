@@ -3,7 +3,7 @@
  */
 
 import React, { useCallback, useMemo } from 'react';
-import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   applyColumnSizing,
   createAgeColumn,
@@ -16,20 +16,20 @@ import {
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { ObjectPanelResourceGridTableSurface } from '@modules/resource-grid/ObjectPanelResourceGridTableSurface';
 import { useObjectPanelResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import {
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import { useResourceGridObjectIdentity } from '@shared/hooks/useResourceGridObjectIdentity';
+import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 
 interface PodsTabProps {
   pods: PodSnapshotEntry[];
@@ -85,13 +85,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     openWithObject,
     navigateToView,
   });
-  const {
-    key: podKey,
-    ref: podRef,
-    open: openPod,
-    navigate: navigatePod,
-    rowIdentity: podRowIdentity,
-  } = podIdentity;
+  const { ref: podRef, open: openPod, navigate: navigatePod } = podIdentity;
   // Ensure pod navigation keeps the active cluster context for object detail scopes.
   const getPodClusterMeta = useCallback(
     (pod: PodSnapshotEntry) => ({
@@ -247,9 +241,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     enabled: Boolean(objectData?.clusterId),
     data: pods,
     columns,
-    keyExtractor: podKey,
+    objectIdentity: podIdentity,
     defaultSort: { key: 'name', direction: 'asc' },
-    rowIdentity: podRowIdentity,
     diagnosticsLabel: 'Object Panel Pods',
     filterAccessors: {
       getKind: () => 'Pod',
@@ -275,30 +268,19 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
         </div>
       )}
       <div className="object-panel-pods__table">
-        <ResourceLoadingBoundary
+        <ObjectPanelResourceGridTableSurface<PodSnapshotEntry>
+          gridTableProps={gridTableProps}
+          columns={columns}
+          diagnosticsLabel="Object Panel Pods"
+          onRowClick={handlePodOpen}
+          enableContextMenu
+          getCustomContextMenuItems={(pod) => objectActions.getMenuItems(podRef(pod))}
+          tableClassName="gridtable-pods gridtable-pods--namespaced"
           loading={loading}
-          dataLength={gridTableProps.data.length}
-          hasLoaded={!loading || gridTableProps.data.length > 0}
           spinnerMessage="Loading pods..."
-        >
-          <GridTable<PodSnapshotEntry>
-            {...gridTableProps}
-            columns={columns}
-            diagnosticsLabel="Object Panel Pods"
-            diagnosticsMode="live"
-            keyExtractor={podKey}
-            onRowClick={handlePodOpen}
-            enableContextMenu
-            getCustomContextMenuItems={(pod) => objectActions.getMenuItems(podRef(pod))}
-            tableClassName="gridtable-pods gridtable-pods--namespaced"
-            loading={loading && gridTableProps.data.length === 0}
-            loadingOverlay={{
-              show: loading && gridTableProps.data.length > 0,
-              message: 'Updating pods…',
-            }}
-            hideHeader={!isActive}
-          />
-        </ResourceLoadingBoundary>
+          updatingMessage="Updating pods..."
+          hideHeader={!isActive}
+        />
       </div>
       {objectActions.modals}
     </div>

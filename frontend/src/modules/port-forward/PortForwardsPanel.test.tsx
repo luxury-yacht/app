@@ -12,10 +12,14 @@ import { KeyboardProvider } from '@ui/shortcuts/context';
 
 // Mock the Wails backend
 const listPortForwardsMock = vi.hoisted(() => vi.fn());
+const listRuntimeOperationsMock = vi.hoisted(() => vi.fn());
+const listShellSessionsMock = vi.hoisted(() => vi.fn());
 const stopPortForwardMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   ListPortForwards: (...args: unknown[]) => listPortForwardsMock(...args),
+  ListRuntimeOperations: (...args: unknown[]) => listRuntimeOperationsMock(...args),
+  ListShellSessions: (...args: unknown[]) => listShellSessionsMock(...args),
   StopPortForward: (...args: unknown[]) => stopPortForwardMock(...args),
 }));
 
@@ -35,6 +39,7 @@ const eventsOffMock = vi.hoisted(() => vi.fn());
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOn: (...args: unknown[]) => eventsOnMock(...args),
   EventsOff: (...args: unknown[]) => eventsOffMock(...args),
+  BrowserOpenURL: vi.fn(),
 }));
 
 // Mock the error handler
@@ -113,6 +118,21 @@ describe('PortForwardsPanel', () => {
     },
   ];
 
+  const runtimeOperationsFor = (sessions: typeof mockSessions) =>
+    sessions.map((session) => ({
+      id: session.id,
+      type: 'port-forward',
+      clusterId: session.clusterId,
+      clusterName: session.clusterName,
+      status: session.status,
+      startedAt: session.startedAt,
+    }));
+
+  const mockInitialSessions = (sessions: typeof mockSessions) => {
+    listPortForwardsMock.mockResolvedValue(sessions);
+    listRuntimeOperationsMock.mockResolvedValue(runtimeOperationsFor(sessions));
+  };
+
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   });
@@ -124,7 +144,18 @@ describe('PortForwardsPanel', () => {
 
     vi.clearAllMocks();
     eventsOnCancels.clear();
+    (
+      window as typeof window & {
+        runtime?: {
+          EventsOn: (event: string, handler: (...args: unknown[]) => void) => () => void;
+        };
+      }
+    ).runtime = {
+      EventsOn: (...args: unknown[]) => eventsOnMock(...args) as unknown as () => void,
+    };
     listPortForwardsMock.mockResolvedValue([]);
+    listRuntimeOperationsMock.mockResolvedValue([]);
+    listShellSessionsMock.mockResolvedValue([]);
     stopPortForwardMock.mockResolvedValue(undefined);
     panelStateMock.isOpen = true;
     panelStateMock.setOpen.mockClear();
@@ -162,6 +193,9 @@ describe('PortForwardsPanel', () => {
   const flushPromises = async () => {
     await act(async () => {
       await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     });
   };
 
@@ -183,7 +217,7 @@ describe('PortForwardsPanel', () => {
   });
 
   it('loads sessions when panel opens', async () => {
-    listPortForwardsMock.mockResolvedValue(mockSessions);
+    mockInitialSessions(mockSessions);
 
     await renderPanel();
     await flushPromises();
@@ -210,7 +244,7 @@ describe('PortForwardsPanel', () => {
   });
 
   it('renders session cards with correct info', async () => {
-    listPortForwardsMock.mockResolvedValue(mockSessions);
+    mockInitialSessions(mockSessions);
 
     await renderPanel();
     await flushPromises();
@@ -234,9 +268,22 @@ describe('PortForwardsPanel', () => {
     expect(errorCard?.textContent).toContain('Connection lost');
   });
 
+  it('uses the runtime operation registry as the active session envelope', async () => {
+    listPortForwardsMock.mockResolvedValue(mockSessions);
+    listRuntimeOperationsMock.mockResolvedValue(runtimeOperationsFor([mockSessions[0]]));
+
+    await renderPanel();
+    await flushPromises();
+
+    const sessionCards = document.querySelectorAll('.pf-session-card');
+    expect(sessionCards.length).toBe(1);
+    expect(sessionCards[0].textContent).toContain('nginx');
+    expect(sessionCards[0].textContent).not.toContain('kube-dns');
+  });
+
   it('sorts sessions by status priority (active first)', async () => {
     // Return sessions in opposite order (error first)
-    listPortForwardsMock.mockResolvedValue([mockSessions[1], mockSessions[0]]);
+    mockInitialSessions([mockSessions[1], mockSessions[0]]);
 
     await renderPanel();
     await flushPromises();
@@ -248,7 +295,7 @@ describe('PortForwardsPanel', () => {
   });
 
   it('shows stop button for active sessions', async () => {
-    listPortForwardsMock.mockResolvedValue([mockSessions[0]]);
+    mockInitialSessions([mockSessions[0]]);
 
     await renderPanel();
     await flushPromises();
@@ -259,7 +306,7 @@ describe('PortForwardsPanel', () => {
   });
 
   it('shows remove button for error sessions', async () => {
-    listPortForwardsMock.mockResolvedValue([mockSessions[1]]);
+    mockInitialSessions([mockSessions[1]]);
 
     await renderPanel();
     await flushPromises();
@@ -270,7 +317,7 @@ describe('PortForwardsPanel', () => {
   });
 
   it('calls stop when stop button clicked', async () => {
-    listPortForwardsMock.mockResolvedValue([mockSessions[0]]);
+    mockInitialSessions([mockSessions[0]]);
 
     await renderPanel();
     await flushPromises();
@@ -287,7 +334,7 @@ describe('PortForwardsPanel', () => {
   });
 
   it('handles stop errors gracefully', async () => {
-    listPortForwardsMock.mockResolvedValue([mockSessions[0]]);
+    mockInitialSessions([mockSessions[0]]);
     stopPortForwardMock.mockRejectedValue(new Error('Stop failed'));
 
     await renderPanel();
@@ -304,7 +351,7 @@ describe('PortForwardsPanel', () => {
   });
 
   it('disables stop button while stopping', async () => {
-    listPortForwardsMock.mockResolvedValue([mockSessions[0]]);
+    mockInitialSessions([mockSessions[0]]);
     // Make stop hang to simulate loading state
     stopPortForwardMock.mockImplementation(
       () =>
@@ -371,6 +418,10 @@ describe('PortForwardsPanel', () => {
 
     // Simulate receiving new sessions
     await act(async () => {
+      const runtimeHandler = eventsOnMock.mock.calls.find(
+        (call) => call[0] === 'runtime-operations:list'
+      )?.[1] as ((...args: unknown[]) => void) | undefined;
+      runtimeHandler!(runtimeOperationsFor(mockSessions));
       listHandler!(mockSessions);
       await Promise.resolve();
     });
@@ -381,7 +432,7 @@ describe('PortForwardsPanel', () => {
   });
 
   it('updates session status when status event received', async () => {
-    listPortForwardsMock.mockResolvedValue([mockSessions[0]]);
+    mockInitialSessions([mockSessions[0]]);
 
     await renderPanel();
     await flushPromises();
@@ -438,7 +489,7 @@ describe('PortForwardsPanel', () => {
       { ...mockSessions[0], id: 'session-3', status: 'reconnecting' },
       { ...mockSessions[0], id: 'session-4', status: 'error' },
     ];
-    listPortForwardsMock.mockResolvedValue(sessionsWithVariousStatus);
+    mockInitialSessions(sessionsWithVariousStatus);
 
     await renderPanel();
     await flushPromises();
@@ -449,7 +500,7 @@ describe('PortForwardsPanel', () => {
   });
 
   it('shows port mapping information correctly', async () => {
-    listPortForwardsMock.mockResolvedValue([mockSessions[0]]);
+    mockInitialSessions([mockSessions[0]]);
 
     await renderPanel();
     await flushPromises();
@@ -477,6 +528,10 @@ describe('PortForwardsPanel', () => {
 
     // Simulate receiving first session (0 -> 1)
     await act(async () => {
+      const runtimeHandler = eventsOnMock.mock.calls.find(
+        (call) => call[0] === 'runtime-operations:list'
+      )?.[1] as ((...args: unknown[]) => void) | undefined;
+      runtimeHandler!(runtimeOperationsFor([mockSessions[0]]));
       listHandler!([mockSessions[0]]);
       await Promise.resolve();
     });

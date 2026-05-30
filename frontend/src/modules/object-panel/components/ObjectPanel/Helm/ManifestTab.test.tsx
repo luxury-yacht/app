@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.test.tsx
+ *
+ * Verifies Helm manifest loading through scoped refresh-domain state.
+ */
+
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +20,7 @@ const refreshMocks = vi.hoisted(() => ({
 
 const refreshStoreMocks = vi.hoisted(() => ({
   useRefreshScopedDomain: vi.fn(),
+  getScopedDomainState: vi.fn(),
 }));
 
 const autoRefreshLoadingState = vi.hoisted(() => ({
@@ -86,10 +93,12 @@ vi.mock('@ui/shortcuts', () => ({
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: refreshMocks,
+  useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
 }));
 
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
+  getScopedDomainState: refreshStoreMocks.getScopedDomainState,
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
@@ -210,7 +219,8 @@ describe('ManifestTab', () => {
     expect(refreshMocks.setScopedDomainEnabled).toHaveBeenCalledWith(
       'object-helm-manifest',
       'ns:helmrelease:demo',
-      true
+      true,
+      { preserveState: true }
     );
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-helm-manifest',

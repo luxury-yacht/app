@@ -9,7 +9,7 @@ import { useCallback } from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { SortAscIcon, SortDescIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
 // Builds context menu item lists for GridTable cells/headers/empty areas,
 // combining custom items with sort actions while avoiding duplicates.
