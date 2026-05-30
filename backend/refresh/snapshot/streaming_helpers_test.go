@@ -1,3 +1,6 @@
+// backend/refresh/snapshot/streaming_helpers_test.go
+//
+// Verifies stream row projection helpers keep parity with snapshot builders.
 package snapshot
 
 import (
@@ -121,6 +124,8 @@ func TestBuildWorkloadSummaryDeployment(t *testing.T) {
 	require.Equal(t, "2/3", summary.StatusState)
 	require.Equal(t, "warning", summary.StatusPresentation)
 	require.True(t, summary.PortForwardAvailable)
+	require.NotNil(t, summary.DesiredReplicas)
+	require.Equal(t, int32(3), *summary.DesiredReplicas)
 }
 
 func TestBuildWorkloadSummaryMatchesSnapshotHPAContext(t *testing.T) {

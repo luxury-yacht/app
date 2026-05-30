@@ -1,5 +1,13 @@
+/**
+ * frontend/src/core/data-access/dataAccess.ts
+ *
+ * Centralizes brokered frontend reads and refresh-domain commands so callers
+ * get consistent diagnostics, loading accounting, and orchestrator access.
+ */
+
 import { refreshOrchestrator } from '@/core/refresh';
 import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { getScopedDomainState } from '@/core/refresh/store';
 import {
   beginBrokerRead,
   completeBrokerRead,
@@ -14,6 +22,7 @@ import type {
   DataRequestResult,
   RefreshDomainRequest,
 } from './types';
+import type { RefreshDomain } from '@/core/refresh/types';
 
 const isReasonAllowedWhilePaused = (reason: DataRequestReason): boolean => {
   return reason === 'user';
@@ -98,6 +107,31 @@ export const requestRefreshDomain = async ({
     blockedReason: result.blockedReason,
   };
 };
+
+export const setRefreshDomainEnabled = ({
+  domain,
+  scope,
+  enabled,
+  preserveState = false,
+}: {
+  domain: RefreshDomain;
+  scope: string;
+  enabled: boolean;
+  preserveState?: boolean;
+}): void => {
+  if (preserveState) {
+    refreshOrchestrator.setScopedDomainEnabled(domain, scope, enabled, { preserveState });
+    return;
+  }
+  refreshOrchestrator.setScopedDomainEnabled(domain, scope, enabled);
+};
+
+export const resetRefreshDomain = (domain: RefreshDomain, scope: string): void => {
+  refreshOrchestrator.resetScopedDomain(domain, scope);
+};
+
+export const readRefreshDomainState = <K extends RefreshDomain>(domain: K, scope: string) =>
+  getScopedDomainState(domain, scope);
 
 export const requestContextRefresh = async ({
   reason,

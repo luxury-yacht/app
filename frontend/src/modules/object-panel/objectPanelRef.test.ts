@@ -1,14 +1,22 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind.test.ts
+ * frontend/src/modules/object-panel/objectPanelRef.test.ts
+ *
+ * Covers canonical object-panel identity helpers: panel IDs, scoped refresh
+ * strings, Helm synthetic references, container-log scopes, and object-map
+ * support checks.
  */
 
 import { describe, expect, it } from 'vitest';
 
-import { getObjectPanelKind } from './getObjectPanelKind';
+import {
+  getObjectPanelScopes,
+  hasCompleteObjectMapReference,
+  isObjectMapSupportedKind,
+} from './objectPanelRef';
 
-describe('getObjectPanelKind', () => {
+describe('getObjectPanelScopes', () => {
   it('normalises kind casing and builds scopes for standard resources', () => {
-    const result = getObjectPanelKind({
+    const result = getObjectPanelScopes({
       kind: 'Pod',
       name: 'api',
       namespace: 'team-a',
@@ -22,7 +30,7 @@ describe('getObjectPanelKind', () => {
   });
 
   it('falls back to cluster scope when namespace is empty', () => {
-    const result = getObjectPanelKind(
+    const result = getObjectPanelScopes(
       {
         kind: 'HelmRelease',
         name: 'shopping-cart',
@@ -38,7 +46,7 @@ describe('getObjectPanelKind', () => {
   });
 
   it('keeps real HelmRelease custom resources on their supplied GVK', () => {
-    const result = getObjectPanelKind({
+    const result = getObjectPanelScopes({
       kind: 'HelmRelease',
       name: 'flux-app',
       namespace: 'apps',
@@ -59,7 +67,7 @@ describe('getObjectPanelKind', () => {
   });
 
   it('marks event resources with event-specific flag', () => {
-    const result = getObjectPanelKind({
+    const result = getObjectPanelScopes({
       kind: 'Event',
       name: 'warning-123',
       namespace: 'default',
@@ -74,7 +82,7 @@ describe('getObjectPanelKind', () => {
     // but come from different API groups. With the GVK form threaded
     // through, the detailScope carries the full group/version so the
     // backend can disambiguate.
-    const result = getObjectPanelKind({
+    const result = getObjectPanelScopes({
       kind: 'DBInstance',
       name: 'my-db',
       namespace: 'default',
@@ -90,7 +98,7 @@ describe('getObjectPanelKind', () => {
     // Core resources (no API group, e.g. Pod) encode the group as an
     // empty string with a leading slash in the GVK form. The backend
     // parser strips this correctly.
-    const result = getObjectPanelKind({
+    const result = getObjectPanelScopes({
       kind: 'Pod',
       name: 'api',
       namespace: 'team-a',
@@ -107,7 +115,7 @@ describe('getObjectPanelKind', () => {
     // dispatch). detailScope uses the lowercased form. ObjectPanelContent
     // and EventsTab both consume eventsScope and MUST agree on the same
     // string — keep the computation in one place.
-    const result = getObjectPanelKind({
+    const result = getObjectPanelScopes({
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -120,7 +128,7 @@ describe('getObjectPanelKind', () => {
   });
 
   it('threads group/version into eventsScope when PanelObjectData carries them', () => {
-    const result = getObjectPanelKind({
+    const result = getObjectPanelScopes({
       kind: 'DBInstance',
       name: 'orders',
       namespace: 'team-a',
@@ -135,9 +143,9 @@ describe('getObjectPanelKind', () => {
   });
 
   it('returns null eventsScope when objectData is incomplete', () => {
-    expect(getObjectPanelKind(null).eventsScope).toBeNull();
-    expect(getObjectPanelKind({ kind: 'Pod' }).eventsScope).toBeNull();
-    expect(getObjectPanelKind({ name: 'api' }).eventsScope).toBeNull();
+    expect(getObjectPanelScopes(null).eventsScope).toBeNull();
+    expect(getObjectPanelScopes({ kind: 'Pod' }).eventsScope).toBeNull();
+    expect(getObjectPanelScopes({ name: 'api' }).eventsScope).toBeNull();
   });
 
   it('builds containerLogsScope using the lowercased kind so ObjectPanelContent and LogViewer agree', () => {
@@ -147,7 +155,7 @@ describe('getObjectPanelKind', () => {
     // strings independently — same drift bug as eventsScope. The log
     // domain producer expects the lowercased kind (matches LogViewer's
     // historical convention), distinct from eventsScope's original case.
-    const result = getObjectPanelKind({
+    const result = getObjectPanelScopes({
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -158,7 +166,7 @@ describe('getObjectPanelKind', () => {
   });
 
   it('threads group/version into containerLogsScope when PanelObjectData carries them', () => {
-    const result = getObjectPanelKind({
+    const result = getObjectPanelScopes({
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -171,7 +179,7 @@ describe('getObjectPanelKind', () => {
   });
 
   it('keeps colliding kinds distinct in containerLogsScope by threading group/version', () => {
-    const first = getObjectPanelKind({
+    const first = getObjectPanelScopes({
       kind: 'DBInstance',
       name: 'orders',
       namespace: 'team-a',
@@ -179,7 +187,7 @@ describe('getObjectPanelKind', () => {
       version: 'v1alpha1',
       clusterId: 'cluster-1',
     });
-    const second = getObjectPanelKind({
+    const second = getObjectPanelScopes({
       kind: 'DBInstance',
       name: 'orders',
       namespace: 'team-a',
@@ -198,11 +206,11 @@ describe('getObjectPanelKind', () => {
   });
 
   it('returns null containerLogsScope when objectData is incomplete', () => {
-    expect(getObjectPanelKind(null).containerLogsScope).toBeNull();
-    expect(getObjectPanelKind({ kind: 'Pod' }).containerLogsScope).toBeNull();
-    expect(getObjectPanelKind({ name: 'api' }).containerLogsScope).toBeNull();
+    expect(getObjectPanelScopes(null).containerLogsScope).toBeNull();
+    expect(getObjectPanelScopes({ kind: 'Pod' }).containerLogsScope).toBeNull();
+    expect(getObjectPanelScopes({ name: 'api' }).containerLogsScope).toBeNull();
     expect(
-      getObjectPanelKind({
+      getObjectPanelScopes({
         kind: 'DBInstance',
         name: 'orders',
         namespace: 'team-a',
@@ -212,7 +220,7 @@ describe('getObjectPanelKind', () => {
   });
 
   it('builds mapScope using the original-case kind so it matches the backend object-map parser', () => {
-    const result = getObjectPanelKind({
+    const result = getObjectPanelScopes({
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -224,11 +232,11 @@ describe('getObjectPanelKind', () => {
   });
 
   it('returns null mapScope when objectData is incomplete', () => {
-    expect(getObjectPanelKind(null).mapScope).toBeNull();
-    expect(getObjectPanelKind({ kind: 'Pod' }).mapScope).toBeNull();
-    expect(getObjectPanelKind({ name: 'api' }).mapScope).toBeNull();
+    expect(getObjectPanelScopes(null).mapScope).toBeNull();
+    expect(getObjectPanelScopes({ kind: 'Pod' }).mapScope).toBeNull();
+    expect(getObjectPanelScopes({ name: 'api' }).mapScope).toBeNull();
     expect(
-      getObjectPanelKind({
+      getObjectPanelScopes({
         kind: 'Pod',
         name: 'api',
         namespace: 'team-a',
@@ -237,7 +245,7 @@ describe('getObjectPanelKind', () => {
       }).mapScope
     ).toBeNull();
     expect(
-      getObjectPanelKind({
+      getObjectPanelScopes({
         kind: 'Pod',
         name: 'api',
         namespace: 'team-a',
@@ -246,7 +254,7 @@ describe('getObjectPanelKind', () => {
       }).mapScope
     ).toBeNull();
     expect(
-      getObjectPanelKind({
+      getObjectPanelScopes({
         kind: 'Pod',
         name: 'api',
         namespace: 'team-a',
@@ -254,5 +262,59 @@ describe('getObjectPanelKind', () => {
         group: '',
       }).mapScope
     ).toBeNull();
+  });
+
+  it('supports policy resources as object-map seeds', () => {
+    expect(isObjectMapSupportedKind('PodDisruptionBudget')).toBe(true);
+    expect(
+      hasCompleteObjectMapReference({
+        clusterId: 'cluster-a',
+        group: 'policy',
+        version: 'v1',
+        kind: 'PodDisruptionBudget',
+        namespace: 'default',
+        name: 'web',
+      })
+    ).toBe(true);
+  });
+
+  it('supports network policies as object-map seeds', () => {
+    expect(isObjectMapSupportedKind('NetworkPolicy')).toBe(true);
+    expect(
+      hasCompleteObjectMapReference({
+        clusterId: 'cluster-a',
+        group: 'networking.k8s.io',
+        version: 'v1',
+        kind: 'NetworkPolicy',
+        namespace: 'default',
+        name: 'web',
+      })
+    ).toBe(true);
+  });
+
+  it('supports Gateway API resources as object-map seeds', () => {
+    for (const kind of [
+      'GatewayClass',
+      'Gateway',
+      'HTTPRoute',
+      'GRPCRoute',
+      'TLSRoute',
+      'ListenerSet',
+      'ReferenceGrant',
+      'BackendTLSPolicy',
+    ]) {
+      expect(isObjectMapSupportedKind(kind)).toBe(true);
+    }
+
+    expect(
+      hasCompleteObjectMapReference({
+        clusterId: 'cluster-a',
+        group: 'gateway.networking.k8s.io',
+        version: 'v1',
+        kind: 'HTTPRoute',
+        namespace: 'default',
+        name: 'web',
+      })
+    ).toBe(true);
   });
 });

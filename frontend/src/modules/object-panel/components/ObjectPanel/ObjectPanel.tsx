@@ -1,9 +1,9 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx
  *
- * Each instance renders a single object as a dockable tab.
- * Accepts objectRef and panelId as props; uses CurrentObjectPanelContext
- * so child components can access the correct object data.
+ * Renders one Kubernetes object as a dockable object-panel tab, deriving the
+ * shared scopes, permissions, available tabs, actions, and refresh lifecycle
+ * from the canonical object reference.
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
@@ -27,7 +27,7 @@ import {
   subscribeObjectPanelTabRequests,
 } from '@modules/object-panel/objectPanelTabRequests';
 import './ObjectPanel.css';
-import { getObjectPanelKind } from '@modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind';
+import { getObjectPanelScopes } from '@modules/object-panel/objectPanelRef';
 import { useObjectPanelFeatureSupport } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport';
 import { useObjectPanelCapabilities } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities';
 import { useObjectPanelActions } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelActions';
@@ -160,7 +160,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     helmScope,
     isHelmRelease,
     isEvent,
-  } = getObjectPanelKind(objectData, {
+  } = getObjectPanelScopes(objectData, {
     clusterScope: CLUSTER_SCOPE,
   });
 

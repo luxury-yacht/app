@@ -1,13 +1,14 @@
 /**
  * frontend/src/modules/port-forward/PortForwardModal.tsx
  *
- * Modal component for configuring and starting port forwards.
- * Allows users to select container ports and configure local port mappings.
+ * Modal for configuring and starting a Kubernetes port-forward session. It
+ * resolves target ports from a full object ref and submits the selected
+ * container/local port mapping.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { buildObjectActionTarget, runStartPortForward } from '@shared/actions/objectActionClient';
-import { readTargetPorts, requestData } from '@/core/data-access';
+import { readTargetPortsForRef, requestData } from '@/core/data-access';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
@@ -137,15 +138,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     requestData({
       resource: 'target-ports',
       reason: 'user',
-      read: () =>
-        readTargetPorts(
-          currentTarget.clusterId,
-          currentTarget.namespace,
-          currentTarget.kind,
-          currentTarget.group,
-          currentTarget.version,
-          currentTarget.name
-        ),
+      read: () => readTargetPortsForRef(currentTarget),
     })
       .then((ports) => {
         if (cancelled) {

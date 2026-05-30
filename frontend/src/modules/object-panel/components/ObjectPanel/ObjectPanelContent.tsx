@@ -1,8 +1,9 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.tsx
  *
- * Renders the content of the object panel based on the active tab and provided props.
- * Each tab is conditionally rendered and wrapped in an error boundary for robustness.
+ * Routes the active object-panel tab to its concrete tab component and owns
+ * tab-level cleanup for scoped refresh domains that should reset when panel
+ * content is torn down.
  */
 import { useEffect } from 'react';
 import type { types } from '@wailsjs/go/models';
@@ -55,18 +56,18 @@ interface ObjectPanelContentProps {
   nodeLogsState: CapabilityState;
   nodeLogSources: NodeLogSource[];
   detailScope: string | null;
-  // eventsScope is computed once in getObjectPanelKind and threaded
+  // eventsScope is computed once in getObjectPanelScopes and threaded
   // here so this component (full-cleanup lifecycle) and EventsTab
   // (fetch + per-tab enable/disable) consume the same string. Used to
   // be computed independently in two places, which created a drift bug.
   eventsScope: string | null;
   // containerLogsScope follows the same pattern as eventsScope: one source of
-  // truth in getObjectPanelKind, consumed by this component (cleanup)
+  // truth in getObjectPanelScopes, consumed by this component (cleanup)
   // and LogViewer (actual streaming). They used to duplicate the
   // string builder and could drift apart on kind casing.
   containerLogsScope: string | null;
   // mapScope mirrors eventsScope/containerLogsScope: computed once in
-  // getObjectPanelKind and threaded into both this component (cleanup)
+  // getObjectPanelScopes and threaded into both this component (cleanup)
   // and MapTab (fetch + per-tab enable/disable) so they cannot drift.
   mapScope: string | null;
   helmScope: string | null;
@@ -118,7 +119,7 @@ export function ObjectPanelContent({
   const showManifest = activeTab === 'manifest';
   const showValues = activeTab === 'values';
 
-  // eventsScope and containerLogsScope are produced upstream by getObjectPanelKind
+  // eventsScope and containerLogsScope are produced upstream by getObjectPanelScopes
   // and threaded in via props so the lifecycle effects below and the
   // tabs that consume them (EventsTab, LogViewer) cannot disagree.
 

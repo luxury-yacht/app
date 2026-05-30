@@ -1,4 +1,16 @@
-import { readCatalogObjectByUID, readCatalogObjectMatch, requestData } from '@/core/data-access';
+/**
+ * frontend/src/shared/utils/resourceLinkIdentity.ts
+ *
+ * Validates backend ResourceLink payloads and resolves them into canonical
+ * frontend object references, using catalog lookups when only UID or display
+ * information is available.
+ */
+
+import {
+  readCatalogObjectByUID,
+  readCatalogObjectMatchForRef,
+  requestData,
+} from '@/core/data-access';
 import type { DisplayRef, ResourceLink, ResourceRef } from '@core/refresh/types';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
@@ -92,6 +104,9 @@ export const resourceLinkToObjectReference = (
   return resourceRefToObjectReference(link.ref, clusterName);
 };
 
+export const resourceLinkDisplayKind = (link?: ResourceLink | null): string | undefined =>
+  normalizeOptional(link?.ref?.kind) ?? normalizeOptional(link?.display?.kind);
+
 export const resolveCatalogObjectByUID = async (
   clusterId?: string | null,
   uid?: string | null
@@ -121,15 +136,7 @@ export const resolveCatalogObjectMatch = async (
   const result = await requestData({
     resource: 'catalog-object-match',
     reason: 'user',
-    read: () =>
-      readCatalogObjectMatch(
-        ref.clusterId,
-        ref.namespace ?? '',
-        ref.group,
-        ref.version,
-        ref.kind,
-        ref.name ?? ''
-      ),
+    read: () => readCatalogObjectMatchForRef({ ...ref, name: ref.name ?? '' }),
   });
   const match = result.status === 'executed' ? result.data : null;
   return match ? buildRequiredObjectReference(match) : undefined;

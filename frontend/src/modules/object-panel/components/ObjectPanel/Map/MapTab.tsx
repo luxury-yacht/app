@@ -27,7 +27,7 @@ import type { PanelObjectData } from '../types';
 interface MapTabProps {
   objectData: PanelObjectData | null;
   isActive?: boolean;
-  // Scope owned by ObjectPanel via getObjectPanelKind so this tab and
+  // Scope owned by ObjectPanel via getObjectPanelScopes so this tab and
   // ObjectPanelContent (which handles full cleanup on panel close)
   // cannot drift apart.
   mapScope: string | null;

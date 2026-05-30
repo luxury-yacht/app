@@ -31,6 +31,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import { buildWorkloadActionReference } from './workloadActionReference';
 
 interface WorkloadsViewProps {
   namespace: string;
@@ -200,24 +201,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {
-        return objectActions.getMenuItems(
-          buildRequiredObjectReference(
-            {
-              kind: row.kind,
-              name: row.name,
-              namespace: row.namespace,
-              clusterId: row.clusterId,
-              clusterName: row.clusterName,
-            },
-            { fallbackClusterId: selectedClusterId },
-            {
-              status: row.status,
-              ready: row.ready,
-              portForwardAvailable: row.portForwardAvailable,
-              hpaManaged: row.hpaManaged === true ? true : row.hpaManaged === false ? false : null,
-            }
-          )
-        );
+        return objectActions.getMenuItems(buildWorkloadActionReference(row, selectedClusterId));
       },
       [objectActions, selectedClusterId]
     );

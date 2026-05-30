@@ -1,16 +1,20 @@
 /**
  * frontend/src/modules/browse/hooks/useBrowseCatalog.ts
  *
- * Hook for managing catalog data in the Browse components.
- * Handles domain management, pagination, and scope synchronization.
+ * Manages Browse catalog state through scoped refresh domains, including
+ * catalog paging, metadata scope synchronization, filter scopes, and manual
+ * refresh behavior.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { requestRefreshDomain, useScopedRefreshDomainLifecycle } from '@/core/data-access';
+import {
+  readRefreshDomainState,
+  requestRefreshDomain,
+  setRefreshDomainEnabled,
+  useRefreshDomainHandle,
+} from '@/core/data-access';
 import { eventBus } from '@/core/events';
-import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { getMaxTableRows } from '@/core/settings/appPreferences';
-import { getScopedDomainState } from '@/core/refresh/store';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -115,23 +119,17 @@ export function useBrowseCatalog({
   const { catalogScope, metadataScope, metadataUsesActiveScope } = plan;
 
   // Read scoped state for the current catalog scope.
-  const domain = useRefreshScopedDomain('catalog', catalogScope);
-  const metadataDomain = useRefreshScopedDomain(
-    'catalog',
-    metadataUsesActiveScope ? catalogScope : metadataScope
-  );
-  useCatalogDiagnostics(domain, diagnosticLabel);
-
-  useScopedRefreshDomainLifecycle({
+  const { state: domain, refresh: refreshCatalogScope } = useRefreshDomainHandle({
     domain: 'catalog',
     scope: catalogScope,
     enabled: true,
   });
-  useScopedRefreshDomainLifecycle({
+  const { state: metadataDomain, refresh: refreshMetadataScope } = useRefreshDomainHandle({
     domain: metadataUsesActiveScope ? null : 'catalog',
     scope: metadataUsesActiveScope ? null : metadataScope,
     enabled: true,
   });
+  useCatalogDiagnostics(domain, diagnosticLabel);
 
   // Apply query scope and refresh page 0 when the query changes
   const previousScopeIdentityRef = useRef(plan.scopeIdentityKey);
@@ -151,19 +149,18 @@ export function useBrowseCatalog({
       setItems([]);
     }
 
-    void requestRefreshDomain({
-      domain: 'catalog',
-      scope: catalogScope,
-      reason: 'startup',
-    });
+    void refreshCatalogScope('startup');
     if (!metadataUsesActiveScope) {
-      void requestRefreshDomain({
-        domain: 'catalog',
-        scope: metadataScope,
-        reason: 'startup',
-      });
+      void refreshMetadataScope('startup');
     }
-  }, [catalogScope, metadataScope, metadataUsesActiveScope, plan.scopeIdentityKey]);
+  }, [
+    catalogScope,
+    metadataScope,
+    metadataUsesActiveScope,
+    plan.scopeIdentityKey,
+    refreshCatalogScope,
+    refreshMetadataScope,
+  ]);
 
   // Apply incoming snapshots to local pagination state
   useEffect(() => {
@@ -222,7 +219,7 @@ export function useBrowseCatalog({
       continueToken
     );
     // Enable the paginated scope and fetch it directly.
-    refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, true);
+    setRefreshDomainEnabled({ domain: 'catalog', scope: normalizedScope, enabled: true });
     const baseScopeAtRequest = catalogScopeRef.current;
     void (async () => {
       try {
@@ -235,7 +232,7 @@ export function useBrowseCatalog({
           return;
         }
 
-        const pageResult = getScopedDomainState('catalog', normalizedScope);
+        const pageResult = readRefreshDomainState('catalog', normalizedScope);
         const payload = pageResult.data as CatalogSnapshotPayload | null;
         if (!payload || (pageResult.status !== 'ready' && pageResult.status !== 'updating')) {
           return;
@@ -256,7 +253,7 @@ export function useBrowseCatalog({
       } catch (error) {
         console.error('Failed to load additional catalog page', error);
       } finally {
-        refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, false);
+        setRefreshDomainEnabled({ domain: 'catalog', scope: normalizedScope, enabled: false });
         if (catalogScopeRef.current === baseScopeAtRequest) {
           setIsRequestingMore(false);
         }

@@ -1,7 +1,9 @@
 /*
  * backend/object_detail_provider.go
  *
- * Object detail provider implementation.
+ * Fetches and normalizes Kubernetes object details for the object panel.
+ * Keeps backend detail reads on full GVK identity so custom resources are not
+ * resolved through kind-only fallbacks.
  */
 
 package backend
@@ -461,7 +463,7 @@ func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, gvk schema.G
 	// kind-only-objects bug (two CRDs sharing a Kind landed on whichever
 	// the legacy first-match-wins resolver returned). The frontend
 	// scope-string producers all emit the GVK form (see
-	// frontend/src/modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind.ts
+	// frontend/src/modules/object-panel/objectPanelRef.ts
 	// and the buildObjectScope helper), so reaching this branch with an
 	// empty Version means a producer was missed and we want to fail loud
 	// rather than silently pick a CRD.

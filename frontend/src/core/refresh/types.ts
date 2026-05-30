@@ -700,6 +700,7 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
   memUsage?: string;
   memRequest?: string;
   memLimit?: string;
+  desiredReplicas?: number;
 }
 
 export interface NamespaceWorkloadSnapshotPayload extends ClusterMeta {

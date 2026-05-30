@@ -1,11 +1,12 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/index.tsx
  *
- * Re-exports public APIs for the object panel feature.
+ * Chooses and renders the correct object overview component for the active
+ * Kubernetes resource, including workload-specific HPA management detection.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { readWorkloadHPAManaged, requestData } from '@/core/data-access';
+import { readWorkloadHPAManagedForRef, requestData } from '@/core/data-access';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { overviewRegistry } from './registry';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
@@ -81,14 +82,14 @@ const Overview: React.FC<OverviewProps> = (props) => {
       resource: 'workload-hpa-managed',
       reason: 'startup',
       read: () =>
-        readWorkloadHPAManaged(
+        readWorkloadHPAManagedForRef({
           clusterId,
-          props.namespace!,
-          objectGroup,
-          objectVersion,
-          props.kind,
-          props.name
-        ),
+          namespace: props.namespace!,
+          group: objectGroup,
+          version: objectVersion,
+          kind: props.kind,
+          name: props.name,
+        }),
     })
       .then((result) => {
         if (!cancelled) {

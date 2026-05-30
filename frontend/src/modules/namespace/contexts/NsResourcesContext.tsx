@@ -1,11 +1,9 @@
 /**
  * frontend/src/modules/namespace/contexts/NsResourcesContext.tsx
  *
- * Context and provider for NsResourcesContext.
- * - Manages the state and operations related to namespace-specific resources.
- * - Provides functionality to load, refresh, and reset resources per namespace.
- * - Integrates with the refresh orchestrator and capability evaluation system.
- * - Exposes a custom hook `useNamespaceResources` for easy access to the context.
+ * Provides namespace-scoped resource data to namespace views. It binds each
+ * namespace resource family to its refresh domain, exposes refresh/reset/load
+ * handles, and keeps rows filtered to the active cluster.
  */
 import React, {
   createContext,
@@ -19,15 +17,7 @@ import React, {
 } from 'react';
 import { errorHandler } from '@/utils/errorHandler';
 import { type ResourceDataReturn } from '@hooks/resources';
-import { requestRefreshDomain, useScopedRefreshDomainLifecycle } from '@/core/data-access';
-import type {
-  NamespaceAutoscalingSnapshotPayload,
-  NamespaceAutoscalingSummary,
-  NamespaceCustomSnapshotPayload,
-  NamespaceHelmSnapshotPayload,
-  NamespaceHelmSummary,
-  NamespaceCustomSummary,
-} from '@/core/refresh/types';
+import { useRefreshDomainHandle } from '@/core/data-access';
 import {
   ALL_NAMESPACE_PERMISSIONS,
   AUTOSCALING_PERMISSIONS,
@@ -43,11 +33,7 @@ import {
   queryNamespacesPermissions,
   type PermissionSpecList,
 } from '@/core/capabilities';
-import {
-  refreshOrchestrator,
-  useRefreshScopedDomain,
-  useRefreshScopedDomainStates,
-} from '@/core/refresh';
+import { refreshOrchestrator } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import type { NamespaceRefresherKey } from '@/core/refresh/refresherTypes';
@@ -55,11 +41,14 @@ import type { RefreshDomain } from '@/core/refresh/types';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
-import { resetScopedDomainState } from '@/core/refresh/store';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useStableKeyedArray, useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
+import {
+  namespaceResourceDescriptors,
+  type NamespaceResourceDescriptor,
+} from './namespaceResourceDescriptors';
 
 export interface PodsResourceDataReturn extends ResourceDataReturn<PodSnapshotEntry[]> {
   metrics: PodMetricsInfo | null;
@@ -118,44 +107,6 @@ const PERMISSIONS_BY_RESOURCE: Partial<Record<NamespaceViewType, PermissionSpecL
   events: [EVENT_PERMISSIONS],
 };
 
-// Filter merged namespace payloads to the active cluster tab.
-const filterByClusterId = <T extends { clusterId?: string | null }>(
-  items: T[] | null | undefined,
-  clusterId?: string | null
-): T[] => {
-  if (!items || items.length === 0) {
-    return [];
-  }
-  if (!clusterId) {
-    return items.filter((item) => !item.clusterId);
-  }
-  return items.filter((item) => item.clusterId === clusterId);
-};
-
-const parseAutoscalingTarget = (
-  target?: string | null,
-  apiVersion?: string | null
-): { kind: string; name: string; apiVersion?: string } | undefined => {
-  if (!target) {
-    return undefined;
-  }
-
-  const [kindPart, ...nameParts] = target.split('/');
-  if (!kindPart || nameParts.length === 0) {
-    return undefined;
-  }
-
-  // apiVersion is the wire-form "group/version" sourced from the
-  // backend's HPA snapshot (NamespaceAutoscalingSummary.targetApiVersion).
-  // Threaded so the object panel can open CRD scale targets with a
-  // fully-qualified GVK.
-  return {
-    kind: kindPart,
-    name: nameParts.join('/'),
-    apiVersion: apiVersion ?? undefined,
-  };
-};
-
 const normalizeNamespaceScope = (
   value?: string | null,
   clusterId?: string | null
@@ -198,33 +149,31 @@ const useNamespacePodsResource = (
     [clusterId, namespace]
   );
 
-  const scopedStates = useRefreshScopedDomainStates('pods');
-  const domainState = scope ? scopedStates[scope] : undefined;
-
-  useScopedRefreshDomainLifecycle({
+  const {
+    state: podDomainState,
+    refresh: refreshPodsDomain,
+    reset: resetPodsDomain,
+  } = useRefreshDomainHandle({
     domain: 'pods',
     scope,
     enabled,
     preserveState: true,
   });
+  const domainState = scope ? podDomainState : undefined;
 
   const refresh = useCallback(async () => {
     if (!enabled || !scope) {
       return;
     }
-    await requestRefreshDomain({
-      domain: 'pods',
-      scope,
-      reason: 'user',
-    });
-  }, [enabled, scope]);
+    await refreshPodsDomain('user');
+  }, [enabled, refreshPodsDomain, scope]);
 
   const reset = useCallback(() => {
     if (!scope) {
       return;
     }
-    resetScopedDomainState('pods', scope);
-  }, [scope]);
+    resetPodsDomain();
+  }, [resetPodsDomain, scope]);
 
   const data = useMemo<PodSnapshotEntry[]>(() => {
     if (!domainState?.data?.pods) {
@@ -271,11 +220,7 @@ const useNamespacePodsResource = (
         if (!enabled || !scope) {
           return;
         }
-        await requestRefreshDomain({
-          domain: 'pods',
-          scope,
-          reason: showSpinner ? 'user' : 'startup',
-        });
+        await refreshPodsDomain(showSpinner ? 'user' : 'startup');
       },
       refresh,
       reset,
@@ -292,6 +237,7 @@ const useNamespacePodsResource = (
       passiveLoading.hasLoaded,
       passiveLoading.loading,
       refresh,
+      refreshPodsDomain,
       refreshing,
       reset,
       scope,
@@ -318,15 +264,17 @@ function useRefreshBackedResource<T>(
     () => normalizeNamespaceScope(namespace, clusterId),
     [namespace, clusterId]
   );
-  const domainState = useRefreshScopedDomain(domain, namespaceScope ?? '');
-  const domainData = domainState.data;
-
-  useScopedRefreshDomainLifecycle({
+  const {
+    state: domainState,
+    refresh: refreshDomain,
+    reset: resetDomain,
+  } = useRefreshDomainHandle({
     domain,
     scope: namespaceScope,
     enabled,
     preserveState: true,
   });
+  const domainData = domainState.data;
 
   const load = useCallback(
     async (_showSpinner: boolean = true) => {
@@ -335,18 +283,14 @@ function useRefreshBackedResource<T>(
       }
 
       try {
-        await requestRefreshDomain({
-          domain,
-          scope: namespaceScope,
-          reason: _showSpinner ? 'user' : 'startup',
-        });
+        await refreshDomain(_showSpinner ? 'user' : 'startup');
       } catch (error) {
         errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
           source: `namespace-resource-load-${resourceKey}`,
         });
       }
     },
-    [domain, enabled, namespaceScope, resourceKey]
+    [enabled, namespaceScope, refreshDomain, resourceKey]
   );
 
   const refresh = useCallback(async () => {
@@ -355,23 +299,17 @@ function useRefreshBackedResource<T>(
     }
 
     try {
-      await requestRefreshDomain({
-        domain,
-        scope: namespaceScope,
-        reason: 'user',
-      });
+      await refreshDomain('user');
     } catch (error) {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: `namespace-resource-refresh-${resourceKey}`,
       });
     }
-  }, [domain, enabled, namespaceScope, resourceKey]);
+  }, [enabled, namespaceScope, refreshDomain, resourceKey]);
 
   const reset = useCallback(() => {
-    if (namespaceScope) {
-      refreshOrchestrator.resetScopedDomain(domain, namespaceScope);
-    }
-  }, [domain, namespaceScope]);
+    resetDomain();
+  }, [resetDomain]);
 
   useEffect(() => {
     if (!enabled || !namespaceScope) {
@@ -430,11 +368,7 @@ function useRefreshBackedResource<T>(
       load,
       refresh,
       reset,
-      cancel: () => {
-        if (namespaceScope) {
-          refreshOrchestrator.resetScopedDomain(domain, namespaceScope);
-        }
-      },
+      cancel: reset,
       lastFetchTime: domainState.lastUpdated ? new Date(domainState.lastUpdated) : null,
       hasLoaded: passiveLoading.hasLoaded,
       meta,
@@ -447,13 +381,34 @@ function useRefreshBackedResource<T>(
       load,
       refresh,
       reset,
-      domain,
       enabled,
       meta,
-      namespaceScope,
       passiveLoading.hasLoaded,
       passiveLoading.loading,
     ]
+  );
+}
+
+function useDescriptorBackedResource<T>(
+  descriptor: NamespaceResourceDescriptor<T>,
+  enabled: boolean,
+  namespace?: string | null,
+  clusterId?: string | null,
+  isPaused: boolean = false,
+  isManualRefreshActive: boolean = false
+): ResourceDataReturn<T> {
+  return useRefreshBackedResource<T>(
+    descriptor.resourceKey,
+    descriptor.domain,
+    (payload) => descriptor.select(payload, clusterId),
+    descriptor.meta,
+    descriptor.fallback,
+    enabled,
+    namespace,
+    clusterId,
+    isPaused,
+    isManualRefreshActive,
+    descriptor.rowIdentity ? (item) => descriptor.rowIdentity!(item, clusterId) : undefined
   );
 }
 
@@ -526,27 +481,17 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const isResourceActive = (resourceKey: NamespaceRefresherKey) =>
     Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === resourceKey;
 
-  const workloads = useRefreshBackedResource<any[]>(
-    'workloads',
-    'namespace-workloads',
-    (payload) => filterByClusterId(payload?.workloads, namespaceClusterId),
-    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
-    [],
+  const workloads = useDescriptorBackedResource<any[]>(
+    namespaceResourceDescriptors.workloads,
     isResourceActive('workloads'),
     currentNamespace,
     namespaceClusterId,
     isPaused,
-    isManualRefreshActive,
-    (item) =>
-      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.namespace}::${item.kind}::${item.name}`
+    isManualRefreshActive
   );
 
-  const config = useRefreshBackedResource<any[]>(
-    'config',
-    'namespace-config',
-    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
-    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
-    [],
+  const config = useDescriptorBackedResource<any[]>(
+    namespaceResourceDescriptors.config,
     isResourceActive('config'),
     currentNamespace,
     namespaceClusterId,
@@ -554,12 +499,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     isManualRefreshActive
   );
 
-  const network = useRefreshBackedResource<any[]>(
-    'network',
-    'namespace-network',
-    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
-    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
-    [],
+  const network = useDescriptorBackedResource<any[]>(
+    namespaceResourceDescriptors.network,
     isResourceActive('network'),
     currentNamespace,
     namespaceClusterId,
@@ -567,12 +508,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     isManualRefreshActive
   );
 
-  const rbac = useRefreshBackedResource<any[]>(
-    'rbac',
-    'namespace-rbac',
-    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
-    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
-    [],
+  const rbac = useDescriptorBackedResource<any[]>(
+    namespaceResourceDescriptors.rbac,
     isResourceActive('rbac'),
     currentNamespace,
     namespaceClusterId,
@@ -580,12 +517,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     isManualRefreshActive
   );
 
-  const storage = useRefreshBackedResource<any[]>(
-    'storage',
-    'namespace-storage',
-    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
-    undefined,
-    [],
+  const storage = useDescriptorBackedResource<any[]>(
+    namespaceResourceDescriptors.storage,
     isResourceActive('storage'),
     currentNamespace,
     namespaceClusterId,
@@ -593,50 +526,17 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     isManualRefreshActive
   );
 
-  const autoscaling = useRefreshBackedResource<any[]>(
-    'autoscaling',
-    'namespace-autoscaling',
-    (payload?: NamespaceAutoscalingSnapshotPayload) =>
-      filterByClusterId(payload?.resources, namespaceClusterId).map(
-        (item: NamespaceAutoscalingSummary) => {
-          const scaleTargetRef = parseAutoscalingTarget(item.target, item.targetApiVersion);
-          return {
-            kind: item.kind,
-            kindAlias: item.kind,
-            name: item.name,
-            namespace: item.namespace,
-            // Multi-cluster identity — required for stable row keys and panel actions.
-            clusterId: item.clusterId,
-            clusterName: item.clusterName,
-            scaleTargetRef,
-            target: item.target,
-            min: item.min,
-            max: item.max,
-            current: item.current,
-            minReplicas: item.min,
-            maxReplicas: item.max,
-            currentReplicas: item.current,
-            age: item.age,
-          };
-        }
-      ),
-    (payload?: NamespaceAutoscalingSnapshotPayload) => ({ kinds: payload?.kinds ?? [] }),
-    [],
+  const autoscaling = useDescriptorBackedResource<any[]>(
+    namespaceResourceDescriptors.autoscaling,
     isResourceActive('autoscaling'),
     currentNamespace,
     namespaceClusterId,
     isPaused,
-    isManualRefreshActive,
-    (item: NamespaceAutoscalingSummary) =>
-      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.namespace}::${item.kind}::${item.name}`
+    isManualRefreshActive
   );
 
-  const quotas = useRefreshBackedResource<any[]>(
-    'quotas',
-    'namespace-quotas',
-    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
-    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
-    [],
+  const quotas = useDescriptorBackedResource<any[]>(
+    namespaceResourceDescriptors.quotas,
     isResourceActive('quotas'),
     currentNamespace,
     namespaceClusterId,
@@ -644,19 +544,13 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     isManualRefreshActive
   );
 
-  const events = useRefreshBackedResource<any[]>(
-    'events',
-    'namespace-events',
-    (payload) => filterByClusterId(payload?.events, namespaceClusterId),
-    undefined,
-    [],
+  const events = useDescriptorBackedResource<any[]>(
+    namespaceResourceDescriptors.events,
     isResourceActive('events'),
     currentNamespace,
     namespaceClusterId,
     isPaused,
-    isManualRefreshActive,
-    (item) =>
-      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.objectNamespace ?? item.namespace ?? ''}::${item.uid || item.name || `${item.object ?? ''}:${item.source ?? ''}:${item.reason ?? ''}:${item.type ?? ''}`}`
+    isManualRefreshActive
   );
 
   const podsEnabled =
@@ -669,71 +563,22 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     isManualRefreshActive
   );
 
-  const custom = useRefreshBackedResource<any[]>(
-    'custom',
-    'namespace-custom',
-    (payload?: NamespaceCustomSnapshotPayload) =>
-      filterByClusterId(payload?.resources, namespaceClusterId).map(
-        (item: NamespaceCustomSummary) => ({
-          kind: item.kind,
-          kindAlias: item.kind,
-          name: item.name,
-          namespace: item.namespace,
-          apiGroup: item.apiGroup,
-          apiVersion: item.apiVersion,
-          // CRD name (e.g. "dbinstances.rds.services.k8s.aws") for the
-          // CRD column's clickable cell. See NsViewCustom.
-          crdName: item.crdName,
-          age: item.age,
-          // Multi-cluster identity — required for stable row keys and panel actions.
-          clusterId: item.clusterId,
-          clusterName: item.clusterName,
-          // Preserve metadata for the custom view/object panel.
-          labels: item.labels,
-          annotations: item.annotations,
-        })
-      ),
-    (payload?: NamespaceCustomSnapshotPayload) => ({ kinds: payload?.kinds ?? [] }),
-    [],
+  const custom = useDescriptorBackedResource<any[]>(
+    namespaceResourceDescriptors.custom,
     isResourceActive('custom'),
     currentNamespace,
     namespaceClusterId,
     isPaused,
-    isManualRefreshActive,
-    (item) =>
-      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.namespace}::${item.apiGroup ?? ''}::${item.apiVersion ?? ''}::${item.kind}::${item.name}`
+    isManualRefreshActive
   );
 
-  const helm = useRefreshBackedResource<any[]>(
-    'helm',
-    'namespace-helm',
-    (payload?: NamespaceHelmSnapshotPayload) =>
-      filterByClusterId(payload?.releases, namespaceClusterId).map(
-        (release: NamespaceHelmSummary) => ({
-          kind: 'HelmRelease',
-          name: release.name,
-          namespace: release.namespace,
-          // Multi-cluster identity — required for stable row keys and panel actions.
-          clusterId: release.clusterId,
-          clusterName: release.clusterName,
-          chart: release.chart,
-          appVersion: release.appVersion,
-          status: release.status,
-          revision: release.revision,
-          updated: release.updated,
-          description: release.description,
-          age: release.age,
-        })
-      ),
-    undefined,
-    [],
+  const helm = useDescriptorBackedResource<any[]>(
+    namespaceResourceDescriptors.helm,
     isResourceActive('helm'),
     currentNamespace,
     namespaceClusterId,
     isPaused,
-    isManualRefreshActive,
-    (release: NamespaceHelmSummary) =>
-      `${release.clusterId ?? namespaceClusterId ?? ''}::${release.namespace}::${release.name}`
+    isManualRefreshActive
   );
 
   useEffect(() => {

@@ -1,8 +1,9 @@
 /**
  * frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts
  *
- * UI component for diagnosticsPanelConfig.
- * Handles rendering and interactions for the shared components.
+ * Shared configuration for refresh diagnostics. It adapts the authored refresh
+ * domain contract into UI metadata so DiagnosticsPanel does not maintain a
+ * second list of domain behavior rules.
  */
 
 import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navigation/views';
@@ -10,10 +11,46 @@ import {
   PERMISSION_FEATURES,
   type PermissionFeatureKey,
 } from '@/core/capabilities/permissionFeatures';
+import {
+  refreshDomainContract,
+  refreshDomainDescriptors,
+  type StreamTelemetryName,
+} from '../../domainRegistry';
+import type { RefreshDomain } from '../../types';
 export { DOMAIN_REFRESHER_MAP, DOMAIN_STREAM_MAP, PRIORITY_DOMAINS } from '../../domainRegistry';
 
 export const STALE_THRESHOLD_MS = 45_000;
 export const CLUSTER_SCOPE = '__cluster__';
+
+export const METRICS_ONLY_DOMAINS = new Set<RefreshDomain>(
+  refreshDomainDescriptors
+    .filter((descriptor) => descriptor.metricsInterval)
+    .map((descriptor) => descriptor.domain)
+);
+
+export const STREAM_ONLY_DOMAINS = new Set<RefreshDomain>(
+  Object.entries(refreshDomainContract.domainInventory)
+    .filter(([, entry]) => entry.cachePolicy === 'stream-only')
+    .map(([domain]) => domain as RefreshDomain)
+);
+
+export const PAUSE_POLLING_WHEN_STREAMING_DOMAINS = new Set<RefreshDomain>(
+  refreshDomainDescriptors
+    .filter(
+      (descriptor) =>
+        descriptor.diagnosticsStream &&
+        !METRICS_ONLY_DOMAINS.has(descriptor.domain) &&
+        !STREAM_ONLY_DOMAINS.has(descriptor.domain)
+    )
+    .map((descriptor) => descriptor.domain)
+);
+
+export const STREAM_MODE_BY_NAME: Record<StreamTelemetryName, 'streaming' | 'watch'> = {
+  resources: 'streaming',
+  events: 'watch',
+  catalog: 'watch',
+  'container-logs': 'streaming',
+};
 
 const OVERVIEW_FEATURES = [PERMISSION_FEATURES.clusterOverview] as const;
 

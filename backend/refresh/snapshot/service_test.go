@@ -1,3 +1,10 @@
+/*
+ * backend/refresh/snapshot/service_test.go
+ *
+ * Exercises snapshot service behavior around build dispatch, caching,
+ * permission handling, and the required cluster identity contract.
+ */
+
 package snapshot
 
 import (
@@ -12,6 +19,10 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
+
+func testClusterMeta() ClusterMeta {
+	return ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
+}
 
 func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	reg := domain.New()
@@ -32,7 +43,7 @@ func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	}
 
 	rec := telemetry.NewRecorder()
-	service := NewService(reg, rec, ClusterMeta{})
+	service := NewService(reg, rec, testClusterMeta())
 
 	snap, err := service.Build(context.Background(), "demo", "scope-a")
 	if err != nil {
@@ -54,6 +65,23 @@ func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	}
 }
 
+func TestServiceBuildRequiresClusterIdentity(t *testing.T) {
+	reg := domain.New()
+	if err := reg.Register(refresh.DomainConfig{
+		Name: "demo",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			return &refresh.Snapshot{Domain: "demo", Scope: scope}, nil
+		},
+	}); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	service := NewService(reg, nil, ClusterMeta{})
+	if _, err := service.Build(context.Background(), "demo", "scope-a"); err == nil {
+		t.Fatalf("expected missing cluster identity error")
+	}
+}
+
 func TestServiceBuildRecordsFailure(t *testing.T) {
 	reg := domain.New()
 	if err := reg.Register(refresh.DomainConfig{
@@ -66,7 +94,7 @@ func TestServiceBuildRecordsFailure(t *testing.T) {
 	}
 
 	rec := telemetry.NewRecorder()
-	service := NewService(reg, rec, ClusterMeta{})
+	service := NewService(reg, rec, testClusterMeta())
 
 	if _, err := service.Build(context.Background(), "demo-fail", "scope-b"); err == nil {
 		t.Fatalf("expected build error")
@@ -99,7 +127,7 @@ func TestServiceBuildCachesAndBypasses(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	service := NewService(reg, nil, ClusterMeta{})
+	service := NewService(reg, nil, testClusterMeta())
 
 	snap1, err := service.Build(context.Background(), "demo-cache", "scope-a")
 	if err != nil {
@@ -147,7 +175,7 @@ func TestServiceBuildDoesNotCacheObjectMaintenance(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	service := NewService(reg, nil, ClusterMeta{})
+	service := NewService(reg, nil, testClusterMeta())
 	snap1, err := service.Build(context.Background(), "object-maintenance", "cluster-a|node:worker-1")
 	if err != nil {
 		t.Fatalf("Build returned error: %v", err)
@@ -194,7 +222,7 @@ func TestServiceBuildDoesNotSingleflightObjectMaintenance(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	service := NewService(reg, nil, ClusterMeta{})
+	service := NewService(reg, nil, testClusterMeta())
 	ctx := context.Background()
 
 	done := make(chan struct{})
@@ -249,7 +277,7 @@ func TestServiceBuildBypassUsesSeparateSingleflightKey(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	service := NewService(reg, nil, ClusterMeta{})
+	service := NewService(reg, nil, testClusterMeta())
 	ctx := context.Background()
 
 	done := make(chan struct{})
@@ -305,7 +333,7 @@ func TestServiceBuildSkipsCacheForPartialSnapshots(t *testing.T) {
 			t.Fatalf("register failed: %v", err)
 		}
 
-		service := NewService(reg, nil, ClusterMeta{})
+		service := NewService(reg, nil, testClusterMeta())
 		if _, err := service.Build(context.Background(), "demo-partial-"+testCase.name, "scope-a"); err != nil {
 			t.Fatalf("Build returned error: %v", err)
 		}
@@ -341,7 +369,7 @@ func TestServiceBuildBlocksPermissionDenied(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
 		return false, nil
 	})
-	service := NewServiceWithPermissions(reg, nil, ClusterMeta{}, checker)
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), checker)
 
 	if _, err := service.Build(context.Background(), namespaceConfigDomainName, "scope-a"); err == nil {
 		t.Fatalf("expected permission error")
@@ -375,7 +403,7 @@ func TestServiceBuildBlocksNamespacesWithoutListPermission(t *testing.T) {
 		}
 		return true, nil
 	})
-	service := NewServiceWithPermissions(reg, nil, ClusterMeta{}, checker)
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), checker)
 
 	if _, err := service.Build(context.Background(), "namespaces", "cluster-a|"); err == nil {
 		t.Fatalf("expected permission error")
@@ -412,7 +440,7 @@ func TestServiceBuildAllowsPartialPermissions(t *testing.T) {
 		}
 		return true, nil
 	})
-	service := NewServiceWithPermissions(reg, nil, ClusterMeta{}, checker)
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), checker)
 
 	if _, err := service.Build(context.Background(), namespaceConfigDomainName, "scope-a"); err != nil {
 		t.Fatalf("expected partial permissions to allow build, got: %v", err)
@@ -450,7 +478,7 @@ func TestServiceBuildKeysCacheByRuntimeAllowedResources(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
 		return resource == "configmaps" || resource == "secrets", nil
 	})
-	service := NewServiceWithPermissions(reg, nil, ClusterMeta{}, checker)
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), checker)
 
 	first, err := service.Build(context.Background(), namespaceConfigDomainName, "cluster-a|namespace:default")
 	if err != nil {
@@ -489,7 +517,7 @@ func TestServiceBuildSkipsEnsureForPermissionDeniedDomain(t *testing.T) {
 		reviewCalled = true
 		return false, nil
 	})
-	service := NewServiceWithPermissions(reg, nil, ClusterMeta{}, checker)
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), checker)
 
 	// Build should return PermissionDeniedError from the placeholder's BuildSnapshot,
 	// NOT from ensurePermissions (which should be skipped).
@@ -528,7 +556,7 @@ func TestServiceBuildAllowsWhenPermissionsSucceed(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
 		return true, nil
 	})
-	service := NewServiceWithPermissions(reg, nil, ClusterMeta{}, checker)
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), checker)
 
 	if _, err := service.Build(context.Background(), namespaceConfigDomainName, "scope-a"); err != nil {
 		t.Fatalf("Build returned error: %v", err)

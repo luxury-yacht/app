@@ -1,9 +1,8 @@
 /**
  * frontend/src/modules/object-panel/contexts/ObjectPanelStateContext.tsx
  *
- * Manages object panel state for multi-tab object panels.
- * Each opened object gets its own tab with a unique panelId derived from its identity.
- * Provides context for components to open, close, and track open object panels.
+ * Owns object-panel tab state across the app: open object refs, active tabs,
+ * canonical panel IDs, and full cache eviction when a panel is closed.
  */
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import type { KubernetesObjectReference } from '@/types/view-state';
@@ -12,9 +11,15 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { clearPanelState } from '@ui/dockable/useDockablePanelState';
 import { handoffLayoutBeforeClose } from '@ui/dockable/useDockablePanelState';
 import { refreshOrchestrator } from '@/core/refresh';
-import { getObjectPanelKind } from '@modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind';
 import { clearLogViewerPrefs } from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
 import { clearContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
+import {
+  buildObjectPanelRef,
+  getObjectPanelScopeEvictions,
+  objectPanelId,
+} from '@modules/object-panel/objectPanelRef';
+
+export { objectPanelId } from '@modules/object-panel/objectPanelRef';
 
 /**
  * Evict every scoped-domain entry that belongs to a single object panel.
@@ -28,62 +33,13 @@ import { clearContainerLogsStreamScopeParams } from '@modules/object-panel/compo
  * the panel for good, which is what this helper enforces.
  */
 const evictPanelScopes = (ref: KubernetesObjectReference): void => {
-  const { detailScope, eventsScope, containerLogsScope, mapScope, helmScope } =
-    getObjectPanelKind(ref);
-  if (detailScope) {
-    refreshOrchestrator.resetScopedDomain('object-details', detailScope);
-    refreshOrchestrator.resetScopedDomain('object-yaml', detailScope);
-  }
-  if (eventsScope) {
-    refreshOrchestrator.resetScopedDomain('object-events', eventsScope);
-  }
-  if (containerLogsScope) {
-    refreshOrchestrator.resetScopedDomain('container-logs', containerLogsScope);
-    clearContainerLogsStreamScopeParams(containerLogsScope);
-  }
-  if (mapScope) {
-    refreshOrchestrator.resetScopedDomain('object-map', mapScope);
-  }
-  if (helmScope) {
-    refreshOrchestrator.resetScopedDomain('object-helm-manifest', helmScope);
-    refreshOrchestrator.resetScopedDomain('object-helm-values', helmScope);
-  }
+  getObjectPanelScopeEvictions(ref).forEach(({ domain, scope }) => {
+    refreshOrchestrator.resetScopedDomain(domain, scope);
+    if (domain === 'container-logs') {
+      clearContainerLogsStreamScopeParams(scope);
+    }
+  });
 };
-
-/**
- * Generate a stable, unique panel ID from a Kubernetes object reference.
- *
- * When the ref carries group and version (new, GVK-aware path), the id
- * format is:
- *   obj:{clusterId}:{group}/{version}/{kind}:{namespace}:{name}
- *
- * When the ref is kind-only (legacy path, no group/version), the id
- * format is:
- *   obj:{clusterId}:{kind}:{namespace}:{name}
- *
- * The split format is deliberate: two DBInstance objects from different
- * CRD groups now get different panel ids and can coexist, but built-in
- * resources and any caller that hasn't been migrated to pass group/version
- * still produces the exact same id as before so persisted panel state and
- * focus tracking are unaffected.
- */
-export function objectPanelId(ref: KubernetesObjectReference): string {
-  const c = ref.clusterId?.trim() ?? '';
-  const k = (ref.kind ?? '').toLowerCase();
-  const ns = ref.namespace?.trim() ?? '_';
-  const n = ref.name?.trim() ?? '';
-  const group = ref.group?.trim() ?? '';
-  const version = ref.version?.trim() ?? '';
-
-  // Only include the GVK segment when the caller supplied a version — we
-  // treat "has version" as the signal that the ref is GVK-aware. An empty
-  // group with a version (e.g. core/v1) still gets the GVK form, encoded
-  // as "/v1/" so the id is still parseable.
-  if (version) {
-    return `obj:${c}:${group}/${version}/${k}:${ns}:${n}`;
-  }
-  return `obj:${c}:${k}:${ns}:${n}`;
-}
 
 interface ObjectPanelState {
   // Map of panelId → objectRef for all open object panels
@@ -239,10 +195,8 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   const onRowClick = useCallback(
     (data: KubernetesObjectReference): string => {
       const enriched = hydrateClusterMeta(data);
-      if (!enriched.clusterId) {
-        throw new Error('Object panel reference is missing clusterId');
-      }
-      const panelId = objectPanelId(enriched);
+      const panelRef = buildObjectPanelRef(enriched);
+      const panelId = objectPanelId(panelRef);
 
       updateActiveState((prev) => {
         // If panel already exists, no state change needed (activation handled by dockable system).
@@ -251,7 +205,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         }
         // Add new panel to the map.
         const nextPanels = new Map(prev.openPanels);
-        nextPanels.set(panelId, enriched);
+        nextPanels.set(panelId, panelRef);
         return { ...prev, openPanels: nextPanels };
       });
 

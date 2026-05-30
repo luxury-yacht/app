@@ -1,3 +1,11 @@
+/*
+ * backend/refresh/eventstream/handler_test.go
+ *
+ * Verifies the event stream HTTP handler contract: scope validation, initial
+ * snapshot delivery, permission-denied payloads, subscriber limits, and resume
+ * fallback behavior.
+ */
+
 package eventstream
 
 import (
@@ -23,6 +31,10 @@ import (
 
 func mustUnixMilli(value time.Time) int64 {
 	return value.UnixMilli()
+}
+
+func testClusterMeta() snapshot.ClusterMeta {
+	return snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
 }
 
 type flushRecorder struct {
@@ -392,7 +404,7 @@ func newTestHandler(t testing.TB, build func(scope string) (*refresh.Snapshot, e
 	}))
 
 	recorder := telemetry.NewRecorder()
-	service := snapshot.NewService(reg, recorder, snapshot.ClusterMeta{})
+	service := snapshot.NewService(reg, recorder, testClusterMeta())
 	manager := &Manager{
 		subscribers: make(map[string]map[uint64]*subscription),
 		buffers:     make(map[string]*eventBuffer),

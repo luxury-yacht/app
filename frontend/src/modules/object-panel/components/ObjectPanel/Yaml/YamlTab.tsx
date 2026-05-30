@@ -1,5 +1,9 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx
+ *
+ * Renders the object-panel YAML editor and apply workflow, including live YAML
+ * refresh, semantic diffing, validation, protected-field handling, and post-save
+ * verification.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -10,7 +14,7 @@ import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { useShortcut } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
-import { readObjectYAMLByGVK, requestData, requestRefreshDomain } from '@/core/data-access';
+import { readObjectYAMLForRef, requestData, requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -493,13 +497,13 @@ const YamlTab: React.FC<YamlTabProps> = ({
         resource: 'object-yaml-by-gvk',
         reason: 'user',
         read: () =>
-          readObjectYAMLByGVK(
-            resolvedClusterId,
-            identity.apiVersion,
-            identity.kind,
-            identity.namespace ?? '',
-            identity.name
-          ),
+          readObjectYAMLForRef({
+            clusterId: resolvedClusterId,
+            apiVersion: identity.apiVersion,
+            kind: identity.kind,
+            namespace: identity.namespace,
+            name: identity.name,
+          }),
       });
       const latestYamlRaw =
         latestYamlResult.status === 'executed' ? (latestYamlResult.data ?? '') : '';

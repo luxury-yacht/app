@@ -1,3 +1,10 @@
+/*
+ * backend/refresh/snapshot/service.go
+ *
+ * Coordinates refresh-domain snapshot builds, permission checks, caching, and
+ * cluster metadata injection for the snapshot subsystem.
+ */
+
 package snapshot
 
 import (
@@ -38,6 +45,13 @@ type cacheEntry struct {
 	expiresAt time.Time
 }
 
+type BuildRequest struct {
+	Context context.Context
+	Domain  string
+	Scope   string
+	Cluster ClusterMeta
+}
+
 // NewService returns a Service for the provided registry.
 func NewService(reg *domain.Registry, recorder *telemetry.Recorder, meta ClusterMeta) *Service {
 	return newService(reg, recorder, meta, nil, domainpermissions.RuntimeAccess{})
@@ -76,7 +90,21 @@ func newService(
 
 // Build returns a snapshot for the requested domain/scope.
 func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh.Snapshot, error) {
-	ctx = WithClusterMeta(ctx, s.cluster)
+	return s.BuildRequest(BuildRequest{
+		Context: ctx,
+		Domain:  domainName,
+		Scope:   scope,
+		Cluster: s.cluster,
+	})
+}
+
+func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
+	if err := req.Cluster.Validate(); err != nil {
+		return nil, err
+	}
+	ctx := WithClusterMeta(req.Context, req.Cluster)
+	domainName := req.Domain
+	scope := req.Scope
 	permissionCacheKey := ""
 	var err error
 	ctx, permissionCacheKey, err = s.ensurePermissions(ctx, domainName, scope)

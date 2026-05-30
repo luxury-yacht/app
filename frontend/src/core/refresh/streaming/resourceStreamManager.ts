@@ -1,14 +1,15 @@
 /**
  * frontend/src/core/refresh/streaming/resourceStreamManager.ts
  *
- * Resource stream manager for watch-style resource updates.
+ * Coordinates resource WebSocket subscriptions, row delivery, resyncs, and
+ * stream fallback behavior for refresh domains that receive live updates.
  */
 
 import { fetchSnapshot, type Snapshot, type SnapshotStats } from '../client';
 import { setScopedDomainState } from '../store';
 import type { PermissionDeniedStatus } from '../types';
 import { stripClusterScope } from '../clusterScope';
-import { eventBus, type AppEvents } from '@/core/events';
+import { eventBus } from '@/core/events';
 import {
   APP_LOG_SOURCES,
   logAppLogsInfo,
@@ -32,6 +33,13 @@ import {
 } from './resourceStreamSubscriptions';
 import { StreamErrorNotifier } from './streamErrorNotifier';
 import { StreamVisibilityController } from './streamVisibilityController';
+import {
+  ResourceStreamHealthStore,
+  STREAM_HEALTH_STATUS_ORDER,
+  type ResourceStreamConnectionStatus,
+  type ResourceStreamHealthPayload,
+  type ResourceStreamHealthStatus,
+} from './resourceStreamHealth';
 
 export {
   normalizeResourceScope,
@@ -75,18 +83,7 @@ const MESSAGE_TYPES = {
   deleted: 'DELETED',
 } as const;
 
-type ResourceStreamHealthStatus = AppEvents['refresh:resource-stream-health']['status'];
-type ResourceStreamHealthPayload = AppEvents['refresh:resource-stream-health'];
-type ResourceStreamConnectionStatus = ResourceStreamHealthPayload['connectionStatus'];
-
 type StreamMessageType = (typeof MESSAGE_TYPES)[keyof typeof MESSAGE_TYPES];
-
-// Aggregate health across clusters using worst-status wins.
-const STREAM_HEALTH_STATUS_ORDER: Record<ResourceStreamHealthStatus, number> = {
-  healthy: 0,
-  degraded: 1,
-  unhealthy: 2,
-};
 
 type ServerMessage = {
   type: StreamMessageType;
@@ -257,7 +254,7 @@ export class ResourceStreamManager {
   private connectionStatus: ResourceStreamConnectionStatus = 'disconnected';
   private connectionEpoch = 0;
   private lastConnectionError = '';
-  private streamHealth = new Map<string, ResourceStreamHealthPayload>();
+  private streamHealth = new ResourceStreamHealthStore();
   private errorNotifier = new StreamErrorNotifier();
   private consecutiveErrors = new Map<string, number>();
   private visibility = new StreamVisibilityController<StreamSubscription>({
@@ -306,16 +303,11 @@ export class ResourceStreamManager {
 
   // Expose per-scope health so refresh gating can keep snapshots running until delivery resumes.
   getHealthStatus(domain: ResourceDomain, scope: string): ResourceStreamHealthStatus {
-    const key = this.healthKey(domain, scope);
-    return this.streamHealth.get(key)?.status ?? 'unhealthy';
+    return this.streamHealth.status(domain, scope);
   }
 
   getHealthSnapshot(domain: string, scope: string): ResourceStreamHealthPayload | null {
-    if (!isSupportedDomain(domain)) {
-      return null;
-    }
-    const key = this.healthKey(domain, scope);
-    return this.streamHealth.get(key) ?? null;
+    return this.streamHealth.snapshot(domain, scope);
   }
 
   isHealthy(domain: ResourceDomain, scope: string): boolean {
@@ -541,10 +533,6 @@ export class ResourceStreamManager {
     );
   }
 
-  private healthKey(domain: ResourceDomain, scope: string): string {
-    return `${domain}::${scope}`;
-  }
-
   private recordSubscriptionMessage(subscription: StreamSubscription): void {
     subscription.lastMessageAt = Date.now();
   }
@@ -633,24 +621,13 @@ export class ResourceStreamManager {
 
   private updateHealthForScope(domain: ResourceDomain, reportScope: string): void {
     const next = this.aggregateHealth(domain, reportScope);
-    const key = this.healthKey(domain, reportScope);
-    const previous = this.streamHealth.get(key);
-    this.streamHealth.set(key, next);
-    // Avoid emitting on every message; only push updates when status changes.
-    if (
-      !previous ||
-      previous.status !== next.status ||
-      previous.reason !== next.reason ||
-      previous.connectionStatus !== next.connectionStatus
-    ) {
-      eventBus.emit('refresh:resource-stream-health', next);
-    }
+    this.streamHealth.set(next);
   }
 
   private updateAllHealth(): void {
     const targets = new Map<string, { domain: ResourceDomain; scope: string }>();
     this.subscriptions.forEach((subscription) => {
-      const key = this.healthKey(subscription.domain, subscription.reportScope);
+      const key = `${subscription.domain}::${subscription.reportScope}`;
       if (!targets.has(key)) {
         targets.set(key, { domain: subscription.domain, scope: subscription.reportScope });
       }

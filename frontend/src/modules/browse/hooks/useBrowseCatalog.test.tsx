@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/browse/hooks/useBrowseCatalog.test.tsx
+ *
+ * Verifies Browse catalog hook behavior for scoped refresh-domain lifecycle,
+ * catalog paging, metadata loading, and filter-driven scope changes.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getScopedDomainState: vi.fn(),
   setScopedDomainState: vi.fn(),
   eventUnsubscribe: vi.fn(),
+  refreshFns: new Map<string, (reason?: string) => Promise<unknown>>(),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -23,7 +31,32 @@ vi.mock('@/core/refresh', () => ({
 
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: (...args: unknown[]) => mocks.requestRefreshDomain(...args),
+  setRefreshDomainEnabled: ({
+    domain,
+    scope,
+    enabled,
+  }: {
+    domain: string;
+    scope: string;
+    enabled: boolean;
+  }) => mocks.setScopedDomainEnabled(domain, scope, enabled),
+  readRefreshDomainState: (...args: unknown[]) => mocks.getScopedDomainState(...args),
   useScopedRefreshDomainLifecycle: vi.fn(),
+  useRefreshDomainHandle: ({ domain, scope }: { domain: string | null; scope: string | null }) => {
+    const key = `${domain ?? ''}:${scope ?? ''}`;
+    let refresh = mocks.refreshFns.get(key);
+    if (!refresh) {
+      refresh = (reason = 'user') =>
+        domain && scope
+          ? mocks.requestRefreshDomain({ domain, scope, reason })
+          : Promise.resolve({ status: 'blocked' });
+      mocks.refreshFns.set(key, refresh);
+    }
+    return {
+      state: domain && scope ? mocks.useRefreshScopedDomain(domain, scope) : { status: 'idle' },
+      refresh,
+    };
+  },
 }));
 
 vi.mock('@/core/refresh/store', () => ({
@@ -111,6 +144,7 @@ describe('useBrowseCatalog', () => {
     root = ReactDOM.createRoot(container);
     result = null;
     vi.clearAllMocks();
+    mocks.refreshFns.clear();
   });
 
   afterEach(() => {

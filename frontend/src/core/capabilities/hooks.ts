@@ -7,7 +7,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { readQueryPermissions, requestData } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { useOptionalClusterLifecycle } from '@/core/contexts/ClusterLifecycleContext';
 
@@ -25,68 +24,7 @@ import {
   isTransientClusterInactivePermissionError,
   isTransientPermissionResultError,
 } from './transientPermissionErrors';
-
-interface QueryPayloadItem {
-  id: string;
-  clusterId: string;
-  /**
-   * API group for the target kind. Optional: when present alongside
-   * `version`, the backend routes through the strict GVK resolver. When
-   * absent, it falls back to kind-only resolution.
-   */
-  group?: string;
-  /** API version paired with `group`. */
-  version?: string;
-  resourceKind: string;
-  verb: string;
-  namespace: string;
-  subresource: string;
-  name: string;
-}
-
-interface QueryResponseResult {
-  id: string;
-  clusterId: string;
-  group?: string;
-  version?: string;
-  resourceKind: string;
-  verb: string;
-  namespace: string;
-  subresource: string;
-  name: string;
-  allowed: boolean;
-  source: string;
-  reason: string;
-  error: string;
-}
-
-interface QueryPermissionsResponse {
-  results: QueryResponseResult[];
-}
-
-function callQueryPermissions(queries: QueryPayloadItem[]): Promise<QueryPermissionsResponse> {
-  return requestData<QueryPermissionsResponse>({
-    resource: 'query-permissions',
-    label: 'Query Permissions',
-    adapter: 'permission-read',
-    reason: 'startup',
-    scope: Array.from(
-      new Set(
-        queries.map((query) =>
-          query.namespace
-            ? `cluster:${query.clusterId}|namespace:${query.namespace}`
-            : `cluster:${query.clusterId}`
-        )
-      )
-    ).join(' || '),
-    read: () => readQueryPermissions<QueryPermissionsResponse>(queries),
-  }).then((result) => {
-    if (result.status !== 'executed' || !result.data) {
-      throw new Error(result.blockedReason ?? 'query-permissions-blocked');
-    }
-    return result.data;
-  });
-}
+import { queryPermissions, type QueryPayloadItem } from './permissionRead';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -262,7 +200,7 @@ export const useCapabilities = (
     namedResultsRef.current = nextPending;
     setNamedResultsVersion((v) => v + 1);
 
-    callQueryPermissions(payload)
+    queryPermissions(payload)
       .then((response) => {
         const nextMap = new Map(namedResultsRef.current);
         for (const r of response.results) {

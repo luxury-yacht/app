@@ -1,3 +1,11 @@
+/**
+ * frontend/src/shared/hooks/useObjectActionController.tsx
+ *
+ * Coordinates shared Kubernetes object actions for table rows and object-panel
+ * headers, including permission-aware menus, modals, object-map navigation,
+ * port-forward setup, and destructive action confirmation.
+ */
+
 import { useCallback, useMemo, useState } from 'react';
 import {
   buildObjectActionTarget,
@@ -13,7 +21,7 @@ import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
 import ScaleModal from '@shared/components/modals/ScaleModal';
 import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
-import { isObjectMapSupportedKind } from '@modules/object-panel/components/ObjectPanel/objectMapSupport';
+import { isObjectMapSupportedKind } from '@modules/object-panel/objectPanelRef';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
