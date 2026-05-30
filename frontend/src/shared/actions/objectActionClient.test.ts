@@ -1,3 +1,9 @@
+/**
+ * frontend/src/shared/actions/objectActionClient.test.ts
+ *
+ * Verifies RunObjectAction target identity normalization.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import { buildObjectActionTarget } from './objectActionClient';

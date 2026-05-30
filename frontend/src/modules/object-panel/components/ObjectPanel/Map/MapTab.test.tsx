@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Map/MapTab.test.tsx
+ *
+ * Verifies object-panel map loading through scoped refresh-domain state.
+ */
+
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

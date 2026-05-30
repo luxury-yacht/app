@@ -1,3 +1,9 @@
+/*
+ * backend/objectcatalog/streaming_test.go
+ *
+ * Verifies object catalog streaming snapshots and update behavior.
+ */
+
 package objectcatalog
 
 import (

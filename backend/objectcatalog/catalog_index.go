@@ -1,3 +1,9 @@
+/*
+ * backend/objectcatalog/catalog_index.go
+ *
+ * Owns the in-memory indexes used by the object catalog service.
+ */
+
 package objectcatalog
 
 import (

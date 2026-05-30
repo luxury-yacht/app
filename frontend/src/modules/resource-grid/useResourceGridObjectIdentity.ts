@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/resource-grid/useResourceGridObjectIdentity.ts
+ *
+ * Builds stable resource-grid row keys and full Kubernetes object identity.
+ */
+
 import { useCallback } from 'react';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import {

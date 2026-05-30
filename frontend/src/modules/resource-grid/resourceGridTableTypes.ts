@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/resource-grid/resourceGridTableTypes.ts
+ *
+ * Defines shared contracts for resource-grid table adapters and state.
+ */
+
 import type React from 'react';
 import type { SortConfig, SortDirection } from '@/hooks/useTableSort';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';

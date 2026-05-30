@@ -1,3 +1,9 @@
+/**
+ * frontend/src/shared/actions/objectActionClient.ts
+ *
+ * Wraps backend RunObjectAction calls with full object identity payloads.
+ */
+
 import { RunObjectAction } from '@wailsjs/go/backend/App';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import type { ResourceRef } from '@core/refresh/types';

@@ -1,3 +1,9 @@
+/*
+ * backend/objectcatalog/service.go
+ *
+ * Defines the object catalog service and its shared dependencies.
+ */
+
 package objectcatalog
 
 import (

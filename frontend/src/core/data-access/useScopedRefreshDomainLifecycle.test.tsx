@@ -1,3 +1,9 @@
+/**
+ * frontend/src/core/data-access/useScopedRefreshDomainLifecycle.test.tsx
+ *
+ * Verifies scoped refresh-domain enablement, initial fetch, and cleanup.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

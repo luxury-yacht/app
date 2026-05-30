@@ -1,3 +1,9 @@
+/*
+ * backend/objectcatalog/lookup.go
+ *
+ * Provides indexed object lookup helpers for catalog consumers.
+ */
+
 package objectcatalog
 
 import (

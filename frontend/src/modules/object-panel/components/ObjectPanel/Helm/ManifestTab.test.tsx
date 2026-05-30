@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.test.tsx
+ *
+ * Verifies Helm manifest loading through scoped refresh-domain state.
+ */
+
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

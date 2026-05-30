@@ -80,12 +80,13 @@ You MUST follow these at all times.
 - Add comments where the logic is not self-evident, using plain language.
 - Treat the object catalog as the source of truth for namespace and cluster
   listings. See `backend/AGENTS.md#Object-Catalog`.
-- Before presenting non-documentation work as complete, run `mage qc:prerelease`
+- Before presenting non-documentation, non-comment-only work as complete, run
+  `mage qc:prerelease`
 - You do not need to rerun these checks after every edit during a task, but the
   final reported state must be based on the latest code in the worktree.
 - If a check cannot be run, or fails because of pre-existing unrelated changes,
   state that clearly and include the command and failure.
-- Skip these checks only when the change is documentation-only.
+- Skip these checks only when the change is documentation-only or comment-only.
 - Aim for at least 80% test coverage. Note gaps and ask for guidance if that is
   not feasible.
 

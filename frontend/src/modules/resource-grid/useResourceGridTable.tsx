@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/resource-grid/useResourceGridTable.tsx
+ *
+ * Coordinates shared resource-grid table state, identity, and context menus.
+ */
+
 import { useCallback, useMemo } from 'react';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';

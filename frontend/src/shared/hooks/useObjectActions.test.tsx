@@ -1,3 +1,9 @@
+/**
+ * frontend/src/shared/hooks/useObjectActions.test.tsx
+ *
+ * Verifies object action menu construction from the shared action contract.
+ */
+
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { eventBus } from '@/core/events';

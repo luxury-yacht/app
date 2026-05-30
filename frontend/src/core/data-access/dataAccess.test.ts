@@ -1,3 +1,9 @@
+/**
+ * frontend/src/core/data-access/dataAccess.test.ts
+ *
+ * Verifies brokered data access and refresh-domain lifecycle coordination.
+ */
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getBrokerReadDiagnosticsSnapshot,

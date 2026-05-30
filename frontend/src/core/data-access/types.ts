@@ -1,3 +1,9 @@
+/**
+ * frontend/src/core/data-access/types.ts
+ *
+ * Defines shared request and response contracts for brokered data access.
+ */
+
 import type { RefreshDomain } from '@/core/refresh/types';
 import type { RefreshContext } from '@/core/refresh/RefreshManager';
 import type { DomainSnapshotState } from '@/core/refresh/store';

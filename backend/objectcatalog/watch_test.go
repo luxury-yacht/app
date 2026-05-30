@@ -1,3 +1,9 @@
+/*
+ * backend/objectcatalog/watch_test.go
+ *
+ * Verifies object catalog watcher registration and lifecycle behavior.
+ */
+
 package objectcatalog
 
 import (

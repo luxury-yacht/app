@@ -1,3 +1,9 @@
+/*
+ * backend/refresh/resourcestream/derived_rows.go
+ *
+ * Builds derived resource stream rows from canonical Kubernetes objects.
+ */
+
 package resourcestream
 
 import (

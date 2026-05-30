@@ -1,3 +1,9 @@
+/**
+ * frontend/src/shared/actions/objectActionContract.test.ts
+ *
+ * Verifies shared object action ids, backend actions, and permission metadata.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import {
