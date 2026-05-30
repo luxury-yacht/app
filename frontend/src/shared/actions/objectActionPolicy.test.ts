@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { OBJECT_ACTION_IDS } from './objectActionDescriptors';
+import { OBJECT_ACTION_IDS } from './objectActionContract';
 import {
   objectActionPolicyIds,
   resolveObjectActionPolicy,

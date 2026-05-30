@@ -9,7 +9,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
 const { useTableSortMock } = vi.hoisted(() => ({
   useTableSortMock: vi.fn(

@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   setScopedDomainEnabled: vi.fn(),
   useRefreshScopedDomain: vi.fn(),
   requestRefreshDomain: vi.fn(),
+  requestRefreshDomainState: vi.fn(),
   getScopedDomainState: vi.fn(),
   setScopedDomainState: vi.fn(),
   eventUnsubscribe: vi.fn(),
@@ -31,15 +32,7 @@ vi.mock('@/core/refresh', () => ({
 
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: (...args: unknown[]) => mocks.requestRefreshDomain(...args),
-  setRefreshDomainEnabled: ({
-    domain,
-    scope,
-    enabled,
-  }: {
-    domain: string;
-    scope: string;
-    enabled: boolean;
-  }) => mocks.setScopedDomainEnabled(domain, scope, enabled),
+  requestRefreshDomainState: (...args: unknown[]) => mocks.requestRefreshDomainState(...args),
   readRefreshDomainState: (...args: unknown[]) => mocks.getScopedDomainState(...args),
   useScopedRefreshDomainLifecycle: vi.fn(),
   useRefreshDomainHandle: ({ domain, scope }: { domain: string | null; scope: string | null }) => {
@@ -185,8 +178,7 @@ describe('useBrowseCatalog', () => {
       }
       return { status: 'idle', data: null, scope };
     });
-    mocks.requestRefreshDomain.mockResolvedValue({ status: 'executed' });
-    mocks.getScopedDomainState.mockReturnValue(pageState);
+    mocks.requestRefreshDomainState.mockResolvedValue({ status: 'executed', data: pageState });
 
     await act(async () => {
       root.render(<Harness />);
@@ -205,14 +197,14 @@ describe('useBrowseCatalog', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
+    expect(mocks.requestRefreshDomainState).toHaveBeenCalledWith({
       domain: 'catalog',
       scope: pageScope,
       reason: 'user',
     });
-    expect(mocks.getScopedDomainState).toHaveBeenCalledWith('catalog', pageScope);
-    expect(mocks.setScopedDomainEnabled).toHaveBeenCalledWith('catalog', pageScope, true);
-    expect(mocks.setScopedDomainEnabled).toHaveBeenCalledWith('catalog', pageScope, false);
+    expect(mocks.getScopedDomainState).not.toHaveBeenCalledWith('catalog', pageScope);
+    expect(mocks.setScopedDomainEnabled).not.toHaveBeenCalledWith('catalog', pageScope, true);
+    expect(mocks.setScopedDomainEnabled).not.toHaveBeenCalledWith('catalog', pageScope, false);
     expect(mocks.setScopedDomainState).not.toHaveBeenCalled();
     expect(result?.items.map((item) => item.name)).toEqual(['pod-a', 'pod-b']);
     expect(result?.continueToken).toBeNull();

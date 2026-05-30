@@ -3,16 +3,14 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PanelObjectData } from '../types';
 
-const dataAccessMocks = vi.hoisted(() => ({
-  requestRefreshDomain: vi.fn(() => Promise.resolve()),
-}));
-
 const refreshMocks = vi.hoisted(() => ({
   setScopedDomainEnabled: vi.fn(),
+  fetchScopedDomain: vi.fn(() => Promise.resolve()),
 }));
 
 const refreshStoreMocks = vi.hoisted(() => ({
   useRefreshScopedDomain: vi.fn(),
+  getScopedDomainState: vi.fn(),
 }));
 
 const objectPanelMocks = vi.hoisted(() => ({
@@ -27,16 +25,18 @@ const errorHandlerMocks = vi.hoisted(() => ({
   handle: vi.fn(),
 }));
 
-vi.mock('@/core/data-access', () => ({
-  requestRefreshDomain: dataAccessMocks.requestRefreshDomain,
-}));
-
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: refreshMocks,
+  useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
 }));
 
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
+  getScopedDomainState: refreshStoreMocks.getScopedDomainState,
+}));
+
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => true,
 }));
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
@@ -151,8 +151,8 @@ beforeEach(() => {
     data: null,
     error: null,
   };
-  dataAccessMocks.requestRefreshDomain.mockClear();
   refreshMocks.setScopedDomainEnabled.mockClear();
+  refreshMocks.fetchScopedDomain.mockClear();
   objectPanelMocks.openWithObject.mockClear();
   navigateMocks.navigateToView.mockClear();
   errorHandlerMocks.handle.mockClear();

@@ -6,7 +6,7 @@ import {
   OBJECT_ACTION_IDS,
   objectActionLabel,
   type ObjectActionId,
-} from '@shared/actions/objectActionDescriptors';
+} from '@shared/actions/objectActionContract';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 
 const findAction = (

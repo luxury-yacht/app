@@ -7,7 +7,7 @@
 
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import type { ResourceLink } from '@core/refresh/types';
-import { OBJECT_ACTION_IDS, type ObjectActionId } from './objectActionDescriptors';
+import { OBJECT_ACTION_IDS, type ObjectActionId } from './objectActionContract';
 
 const WORKLOAD_KIND_MAP: Record<string, string> = {
   Deployment: 'Deployment',

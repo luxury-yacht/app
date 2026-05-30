@@ -20,7 +20,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import { useResourceGridObjectIdentity } from '@shared/hooks/useResourceGridObjectIdentity';
+import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 
 // Data interface for configuration resources (ConfigMaps, Secrets)
 export interface ConfigData {
@@ -79,13 +79,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       openWithObject,
       navigateToView,
     });
-    const {
-      key: resourceKey,
-      ref: resourceRef,
-      open: openResource,
-      navigate: navigateResource,
-      rowIdentity: resourceRowIdentity,
-    } = resourceIdentity;
+    const { ref: resourceRef, open: openResource, navigate: navigateResource } = resourceIdentity;
 
     const columns: GridColumnDefinition<ConfigData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<ConfigData>[] = [
@@ -152,8 +146,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       namespace,
       columns,
       data,
-      keyExtractor: resourceKey,
-      rowIdentity: resourceRowIdentity,
+      objectIdentity: resourceIdentity,
       defaultSort: { key: 'name', direction: 'asc' },
       availableKinds: kindOptions,
       showKindDropdown: true,
@@ -194,7 +187,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
           loading={loading}
-          keyExtractor={resourceKey}
+          keyExtractor={resourceIdentity.key}
           onRowClick={openResource}
           tableClassName="ns-config-table"
           enableContextMenu={true}

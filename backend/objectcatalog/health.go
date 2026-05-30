@@ -6,10 +6,7 @@
 
 package objectcatalog
 
-import (
-	"sort"
-	"time"
-)
+import "time"
 
 type healthStatus struct {
 	State               HealthState
@@ -88,35 +85,7 @@ func (s *Service) logDebug(msg string) {
 }
 
 func (s *Service) rebuildCacheFromItems(items map[string]Summary, descriptors []Descriptor) {
-	kindSet := make(map[string]bool)
-	namespaceSet := make(map[string]struct{})
-	chunks := make([]*summaryChunk, 0, 1)
-
-	if len(items) > 0 {
-		summaries := make([]Summary, 0, len(items))
-		for _, summary := range items {
-			summaries = append(summaries, summary)
-			if summary.Kind != "" {
-				// Track whether the kind is namespaced (Scope == ScopeNamespace)
-				kindSet[summary.Kind] = summary.Scope == ScopeNamespace
-			}
-			if summary.Namespace != "" {
-				namespaceSet[summary.Namespace] = struct{}{}
-			}
-		}
-		sort.Slice(summaries, func(i, j int) bool {
-			if summaries[i].Kind != summaries[j].Kind {
-				return summaries[i].Kind < summaries[j].Kind
-			}
-			if summaries[i].Namespace != summaries[j].Namespace {
-				return summaries[i].Namespace < summaries[j].Namespace
-			}
-			return summaries[i].Name < summaries[j].Name
-		})
-		chunkCopy := make([]Summary, len(summaries))
-		copy(chunkCopy, summaries)
-		chunks = append(chunks, &summaryChunk{items: chunkCopy})
-	}
-
-	s.publishStreamingState(chunks, kindSet, namespaceSet, descriptors, true)
+	s.mu.Lock()
+	s.catalogIndex.rebuildCacheFromItems(items, descriptors)
+	s.mu.Unlock()
 }

@@ -24,6 +24,7 @@ func TestCloneSetCopiesValues(t *testing.T) {
 func newTestServiceForStreaming() *Service {
 	return &Service{
 		now:               time.Now,
+		catalogIndex:      newCatalogIndex(),
 		streamSubscribers: make(map[int]chan StreamingUpdate),
 	}
 }

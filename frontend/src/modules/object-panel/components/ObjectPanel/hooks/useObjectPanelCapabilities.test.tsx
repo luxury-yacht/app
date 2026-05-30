@@ -110,6 +110,9 @@ describe('useObjectPanelCapabilities', () => {
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
+      clusterId: 'cluster-a',
+      group: 'apps',
+      version: 'v1',
     };
 
     const result = await renderHook({
@@ -134,7 +137,13 @@ describe('useObjectPanelCapabilities', () => {
     expect(descriptors).toContainEqual(
       expect.objectContaining({
         id: 'scale',
+        clusterId: 'cluster-a',
         verb: 'update',
+        group: 'apps',
+        version: 'v1',
+        resourceKind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
         subresource: 'scale',
       })
     );

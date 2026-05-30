@@ -7,12 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  readRefreshDomainState,
-  requestRefreshDomain,
-  setRefreshDomainEnabled,
-  useRefreshDomainHandle,
-} from '@/core/data-access';
+import { requestRefreshDomainState, useRefreshDomainHandle } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { getMaxTableRows } from '@/core/settings/appPreferences';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
@@ -218,12 +213,10 @@ export function useBrowseCatalog({
       { clusterId, filters, pageLimit, pinnedNamespaces },
       continueToken
     );
-    // Enable the paginated scope and fetch it directly.
-    setRefreshDomainEnabled({ domain: 'catalog', scope: normalizedScope, enabled: true });
     const baseScopeAtRequest = catalogScopeRef.current;
     void (async () => {
       try {
-        const result = await requestRefreshDomain({
+        const result = await requestRefreshDomainState({
           domain: 'catalog',
           scope: normalizedScope,
           reason: 'user',
@@ -232,7 +225,10 @@ export function useBrowseCatalog({
           return;
         }
 
-        const pageResult = readRefreshDomainState('catalog', normalizedScope);
+        const pageResult = result.data;
+        if (!pageResult) {
+          return;
+        }
         const payload = pageResult.data as CatalogSnapshotPayload | null;
         if (!payload || (pageResult.status !== 'ready' && pageResult.status !== 'updating')) {
           return;
@@ -253,7 +249,6 @@ export function useBrowseCatalog({
       } catch (error) {
         console.error('Failed to load additional catalog page', error);
       } finally {
-        setRefreshDomainEnabled({ domain: 'catalog', scope: normalizedScope, enabled: false });
         if (catalogScopeRef.current === baseScopeAtRequest) {
           setIsRequestingMore(false);
         }

@@ -10,7 +10,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JobsTab } from './JobsTab';
 import { types } from '@wailsjs/go/models';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
 // Track calls to useGridTablePersistence so we can inspect clusterIdentity.
 const gridTablePropsRef: { current: any } = { current: null };

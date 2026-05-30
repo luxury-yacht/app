@@ -205,7 +205,7 @@ func (s *Service) broadcastStreaming(ready bool) {
 func (s *Service) CachesReady() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.cachesReady
+	return s.catalogIndex.cachesAreReady()
 }
 
 // publishStreamingState updates the streaming state in the service.
@@ -219,24 +219,15 @@ func (s *Service) publishStreamingState(
 	chunkSnapshot := make([]*summaryChunk, len(chunks))
 	copy(chunkSnapshot, chunks)
 
-	kindSnapshot := snapshotSortedKindInfos(kindSet)
-	namespaceSnapshot := snapshotSortedKeys(namespaceSet)
-
 	s.mu.Lock()
-	s.sortedChunks = chunkSnapshot
-	s.cachedKinds = kindSnapshot
-	s.cachedNamespaces = namespaceSnapshot
-	if descriptors != nil {
-		s.cachedDescriptors = append([]Descriptor(nil), descriptors...)
-	}
-	s.cachesReady = ready
+	s.catalogIndex.publishStreamingState(chunkSnapshot, kindSet, namespaceSet, descriptors, ready)
 	s.mu.Unlock()
 }
 
 // setFirstBatchLatency records the time-to-first-batch measurement.
 func (s *Service) setFirstBatchLatency(latency time.Duration) {
 	s.mu.Lock()
-	s.lastFirstBatchLatency = latency
+	s.catalogIndex.setFirstBatchLatency(latency)
 	s.mu.Unlock()
 }
 
@@ -244,5 +235,5 @@ func (s *Service) setFirstBatchLatency(latency time.Duration) {
 func (s *Service) FirstBatchLatency() time.Duration {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.lastFirstBatchLatency
+	return s.catalogIndex.firstBatchLatency()
 }

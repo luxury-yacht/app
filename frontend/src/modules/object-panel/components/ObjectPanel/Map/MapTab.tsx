@@ -10,18 +10,15 @@
  * The object-map scoped domain stays enabled while the tab is active,
  * so the shared refresh manager polls it on the configured cadence.
  */
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback } from 'react';
 import './MapTab.css';
 import { errorHandler } from '@/utils/errorHandler';
-import { requestRefreshDomain } from '@/core/data-access';
-import { refreshOrchestrator } from '@/core/refresh';
-import { useRefreshScopedDomain } from '@/core/refresh/store';
+import { useRefreshDomainHandle } from '@/core/data-access';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@/core/refresh/types';
 import ObjectMap from '@modules/object-map/ObjectMap';
 import { buildResolvedFromMapRef } from '@modules/object-map/objectMapNavigation';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { INACTIVE_SCOPE } from '../constants';
 import type { PanelObjectData } from '../types';
 
 interface MapTabProps {
@@ -41,48 +38,27 @@ const isRefreshingState = (status: string): boolean =>
 const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
-  const snapshot = useRefreshScopedDomain('object-map', mapScope ?? INACTIVE_SCOPE);
-
-  // Enable the scoped domain while the tab is active. preserveState on
-  // unmount keeps the store entry around so diagnostics still sees it
-  // and a remount renders from cache; full eviction happens when the
-  // owning panel closes (evictPanelScopes).
-  useEffect(() => {
-    if (!mapScope) {
-      return;
-    }
-    const enabled = Boolean(isActive && objectData);
-    refreshOrchestrator.setScopedDomainEnabled('object-map', mapScope, enabled);
-    return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-map', mapScope, false, {
-        preserveState: true,
-      });
-    };
-  }, [mapScope, isActive, objectData]);
+  const handleFetchError = useCallback((error: unknown) => {
+    errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
+      source: 'object-map-fetch',
+    });
+  }, []);
+  const { state: snapshot, refresh: refreshMap } = useRefreshDomainHandle({
+    domain: 'object-map',
+    scope: mapScope,
+    enabled: Boolean(isActive && objectData && mapScope),
+    preserveState: true,
+    fetchOnEnable: isActive && objectData && mapScope ? 'startup' : false,
+    onFetchError: handleFetchError,
+  });
 
   const fetchMap = useCallback(
     (reason: 'startup' | 'user' = 'startup') => {
       if (!mapScope) return;
-      void requestRefreshDomain({
-        domain: 'object-map',
-        scope: mapScope,
-        reason,
-      }).catch((error) => {
-        errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
-          source: 'object-map-fetch',
-        });
-      });
+      void refreshMap(reason, mapScope).catch(handleFetchError);
     },
-    [mapScope]
+    [handleFetchError, mapScope, refreshMap]
   );
-
-  // Fetch immediately on activation; the enabled scoped domain handles
-  // subsequent polling, and the toolbar exposes an explicit refresh.
-  useEffect(() => {
-    if (isActive && objectData && mapScope) {
-      fetchMap('startup');
-    }
-  }, [fetchMap, isActive, objectData, mapScope]);
 
   const payload = snapshot.data as ObjectMapSnapshotPayload | null;
   const loading =

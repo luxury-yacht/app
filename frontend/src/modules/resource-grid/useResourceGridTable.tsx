@@ -34,6 +34,10 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
   ...common
 }: ClusterResourceGridTableParams<T>): ResourceGridTableResult<T> {
   const { selectedClusterId } = useKubeconfig();
+  const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key;
+  if (!resolvedKeyExtractor) {
+    throw new Error('resource grid requires keyExtractor or objectIdentity');
+  }
   const persistence = useGridTablePersistence<T>({
     viewId,
     clusterIdentity: selectedClusterId,
@@ -41,7 +45,7 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
     isNamespaceScoped: false,
     columns,
     data: persistenceData ?? data,
-    keyExtractor,
+    keyExtractor: resolvedKeyExtractor,
     filterOptions: { ...(filterOptions ?? {}), isNamespaceScoped: false },
   });
 
@@ -49,7 +53,8 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
     ...common,
     data,
     columns,
-    keyExtractor,
+    keyExtractor: resolvedKeyExtractor,
+    rowIdentity: common.rowIdentity ?? common.objectIdentity?.rowIdentity,
     persistence,
     defaultSortKey,
     defaultSortDirection,
@@ -70,12 +75,16 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
   showNamespaceFilters = false,
   ...common
 }: NamespaceResourceGridTableParams<T>): ResourceGridTableResult<T> {
+  const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key;
+  if (!resolvedKeyExtractor) {
+    throw new Error('resource grid requires keyExtractor or objectIdentity');
+  }
   const persistence = useNamespaceGridTablePersistence<T>({
     viewId,
     namespace,
     columns,
     data: persistenceData ?? data,
-    keyExtractor,
+    keyExtractor: resolvedKeyExtractor,
     defaultSort,
     filterOptions: {
       ...(filterOptions ?? {}),
@@ -87,7 +96,8 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
     ...common,
     data,
     columns,
-    keyExtractor,
+    keyExtractor: resolvedKeyExtractor,
+    rowIdentity: common.rowIdentity ?? common.objectIdentity?.rowIdentity,
     persistence: {
       ...persistence,
       setSortConfig: persistence.onSortChange,
@@ -110,7 +120,12 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
   defaultSort = { key: 'name', direction: 'asc' },
   diagnosticsLabel,
   rowIdentity,
+  objectIdentity,
 }: ObjectPanelResourceGridTableParams<T>): ResourceGridTableResult<T> {
+  const resolvedKeyExtractor = keyExtractor ?? objectIdentity?.key;
+  if (!resolvedKeyExtractor) {
+    throw new Error('resource grid requires keyExtractor or objectIdentity');
+  }
   const persistence = useGridTablePersistence<T>({
     viewId,
     clusterIdentity: clusterIdentity ?? '',
@@ -119,7 +134,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
     isNamespaceScoped: false,
     columns,
     data,
-    keyExtractor,
+    keyExtractor: resolvedKeyExtractor,
     filterOptions: { ...(filterOptions ?? {}), isNamespaceScoped: false },
   });
 
@@ -129,7 +144,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
     defaultSortKey: defaultSort.key,
     defaultSortDirection: defaultSort.direction ?? 'asc',
     diagnosticsLabel,
-    rowIdentity,
+    rowIdentity: rowIdentity ?? objectIdentity?.rowIdentity,
     persistence,
   });
 

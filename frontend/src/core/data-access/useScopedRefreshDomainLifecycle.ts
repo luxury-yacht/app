@@ -8,7 +8,8 @@
 import { useEffect, useRef } from 'react';
 
 import type { RefreshDomain } from '@/core/refresh/types';
-import { setRefreshDomainEnabled } from './dataAccess';
+import { requestRefreshDomain, setRefreshDomainEnabled } from './dataAccess';
+import type { DataRequestReason } from './types';
 
 const PRESERVE_SCOPED_STATE = { preserveState: true } as const;
 
@@ -17,6 +18,8 @@ interface ScopedRefreshDomainLifecycleOptions {
   scope: string | null | undefined;
   enabled: boolean;
   preserveState?: boolean;
+  fetchOnEnable?: DataRequestReason | false;
+  onFetchError?: (error: unknown) => void;
 }
 
 interface ActiveScope {
@@ -43,8 +46,15 @@ export function useScopedRefreshDomainLifecycle({
   scope,
   enabled,
   preserveState = false,
+  fetchOnEnable = false,
+  onFetchError,
 }: ScopedRefreshDomainLifecycleOptions): void {
   const activeRef = useRef<ActiveScope | null>(null);
+  const onFetchErrorRef = useRef(onFetchError);
+
+  useEffect(() => {
+    onFetchErrorRef.current = onFetchError;
+  }, [onFetchError]);
 
   useEffect(() => {
     const next = domain && scope ? { domain, scope } : null;
@@ -61,6 +71,23 @@ export function useScopedRefreshDomainLifecycle({
     }
 
     setScopeEnabled(next, enabled, preserveState);
+    if (enabled && fetchOnEnable) {
+      void requestRefreshDomain({
+        domain: next.domain,
+        scope: next.scope,
+        reason: fetchOnEnable,
+      }).catch((error) => {
+        const handler = onFetchErrorRef.current;
+        if (handler) {
+          handler(error);
+          return;
+        }
+        console.error(
+          `Failed to fetch refresh domain ${next.domain} for scope ${next.scope}`,
+          error
+        );
+      });
+    }
 
     return () => {
       setScopeEnabled(next, false, preserveState);
@@ -68,5 +95,5 @@ export function useScopedRefreshDomainLifecycle({
         activeRef.current = null;
       }
     };
-  }, [domain, enabled, preserveState, scope]);
+  }, [domain, enabled, fetchOnEnable, preserveState, scope]);
 }

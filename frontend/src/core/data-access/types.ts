@@ -1,5 +1,7 @@
 import type { RefreshDomain } from '@/core/refresh/types';
 import type { RefreshContext } from '@/core/refresh/RefreshManager';
+import type { DomainSnapshotState } from '@/core/refresh/store';
+import type { DomainPayloadMap } from '@/core/refresh/types';
 
 export type DataRequestReason = 'background' | 'startup' | 'user';
 export type DataAccessAdapter =
@@ -19,6 +21,14 @@ export interface RefreshDomainRequest {
   label?: string;
 }
 
+export interface RefreshDomainStateRequest<
+  K extends RefreshDomain = RefreshDomain,
+> extends RefreshDomainRequest {
+  domain: K;
+  cleanup?: boolean;
+  preserveState?: boolean;
+}
+
 export interface DataRequestResult {
   status: 'executed' | 'blocked';
   blockedReason?: DataBlockedReason;
@@ -36,6 +46,10 @@ export interface DataReadRequest<T> {
 export interface DataReadResult<T> extends DataRequestResult {
   data?: T;
 }
+
+export type RefreshDomainStateResult<K extends RefreshDomain = RefreshDomain> = DataReadResult<
+  DomainSnapshotState<DomainPayloadMap[K]>
+>;
 
 export interface ContextRefreshRequest {
   reason: DataRequestReason;

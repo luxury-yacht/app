@@ -10,6 +10,7 @@ import type {
   GridTableVirtualizationOptions,
 } from '@shared/components/tables/GridTable';
 import type { GridTableFilterPersistenceOptions } from '@shared/components/tables/persistence/gridTablePersistence';
+import type { ResourceGridObjectIdentityAdapter } from './useResourceGridObjectIdentity';
 
 export interface GridTableBindingProps<T> {
   data: T[];
@@ -33,7 +34,8 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   viewId: string;
   data: T[];
   columns: GridColumnDefinition<T>[];
-  keyExtractor: (item: T, index: number) => string;
+  keyExtractor?: (item: T, index: number) => string;
+  objectIdentity?: ResourceGridObjectIdentityAdapter<T>;
   availableKinds?: string[];
   diagnosticsLabel?: string;
   filterAccessors?: GridTableFilterConfig<T>['accessors'];
@@ -96,6 +98,7 @@ export interface ResourceGridCommonParams<T extends ResourceGridTableRow> extend
   'viewId' | 'filterOptions'
 > {
   persistence: ResourceGridPersistence<T>;
+  keyExtractor: (item: T, index: number) => string;
   defaultSortKey?: string;
   defaultSortDirection?: SortDirection;
   namespace?: string;

@@ -6,16 +6,23 @@ import {
 
 const hoisted = vi.hoisted(() => ({
   fetchScopedDomain: vi.fn(),
+  setScopedDomainEnabled: vi.fn(),
   triggerManualRefreshForContext: vi.fn(),
+  getScopedDomainState: vi.fn(),
   getAutoRefreshEnabled: vi.fn(),
 }));
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: {
     fetchScopedDomain: (...args: unknown[]) => hoisted.fetchScopedDomain(...args),
+    setScopedDomainEnabled: (...args: unknown[]) => hoisted.setScopedDomainEnabled(...args),
     triggerManualRefreshForContext: (...args: unknown[]) =>
       hoisted.triggerManualRefreshForContext(...args),
   },
+}));
+
+vi.mock('@/core/refresh/store', () => ({
+  getScopedDomainState: (...args: unknown[]) => hoisted.getScopedDomainState(...args),
 }));
 
 vi.mock('@/core/settings/appPreferences', () => ({
@@ -27,6 +34,7 @@ import {
   requestContextRefresh,
   requestData,
   requestRefreshDomain,
+  requestRefreshDomainState,
 } from './dataAccess';
 
 describe('dataAccess', () => {
@@ -34,6 +42,7 @@ describe('dataAccess', () => {
     vi.clearAllMocks();
     resetBrokerReadDiagnosticsForTesting();
     hoisted.fetchScopedDomain.mockResolvedValue(undefined);
+    hoisted.getScopedDomainState.mockReturnValue({ status: 'ready', data: null });
     hoisted.triggerManualRefreshForContext.mockResolvedValue(undefined);
     hoisted.getAutoRefreshEnabled.mockReturnValue(true);
   });
@@ -101,6 +110,55 @@ describe('dataAccess', () => {
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('cluster-overview', 'cluster:alpha', {
       isManual: false,
     });
+  });
+
+  it('owns enable, fetch, read, and cleanup ordering for one-shot scoped refresh reads', async () => {
+    const state = {
+      status: 'ready',
+      data: { items: [] },
+      scope: 'cluster:alpha|limit=2',
+    };
+    hoisted.getScopedDomainState.mockReturnValue(state);
+
+    await expect(
+      requestRefreshDomainState({
+        domain: 'catalog',
+        scope: 'cluster:alpha|limit=2',
+        reason: 'user',
+        preserveState: true,
+      })
+    ).resolves.toEqual({
+      status: 'executed',
+      data: state,
+    });
+
+    expect(hoisted.setScopedDomainEnabled).toHaveBeenNthCalledWith(
+      1,
+      'catalog',
+      'cluster:alpha|limit=2',
+      true,
+      { preserveState: true }
+    );
+    expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2', {
+      isManual: true,
+    });
+    expect(hoisted.getScopedDomainState).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2');
+    expect(hoisted.setScopedDomainEnabled).toHaveBeenNthCalledWith(
+      2,
+      'catalog',
+      'cluster:alpha|limit=2',
+      false,
+      { preserveState: true }
+    );
+    expect(hoisted.setScopedDomainEnabled.mock.invocationCallOrder[0]).toBeLessThan(
+      hoisted.fetchScopedDomain.mock.invocationCallOrder[0]
+    );
+    expect(hoisted.fetchScopedDomain.mock.invocationCallOrder[0]).toBeLessThan(
+      hoisted.getScopedDomainState.mock.invocationCallOrder[0]
+    );
+    expect(hoisted.getScopedDomainState.mock.invocationCallOrder[0]).toBeLessThan(
+      hoisted.setScopedDomainEnabled.mock.invocationCallOrder[1]
+    );
   });
 
   it('executes generic cluster-data reads through the shared request path', async () => {

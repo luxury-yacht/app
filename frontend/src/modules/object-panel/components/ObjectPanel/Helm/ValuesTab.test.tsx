@@ -26,6 +26,7 @@ const refreshMocks = vi.hoisted(() => ({
 
 const refreshStoreMocks = vi.hoisted(() => ({
   useRefreshScopedDomain: vi.fn(),
+  getScopedDomainState: vi.fn(),
 }));
 
 const autoRefreshLoadingState = vi.hoisted(() => ({
@@ -111,10 +112,12 @@ vi.mock('@ui/shortcuts', () => ({
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: refreshMocks,
+  useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
 }));
 
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
+  getScopedDomainState: refreshStoreMocks.getScopedDomainState,
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
@@ -411,7 +414,8 @@ describe('ValuesTab', () => {
     expect(refreshMocks.setScopedDomainEnabled).toHaveBeenCalledWith(
       'object-helm-values',
       'ns:helmrelease:chart',
-      true
+      true,
+      { preserveState: true }
     );
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-helm-values',

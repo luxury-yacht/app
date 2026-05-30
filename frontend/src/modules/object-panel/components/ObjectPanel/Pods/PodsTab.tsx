@@ -29,7 +29,7 @@ import {
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import { useResourceGridObjectIdentity } from '@shared/hooks/useResourceGridObjectIdentity';
+import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 
 interface PodsTabProps {
   pods: PodSnapshotEntry[];
@@ -85,13 +85,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     openWithObject,
     navigateToView,
   });
-  const {
-    key: podKey,
-    ref: podRef,
-    open: openPod,
-    navigate: navigatePod,
-    rowIdentity: podRowIdentity,
-  } = podIdentity;
+  const { ref: podRef, open: openPod, navigate: navigatePod } = podIdentity;
   // Ensure pod navigation keeps the active cluster context for object detail scopes.
   const getPodClusterMeta = useCallback(
     (pod: PodSnapshotEntry) => ({
@@ -247,9 +241,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     enabled: Boolean(objectData?.clusterId),
     data: pods,
     columns,
-    keyExtractor: podKey,
+    objectIdentity: podIdentity,
     defaultSort: { key: 'name', direction: 'asc' },
-    rowIdentity: podRowIdentity,
     diagnosticsLabel: 'Object Panel Pods',
     filterAccessors: {
       getKind: () => 'Pod',
@@ -286,7 +279,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             columns={columns}
             diagnosticsLabel="Object Panel Pods"
             diagnosticsMode="live"
-            keyExtractor={podKey}
+            keyExtractor={podIdentity.key}
             onRowClick={handlePodOpen}
             enableContextMenu
             getCustomContextMenuItems={(pod) => objectActions.getMenuItems(podRef(pod))}

@@ -24,7 +24,7 @@ import {
   OBJECT_ACTION_IDS,
   objectActionInvolvedObjectLabel,
   objectActionLabel,
-} from '@shared/actions/objectActionDescriptors';
+} from '@shared/actions/objectActionContract';
 import {
   normalizeKind,
   resolveObjectActionPolicy,
