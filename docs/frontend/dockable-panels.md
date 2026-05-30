@@ -16,13 +16,17 @@ cluster/object scoped.
 - The visible group shell owns focus and keyboard behavior for the group.
 - Closing a panel tab must clean only that tab's state and must not affect other
   clusters or groups.
+- Transient unmounts such as cluster-tab switches should preserve object-panel
+  refresh/cache state. Actual panel close is the cache-eviction boundary.
 - Layout CSS and measured group geometry are part of behavior; do not remove
   geometry transfer without replacing it.
 
 ## Ownership
 
 - Dockable provider/state/actions: `frontend/src/ui/dockable`
-- Object panel integration: `frontend/src/modules/object-panel`
+- Object panel integration and cache eviction:
+  `frontend/src/modules/object-panel`,
+  `frontend/src/modules/object-panel/contexts/ObjectPanelStateContext.tsx`
 - Shared tab behavior: [tabs.md](tabs.md)
 - Keyboard/focus behavior: [keyboard.md](keyboard.md)
 
@@ -43,7 +47,9 @@ When changing dockable behavior:
 2. Verify docked, floating, grouped, close, and move behavior.
 3. Confirm focus stays in the visible group shell.
 4. Confirm cluster tab switches do not rewrite object-panel identity.
-5. Add reducer tests for state changes and component tests for visible behavior.
+5. Confirm unmount preserves scoped refresh state and close evicts only the
+   closed panel's scopes.
+6. Add reducer tests for state changes and component tests for visible behavior.
 
 ## Validation
 

@@ -18,6 +18,9 @@ Panel. They are not Application Logs and they are not Node Logs.
   startup paths for the same consumer.
 - Initial stream snapshots must replace preserved client buffers when the scope
   changes.
+- A reconnect handshake with `reset=true` and no entries must preserve the
+  existing client buffer and keep the client-visible sequence monotonic. A
+  non-empty reset payload replaces the buffer deliberately.
 
 ## Ownership
 
@@ -35,8 +38,10 @@ When changing container logs:
 1. Trace object/workload identity into the log scope.
 2. Confirm live stream and fallback fetch agree on target selection.
 3. Verify scope changes reset or preserve buffers deliberately.
-4. Keep frontend filters separate from backend target reduction.
-5. Test pod, workload, missing container, previous logs, fallback, and stream
+4. Verify reconnect/remount behavior does not show an initial-load state when
+   cached entries still exist.
+5. Keep frontend filters separate from backend target reduction.
+6. Test pod, workload, missing container, previous logs, fallback, and stream
    cleanup behavior as relevant.
 
 ## Validation

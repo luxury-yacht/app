@@ -18,17 +18,23 @@ must not poison other selected clusters.
 
 ## Ownership
 
-- Backend auth state manager: `backend/authstate`
+- Backend auth state manager: `backend/internal/authstate`
 - Cluster client auth wiring: `backend/cluster_clients.go`
-- Auth events and recovery lifecycle: backend app lifecycle/refresh setup paths
-- Frontend cluster/auth context: `frontend/src/modules/kubernetes/config`
+- Auth events and recovery lifecycle: `backend/cluster_auth.go`, backend app
+  lifecycle/refresh setup paths
+- Frontend cluster/auth context: `frontend/src/core/contexts/AuthErrorContext.tsx`
 - Refresh pause/recovery behavior: `frontend/src/core/refresh`
 
 ## State Model
 
-Use explicit states such as valid, failed, recovering, and unknown instead of
+Use explicit states such as valid, invalid, recovering, and unknown instead of
 deriving behavior from error strings alone. Error capture may detect auth-like
 stderr, but durable state belongs to the per-cluster auth manager.
+
+Backend auth events are `cluster:auth:failed`, `cluster:auth:recovering`,
+`cluster:auth:recovered`, and `cluster:auth:progress`. Payloads must include
+`clusterId` and enough cluster metadata for the frontend to update only the
+affected cluster.
 
 Recovery must prove both sides of the gate:
 

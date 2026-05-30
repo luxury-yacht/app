@@ -19,9 +19,16 @@ object panel. They are snapshot/fetch based, not container log streaming.
 
 - Backend node log helpers: `backend/resources/nodes/logs.go`
 - Object-panel node log UI:
+  `frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs`
+- Shared log viewer infrastructure:
   `frontend/src/modules/object-panel/components/ObjectPanel/Logs`
 - Permission/capability behavior:
   [../../architecture/permissions.md](../../architecture/permissions.md)
+
+Node log discovery and fetches go through
+`frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs/nodeLogsApi.ts`
+and `frontend/src/core/data-access/readers.ts`. Discovery is cached by
+`clusterId + nodeName`; do not leak results across clusters.
 
 ## Change Checklist
 
