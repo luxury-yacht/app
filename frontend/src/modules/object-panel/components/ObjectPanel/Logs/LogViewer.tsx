@@ -10,6 +10,7 @@ import {
   readContainerLogs,
   readContainerLogsScopeContainers,
   requestData,
+  setRefreshDomainEnabled,
 } from '@/core/data-access';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
@@ -941,7 +942,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     refreshOrchestrator.stopStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope, {
       reset: false,
     });
-    refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, false);
+    setRefreshDomainEnabled({
+      domain: CONTAINER_LOGS_DOMAIN,
+      scope: containerLogsScope,
+      enabled: false,
+    });
 
     setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previous) => {
       const previousPayload = previous.data ?? {

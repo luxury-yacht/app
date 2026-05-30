@@ -16,6 +16,7 @@ import {
 import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
 import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useGridTableBinding } from './useGridTableBinding';
 import type {
@@ -27,6 +28,15 @@ import type {
   ResourceGridTableResult,
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
+
+const useDefaultResourceGridKey = <T extends ResourceGridTableRow>(
+  fallbackClusterId?: string | null
+) =>
+  useCallback(
+    (item: T) => buildRequiredCanonicalObjectRowKey(item, { fallbackClusterId }),
+    [fallbackClusterId]
+  );
+
 export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
   viewId,
   data,
@@ -40,10 +50,8 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
   ...common
 }: ClusterResourceGridTableParams<T>): ResourceGridTableResult<T> {
   const { selectedClusterId } = useKubeconfig();
-  const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key;
-  if (!resolvedKeyExtractor) {
-    throw new Error('resource grid requires keyExtractor or objectIdentity');
-  }
+  const defaultKeyExtractor = useDefaultResourceGridKey<T>(selectedClusterId);
+  const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key ?? defaultKeyExtractor;
   const persistence = useGridTablePersistence<T>({
     viewId,
     clusterIdentity: selectedClusterId,
@@ -81,10 +89,9 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
   showNamespaceFilters = false,
   ...common
 }: NamespaceResourceGridTableParams<T>): ResourceGridTableResult<T> {
-  const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key;
-  if (!resolvedKeyExtractor) {
-    throw new Error('resource grid requires keyExtractor or objectIdentity');
-  }
+  const { selectedClusterId } = useKubeconfig();
+  const defaultKeyExtractor = useDefaultResourceGridKey<T>(selectedClusterId);
+  const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key ?? defaultKeyExtractor;
   const persistence = useNamespaceGridTablePersistence<T>({
     viewId,
     namespace,
@@ -128,10 +135,8 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
   rowIdentity,
   objectIdentity,
 }: ObjectPanelResourceGridTableParams<T>): ResourceGridTableResult<T> {
-  const resolvedKeyExtractor = keyExtractor ?? objectIdentity?.key;
-  if (!resolvedKeyExtractor) {
-    throw new Error('resource grid requires keyExtractor or objectIdentity');
-  }
+  const defaultKeyExtractor = useDefaultResourceGridKey<T>(clusterIdentity);
+  const resolvedKeyExtractor = keyExtractor ?? objectIdentity?.key ?? defaultKeyExtractor;
   const persistence = useGridTablePersistence<T>({
     viewId,
     clusterIdentity: clusterIdentity ?? '',
@@ -147,6 +152,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
   const binding = useGridTableBinding({
     data,
     columns,
+    keyExtractor: resolvedKeyExtractor,
     defaultSortKey: defaultSort.key,
     defaultSortDirection: defaultSort.direction ?? 'asc',
     diagnosticsLabel,
@@ -186,12 +192,16 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
   diagnosticsLabel,
   filterAccessors,
   filterOptions,
+  keyExtractor,
   rowIdentity,
   virtualization = GRIDTABLE_VIRTUALIZATION_DEFAULT,
 }: QueryResourceGridTableParams<T>): ResourceGridTableResult<T> {
+  const defaultKeyExtractor = useDefaultResourceGridKey<T>();
+  const resolvedKeyExtractor = keyExtractor ?? defaultKeyExtractor;
   const binding = useGridTableBinding({
     data,
     columns,
+    keyExtractor: resolvedKeyExtractor,
     defaultSortKey,
     defaultSortDirection,
     diagnosticsLabel,
@@ -257,6 +267,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   kindDropdownSearchable = false,
   metadataSearch,
   rowIdentity,
+  keyExtractor,
   persistence,
   defaultSortKey,
   defaultSortDirection = 'asc',
@@ -269,6 +280,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   const binding = useGridTableBinding({
     data,
     columns,
+    keyExtractor,
     defaultSortKey,
     defaultSortDirection,
     diagnosticsLabel,

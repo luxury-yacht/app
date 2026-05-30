@@ -17,10 +17,12 @@ import {
   readCatalogObjectMatchForRef,
   requestData,
   requestRefreshDomain,
+  resetRefreshDomain,
+  setRefreshDomainEnabled,
 } from '@/core/data-access';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
-import { refreshOrchestrator, useRefreshScopedDomain } from '@core/refresh';
+import { useRefreshScopedDomain } from '@core/refresh';
 import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
 import { computeBudgetedLineDiff, type LineDiffResult } from '@shared/components/diff/lineDiff';
 import { OBJECT_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
@@ -304,7 +306,7 @@ const useCatalogDiffSnapshot = (
       return;
     }
 
-    refreshOrchestrator.setScopedDomainEnabled('catalog-diff', scope, true);
+    setRefreshDomainEnabled({ domain: 'catalog-diff', scope, enabled: true });
     void requestRefreshDomain({
       domain: 'catalog-diff',
       scope,
@@ -313,8 +315,8 @@ const useCatalogDiffSnapshot = (
 
     return () => {
       // Clean up the previous scope to prevent background refreshes.
-      refreshOrchestrator.setScopedDomainEnabled('catalog-diff', scope, false);
-      refreshOrchestrator.resetScopedDomain('catalog-diff', scope);
+      setRefreshDomainEnabled({ domain: 'catalog-diff', scope, enabled: false });
+      resetRefreshDomain('catalog-diff', scope);
     };
   }, [enabled, scope]);
 
@@ -351,7 +353,7 @@ const useObjectYamlSnapshot = (selection: CatalogItem | null, enabled: boolean) 
       return;
     }
 
-    refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, true);
+    setRefreshDomainEnabled({ domain: 'object-yaml', scope, enabled: true });
     void requestRefreshDomain({
       domain: 'object-yaml',
       scope,
@@ -359,8 +361,8 @@ const useObjectYamlSnapshot = (selection: CatalogItem | null, enabled: boolean) 
     });
 
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, false);
-      refreshOrchestrator.resetScopedDomain('object-yaml', scope);
+      setRefreshDomainEnabled({ domain: 'object-yaml', scope, enabled: false });
+      resetRefreshDomain('object-yaml', scope);
     };
   }, [enabled, scope]);
 

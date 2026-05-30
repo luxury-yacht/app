@@ -227,7 +227,6 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel="Cluster CRDs"
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleResourceClick}
           tableClassName="gridtable-crds"
           enableContextMenu={true}

@@ -1,3 +1,10 @@
+/*
+ * backend/objectcatalog/identity.go
+ *
+ * Adapts the shared built-in resource contract and discovery results into the
+ * object catalog's GVK-to-GVR resolver.
+ */
+
 package objectcatalog
 
 import (
@@ -6,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/luxury-yacht/app/backend/resourcecontract"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,65 +33,20 @@ type resourceIdentityResolver struct {
 	resources map[resourceIdentityKey]resourceDescriptor
 }
 
-var builtinResourceCatalog = []resourceDescriptor{
-	builtinDescriptor("", "v1", "Pod", "pods", true),
-	builtinDescriptor("", "v1", "Service", "services", true),
-	builtinDescriptor("", "v1", "ConfigMap", "configmaps", true),
-	builtinDescriptor("", "v1", "Secret", "secrets", true),
-	builtinDescriptor("", "v1", "ServiceAccount", "serviceaccounts", true),
-	builtinDescriptor("", "v1", "Event", "events", true),
-	builtinDescriptor("", "v1", "LimitRange", "limitranges", true),
-	builtinDescriptor("", "v1", "ResourceQuota", "resourcequotas", true),
-	builtinDescriptor("", "v1", "Endpoints", "endpoints", true),
-	builtinDescriptor("", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", true),
-	builtinDescriptor("", "v1", "Namespace", "namespaces", false),
-	builtinDescriptor("", "v1", "Node", "nodes", false),
-	builtinDescriptor("", "v1", "PersistentVolume", "persistentvolumes", false),
+var builtinResourceCatalog = builtinResourceDescriptors()
 
-	builtinDescriptor("apps", "v1", "Deployment", "deployments", true),
-	builtinDescriptor("apps", "v1", "StatefulSet", "statefulsets", true),
-	builtinDescriptor("apps", "v1", "DaemonSet", "daemonsets", true),
-	builtinDescriptor("apps", "v1", "ReplicaSet", "replicasets", true),
-
-	builtinDescriptor("batch", "v1", "Job", "jobs", true),
-	builtinDescriptor("batch", "v1", "CronJob", "cronjobs", true),
-
-	builtinDescriptor("autoscaling", "v1", "HorizontalPodAutoscaler", "horizontalpodautoscalers", true),
-	builtinDescriptor("autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", true),
-
-	builtinDescriptor("networking.k8s.io", "v1", "Ingress", "ingresses", true),
-	builtinDescriptor("networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", true),
-	builtinDescriptor("networking.k8s.io", "v1", "IngressClass", "ingressclasses", false),
-
-	builtinDescriptor("discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", true),
-
-	builtinDescriptor("gateway.networking.k8s.io", "v1", "Gateway", "gateways", true),
-	builtinDescriptor("gateway.networking.k8s.io", "v1", "HTTPRoute", "httproutes", true),
-	builtinDescriptor("gateway.networking.k8s.io", "v1", "GRPCRoute", "grpcroutes", true),
-	builtinDescriptor("gateway.networking.k8s.io", "v1", "TLSRoute", "tlsroutes", true),
-	builtinDescriptor("gateway.networking.k8s.io", "v1", "ListenerSet", "listenersets", true),
-	builtinDescriptor("gateway.networking.k8s.io", "v1", "BackendTLSPolicy", "backendtlspolicies", true),
-	builtinDescriptor("gateway.networking.k8s.io", "v1", "ReferenceGrant", "referencegrants", true),
-	builtinDescriptor("gateway.networking.k8s.io", "v1", "GatewayClass", "gatewayclasses", false),
-
-	builtinDescriptor("rbac.authorization.k8s.io", "v1", "Role", "roles", true),
-	builtinDescriptor("rbac.authorization.k8s.io", "v1", "RoleBinding", "rolebindings", true),
-	builtinDescriptor("rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", false),
-	builtinDescriptor("rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings", false),
-
-	builtinDescriptor("policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets", true),
-
-	builtinDescriptor("storage.k8s.io", "v1", "StorageClass", "storageclasses", false),
-	builtinDescriptor("storage.k8s.io", "v1", "CSIDriver", "csidrivers", false),
-	builtinDescriptor("storage.k8s.io", "v1", "CSINode", "csinodes", false),
-	builtinDescriptor("storage.k8s.io", "v1", "VolumeAttachment", "volumeattachments", false),
-
-	builtinDescriptor("admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", false),
-	builtinDescriptor("admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", false),
-
-	builtinDescriptor("coordination.k8s.io", "v1", "Lease", "leases", true),
-
-	builtinDescriptor("apiextensions.k8s.io", "v1", "CustomResourceDefinition", "customresourcedefinitions", false),
+func builtinResourceDescriptors() []resourceDescriptor {
+	descriptors := make([]resourceDescriptor, 0, len(resourcecontract.BuiltinResources))
+	for _, resource := range resourcecontract.BuiltinResources {
+		descriptors = append(descriptors, builtinDescriptor(
+			resource.Group,
+			resource.Version,
+			resource.Kind,
+			resource.Resource,
+			resource.Namespaced,
+		))
+	}
+	return descriptors
 }
 
 func builtinDescriptor(group, version, kind, resource string, namespaced bool) resourceDescriptor {

@@ -73,18 +73,10 @@ func fetchObjectYAMLByGVK(ctx context.Context, deps common.Dependencies, gvk sch
 		}
 	}
 
-	if deps.ResourceResolver == nil {
-		return "", fmt.Errorf("resource resolver not initialized")
-	}
-	resolved, ok, err := deps.ResourceResolver.ResolveResourceForGVK(ctx, gvk)
+	gvr, isNamespaced, err := resolveObjectYAMLGVR(ctx, deps, gvk, objectYAMLResolverStrict)
 	if err != nil {
 		return "", err
 	}
-	if !ok {
-		return "", fmt.Errorf("unable to resolve resource for %s", gvk.String())
-	}
-	gvr := resolved.GVR()
-	isNamespaced := resolved.Namespaced
 
 	var obj *unstructured.Unstructured
 	if isNamespaced {

@@ -186,7 +186,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel="Cluster RBAC"
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleResourceClick}
           tableClassName="gridtable-rbac"
           enableContextMenu={true}

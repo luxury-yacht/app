@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/resource-grid/useGridTableBinding.ts
+ *
+ * Builds the GridTable prop bundle shared by resource-grid adapters, including
+ * sorting, persistence-backed table state, virtualization, and canonical row keys.
+ */
+
 import { useMemo } from 'react';
 import { useTableSort, type SortConfig, type SortDirection } from '@/hooks/useTableSort';
 import {
@@ -20,6 +27,7 @@ interface GridTableBindingPersistence {
 interface GridTableBindingParams<T> {
   data: T[];
   columns: GridColumnDefinition<T>[];
+  keyExtractor: (item: T, index: number) => string;
   defaultSortKey?: string;
   defaultSortDirection?: SortDirection;
   diagnosticsLabel?: string;
@@ -32,6 +40,7 @@ interface GridTableBindingParams<T> {
 export function useGridTableBinding<T>({
   data,
   columns,
+  keyExtractor,
   defaultSortKey,
   defaultSortDirection = 'asc',
   diagnosticsLabel,
@@ -59,6 +68,7 @@ export function useGridTableBinding<T>({
       sortConfig,
       gridTableProps: {
         data: sortedData,
+        keyExtractor,
         onSort: handleSort,
         sortConfig,
         ...(filters ? { filters } : {}),
@@ -74,6 +84,6 @@ export function useGridTableBinding<T>({
           : {}),
       },
     }),
-    [filters, handleSort, persistence, sortConfig, sortedData, virtualization]
+    [filters, handleSort, keyExtractor, persistence, sortConfig, sortedData, virtualization]
   );
 }

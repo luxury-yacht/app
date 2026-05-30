@@ -310,7 +310,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel="Cluster Storage"
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleResourceClick}
           tableClassName="gridtable-pvs"
           enableContextMenu={true}

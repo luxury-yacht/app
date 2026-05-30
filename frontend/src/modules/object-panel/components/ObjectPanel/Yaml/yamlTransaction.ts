@@ -6,8 +6,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { readObjectYAMLForRef, requestData, requestRefreshDomain } from '@/core/data-access';
-import { refreshOrchestrator } from '@/core/refresh';
+import {
+  readObjectYAMLForRef,
+  requestData,
+  requestRefreshDomain,
+  setRefreshDomainEnabled,
+} from '@/core/data-access';
 import type { DiffLine } from '@shared/components/diff/lineDiff';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { YAML_TAB_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
@@ -189,7 +193,7 @@ export const useYamlTransaction = ({
     }
 
     const enabled = isActive && !isEditing;
-    refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, enabled);
+    setRefreshDomainEnabled({ domain: 'object-yaml', scope, enabled });
     if (enabled) {
       void requestRefreshDomain({
         domain: 'object-yaml',
@@ -199,7 +203,10 @@ export const useYamlTransaction = ({
     }
 
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, false, {
+      setRefreshDomainEnabled({
+        domain: 'object-yaml',
+        scope,
+        enabled: false,
         preserveState: true,
       });
     };

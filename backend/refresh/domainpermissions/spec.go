@@ -2,7 +2,12 @@
 // used by runtime permission checks, registration gates, and resource streams.
 package domainpermissions
 
-import "github.com/luxury-yacht/app/backend/refresh/permissions"
+import (
+	"fmt"
+
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
+	"github.com/luxury-yacht/app/backend/resourcecontract"
+)
 
 // Mode describes how a domain's runtime permission requirements are evaluated.
 type Mode string
@@ -224,51 +229,64 @@ func resources(groups ...[]Resource) []Resource {
 }
 
 func core(version, kind, resource string) Resource {
-	return Resource{Version: version, Kind: kind, Resource: resource}
+	return builtinResource("", version, kind, resource)
 }
 
 func apps(kind, resource string) Resource {
-	return Resource{Group: "apps", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("apps", "v1", kind, resource)
 }
 
 func batch(kind, resource string) Resource {
-	return Resource{Group: "batch", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("batch", "v1", kind, resource)
 }
 
 func autoscaling(kind, resource string) Resource {
-	return Resource{Group: "autoscaling", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("autoscaling", "v1", kind, resource)
 }
 
 func discovery(kind, resource string) Resource {
-	return Resource{Group: "discovery.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("discovery.k8s.io", "v1", kind, resource)
 }
 
 func networking(kind, resource string) Resource {
-	return Resource{Group: "networking.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("networking.k8s.io", "v1", kind, resource)
 }
 
 func gateway(kind, resource string) Resource {
-	return Resource{Group: "gateway.networking.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("gateway.networking.k8s.io", "v1", kind, resource)
 }
 
 func rbac(kind, resource string) Resource {
-	return Resource{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("rbac.authorization.k8s.io", "v1", kind, resource)
 }
 
 func policy(kind, resource string) Resource {
-	return Resource{Group: "policy", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("policy", "v1", kind, resource)
 }
 
 func storage(kind, resource string) Resource {
-	return Resource{Group: "storage.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("storage.k8s.io", "v1", kind, resource)
 }
 
 func admission(kind, resource string) Resource {
-	return Resource{Group: "admissionregistration.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("admissionregistration.k8s.io", "v1", kind, resource)
 }
 
 func apiextensions(kind, resource string) Resource {
-	return Resource{Group: "apiextensions.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+	return builtinResource("apiextensions.k8s.io", "v1", kind, resource)
+}
+
+func builtinResource(group, version, kind, resource string) Resource {
+	desc := resourcecontract.MustBuiltin(group, version, kind)
+	if desc.Resource != resource {
+		panic(fmt.Sprintf("resource contract mismatch for %s/%s/%s: got %q, want %q", group, version, kind, resource, desc.Resource))
+	}
+	return Resource{
+		Group:    desc.Group,
+		Version:  desc.Version,
+		Kind:     desc.Kind,
+		Resource: desc.Resource,
+	}
 }
 
 var policySpecs = []policySpec{

@@ -21,8 +21,7 @@ import {
 } from '@shared/actions/objectActionClient';
 import { errorHandler } from '@/utils/errorHandler';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
-import { refreshOrchestrator } from '@/core/refresh';
-import { requestRefreshDomain } from '@/core/data-access';
+import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useRefreshScopedDomainEntries, type DomainSnapshotState } from '@/core/refresh/store';
 import type { NodeMaintenanceDrainJob, NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
@@ -102,7 +101,7 @@ export const useNodeMaintenanceActions = ({
   useEffect(() => {
     if (watchedAggregateScopes.length === 0) return;
     watchedAggregateScopes.forEach((scope) => {
-      refreshOrchestrator.setScopedDomainEnabled('object-maintenance', scope, true);
+      setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: true });
       void requestRefreshDomain({
         domain: 'object-maintenance',
         scope,
@@ -111,7 +110,7 @@ export const useNodeMaintenanceActions = ({
     });
     return () => {
       watchedAggregateScopes.forEach((scope) => {
-        refreshOrchestrator.setScopedDomainEnabled('object-maintenance', scope, false);
+        setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: false });
       });
     };
   }, [watchedAggregateScopes]);

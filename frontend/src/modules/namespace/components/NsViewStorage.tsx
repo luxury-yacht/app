@@ -272,7 +272,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleResourceClick}
           tableClassName="ns-storage-table"
           enableContextMenu={true}

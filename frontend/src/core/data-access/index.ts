@@ -10,6 +10,8 @@ export {
   requestData,
   requestRefreshDomain,
   requestRefreshDomainState,
+  resetRefreshDomain,
+  setRefreshDomainEnabled,
 } from './dataAccess';
 export { useRefreshDomainHandle } from './useRefreshDomainHandle';
 export { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';

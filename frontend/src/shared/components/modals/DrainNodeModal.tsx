@@ -17,8 +17,8 @@ import { CancelDrainNodeJob } from '@wailsjs/go/backend/App';
 import { buildObjectActionTarget, runStartDrain } from '@shared/actions/objectActionClient';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@/utils/errorHandler';
-import { requestRefreshDomain } from '@/core/data-access';
-import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import { useRefreshScopedDomain } from '@/core/refresh';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -122,9 +122,9 @@ const DrainNodeModal = ({
 
   useEffect(() => {
     if (!scope || !isOpen) return;
-    refreshOrchestrator.setScopedDomainEnabled('object-maintenance', scope, true);
+    setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: true });
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-maintenance', scope, false);
+      setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: false });
     };
   }, [scope, isOpen]);
 

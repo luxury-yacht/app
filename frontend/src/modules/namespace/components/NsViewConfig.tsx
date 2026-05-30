@@ -187,7 +187,6 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
           loading={loading}
-          keyExtractor={resourceIdentity.key}
           onRowClick={openResource}
           tableClassName="ns-config-table"
           enableContextMenu={true}

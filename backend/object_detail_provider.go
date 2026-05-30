@@ -15,6 +15,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/cachekeys"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resourcecontract"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/autoscaling"
@@ -300,45 +301,49 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 // fetcher handles. It is fetcher capability metadata, not a resource identity
 // source; dynamic resource identity still resolves through the object catalog.
 var objectDetailFetcherGVKs = map[string]schema.GroupVersionKind{
-	"pod":                            {Version: "v1", Kind: "Pod"},
-	"deployment":                     {Group: "apps", Version: "v1", Kind: "Deployment"},
-	"replicaset":                     {Group: "apps", Version: "v1", Kind: "ReplicaSet"},
-	"daemonset":                      {Group: "apps", Version: "v1", Kind: "DaemonSet"},
-	"statefulset":                    {Group: "apps", Version: "v1", Kind: "StatefulSet"},
-	"job":                            {Group: "batch", Version: "v1", Kind: "Job"},
-	"cronjob":                        {Group: "batch", Version: "v1", Kind: "CronJob"},
-	"configmap":                      {Version: "v1", Kind: "ConfigMap"},
-	"secret":                         {Version: "v1", Kind: "Secret"},
-	"service":                        {Version: "v1", Kind: "Service"},
-	"ingress":                        {Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
-	"gateway":                        {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "Gateway"},
-	"httproute":                      {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "HTTPRoute"},
-	"grpcroute":                      {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "GRPCRoute"},
-	"tlsroute":                       {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "TLSRoute"},
-	"listenerset":                    {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "ListenerSet"},
-	"referencegrant":                 {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "ReferenceGrant"},
-	"backendtlspolicy":               {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "BackendTLSPolicy"},
-	"networkpolicy":                  {Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
-	"endpointslice":                  {Group: "discovery.k8s.io", Version: "v1", Kind: "EndpointSlice"},
-	"persistentvolumeclaim":          {Version: "v1", Kind: "PersistentVolumeClaim"},
-	"persistentvolume":               {Version: "v1", Kind: "PersistentVolume"},
-	"storageclass":                   {Group: "storage.k8s.io", Version: "v1", Kind: "StorageClass"},
-	"serviceaccount":                 {Version: "v1", Kind: "ServiceAccount"},
-	"role":                           {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
-	"rolebinding":                    {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
-	"clusterrole":                    {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"},
-	"clusterrolebinding":             {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"},
-	"resourcequota":                  {Version: "v1", Kind: "ResourceQuota"},
-	"limitrange":                     {Version: "v1", Kind: "LimitRange"},
-	"horizontalpodautoscaler":        {Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler"},
-	"poddisruptionbudget":            {Group: "policy", Version: "v1", Kind: "PodDisruptionBudget"},
-	"namespace":                      {Version: "v1", Kind: "Namespace"},
-	"node":                           {Version: "v1", Kind: "Node"},
-	"ingressclass":                   {Group: "networking.k8s.io", Version: "v1", Kind: "IngressClass"},
-	"gatewayclass":                   {Group: "gateway.networking.k8s.io", Version: "v1", Kind: "GatewayClass"},
-	"customresourcedefinition":       {Group: "apiextensions.k8s.io", Version: "v1", Kind: "CustomResourceDefinition"},
-	"mutatingwebhookconfiguration":   {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "MutatingWebhookConfiguration"},
-	"validatingwebhookconfiguration": {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "ValidatingWebhookConfiguration"},
+	"pod":                            builtinDetailGVK("", "v1", "Pod"),
+	"deployment":                     builtinDetailGVK("apps", "v1", "Deployment"),
+	"replicaset":                     builtinDetailGVK("apps", "v1", "ReplicaSet"),
+	"daemonset":                      builtinDetailGVK("apps", "v1", "DaemonSet"),
+	"statefulset":                    builtinDetailGVK("apps", "v1", "StatefulSet"),
+	"job":                            builtinDetailGVK("batch", "v1", "Job"),
+	"cronjob":                        builtinDetailGVK("batch", "v1", "CronJob"),
+	"configmap":                      builtinDetailGVK("", "v1", "ConfigMap"),
+	"secret":                         builtinDetailGVK("", "v1", "Secret"),
+	"service":                        builtinDetailGVK("", "v1", "Service"),
+	"ingress":                        builtinDetailGVK("networking.k8s.io", "v1", "Ingress"),
+	"gateway":                        builtinDetailGVK("gateway.networking.k8s.io", "v1", "Gateway"),
+	"httproute":                      builtinDetailGVK("gateway.networking.k8s.io", "v1", "HTTPRoute"),
+	"grpcroute":                      builtinDetailGVK("gateway.networking.k8s.io", "v1", "GRPCRoute"),
+	"tlsroute":                       builtinDetailGVK("gateway.networking.k8s.io", "v1", "TLSRoute"),
+	"listenerset":                    builtinDetailGVK("gateway.networking.k8s.io", "v1", "ListenerSet"),
+	"referencegrant":                 builtinDetailGVK("gateway.networking.k8s.io", "v1", "ReferenceGrant"),
+	"backendtlspolicy":               builtinDetailGVK("gateway.networking.k8s.io", "v1", "BackendTLSPolicy"),
+	"networkpolicy":                  builtinDetailGVK("networking.k8s.io", "v1", "NetworkPolicy"),
+	"endpointslice":                  builtinDetailGVK("discovery.k8s.io", "v1", "EndpointSlice"),
+	"persistentvolumeclaim":          builtinDetailGVK("", "v1", "PersistentVolumeClaim"),
+	"persistentvolume":               builtinDetailGVK("", "v1", "PersistentVolume"),
+	"storageclass":                   builtinDetailGVK("storage.k8s.io", "v1", "StorageClass"),
+	"serviceaccount":                 builtinDetailGVK("", "v1", "ServiceAccount"),
+	"role":                           builtinDetailGVK("rbac.authorization.k8s.io", "v1", "Role"),
+	"rolebinding":                    builtinDetailGVK("rbac.authorization.k8s.io", "v1", "RoleBinding"),
+	"clusterrole":                    builtinDetailGVK("rbac.authorization.k8s.io", "v1", "ClusterRole"),
+	"clusterrolebinding":             builtinDetailGVK("rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"),
+	"resourcequota":                  builtinDetailGVK("", "v1", "ResourceQuota"),
+	"limitrange":                     builtinDetailGVK("", "v1", "LimitRange"),
+	"horizontalpodautoscaler":        builtinDetailGVK("autoscaling", "v2", "HorizontalPodAutoscaler"),
+	"poddisruptionbudget":            builtinDetailGVK("policy", "v1", "PodDisruptionBudget"),
+	"namespace":                      builtinDetailGVK("", "v1", "Namespace"),
+	"node":                           builtinDetailGVK("", "v1", "Node"),
+	"ingressclass":                   builtinDetailGVK("networking.k8s.io", "v1", "IngressClass"),
+	"gatewayclass":                   builtinDetailGVK("gateway.networking.k8s.io", "v1", "GatewayClass"),
+	"customresourcedefinition":       builtinDetailGVK("apiextensions.k8s.io", "v1", "CustomResourceDefinition"),
+	"mutatingwebhookconfiguration":   builtinDetailGVK("admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration"),
+	"validatingwebhookconfiguration": builtinDetailGVK("admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration"),
+}
+
+func builtinDetailGVK(group, version, kind string) schema.GroupVersionKind {
+	return resourcecontract.MustBuiltin(group, version, kind).GVK()
 }
 
 // lookupObjectDetailFetcher returns the configured fetcher for the supplied

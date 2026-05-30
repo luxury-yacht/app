@@ -6,8 +6,11 @@
  * - Returns structured pod data, loading states, and error information.
  */
 import { useEffect, useMemo } from 'react';
-import { requestRefreshDomain } from '@/core/data-access';
-import { refreshOrchestrator } from '@/core/refresh/orchestrator';
+import {
+  requestRefreshDomain,
+  resetRefreshDomain,
+  setRefreshDomainEnabled,
+} from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -104,7 +107,7 @@ export function useObjectPanelPods({
       return;
     }
 
-    refreshOrchestrator.setScopedDomainEnabled('pods', refreshScope, shouldEnable);
+    setRefreshDomainEnabled({ domain: 'pods', scope: refreshScope, enabled: shouldEnable });
     if (shouldEnable) {
       void requestRefreshDomain({
         domain: 'pods',
@@ -114,8 +117,8 @@ export function useObjectPanelPods({
     }
 
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('pods', refreshScope, false);
-      refreshOrchestrator.resetScopedDomain('pods', refreshScope);
+      setRefreshDomainEnabled({ domain: 'pods', scope: refreshScope, enabled: false });
+      resetRefreshDomain('pods', refreshScope);
     };
   }, [podsScope?.scope, refreshScope, shouldEnable]);
 

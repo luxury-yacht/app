@@ -242,7 +242,6 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleResourceClick}
           tableClassName="ns-quotas-table"
           enableContextMenu={true}

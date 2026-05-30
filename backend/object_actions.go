@@ -1,3 +1,10 @@
+/*
+ * backend/object_actions.go
+ *
+ * Owns the backend side of the object action contract consumed by frontend
+ * actions and legacy wrapper methods.
+ */
+
 package backend
 
 import (
@@ -23,6 +30,28 @@ const (
 	ObjectActionCreateDebugContainer = "createDebugContainer"
 	ObjectActionRollback             = "rollback"
 )
+
+// frontendObjectActions is the backend-owned list of action strings the
+// frontend may send to RunObjectAction. Legacy wrappers may use additional
+// backend-only actions, but frontend drift must fail parity tests.
+var frontendObjectActions = map[string]struct{}{
+	ObjectActionDelete:               {},
+	ObjectActionRestart:              {},
+	ObjectActionScale:                {},
+	ObjectActionTrigger:              {},
+	ObjectActionSuspend:              {},
+	ObjectActionCordon:               {},
+	ObjectActionUncordon:             {},
+	ObjectActionStartDrain:           {},
+	ObjectActionStartPortForward:     {},
+	ObjectActionCreateDebugContainer: {},
+	ObjectActionRollback:             {},
+}
+
+var backendOnlyObjectActions = map[string]struct{}{
+	ObjectActionForceDelete: {},
+	ObjectActionDrain:       {},
+}
 
 // ObjectActionTargetRef is the canonical object identity for state-changing
 // app actions. Core resources use group="" with version="v1".
@@ -84,6 +113,16 @@ func validateObjectActionTarget(target ObjectActionTargetRef) (ObjectActionTarge
 	return normalized, nil
 }
 
+func validateObjectActionName(action string) error {
+	if _, ok := frontendObjectActions[action]; ok {
+		return nil
+	}
+	if _, ok := backendOnlyObjectActions[action]; ok {
+		return nil
+	}
+	return fmt.Errorf("unsupported object action %q", action)
+}
+
 func requireActionNamespacedTarget(target ObjectActionTargetRef, action string) error {
 	if strings.TrimSpace(target.Namespace) == "" {
 		return fmt.Errorf("%s requires namespace for %s/%s", action, target.Kind, target.Name)
@@ -124,6 +163,9 @@ func (a *App) deleteObjectAction(target ObjectActionTargetRef, force bool) error
 // when the target is namespaced.
 func (a *App) RunObjectAction(req ObjectActionRequest) (ObjectActionResponse, error) {
 	action := strings.TrimSpace(req.Action)
+	if err := validateObjectActionName(action); err != nil {
+		return ObjectActionResponse{}, err
+	}
 	target, err := validateObjectActionTarget(req.Target)
 	if err != nil {
 		return ObjectActionResponse{}, err
@@ -210,6 +252,6 @@ func (a *App) RunObjectAction(req ObjectActionRequest) (ObjectActionResponse, er
 		}
 		return ObjectActionResponse{}, a.rollbackWorkloadAction(target, revision)
 	default:
-		return ObjectActionResponse{}, fmt.Errorf("unsupported object action %q", action)
+		return ObjectActionResponse{}, fmt.Errorf("object action %q has no backend handler", action)
 	}
 }

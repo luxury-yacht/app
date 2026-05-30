@@ -236,7 +236,6 @@ export const JobsTab: React.FC<JobsTabProps> = ({
           gridTableProps={gridTableProps}
           columns={columns}
           diagnosticsLabel="Object Panel Jobs"
-          keyExtractor={keyExtractor}
           onRowClick={handleJobOpen}
           enableContextMenu
           getCustomContextMenuItems={(job) =>

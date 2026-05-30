@@ -13,12 +13,26 @@
  */
 import { useEffect } from 'react';
 import type { Dispatch, MutableRefObject } from 'react';
+import { setRefreshDomainEnabled } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { containerLogsFallbackManager } from '@/core/refresh/fallbacks/containerLogsFallbackManager';
 import { setScopedDomainState } from '@/core/refresh/store';
 import type { LogViewerAction } from '../logViewerReducer';
 
 const CONTAINER_LOGS_DOMAIN = 'container-logs' as const;
+
+const setContainerLogsDomainEnabled = (
+  scope: string,
+  enabled: boolean,
+  preserveState = false
+): void => {
+  setRefreshDomainEnabled({
+    domain: CONTAINER_LOGS_DOMAIN,
+    scope,
+    enabled,
+    preserveState,
+  });
+};
 
 /**
  * Checks whether an error message indicates that logs are structurally
@@ -95,9 +109,7 @@ export function useContainerLogsStreamFallback({
       // Use preserveState so the diagnostics panel can still see the last
       // log snapshot while the logs tab is inactive. Full cleanup happens
       // via ObjectPanelContent when the panel closes.
-      refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, false, {
-        preserveState: true,
-      });
+      setContainerLogsDomainEnabled(containerLogsScope, false, true);
       return;
     }
 
@@ -107,9 +119,7 @@ export function useContainerLogsStreamFallback({
       refreshOrchestrator.stopStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope, {
         reset: false,
       });
-      refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, false, {
-        preserveState: true,
-      });
+      setContainerLogsDomainEnabled(containerLogsScope, false, true);
       return;
     }
 
@@ -117,18 +127,9 @@ export function useContainerLogsStreamFallback({
       refreshOrchestrator.stopStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope, {
         reset: false,
       });
-      refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, false, {
-        preserveState: true,
-      });
+      setContainerLogsDomainEnabled(containerLogsScope, false, true);
       return () => {
-        refreshOrchestrator.setScopedDomainEnabled(
-          CONTAINER_LOGS_DOMAIN,
-          containerLogsScope,
-          false,
-          {
-            preserveState: true,
-          }
-        );
+        setContainerLogsDomainEnabled(containerLogsScope, false, true);
       };
     }
 
@@ -140,42 +141,19 @@ export function useContainerLogsStreamFallback({
         // buffered log entries the moment the LogViewer remounts and
         // re-enables the scope, which negates Tier 1 of the
         // responsiveness fix.
-        refreshOrchestrator.setScopedDomainEnabled(
-          CONTAINER_LOGS_DOMAIN,
-          containerLogsScope,
-          true,
-          {
-            preserveState: true,
-          }
-        );
+        setContainerLogsDomainEnabled(containerLogsScope, true, true);
         return () => {
           if (!fallbackRecoveringRef.current) {
-            refreshOrchestrator.setScopedDomainEnabled(
-              CONTAINER_LOGS_DOMAIN,
-              containerLogsScope,
-              false,
-              {
-                preserveState: true,
-              }
-            );
+            setContainerLogsDomainEnabled(containerLogsScope, false, true);
           }
         };
       }
       refreshOrchestrator.stopStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope, {
         reset: false,
       });
-      refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, false, {
-        preserveState: true,
-      });
+      setContainerLogsDomainEnabled(containerLogsScope, false, true);
       return () => {
-        refreshOrchestrator.setScopedDomainEnabled(
-          CONTAINER_LOGS_DOMAIN,
-          containerLogsScope,
-          false,
-          {
-            preserveState: true,
-          }
-        );
+        setContainerLogsDomainEnabled(containerLogsScope, false, true);
       };
     }
 
@@ -185,16 +163,12 @@ export function useContainerLogsStreamFallback({
     // after a cluster-switch round-trip) wipes the cached entries and
     // forces a fresh reload — Tier 1 of the responsiveness fix becomes
     // a no-op for streaming domains otherwise.
-    refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, true, {
-      preserveState: true,
-    });
+    setContainerLogsDomainEnabled(containerLogsScope, true, true);
     return () => {
       refreshOrchestrator.stopStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope, {
         reset: false,
       });
-      refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, false, {
-        preserveState: true,
-      });
+      setContainerLogsDomainEnabled(containerLogsScope, false, true);
     };
   }, [
     autoRefresh,
@@ -230,7 +204,7 @@ export function useContainerLogsStreamFallback({
       refreshOrchestrator.stopStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope, {
         reset: false,
       });
-      refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, false);
+      setContainerLogsDomainEnabled(containerLogsScope, false);
       dispatch({ type: 'SET_FALLBACK_ACTIVE', payload: true });
     }
   }, [
@@ -329,9 +303,7 @@ export function useContainerLogsStreamFallback({
       // effect above — without it, the orchestrator wipes the cached
       // entries before scheduling the new stream, undoing the buffered
       // log content the user was looking at moments ago.
-      refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, true, {
-        preserveState: true,
-      });
+      setContainerLogsDomainEnabled(containerLogsScope, true, true);
 
       try {
         await refreshOrchestrator.restartStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope);

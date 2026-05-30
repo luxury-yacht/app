@@ -21,7 +21,12 @@ import React, {
   ReactNode,
 } from 'react';
 import type { ResourceDataReturn } from '@hooks/resources';
-import { requestRefreshDomain, useScopedRefreshDomainLifecycle } from '@/core/data-access';
+import {
+  requestRefreshDomain,
+  resetRefreshDomain,
+  setRefreshDomainEnabled,
+  useScopedRefreshDomainLifecycle,
+} from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -88,8 +93,6 @@ const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>(Object.values(CLUSTER_REFRESHE
 // Domains that use 'cluster' as their domain scope suffix (events need special scope).
 const CLUSTER_EVENTS_DOMAIN: RefreshDomain = 'cluster-events';
 
-const PRESERVE_SCOPED_STATE = { preserveState: true };
-
 const noop = () => {};
 
 // Keep merged multi-cluster payloads scoped to the active tab.
@@ -137,7 +140,7 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
   }, [domainName, scope]);
 
   const reset = useCallback(() => {
-    refreshOrchestrator.resetScopedDomain(domainName, scope);
+    resetRefreshDomain(domainName, scope);
   }, [domainName, scope]);
 
   const selectedData = useMemo(() => extractFn(state.data ?? null), [extractFn, state.data]);
@@ -422,7 +425,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   }, [clusterScope]);
 
   const resetNodes = useCallback(() => {
-    refreshOrchestrator.resetScopedDomain('nodes', clusterScope);
+    resetRefreshDomain('nodes', clusterScope);
   }, [clusterScope]);
 
   const cancelNodes = useCallback(() => {
@@ -578,7 +581,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     return () => {
       CLUSTER_DOMAIN_SET.forEach((domain) => {
         const scope = domain === CLUSTER_EVENTS_DOMAIN ? eventsScopeForCleanup : scopeForCleanup;
-        refreshOrchestrator.setScopedDomainEnabled(domain, scope, false, PRESERVE_SCOPED_STATE);
+        setRefreshDomainEnabled({ domain, scope, enabled: false, preserveState: true });
       });
     };
   }, [clusterScope, clusterEventsScope]);

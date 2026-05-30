@@ -1,9 +1,17 @@
+/**
+ * frontend/src/modules/namespace/components/NsViewMap.test.tsx
+ *
+ * Verifies namespace object-map startup loading while the scoped refresh
+ * lifecycle is brokered through core data-access.
+ */
+
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dataAccessMocks = vi.hoisted(() => ({
   requestRefreshDomain: vi.fn(() => Promise.resolve()),
+  setRefreshDomainEnabled: vi.fn(),
 }));
 
 const refreshMocks = vi.hoisted(() => ({
@@ -21,6 +29,7 @@ const namespaceMocks = vi.hoisted(() => ({
 
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: dataAccessMocks.requestRefreshDomain,
+  setRefreshDomainEnabled: dataAccessMocks.setRefreshDomainEnabled,
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -91,6 +100,7 @@ beforeEach(() => {
     error: null,
   };
   dataAccessMocks.requestRefreshDomain.mockClear();
+  dataAccessMocks.setRefreshDomainEnabled.mockClear();
   refreshMocks.setScopedDomainEnabled.mockClear();
   refreshMocks.useRefreshScopedDomain.mockClear();
 });

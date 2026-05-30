@@ -14,7 +14,6 @@ import type {
 export function ObjectPanelResourceGridTableSurface<T extends ResourceGridTableRow>({
   gridTableProps,
   columns,
-  keyExtractor,
   diagnosticsLabel,
   loading,
   spinnerMessage,
@@ -40,7 +39,6 @@ export function ObjectPanelResourceGridTableSurface<T extends ResourceGridTableR
         columns={columns}
         diagnosticsLabel={diagnosticsLabel}
         diagnosticsMode={diagnosticsMode}
-        keyExtractor={keyExtractor}
         onRowClick={onRowClick}
         enableContextMenu={enableContextMenu}
         getCustomContextMenuItems={getCustomContextMenuItems}

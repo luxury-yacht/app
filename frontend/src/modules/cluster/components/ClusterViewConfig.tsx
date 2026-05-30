@@ -186,7 +186,6 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel="Cluster Configuration"
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleResourceClick}
           tableClassName="gridtable-config"
           enableContextMenu={true}

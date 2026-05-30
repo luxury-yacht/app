@@ -237,7 +237,6 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
           loading={loading}
-          keyExtractor={keyExtractor}
           onRowClick={handleResourceClick}
           tableClassName="ns-network-table"
           enableContextMenu={true}

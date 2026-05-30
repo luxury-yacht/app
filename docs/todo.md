@@ -1,3 +1,0 @@
-- error when opening object panel for a pod
-  - go to Pods view, open a pod in object panel
-  - missing required field clusterID

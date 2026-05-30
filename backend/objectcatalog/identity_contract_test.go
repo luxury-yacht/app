@@ -1,36 +1,24 @@
+/*
+ * backend/objectcatalog/identity_contract_test.go
+ *
+ * Verifies the object catalog resolver is seeded from the backend-owned
+ * built-in resource identity contract without local drift.
+ */
+
 package objectcatalog
 
 import (
-	"encoding/json"
-	"os"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resourcecontract"
 	"github.com/stretchr/testify/require"
 )
 
-type builtinIdentityContract struct {
-	Resources []builtinIdentityContractResource `json:"resources"`
-}
-
-type builtinIdentityContractResource struct {
-	Group      string `json:"group"`
-	Version    string `json:"version"`
-	Kind       string `json:"kind"`
-	Resource   string `json:"resource"`
-	Namespaced bool   `json:"namespaced"`
-}
-
 func TestBuiltinResourceIdentityContractMatchesResolverSeed(t *testing.T) {
-	payload, err := os.ReadFile("builtin-resource-identities.json")
-	require.NoError(t, err)
+	require.Len(t, builtinResourceCatalog, len(resourcecontract.BuiltinResources))
 
-	var contract builtinIdentityContract
-	require.NoError(t, json.Unmarshal(payload, &contract))
-
-	require.Len(t, contract.Resources, len(builtinResourceCatalog))
-
-	contractByKey := make(map[resourceIdentityKey]builtinIdentityContractResource, len(contract.Resources))
-	for _, resource := range contract.Resources {
+	contractByKey := make(map[resourceIdentityKey]resourcecontract.BuiltinResource, len(resourcecontract.BuiltinResources))
+	for _, resource := range resourcecontract.BuiltinResources {
 		key := identityKey(resource.Group, resource.Version, resource.Kind)
 		require.NotEmpty(t, key.version)
 		require.NotEmpty(t, key.kind)
@@ -41,7 +29,7 @@ func TestBuiltinResourceIdentityContractMatchesResolverSeed(t *testing.T) {
 	for _, desc := range builtinResourceCatalog {
 		key := identityKey(desc.Group, desc.Version, desc.Kind)
 		resource, ok := contractByKey[key]
-		require.Truef(t, ok, "builtin-resource-identities.json missing %s/%s/%s", desc.Group, desc.Version, desc.Kind)
+		require.Truef(t, ok, "built-in resource contract missing %s/%s/%s", desc.Group, desc.Version, desc.Kind)
 		require.Equal(t, desc.Resource, resource.Resource)
 		require.Equal(t, desc.Namespaced, resource.Namespaced)
 	}

@@ -9,8 +9,12 @@
 
 import { useEffect, useRef } from 'react';
 
-import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
-import { refreshOrchestrator } from '@/core/refresh';
+import {
+  requestRefreshDomain,
+  resetRefreshDomain,
+  setRefreshDomainEnabled,
+  type DataRequestReason,
+} from '@/core/data-access';
 import type { RefreshDomain } from '@/core/refresh/types';
 
 export type ObjectPanelLifecycleDomain = Extract<
@@ -42,8 +46,6 @@ interface ObjectPanelScopedDomainLifecycleOptions extends ObjectPanelScopedDomai
   preserveStateOnDisable?: boolean;
 }
 
-const PRESERVE_SCOPED_STATE = { preserveState: true } as const;
-
 const scopedDomainKey = ({ domain, scope }: ActiveScopedDomain): string => `${domain}\0${scope}`;
 
 const activeScopedDomain = ({
@@ -74,11 +76,7 @@ const setObjectPanelScopedDomainEnabled = (
   enabled: boolean,
   preserveState: boolean
 ): void => {
-  if (preserveState) {
-    refreshOrchestrator.setScopedDomainEnabled(domain, scope, enabled, PRESERVE_SCOPED_STATE);
-    return;
-  }
-  refreshOrchestrator.setScopedDomainEnabled(domain, scope, enabled);
+  setRefreshDomainEnabled({ domain, scope, enabled, preserveState });
 };
 
 const disableObjectPanelScopedDomain = ({ domain, scope }: ActiveScopedDomain): void => {
@@ -91,7 +89,7 @@ export const resetObjectPanelScopedDomain = (ref: ObjectPanelScopedDomainRef): v
     return;
   }
   setObjectPanelScopedDomainEnabled(active, false, false);
-  refreshOrchestrator.resetScopedDomain(active.domain, active.scope);
+  resetRefreshDomain(active.domain, active.scope);
 };
 
 export function useObjectPanelScopedDomainCleanups(

@@ -22,6 +22,7 @@ import type { ResourceGridObjectIdentityAdapter } from './useResourceGridObjectI
 
 export interface GridTableBindingProps<T> {
   data: T[];
+  keyExtractor: (item: T, index: number) => string;
   onSort: (key: string, targetDirection?: SortDirection) => void;
   sortConfig: SortConfig;
   filters?: GridTableFilterConfig<T>;
@@ -35,7 +36,13 @@ export interface GridTableBindingProps<T> {
 
 export interface ResourceGridTableRow {
   kind?: string | null;
+  kindAlias?: string | null;
+  name?: string | null;
   namespace?: string | null;
+  clusterId?: string | null;
+  clusterName?: string | null;
+  group?: string | null;
+  version?: string | null;
 }
 
 export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
@@ -121,7 +128,6 @@ export interface ResourceGridTableResult<T extends ResourceGridTableRow> {
 export interface ObjectPanelResourceGridTableSurfaceProps<T extends ResourceGridTableRow> {
   gridTableProps: GridTableBindingProps<T>;
   columns: GridColumnDefinition<T>[];
-  keyExtractor: (item: T, index: number) => string;
   diagnosticsLabel: string;
   loading: boolean;
   spinnerMessage: string;
@@ -138,6 +144,7 @@ export interface QueryResourceGridTableParams<T extends ResourceGridTableRow> {
   data: T[];
   columns: GridColumnDefinition<T>[];
   persistence: ResourceGridPersistence<T>;
+  keyExtractor?: (item: T, index: number) => string;
   defaultSortKey?: string;
   defaultSortDirection?: SortDirection;
   diagnosticsLabel?: string;

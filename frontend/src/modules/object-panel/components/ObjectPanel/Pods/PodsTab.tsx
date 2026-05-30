@@ -272,7 +272,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
           gridTableProps={gridTableProps}
           columns={columns}
           diagnosticsLabel="Object Panel Pods"
-          keyExtractor={podIdentity.key}
           onRowClick={handlePodOpen}
           enableContextMenu
           getCustomContextMenuItems={(pod) => objectActions.getMenuItems(podRef(pod))}

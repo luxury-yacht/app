@@ -238,7 +238,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           }
           diagnosticsMode="live"
           loading={loading && sortedWorkloads.length === 0}
-          keyExtractor={keyExtractor}
           onRowClick={handleWorkloadClick}
           tableClassName="gridtable-workloads"
           enableContextMenu={true}
