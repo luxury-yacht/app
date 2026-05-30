@@ -6,7 +6,7 @@
  * and the close-button overlay. Knows nothing about drag, persistence,
  * or system-specific quirks — those live in wrapper components.
  *
- * See docs/plans/shared-tabs-component-design.md for the full design.
+ * See docs/frontend/tabs.md for the shared tab contract.
  */
 import {
   Fragment,

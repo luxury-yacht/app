@@ -30,9 +30,9 @@ import (
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-// TestSnapshotStreamRowParity is the keystone parity harness mandated by
-// docs/plans/resource-stream-projection-contract.md. For every domain
-// returned by resourcestream.SupportedDomains() it:
+// TestSnapshotStreamRowParity is the keystone parity harness for the
+// snapshot/stream row contract in docs/architecture/refresh-system.md. For
+// every domain returned by resourcestream.SupportedDomains() it:
 //
 //  1. Builds a snapshot through the canonical Builder for that domain
 //     (the same code that produces the initial snapshot the frontend

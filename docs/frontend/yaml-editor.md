@@ -1,156 +1,51 @@
-# YAML Editor
+# YAML Editor Contract
 
-`YamlEditor` is the shared single-document YAML viewing and editing surface.
-Use it for YAML text that should behave like an editor, including object YAML,
-Helm manifests, Helm values, and future object-creation manifests.
+The shared YAML editor supports object YAML, Helm manifests, Helm values, and
+future YAML creation/edit flows. Kubernetes policy and identity live outside the
+editor.
 
-## Location
+## Agent Contract
 
-The shared component lives in:
-
-- `frontend/src/shared/components/yaml/YamlEditor.tsx`
-- `frontend/src/shared/components/yaml/YamlEditor.css`
-- `frontend/src/shared/components/yaml/YamlEditor.test.tsx`
-- `frontend/src/shared/components/yaml/index.ts`
+- Use the shared YAML editor components for YAML viewing/editing surfaces.
+- The editor must receive complete object identity from its caller; it must not
+  infer cluster, GVK, namespace, or name.
+- Protected ranges and read-only modes are caller policy, not Kubernetes
+  semantics embedded in the editor.
+- Keyboard behavior should register as an editor surface when it needs ownership.
+- Diff, apply, merge, and live-object refresh behavior belongs to the workflow
+  layer, not the text editor core.
+- Do not route YAML reads or applies around the documented data-access/action
+  boundaries.
 
 ## Ownership
 
-`YamlEditor` owns editor mechanics only:
-
-- CodeMirror rendering
-- YAML language mode and shared CodeMirror theme
-- editable, view-only, and disabled modes
-- search input/buttons and search keyboard integration
-- editor context menu for copy/select-all, plus cut/paste when editable
-- native copy, select-all, and paste handling through keyboard surfaces
-- optional caller key bindings for focused-editor behavior
-- optional caller toolbar actions
-- protected-range decoration and transaction filtering
-
-`YamlEditor` must not own workflow state:
-
-- object refresh subscriptions
-- Kubernetes object identity
-- capability checks
-- save/apply/create/delete calls
-- reload/merge or drift detection
-- post-save verification/diff notices
-- managedFields viewing policy
-- Helm values mode selection
-- modal fetch/rollback actions
-
-Workflow wrappers such as `YamlTab`, `ManifestTab`, and `ValuesTab` pass values,
-mode flags, labels, priorities, toolbar actions, and callbacks into
-`YamlEditor`.
+- Shared editor components: `frontend/src/shared/components/yaml`
+- Object-panel YAML workflows: `frontend/src/modules/object-panel`
+- Backend object YAML read/apply paths: `backend/object_yaml*.go`
+- Data reads: [../architecture/data-access.md](../architecture/data-access.md)
+- Object identity: [../architecture/shared-resource-model.md](../architecture/shared-resource-model.md)
 
 ## Modes
 
-Use `editable={true}` only when the caller owns a draft and can accept edits.
-Use `editable={false}` for view-only YAML. Use `disabled={true}` when the editor
-is temporarily non-mutating, such as during save; disabled mode must preserve
-selection, copy, cursor movement, and search.
+- Read-only view.
+- Editable draft.
+- Protected-range editing.
+- Diff/review surface.
 
-`onChange` fires only for accepted document changes. The component should reject
-mutating behavior while disabled or view-only, including native paste and context
-menu cut/paste.
+Mode selection is workflow-owned. The editor should expose focused primitives
+for text, markers, keyboard handling, and diagnostics.
 
-## Shortcut Ownership
+## Change Checklist
 
-`YamlEditor` registers the editor surface with `useKeyboardSurface` and the
-search target with `useSearchShortcutTarget`. Callers must pass the active-tab
-contract explicitly:
+When changing YAML behavior:
 
-- `active`
-- `shortcutLabel`
-- `shortcutPriority`
+1. Preserve complete `clusterId` and GVK identity.
+2. Decide whether the change belongs in shared editor UI or a workflow wrapper.
+3. Confirm shortcut ownership and native editor behavior.
+4. Test read-only, editable, dirty, apply/error, and protected-range states as
+   relevant.
 
-Preserve existing per-surface priorities when migrating callers. Current YAML
-surfaces use:
+## Validation
 
-- `YamlTab`: priority `30`, label `"YAML tab search"`
-- `ManifestTab`: priority `20`, label `"Helm manifest search"`
-- `ValuesTab`: priority `20`, label `"Helm values search"`
-
-Workflow-level shortcuts stay in the workflow wrapper. For example, `YamlTab`
-owns save/cancel shortcuts through `useShortcut` so those commands still work
-from search input and toolbar focus. Do not move workflow commands exclusively
-into CodeMirror key bindings.
-
-`YamlEditor` may accept caller `keyBindings`, but those bindings are for
-focused-editor behavior only. Component-owned search bindings take precedence.
-
-## Protected Ranges
-
-`YamlEditor` does not know Kubernetes policy semantics. It accepts resolved
-protected ranges and user-facing messages from the caller or a policy helper.
-
-Use `protectedRangeResolver` for editable documents. Static `protectedRanges`
-are appropriate only for immutable/view-only documents or tests. The resolver
-runs against the pre-transaction document before filtering changes so offsets
-stay valid after accepted edits outside protected blocks.
-
-Protected-field visual treatment is intentionally plain:
-
-- slightly dimmed but readable text, implemented with range opacity so syntax
-  colors remain recognizable
-- no lock icons, badges, chips, overlays, split panes, or hidden text
-
-Cursor movement, selection, copy, and search must continue to work inside
-protected ranges.
-
-Any transaction that touches a protected range is rejected as a whole. This
-includes type, paste, cut, delete, undo, redo, select-all delete, and
-whole-object replacement. Rejected transactions leave the document unchanged and
-call `onProtectedEditBlocked`.
-
-## Live Object Policy
-
-Live Kubernetes object editing uses the backend-owned field policy contract at
-`backend/objectyaml/field-policy-contract.json`. The frontend imports that
-contract through `yamlFieldPolicy.ts` and uses it for:
-
-- protected editor ranges
-- protected edit messages
-- post-save semantic diff suppression
-
-The backend owns correctness. Backend mutation code still rejects or preserves
-protected fields even if a caller bypasses the editor UI. Keep the Go
-enforcement table and JSON contract aligned with `TestYAMLFieldPolicyContract`.
-
-For existing-object edit mode:
-
-- `apiVersion`, `kind`, `metadata.name`, and `metadata.namespace` are visible
-  but read-only because object identity cannot be changed in place.
-- Kubernetes-owned metadata such as `resourceVersion`, `uid`, timestamps,
-  `generation`, and `selfLink` is visible but read-only when present.
-- `status` is visible but read-only because controllers own observed state.
-- exact generated annotation keys listed in the policy are visible but read-only.
-- `metadata.resourceVersion` is preserved from the authoritative live object
-  rather than treated as user intent.
-- the managedFields toolbar toggle controls whether `metadata.managedFields` is
-  present when entering edit mode. If shown, it is read-only and protected; if
-  hidden, it is omitted from both the draft and baseline so saving does not treat
-  it as a deletion. The toggle is not available while an edit draft is active.
-
-The protected-field message is local to the YAML tab. It is not a global app
-error and should clear when the user makes an accepted edit, reloads, exits edit
-mode, or starts saving.
-
-Object creation should reuse `YamlEditor`, but it must pass a creation-specific
-policy scope. Existing-object identity fields that are protected during edit,
-such as `apiVersion`, `kind`, and `metadata.name`, are expected to be editable
-in creation workflows.
-
-## Diff Surfaces
-
-`ObjectDiffModal` and `RollbackModal` use `DiffViewer`, not `YamlEditor`.
-Revisit that only if a future design needs single-document YAML editor behavior,
-synchronized CodeMirror panes, inline search in each side, or protected-field
-decorations inside diff panes.
-
-## Tests
-
-Add or update focused `YamlEditor` tests when changing shared editor mechanics.
-Workflow wrappers should keep their own tests for workflow behavior, such as
-object save/cancel, Helm values mode switching, loading states, permissions, and
-post-save notices.
+Run targeted YAML editor/object-panel tests and typecheck. For editor behavior,
+verify keyboard and focus manually.

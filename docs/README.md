@@ -1,67 +1,70 @@
-# Documentation Map
+# Agent Documentation
 
-Use this page to decide where to look before changing architecture, resource
-behavior, frontend infrastructure, or workflow-specific code.
+This directory exists to help agents change Luxury Yacht correctly. Keep docs
+short, contract-focused, and cheaper to maintain than re-reading the code.
 
-## Architecture
+Durable docs should answer:
 
-| Question                                                          | Start here                                                                     |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| How should cluster-scoped data stay isolated?                     | [architecture/multi-cluster.md](architecture/multi-cluster.md)                 |
-| How do snapshots, streams, refresh domains, and diagnostics work? | [architecture/refresh-system.md](architecture/refresh-system.md)               |
-| What owns object identity, discovery, and existence?              | [architecture/catalog.md](architecture/catalog.md)                             |
-| What owns resource status, lifecycle, links, and facts?           | [architecture/shared-resource-model.md](architecture/shared-resource-model.md) |
-| Where should cross-layer policy/schema contracts live?            | [architecture/shared-contracts.md](architecture/shared-contracts.md)           |
-| How should frontend reads flow through brokers and transports?    | [architecture/data-access.md](architecture/data-access.md)                     |
-| How do refresh permissions and UI action permissions work?        | [architecture/permissions.md](architecture/permissions.md)                     |
-| How are auth failures detected and recovered per cluster?         | [architecture/auth.md](architecture/auth.md)                                   |
-| What are the rules for large datasets and table scalability?      | [architecture/large-data.md](architecture/large-data.md)                       |
+- What invariant must not be broken?
+- Which subsystem owns the contract?
+- Which files are the starting points?
+- What must be validated after a change?
 
-## Frontend
+Do not use durable docs for implementation inventories, current UI walkthroughs,
+completed phase plans, or test lists that can be discovered with `rg`.
 
-| Question                                                       | Start here                                                         |
-| -------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Where should frontend code live?                               | [frontend/component-structure.md](frontend/component-structure.md) |
-| How should shared resource tables be built and maintained?     | [frontend/gridtable.md](frontend/gridtable.md)                     |
-| How do keyboard shortcuts, surfaces, and focus ownership work? | [frontend/keyboard.md](frontend/keyboard.md)                       |
-| How should blocking modals be built?                           | [frontend/modals.md](frontend/modals.md)                           |
-| How do shared tabs and tab drag/drop work?                     | [frontend/tabs.md](frontend/tabs.md)                               |
-| How do dockable object panels and panel tab groups work?       | [frontend/dockable-panels.md](frontend/dockable-panels.md)         |
-| How should shared YAML viewing/editing surfaces be built?      | [frontend/yaml-editor.md](frontend/yaml-editor.md)                 |
+## Architecture Contracts
 
-## Workflows
+| Question | Start here |
+| --- | --- |
+| How is cluster data isolated? | [architecture/multi-cluster.md](architecture/multi-cluster.md) |
+| How do refresh domains, snapshots, streams, and scopes work? | [architecture/refresh-system.md](architecture/refresh-system.md) |
+| What owns object existence and GVK/GVR identity? | [architecture/catalog.md](architecture/catalog.md) |
+| What owns object refs, status, facts, and links? | [architecture/shared-resource-model.md](architecture/shared-resource-model.md) |
+| Where should cross-layer contracts live? | [architecture/shared-contracts.md](architecture/shared-contracts.md) |
+| How should frontend reads reach backend data? | [architecture/data-access.md](architecture/data-access.md) |
+| How do permission gates and action capabilities work? | [architecture/permissions.md](architecture/permissions.md) |
+| How are auth failures represented and recovered? | [architecture/auth.md](architecture/auth.md) |
+| What are the large-data table rules? | [architecture/large-data.md](architecture/large-data.md) |
 
-| Question                                                                       | Start here                                                               |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| How does the object relationship map work?                                     | [workflows/object-map.md](workflows/object-map.md)                       |
-| How are live shell, port-forward, and drain operations tracked and cleaned up? | [workflows/operation-lifecycle.md](workflows/operation-lifecycle.md)     |
-| How do shell exec and debug containers work?                                   | [workflows/shell-debug.md](workflows/shell-debug.md)                     |
-| Which logs doc should I use?                                                   | [workflows/logs/overview.md](workflows/logs/overview.md)                 |
-| How do container/pod/workload logs work?                                       | [workflows/logs/container-logs.md](workflows/logs/container-logs.md)     |
-| How do node logs work?                                                         | [workflows/logs/node-logs.md](workflows/logs/node-logs.md)               |
-| How do app diagnostic logs work?                                               | [workflows/logs/application-logs.md](workflows/logs/application-logs.md) |
+## Frontend Contracts
 
-## Plans And Release Notes
+| Question | Start here |
+| --- | --- |
+| Where should frontend code live? | [frontend/component-structure.md](frontend/component-structure.md) |
+| How should shared tables be built? | [frontend/gridtable.md](frontend/gridtable.md) |
+| How are shortcuts and focus owned? | [frontend/keyboard.md](frontend/keyboard.md) |
+| How should blocking modals work? | [frontend/modals.md](frontend/modals.md) |
+| How do shared tabs and tab dragging work? | [frontend/tabs.md](frontend/tabs.md) |
+| How do docked/floating object panels work? | [frontend/dockable-panels.md](frontend/dockable-panels.md) |
+| How should shared YAML editors work? | [frontend/yaml-editor.md](frontend/yaml-editor.md) |
 
-- [plans/in-cluster-web-mode.md](plans/in-cluster-web-mode.md) is the current
-  in-cluster web mode design.
-- [plans/refresh-domain-follow-ups.md](plans/refresh-domain-follow-ups.md)
-  tracks non-blocking refresh-domain contract follow-ups.
-- [plans/todos.md](plans/todos.md) is a lightweight feature backlog.
-- [release/pending.md](release/pending.md) tracks unreleased changelog entries.
+## Workflow Contracts
+
+| Question | Start here |
+| --- | --- |
+| How does the object map work? | [workflows/object-map.md](workflows/object-map.md) |
+| How are live operations tracked and cleaned up? | [workflows/operation-lifecycle.md](workflows/operation-lifecycle.md) |
+| How do shell exec and debug containers work? | [workflows/shell-debug.md](workflows/shell-debug.md) |
+| Which logs doc applies? | [workflows/logs/overview.md](workflows/logs/overview.md) |
 
 ## Cross-Cutting Rules
 
-- Every cluster-data path must carry `clusterId`; see
-  [architecture/multi-cluster.md](architecture/multi-cluster.md).
+- Every cluster-data path must carry `clusterId`.
 - Object references crossing boundaries must carry `clusterId`, `group`,
-  `version`, `kind`, plus `namespace` and `name` for concrete objects; see
-  [architecture/shared-resource-model.md](architecture/shared-resource-model.md).
-- Shared contracts are code-owned by the enforcing subsystem, not stored under
-  docs; see [architecture/shared-contracts.md](architecture/shared-contracts.md).
-- The object catalog owns identity and existence; typed views add richer
-  projections, not competing identity systems; see
-  [architecture/catalog.md](architecture/catalog.md).
-- Frontend resource reads go through `dataAccess`; app-shell and persisted
-  state reads go through `appStateAccess`; see
-  [architecture/data-access.md](architecture/data-access.md).
+  `version`, and `kind`; concrete objects also need `namespace` and `name`.
+- The object catalog owns existence and GVK/GVR identity.
+- The backend shared resource model owns primary resource status and relationship
+  links.
+- Frontend resource reads go through `dataAccess`; app-shell and persisted-state
+  reads go through `appStateAccess`.
+- Shared contracts belong beside enforcing code, with docs summarizing the rule.
+
+## Maintenance Policy
+
+- Keep each durable doc under roughly 150 lines unless the extra detail prevents
+  repeated mistakes.
+- Prefer links to owning code over copied implementation detail.
+- Delete completed or stale plans instead of indexing them here.
+- Put temporary implementation plans in `docs/plans/` only while they are active.
+- Put unreleased changelog entries in [release/pending.md](release/pending.md).

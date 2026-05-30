@@ -557,7 +557,7 @@ describe('ContainerLogsStreamManager', () => {
   // sequence must stay monotonic across stream restarts. Together these
   // guarantee the initial-load spinner only shows on the true first load
   // of a scope, not on every auto-refresh toggle / cluster-switch
-  // remount. See docs/plans (Tier 1/2 responsiveness fix).
+  // remount. See docs/workflows/logs/container-logs.md.
   // ---------------------------------------------------------------------
 
   const seedScopeWithEntries = async (
