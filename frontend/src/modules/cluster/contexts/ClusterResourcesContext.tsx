@@ -50,6 +50,10 @@ import { useUserPermission } from '@/core/capabilities';
 import type { PermissionStatus } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
+import {
+  clusterResourceDescriptors,
+  type ClusterResourceDescriptor,
+} from './clusterResourceDescriptors';
 
 export type { ClusterNodeRow } from '@/core/refresh/types';
 
@@ -173,6 +177,34 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
       meta: stableMeta,
     };
   }, [isManualRefreshActive, isPaused, load, refresh, reset, stableData, stableMeta, state]);
+}
+
+function useDescriptorBackedClusterResource<T>(
+  descriptor: ClusterResourceDescriptor<any, T>,
+  state: DomainSnapshotState<any>,
+  scope: string,
+  clusterId: string | null | undefined,
+  isPaused: boolean = false,
+  isManualRefreshActive: boolean = false
+): ResourceDataReturn<T> {
+  const select = useCallback(
+    (payload: any | null) => descriptor.select(payload, clusterId),
+    [clusterId, descriptor]
+  );
+  const selectMeta = useCallback(
+    (payload: any | null) => (descriptor.meta ? descriptor.meta(payload) : undefined),
+    [descriptor]
+  );
+
+  return useClusterDomainResource(
+    descriptor.domain,
+    state,
+    select,
+    scope,
+    descriptor.meta ? selectMeta : undefined,
+    isPaused,
+    isManualRefreshActive
+  );
 }
 
 export const useClusterResources = () => {
@@ -572,100 +604,51 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     };
   }, [setActiveResourceTypeWithCallback]);
 
-  const rbacExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-rbac'] | null) =>
-      filterByClusterId(payload?.resources ?? null, selectedClusterId),
-    [selectedClusterId]
-  );
-  const rbacMetaExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-rbac'] | null) => ({ kinds: payload?.kinds ?? [] }),
-    []
-  );
-  const storageExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-storage'] | null) =>
-      filterByClusterId(payload?.volumes ?? null, selectedClusterId),
-    [selectedClusterId]
-  );
-  const configExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-config'] | null) =>
-      filterByClusterId(payload?.resources ?? null, selectedClusterId),
-    [selectedClusterId]
-  );
-  const configMetaExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-config'] | null) => ({ kinds: payload?.kinds ?? [] }),
-    []
-  );
-  const crdExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-crds'] | null) =>
-      filterByClusterId(payload?.definitions ?? null, selectedClusterId),
-    [selectedClusterId]
-  );
-  const customExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-custom'] | null) =>
-      filterByClusterId(payload?.resources ?? null, selectedClusterId),
-    [selectedClusterId]
-  );
-  const customMetaExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-custom'] | null) => ({ kinds: payload?.kinds ?? [] }),
-    []
-  );
-  const eventsExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-events'] | null) =>
-      filterByClusterId(payload?.events ?? null, selectedClusterId),
-    [selectedClusterId]
-  );
-
-  const rbac = useClusterDomainResource(
-    'cluster-rbac',
+  const rbac = useDescriptorBackedClusterResource<any[]>(
+    clusterResourceDescriptors.rbac,
     rbacDomain,
-    rbacExtractor,
     clusterScope,
-    rbacMetaExtractor,
+    selectedClusterId,
     isPaused,
     isManualRefreshActive
   );
-  const storage = useClusterDomainResource(
-    'cluster-storage',
+  const storage = useDescriptorBackedClusterResource<any[]>(
+    clusterResourceDescriptors.storage,
     storageDomain,
-    storageExtractor,
     clusterScope,
-    undefined,
+    selectedClusterId,
     isPaused,
     isManualRefreshActive
   );
-  const config = useClusterDomainResource(
-    'cluster-config',
+  const config = useDescriptorBackedClusterResource<any[]>(
+    clusterResourceDescriptors.config,
     configDomain,
-    configExtractor,
     clusterScope,
-    configMetaExtractor,
+    selectedClusterId,
     isPaused,
     isManualRefreshActive
   );
-  const crds = useClusterDomainResource(
-    'cluster-crds',
+  const crds = useDescriptorBackedClusterResource<any[]>(
+    clusterResourceDescriptors.crds,
     crdDomain,
-    crdExtractor,
     clusterScope,
-    undefined,
+    selectedClusterId,
     isPaused,
     isManualRefreshActive
   );
-  const custom = useClusterDomainResource(
-    'cluster-custom',
+  const custom = useDescriptorBackedClusterResource<any[]>(
+    clusterResourceDescriptors.custom,
     customDomain,
-    customExtractor,
     clusterScope,
-    customMetaExtractor,
+    selectedClusterId,
     isPaused,
     isManualRefreshActive
   );
-  const events = useClusterDomainResource(
-    'cluster-events',
+  const events = useDescriptorBackedClusterResource<any[]>(
+    clusterResourceDescriptors.events,
     eventsDomain,
-    eventsExtractor,
     clusterEventsScope,
-    undefined,
+    selectedClusterId,
     isPaused,
     isManualRefreshActive
   );

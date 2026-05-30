@@ -15,6 +15,11 @@ import type {
   NamespaceHelmSummary,
   RefreshDomain,
 } from '@/core/refresh/types';
+import {
+  buildHelmReleaseRowKey,
+  buildKindedNamespacedRowKey,
+  buildVersionedNamespacedRowKey,
+} from '@shared/utils/resourceRowIdentity';
 
 export interface NamespaceResourceDescriptor<T = any[]> {
   resourceKey: NamespaceRefresherKey;
@@ -41,7 +46,7 @@ const filterByClusterId = <T extends { clusterId?: string | null }>(
 const kindsMeta = (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] });
 
 const resourceRowIdentity = (item: any, clusterId?: string | null) =>
-  `${item.clusterId ?? clusterId ?? ''}::${item.namespace}::${item.kind}::${item.name}`;
+  buildKindedNamespacedRowKey(item.clusterId ?? clusterId, item.namespace, item.kind, item.name);
 
 const parseAutoscalingTarget = (
   target?: string | null,
@@ -163,7 +168,14 @@ export const namespaceResourceDescriptors = {
       })),
     meta: kindsMeta,
     rowIdentity: (item, clusterId) =>
-      `${item.clusterId ?? clusterId ?? ''}::${item.namespace}::${item.apiGroup ?? ''}::${item.apiVersion ?? ''}::${item.kind}::${item.name}`,
+      buildVersionedNamespacedRowKey(
+        item.clusterId ?? clusterId,
+        item.namespace,
+        item.apiGroup,
+        item.apiVersion,
+        item.kind,
+        item.name
+      ),
   },
   helm: {
     resourceKey: 'helm',
@@ -185,6 +197,6 @@ export const namespaceResourceDescriptors = {
         age: release.age,
       })),
     rowIdentity: (release, clusterId) =>
-      `${release.clusterId ?? clusterId ?? ''}::${release.namespace}::${release.name}`,
+      buildHelmReleaseRowKey(release.clusterId ?? clusterId, release.namespace, release.name),
   },
 } satisfies Partial<Record<NamespaceRefresherKey, NamespaceResourceDescriptor>>;

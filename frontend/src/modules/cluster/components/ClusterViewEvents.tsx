@@ -1,8 +1,9 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewEvents.tsx
  *
- * UI component for ClusterViewEvents.
- * Handles rendering and interactions for the cluster feature.
+ * Renders cluster-scoped Kubernetes Events. It displays event rows, links
+ * involved objects through ResourceLink-aware navigation, and wires event
+ * context menu actions into the shared object action controller.
  */
 
 import './ClusterViewEvents.css';
@@ -254,7 +255,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
               clusterName: event.clusterName,
             },
             { fallbackClusterId: selectedClusterId },
-            { involvedObject: event.object }
+            { involvedObject: event.object, involvedObjectRef: event.involvedObject }
           )
         );
       },

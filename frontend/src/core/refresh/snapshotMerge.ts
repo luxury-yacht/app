@@ -1,4 +1,17 @@
+/**
+ * frontend/src/core/refresh/snapshotMerge.ts
+ *
+ * Reuses stable row objects while applying snapshot payloads. It keeps polling
+ * refreshes from replacing unchanged rows and shares row identity helpers with
+ * stream and table surfaces.
+ */
+
 import { getScopedDomainState } from './store';
+import {
+  buildCatalogResourceRowKey,
+  buildClusterNameRowKey,
+  buildKindedNamespacedRowKey,
+} from '@shared/utils/resourceRowIdentity';
 import type {
   CatalogSnapshotPayload,
   DomainPayloadMap,
@@ -75,14 +88,24 @@ export const mergeWorkloadMetricRows = (
 
   const incomingByKey = new Map(
     incoming.map((workload) => [
-      `${workload.clusterId ?? fallbackClusterId}::${workload.namespace}::${workload.kind}::${workload.name}`,
+      buildKindedNamespacedRowKey(
+        workload.clusterId ?? fallbackClusterId,
+        workload.namespace,
+        workload.kind,
+        workload.name
+      ),
       workload,
     ])
   );
 
   let changed = false;
   const next = previous.map((existing) => {
-    const key = `${existing.clusterId ?? fallbackClusterId}::${existing.namespace}::${existing.kind}::${existing.name}`;
+    const key = buildKindedNamespacedRowKey(
+      existing.clusterId ?? fallbackClusterId,
+      existing.namespace,
+      existing.kind,
+      existing.name
+    );
     const candidate = incomingByKey.get(key);
     if (!candidate) {
       return existing;
@@ -143,7 +166,7 @@ const pollingListMergeDescriptors = {
     // payload.clusterId is required on ClusterMeta-derived payloads, so the
     // merge-key fallback does not need a blank-cluster guard.
     key: (entry: NamespaceRow, payload: NamespaceSnapshotPayload) =>
-      `${entry.clusterId ?? payload.clusterId}::${entry.name}`,
+      buildClusterNameRowKey(entry.clusterId ?? payload.clusterId, entry.name),
   },
   'object-maintenance': {
     previous: (scope?: string) =>
@@ -157,7 +180,7 @@ const pollingListMergeDescriptors = {
       drains: rows,
     }),
     key: (entry: NodeMaintenanceRow, payload: NodeMaintenanceSnapshotPayload) =>
-      `${entry.clusterId ?? payload.clusterId}::${entry.id}`,
+      buildClusterNameRowKey(entry.clusterId ?? payload.clusterId, entry.id),
   },
   'catalog-diff': {
     previous: (scope?: string) =>
@@ -172,9 +195,16 @@ const pollingListMergeDescriptors = {
     key: (entry: CatalogRow, payload: CatalogSnapshotPayload) => {
       const clusterId = entry.clusterId ?? payload.clusterId;
       if (entry.uid) {
-        return `${clusterId}::${entry.uid}`;
+        return buildClusterNameRowKey(clusterId, entry.uid);
       }
-      return `${clusterId}::${entry.group}::${entry.version}::${entry.resource}::${entry.namespace ?? ''}::${entry.name}`;
+      return buildCatalogResourceRowKey(
+        clusterId,
+        entry.group,
+        entry.version,
+        entry.resource,
+        entry.namespace ?? '',
+        entry.name
+      );
     },
   },
 };

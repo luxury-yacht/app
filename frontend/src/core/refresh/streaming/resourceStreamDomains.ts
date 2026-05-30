@@ -5,6 +5,15 @@
  */
 
 import type { AppEvents } from '@/core/events';
+import {
+  buildClusterNameRowKey,
+  buildHelmReleaseRowKey,
+  buildKindedClusterRowKey,
+  buildKindedNamespacedRowKey,
+  buildPodRowKey,
+  buildVersionedClusterRowKey,
+  buildVersionedNamespacedRowKey,
+} from '@shared/utils/resourceRowIdentity';
 import { refreshDomainContract } from '../domainRegistry';
 import type {
   ClusterConfigEntry,
@@ -315,27 +324,27 @@ export const sortNodeRows = (rows: ClusterNodeSnapshotEntry[]): void => {
 };
 
 const buildPodKey = (clusterId: string, namespace: string, name: string): string =>
-  `${clusterId}::${namespace}::${name}`;
+  buildPodRowKey(clusterId, namespace, name);
 
 const buildWorkloadKey = (
   clusterId: string,
   namespace: string,
   kind: string,
   name: string
-): string => `${clusterId}::${namespace}::${kind}::${name}`;
+): string => buildKindedNamespacedRowKey(clusterId, namespace, kind, name);
 
 const buildConfigKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
-  `${clusterId}::${namespace}::${kind}::${name}`;
+  buildKindedNamespacedRowKey(clusterId, namespace, kind, name);
 
 const buildRBACKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
-  `${clusterId}::${namespace}::${kind}::${name}`;
+  buildKindedNamespacedRowKey(clusterId, namespace, kind, name);
 
 const buildNetworkKey = (
   clusterId: string,
   namespace: string,
   kind: string,
   name: string
-): string => `${clusterId}::${namespace}::${kind}::${name}`;
+): string => buildKindedNamespacedRowKey(clusterId, namespace, kind, name);
 
 const buildCustomKey = (
   clusterId: string,
@@ -344,37 +353,39 @@ const buildCustomKey = (
   apiVersion: string,
   kind: string,
   name: string
-): string => `${clusterId}::${namespace}::${apiGroup}::${apiVersion}::${kind}::${name}`;
+): string => buildVersionedNamespacedRowKey(clusterId, namespace, apiGroup, apiVersion, kind, name);
 
 const buildHelmKey = (clusterId: string, namespace: string, name: string): string =>
-  `${clusterId}::${namespace}::${name}`;
+  buildHelmReleaseRowKey(clusterId, namespace, name);
 
 const buildAutoscalingKey = (
   clusterId: string,
   namespace: string,
   kind: string,
   name: string
-): string => `${clusterId}::${namespace}::${kind}::${name}`;
+): string => buildKindedNamespacedRowKey(clusterId, namespace, kind, name);
 
 const buildQuotaKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
-  `${clusterId}::${namespace}::${kind}::${name}`;
+  buildKindedNamespacedRowKey(clusterId, namespace, kind, name);
 
 const buildStorageKey = (
   clusterId: string,
   namespace: string,
   kind: string,
   name: string
-): string => `${clusterId}::${namespace}::${kind}::${name}`;
+): string => buildKindedNamespacedRowKey(clusterId, namespace, kind, name);
 
 const buildClusterRBACKey = (clusterId: string, kind: string, name: string): string =>
-  `${clusterId}::${kind}::${name}`;
+  buildKindedClusterRowKey(clusterId, kind, name);
 
-const buildClusterStorageKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
+const buildClusterStorageKey = (clusterId: string, name: string): string =>
+  buildClusterNameRowKey(clusterId, name);
 
 const buildClusterConfigKey = (clusterId: string, kind: string, name: string): string =>
-  `${clusterId}::${kind}::${name}`;
+  buildKindedClusterRowKey(clusterId, kind, name);
 
-const buildClusterCRDKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
+const buildClusterCRDKey = (clusterId: string, name: string): string =>
+  buildClusterNameRowKey(clusterId, name);
 
 const buildClusterCustomKey = (
   clusterId: string,
@@ -382,9 +393,10 @@ const buildClusterCustomKey = (
   apiVersion: string,
   kind: string,
   name: string
-): string => `${clusterId}::${apiGroup}::${apiVersion}::${kind}::${name}`;
+): string => buildVersionedClusterRowKey(clusterId, apiGroup, apiVersion, kind, name);
 
-const buildNodeKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
+const buildNodeKey = (clusterId: string, name: string): string =>
+  buildClusterNameRowKey(clusterId, name);
 
 // Stream update/delete identity is only accepted through update.ref. Snapshot
 // rows still derive keys from row fields because rows are the snapshot payload.

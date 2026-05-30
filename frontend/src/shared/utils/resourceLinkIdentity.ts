@@ -104,6 +104,9 @@ export const resourceLinkToObjectReference = (
   return resourceRefToObjectReference(link.ref, clusterName);
 };
 
+export const resourceLinkDisplayKind = (link?: ResourceLink | null): string | undefined =>
+  normalizeOptional(link?.ref?.kind) ?? normalizeOptional(link?.display?.kind);
+
 export const resolveCatalogObjectByUID = async (
   clusterId?: string | null,
   uid?: string | null

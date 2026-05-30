@@ -1,8 +1,9 @@
 /**
  * frontend/src/core/refresh/components/RefreshDiagnosticsPanel.tsx
  *
- * UI component for RefreshDiagnosticsPanel.
- * Handles rendering and interactions for the shared components.
+ * Renders the refresh diagnostics panel. It combines refresh-domain state,
+ * stream health, permission diagnostics, broker reads, and table diagnostics
+ * into the developer-facing runtime inspection surface.
  */
 
 import React, {
@@ -66,7 +67,11 @@ import {
   CLUSTER_SCOPE,
   DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
+  METRICS_ONLY_DOMAINS,
+  PAUSE_POLLING_WHEN_STREAMING_DOMAINS,
   PRIORITY_DOMAINS,
+  STREAM_MODE_BY_NAME,
+  STREAM_ONLY_DOMAINS,
   getScopedFeaturesForView,
   resolveDomainNamespace,
 } from './diagnostics';
@@ -101,34 +106,6 @@ type StreamHealthSummary = {
   connectionStatus?: 'connected' | 'disconnected';
   lastMessageAt?: number;
   lastDeliveryAt?: number;
-};
-
-const METRICS_ONLY_DOMAINS = new Set<RefreshDomain>(['pods', 'namespace-workloads', 'nodes']);
-const STREAM_ONLY_DOMAINS = new Set<RefreshDomain>(['container-logs']);
-const PAUSE_POLLING_WHEN_STREAMING_DOMAINS = new Set<RefreshDomain>([
-  'catalog',
-  'cluster-rbac',
-  'cluster-storage',
-  'cluster-config',
-  'cluster-crds',
-  'cluster-custom',
-  'cluster-events',
-  'namespace-config',
-  'namespace-network',
-  'namespace-rbac',
-  'namespace-storage',
-  'namespace-autoscaling',
-  'namespace-quotas',
-  'namespace-custom',
-  'namespace-helm',
-  'namespace-events',
-]);
-
-const STREAM_MODE_BY_NAME: Record<string, 'streaming' | 'watch'> = {
-  resources: 'streaming',
-  events: 'watch',
-  catalog: 'watch',
-  'container-logs': 'streaming',
 };
 
 const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'access denied', 'rbac'];

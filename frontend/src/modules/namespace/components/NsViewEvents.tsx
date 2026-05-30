@@ -1,8 +1,9 @@
 /**
  * frontend/src/modules/namespace/components/NsViewEvents.tsx
  *
- * UI component for NsViewEvents.
- * Handles rendering and interactions for the namespace feature.
+ * Renders namespace-scoped Kubernetes Events. It displays event rows, links
+ * involved objects through ResourceLink-aware navigation, and wires event
+ * context menu actions into the shared object action controller.
  */
 
 import './NsViewEvents.css';
@@ -298,7 +299,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
               clusterName: event.clusterName,
             },
             { fallbackClusterId: selectedClusterId },
-            { involvedObject: event.object }
+            { involvedObject: event.object, involvedObjectRef: event.involvedObject }
           )
         );
       },

@@ -26,6 +26,8 @@ import {
   objectActionInvolvedObjectLabel,
   objectActionLabel,
 } from '@shared/actions/objectActionDescriptors';
+import type { ResourceLink } from '@core/refresh/types';
+import { resourceLinkDisplayKind } from '@shared/utils/resourceLinkIdentity';
 
 // Normalized kind mapping for permission checks
 const WORKLOAD_KIND_MAP: Record<string, string> = {
@@ -80,6 +82,7 @@ export interface ObjectActionData {
   unschedulable?: boolean;
   // For Event-specific actions - the involved object reference (e.g., "Pod/my-pod")
   involvedObject?: string;
+  involvedObjectRef?: ResourceLink;
 }
 
 // Action handlers
@@ -291,9 +294,13 @@ export function buildObjectActionItems({
   }
 
   // Event-specific actions - view the involved object
-  if (object.kind === 'Event' && object.involvedObject && handlers.onViewInvolvedObject) {
-    // Parse the involved object reference (e.g., "Pod/my-pod" -> "Pod")
-    const [involvedKind] = object.involvedObject.split('/');
+  if (
+    object.kind === 'Event' &&
+    (object.involvedObject || object.involvedObjectRef) &&
+    handlers.onViewInvolvedObject
+  ) {
+    const involvedKind =
+      resourceLinkDisplayKind(object.involvedObjectRef) ?? object.involvedObject?.split('/')[0];
     if (involvedKind && involvedKind !== '-') {
       menuItems.push({
         actionId: OBJECT_ACTION_IDS.viewInvolvedObject,
