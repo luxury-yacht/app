@@ -6,10 +6,12 @@
 
 import type React from 'react';
 import type { SortConfig, SortDirection } from '@/hooks/useTableSort';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import type {
   ColumnWidthState,
   GridColumnDefinition,
+  GridTableDiagnosticsMode,
   GridTableFilterConfig,
   GridTableFilterOptions,
   GridTableFilterState,
@@ -114,6 +116,22 @@ export interface ResourceGridCommonParams<T extends ResourceGridTableRow> extend
 export interface ResourceGridTableResult<T extends ResourceGridTableRow> {
   gridTableProps: GridTableBindingProps<T>;
   favModal: React.ReactNode;
+}
+
+export interface ObjectPanelResourceGridTableSurfaceProps<T extends ResourceGridTableRow> {
+  gridTableProps: GridTableBindingProps<T>;
+  columns: GridColumnDefinition<T>[];
+  keyExtractor: (item: T, index: number) => string;
+  diagnosticsLabel: string;
+  loading: boolean;
+  spinnerMessage: string;
+  updatingMessage: string;
+  diagnosticsMode?: GridTableDiagnosticsMode;
+  tableClassName?: string;
+  hideHeader?: boolean;
+  onRowClick?: (item: T) => void;
+  enableContextMenu?: boolean;
+  getCustomContextMenuItems?: (item: T, columnKey: string) => ContextMenuItem[];
 }
 
 export interface QueryResourceGridTableParams<T extends ResourceGridTableRow> {

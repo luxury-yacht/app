@@ -19,7 +19,7 @@ import { formatAge, formatFullDate } from '@utils/ageFormatter';
 import { errorHandler } from '@/utils/errorHandler';
 import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
 import type { ObjectEventSummary } from '@/core/refresh/types';
-import { refreshManager, refreshOrchestrator } from '@/core/refresh';
+import { refreshManager } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
@@ -40,6 +40,7 @@ import {
 import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
 import type { PanelObjectData } from '../types';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
+import { useObjectPanelScopedDomainLifecycle } from '../hooks/useObjectPanelScopedDomainLifecycle';
 import './EventsTab.css';
 
 interface EventsTabProps {
@@ -102,22 +103,11 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
 
   const eventsSnapshot = useRefreshScopedDomain('object-events', eventsScope ?? INACTIVE_SCOPE);
 
-  // Enable/disable the scoped domain based on tab activity. preserveState
-  // keeps the store entry alive when the tab unmounts so diagnostics can still
-  // see it. Full cleanup (reset) is handled by ObjectPanelContent when the
-  // panel closes.
-  useEffect(() => {
-    if (!eventsScope) {
-      return;
-    }
-    const enabled = Boolean(isActive && objectData);
-    refreshOrchestrator.setScopedDomainEnabled('object-events', eventsScope, enabled);
-    return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-events', eventsScope, false, {
-        preserveState: true,
-      });
-    };
-  }, [eventsScope, isActive, objectData]);
+  useObjectPanelScopedDomainLifecycle({
+    domain: 'object-events',
+    scope: eventsScope,
+    enabled: Boolean(isActive && objectData),
+  });
 
   const fetchEvents = useCallback(
     async (reason: DataRequestReason = 'startup') => {

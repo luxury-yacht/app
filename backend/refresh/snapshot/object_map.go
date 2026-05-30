@@ -1,3 +1,5 @@
+// Package snapshot builds refresh-domain payloads, including the object-map
+// relationship graph.
 package snapshot
 
 import (
@@ -335,101 +337,19 @@ func (b *objectMapBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		return nil, fmt.Errorf("object-map scope for %s/%s is missing group/version", opts.identity.GVK.Kind, opts.identity.Name)
 	}
 
-	meta := ClusterMetaFromContext(ctx)
-	index := newObjectMapIndex(meta)
-	index.addCatalog(b.catalog())
-	index.collectTyped(ctx, b.client)
-	index.collectGatewayTyped(ctx, b.gatewayClient, b.gatewayPresence)
-	if err := index.listError(); err != nil {
+	assembler, err := b.newObjectMapAssembler(ctx)
+	if err != nil {
 		return nil, err
 	}
-	index.enrichActionFacts()
-
-	seed, ok := index.findIdentity(opts.identity.Namespace, opts.identity.GVK, opts.identity.Name)
-	if !ok {
-		return nil, fmt.Errorf("object-map seed not found: %s/%s %s/%s", opts.identity.GVK.Group, opts.identity.GVK.Version, opts.identity.GVK.Kind, opts.identity.Name)
-	}
-
-	graph := index.buildGraph(seed, opts.maxDepth, opts.maxNodes)
-	nodes := sortedObjectMapNodes(graph.nodes)
-	edges := sortedObjectMapEdges(graph.edges)
-	payload := ObjectMapSnapshotPayload{
-		ClusterMeta: meta,
-		Seed:        seed.ref,
-		Nodes:       nodes,
-		Edges:       edges,
-		MaxDepth:    opts.maxDepth,
-		MaxNodes:    opts.maxNodes,
-		Truncated:   graph.truncated,
-		Warnings:    index.warnings,
-	}
-
-	return &refresh.Snapshot{
-		Domain:  objectMapDomain,
-		Scope:   scope,
-		Version: 0,
-		Payload: payload,
-		Stats: refresh.SnapshotStats{
-			ItemCount:    len(nodes),
-			TotalItems:   len(nodes),
-			Truncated:    graph.truncated,
-			Warnings:     index.warnings,
-			IsFinalBatch: true,
-			BatchSize:    len(nodes),
-			TotalBatches: 1,
-		},
-	}, nil
+	return assembler.buildObjectSnapshot(scope, opts)
 }
 
 func (b *objectMapBuilder) buildNamespace(ctx context.Context, scope string, opts objectMapOptions) (*refresh.Snapshot, error) {
-	meta := ClusterMetaFromContext(ctx)
-	index := newObjectMapIndex(meta)
-	index.addCatalog(b.catalog())
-	index.collectTyped(ctx, b.client)
-	index.collectGatewayTyped(ctx, b.gatewayClient, b.gatewayPresence)
-	if err := index.listError(); err != nil {
+	assembler, err := b.newObjectMapAssembler(ctx)
+	if err != nil {
 		return nil, err
 	}
-	index.enrichActionFacts()
-
-	graph := index.buildNamespaceGraph(opts.namespace, opts.maxNodes)
-	nodes := sortedObjectMapNodes(graph.nodes)
-	edges := sortedObjectMapEdges(graph.edges)
-	seed := ObjectMapReference{
-		ClusterID:   meta.ClusterID,
-		ClusterName: meta.ClusterName,
-		Group:       "",
-		Version:     "v1",
-		Kind:        "Namespace",
-		Resource:    "namespaces",
-		Name:        opts.namespace,
-	}
-	payload := ObjectMapSnapshotPayload{
-		ClusterMeta: meta,
-		Seed:        seed,
-		Nodes:       nodes,
-		Edges:       edges,
-		MaxDepth:    opts.maxDepth,
-		MaxNodes:    opts.maxNodes,
-		Truncated:   graph.truncated,
-		Warnings:    index.warnings,
-	}
-
-	return &refresh.Snapshot{
-		Domain:  objectMapDomain,
-		Scope:   scope,
-		Version: 0,
-		Payload: payload,
-		Stats: refresh.SnapshotStats{
-			ItemCount:    len(nodes),
-			TotalItems:   len(nodes),
-			Truncated:    graph.truncated,
-			Warnings:     index.warnings,
-			IsFinalBatch: true,
-			BatchSize:    len(nodes),
-			TotalBatches: 1,
-		},
-	}, nil
+	return assembler.buildNamespaceSnapshot(scope, opts)
 }
 
 func (b *objectMapBuilder) catalog() *objectcatalog.Service {

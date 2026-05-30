@@ -361,12 +361,8 @@ func (a *App) shouldReconnect(session *portForwardSessionInternal) bool {
 	session.mu.Lock()
 	defer session.mu.Unlock()
 
-	switch session.TargetKind {
-	case "Deployment", "StatefulSet", "DaemonSet", "Service":
-		return true
-	default:
-		return false
-	}
+	capability, ok := lookupPortForwardTargetCapability(session.TargetKind)
+	return ok && capability.Reconnect
 }
 
 // calculateBackoff returns the backoff duration for a reconnect attempt.

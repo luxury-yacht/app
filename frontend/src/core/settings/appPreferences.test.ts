@@ -7,6 +7,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import {
+  commitIntegerPreferenceInput,
+  createPaletteTintPreferenceWorkflow,
   getAccentColor,
   getAppearanceModePreference,
   getAutoRefreshEnabled,
@@ -433,6 +435,7 @@ describe('appPreferences', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     delete (window as any).go;
   });
 
@@ -805,6 +808,59 @@ describe('appPreferences', () => {
         { key: 'paletteBrightnessDark', value: 20 },
       ],
     });
+  });
+
+  it('debounces workflow preference commits and persists only the latest value', async () => {
+    vi.useFakeTimers();
+    appMocks.GetAppSettings.mockResolvedValue({
+      appearanceMode: 'system',
+      paletteHueLight: 0,
+      paletteSaturationLight: 0,
+      paletteBrightnessLight: 0,
+    });
+
+    await hydrateAppPreferences({ force: true });
+    const workflow = createPaletteTintPreferenceWorkflow({ debounceMs: 50 });
+
+    workflow.commitDebounced({ mode: 'light', hue: 20, saturation: 25, brightness: 5 });
+    workflow.commitDebounced({ mode: 'light', hue: 40, saturation: 50, brightness: -5 });
+
+    expect(getPaletteTint('light')).toEqual({ hue: 0, saturation: 0, brightness: 0 });
+    expect(appMocks.UpdateAppPreferences).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(50);
+    await vi.runAllTimersAsync();
+
+    expect(getPaletteTint('light')).toEqual({ hue: 40, saturation: 50, brightness: -5 });
+    expect(appMocks.UpdateAppPreferences).toHaveBeenCalledTimes(1);
+    expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
+      changes: [
+        { key: 'paletteHueLight', value: 40 },
+        { key: 'paletteSaturationLight', value: 50 },
+        { key: 'paletteBrightnessLight', value: -5 },
+      ],
+    });
+    vi.useRealTimers();
+  });
+
+  it('commits integer preference inputs through schema-backed normalization', async () => {
+    appMocks.GetAppSettingsSchema.mockResolvedValue(
+      preferenceSchema({
+        maxTableRows: { defaultValue: 750, currentValue: 1000, min: 50, max: 9000 },
+      })
+    );
+    await hydrateAppPreferences({ force: true });
+    const persisted: number[] = [];
+
+    const normalized = commitIntegerPreferenceInput(
+      'maxTableRows',
+      '99999',
+      (value) => persisted.push(value),
+      { defaultOnNonPositive: true }
+    );
+
+    expect(normalized).toBe(9000);
+    expect(persisted).toEqual([9000]);
   });
 
   it('setAccentColor updates cache and calls backend for the specified mode', async () => {

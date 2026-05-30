@@ -44,7 +44,8 @@ func (a *App) GetTargetPorts(clusterID, namespace, targetKind, targetGroup, targ
 	ctx, cancel := context.WithTimeout(context.Background(), config.PortForwardTargetPortsTimeout)
 	defer cancel()
 
-	if target.Kind == "Service" {
+	capability, _ := lookupPortForwardTargetCapability(target.Kind)
+	if capability.UsesServicePortSpec {
 		service, err := deps.KubernetesClient.CoreV1().Services(target.Namespace).Get(ctx, target.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get service: %w", err)

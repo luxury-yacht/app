@@ -1,3 +1,9 @@
+/**
+ * frontend/src/ui/settings/sections/AppearanceSection.test.tsx
+ *
+ * Tests for Appearance settings interactions and preference workflow wiring.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,27 +64,50 @@ vi.mock('@/core/contexts/AppearanceModeContext', () => ({
   useAppearanceMode: () => ({ mode: 'light', resolvedMode: 'light' }),
 }));
 
-vi.mock('@/core/settings/appPreferences', () => ({
-  hydrateAppPreferences: vi.fn().mockResolvedValue({}),
-  getPreferenceMetadata: (key: string) => appPreferenceMocks.getPreferenceMetadata(key),
-  getIntegerPreferenceMetadata: (key: string) =>
-    appPreferenceMocks.getIntegerPreferenceMetadata(key),
-  normalizeIntegerPreferenceValue: (key: string, value: number) =>
-    appPreferenceMocks.normalizeIntegerPreferenceValue(key, value),
-  getPaletteTint: (...args: unknown[]) => appPreferenceMocks.getPaletteTint(...args),
-  setPaletteTint: (...args: unknown[]) => appPreferenceMocks.setPaletteTint(...args),
-  getAccentColor: (...args: unknown[]) => appPreferenceMocks.getAccentColor(...args),
-  setAccentColor: (...args: unknown[]) => appPreferenceMocks.setAccentColor(...args),
-  getLinkColor: (...args: unknown[]) => appPreferenceMocks.getLinkColor(...args),
-  setLinkColor: (...args: unknown[]) => appPreferenceMocks.setLinkColor(...args),
-  getThemes: (...args: unknown[]) => appPreferenceMocks.getThemes(...args),
-  saveTheme: (...args: unknown[]) => appPreferenceMocks.saveTheme(...args),
-  validateThemeClusterPattern: (...args: unknown[]) =>
-    appPreferenceMocks.validateThemeClusterPattern(...args),
-  deleteTheme: vi.fn(),
-  reorderThemes: vi.fn(),
-  applyTheme: vi.fn(),
-}));
+vi.mock('@/core/settings/appPreferences', () => {
+  const createPreferenceWorkflowMock = <T,>(commit: (input: T) => void) => ({
+    commit,
+    commitDebounced: commit,
+    cancelPending: vi.fn(),
+  });
+
+  return {
+    hydrateAppPreferences: vi.fn().mockResolvedValue({}),
+    getPreferenceMetadata: (key: string) => appPreferenceMocks.getPreferenceMetadata(key),
+    getIntegerPreferenceMetadata: (key: string) =>
+      appPreferenceMocks.getIntegerPreferenceMetadata(key),
+    normalizeIntegerPreferenceValue: (key: string, value: number) =>
+      appPreferenceMocks.normalizeIntegerPreferenceValue(key, value),
+    getPaletteTint: (...args: unknown[]) => appPreferenceMocks.getPaletteTint(...args),
+    createPaletteTintPreferenceWorkflow: () =>
+      createPreferenceWorkflowMock(
+        (input: { mode: 'light' | 'dark'; hue: number; saturation: number; brightness?: number }) =>
+          appPreferenceMocks.setPaletteTint(
+            input.mode,
+            input.hue,
+            input.saturation,
+            input.brightness
+          )
+      ),
+    getAccentColor: (...args: unknown[]) => appPreferenceMocks.getAccentColor(...args),
+    createAccentColorPreferenceWorkflow: () =>
+      createPreferenceWorkflowMock((input: { mode: 'light' | 'dark'; color: string }) =>
+        appPreferenceMocks.setAccentColor(input.mode, input.color)
+      ),
+    getLinkColor: (...args: unknown[]) => appPreferenceMocks.getLinkColor(...args),
+    createLinkColorPreferenceWorkflow: () =>
+      createPreferenceWorkflowMock((input: { mode: 'light' | 'dark'; color: string }) =>
+        appPreferenceMocks.setLinkColor(input.mode, input.color)
+      ),
+    getThemes: (...args: unknown[]) => appPreferenceMocks.getThemes(...args),
+    saveTheme: (...args: unknown[]) => appPreferenceMocks.saveTheme(...args),
+    validateThemeClusterPattern: (...args: unknown[]) =>
+      appPreferenceMocks.validateThemeClusterPattern(...args),
+    deleteTheme: vi.fn(),
+    reorderThemes: vi.fn(),
+    applyTheme: vi.fn(),
+  };
+});
 
 vi.mock('@/utils/appearanceMode', () => ({
   changeAppearanceMode: (...args: unknown[]) => appearanceModeMocks.changeAppearanceMode(...args),

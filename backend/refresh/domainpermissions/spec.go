@@ -1,3 +1,5 @@
+// Package domainpermissions owns the shared refresh-domain resource contracts
+// used by runtime permission checks, registration gates, and resource streams.
 package domainpermissions
 
 import "github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -31,12 +33,58 @@ type Resource struct {
 	Resource string
 }
 
+// Composition is the Kubernetes resource composition for one refresh domain
+// before it is converted into verb-specific permission requirements.
+type Composition struct {
+	Domain  string
+	Mode    Mode
+	Reason  string
+	Runtime []Resource
+	Stream  []Resource
+}
+
 type policySpec struct {
 	Domain  string
 	Mode    Mode
 	Reason  string
 	Runtime []Resource
 	Stream  []Resource
+}
+
+// Compositions returns the shared resource composition for refresh domains.
+func Compositions() []Composition {
+	result := make([]Composition, 0, len(policySpecs))
+	for _, spec := range policySpecs {
+		result = append(result, Composition{
+			Domain:  spec.Domain,
+			Mode:    spec.Mode,
+			Reason:  spec.Reason,
+			Runtime: copyResources(spec.Runtime),
+			Stream:  copyResources(spec.Stream),
+		})
+	}
+	return result
+}
+
+// CompositionByDomain returns the resource composition keyed by domain.
+func CompositionByDomain() map[string]Composition {
+	result := make(map[string]Composition, len(policySpecs))
+	for _, composition := range Compositions() {
+		result[composition.Domain] = composition
+	}
+	return result
+}
+
+// StreamDomains returns the domains with resource-stream list/watch resources.
+func StreamDomains() []string {
+	result := make([]string, 0, len(policySpecs))
+	for _, spec := range policySpecs {
+		if len(spec.Stream) == 0 {
+			continue
+		}
+		result = append(result, spec.Domain)
+	}
+	return result
 }
 
 // Policies returns the shared permission contract for refresh domains.
@@ -71,11 +119,11 @@ func StreamRequirementsByDomain() map[string][]permissions.ResourceRequirement {
 // RuntimeResourcesByDomain returns the runtime resource composition keyed by domain.
 func RuntimeResourcesByDomain() map[string][]Resource {
 	result := make(map[string][]Resource)
-	for _, spec := range policySpecs {
-		if len(spec.Runtime) == 0 {
+	for _, composition := range Compositions() {
+		if len(composition.Runtime) == 0 {
 			continue
 		}
-		result[spec.Domain] = append([]Resource(nil), spec.Runtime...)
+		result[composition.Domain] = copyResources(composition.Runtime)
 	}
 	return result
 }
@@ -83,11 +131,11 @@ func RuntimeResourcesByDomain() map[string][]Resource {
 // StreamResourcesByDomain returns the resource stream composition keyed by domain.
 func StreamResourcesByDomain() map[string][]Resource {
 	result := make(map[string][]Resource)
-	for _, spec := range policySpecs {
-		if len(spec.Stream) == 0 {
+	for _, composition := range Compositions() {
+		if len(composition.Stream) == 0 {
 			continue
 		}
-		result[spec.Domain] = append([]Resource(nil), spec.Stream...)
+		result[composition.Domain] = copyResources(composition.Stream)
 	}
 	return result
 }
@@ -142,6 +190,10 @@ func copyPolicy(policy Policy) Policy {
 	policy.Runtime = append([]permissions.ResourceRequirement(nil), policy.Runtime...)
 	policy.Stream = append([]permissions.ResourceRequirement(nil), policy.Stream...)
 	return policy
+}
+
+func copyResources(src []Resource) []Resource {
+	return append([]Resource(nil), src...)
 }
 
 func listRequirements(resources []Resource) []permissions.ResourceRequirement {

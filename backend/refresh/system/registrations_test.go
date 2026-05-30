@@ -1,3 +1,4 @@
+// Package system tests refresh-domain registration wiring and permission gates.
 package system
 
 import (
@@ -532,6 +533,25 @@ func TestPartialDataRegistrationDeniedReasonsUseRuntimeContract(t *testing.T) {
 		expected, ok := access.DeniedReason(registration.name)
 		require.Truef(t, ok, "list-gated partial-data domain %s must have a runtime denied reason", registration.name)
 		require.Equal(t, expected, registration.list.deniedReason)
+	}
+}
+
+func TestListRegistrationMetadataDerivesFromRuntimeContract(t *testing.T) {
+	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	access := domainpermissions.NewRuntimeAccess()
+
+	for _, registration := range registrations {
+		if registration.list == nil {
+			continue
+		}
+		plan, ok := access.RegistrationPlan(registration.name)
+		if !ok {
+			continue
+		}
+		require.Equalf(t, permissionIssueResource(plan.Requirements), registration.list.issueResource, "domain %s issue resource", registration.name)
+		require.Equalf(t, permissionLogResource(plan.Requirements), registration.list.logResource, "domain %s log resource", registration.name)
+		require.Equalf(t, permissionLogGroup(plan.Requirements), registration.list.logGroup, "domain %s log group", registration.name)
+		require.Equalf(t, plan.DeniedReason, registration.list.deniedReason, "domain %s denied reason", registration.name)
 	}
 }
 

@@ -9,13 +9,13 @@ import { errorHandler } from '@utils/errorHandler';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import {
+  commitIntegerPreferenceInput,
   getIntegerPreferenceMetadata,
   hydrateAppPreferences,
   getKubernetesClientBurst,
   getKubernetesClientQPS,
   getMaxTableRows,
   getPermissionSSRRFetchConcurrency,
-  normalizeIntegerPreferenceValue,
   setKubernetesClientBurst,
   setKubernetesClientQPS,
   setMaxTableRows,
@@ -88,39 +88,46 @@ function AdvancedSection() {
   };
 
   const commitMaxTableRows = (raw: string) => {
-    const parsed = parseInt(raw, 10);
-    const normalized = normalizeIntegerPreferenceValue('maxTableRows', parsed, {
+    const normalized = commitIntegerPreferenceInput('maxTableRows', raw, setMaxTableRows, {
       defaultOnNonPositive: true,
     });
     setMaxTableRowsInput(String(normalized));
-    setMaxTableRows(normalized);
   };
 
   const commitKubernetesClientQPS = (raw: string) => {
-    const parsed = parseInt(raw, 10);
-    const normalized = normalizeIntegerPreferenceValue('kubernetesClientQPS', parsed, {
-      defaultOnNonPositive: true,
-    });
+    const normalized = commitIntegerPreferenceInput(
+      'kubernetesClientQPS',
+      raw,
+      setKubernetesClientQPS,
+      {
+        defaultOnNonPositive: true,
+      }
+    );
     setKubernetesClientQPSInput(String(normalized));
-    setKubernetesClientQPS(normalized);
   };
 
   const commitKubernetesClientBurst = (raw: string) => {
-    const parsed = parseInt(raw, 10);
-    const normalized = normalizeIntegerPreferenceValue('kubernetesClientBurst', parsed, {
-      defaultOnNonPositive: true,
-    });
+    const normalized = commitIntegerPreferenceInput(
+      'kubernetesClientBurst',
+      raw,
+      setKubernetesClientBurst,
+      {
+        defaultOnNonPositive: true,
+      }
+    );
     setKubernetesClientBurstInput(String(normalized));
-    setKubernetesClientBurst(normalized);
   };
 
   const commitPermissionSSRRFetchConcurrency = (raw: string) => {
-    const parsed = parseInt(raw, 10);
-    const normalized = normalizeIntegerPreferenceValue('permissionSSRRFetchConcurrency', parsed, {
-      defaultOnNonPositive: true,
-    });
+    const normalized = commitIntegerPreferenceInput(
+      'permissionSSRRFetchConcurrency',
+      raw,
+      setPermissionSSRRFetchConcurrency,
+      {
+        defaultOnNonPositive: true,
+      }
+    );
     setPermissionSSRRFetchConcurrencyInput(String(normalized));
-    setPermissionSSRRFetchConcurrency(normalized);
   };
 
   const handleResetViews = async () => {

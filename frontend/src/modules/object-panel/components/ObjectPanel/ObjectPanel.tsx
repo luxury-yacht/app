@@ -48,10 +48,10 @@ import type {
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
 import type { KubernetesObjectReference } from '@/types/view-state';
-import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import type { DockPosition } from '@ui/dockable';
 import { buildObjectDetailModel } from './Details/objectDetailModel';
+import { resetObjectPanelScopedDomain } from './hooks/useObjectPanelScopedDomainLifecycle';
 
 // ============================================================================
 // REDUCER
@@ -246,8 +246,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
       payload: { deleted: true, name: objectData?.name ?? '' },
     });
     if (detailScope) {
-      refreshOrchestrator.setScopedDomainEnabled('object-details', detailScope, false);
-      refreshOrchestrator.resetScopedDomain('object-details', detailScope);
+      resetObjectPanelScopedDomain({ domain: 'object-details', scope: detailScope });
     }
   }, [detailScope, isNotFoundError, objectData?.name, state.resourceDeleted]);
 

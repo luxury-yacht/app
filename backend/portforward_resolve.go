@@ -173,12 +173,17 @@ func resolvePortForwardDestination(
 	target portForwardTargetRef,
 	requestedPort int,
 ) (resolvedPortForwardTarget, error) {
+	capability, ok := lookupPortForwardTargetCapability(target.Kind)
+	if !ok {
+		return resolvedPortForwardTarget{}, fmt.Errorf("unsupported target kind: %s", target.Kind)
+	}
+
 	podName, err := resolvePodForTarget(ctx, client, target)
 	if err != nil {
 		return resolvedPortForwardTarget{}, err
 	}
 
-	if target.Kind != "Service" {
+	if !capability.UsesServicePortSpec {
 		return resolvedPortForwardTarget{PodName: podName, ForwardPort: requestedPort}, nil
 	}
 
@@ -395,33 +400,6 @@ func resolveServiceTargetPortForPod(servicePort *corev1.ServicePort, pod *corev1
 	}
 
 	return int(servicePort.Port), nil
-}
-
-func validatePortForwardTargetGVK(target portForwardTargetRef) error {
-	expected, ok := map[string]struct {
-		group   string
-		version string
-	}{
-		"Pod":         {group: "", version: "v1"},
-		"Service":     {group: "", version: "v1"},
-		"Deployment":  {group: "apps", version: "v1"},
-		"StatefulSet": {group: "apps", version: "v1"},
-		"DaemonSet":   {group: "apps", version: "v1"},
-	}[target.Kind]
-	if !ok {
-		return fmt.Errorf("unsupported target kind: %s", target.Kind)
-	}
-	if target.Version == "" {
-		return fmt.Errorf("target version is required")
-	}
-	if target.Group != expected.group || target.Version != expected.version {
-		groupVersion := expected.version
-		if expected.group != "" {
-			groupVersion = expected.group + "/" + expected.version
-		}
-		return fmt.Errorf("target %s must use apiVersion %s", target.Kind, groupVersion)
-	}
-	return nil
 }
 
 func isTCPProtocol(protocol corev1.Protocol) bool {

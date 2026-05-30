@@ -78,6 +78,53 @@ describe('resolveObjectActionPolicy', () => {
     ).toBe(false);
   });
 
+  it('uses exact supported target GVKs for port-forward availability', () => {
+    const supportedTargets: ObjectActionData[] = [
+      { kind: 'Pod', name: 'api', namespace: 'apps', clusterId: 'cluster-a' },
+      {
+        kind: 'Service',
+        group: '',
+        version: 'v1',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
+      deployment({ group: 'apps', version: 'v1' }),
+      deployment({ kind: 'StatefulSet', group: 'apps', version: 'v1' }),
+      deployment({ kind: 'DaemonSet', group: 'apps', version: 'v1' }),
+    ];
+
+    for (const object of supportedTargets) {
+      const policy = resolveObjectActionPolicy({
+        object,
+        context: 'gridtable',
+        handlers: { portForward: true },
+        permissions: { portForward: allowed },
+      });
+
+      expect(policy.portForward.show, object.kind).toBe(true);
+      expect(policy.portForwardEnabled, object.kind).toBe(true);
+    }
+
+    const staleDeployment = resolveObjectActionPolicy({
+      object: deployment({ group: 'extensions', version: 'v1beta1' }),
+      context: 'gridtable',
+      handlers: { portForward: true },
+      permissions: { portForward: allowed },
+    });
+    expect(staleDeployment.portForward.show).toBe(true);
+    expect(staleDeployment.portForwardEnabled).toBe(false);
+
+    const replicaSet = resolveObjectActionPolicy({
+      object: deployment({ kind: 'ReplicaSet', group: 'apps', version: 'v1' }),
+      context: 'gridtable',
+      handlers: { portForward: true },
+      permissions: { portForward: allowed },
+    });
+    expect(replicaSet.portForward.show).toBe(false);
+    expect(replicaSet.portForwardEnabled).toBe(false);
+  });
+
   it('uses node facts and permissions to choose cordon versus uncordon', () => {
     expect(
       resolveObjectActionPolicy({

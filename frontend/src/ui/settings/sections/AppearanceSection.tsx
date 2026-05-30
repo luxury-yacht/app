@@ -10,6 +10,7 @@ import {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
   type CSSProperties,
   type ReactElement,
   type RefObject,
@@ -22,12 +23,12 @@ import {
   getPreferenceMetadata,
   hydrateAppPreferences,
   normalizeIntegerPreferenceValue,
-  setPaletteTint as persistPaletteTint,
+  createPaletteTintPreferenceWorkflow,
   getPaletteTint,
   getAccentColor,
-  setAccentColor as persistAccentColor,
+  createAccentColorPreferenceWorkflow,
   getLinkColor,
-  setLinkColor as persistLinkColor,
+  createLinkColorPreferenceWorkflow,
 } from '@/core/settings/appPreferences';
 import { useAppearanceMode } from '@/core/contexts/AppearanceModeContext';
 import {
@@ -326,18 +327,18 @@ function AppearanceSection() {
   const [paletteHue, setPaletteHue] = useState(0);
   const [paletteSaturation, setPaletteSaturation] = useState(0);
   const [paletteBrightness, setPaletteBrightness] = useState(0);
-  const palettePersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const palettePreferenceWorkflow = useMemo(() => createPaletteTintPreferenceWorkflow(), []);
 
   // Accent color state.
   const [accentColor, setAccentColorState] = useState('');
-  const accentPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accentColorPreferenceWorkflow = useMemo(() => createAccentColorPreferenceWorkflow(), []);
   const [isEditingAccentHex, setIsEditingAccentHex] = useState(false);
   const [accentHexDraft, setAccentHexDraft] = useState('');
   const accentHexInputRef = useRef<HTMLInputElement>(null);
 
   // Link color state.
   const [linkColor, setLinkColorState] = useState('');
-  const linkPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const linkColorPreferenceWorkflow = useMemo(() => createLinkColorPreferenceWorkflow(), []);
   const [isEditingLinkHex, setIsEditingLinkHex] = useState(false);
   const [linkHexDraft, setLinkHexDraft] = useState('');
   const linkHexInputRef = useRef<HTMLInputElement>(null);
@@ -408,14 +409,14 @@ function AppearanceSection() {
     }
   }, [editingPaletteField]);
 
-  // Clean up persist timers on unmount.
+  // Clean up pending preference commits on unmount.
   useEffect(() => {
     return () => {
-      if (palettePersistTimer.current) clearTimeout(palettePersistTimer.current);
-      if (accentPersistTimer.current) clearTimeout(accentPersistTimer.current);
-      if (linkPersistTimer.current) clearTimeout(linkPersistTimer.current);
+      palettePreferenceWorkflow.cancelPending();
+      accentColorPreferenceWorkflow.cancelPending();
+      linkColorPreferenceWorkflow.cancelPending();
     };
-  }, []);
+  }, [accentColorPreferenceWorkflow, linkColorPreferenceWorkflow, palettePreferenceWorkflow]);
 
   const handleAppearanceModeChange = async (nextMode: string) => {
     try {
@@ -437,12 +438,14 @@ function AppearanceSection() {
   // Debounced palette tint persistence — avoids backend hammering during fast drags.
   const debouncePalettePersist = useCallback(
     (hue: number, saturation: number, brightness: number) => {
-      if (palettePersistTimer.current) clearTimeout(palettePersistTimer.current);
-      palettePersistTimer.current = setTimeout(() => {
-        persistPaletteTint(resolvedMode, hue, saturation, brightness);
-      }, 300);
+      palettePreferenceWorkflow.commitDebounced({
+        mode: resolvedMode,
+        hue,
+        saturation,
+        brightness,
+      });
     },
-    [resolvedMode]
+    [palettePreferenceWorkflow, resolvedMode]
   );
 
   const handlePaletteHueChange = (value: number) => {
@@ -499,12 +502,9 @@ function AppearanceSection() {
 
   const debounceAccentPersist = useCallback(
     (color: string) => {
-      if (accentPersistTimer.current) clearTimeout(accentPersistTimer.current);
-      accentPersistTimer.current = setTimeout(() => {
-        persistAccentColor(resolvedMode, color);
-      }, 300);
+      accentColorPreferenceWorkflow.commitDebounced({ mode: resolvedMode, color });
     },
-    [resolvedMode]
+    [accentColorPreferenceWorkflow, resolvedMode]
   );
 
   const handleAccentColorChange = (hex: string) => {
@@ -520,17 +520,13 @@ function AppearanceSection() {
 
   const handleAccentReset = () => {
     flagUnsavedDefaultThemeChange();
-    if (accentPersistTimer.current) {
-      clearTimeout(accentPersistTimer.current);
-      accentPersistTimer.current = null;
-    }
     setAccentColorState('');
     applyAccentColor(
       resolvedMode === 'light' ? '' : getAccentColor('light'),
       resolvedMode === 'dark' ? '' : getAccentColor('dark')
     );
     applyAccentBg('', resolvedMode);
-    persistAccentColor(resolvedMode, '');
+    accentColorPreferenceWorkflow.commit({ mode: resolvedMode, color: '' });
   };
 
   const validHexRe = /^#[0-9a-fA-F]{6}$/;
@@ -558,12 +554,9 @@ function AppearanceSection() {
 
   const debounceLinkPersist = useCallback(
     (color: string) => {
-      if (linkPersistTimer.current) clearTimeout(linkPersistTimer.current);
-      linkPersistTimer.current = setTimeout(() => {
-        persistLinkColor(resolvedMode, color);
-      }, 300);
+      linkColorPreferenceWorkflow.commitDebounced({ mode: resolvedMode, color });
     },
-    [resolvedMode]
+    [linkColorPreferenceWorkflow, resolvedMode]
   );
 
   const handleLinkColorChange = (hex: string) => {
@@ -575,13 +568,9 @@ function AppearanceSection() {
 
   const handleLinkReset = () => {
     flagUnsavedDefaultThemeChange();
-    if (linkPersistTimer.current) {
-      clearTimeout(linkPersistTimer.current);
-      linkPersistTimer.current = null;
-    }
     setLinkColorState('');
     applyLinkColor('', resolvedMode);
-    persistLinkColor(resolvedMode, '');
+    linkColorPreferenceWorkflow.commit({ mode: resolvedMode, color: '' });
   };
 
   const defaultLink = resolvedMode === 'light' ? '#525252' : '#aaaaaa';
