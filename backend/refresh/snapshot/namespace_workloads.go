@@ -1,3 +1,7 @@
+// backend/refresh/snapshot/namespace_workloads.go
+//
+// Builds namespace workload refresh snapshots and projects the row facts needed
+// by workload tables, stream rows, and object-action surfaces.
 package snapshot
 
 import (
@@ -83,6 +87,7 @@ type WorkloadSummary struct {
 	MemRequest           string `json:"memRequest,omitempty"`
 	MemLimit             string `json:"memLimit,omitempty"`
 	PortForwardAvailable bool   `json:"portForwardAvailable"`
+	DesiredReplicas      *int32 `json:"desiredReplicas,omitempty"`
 	// HPAManaged indicates whether a HorizontalPodAutoscaler targets this workload.
 	// Nil means HPA coverage was unavailable, so action surfaces must fail closed.
 	HPAManaged *bool `json:"hpaManaged,omitempty"`
@@ -383,6 +388,7 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
 		PortForwardAvailable: hasForwardableContainerPorts(deployment.Spec.Template.Spec.Containers),
+		DesiredReplicas:      cloneInt32Ptr(deployment.Spec.Replicas),
 	}
 }
 
@@ -427,6 +433,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
 		PortForwardAvailable: hasForwardableContainerPorts(stateful.Spec.Template.Spec.Containers),
+		DesiredReplicas:      cloneInt32Ptr(stateful.Spec.Replicas),
 	}
 }
 
@@ -781,6 +788,14 @@ func workloadHPATargetKey(summary WorkloadSummary) string {
 
 func hpaTargetKey(group, version, kind, namespace, name string) string {
 	return fmt.Sprintf("%s/%s/%s/%s/%s", group, version, kind, namespace, name)
+}
+
+func cloneInt32Ptr(value *int32) *int32 {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
 
 func formatWorkloadCPUMilli(value int64) string {

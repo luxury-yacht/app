@@ -29,10 +29,14 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
   buildEventObjectReference,
-  canResolveEventObjectReference,
-  resolveEventObjectReference,
   splitEventObjectTarget,
 } from '@shared/utils/eventObjectIdentity';
+import {
+  eventGridCanOpenRelatedObject,
+  eventGridRelatedObjectInput,
+  objectPanelEventGridRow,
+  resolveEventGridRelatedObject,
+} from '@shared/events/eventGridModel';
 import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
 import type { PanelObjectData } from '../types';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
@@ -196,19 +200,21 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
         | 'clusterName'
       >
     ) => ({
-      involvedObject: event.involvedObject,
-      object: `${event.objectKind}/${event.objectName}`,
-      objectUid: event.objectUid,
-      objectApiVersion: event.objectApiVersion,
-      objectNamespace:
-        event.objectNamespace && event.objectNamespace !== CLUSTER_SCOPE
-          ? event.objectNamespace
-          : undefined,
-      clusterId: event.clusterId ?? objectData?.clusterId ?? undefined,
-      clusterName: event.clusterName ?? objectData?.clusterName ?? undefined,
-      fallbackKind: objectData?.kind,
-      fallbackGroup: objectData?.group,
-      fallbackVersion: objectData?.version,
+      ...eventGridRelatedObjectInput(
+        objectPanelEventGridRow(
+          {
+            ...event,
+            clusterId: event.clusterId ?? objectData?.clusterId,
+            clusterName: event.clusterName ?? objectData?.clusterName,
+          },
+          CLUSTER_SCOPE
+        ),
+        {
+          fallbackKind: objectData?.kind,
+          fallbackGroup: objectData?.group,
+          fallbackVersion: objectData?.version,
+        }
+      ),
     }),
     [
       objectData?.clusterId,
@@ -288,62 +294,105 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
 
   const canOpenRelatedObject = useCallback(
     (item: EventDisplay) =>
-      canResolveEventObjectReference(
-        buildEventObjectRefInput({
-          objectKind: item.objectKind,
-          objectName: item.objectName,
-          objectNamespace: item.objectNamespace,
-          objectUid: item.objectUid,
-          objectApiVersion: item.objectApiVersion,
-          involvedObject: item.involvedObject,
-          clusterId: item.clusterId,
-          clusterName: item.clusterName,
-        })
+      eventGridCanOpenRelatedObject(
+        objectPanelEventGridRow(
+          {
+            objectKind: item.objectKind,
+            objectName: item.objectName,
+            objectNamespace: item.objectNamespace,
+            objectUid: item.objectUid,
+            objectApiVersion: item.objectApiVersion,
+            involvedObject: item.involvedObject,
+            clusterId: item.clusterId ?? objectData?.clusterId,
+            clusterName: item.clusterName ?? objectData?.clusterName,
+          },
+          CLUSTER_SCOPE
+        ),
+        {
+          fallbackKind: objectData?.kind,
+          fallbackGroup: objectData?.group,
+          fallbackVersion: objectData?.version,
+        }
       ),
-    [buildEventObjectRefInput]
+    [
+      objectData?.clusterId,
+      objectData?.clusterName,
+      objectData?.group,
+      objectData?.kind,
+      objectData?.version,
+    ]
   );
 
   const openRelatedObject = useCallback(
     async (item: EventDisplay) => {
-      const ref = await resolveEventObjectReference(
-        buildEventObjectRefInput({
-          objectKind: item.objectKind,
-          objectName: item.objectName,
-          objectNamespace: item.objectNamespace,
-          objectUid: item.objectUid,
-          objectApiVersion: item.objectApiVersion,
-          involvedObject: item.involvedObject,
-          clusterId: item.clusterId,
-          clusterName: item.clusterName,
-        })
+      const ref = await resolveEventGridRelatedObject(
+        objectPanelEventGridRow(
+          {
+            objectKind: item.objectKind,
+            objectName: item.objectName,
+            objectNamespace: item.objectNamespace,
+            objectUid: item.objectUid,
+            objectApiVersion: item.objectApiVersion,
+            involvedObject: item.involvedObject,
+            clusterId: item.clusterId ?? objectData?.clusterId,
+            clusterName: item.clusterName ?? objectData?.clusterName,
+          },
+          CLUSTER_SCOPE
+        ),
+        {
+          fallbackKind: objectData?.kind,
+          fallbackGroup: objectData?.group,
+          fallbackVersion: objectData?.version,
+        }
       );
       if (ref) {
         openWithObjectRef.current(ref);
       }
     },
-    [buildEventObjectRefInput]
+    [
+      objectData?.clusterId,
+      objectData?.clusterName,
+      objectData?.group,
+      objectData?.kind,
+      objectData?.version,
+    ]
   );
 
   // Alt+click: navigate to the related object's view and focus it.
   const navigateToRelatedObject = useCallback(
     async (item: EventDisplay) => {
-      const ref = await resolveEventObjectReference(
-        buildEventObjectRefInput({
-          objectKind: item.objectKind,
-          objectName: item.objectName,
-          objectNamespace: item.objectNamespace,
-          objectUid: item.objectUid,
-          objectApiVersion: item.objectApiVersion,
-          involvedObject: item.involvedObject,
-          clusterId: item.clusterId,
-          clusterName: item.clusterName,
-        })
+      const ref = await resolveEventGridRelatedObject(
+        objectPanelEventGridRow(
+          {
+            objectKind: item.objectKind,
+            objectName: item.objectName,
+            objectNamespace: item.objectNamespace,
+            objectUid: item.objectUid,
+            objectApiVersion: item.objectApiVersion,
+            involvedObject: item.involvedObject,
+            clusterId: item.clusterId ?? objectData?.clusterId,
+            clusterName: item.clusterName ?? objectData?.clusterName,
+          },
+          CLUSTER_SCOPE
+        ),
+        {
+          fallbackKind: objectData?.kind,
+          fallbackGroup: objectData?.group,
+          fallbackVersion: objectData?.version,
+        }
       );
       if (ref) {
         navigateToView(ref);
       }
     },
-    [buildEventObjectRefInput, navigateToView]
+    [
+      navigateToView,
+      objectData?.clusterId,
+      objectData?.clusterName,
+      objectData?.group,
+      objectData?.kind,
+      objectData?.version,
+    ]
   );
 
   const columns = useMemo<GridColumnDefinition<EventDisplay>[]>(() => {

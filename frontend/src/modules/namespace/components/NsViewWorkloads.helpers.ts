@@ -24,6 +24,7 @@ export interface WorkloadData {
   memLimit?: number | string;
   portForwardAvailable?: boolean;
   hpaManaged?: boolean | null;
+  desiredReplicas?: number;
   age?: string;
   [key: string]: any;
 }

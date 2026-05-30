@@ -19,71 +19,20 @@ import {
   ScaleIcon,
 } from '@shared/components/icons/SharedIcons';
 import { ObjectMapIcon } from '@shared/components/icons/ObjectMapIcons';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectDiffSelection } from '@shared/components/diff/objectDiffSelection';
 import {
   OBJECT_ACTION_IDS,
   objectActionInvolvedObjectLabel,
   objectActionLabel,
 } from '@shared/actions/objectActionDescriptors';
-import type { ResourceLink } from '@core/refresh/types';
+import {
+  normalizeKind,
+  resolveObjectActionPolicy,
+  SCALABLE_KINDS,
+  type ObjectActionData,
+  type PermissionStatus,
+} from '@shared/actions/objectActionPolicy';
 import { resourceLinkDisplayKind } from '@shared/utils/resourceLinkIdentity';
-
-// Normalized kind mapping for permission checks
-const WORKLOAD_KIND_MAP: Record<string, string> = {
-  Deployment: 'Deployment',
-  deployment: 'Deployment',
-  StatefulSet: 'StatefulSet',
-  statefulset: 'StatefulSet',
-  DaemonSet: 'DaemonSet',
-  daemonset: 'DaemonSet',
-  ReplicaSet: 'ReplicaSet',
-  replicaset: 'ReplicaSet',
-  Pod: 'Pod',
-  pod: 'Pod',
-  Job: 'Job',
-  job: 'Job',
-  CronJob: 'CronJob',
-  cronjob: 'CronJob',
-};
-
-export function normalizeKind(kind: string): string {
-  return WORKLOAD_KIND_MAP[kind] || kind;
-}
-
-// Object data needed for actions
-export interface ObjectActionData {
-  kind: string;
-  name: string;
-  namespace?: string;
-  clusterId?: string;
-  clusterName?: string;
-  // API group/version for the object's kind. Required to look up CRD
-  // permissions correctly: getPermissionKey only auto-resolves built-in
-  // GVK from a static table, so CRD callers must thread these through
-  // or the lookup key won't match the spec-emit key from
-  // queryKindPermissions and the Delete action silently disappears.
-  group?: string;
-  version?: string;
-  resource?: string;
-  uid?: string;
-  requiresExplicitVersion?: boolean;
-  explicitVersionProvided?: boolean;
-  // For workload-specific actions
-  status?: string;
-  ready?: string;
-  desiredReplicas?: number;
-  // Whether the target exposes any forwardable TCP ports.
-  portForwardAvailable?: boolean;
-  // Whether a HorizontalPodAutoscaler targets this workload. `null`/`undefined`
-  // means the action surface has not established HPA ownership yet.
-  hpaManaged?: boolean | null;
-  // Node-only: when true the cordon action toggles to "Uncordon".
-  unschedulable?: boolean;
-  // For Event-specific actions - the involved object reference (e.g., "Pod/my-pod")
-  involvedObject?: string;
-  involvedObjectRef?: ResourceLink;
-}
 
 // Action handlers
 export interface ObjectActionHandlers {
@@ -111,33 +60,10 @@ export interface ObjectActionHandlers {
   onObjectMap?: () => void;
 }
 
-// Permission status type (matches what useUserPermissions returns)
-export interface PermissionStatus {
-  allowed: boolean;
-  pending: boolean;
-}
-
-interface PortForwardAvailability {
-  show: boolean;
-  enabled: boolean;
-  label: string;
-}
-
-// Kinds that support each action
-const RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
-const ROLLBACKABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
-export const SCALABLE_KINDS = ['Deployment', 'StatefulSet', 'ReplicaSet'];
-const CORDONABLE_KINDS = ['Node'];
-const DRAINABLE_KINDS = ['Node'];
 let nextObjectDiffRequestId = 1;
 
-const PORT_FORWARDABLE_TARGETS: Record<string, { group: string; version: string }> = {
-  Pod: { group: '', version: 'v1' },
-  Deployment: { group: 'apps', version: 'v1' },
-  StatefulSet: { group: 'apps', version: 'v1' },
-  DaemonSet: { group: 'apps', version: 'v1' },
-  Service: { group: '', version: 'v1' },
-};
+export { normalizeKind, SCALABLE_KINDS };
+export type { ObjectActionData, PermissionStatus };
 
 // Options for building action items
 export interface BuildObjectActionsOptions {
@@ -158,67 +84,6 @@ export interface BuildObjectActionsOptions {
   actionLoading?: boolean;
 }
 
-function getPortForwardAvailability(
-  object: ObjectActionData,
-  handlers: ObjectActionHandlers
-): PortForwardAvailability {
-  const normalizedKind = normalizeKind(object.kind);
-  const expectedTarget = PORT_FORWARDABLE_TARGETS[normalizedKind];
-
-  if (!expectedTarget || !handlers.onPortForward) {
-    return {
-      show: false,
-      enabled: false,
-      label: objectActionLabel(OBJECT_ACTION_IDS.portForward),
-    };
-  }
-
-  const builtin = resolveBuiltinGroupVersion(object.kind);
-  const group = object.group ?? builtin.group;
-  const version = object.version ?? builtin.version;
-
-  if (!object.clusterId || !object.namespace) {
-    return {
-      show: true,
-      enabled: false,
-      label: objectActionLabel(OBJECT_ACTION_IDS.portForward),
-    };
-  }
-
-  if (group !== expectedTarget.group || version !== expectedTarget.version) {
-    return {
-      show: true,
-      enabled: false,
-      label: objectActionLabel(OBJECT_ACTION_IDS.portForward),
-    };
-  }
-
-  if (object.portForwardAvailable === false) {
-    return {
-      show: true,
-      enabled: false,
-      label: objectActionLabel(OBJECT_ACTION_IDS.portForward),
-    };
-  }
-
-  return {
-    show: true,
-    enabled: true,
-    label: objectActionLabel(OBJECT_ACTION_IDS.portForward),
-  };
-}
-
-const extractDesiredReplicas = (object: ObjectActionData): number | null => {
-  if (typeof object.desiredReplicas === 'number' && Number.isFinite(object.desiredReplicas)) {
-    return Math.max(0, object.desiredReplicas);
-  }
-  const ready = object.ready?.trim();
-  if (!ready) return null;
-  const segments = ready.split('/');
-  const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
-  return Number.isFinite(candidate) ? Math.max(0, candidate) : null;
-};
-
 /**
  * Build menu items for an object. Production callers should go through
  * useObjectActionController so permission lookup and action execution stay centralized.
@@ -231,22 +96,27 @@ export function buildObjectActionItems({
   actionLoading = false,
 }: BuildObjectActionsOptions): ContextMenuItem[] {
   const menuItems: ContextMenuItem[] = [];
-  const normalizedKind = normalizeKind(object.kind);
   const diffSelection =
     object.kind === 'Event' && object.involvedObject ? null : buildObjectDiffSelection(object);
-  const portForwardAvailability = getPortForwardAvailability(object, handlers);
-
-  const {
-    restart: restartStatus,
-    rollback: rollbackStatus,
-    scale: scaleStatus,
-    trigger: triggerStatus,
-    suspend: suspendStatus,
-    delete: deleteStatus,
-    portForward: portForwardStatus,
-    cordon: cordonStatus,
-    drain: drainStatus,
-  } = permissions;
+  const policy = resolveObjectActionPolicy({
+    object,
+    context,
+    handlers: {
+      restart: Boolean(handlers.onRestart),
+      rollback: Boolean(handlers.onRollback),
+      scale: Boolean(handlers.onScale),
+      scaleToZero: Boolean(handlers.onScaleToZero),
+      resumeFromZero: Boolean(handlers.onResumeFromZero),
+      delete: Boolean(handlers.onDelete),
+      portForward: Boolean(handlers.onPortForward),
+      cordon: Boolean(handlers.onCordon),
+      drain: Boolean(handlers.onDrain),
+      trigger: Boolean(handlers.onTrigger),
+      suspendToggle: Boolean(handlers.onSuspendToggle),
+    },
+    permissions,
+    actionLoading,
+  });
 
   // Open - only for surfaces that are not already the object panel.
   if ((context === 'gridtable' || context === 'object-map') && handlers.onOpen) {
@@ -312,54 +182,31 @@ export function buildObjectActionItems({
   }
 
   // Permission pending header
-  const anyPending =
-    restartStatus?.pending ||
-    rollbackStatus?.pending ||
-    scaleStatus?.pending ||
-    triggerStatus?.pending ||
-    suspendStatus?.pending ||
-    deleteStatus?.pending ||
-    portForwardStatus?.pending;
-
-  const hasActionSection =
-    anyPending ||
-    normalizedKind === 'CronJob' ||
-    (RESTARTABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRestart)) ||
-    (ROLLBACKABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRollback)) ||
-    (SCALABLE_KINDS.includes(normalizedKind) &&
-      (object.hpaManaged === true || (object.hpaManaged === false && Boolean(handlers.onScale)))) ||
-    (CORDONABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onCordon)) ||
-    (DRAINABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onDrain)) ||
-    portForwardAvailability.show;
-
-  if (menuItems.length > 0 && hasActionSection) {
+  if (menuItems.length > 0 && policy.hasActionSection) {
     menuItems.push({ divider: true });
   }
 
-  if (anyPending) {
+  if (policy.anyPending) {
     menuItems.push({ header: true, label: 'Awaiting permissions...' });
   }
 
   // CronJob-specific actions
-  if (normalizedKind === 'CronJob') {
-    const isSuspended = object.status === 'Suspended';
-
-    if (handlers.onTrigger && triggerStatus?.allowed && !triggerStatus.pending) {
+  if (policy.normalizedKind === 'CronJob') {
+    if (policy.triggerEnabled) {
       menuItems.push({
         actionId: OBJECT_ACTION_IDS.triggerNow,
         label: objectActionLabel(OBJECT_ACTION_IDS.triggerNow),
         icon: '▶',
         onClick: handlers.onTrigger,
-        disabled: isSuspended || actionLoading,
+        disabled: policy.triggerDisabled,
       });
     }
 
-    if (handlers.onSuspendToggle && suspendStatus?.allowed && !suspendStatus.pending) {
-      const suspendActionId = isSuspended ? OBJECT_ACTION_IDS.resume : OBJECT_ACTION_IDS.suspend;
+    if (policy.suspendActionId) {
       menuItems.push({
-        actionId: suspendActionId,
-        label: objectActionLabel(suspendActionId),
-        icon: isSuspended ? '▶' : '⏸',
+        actionId: policy.suspendActionId,
+        label: objectActionLabel(policy.suspendActionId),
+        icon: policy.suspendActionId === OBJECT_ACTION_IDS.resume ? '▶' : '⏸',
         onClick: handlers.onSuspendToggle,
         disabled: actionLoading,
       });
@@ -367,12 +214,7 @@ export function buildObjectActionItems({
   }
 
   // Restart
-  if (
-    RESTARTABLE_KINDS.includes(normalizedKind) &&
-    restartStatus?.allowed &&
-    !restartStatus.pending &&
-    handlers.onRestart
-  ) {
+  if (policy.restartEnabled && handlers.onRestart) {
     menuItems.push({
       actionId: OBJECT_ACTION_IDS.restart,
       label: objectActionLabel(OBJECT_ACTION_IDS.restart),
@@ -383,12 +225,7 @@ export function buildObjectActionItems({
   }
 
   // Rollback
-  if (
-    ROLLBACKABLE_KINDS.includes(normalizedKind) &&
-    rollbackStatus?.allowed &&
-    !rollbackStatus.pending &&
-    handlers.onRollback
-  ) {
+  if (policy.rollbackEnabled && handlers.onRollback) {
     menuItems.push({
       actionId: OBJECT_ACTION_IDS.rollback,
       label: objectActionLabel(OBJECT_ACTION_IDS.rollback),
@@ -399,49 +236,27 @@ export function buildObjectActionItems({
   }
 
   // Scale
-  if (SCALABLE_KINDS.includes(normalizedKind) && scaleStatus?.allowed && !scaleStatus.pending) {
-    if (object.hpaManaged === true) {
-      const desiredReplicas = extractDesiredReplicas(object);
-      if (desiredReplicas === 0) {
-        menuItems.push({
-          actionId: OBJECT_ACTION_IDS.resumeFromZero,
-          label: objectActionLabel(OBJECT_ACTION_IDS.resumeFromZero),
-          icon: <ScaleIcon />,
-          onClick: handlers.onResumeFromZero,
-          disabled: actionLoading || !handlers.onResumeFromZero,
-        });
-      } else {
-        menuItems.push({
-          actionId: OBJECT_ACTION_IDS.scaleToZero,
-          label: objectActionLabel(OBJECT_ACTION_IDS.scaleToZero),
-          icon: <ScaleIcon />,
-          onClick: handlers.onScaleToZero,
-          disabled: actionLoading || !handlers.onScaleToZero,
-        });
-      }
-    } else if (object.hpaManaged === false && handlers.onScale) {
-      menuItems.push({
-        actionId: OBJECT_ACTION_IDS.scale,
-        label: objectActionLabel(OBJECT_ACTION_IDS.scale),
-        icon: <ScaleIcon />,
-        onClick: handlers.onScale,
-        disabled: actionLoading,
-      });
-    }
+  if (policy.scaleActionId) {
+    const scaleHandler =
+      policy.scaleActionId === OBJECT_ACTION_IDS.resumeFromZero
+        ? handlers.onResumeFromZero
+        : policy.scaleActionId === OBJECT_ACTION_IDS.scaleToZero
+          ? handlers.onScaleToZero
+          : handlers.onScale;
+    menuItems.push({
+      actionId: policy.scaleActionId,
+      label: objectActionLabel(policy.scaleActionId),
+      icon: <ScaleIcon />,
+      onClick: scaleHandler,
+      disabled: policy.scaleActionDisabled,
+    });
   }
 
   // Cordon / Uncordon (Node-only)
-  if (
-    CORDONABLE_KINDS.includes(normalizedKind) &&
-    handlers.onCordon &&
-    cordonStatus?.allowed &&
-    !cordonStatus.pending
-  ) {
-    const isCordoned = Boolean(object.unschedulable);
-    const cordonActionId = isCordoned ? OBJECT_ACTION_IDS.uncordon : OBJECT_ACTION_IDS.cordon;
+  if (policy.cordonActionId && handlers.onCordon) {
     menuItems.push({
-      actionId: cordonActionId,
-      label: objectActionLabel(cordonActionId),
+      actionId: policy.cordonActionId,
+      label: objectActionLabel(policy.cordonActionId),
       icon: <CordonIcon />,
       onClick: handlers.onCordon,
       disabled: actionLoading,
@@ -449,12 +264,7 @@ export function buildObjectActionItems({
   }
 
   // Drain (Node-only)
-  if (
-    DRAINABLE_KINDS.includes(normalizedKind) &&
-    handlers.onDrain &&
-    drainStatus?.allowed &&
-    !drainStatus.pending
-  ) {
+  if (policy.drainEnabled && handlers.onDrain) {
     menuItems.push({
       actionId: OBJECT_ACTION_IDS.drain,
       label: objectActionLabel(OBJECT_ACTION_IDS.drain),
@@ -465,22 +275,17 @@ export function buildObjectActionItems({
   }
 
   // Port Forward
-  if (portForwardAvailability.show && !portForwardAvailability.enabled) {
+  if (policy.portForward.show && !policy.portForward.enabled) {
     menuItems.push({
       actionId: OBJECT_ACTION_IDS.portForward,
-      label: portForwardAvailability.label,
+      label: objectActionLabel(policy.portForward.actionId),
       icon: <PortForwardIcon />,
       disabled: true,
     });
-  } else if (
-    portForwardAvailability.show &&
-    portForwardStatus?.allowed &&
-    !portForwardStatus.pending &&
-    handlers.onPortForward
-  ) {
+  } else if (policy.portForwardEnabled && handlers.onPortForward) {
     menuItems.push({
       actionId: OBJECT_ACTION_IDS.portForward,
-      label: portForwardAvailability.label,
+      label: objectActionLabel(policy.portForward.actionId),
       icon: <PortForwardIcon />,
       onClick: handlers.onPortForward,
       disabled: actionLoading,
@@ -488,7 +293,7 @@ export function buildObjectActionItems({
   }
 
   // Delete (with divider if there are other items)
-  if (deleteStatus?.allowed && !deleteStatus.pending && handlers.onDelete) {
+  if (policy.deleteEnabled && handlers.onDelete) {
     // Add divider before Delete if there are other action items
     const hasOtherActions = menuItems.some((item) => !('header' in item) && !('divider' in item));
     const lastItem = menuItems[menuItems.length - 1];

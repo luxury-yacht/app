@@ -9,6 +9,10 @@
 
 import type { ClusterViewType } from '@/types/navigation/views';
 import type { RefreshDomain } from '@/core/refresh/types';
+import {
+  resourceKindsMeta,
+  selectClusterRows,
+} from '@shared/resources/resourceDescriptorSelectors';
 
 export interface ClusterResourceDescriptor<K extends RefreshDomain = RefreshDomain, T = unknown[]> {
   resourceKey: ClusterViewType;
@@ -19,65 +23,50 @@ export interface ClusterResourceDescriptor<K extends RefreshDomain = RefreshDoma
   meta?: (payload: any | null) => unknown;
 }
 
-const filterByClusterId = <T extends { clusterId?: string | null }>(
-  items: T[] | null | undefined,
-  clusterId: string | null | undefined
-): T[] | null => {
-  if (!items) {
-    return null;
-  }
-  if (!clusterId) {
-    return items.filter((item) => !item.clusterId);
-  }
-  return items.filter((item) => item.clusterId === clusterId);
-};
-
-const kindsMeta = (payload?: { kinds?: string[] } | null) => ({ kinds: payload?.kinds ?? [] });
-
 export const clusterResourceDescriptors = {
   rbac: {
     resourceKey: 'rbac',
     domain: 'cluster-rbac',
     scopeKind: 'cluster',
     fallback: [],
-    select: (payload, clusterId) => filterByClusterId(payload?.resources, clusterId),
-    meta: kindsMeta,
+    select: (payload, clusterId) => selectClusterRows(payload?.resources, clusterId),
+    meta: resourceKindsMeta,
   },
   storage: {
     resourceKey: 'storage',
     domain: 'cluster-storage',
     scopeKind: 'cluster',
     fallback: [],
-    select: (payload, clusterId) => filterByClusterId(payload?.volumes, clusterId),
+    select: (payload, clusterId) => selectClusterRows(payload?.volumes, clusterId),
   },
   config: {
     resourceKey: 'config',
     domain: 'cluster-config',
     scopeKind: 'cluster',
     fallback: [],
-    select: (payload, clusterId) => filterByClusterId(payload?.resources, clusterId),
-    meta: kindsMeta,
+    select: (payload, clusterId) => selectClusterRows(payload?.resources, clusterId),
+    meta: resourceKindsMeta,
   },
   crds: {
     resourceKey: 'crds',
     domain: 'cluster-crds',
     scopeKind: 'cluster',
     fallback: [],
-    select: (payload, clusterId) => filterByClusterId(payload?.definitions, clusterId),
+    select: (payload, clusterId) => selectClusterRows(payload?.definitions, clusterId),
   },
   custom: {
     resourceKey: 'custom',
     domain: 'cluster-custom',
     scopeKind: 'cluster',
     fallback: [],
-    select: (payload, clusterId) => filterByClusterId(payload?.resources, clusterId),
-    meta: kindsMeta,
+    select: (payload, clusterId) => selectClusterRows(payload?.resources, clusterId),
+    meta: resourceKindsMeta,
   },
   events: {
     resourceKey: 'events',
     domain: 'cluster-events',
     scopeKind: 'cluster-events',
     fallback: [],
-    select: (payload, clusterId) => filterByClusterId(payload?.events, clusterId),
+    select: (payload, clusterId) => selectClusterRows(payload?.events, clusterId),
   },
 } satisfies Partial<Record<ClusterViewType, ClusterResourceDescriptor>>;

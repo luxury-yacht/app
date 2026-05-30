@@ -420,232 +420,10 @@ const updateAPIGroup = (ref: ResourceRef): string => ref.group;
 
 const updateAPIVersion = (ref: ResourceRef): string => ref.version;
 
-const buildPodKeySet = (
-  payload: PodSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.pods ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildPodKey(row.clusterId ?? fallbackClusterId, row.namespace, row.name));
-  });
-  return keys;
-};
-
-const buildWorkloadKeySet = (
-  payload: NamespaceWorkloadSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.workloads ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(
-      buildWorkloadKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
-    );
-  });
-  return keys;
-};
-
-const buildConfigKeySet = (
-  payload: NamespaceConfigSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildConfigKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildRBACKeySet = (
-  payload: NamespaceRBACSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildRBACKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildNetworkKeySet = (
-  payload: NamespaceNetworkSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(
-      buildNetworkKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
-    );
-  });
-  return keys;
-};
-
-const buildCustomKeySet = (
-  payload: NamespaceCustomSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(
-      buildCustomKey(
-        row.clusterId ?? fallbackClusterId,
-        row.namespace,
-        row.apiGroup,
-        row.apiVersion,
-        row.kind,
-        row.name
-      )
-    );
-  });
-  return keys;
-};
-
-const buildHelmKeySet = (
-  payload: NamespaceHelmSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.releases ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildHelmKey(row.clusterId ?? fallbackClusterId, row.namespace, row.name));
-  });
-  return keys;
-};
-
-const buildAutoscalingKeySet = (
-  payload: NamespaceAutoscalingSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(
-      buildAutoscalingKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
-    );
-  });
-  return keys;
-};
-
-const buildQuotaKeySet = (
-  payload: NamespaceQuotasSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildQuotaKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildStorageKeySet = (
-  payload: NamespaceStorageSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(
-      buildStorageKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
-    );
-  });
-  return keys;
-};
-
-const buildClusterRBACKeySet = (
-  payload: ClusterRBACSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildClusterRBACKey(row.clusterId ?? fallbackClusterId, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildClusterStorageKeySet = (
-  payload: ClusterStorageSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.volumes ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildClusterStorageKey(row.clusterId ?? fallbackClusterId, row.name));
-  });
-  return keys;
-};
-
-const buildClusterConfigKeySet = (
-  payload: ClusterConfigSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildClusterConfigKey(row.clusterId ?? fallbackClusterId, row.kind, row.name));
-  });
-  return keys;
-};
-
-const buildClusterCRDKeySet = (
-  payload: ClusterCRDSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.definitions ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildClusterCRDKey(row.clusterId ?? fallbackClusterId, row.name));
-  });
-  return keys;
-};
-
-const buildClusterCustomKeySet = (
-  payload: ClusterCustomSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.resources ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(
-      buildClusterCustomKey(
-        row.clusterId ?? fallbackClusterId,
-        row.apiGroup,
-        row.apiVersion,
-        row.kind,
-        row.name
-      )
-    );
-  });
-  return keys;
-};
-
-const buildNodeKeySet = (
-  payload: ClusterNodeSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.nodes ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildNodeKey(row.clusterId ?? fallbackClusterId, row.name));
-  });
-  return keys;
-};
-
 const rowSorter =
   <T>(sortRows: (rows: T[]) => void) =>
   (rows: unknown[]): void =>
     sortRows(rows as T[]);
-
-const snapshotKeys =
-  <T>(buildKeys: (payload: T | null | undefined, fallbackClusterId: string) => Set<string>) =>
-  (payload: unknown, fallbackClusterId: string): Set<string> =>
-    buildKeys(payload as T | null | undefined, fallbackClusterId);
 
 const podCollection = {
   getRows: (payload: PodSnapshotPayload) => payload.pods ?? [],
@@ -1022,6 +800,22 @@ const nodeCollection = {
   mergeRow: mergeNodeMetricsRow,
 } satisfies ResourceStreamRowCollection<ClusterNodeSnapshotEntry, ClusterNodeSnapshotPayload>;
 
+const collectionSnapshotKeys =
+  <TRow extends object, TPayload extends object>(
+    collection: ResourceStreamRowCollection<TRow, TPayload>
+  ) =>
+  (payload: unknown, fallbackClusterId: string): Set<string> => {
+    const typedPayload = payload as TPayload | null | undefined;
+    const keys = new Set<string>();
+    if (!typedPayload) {
+      return keys;
+    }
+    collection.getRows(typedPayload).forEach((row) => {
+      keys.add(collection.buildRowKey(row, fallbackClusterId));
+    });
+    return keys;
+  };
+
 export const resourceStreamDomainDescriptors = [
   {
     domain: 'pods',
@@ -1029,7 +823,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: false,
     preserveMetrics: true,
     sortRows: rowSorter(sortPodRows),
-    buildSnapshotKeys: snapshotKeys(buildPodKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(podCollection),
     collection: podCollection,
   },
   {
@@ -1038,7 +832,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: false,
     preserveMetrics: true,
     sortRows: rowSorter(sortWorkloadRows),
-    buildSnapshotKeys: snapshotKeys(buildWorkloadKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(workloadCollection),
     collection: workloadCollection,
   },
   {
@@ -1047,7 +841,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortConfigRows),
-    buildSnapshotKeys: snapshotKeys(buildConfigKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(namespaceConfigCollection),
     collection: namespaceConfigCollection,
   },
   {
@@ -1056,7 +850,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortNetworkRows),
-    buildSnapshotKeys: snapshotKeys(buildNetworkKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(namespaceNetworkCollection),
     collection: namespaceNetworkCollection,
   },
   {
@@ -1065,7 +859,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortRBACRows),
-    buildSnapshotKeys: snapshotKeys(buildRBACKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(namespaceRBACCollection),
     collection: namespaceRBACCollection,
   },
   {
@@ -1074,7 +868,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortCustomRows),
-    buildSnapshotKeys: snapshotKeys(buildCustomKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(namespaceCustomCollection),
     collection: namespaceCustomCollection,
   },
   {
@@ -1083,7 +877,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortHelmRows),
-    buildSnapshotKeys: snapshotKeys(buildHelmKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(namespaceHelmCollection),
     collection: namespaceHelmCollection,
   },
   {
@@ -1092,7 +886,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortAutoscalingRows),
-    buildSnapshotKeys: snapshotKeys(buildAutoscalingKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(namespaceAutoscalingCollection),
     collection: namespaceAutoscalingCollection,
   },
   {
@@ -1101,7 +895,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortQuotaRows),
-    buildSnapshotKeys: snapshotKeys(buildQuotaKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(namespaceQuotaCollection),
     collection: namespaceQuotaCollection,
   },
   {
@@ -1110,7 +904,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: false,
     preserveMetrics: false,
     sortRows: rowSorter(sortStorageRows),
-    buildSnapshotKeys: snapshotKeys(buildStorageKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(namespaceStorageCollection),
     collection: namespaceStorageCollection,
   },
   {
@@ -1119,7 +913,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: true,
     preserveMetrics: false,
     sortRows: rowSorter(sortClusterRBACRows),
-    buildSnapshotKeys: snapshotKeys(buildClusterRBACKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(clusterRBACCollection),
     collection: clusterRBACCollection,
   },
   {
@@ -1128,7 +922,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: true,
     preserveMetrics: false,
     sortRows: rowSorter(sortClusterStorageRows),
-    buildSnapshotKeys: snapshotKeys(buildClusterStorageKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(clusterStorageCollection),
     collection: clusterStorageCollection,
   },
   {
@@ -1137,7 +931,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: true,
     preserveMetrics: false,
     sortRows: rowSorter(sortClusterConfigRows),
-    buildSnapshotKeys: snapshotKeys(buildClusterConfigKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(clusterConfigCollection),
     collection: clusterConfigCollection,
   },
   {
@@ -1146,7 +940,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: true,
     preserveMetrics: false,
     sortRows: rowSorter(sortClusterCRDRows),
-    buildSnapshotKeys: snapshotKeys(buildClusterCRDKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(clusterCRDCollection),
     collection: clusterCRDCollection,
   },
   {
@@ -1155,7 +949,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: true,
     preserveMetrics: false,
     sortRows: rowSorter(sortClusterCustomRows),
-    buildSnapshotKeys: snapshotKeys(buildClusterCustomKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(clusterCustomCollection),
     collection: clusterCustomCollection,
   },
   {
@@ -1164,7 +958,7 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: true,
     preserveMetrics: true,
     sortRows: rowSorter(sortNodeRows),
-    buildSnapshotKeys: snapshotKeys(buildNodeKeySet),
+    buildSnapshotKeys: collectionSnapshotKeys(nodeCollection),
     collection: nodeCollection,
   },
 ] satisfies ResourceStreamDomainDescriptor[];

@@ -20,17 +20,16 @@ import ResourceGridTableView from '@shared/components/tables/ResourceGridTableVi
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
 import {
-  canResolveEventObjectReference,
-  resolveEventObjectReference,
-  splitEventObjectTarget,
-} from '@shared/utils/eventObjectIdentity';
-import {
-  buildRequiredCanonicalObjectRowKey,
-  buildRequiredObjectReference,
-} from '@shared/utils/objectIdentity';
+  clusterEventRowIdentity,
+  eventGridActionReference,
+  eventGridCanOpenRelatedObject,
+  eventGridSearchText,
+  eventGridStableKey,
+  resolveEventGridRelatedObject,
+} from '@shared/events/eventGridModel';
 import type { ResourceLink } from '@core/refresh/types';
 
 interface EventData {
@@ -70,82 +69,43 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
-    // Include all visible columns in search: type, source, reason, object, message.
-    const getSearchText = useCallback((event: EventData): string[] => {
-      const values = [
-        event.kind,
-        event.name,
-        event.namespace,
-        event.type,
-        event.source,
-        event.reason,
-        event.object,
-        event.message,
-      ];
-      return values.filter(Boolean);
-    }, []);
-
-    // Build an object reference from an event's involved object for navigation.
-    const getEventObjectRefInput = useCallback(
-      (event: EventData) => {
-        return {
-          object: event.object,
-          involvedObject: event.involvedObject,
-          objectUid: event.objectUid,
-          objectApiVersion: event.objectApiVersion,
-          objectNamespace: event.objectNamespace,
-          clusterId: event.clusterId ?? selectedClusterId ?? undefined,
-          clusterName: event.clusterName ?? undefined,
-        };
-      },
-      [selectedClusterId]
+    const getSearchText = useCallback(
+      (event: EventData): string[] => eventGridSearchText(event),
+      []
     );
 
     const canOpenEventObject = useCallback(
-      (event: EventData) => canResolveEventObjectReference(getEventObjectRefInput(event)),
-      [getEventObjectRefInput]
+      (event: EventData) => eventGridCanOpenRelatedObject(event, { selectedClusterId }),
+      [selectedClusterId]
     );
 
     const handleEventClick = useCallback(
       async (event: EventData) => {
-        const ref = await resolveEventObjectReference(getEventObjectRefInput(event));
+        const ref = await resolveEventGridRelatedObject(event, { selectedClusterId });
         if (ref) {
           openWithObject(ref);
         }
       },
-      [getEventObjectRefInput, openWithObject]
+      [openWithObject, selectedClusterId]
     );
 
     const handleEventAltClick = useCallback(
       async (event: EventData) => {
-        const ref = await resolveEventObjectReference(getEventObjectRefInput(event));
+        const ref = await resolveEventGridRelatedObject(event, { selectedClusterId });
         if (ref) {
           navigateToView(ref);
         }
       },
-      [getEventObjectRefInput, navigateToView]
+      [navigateToView, selectedClusterId]
     );
 
     const keyExtractor = useCallback(
-      (event: EventData, index: number) =>
-        buildClusterScopedKey(
-          event,
-          `${event.namespace}-${event.reason}-${event.source}-${event.object}-${event.ageTimestamp ?? event.age ?? '0'}-${index}`
-        ),
+      (event: EventData, index: number) => eventGridStableKey(event, index),
       []
     );
 
     const sortRowIdentity = useCallback(
-      (event: EventData) =>
-        buildRequiredCanonicalObjectRowKey(
-          {
-            kind: 'Event',
-            name: event.name,
-            namespace: event.namespace,
-            clusterId: event.clusterId,
-          },
-          { fallbackClusterId: selectedClusterId }
-        ),
+      (event: EventData) => clusterEventRowIdentity(event, selectedClusterId),
       [selectedClusterId]
     );
 
@@ -246,17 +206,10 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
         }
 
         return objectActions.getMenuItems(
-          buildRequiredObjectReference(
-            {
-              kind: 'Event',
-              name: event.name,
-              namespace: event.namespace,
-              clusterId: event.clusterId,
-              clusterName: event.clusterName,
-            },
-            { fallbackClusterId: selectedClusterId },
-            { involvedObject: event.object, involvedObjectRef: event.involvedObject }
-          )
+          eventGridActionReference(event, event.name, selectedClusterId, {
+            involvedObject: event.object,
+            involvedObjectRef: event.involvedObject,
+          })
         );
       },
       [canOpenEventObject, objectActions, selectedClusterId]
