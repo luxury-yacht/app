@@ -1,14 +1,30 @@
+/*
+ * backend/refresh/snapshot/cluster_meta.go
+ *
+ * Carries validated cluster identity through snapshot builds so every refresh
+ * payload can be attributed to the cluster that produced it.
+ */
+
 package snapshot
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strings"
 )
 
 // ClusterMeta carries stable cluster identifiers for snapshot payloads.
 type ClusterMeta struct {
 	ClusterID   string `json:"clusterId"`
 	ClusterName string `json:"clusterName"`
+}
+
+func (m ClusterMeta) Validate() error {
+	if strings.TrimSpace(m.ClusterID) == "" {
+		return fmt.Errorf("snapshot clusterId is required")
+	}
+	return nil
 }
 
 type clusterMetaContextKey struct{}

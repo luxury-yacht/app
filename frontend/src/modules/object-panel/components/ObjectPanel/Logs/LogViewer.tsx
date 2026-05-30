@@ -1,9 +1,9 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx
  *
- * Component for viewing Object Panel Logs Tab with filtering, parsing, and keyboard shortcuts.
- * Extracts logic into hooks for clarity.
- * Uses a reducer for state management.
+ * Renders the object-panel Logs tab. It coordinates container-log stream
+ * lifecycle, fallback reads, filtering, parsing, keyboard shortcuts, and viewer
+ * preference persistence.
  */
 import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
@@ -94,7 +94,7 @@ interface LogViewerProps {
   resourceKind: string;
   /**
    * Refresh-domain scope string for the container-logs producer. Owned by
-   * ObjectPanel via getObjectPanelKind so this component and the panel-
+   * ObjectPanel via getObjectPanelScopes so this component and the panel-
    * level cleanup effect in ObjectPanelContent consume the same value.
    * They used to compute it independently and could drift apart.
    */

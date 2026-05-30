@@ -1,3 +1,11 @@
+/**
+ * frontend/src/core/data-access/readers.ts
+ *
+ * Typed frontend wrappers around Wails backend read methods. Object-scoped
+ * readers accept ref-shaped targets so cluster/GVK/name identity travels as a
+ * single contract instead of positional string lists.
+ */
+
 import {
   DiscoverNodeLogs,
   FetchContainerLogs,
@@ -13,14 +21,49 @@ import {
 } from '@wailsjs/go/backend/App';
 import type { types } from '@wailsjs/go/models';
 
-export const readTargetPorts = (
-  clusterId: string,
-  namespace: string,
-  kind: string,
-  group: string,
-  version: string,
-  name: string
-) => GetTargetPorts(clusterId, namespace, kind, group, version, name);
+export interface ObjectReadTarget {
+  clusterId: string;
+  namespace?: string | null;
+  group: string;
+  version: string;
+  kind: string;
+  name: string;
+}
+
+export interface ObjectYAMLReadTarget {
+  clusterId: string;
+  apiVersion?: string | null;
+  group?: string | null;
+  version?: string | null;
+  kind: string;
+  namespace?: string | null;
+  name: string;
+}
+
+const namespaceOrEmpty = (namespace: string | null | undefined): string => namespace ?? '';
+
+const apiVersionForTarget = (target: ObjectYAMLReadTarget): string => {
+  const apiVersion = target.apiVersion?.trim();
+  if (apiVersion) {
+    return apiVersion;
+  }
+  const version = target.version?.trim();
+  if (!version) {
+    throw new Error(`Object identity for ${target.kind}/${target.name} is missing apiVersion`);
+  }
+  const group = target.group?.trim();
+  return group ? `${group}/${version}` : version;
+};
+
+export const readTargetPortsForRef = (target: ObjectReadTarget) =>
+  GetTargetPorts(
+    target.clusterId,
+    namespaceOrEmpty(target.namespace),
+    target.kind,
+    target.group,
+    target.version,
+    target.name
+  );
 
 export const readPodContainers = (clusterId: string, namespace: string, resourceName: string) =>
   GetPodContainers(clusterId, namespace, resourceName);
@@ -40,43 +83,50 @@ export const readNodeLogs = (
   request: types.NodeLogFetchRequest
 ) => FetchNodeLogs(clusterId, nodeName, request);
 
-export const readObjectYAMLByGVK = (
-  clusterId: string,
-  apiVersion: string,
-  kind: string,
-  namespace: string,
-  name: string
-) => GetObjectYAMLByGVK(clusterId, apiVersion, kind, namespace, name);
+export const readObjectYAMLForRef = (target: ObjectYAMLReadTarget) =>
+  GetObjectYAMLByGVK(
+    target.clusterId,
+    apiVersionForTarget(target),
+    target.kind,
+    namespaceOrEmpty(target.namespace),
+    target.name
+  );
 
-export const readCatalogObjectMatch = (
-  clusterId: string,
-  namespace: string,
-  group: string,
-  version: string,
-  kind: string,
-  name: string
-) => FindCatalogObjectMatch(clusterId, namespace, group, version, kind, name);
+export const readCatalogObjectMatchForRef = (
+  target: ObjectReadTarget,
+  options?: { clusterId?: string | null }
+) =>
+  FindCatalogObjectMatch(
+    options?.clusterId?.trim() || target.clusterId,
+    namespaceOrEmpty(target.namespace),
+    target.group,
+    target.version,
+    target.kind,
+    target.name
+  );
 
 export const readCatalogObjectByUID = (clusterId: string, uid: string) =>
   FindCatalogObjectByUID(clusterId, uid);
 
-export const readRevisionHistory = (
-  clusterId: string,
-  namespace: string,
-  group: string,
-  version: string,
-  kind: string,
-  name: string
-) => GetRevisionHistory(clusterId, namespace, group, version, kind, name);
+export const readRevisionHistoryForRef = (target: ObjectReadTarget) =>
+  GetRevisionHistory(
+    target.clusterId,
+    namespaceOrEmpty(target.namespace),
+    target.group,
+    target.version,
+    target.kind,
+    target.name
+  );
 
-export const readWorkloadHPAManaged = (
-  clusterId: string,
-  namespace: string,
-  group: string,
-  version: string,
-  kind: string,
-  name: string
-) => IsWorkloadHPAManaged(clusterId, namespace, group, version, kind, name);
+export const readWorkloadHPAManagedForRef = (target: ObjectReadTarget) =>
+  IsWorkloadHPAManaged(
+    target.clusterId,
+    namespaceOrEmpty(target.namespace),
+    target.group,
+    target.version,
+    target.kind,
+    target.name
+  );
 
 export const readQueryPermissions = async <T>(queries: unknown[]): Promise<T> => {
   const runtimeApp = (window as any)?.go?.backend?.App;

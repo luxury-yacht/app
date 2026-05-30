@@ -1,5 +1,8 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.test.tsx
+ *
+ * Verifies object-panel log viewing behavior: stream/fallback reads, filtering,
+ * parsing, container selection, lifecycle cleanup, and persisted viewer prefs.
  */
 
 import React from 'react';
@@ -347,7 +350,7 @@ describe('LogViewer active pod synchronisation', () => {
       isActive = true,
       activePodNames = null,
       clusterId = testClusterId,
-      // containerLogsScope is normally produced by getObjectPanelKind in
+      // containerLogsScope is normally produced by getObjectPanelScopes in
       // ObjectPanel and threaded down. The default here mirrors what
       // seedLogSnapshot wrote to so existing scope-keyed assertions
       // keep working without per-test plumbing.
@@ -2371,7 +2374,7 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('renders loading state when resource metadata is missing', async () => {
-    // Mirror what getObjectPanelKind would produce upstream when the
+    // Mirror what getObjectPanelScopes would produce upstream when the
     // panel is in its empty state: a null containerLogsScope. The component
     // gates its loading-vs-rendered path on containerLogsScope, not on
     // resourceName/resourceKind directly.

@@ -391,7 +391,7 @@
         "kind": "helm-release",
         "clusterPrefix": "required",
         "parser": "backend/refresh/snapshot/object_content.go:parseHelmScope",
-        "frontendBuilder": "frontend/src/modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind.ts:getObjectPanelKind",
+        "frontendBuilder": "frontend/src/modules/object-panel/objectPanelRef.ts:getObjectPanelScopes",
         "acceptedEncodings": ["<namespace>:<name>", "__cluster__:<name>"]
       },
       "singleCluster": true,
@@ -407,7 +407,7 @@
         "kind": "helm-release",
         "clusterPrefix": "required",
         "parser": "backend/refresh/snapshot/object_content.go:parseHelmScope",
-        "frontendBuilder": "frontend/src/modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind.ts:getObjectPanelKind",
+        "frontendBuilder": "frontend/src/modules/object-panel/objectPanelRef.ts:getObjectPanelScopes",
         "acceptedEncodings": ["<namespace>:<name>", "__cluster__:<name>"]
       },
       "singleCluster": true,
@@ -471,7 +471,7 @@
         "kind": "log-stream-selector",
         "clusterPrefix": "required",
         "parser": "backend/refresh/containerlogsstream/handler.go:parseOptions",
-        "frontendBuilder": "frontend/src/modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind.ts:getObjectPanelKind",
+        "frontendBuilder": "frontend/src/modules/object-panel/objectPanelRef.ts:getObjectPanelScopes",
         "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>?container=<container>&tail=<n>"]
       },
       "singleCluster": true,

@@ -1,5 +1,8 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx
+ *
+ * Renders object-scoped Kubernetes events in the object panel, backed by the
+ * shared events refresh scope computed by ObjectPanel.
  */
 
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
@@ -39,7 +42,7 @@ interface EventsTabProps {
   objectData?: PanelObjectData | null;
   isActive?: boolean;
   // Refresh-domain scope string for the object-events provider. Owned
-  // by ObjectPanel via getObjectPanelKind so EventsTab and
+  // by ObjectPanel via getObjectPanelScopes so EventsTab and
   // ObjectPanelContent (which handles full-cleanup on panel close)
   // cannot drift apart on the same scope key.
   eventsScope: string | null;

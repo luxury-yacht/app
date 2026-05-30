@@ -1,7 +1,14 @@
+/**
+ * frontend/src/core/data-access/useScopedRefreshDomainLifecycle.ts
+ *
+ * Keeps a scoped refresh domain enabled while a component is mounted and
+ * disables it on teardown without forcing callers to import the orchestrator.
+ */
+
 import { useEffect, useRef } from 'react';
 
-import { refreshOrchestrator } from '@/core/refresh';
 import type { RefreshDomain } from '@/core/refresh/types';
+import { setRefreshDomainEnabled } from './dataAccess';
 
 const PRESERVE_SCOPED_STATE = { preserveState: true } as const;
 
@@ -21,16 +28,12 @@ const sameScope = (a: ActiveScope | null, b: ActiveScope | null): boolean =>
   Boolean(a && b && a.domain === b.domain && a.scope === b.scope);
 
 const setScopeEnabled = (scope: ActiveScope, enabled: boolean, preserveState: boolean) => {
-  if (preserveState) {
-    refreshOrchestrator.setScopedDomainEnabled(
-      scope.domain,
-      scope.scope,
-      enabled,
-      PRESERVE_SCOPED_STATE
-    );
-    return;
-  }
-  refreshOrchestrator.setScopedDomainEnabled(scope.domain, scope.scope, enabled);
+  setRefreshDomainEnabled({
+    domain: scope.domain,
+    scope: scope.scope,
+    enabled,
+    ...(preserveState ? PRESERVE_SCOPED_STATE : {}),
+  });
 };
 
 // Owns the shared scoped-domain lifecycle: enable the current scope, disable

@@ -3,12 +3,13 @@
  *
  * Modal for viewing revision history and rolling back a workload.
  * Left panel shows a scrollable revision list; right panel shows a
- * side-by-side diff between the current and selected revision pod templates.
+ * side-by-side diff between the current and selected revision pod templates,
+ * with history loaded from a full object ref.
  */
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { buildObjectActionTarget, runObjectRollback } from '@shared/actions/objectActionClient';
-import { readRevisionHistory, requestData } from '@/core/data-access';
+import { readRevisionHistoryForRef, requestData } from '@/core/data-access';
 import type { backend } from '@wailsjs/go/models';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { ROLLBACK_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
@@ -108,7 +109,7 @@ const RollbackModal = ({
     requestData({
       resource: 'revision-history',
       reason: 'user',
-      read: () => readRevisionHistory(clusterId, namespace, group, version, kind, name),
+      read: () => readRevisionHistoryForRef({ clusterId, namespace, group, version, kind, name }),
     })
       .then((result) => {
         const entries = result.status === 'executed' ? (result.data ?? []) : [];

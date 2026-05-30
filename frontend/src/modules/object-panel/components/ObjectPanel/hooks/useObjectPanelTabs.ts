@@ -1,15 +1,15 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs.ts
  *
- * Manages tabs within the object panel based on object capabilities and type.
- * Returns available tabs and handles keyboard shortcuts for navigation and tab switching.
+ * Computes available object-panel tabs from capabilities, object identity, and
+ * object type, then wires keyboard shortcuts for tab navigation.
  */
 import { useEffect, useMemo } from 'react';
 
 import { useShortcuts } from '@ui/shortcuts';
 
 import { TABS } from '@modules/object-panel/components/ObjectPanel/constants';
-import { hasCompleteObjectMapReference } from '@modules/object-panel/components/ObjectPanel/objectMapSupport';
+import { hasCompleteObjectMapReference } from '@modules/object-panel/objectPanelRef';
 import type {
   ComputedCapabilities,
   PanelAction,

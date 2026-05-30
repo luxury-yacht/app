@@ -1,8 +1,8 @@
 /**
- * frontend/src/components/modals/ObjectDiffModal.tsx
+ * frontend/src/ui/modals/ObjectDiffModal.tsx
  *
- * UI component for ObjectDiffModal.
- * Provides a global, side-by-side YAML diff viewer for Kubernetes objects.
+ * Global side-by-side YAML diff modal for comparing Kubernetes objects across
+ * clusters, namespaces, kinds, and catalog matches.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -13,7 +13,11 @@ import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import ModalHeader from '@shared/components/modals/ModalHeader';
-import { readCatalogObjectMatch, requestData, requestRefreshDomain } from '@/core/data-access';
+import {
+  readCatalogObjectMatchForRef,
+  requestData,
+  requestRefreshDomain,
+} from '@/core/data-access';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@core/refresh';
@@ -665,14 +669,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
           resource: 'catalog-object-match',
           reason: 'user',
           read: () =>
-            readCatalogObjectMatch(
-              selection.clusterId,
-              selection.namespace ?? '',
-              selection.group,
-              selection.version,
-              selection.kind,
-              selection.name
-            ),
+            readCatalogObjectMatchForRef({
+              clusterId: selection.clusterId,
+              namespace: selection.namespace,
+              group: selection.group,
+              version: selection.version,
+              kind: selection.kind,
+              name: selection.name,
+            }),
         });
         const match = toCatalogItem(result.status === 'executed' ? result.data : null);
         if (leftInitialSelectionRequestRef.current !== requestId) {
@@ -985,15 +989,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
       const result = await requestData({
         resource: 'catalog-object-match',
         reason: 'user',
-        read: () =>
-          readCatalogObjectMatch(
-            targetClusterId,
-            leftSelection.namespace ?? '',
-            leftSelection.group,
-            leftSelection.version,
-            leftSelection.kind,
-            leftSelection.name
-          ),
+        read: () => readCatalogObjectMatchForRef(leftSelection, { clusterId: targetClusterId }),
       });
       const match = toCatalogItem(result.status === 'executed' ? result.data : null);
       if (
@@ -1047,15 +1043,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
       const result = await requestData({
         resource: 'catalog-object-match',
         reason: 'user',
-        read: () =>
-          readCatalogObjectMatch(
-            targetClusterId,
-            rightSelection.namespace ?? '',
-            rightSelection.group,
-            rightSelection.version,
-            rightSelection.kind,
-            rightSelection.name
-          ),
+        read: () => readCatalogObjectMatchForRef(rightSelection, { clusterId: targetClusterId }),
       });
       const match = toCatalogItem(result.status === 'executed' ? result.data : null);
       if (
