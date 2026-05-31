@@ -1,0 +1,2 @@
+- Ingress/service/gateway hostnames should be clickable links
+- Make Impossible States Impossible
