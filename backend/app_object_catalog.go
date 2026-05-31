@@ -529,3 +529,37 @@ func (a *App) FindCatalogObjectByUID(clusterID, uid string) (*objectcatalog.Summ
 
 	return &match, nil
 }
+
+// ExportCatalogQueryCSV exports every catalog object matching the provided
+// query from the backend. The query is scoped to one cluster and uses catalog
+// keyset pagination internally so the frontend does not need to load all rows.
+func (a *App) ExportCatalogQueryCSV(
+	clusterID string,
+	kinds []string,
+	namespaces []string,
+	search string,
+	sortField string,
+	sortDirection string,
+) (string, error) {
+	if a == nil {
+		return "", fmt.Errorf("app is not initialised")
+	}
+
+	trimmedClusterID := strings.TrimSpace(clusterID)
+	if trimmedClusterID == "" {
+		return "", fmt.Errorf("cluster ID is required")
+	}
+
+	svc := a.objectCatalogServiceForCluster(trimmedClusterID)
+	if svc == nil {
+		return "", fmt.Errorf("object catalog service unavailable for cluster %q", trimmedClusterID)
+	}
+
+	return svc.ExportQueryCSV(objectcatalog.QueryOptions{
+		Kinds:         kinds,
+		Namespaces:    namespaces,
+		Search:        search,
+		SortField:     sortField,
+		SortDirection: sortDirection,
+	})
+}

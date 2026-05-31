@@ -168,6 +168,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     }, [canOpenEventObject, handleEventAltClick, handleEventClick, useShortResourceNames]);
 
     const { gridTableProps, favModal } = useClusterResourceGridTable<EventData>({
+      tableMode: 'Local Partial',
       viewId: 'cluster-events',
       data,
       columns,

@@ -493,10 +493,14 @@ export interface CatalogNamespaceGroup extends ClusterMeta {
 export interface CatalogSnapshotPayload extends ClusterMeta {
   items: CatalogItem[];
   continue?: string;
+  previous?: string;
+  cursorInvalid?: boolean;
   total: number;
+  totalIsExact?: boolean;
   resourceCount: number;
   kinds?: KindInfo[];
   namespaces?: string[];
+  facetsExact?: boolean;
   namespaceGroups?: CatalogNamespaceGroup[];
   parity?: CatalogParity | null;
   batchIndex: number;
@@ -504,6 +508,126 @@ export interface CatalogSnapshotPayload extends ClusterMeta {
   totalBatches: number;
   isFinal: boolean;
   firstBatchLatencyMs?: number;
+}
+
+export interface ResourceQueryRequest {
+  clusterId: string;
+  table: string;
+  namespaces?: string[];
+  kinds?: string[];
+  search?: string;
+  predicates?: ResourceQueryPredicate[];
+  sortField?: string;
+  sortDirection?: string;
+  limit?: number;
+  continue?: string;
+}
+
+export interface ResourceQueryPredicate {
+  field: string;
+  op: string;
+  value?: string;
+}
+
+export interface ResourceQueryResult {
+  rows: ResourceQueryRow[];
+  continue?: string;
+  previous?: string;
+  cursorInvalid?: boolean;
+  total: number;
+  totalIsExact: boolean;
+  facets: ResourceQueryFacets;
+  facetsExact: boolean;
+  partial?: ResourceQueryIssue[];
+  dynamic?: ResourceQueryDynamicRef;
+}
+
+export interface ResourceQueryRow {
+  clusterId: string;
+  group: string;
+  version: string;
+  kind: string;
+  resource: string;
+  namespace?: string;
+  name: string;
+  uid?: string;
+  status?: string;
+  ready?: string;
+  details?: string;
+  age?: string;
+  restarts?: number;
+  owner?: string;
+  node?: string;
+  crdName?: string;
+  crdGroup?: string;
+  crdScope?: string;
+  storageVersion?: string;
+  storageClass?: string;
+  capacity?: string;
+  claim?: string;
+  chartVersion?: string;
+  appVersion?: string;
+  helmRevision?: string;
+  helmUpdated?: string;
+  autoscalingTarget?: string;
+  autoscalingCurrent?: string;
+  autoscalingDesired?: string;
+  cpu?: string;
+  memory?: string;
+}
+
+export interface ResourceQueryFacets {
+  kinds?: string[];
+  namespaces?: string[];
+  statuses?: string[];
+  nodes?: string[];
+}
+
+export interface ResourceQueryIssue {
+  kind: string;
+  message: string;
+}
+
+export interface ResourceQueryDynamicRef {
+  source: string;
+  revision: string;
+  policy: string;
+}
+
+export interface QuerySelectionDescriptor {
+  clusterId: string;
+  table: string;
+  namespaces?: string[];
+  kinds?: string[];
+  search?: string;
+  predicates?: ResourceQueryPredicate[];
+  sortField?: string;
+  sortDirection?: string;
+  querySignature?: string;
+}
+
+export interface QueryBulkActionRequest {
+  selection: QuerySelectionDescriptor;
+  action: string;
+  dryRun?: boolean;
+  confirmed?: boolean;
+  limit?: number;
+  continue?: string;
+}
+
+export interface QueryBulkActionResult {
+  requiresConfirmation?: boolean;
+  processed: number;
+  succeeded: number;
+  failed: number;
+  continue?: string;
+  failures?: QueryBulkActionFailure[];
+  issues?: ResourceQueryIssue[];
+}
+
+export interface QueryBulkActionFailure {
+  ref: ResourceQueryRow;
+  message: string;
 }
 
 // Indicates whether the catalog stream payload is a full replacement or a partial update.

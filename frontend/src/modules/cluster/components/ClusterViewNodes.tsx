@@ -301,6 +301,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     );
 
     const { gridTableProps, favModal } = useClusterResourceGridTable<ClusterNodeRow>({
+      tableMode: 'Local Complete',
       viewId: 'cluster-nodes',
       data,
       persistenceData: [],

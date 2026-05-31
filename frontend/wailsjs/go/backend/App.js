@@ -74,6 +74,10 @@ export function DiscoverNodeLogs(arg1, arg2) {
   return window['go']['backend']['App']['DiscoverNodeLogs'](arg1, arg2);
 }
 
+export function ExportCatalogQueryCSV(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['backend']['App']['ExportCatalogQueryCSV'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function FetchContainerLogs(arg1, arg2) {
   return window['go']['backend']['App']['FetchContainerLogs'](arg1, arg2);
 }

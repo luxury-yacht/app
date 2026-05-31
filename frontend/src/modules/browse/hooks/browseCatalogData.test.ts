@@ -72,6 +72,35 @@ describe('browseCatalogData', () => {
     ).toBe('cluster-1|limit=200&search=api&kind=Pod&namespace=default&continue=200');
   });
 
+  it('includes backend sort in catalog scopes when the sort is not the default', () => {
+    const plan = buildBrowseCatalogPlan({
+      clusterId: 'cluster-1',
+      clusterScopedOnly: false,
+      pinnedNamespaces: ['default'],
+      filters: { search: '', kinds: [], namespaces: [] },
+      sort: { key: 'name', direction: 'desc' },
+      availableNamespaces: ['default'],
+      pageLimit: 200,
+    });
+
+    expect(plan.catalogScope).toBe(
+      'cluster-1|limit=200&sort=name&sortDirection=desc&namespace=default'
+    );
+    expect(
+      buildBrowseCatalogPageScope(
+        plan,
+        {
+          clusterId: 'cluster-1',
+          filters: { search: '', kinds: [], namespaces: [] },
+          sort: { key: 'name', direction: 'desc' },
+          pageLimit: 200,
+          pinnedNamespaces: ['default'],
+        },
+        'cursor'
+      )
+    ).toBe('cluster-1|limit=200&sort=name&sortDirection=desc&namespace=default&continue=cursor');
+  });
+
   it('rejects stale pinned-namespace snapshots', () => {
     expect(
       acceptsCatalogSnapshotScope(
@@ -107,7 +136,7 @@ describe('browseCatalogData', () => {
     expect(next.totalCount).toBe(1);
   });
 
-  it('applies page snapshots as append-only pagination', () => {
+  it('applies page snapshots as current-window replacement pagination', () => {
     const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
     const second = makeItem({ uid: 'pod-b', name: 'pod-b' });
     const existing = applyCatalogBaseline(
@@ -120,7 +149,7 @@ describe('browseCatalogData', () => {
       makePayload({ items: [second], continue: '', total: 2 })
     );
 
-    expect(next.items.map((item) => item.name)).toEqual(['pod-a', 'pod-b']);
+    expect(next.items.map((item) => item.name)).toEqual(['pod-b']);
     expect(next.continueToken).toBeNull();
     expect(next.totalCount).toBe(2);
   });

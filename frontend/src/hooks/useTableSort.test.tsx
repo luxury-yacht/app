@@ -127,6 +127,49 @@ describe('useTableSort', () => {
     expect(getText('ids')).toBe('b,c,a');
   });
 
+  it('emits sort state without locally reordering when local sort is disabled', async () => {
+    type Item = { id: string; score: number };
+    const items: Item[] = [
+      { id: 'b', score: 30 },
+      { id: 'a', score: 10 },
+      { id: 'c', score: 20 },
+    ];
+
+    const DisabledSortHarness = () => {
+      const { sortedData, sortConfig, handleSort } = useTableSort<Item>(items, 'score', 'asc', {
+        disableLocalSort: true,
+      });
+      return (
+        <div>
+          <button data-testid="sort-score" onClick={() => handleSort('score')}>
+            sort-score
+          </button>
+          <div data-testid="ids">{sortedData.map((r) => r.id).join(',')}</div>
+          <div data-testid="direction">{sortConfig.direction ?? 'none'}</div>
+        </div>
+      );
+    };
+
+    await act(async () => {
+      root.render(<DisabledSortHarness />);
+      await Promise.resolve();
+    });
+
+    expect(getText('ids')).toBe('b,a,c');
+    expect(getText('direction')).toBe('asc');
+
+    const sortScoreButton = container.querySelector(
+      '[data-testid="sort-score"]'
+    ) as HTMLButtonElement;
+
+    act(() => {
+      sortScoreButton.click();
+    });
+
+    expect(getText('ids')).toBe('b,a,c');
+    expect(getText('direction')).toBe('desc');
+  });
+
   it('falls back to row[key] when column has no sortValue', async () => {
     type Item = { id: string; score: number };
     const items: Item[] = [

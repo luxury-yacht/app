@@ -117,11 +117,22 @@ describe('useBrowseCatalog', () => {
   let result: UseBrowseCatalogResult | null;
   const pinnedNamespaces = ['default'];
 
-  const Harness = () => {
+  const Harness = ({
+    search = '',
+    kinds = [],
+    namespaces = [],
+    customOnly = false,
+  }: {
+    search?: string;
+    kinds?: string[];
+    namespaces?: string[];
+    customOnly?: boolean;
+  }) => {
     result = useBrowseCatalog({
       clusterId: 'cluster-1',
       pinnedNamespaces,
-      filters: { search: '', kinds: [], namespaces: [] },
+      customOnly,
+      filters: { search, kinds, namespaces },
       diagnosticLabel: 'test browse',
     });
     return null;
@@ -141,13 +152,14 @@ describe('useBrowseCatalog', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     act(() => {
       root.unmount();
     });
     container.remove();
   });
 
-  it('appends load-more pages locally without copying paginated data into the base refresh scope', async () => {
+  it('replaces the current row window with the next cursor page', async () => {
     const baseScope = 'cluster-1|limit=2&namespace=default';
     const metadataScope = 'cluster-1|limit=1&namespace=default';
     const pageScope = 'cluster-1|limit=2&namespace=default&continue=2';
@@ -206,8 +218,270 @@ describe('useBrowseCatalog', () => {
     expect(mocks.setScopedDomainEnabled).not.toHaveBeenCalledWith('catalog', pageScope, true);
     expect(mocks.setScopedDomainEnabled).not.toHaveBeenCalledWith('catalog', pageScope, false);
     expect(mocks.setScopedDomainState).not.toHaveBeenCalled();
-    expect(result?.items.map((item) => item.name)).toEqual(['pod-a', 'pod-b']);
+    expect(result?.items.map((item) => item.name)).toEqual(['pod-b']);
     expect(result?.continueToken).toBeNull();
     expect(result?.isRequestingMore).toBe(false);
+  });
+
+  it('replaces the current row window with the previous cursor page', async () => {
+    const baseScope = 'cluster-1|limit=2&namespace=default';
+    const metadataScope = 'cluster-1|limit=1&namespace=default';
+    const pageScope = 'cluster-1|limit=2&namespace=default&continue=prev';
+    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const second = makeItem({ uid: 'pod-b', name: 'pod-b' });
+    const baseState = {
+      status: 'ready',
+      data: makePayload({
+        items: [second],
+        previous: 'prev',
+        continue: '',
+        total: 2,
+        batchSize: 1,
+      }),
+      scope: baseScope,
+    };
+    const metadataState = {
+      status: 'ready',
+      data: makePayload({ items: [], total: 2, batchSize: 0 }),
+      scope: metadataScope,
+    };
+    const pageState = {
+      status: 'ready',
+      data: makePayload({ items: [first], previous: '', continue: 'next', total: 2, batchSize: 1 }),
+      scope: pageScope,
+    };
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === baseScope) {
+        return baseState;
+      }
+      if (scope === metadataScope) {
+        return metadataState;
+      }
+      return { status: 'idle', data: null, scope };
+    });
+    mocks.requestRefreshDomainState.mockResolvedValue({ status: 'executed', data: pageState });
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    expect(result?.items.map((item) => item.name)).toEqual(['pod-b']);
+    expect(result?.previousToken).toBe('prev');
+
+    await act(async () => {
+      result?.handleLoadPrevious();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(mocks.requestRefreshDomainState).toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: pageScope,
+      reason: 'user',
+    });
+    expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
+    expect(result?.previousToken).toBeNull();
+    expect(result?.continueToken).toBe('next');
+  });
+
+  it('refreshes the first page when the backend reports an invalid cursor', async () => {
+    const baseScope = 'cluster-1|limit=2&namespace=default';
+    const metadataScope = 'cluster-1|limit=1&namespace=default';
+    const pageScope = 'cluster-1|limit=2&namespace=default&continue=bad-cursor';
+    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const baseState = {
+      status: 'ready',
+      data: makePayload({ items: [first], continue: 'bad-cursor', total: 2, batchSize: 1 }),
+      scope: baseScope,
+    };
+    const metadataState = {
+      status: 'ready',
+      data: makePayload({ items: [], total: 2, batchSize: 0 }),
+      scope: metadataScope,
+    };
+    const pageState = {
+      status: 'ready',
+      data: makePayload({ items: [], cursorInvalid: true, total: 2, batchSize: 0 }),
+      scope: pageScope,
+    };
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === baseScope) {
+        return baseState;
+      }
+      if (scope === metadataScope) {
+        return metadataState;
+      }
+      return { status: 'idle', data: null, scope };
+    });
+    mocks.requestRefreshDomainState.mockResolvedValue({ status: 'executed', data: pageState });
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      result?.handleLoadMore();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(result?.items).toEqual([]);
+    expect(result?.continueToken).toBeNull();
+    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: baseScope,
+      reason: 'user',
+    });
+  });
+
+  it('debounces backend search scope refreshes', async () => {
+    vi.useFakeTimers();
+    const baseScope = 'cluster-1|limit=2&namespace=default';
+    const searchScope = 'cluster-1|limit=2&search=api&namespace=default';
+    const metadataScope = 'cluster-1|limit=1&namespace=default';
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === baseScope || scope === searchScope || scope === metadataScope) {
+        return {
+          status: 'ready',
+          data: makePayload({ items: [], total: 0, batchSize: 0 }),
+          scope,
+        };
+      }
+      return { status: 'idle', data: null, scope };
+    });
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+    mocks.requestRefreshDomain.mockClear();
+
+    await act(async () => {
+      root.render(<Harness search="api" />);
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestRefreshDomain).not.toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: searchScope,
+      reason: 'startup',
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: searchScope,
+      reason: 'startup',
+    });
+    vi.useRealTimers();
+  });
+
+  it('threads custom-resource-only queries into catalog scopes', async () => {
+    const customScope = 'cluster-1|limit=2&customOnly=true&namespace=default';
+    const metadataScope = 'cluster-1|limit=1&customOnly=true&namespace=default';
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === customScope || scope === metadataScope) {
+        return {
+          status: 'ready',
+          data: makePayload({ items: [], total: 0, batchSize: 0 }),
+          scope,
+        };
+      }
+      return { status: 'idle', data: null, scope };
+    });
+
+    await act(async () => {
+      root.render(<Harness customOnly />);
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: customScope,
+      reason: 'startup',
+    });
+    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: metadataScope,
+      reason: 'startup',
+    });
+  });
+
+  it('keeps only the current page window across repeated page navigation', async () => {
+    const baseScope = 'cluster-1|limit=2&namespace=default';
+    const metadataScope = 'cluster-1|limit=1&namespace=default';
+    const first = makeItem({ uid: 'pod-0', name: 'pod-0' });
+    const baseState = {
+      status: 'ready',
+      data: makePayload({ items: [first], continue: 'page-1', total: 21, batchSize: 1 }),
+      scope: baseScope,
+    };
+    const metadataState = {
+      status: 'ready',
+      data: makePayload({ items: [], total: 21, batchSize: 0 }),
+      scope: metadataScope,
+    };
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === baseScope) {
+        return baseState;
+      }
+      if (scope === metadataScope) {
+        return metadataState;
+      }
+      return { status: 'idle', data: null, scope };
+    });
+    mocks.requestRefreshDomainState.mockImplementation(async ({ scope }: { scope: string }) => {
+      const token = new URLSearchParams(scope.split('|')[1] ?? '').get('continue') ?? '';
+      const pageNumber = Number(token.replace('page-', ''));
+      const nextToken = pageNumber < 20 ? `page-${pageNumber + 1}` : '';
+      return {
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: makePayload({
+            items: [makeItem({ uid: `pod-${pageNumber}`, name: `pod-${pageNumber}` })],
+            continue: nextToken,
+            total: 21,
+            batchSize: 1,
+          }),
+          scope,
+        },
+      };
+    });
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    for (let page = 1; page <= 20; page += 1) {
+      await act(async () => {
+        result?.handleLoadMore();
+        await Promise.resolve();
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(result?.items.map((item) => item.name)).toEqual([`pod-${page}`]);
+      expect(result?.items).toHaveLength(1);
+    }
   });
 });

@@ -181,6 +181,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Network' : 'Namespace Network';
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<NetworkData>({
+      tableMode: 'Local Partial',
       viewId: 'namespace-network',
       namespace,
       columns,

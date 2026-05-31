@@ -236,6 +236,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
   }, []);
 
   const { gridTableProps } = useObjectPanelResourceGridTable<PodSnapshotEntry>({
+    tableMode: 'Local Complete',
     viewId: 'object-panel-pods',
     clusterIdentity: objectData?.clusterId ?? '',
     enabled: Boolean(objectData?.clusterId),

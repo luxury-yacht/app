@@ -198,11 +198,18 @@ export function useGridTableFiltersWiring<T>({
     return {
       displayed,
       total,
-      capped: displayed < tableData.length || total > data.length,
+      totalIsExact: filters?.options?.totalIsExact ?? true,
+      partialDataLabel: filters?.options?.partialDataLabel,
+      capped:
+        Boolean(filters?.options?.partialDataLabel) ||
+        displayed < tableData.length ||
+        total > data.length,
     };
   }, [
     filteringEnabled,
     filters?.options?.totalCount,
+    filters?.options?.totalIsExact,
+    filters?.options?.partialDataLabel,
     totalDataCount,
     maxDisplayRows,
     data.length,

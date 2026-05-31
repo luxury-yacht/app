@@ -18,7 +18,10 @@ import React, { useMemo, useCallback } from 'react';
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
+import type { CatalogItem } from '@/core/refresh/types';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -68,6 +71,20 @@ interface ClusterCustomViewProps {
   loaded?: boolean;
   error?: string | null;
 }
+
+const catalogItemToClusterCustomData = (item: CatalogItem): ClusterCustomData => ({
+  kind: item.kind,
+  kindAlias: item.kind,
+  name: item.name,
+  clusterId: item.clusterId,
+  clusterName: item.clusterName,
+  apiGroup: item.group,
+  apiVersion: item.version,
+  crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
+  status: item.actionFacts?.status ?? 'Unknown',
+  statusPresentation: item.actionFacts?.status,
+  age: item.creationTimestamp,
+});
 
 /**
  * GridTable component for cluster custom resources
@@ -266,16 +283,65 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
-    const { gridTableProps, favModal } = useClusterResourceGridTable<ClusterCustomData>({
+    const persistence = useGridTablePersistence<ClusterCustomData>({
       viewId: 'cluster-custom',
-      data,
+      clusterIdentity: selectedClusterId,
+      namespace: null,
+      isNamespaceScoped: false,
       columns,
       keyExtractor,
-      availableKinds: kindOptions ?? [],
-      showKindDropdown: true,
-      kindDropdownSearchable: true,
-      kindDropdownBulkActions: true,
+      data: [],
       filterOptions: { isNamespaceScoped: false },
+    });
+
+    const {
+      items: catalogItems,
+      loading: catalogLoading,
+      hasLoadedOnce: catalogLoaded,
+      filterOptions: catalogFilterOptions,
+      totalCount,
+      totalIsExact,
+    } = useBrowseCatalog({
+      clusterId: selectedClusterId,
+      pinnedNamespaces: [],
+      clusterScopedOnly: true,
+      customOnly: true,
+      filters: {
+        search: persistence.filters.search ?? '',
+        kinds: persistence.filters.kinds ?? [],
+        namespaces: [],
+      },
+      sort: persistence.sortConfig,
+      diagnosticLabel: 'Cluster Custom',
+    });
+
+    const rows = useMemo(() => {
+      if (!catalogLoaded && catalogItems.length === 0 && data.length > 0) {
+        return data;
+      }
+      return catalogItems.map(catalogItemToClusterCustomData);
+    }, [catalogItems, catalogLoaded, data]);
+
+    const { gridTableProps, favModal } = useQueryResourceGridTable<ClusterCustomData>({
+      tableMode: 'Query Backed Static',
+      data: rows,
+      columns,
+      persistence,
+      keyExtractor,
+      defaultSortKey: 'name',
+      defaultSortDirection: 'asc',
+      diagnosticsLabel: 'Cluster Custom',
+      filterOptions: {
+        searchBehavior: 'query',
+        kinds:
+          catalogFilterOptions.kinds.length > 0 ? catalogFilterOptions.kinds : (kindOptions ?? []),
+        namespaces: undefined,
+        showKindDropdown: true,
+        kindDropdownSearchable: true,
+        kindDropdownBulkActions: true,
+        totalCount,
+        totalIsExact,
+      },
     });
 
     const objectActions = useObjectActionController({
@@ -321,13 +387,13 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
+          boundaryLoading={catalogLoading || (loading ?? false)}
+          loaded={catalogLoaded || loaded}
           spinnerMessage="Loading cluster custom resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster Custom"
-          loading={loading}
+          loading={catalogLoading || loading}
           onRowClick={handleResourceClick}
           tableClassName="cluster-custom-table"
           enableContextMenu={true}

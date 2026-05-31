@@ -44,8 +44,10 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     useShortNames = false,
     emptyMessage = 'No data available',
     hasMore = false,
+    hasPrevious = false,
     isRequestingMore = false,
     loadMoreLabel = 'Load more',
+    previousPageLabel = 'Previous page',
     showLoadMoreButton = true,
     showPaginationStatus = true,
     allowHorizontalOverflow = true,
@@ -80,6 +82,7 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     resolvedPaginationStatus,
     loadMoreSentinelRef,
     handleManualLoadMore,
+    handleManualLoadPrevious,
     showLoadingOverlay,
     loadingOverlayMessage,
     hasActiveFilters,
@@ -129,9 +132,12 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       showPaginationStatus={showPaginationStatus}
       showLoadMoreButton={showLoadMoreButton}
       loadMoreLabel={loadMoreLabel}
+      previousPageLabel={previousPageLabel}
       hasMore={hasMore}
+      hasPrevious={hasPrevious}
       isRequestingMore={isRequestingMore}
       onManualLoadMore={handleManualLoadMore}
+      onManualLoadPrevious={handleManualLoadPrevious}
       sentinelRef={loadMoreSentinelRef}
       onWrapperFocus={handleWrapperFocus}
       onWrapperBlur={handleWrapperBlur}

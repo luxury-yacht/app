@@ -155,11 +155,20 @@ type Options struct {
 
 // QueryOptions controls catalog queries executed against the in-memory cache.
 type QueryOptions struct {
-	Kinds      []string // resource kinds to filter
-	Namespaces []string // namespaces to filter
-	Search     string   // search term for filtering
-	Limit      int      // maximum number of items to return
-	Continue   string   // token for continuing a paginated query
+	Kinds         []string // resource kinds to filter
+	Namespaces    []string // namespaces to filter
+	Search        string   // search term for filtering
+	SortField     string   // backend-owned sort field; empty uses the catalog default
+	SortDirection string   // backend-owned sort direction; empty uses ascending
+	Limit         int      // maximum number of items to return
+	Continue      string   // token for continuing a paginated query
+	CustomOnly    bool     // restricts results to non-built-in discovered resources
+}
+
+// CatalogQueryStore is the backend boundary consumed by refresh snapshots.
+// Implementations own filtering, sorting, cursor pagination, totals, and facets.
+type CatalogQueryStore interface {
+	Query(opts QueryOptions) QueryResult
 }
 
 // KindInfo captures metadata about a resource kind for filtering.
@@ -172,10 +181,14 @@ type KindInfo struct {
 type QueryResult struct {
 	Items         []Summary  // items returned by the query
 	ContinueToken string     // token for continuing a paginated query
+	PreviousToken string     // token for fetching the previous page
+	CursorInvalid bool       // indicates the supplied cursor was malformed or incompatible
 	TotalItems    int        // total number of items matching the query
+	TotalIsExact  bool       // indicates TotalItems is exact for the query
 	ResourceCount int        // total number of resources matching the query
 	Kinds         []KindInfo // resource kinds included in the query
 	Namespaces    []string   // namespaces included in the query
+	FacetsExact   bool       // indicates Kinds and Namespaces describe the matching universe exactly
 }
 
 // PartialSyncError reports that a sync completed with partial failures.

@@ -554,6 +554,13 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   pointer-events: none;
 }
 
+.gridtable-pagination-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--grid-spacing-sm);
+}
+
 .gridtable-pagination-button {
   padding: 0.5rem 1.1rem;
   border-radius: var(--border-radius-md);

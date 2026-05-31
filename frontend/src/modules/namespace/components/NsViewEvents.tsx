@@ -209,6 +209,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<EventData>({
+      tableMode: 'Local Partial',
       viewId: 'namespace-events',
       namespace,
       data,

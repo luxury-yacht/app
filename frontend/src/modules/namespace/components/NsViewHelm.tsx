@@ -278,6 +278,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     ]);
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<HelmData>({
+      tableMode: 'Local Complete',
       viewId: 'namespace-helm',
       namespace,
       data,

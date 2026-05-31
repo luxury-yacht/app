@@ -52,7 +52,13 @@ interface GridTableFiltersBarProps {
   /** Arbitrary content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
   /** Displayed vs total item count shown to the right of actions. */
-  resultCount?: { displayed: number; total: number; capped?: boolean };
+  resultCount?: {
+    displayed: number;
+    total: number;
+    totalIsExact?: boolean;
+    partialDataLabel?: string;
+    capped?: boolean;
+  };
 }
 
 const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
@@ -220,21 +226,39 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 className="gridtable-filter-result-count"
                 data-gridtable-filter-role="result-count"
               >
-                {resultCount.displayed === resultCount.total
-                  ? `${resultCount.total} items`
-                  : `${resultCount.displayed} of ${resultCount.total} items`}
+                {resultCount.partialDataLabel
+                  ? `${resultCount.displayed} visible items`
+                  : resultCount.displayed === resultCount.total &&
+                      resultCount.totalIsExact !== false
+                    ? `${resultCount.total} items`
+                    : `${resultCount.displayed} of ${
+                        resultCount.totalIsExact === false ? '~' : ''
+                      }${resultCount.total} items`}
                 {resultCount.capped && (
                   <Tooltip
                     content={
                       <>
+                        {resultCount.totalIsExact === false && (
+                          <p className="gridtable-filter-result-tooltip-paragraph">
+                            The total count is approximate because the backend stopped counting
+                            after the configured exact-count budget.
+                          </p>
+                        )}
+                        {resultCount.partialDataLabel && (
+                          <p className="gridtable-filter-result-tooltip-paragraph">
+                            {resultCount.partialDataLabel}
+                          </p>
+                        )}
                         <p className="gridtable-filter-result-tooltip-paragraph">
-                          The total number of objects exceeds the max table size. Use search filters
-                          to reduce the size of the data set.
+                          {resolvedFilterOptions.searchBehavior === 'query'
+                            ? 'This table is showing the current backend query page.'
+                            : 'The local row set exceeds the table safety cap. Use filters to narrow the visible set.'}
                         </p>
-                        <p className="gridtable-filter-result-tooltip-paragraph">
-                          You can change the max table size in Settings, but larger values can
-                          impact the app&apos;s performance.
-                        </p>
+                        {resolvedFilterOptions.searchBehavior === 'query' && (
+                          <p className="gridtable-filter-result-tooltip-paragraph">
+                            Use page controls to inspect additional matching rows.
+                          </p>
+                        )}
                       </>
                     }
                   />

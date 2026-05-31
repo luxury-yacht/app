@@ -30,10 +30,14 @@ type CatalogSnapshot struct {
 	ClusterMeta
 	Items               []objectcatalog.Summary  `json:"items"`
 	Continue            string                   `json:"continue,omitempty"`
+	Previous            string                   `json:"previous,omitempty"`
+	CursorInvalid       bool                     `json:"cursorInvalid,omitempty"`
 	Total               int                      `json:"total"`
+	TotalIsExact        bool                     `json:"totalIsExact"`
 	ResourceCount       int                      `json:"resourceCount"`
 	Kinds               []objectcatalog.KindInfo `json:"kinds,omitempty"`
 	Namespaces          []string                 `json:"namespaces,omitempty"`
+	FacetsExact         bool                     `json:"facetsExact"`
 	NamespaceGroups     []CatalogNamespaceGroup  `json:"namespaceGroups,omitempty"`
 	BatchIndex          int                      `json:"batchIndex"`
 	BatchSize           int                      `json:"batchSize"`
@@ -60,8 +64,11 @@ type browseQueryOptions struct {
 	Kinds      []string
 	Namespaces []string
 	Search     string
+	SortField  string
+	SortDir    string
 	Limit      int
 	Continue   string
+	CustomOnly bool
 }
 
 // RegisterCatalogDomain registers the catalog browse domain with the registry.
@@ -169,10 +176,14 @@ func buildCatalogSnapshot(
 	payload := CatalogSnapshot{
 		Items:         cloneSummaries(result.Items),
 		Continue:      result.ContinueToken,
+		Previous:      result.PreviousToken,
+		CursorInvalid: result.CursorInvalid,
 		Total:         result.TotalItems,
+		TotalIsExact:  result.TotalIsExact,
 		ResourceCount: result.ResourceCount,
 		Kinds:         cloneKindInfos(result.Kinds),
 		Namespaces:    cloneStrings(result.Namespaces),
+		FacetsExact:   result.FacetsExact,
 		BatchIndex:    batchIndex,
 		BatchSize:     len(result.Items),
 		TotalBatches:  totalBatches,
@@ -238,7 +249,10 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 		Kinds:      values["kind"],
 		Namespaces: values["namespace"],
 		Search:     values.Get("search"),
+		SortField:  values.Get("sort"),
+		SortDir:    values.Get("sortDirection"),
 		Continue:   values.Get("continue"),
+		CustomOnly: values.Get("customOnly") == "true",
 	}
 	if limit := values.Get("limit"); limit != "" {
 		if parsed, err := strconv.Atoi(limit); err == nil {
@@ -250,11 +264,14 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 
 func (o browseQueryOptions) toQueryOptions() objectcatalog.QueryOptions {
 	return objectcatalog.QueryOptions{
-		Kinds:      o.Kinds,
-		Namespaces: o.Namespaces,
-		Search:     o.Search,
-		Limit:      o.Limit,
-		Continue:   o.Continue,
+		Kinds:         o.Kinds,
+		Namespaces:    o.Namespaces,
+		Search:        o.Search,
+		SortField:     o.SortField,
+		SortDirection: o.SortDir,
+		Limit:         o.Limit,
+		Continue:      o.Continue,
+		CustomOnly:    o.CustomOnly,
 	}
 }
 

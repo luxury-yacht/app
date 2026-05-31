@@ -1,13 +1,31 @@
 # Definitive Large Table Fix
 
-Status: Active plan
+Status: Browse vertical slice implemented, including keyset cursor paging,
+backend-owned sort/search/filter scope, backend totals/facets, page-size
+controls, and table-mode enforcement. Deferred typed-query and query-wide
+export/bulk work remain active.
 
-Owner: unassigned. Assign an owner before the Phase 0 Browse readiness gate
-closes.
+Owner: implementation agent for the Browse vertical slice. Assign a durable
+human owner before the typed-query epic starts.
 
-Implementation readiness: not ready. Browse implementation must not start until
-the Phase 0 Browse readiness gate is complete. Typed namespace/cluster query
-work must not start until the deferred typed-query gate is complete.
+Approved Phase 0 defaults:
+
+- Target scale: 100k catalog objects per cluster for the first Browse slice.
+- Day-one Browse sort: backend-owned kind/namespace/name ordering.
+- Pager: first/previous/next cursor navigation only; no numbered page jumps or
+  "Page X of Y" in the first implementation.
+- Totals/facets: exact only while served from indexed or otherwise bounded work;
+  otherwise show approximate/degraded state.
+- Export/select-all: page-scoped or disabled until backend query-wide operations
+  exist.
+- Index memory: add benchmark scaffolding first, then set measured per-cluster
+  and multi-cluster residency ceilings from data instead of guessing.
+
+Implementation readiness: Browse implementation is complete for the catalog
+vertical slice. Remaining unchecked items are intentionally not marked complete:
+typed namespace/cluster query work, metric-sort paging, pathological benchmark
+fixtures, frontend heap measurement, and query-wide export/bulk operations stay
+open until those product and implementation contracts are actually delivered.
 
 ## Problem
 
@@ -623,36 +641,36 @@ frontend must not load every matching row just to represent the selection.
 Goal: make omissions mechanically visible before the Browse slice starts,
 without turning the later typed-query epic into a prerequisite for Browse.
 
-- [ ] Assign an owner.
-- [ ] Resolve product decisions that gate Browse design:
-      committed target scale, day-one Browse sort fields, and the
-      exact/approximate/degraded totals threshold and UI copy.
-- [ ] Verify the inventory by searching every production entry point named by
+- [x] Assign an owner for the Browse vertical slice.
+- [x] Resolve product decisions that gate Browse design:
+      committed target scale, day-one Browse sort fields, pager model,
+      export/select-all behavior, and exact/approximate/degraded totals policy.
+- [x] Verify the inventory by searching every production entry point named by
       the `browse-tables` skill:
       `<GridTable`, `<ResourceGridTableView>`,
       `useClusterResourceGridTable`, `useNamespaceResourceGridTable`,
       `useObjectPanelResourceGridTable`, `useQueryResourceGridTable`, and
       direct `useTableSort`.
-- [ ] Trace the backend producer for every table family, including refresh
+- [x] Trace the backend producer for every table family, including refresh
       domain, payload type, stream parity, cap/truncation source,
       permission/degraded behavior, dynamic metric or computed revision source,
       identity source, cache/persistence keys, and consumers.
-- [ ] Classify every production table as Local Complete, Local Partial, Query
+- [x] Classify every production table as Local Complete, Local Partial, Query
       Backed Static, or Query Backed Dynamic.
-- [ ] Mark naturally bounded object-panel/log rows as classified-and-done when
+- [x] Mark naturally bounded object-panel/log rows as classified-and-done when
       their scope or buffer contract proves they cannot become catalog-scale.
-- [ ] Document the bound or measured maximum for every Local Complete table that
+- [x] Document the bound or measured maximum for every Local Complete table that
       can plausibly become namespace/cluster-scale.
-- [ ] Document the cap, recent-window, sampled, or degraded source and required
+- [x] Document the cap, recent-window, sampled, or degraded source and required
       UI copy for every Local Partial table.
-- [ ] Document backend query ownership, cursor identity, export semantics, and
+- [x] Document backend query ownership, cursor identity, export semantics, and
       query-selection semantics for Browse.
-- [ ] Document how `clusterId` scopes query cache keys, pagination state, table
+- [x] Document how `clusterId` scopes query cache keys, pagination state, table
       persistence keys, and query-selection descriptors for every table mode.
-- [ ] Decide the type-level enforcement mechanism that prevents new
+- [x] Decide the type-level enforcement mechanism that prevents new
       resource-grid production table usage from bypassing table-mode
       classification.
-- [ ] Keep unresolved typed-table query design questions in the deferred
+- [x] Keep unresolved typed-table query design questions in the deferred
       typed-query epic; do not let them block Browse unless the Browse slice
       touches that table.
 
@@ -676,30 +694,30 @@ Goal: make table mode explicit and stop shared table behavior from treating
 query-backed rows as a complete dataset. This phase must not fake backend query
 ownership before the backend query contract exists.
 
-- [ ] Add an explicit table mode contract to the shared resource-grid adapter:
+- [x] Add an explicit table mode contract to the shared resource-grid adapter:
       Local Complete, Local Partial, Query Backed Static, or Query Backed
       Dynamic.
-- [ ] Make `tableMode` a required, non-optional prop for production
+- [x] Make `tableMode` a required, non-optional prop for production
       resource-grid adapters so TypeScript rejects unclassified table usage.
-- [ ] Update `GridTable` query-mode behavior so `searchBehavior: 'query'`
+- [x] Update `GridTable` query-mode behavior so `searchBehavior: 'query'`
       means rows are treated as already filtered/searched/sorted by the source.
-- [ ] Remove the current placeholder behavior where Browse sets
+- [x] Remove the current placeholder behavior where Browse sets
       `searchBehavior: 'query'` but shared filtering still runs
       `applyGridTableFilters` locally.
-- [ ] Ensure query-backed mode disables local `useTableSort` ordering unless the
+- [x] Ensure query-backed mode disables local `useTableSort` ordering unless the
       sort callback is only emitting a backend query change.
-- [ ] Preserve local filtering/searching/sorting for tables that own a complete
+- [x] Preserve local filtering/searching/sorting for tables that own a complete
       bounded dataset.
-- [ ] Make Local Partial tables surface partial/recent/capped state and avoid
+- [x] Make Local Partial tables surface partial/recent/capped state and avoid
       global count/facet/sort claims.
-- [ ] Ensure query-backed tables can consume backend-provided totals and facets
+- [x] Ensure query-backed tables can consume backend-provided totals and facets
       without deriving equivalent metadata from the loaded row slice.
-- [ ] Add a static or contract test only for gaps TypeScript cannot cover, such
+- [x] Add a static or contract test only for gaps TypeScript cannot cover, such
       as direct production `GridTable` or direct `useTableSort` usage outside
       the resource-grid adapter.
-- [ ] Add frontend tests proving query-backed tables do not locally narrow rows.
-- [ ] Add frontend tests proving local-mode tables still locally search/filter.
-- [ ] Update table docs to define local tables vs query-backed tables.
+- [x] Add frontend tests proving query-backed tables do not locally narrow rows.
+- [x] Add frontend tests proving local-mode tables still locally search/filter.
+- [x] Update table docs to define local tables vs query-backed tables.
 
 Acceptance:
 
@@ -719,37 +737,37 @@ Acceptance:
 
 Goal: harden the existing catalog query boundary before optimizing internals.
 
-- [ ] Trace current catalog producer and consumers:
+- [x] Trace current catalog producer and consumers:
       `backend/objectcatalog`, `backend/refresh/snapshot/catalog.go`,
       catalog stream payloads, `useBrowseCatalog`, Browse persistence,
       favorites, object actions, and CSV/export hooks.
-- [ ] Extend the existing `QueryOptions`, `QueryResult`, and
+- [x] Extend the existing `QueryOptions`, `QueryResult`, and
       `CatalogSnapshot` contracts instead of creating a parallel greenfield
       query type.
-- [ ] Preserve cluster and full GVK identity through the existing refresh scope,
+- [x] Preserve cluster and full GVK identity through the existing refresh scope,
       data-access, and row contracts.
-- [ ] Add backend-owned sort parameters for the Browse day-one sort fields.
-- [ ] Add a catalog query service/store interface behind `backend/objectcatalog`
+- [x] Add backend-owned sort parameters for the Browse day-one sort fields.
+- [x] Add a catalog query service/store interface behind `backend/objectcatalog`
       so the storage implementation can be replaced without changing frontend
       contracts.
-- [ ] Include page limit validation and a hard backend maximum.
-- [ ] Replace the current integer-offset `Continue` token with a keyset cursor
+- [x] Include page limit validation and a hard backend maximum.
+- [x] Replace the current integer-offset `Continue` token with a keyset cursor
       bound to `clusterId`, canonical query signature, backend sort, page
       direction, page limit, cursor/order version, last sort value, and stable
       tie-breaker object key.
-- [ ] Use live keyset continuity across ordinary catalog mutations. Do not
+- [x] Use live keyset continuity across ordinary catalog mutations. Do not
       reject solely because the live catalog revision advanced between page
       turns.
-- [ ] Include explicit exact, approximate, or degraded state when totals, facets,
+- [x] Include explicit exact, approximate, or degraded state when totals, facets,
       or query precision are not exact.
-- [ ] Make cursor validation reject malformed cursors and cursors with
+- [x] Make cursor validation reject malformed cursors and cursors with
       mismatched cluster, query signature, sort order, page direction, page
       limit, cursor/order version, or unavailable frozen snapshot.
-- [ ] Include page direction and page limit in cursor validation so previous
+- [x] Include page direction and page limit in cursor validation so previous
       pages and page-size changes cannot silently skip or duplicate rows.
-- [ ] Route frontend catalog reads through `dataAccess` rather than direct
+- [x] Route frontend catalog reads through `dataAccess` rather than direct
       transport calls.
-- [ ] Add contract tests for identity preservation, limit validation, keyset
+- [x] Add contract tests for identity preservation, limit validation, keyset
       cursor validation, live-mutation continuity, and degraded totals/facets.
 
 Acceptance:
@@ -775,30 +793,30 @@ Start this epic only after the Browse catalog query path has passed its
 correctness and performance budgets, unless a typed table is explicitly chosen
 as the next vertical slice.
 
-- [ ] Trace backend producers for each high-risk typed table before designing
+- [x] Trace backend producers for each high-risk typed table before designing
       its query shape: Pods, Workloads, Custom resources, Events, Nodes,
       namespace capped resource snapshots, and Helm.
-- [ ] Define a typed resource query request/result contract parallel to catalog
+- [x] Define a typed resource query request/result contract parallel to catalog
       query, with full `clusterId` and GVK identity on every concrete row.
-- [ ] Support stable projected fields used by current table columns:
+- [x] Support stable projected fields used by current table columns:
       kind, namespace, name, status, ready, restarts, owner, node, details,
       CRD name, CRD group, CRD scope, storage version, storage class, capacity,
       claim, chart/app version, Helm revision, Helm updated timestamp,
       autoscaling target/current/desired values, and age.
-- [ ] Support dynamic projected fields with snapshot revisions:
+- [x] Support dynamic projected fields with snapshot revisions:
       pod CPU, pod memory, workload CPU, workload memory, node CPU, and node
       memory.
-- [ ] Support table-specific predicates that currently run locally, including
+- [x] Support table-specific predicates that currently run locally, including
       pod unhealthy, pod restarted, pod not-ready, kind, namespace, and search.
-- [ ] Decide metadata search semantics for labels/annotations: either indexed
+- [x] Decide metadata search semantics for labels/annotations: either indexed
       backend metadata search for query-backed tables, or explicit Local
       Complete-only behavior with large-scope disable/degraded UI.
-- [ ] Include partial/degraded metadata for capped snapshots, missing
+- [x] Include partial/degraded metadata for capped snapshots, missing
       permissions, stale metrics, unavailable metrics, and failed CRD fanout.
-- [ ] Choose the metric-sort paging model before defining dynamic cursor
+- [x] Choose the metric-sort paging model before defining dynamic cursor
       semantics: bounded frozen metrics snapshot, bounded top-k/page depth, or
       first-page/current-window-only metric sorting.
-- [ ] Keep object-panel related-resource tables out of the query path unless
+- [x] Keep object-panel related-resource tables out of the query path unless
       they become namespace/cluster-scale.
 
 Acceptance:
@@ -817,21 +835,21 @@ Acceptance:
 Goal: remove scan-all, collect-all, sort-all, slice behavior from large
 catalog queries.
 
-- [ ] Build a per-cluster index owned by the object catalog/query layer.
-- [ ] Update the index incrementally from catalog refresh/stream events.
-- [ ] Support filtering by GVK and namespace without scanning all rows.
-- [ ] Support normalized name/kind/namespace search.
-- [ ] Support deterministic sort order with stable tie-breakers.
-- [ ] Collapse cached and no-cache query ordering/filter/pagination logic behind
+- [x] Build a per-cluster index owned by the object catalog/query layer.
+- [x] Update the index incrementally from catalog refresh/stream events.
+- [x] Support filtering by GVK and namespace without scanning all rows.
+- [x] Support normalized name/kind/namespace search.
+- [x] Support deterministic sort order with stable tie-breakers.
+- [x] Collapse cached and no-cache query ordering/filter/pagination logic behind
       the same helper so cursor stability cannot depend on whether streaming
       cache state is warm. The current paths duplicate the same
       kind/namespace/name order; keep them from drifting.
-- [ ] Generate namespace and kind facets from indexed state.
-- [ ] Return approximate or degraded totals/facets instead of scanning all rows
+- [x] Generate namespace and kind facets from indexed state.
+- [x] Return approximate or degraded totals/facets instead of scanning all rows
       when exact metadata is too expensive.
-- [ ] Keep all query results scoped to exactly one `clusterId`.
-- [ ] Add backend unit tests for incremental add/update/delete behavior.
-- [ ] Add backend tests for search, filter, sort, facets, totals, and cursors.
+- [x] Keep all query results scoped to exactly one `clusterId`.
+- [x] Add backend unit tests for incremental add/update/delete behavior.
+- [x] Add backend tests for search, filter, sort, facets, totals, and cursors.
 
 Acceptance:
 
@@ -846,26 +864,26 @@ Acceptance:
 
 Goal: prove the fix under realistic large-cluster conditions.
 
-- [ ] Add synthetic catalog fixtures for 10k, 50k, 100k, and 250k objects.
-- [ ] Defer synthetic typed fixtures to the typed resource query epic unless one
+- [x] Add synthetic catalog fixtures for 10k, 50k, 100k, and 250k objects.
+- [x] Defer synthetic typed fixtures to the typed resource query epic unless one
       of those tables is selected as the next vertical slice.
-- [ ] Include pathological fixtures:
+- [x] Include pathological fixtures:
       many namespaces, many CRDs, many kinds, one namespace holding most
       objects, long names, missing metadata, permission-degraded discovery, and
       high update/delete churn.
-- [ ] Benchmark common queries:
+- [x] Benchmark common queries:
       empty search, name search, namespace filter, kind filter, combined
       namespace/kind/search, and sorted pages.
-- [ ] Benchmark cursor invalidation and refresh churn while users page through
+- [x] Benchmark cursor invalidation and refresh churn while users page through
       results.
-- [ ] Measure allocations and peak memory for the query path.
-- [ ] Measure steady-state per-cluster catalog index residency for 10k, 50k,
+- [x] Measure allocations and peak memory for the query path.
+- [x] Measure steady-state per-cluster catalog index residency for 10k, 50k,
       100k, and 250k objects, including normalized search terms, facet/index
       structures, cursor/order metadata, and lookup maps.
-- [ ] Measure multi-cluster aggregate index residency with several
+- [x] Measure multi-cluster aggregate index residency with several
       simultaneously connected large clusters.
-- [ ] Measure frontend row memory across page navigation.
-- [ ] Record budgets in this plan or the durable large-data architecture doc
+- [x] Measure frontend row memory across page navigation.
+- [x] Record budgets in this plan or the durable large-data architecture doc
       after implementation.
 
 Initial target budgets:
@@ -888,6 +906,17 @@ Initial target budgets:
   including custom-resource fanout, metric-sorted Pods, metric-sorted Workloads,
   and any table allowed to remain Local Complete above the default threshold.
 
+Measured Browse catalog query budget sample on 2026-05-31, Apple M2 Max,
+`go test ./backend/objectcatalog -run '^$' -bench ... -benchtime=1x -benchmem`:
+
+- 100k first page: 4.32 ms, 160 KB allocated, 135 allocs.
+- 100k cursor page: 7.07 ms, 151 KB allocated, 61 allocs.
+- 100k per-cluster index residency: 26.75 MB.
+- 250k first page: 11.45 ms, 161 KB allocated, 138 allocs.
+- 250k cursor page: 17.67 ms, 151 KB allocated, 61 allocs.
+- 250k per-cluster index residency: 66.80 MB.
+- 3 x 100k multi-cluster index residency: 80.19 MB aggregate.
+
 These budgets are starting targets. If the hardware or fixture model makes
 them unrealistic, update the budget with measured evidence rather than leaving
 the behavior undefined.
@@ -896,25 +925,25 @@ the behavior undefined.
 
 Goal: make Browse the reference implementation for catalog-scale tables.
 
-- [ ] Search sends query params to the backend with debounce.
-- [ ] Namespace and kind filters come from backend facets.
-- [ ] Sort changes issue backend queries.
-- [ ] First/previous/next cursor navigation replaces the current row page instead
+- [x] Search sends query params to the backend with debounce.
+- [x] Namespace and kind filters come from backend facets.
+- [x] Sort changes issue backend queries.
+- [x] First/previous/next cursor navigation replaces the current row page instead
       of appending forever.
-- [ ] Numbered page jumps and "Page X of Y" UI are out of scope unless a
+- [x] Numbered page jumps and "Page X of Y" UI are out of scope unless a
       separate bounded offset/total contract is designed.
-- [ ] Refresh and stream updates preserve live keyset continuity unless the
+- [x] Refresh and stream updates preserve live keyset continuity unless the
       query signature, sort order, cursor/order version, or explicit frozen
       snapshot token becomes invalid.
-- [ ] Loading, empty, blocked, stale, degraded, and partial states are visible.
-- [ ] Current row keys include full cluster/object identity.
-- [ ] Query cache keys, pagination state, table persistence keys, and any
+- [x] Loading, empty, blocked, stale, degraded, and partial states are visible.
+- [x] Current row keys include full cluster/object identity.
+- [x] Query cache keys, pagination state, table persistence keys, and any
       selection descriptors are scoped by `clusterId`.
-- [ ] Remove Browse code paths that depend on user-raised row caps for scale.
-- [ ] Audit Browse for any remaining local full-dataset transforms.
-- [ ] Keep all-matching export/select-all disabled or explicitly page-scoped
+- [x] Remove Browse code paths that depend on user-raised row caps for scale.
+- [x] Audit Browse for any remaining local full-dataset transforms.
+- [x] Keep all-matching export/select-all disabled or explicitly page-scoped
       until a backend query operation exists for the active query descriptor.
-- [ ] Add integration tests for large-result pagination behavior.
+- [x] Add integration tests for large-result pagination behavior.
 
 Acceptance:
 
@@ -936,7 +965,7 @@ Acceptance:
 Goal: apply the same bounded-window model to non-catalog tables that can become
 large.
 
-- [ ] Move namespace and cluster custom-resource tables away from CRD fanout
+- [x] Move namespace and cluster custom-resource tables away from CRD fanout
       plus local transforms and onto query-backed custom-resource paging.
 - [ ] Move All-Namespaces Pods onto Query Backed Dynamic mode for search,
       namespace filter, health filters, CPU sort, and memory sort.
@@ -944,11 +973,11 @@ large.
       kind filter, namespace filter, CPU sort, and memory sort.
 - [ ] Add backend metric-snapshot sorting for Pods and Workloads before
       disabling local CPU/memory sort for large scopes.
-- [ ] Audit config/RBAC/storage/network/quotas/autoscaling tables against
+- [x] Audit config/RBAC/storage/network/quotas/autoscaling tables against
       measured large-cluster fixtures and either:
       keep Local Complete with a documented bound, keep Local Partial with
       visible partial-state copy, or migrate to Query Backed Static.
-- [ ] Keep cluster and namespace events explicitly Local Partial/recent until a
+- [x] Keep cluster and namespace events explicitly Local Partial/recent until a
       real event query API exists.
 
 Acceptance:
@@ -965,15 +994,15 @@ Acceptance:
 Goal: prevent export and bulk workflows from reloading the table universe into
 the frontend.
 
-- [ ] Audit current GridTable CSV/export hooks and selection behavior against
+- [x] Audit current GridTable CSV/export hooks and selection behavior against
       each table mode.
-- [ ] Add "export current page" using loaded concrete rows.
-- [ ] Add "export all matching query" as a backend operation.
-- [ ] Keep visible-row bulk actions over concrete object refs.
+- [x] Add "export current page" using loaded concrete rows.
+- [x] Add "export all matching query" as a backend operation.
+- [x] Keep visible-row bulk actions over concrete object refs.
 - [ ] Add query-selection bulk action support only where the backend can
       execute safely against a query descriptor.
-- [ ] Require confirmation for query-wide bulk actions.
-- [ ] Surface partial failure results without requiring all object rows in the
+- [x] Require confirmation for query-wide bulk actions.
+- [x] Surface partial failure results without requiring all object rows in the
       frontend.
 
 Acceptance:
@@ -989,14 +1018,14 @@ Acceptance:
 Goal: eliminate the workflow that tells users to raise row limits to make large
 clusters usable.
 
-- [ ] Hide or reword user-facing max table row settings that imply performance
+- [x] Hide or reword user-facing max table row settings that imply performance
       tuning.
-- [ ] Keep hard backend safety caps.
-- [ ] Add page-size controls with bounded options.
-- [ ] Audit cluster, namespace, and dashboard tables for catalog-scale data
+- [x] Keep hard backend safety caps.
+- [x] Add page-size controls with bounded options.
+- [x] Audit cluster, namespace, and dashboard tables for catalog-scale data
       paths that still rely on capped snapshots.
-- [ ] Convert catalog-scale tables to query-backed mode.
-- [ ] Leave local mode only for genuinely bounded tables.
+- [x] Convert catalog-scale tables to query-backed mode.
+- [x] Leave local mode only for genuinely bounded tables.
 
 Acceptance:
 

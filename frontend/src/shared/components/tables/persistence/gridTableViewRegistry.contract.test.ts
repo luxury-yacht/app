@@ -50,6 +50,12 @@ function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] 
   const found: { viewId: string; file: string }[] = [];
 
   for (const filePath of files) {
+    const relativePath = path.relative(sourceRoot, filePath);
+    if (
+      relativePath.split(path.sep).join('/') === 'modules/resource-grid/useResourceGridTable.tsx'
+    ) {
+      continue;
+    }
     const content = fs.readFileSync(filePath, 'utf-8');
     if (!hookPattern.test(content)) continue;
 
@@ -75,6 +81,64 @@ function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] 
   }
 
   return found;
+}
+
+function findResourceGridCallsMissingTableMode(sourceRoot: string): string[] {
+  const files = walkSourceFiles(sourceRoot);
+  const callPattern =
+    /use(?:Cluster|Namespace|ObjectPanel|Query)ResourceGridTable(?:<[^>]+>)?\s*\(\s*\{[\s\S]*?\n\s*\}\s*\)/g;
+  const missing: string[] = [];
+
+  for (const filePath of files) {
+    const relativePath = path.relative(sourceRoot, filePath);
+    if (
+      relativePath.split(path.sep).join('/') === 'modules/resource-grid/useResourceGridTable.tsx'
+    ) {
+      continue;
+    }
+    const content = fs.readFileSync(filePath, 'utf-8');
+    for (const match of content.matchAll(callPattern)) {
+      if (!/\btableMode\s*:/.test(match[0])) {
+        missing.push(relativePath);
+      }
+    }
+  }
+
+  return [...new Set(missing)].sort();
+}
+
+function findProductionDirectGridTableUsages(sourceRoot: string): string[] {
+  const allowed = new Set([
+    'modules/resource-grid/ObjectPanelResourceGridTableSurface.tsx',
+    'modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx',
+    'modules/object-panel/components/ObjectPanel/Logs/ParsedLogTable.tsx',
+  ]);
+  return walkSourceFiles(sourceRoot)
+    .map((filePath) => path.relative(sourceRoot, filePath).split(path.sep).join('/'))
+    .filter((relativePath) => !relativePath.startsWith('shared/components/tables/'))
+    .filter((relativePath) => !relativePath.endsWith('.stories.tsx'))
+    .filter((relativePath) => {
+      const content = fs.readFileSync(path.join(sourceRoot, relativePath), 'utf-8');
+      return /<GridTable(?:<[^>]+>)?[\s>]/.test(content);
+    })
+    .filter((relativePath) => !allowed.has(relativePath))
+    .sort();
+}
+
+function findProductionDirectUseTableSortUsages(sourceRoot: string): string[] {
+  const allowed = new Set([
+    'modules/resource-grid/useGridTableBinding.ts',
+    'modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx',
+  ]);
+  return walkSourceFiles(sourceRoot)
+    .map((filePath) => path.relative(sourceRoot, filePath).split(path.sep).join('/'))
+    .filter((relativePath) => !relativePath.startsWith('hooks/'))
+    .filter((relativePath) => {
+      const content = fs.readFileSync(path.join(sourceRoot, relativePath), 'utf-8');
+      return /\buseTableSort\(/.test(content);
+    })
+    .filter((relativePath) => !allowed.has(relativePath))
+    .sort();
 }
 
 describe('gridTableViewRegistry contract', () => {
@@ -107,6 +171,39 @@ describe('gridTableViewRegistry contract', () => {
         `Registry contains viewIds with no matching usage in source files:\n` +
           stale.map((id) => `  "${id}"`).join('\n') +
           '\n\nRemove them from gridTableViewRegistry.ts or add their usage.'
+      );
+    }
+  });
+
+  it('production resource-grid adapter calls declare tableMode', () => {
+    const missing = findResourceGridCallsMissingTableMode(srcRoot);
+    if (missing.length > 0) {
+      throw new Error(
+        `Found resource-grid adapter calls without tableMode:\n` +
+          missing.map((file) => `  ${file}`).join('\n') +
+          '\n\nAdd an explicit Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic mode.'
+      );
+    }
+  });
+
+  it('direct production GridTable usage is explicitly allowed', () => {
+    const unexpected = findProductionDirectGridTableUsages(srcRoot);
+    if (unexpected.length > 0) {
+      throw new Error(
+        `Found direct production GridTable usages without an explicit exception:\n` +
+          unexpected.map((file) => `  ${file}`).join('\n') +
+          '\n\nRoute resource tables through the resource-grid adapter with tableMode, or add a reviewed bounded/partial exception here.'
+      );
+    }
+  });
+
+  it('direct production useTableSort usage is explicitly allowed', () => {
+    const unexpected = findProductionDirectUseTableSortUsages(srcRoot);
+    if (unexpected.length > 0) {
+      throw new Error(
+        `Found direct production useTableSort usages without an explicit exception:\n` +
+          unexpected.map((file) => `  ${file}`).join('\n') +
+          '\n\nRoute resource tables through the resource-grid adapter tableMode path, or add a reviewed bounded/partial exception here.'
       );
     }
   });

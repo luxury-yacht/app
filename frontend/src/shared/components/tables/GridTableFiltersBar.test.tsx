@@ -249,6 +249,53 @@ describe('GridTableFiltersBar', () => {
     ).toBeNull();
   });
 
+  it('marks approximate backend totals with visible copy', async () => {
+    vi.useFakeTimers();
+    await renderFilters({
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [],
+        searchBehavior: 'query',
+      },
+      resultCount: { displayed: 100, total: 100001, totalIsExact: false, capped: true },
+    });
+
+    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+    expect(resultCount?.textContent).toContain('100 of ~100001 items');
+    const trigger = resultCount?.querySelector('.tooltip-trigger');
+    expect(trigger).not.toBeNull();
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    expect(document.body.textContent).toContain('The total count is approximate');
+    expect(document.body.textContent).toContain('current backend query page');
+  });
+
+  it('marks partial local windows with visible copy', async () => {
+    vi.useFakeTimers();
+    await renderFilters({
+      resultCount: {
+        displayed: 50,
+        total: 500,
+        capped: true,
+        partialDataLabel: 'Only the recent local window is loaded.',
+      },
+    });
+
+    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+    expect(resultCount?.textContent).toContain('50 visible items');
+    const trigger = resultCount?.querySelector('.tooltip-trigger');
+    expect(trigger).not.toBeNull();
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    expect(document.body.textContent).toContain('Only the recent local window is loaded.');
+  });
+
   it('registers search shortcut and focuses the input when invoked', async () => {
     await renderFilters({
       searchShortcutActive: true,

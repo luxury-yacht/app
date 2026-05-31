@@ -44,6 +44,7 @@ const renderObjectPanelGrid = (
   const Probe: React.FC = () => {
     result.current = useObjectPanelResourceGridTable<TestRow>({
       viewId: 'test-grid',
+      tableMode: 'Local Complete',
       clusterIdentity: 'alpha:ctx',
       data: [row],
       columns,

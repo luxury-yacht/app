@@ -325,6 +325,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<AutoscalingData>({
+      tableMode: 'Local Partial',
       viewId: 'namespace-autoscaling',
       namespace,
       data,

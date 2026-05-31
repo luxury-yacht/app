@@ -181,6 +181,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
     const { gridTableProps, favModal } = useClusterResourceGridTable<CRDsData>({
+      tableMode: 'Local Complete',
       viewId: 'cluster-crds',
       data,
       columns,

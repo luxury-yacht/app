@@ -218,10 +218,10 @@ function AdvancedSection() {
 
       <div className="settings-row">
         <div className="settings-row-label">
-          <div className="settings-row-label-title">Max rows</div>
+          <div className="settings-row-label-title">Local table row safety cap</div>
           <div className="settings-row-label-help">
-            Max number of rows in a data table. Larger values will show more data, but could impact
-            app rendering performance.
+            Hard cap for local-only tables. Large resource tables page from the backend instead of
+            relying on this value.
           </div>
         </div>
         <div className="settings-row-control">

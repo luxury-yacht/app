@@ -53,6 +53,8 @@ export function buildGridTableFilterOptions<T>({
     preActions: options?.preActions,
     postActions: options?.postActions,
     customActions: options?.customActions,
+    totalIsExact: options?.totalIsExact ?? true,
+    partialDataLabel: options?.partialDataLabel,
   };
 
   if (!filteringEnabled) {
@@ -64,6 +66,7 @@ export function buildGridTableFilterOptions<T>({
   }
 
   const includeClusterScoped = options?.includeClusterScopedSyntheticNamespace ?? false;
+  const queryBacked = baseOptions.searchBehavior === 'query';
   const clusterScopedOption = includeClusterScoped
     ? ({ value: '', label: 'cluster-scoped' } satisfies DropdownOption)
     : null;
@@ -94,7 +97,7 @@ export function buildGridTableFilterOptions<T>({
     const map = new Map<string, DropdownOption>();
     if (provided?.length) {
       provided.forEach((value) => addOption(map, value, normalize));
-    } else {
+    } else if (!queryBacked) {
       for (const row of data) {
         addOption(map, getValue(row), normalize);
       }
@@ -138,6 +141,7 @@ export function buildGridTableFilterOptions<T>({
 
 interface ApplyGridTableFiltersParams<T> {
   filteringEnabled: boolean;
+  searchBehavior?: 'local' | 'query';
   data: T[];
   activeFilters: GridTableFilterState;
   accessors: GridTableFilterAccessors<T>;
@@ -148,6 +152,7 @@ interface ApplyGridTableFiltersParams<T> {
 
 export function applyGridTableFilters<T>({
   filteringEnabled,
+  searchBehavior = 'local',
   data,
   activeFilters,
   accessors,
@@ -156,6 +161,10 @@ export function applyGridTableFilters<T>({
   defaultGetSearchText,
 }: ApplyGridTableFiltersParams<T>): T[] {
   if (!filteringEnabled || data.length === 0) {
+    return data;
+  }
+
+  if (searchBehavior === 'query') {
     return data;
   }
 

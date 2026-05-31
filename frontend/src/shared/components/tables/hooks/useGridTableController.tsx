@@ -97,6 +97,7 @@ export interface GridTableControllerResult<T> {
   resolvedPaginationStatus: string;
   loadMoreSentinelRef: RefObject<HTMLDivElement | null>;
   handleManualLoadMore: () => void;
+  handleManualLoadPrevious: () => void;
 
   // Loading
   showLoadingOverlay: boolean;
@@ -137,7 +138,9 @@ export function useGridTableController<T>({
   nonHideableColumns = DEFAULT_NON_HIDEABLE_COLUMNS,
   enableColumnVisibilityMenu = true,
   hasMore = false,
+  hasPrevious = false,
   onRequestMore,
+  onRequestPrevious,
   isRequestingMore = false,
   autoLoadMore = true,
   showPaginationStatus = true,
@@ -160,7 +163,7 @@ export function useGridTableController<T>({
   const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
   const headerInnerRef = useRef<HTMLDivElement | null>(null);
   const previousInputDataRef = useRef(inputData);
-  const paginationEnabled = Boolean(onRequestMore);
+  const paginationEnabled = Boolean(onRequestMore || onRequestPrevious);
   const contextMenuActiveRef = useRef(false);
   const clusterKeyCheckRef = useRef(false);
   const keyExtractorRef = useRef(keyExtractor);
@@ -462,15 +465,18 @@ export function useGridTableController<T>({
     measureRowRef,
   });
 
-  const { loadMoreSentinelRef, handleManualLoadMore, paginationStatus } = useGridTablePagination({
-    paginationEnabled,
-    autoLoadMore,
-    hasMore,
-    isRequestingMore,
-    onRequestMore,
-    tableDataLength: tableData.length,
-    tableRef: tableRefMutable,
-  });
+  const { loadMoreSentinelRef, handleManualLoadMore, handleManualLoadPrevious, paginationStatus } =
+    useGridTablePagination({
+      paginationEnabled,
+      autoLoadMore,
+      hasMore,
+      hasPrevious,
+      isRequestingMore,
+      onRequestMore,
+      onRequestPrevious,
+      tableDataLength: tableData.length,
+      tableRef: tableRefMutable,
+    });
 
   const resolvedPaginationStatus = useMemo(() => {
     if (!showPaginationStatus) {
@@ -519,6 +525,7 @@ export function useGridTableController<T>({
     resolvedPaginationStatus,
     loadMoreSentinelRef,
     handleManualLoadMore,
+    handleManualLoadPrevious,
     showLoadingOverlay,
     loadingOverlayMessage,
     hasActiveFilters,

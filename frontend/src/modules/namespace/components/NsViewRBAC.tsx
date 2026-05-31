@@ -192,6 +192,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces RBAC' : 'Namespace RBAC';
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<RBACData>({
+      tableMode: namespace === ALL_NAMESPACES_SCOPE ? 'Local Partial' : 'Local Complete',
       viewId: 'namespace-rbac',
       namespace,
       columns,

@@ -136,6 +136,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
     const { gridTableProps, favModal } = useClusterResourceGridTable<RBACData>({
+      tableMode: 'Local Complete',
       viewId: 'cluster-rbac',
       columns,
       data,

@@ -238,6 +238,52 @@ func TestFindCatalogObjectByUIDUsesCatalogIdentity(t *testing.T) {
 	require.Nil(t, noMatch)
 }
 
+func TestExportCatalogQueryCSVUsesClusterScopedCatalog(t *testing.T) {
+	app := NewApp()
+	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
+	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
+		"apps/v1, Resource=deployments/apps/alpha": {
+			ClusterID: "cluster-b",
+			Kind:      "Deployment",
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Namespace: "apps",
+			Name:      "alpha",
+			UID:       "alpha-uid",
+			Scope:     objectcatalog.ScopeNamespace,
+		},
+		"v1, Resource=pods/apps/alpha-pod": {
+			ClusterID: "cluster-b",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "apps",
+			Name:      "alpha-pod",
+			UID:       "pod-uid",
+			Scope:     objectcatalog.ScopeNamespace,
+		},
+	})
+	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
+
+	csvText, err := app.ExportCatalogQueryCSV(
+		"cluster-b",
+		[]string{"apps/v1/Deployment"},
+		[]string{"apps"},
+		"",
+		"name",
+		"asc",
+	)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		"clusterId,kind,namespace,name,group,version,resource,uid\n"+
+			"cluster-b,Deployment,apps,alpha,apps,v1,deployments,alpha-uid\n",
+		csvText,
+	)
+}
+
 func TestWaitForFactorySyncHandlesNilFactory(t *testing.T) {
 	if !waitForFactorySync(context.Background(), nil) {
 		t.Fatal("nil factory should return true")

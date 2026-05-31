@@ -136,6 +136,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
     const { gridTableProps, favModal } = useClusterResourceGridTable<ConfigData>({
+      tableMode: 'Local Complete',
       viewId: 'cluster-config',
       columns,
       data,

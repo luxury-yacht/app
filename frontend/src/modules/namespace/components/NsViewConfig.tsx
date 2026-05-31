@@ -142,6 +142,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         : 'Namespace Configuration';
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<ConfigData>({
+      tableMode: 'Local Partial',
       viewId: 'namespace-config',
       namespace,
       columns,

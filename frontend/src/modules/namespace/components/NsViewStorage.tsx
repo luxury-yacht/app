@@ -216,6 +216,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Storage' : 'Namespace Storage';
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<StorageData>({
+      tableMode: 'Local Partial',
       viewId: 'namespace-storage',
       namespace,
       columns,

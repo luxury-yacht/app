@@ -207,6 +207,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
   }, []);
 
   const { gridTableProps } = useObjectPanelResourceGridTable<JobRow>({
+    tableMode: 'Local Complete',
     viewId: 'object-panel-jobs',
     clusterIdentity: objectData?.clusterId ?? '',
     enabled: Boolean(objectData?.clusterId),

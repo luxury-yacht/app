@@ -499,6 +499,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     );
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<PodSnapshotEntry>({
+      tableMode: namespace === ALL_NAMESPACES_SCOPE ? 'Local Partial' : 'Local Complete',
       viewId: 'namespace-pods',
       namespace,
       data,

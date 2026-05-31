@@ -187,6 +187,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Quotas' : 'Namespace Quotas';
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<QuotaData>({
+      tableMode: 'Local Partial',
       viewId: 'namespace-quotas',
       namespace,
       columns,

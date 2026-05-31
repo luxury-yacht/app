@@ -60,8 +60,8 @@ func TestServiceQueryStreamsWithoutFullCache(t *testing.T) {
 	if result.TotalItems != 2 {
 		t.Fatalf("expected total matches 2, got %d", result.TotalItems)
 	}
-	if result.ContinueToken != "1" {
-		t.Fatalf("expected continue token 1, got %q", result.ContinueToken)
+	if result.ContinueToken == "" {
+		t.Fatalf("expected continue token")
 	}
 
 	next := svc.Query(QueryOptions{Limit: 1, Continue: result.ContinueToken})
@@ -143,8 +143,8 @@ func TestQueryFiltersAndPagination(t *testing.T) {
 	if len(result.Items) != 1 {
 		t.Fatalf("expected first page to return 1 item, got %d", len(result.Items))
 	}
-	if result.ContinueToken != "1" {
-		t.Fatalf("expected continue token '1', got %q", result.ContinueToken)
+	if result.ContinueToken == "" {
+		t.Fatalf("expected continue token")
 	}
 	if result.ResourceCount != 1 {
 		t.Fatalf("expected resource count 1 for pod filter, got %d", result.ResourceCount)
@@ -167,6 +167,636 @@ func TestQueryFiltersAndPagination(t *testing.T) {
 	}
 	if next.ContinueToken != "" {
 		t.Fatalf("expected no further pages, got token %q", next.ContinueToken)
+	}
+}
+
+func TestQueryCustomOnlyExcludesBuiltins(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+
+	podDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Kind:       "Pod",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+	widgetDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+		Namespaced: true,
+		Kind:       "Widget",
+		Group:      "example.com",
+		Version:    "v1",
+		Resource:   "widgets",
+		Scope:      ScopeNamespace,
+	}
+
+	svc.mu.Lock()
+	svc.items = map[string]Summary{
+		catalogKey(podDesc, "default", "pod-a"): {
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      "pod-a",
+			UID:       "uid-pod",
+			Scope:     ScopeNamespace,
+		},
+		catalogKey(widgetDesc, "default", "widget-a"): {
+			ClusterID: "cluster-a",
+			Kind:      "Widget",
+			Group:     "example.com",
+			Version:   "v1",
+			Resource:  "widgets",
+			Namespace: "default",
+			Name:      "widget-a",
+			UID:       "uid-widget",
+			Scope:     ScopeNamespace,
+		},
+	}
+	svc.resources = map[string]resourceDescriptor{
+		podDesc.GVR.String():    podDesc,
+		widgetDesc.GVR.String(): widgetDesc,
+	}
+	svc.mu.Unlock()
+
+	result := svc.Query(QueryOptions{CustomOnly: true, Limit: 10})
+	if result.TotalItems != 1 {
+		t.Fatalf("expected one custom resource, got %d", result.TotalItems)
+	}
+	if len(result.Items) != 1 || result.Items[0].Kind != "Widget" {
+		t.Fatalf("unexpected custom-only items: %+v", result.Items)
+	}
+	if result.ResourceCount != 1 {
+		t.Fatalf("expected one custom descriptor, got %d", result.ResourceCount)
+	}
+	if !reflect.DeepEqual(result.Kinds, []KindInfo{{Kind: "Widget", Namespaced: true}}) {
+		t.Fatalf("unexpected custom-only facets: %+v", result.Kinds)
+	}
+}
+
+func TestQueryKeysetCursorContinuesAcrossLiveInsertBeforeAnchor(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	podDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Kind:       "Pod",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+
+	svc.mu.Lock()
+	svc.items = map[string]Summary{
+		catalogKey(podDesc, "default", "b"): {
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      "b",
+			UID:       "uid-b",
+			Scope:     ScopeNamespace,
+		},
+		catalogKey(podDesc, "default", "c"): {
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      "c",
+			UID:       "uid-c",
+			Scope:     ScopeNamespace,
+		},
+	}
+	svc.resources = map[string]resourceDescriptor{
+		podDesc.GVR.String(): podDesc,
+	}
+	svc.mu.Unlock()
+
+	first := svc.Query(QueryOptions{Limit: 1})
+	if len(first.Items) != 1 || first.Items[0].Name != "b" || first.ContinueToken == "" {
+		t.Fatalf("unexpected first page: %+v", first)
+	}
+
+	svc.mu.Lock()
+	svc.items[catalogKey(podDesc, "default", "a")] = Summary{
+		ClusterID: "cluster-a",
+		Kind:      "Pod",
+		Group:     "",
+		Version:   "v1",
+		Resource:  "pods",
+		Namespace: "default",
+		Name:      "a",
+		UID:       "uid-a",
+		Scope:     ScopeNamespace,
+	}
+	svc.mu.Unlock()
+
+	next := svc.Query(QueryOptions{Limit: 1, Continue: first.ContinueToken})
+	if next.CursorInvalid {
+		t.Fatalf("expected live insert before anchor to keep cursor valid")
+	}
+	if len(next.Items) != 1 || next.Items[0].Name != "c" {
+		t.Fatalf("expected next page to continue after anchor b, got %+v", next.Items)
+	}
+}
+
+func TestQueryRejectsIncompatibleCursor(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	result := svc.Query(QueryOptions{Limit: 1, Continue: "not-a-cursor"})
+	if !result.CursorInvalid {
+		t.Fatalf("expected malformed cursor to be marked invalid")
+	}
+}
+
+func TestQueryBackendSortsByRequestedFieldAndDirection(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	podDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Kind:       "Pod",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+
+	svc.mu.Lock()
+	svc.items = map[string]Summary{}
+	for _, name := range []string{"alpha", "charlie", "bravo"} {
+		svc.items[catalogKey(podDesc, "default", name)] = Summary{
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      name,
+			UID:       "uid-" + name,
+			Scope:     ScopeNamespace,
+		}
+	}
+	svc.resources = map[string]resourceDescriptor{
+		podDesc.GVR.String(): podDesc,
+	}
+	svc.mu.Unlock()
+	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
+
+	first := svc.Query(QueryOptions{Limit: 2, SortField: "name", SortDirection: "desc"})
+	if len(first.Items) != 2 {
+		t.Fatalf("expected first page with 2 items, got %+v", first.Items)
+	}
+	if first.Items[0].Name != "charlie" || first.Items[1].Name != "bravo" {
+		t.Fatalf("unexpected first sorted page: %+v", first.Items)
+	}
+	if first.ContinueToken == "" {
+		t.Fatalf("expected continue token")
+	}
+
+	next := svc.Query(QueryOptions{
+		Limit:         2,
+		SortField:     "name",
+		SortDirection: "desc",
+		Continue:      first.ContinueToken,
+	})
+	if next.CursorInvalid {
+		t.Fatalf("expected compatible sort cursor to remain valid")
+	}
+	if len(next.Items) != 1 || next.Items[0].Name != "alpha" {
+		t.Fatalf("unexpected second sorted page: %+v", next.Items)
+	}
+}
+
+func TestQueryCachedAndUncachedPathsUseSameOrdering(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	podDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Kind:       "Pod",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+
+	svc.mu.Lock()
+	svc.items = map[string]Summary{}
+	for _, item := range []struct {
+		namespace string
+		name      string
+		created   string
+	}{
+		{namespace: "team-b", name: "alpha", created: "2026-01-03T00:00:00Z"},
+		{namespace: "team-a", name: "charlie", created: "2026-01-01T00:00:00Z"},
+		{namespace: "team-a", name: "bravo", created: "2026-01-02T00:00:00Z"},
+	} {
+		svc.items[catalogKey(podDesc, item.namespace, item.name)] = Summary{
+			ClusterID:         "cluster-a",
+			Kind:              "Pod",
+			Group:             "",
+			Version:           "v1",
+			Resource:          "pods",
+			Namespace:         item.namespace,
+			Name:              item.name,
+			UID:               "uid-" + item.name,
+			CreationTimestamp: item.created,
+			Scope:             ScopeNamespace,
+		}
+	}
+	svc.resources = map[string]resourceDescriptor{
+		podDesc.GVR.String(): podDesc,
+	}
+	svc.mu.Unlock()
+
+	opts := QueryOptions{Limit: 3, SortField: "age", SortDirection: "desc"}
+	uncached := svc.Query(opts)
+	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
+	cached := svc.Query(opts)
+
+	if len(uncached.Items) != len(cached.Items) {
+		t.Fatalf("expected same item count, uncached=%+v cached=%+v", uncached.Items, cached.Items)
+	}
+	for idx := range uncached.Items {
+		if uncached.Items[idx].Name != cached.Items[idx].Name {
+			t.Fatalf("ordering diverged at %d: uncached=%+v cached=%+v", idx, uncached.Items, cached.Items)
+		}
+	}
+}
+
+func TestQueryUsesGVKAndNamespaceFilterContract(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	deployDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+		Namespaced: true,
+		Kind:       "Deployment",
+		Group:      "apps",
+		Version:    "v1",
+		Resource:   "deployments",
+		Scope:      ScopeNamespace,
+	}
+	podDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Kind:       "Pod",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+
+	svc.mu.Lock()
+	svc.items = map[string]Summary{
+		catalogKey(deployDesc, "team-a", "deploy-a"): {
+			ClusterID: "cluster-a",
+			Kind:      "Deployment",
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Namespace: "team-a",
+			Name:      "deploy-a",
+			UID:       "uid-deploy-a",
+			Scope:     ScopeNamespace,
+		},
+		catalogKey(deployDesc, "team-b", "deploy-b"): {
+			ClusterID: "cluster-a",
+			Kind:      "Deployment",
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Namespace: "team-b",
+			Name:      "deploy-b",
+			UID:       "uid-deploy-b",
+			Scope:     ScopeNamespace,
+		},
+		catalogKey(podDesc, "team-a", "pod-a"): {
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "team-a",
+			Name:      "pod-a",
+			UID:       "uid-pod-a",
+			Scope:     ScopeNamespace,
+		},
+	}
+	svc.resources = map[string]resourceDescriptor{
+		deployDesc.GVR.String(): deployDesc,
+		podDesc.GVR.String():    podDesc,
+	}
+	svc.mu.Unlock()
+	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
+
+	result := svc.Query(QueryOptions{
+		Kinds:      []string{"apps/v1/Deployment"},
+		Namespaces: []string{"team-a"},
+		Limit:      10,
+	})
+	if result.CursorInvalid {
+		t.Fatalf("did not expect cursor invalid")
+	}
+	if result.TotalItems != 1 || len(result.Items) != 1 {
+		t.Fatalf("expected one deployment in team-a, got total=%d items=%+v", result.TotalItems, result.Items)
+	}
+	if item := result.Items[0]; item.Name != "deploy-a" || item.Group != "apps" || item.Version != "v1" || item.Kind != "Deployment" {
+		t.Fatalf("unexpected filtered item: %+v", item)
+	}
+	expectedKinds := []KindInfo{{Kind: "Deployment", Namespaced: true}, {Kind: "Pod", Namespaced: true}}
+	if !reflect.DeepEqual(result.Kinds, expectedKinds) {
+		t.Fatalf("namespace facets should describe the namespace universe, got %+v", result.Kinds)
+	}
+}
+
+func TestQueryRejectsCursorFromDifferentCluster(t *testing.T) {
+	podDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Kind:       "Pod",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+
+	source := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	source.mu.Lock()
+	source.items = map[string]Summary{
+		catalogKey(podDesc, "default", "a"): {
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      "a",
+			UID:       "uid-a",
+			Scope:     ScopeNamespace,
+		},
+		catalogKey(podDesc, "default", "b"): {
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      "b",
+			UID:       "uid-b",
+			Scope:     ScopeNamespace,
+		},
+	}
+	source.resources = map[string]resourceDescriptor{
+		podDesc.GVR.String(): podDesc,
+	}
+	source.mu.Unlock()
+
+	first := source.Query(QueryOptions{Limit: 1})
+	if first.ContinueToken == "" {
+		t.Fatalf("expected source cursor")
+	}
+
+	target := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-b"}, nil)
+	target.mu.Lock()
+	target.items = cloneSummaryMap(source.items)
+	target.resources = map[string]resourceDescriptor{
+		podDesc.GVR.String(): podDesc,
+	}
+	target.mu.Unlock()
+
+	next := target.Query(QueryOptions{Limit: 1, Continue: first.ContinueToken})
+	if !next.CursorInvalid {
+		t.Fatalf("expected cursor from cluster-a to be invalid on cluster-b")
+	}
+}
+
+func TestQueryMarksTotalsAndFacetsApproximateAboveBudget(t *testing.T) {
+	originalThreshold := catalogQueryExactMetadataThreshold
+	catalogQueryExactMetadataThreshold = 2
+	t.Cleanup(func() {
+		catalogQueryExactMetadataThreshold = originalThreshold
+	})
+
+	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	chunk := &summaryChunk{
+		items: []Summary{
+			{ClusterID: "cluster-a", Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "a", UID: "uid-a", Scope: ScopeNamespace},
+			{ClusterID: "cluster-a", Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "b", UID: "uid-b", Scope: ScopeNamespace},
+			{ClusterID: "cluster-a", Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "c", UID: "uid-c", Scope: ScopeNamespace},
+		},
+	}
+	svc.publishStreamingState(
+		[]*summaryChunk{chunk},
+		map[string]bool{"Pod": true},
+		map[string]struct{}{"default": {}},
+		[]Descriptor{{Version: "v1", Resource: "pods", Kind: "Pod", Scope: ScopeNamespace, Namespaced: true}},
+		true,
+	)
+
+	result := svc.Query(QueryOptions{Limit: 1})
+	if result.TotalIsExact {
+		t.Fatalf("expected total to be marked approximate above budget")
+	}
+	if result.FacetsExact {
+		t.Fatalf("expected facets to be marked approximate above budget")
+	}
+	if result.TotalItems != 3 {
+		t.Fatalf("expected approximate lower-bound total threshold+1, got %d", result.TotalItems)
+	}
+}
+
+func TestExportQueryCSVPagesThroughAllMatchingRows(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	deployDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+		Namespaced: true,
+		Kind:       "Deployment",
+		Group:      "apps",
+		Version:    "v1",
+		Resource:   "deployments",
+		Scope:      ScopeNamespace,
+	}
+	podDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Kind:       "Pod",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+
+	svc.mu.Lock()
+	svc.items = map[string]Summary{
+		catalogKey(deployDesc, "default", "deploy-a"): {
+			ClusterID: "cluster-a",
+			Kind:      "Deployment",
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Namespace: "default",
+			Name:      "deploy-a",
+			UID:       "uid-deploy-a",
+			Scope:     ScopeNamespace,
+		},
+		catalogKey(deployDesc, "default", "deploy-b"): {
+			ClusterID: "cluster-a",
+			Kind:      "Deployment",
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Namespace: "default",
+			Name:      "deploy-b",
+			UID:       "uid-deploy-b",
+			Scope:     ScopeNamespace,
+		},
+		catalogKey(podDesc, "default", "pod-a"): {
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      "pod-a",
+			UID:       "uid-pod-a",
+			Scope:     ScopeNamespace,
+		},
+	}
+	svc.resources = map[string]resourceDescriptor{
+		deployDesc.GVR.String(): deployDesc,
+		podDesc.GVR.String():    podDesc,
+	}
+	svc.mu.Unlock()
+	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
+
+	csvText, err := svc.ExportQueryCSV(QueryOptions{
+		Kinds:      []string{"apps/v1/Deployment"},
+		Namespaces: []string{"default"},
+		Limit:      1,
+		SortField:  "name",
+	})
+	if err != nil {
+		t.Fatalf("ExportQueryCSV returned error: %v", err)
+	}
+	expected := "clusterId,kind,namespace,name,group,version,resource,uid\n" +
+		"cluster-a,Deployment,default,deploy-a,apps,v1,deployments,uid-deploy-a\n" +
+		"cluster-a,Deployment,default,deploy-b,apps,v1,deployments,uid-deploy-b\n"
+	if csvText != expected {
+		t.Fatalf("unexpected CSV:\n%s", csvText)
+	}
+}
+
+func TestQueryPreviousCursorReturnsReverseWindow(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	podDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Kind:       "Pod",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+
+	svc.mu.Lock()
+	svc.items = map[string]Summary{}
+	for _, name := range []string{"a", "b", "c"} {
+		svc.items[catalogKey(podDesc, "default", name)] = Summary{
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      name,
+			UID:       "uid-" + name,
+			Scope:     ScopeNamespace,
+		}
+	}
+	svc.resources = map[string]resourceDescriptor{
+		podDesc.GVR.String(): podDesc,
+	}
+	svc.mu.Unlock()
+
+	first := svc.Query(QueryOptions{Limit: 1})
+	second := svc.Query(QueryOptions{Limit: 1, Continue: first.ContinueToken})
+	if second.PreviousToken == "" {
+		t.Fatalf("expected second page to expose a previous cursor")
+	}
+
+	previous := svc.Query(QueryOptions{Limit: 1, Continue: second.PreviousToken})
+	if previous.CursorInvalid {
+		t.Fatalf("expected previous cursor to remain valid")
+	}
+	if len(previous.Items) != 1 || previous.Items[0].Name != "a" {
+		t.Fatalf("expected previous page to return a, got %+v", previous.Items)
+	}
+	if previous.PreviousToken != "" {
+		t.Fatalf("expected first page to have no previous cursor")
+	}
+	if previous.ContinueToken == "" {
+		t.Fatalf("expected previous page to retain a next cursor")
+	}
+}
+
+func TestQueryRejectsCursorWithMismatchedSortContract(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	podDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Kind:       "Pod",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+	svc.mu.Lock()
+	svc.items = map[string]Summary{
+		catalogKey(podDesc, "default", "a"): {
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      "a",
+			UID:       "uid-a",
+			Scope:     ScopeNamespace,
+		},
+		catalogKey(podDesc, "default", "b"): {
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      "b",
+			UID:       "uid-b",
+			Scope:     ScopeNamespace,
+		},
+	}
+	svc.resources = map[string]resourceDescriptor{
+		podDesc.GVR.String(): podDesc,
+	}
+	svc.mu.Unlock()
+
+	first := svc.Query(QueryOptions{Limit: 1})
+	if first.ContinueToken == "" {
+		t.Fatalf("expected continue token")
+	}
+
+	next := svc.Query(QueryOptions{
+		Limit:         1,
+		SortDirection: "desc",
+		Continue:      first.ContinueToken,
+	})
+	if !next.CursorInvalid {
+		t.Fatalf("expected sort mismatch to invalidate cursor")
 	}
 }
 

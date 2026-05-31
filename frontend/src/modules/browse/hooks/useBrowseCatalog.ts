@@ -30,6 +30,23 @@ import {
 import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 export type { BrowseFilterOptions, BrowseFilters } from './browseCatalogData';
 
+const BROWSE_SEARCH_DEBOUNCE_MS = 250;
+export const BROWSE_PAGE_LIMIT_OPTIONS = [100, 250, 500, 1000] as const;
+export type BrowsePageLimit = (typeof BROWSE_PAGE_LIMIT_OPTIONS)[number];
+
+const normalizeInitialPageLimit = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return BROWSE_PAGE_LIMIT_OPTIONS[2];
+  }
+  return Math.max(
+    1,
+    Math.min(BROWSE_PAGE_LIMIT_OPTIONS[BROWSE_PAGE_LIMIT_OPTIONS.length - 1], value)
+  );
+};
+
+const isBrowsePageLimit = (value: number): value is BrowsePageLimit =>
+  BROWSE_PAGE_LIMIT_OPTIONS.includes(value as BrowsePageLimit);
+
 /**
  * Options for the useBrowseCatalog hook.
  */
@@ -40,8 +57,14 @@ export interface UseBrowseCatalogOptions {
   pinnedNamespaces: string[];
   /** When true, only show cluster-scoped objects (not namespace-scoped) */
   clusterScopedOnly?: boolean;
+  /** When true, only show custom-resource catalog rows */
+  customOnly?: boolean;
   /** Current filter state */
   filters: BrowseFilters;
+  /** Current backend-owned sort state */
+  sort?: { key: string; direction: 'asc' | 'desc' | null } | null;
+  /** Optional initial page size for catalog cursor pages */
+  initialPageLimit?: number;
   /** Diagnostic label for logging */
   diagnosticLabel: string;
 }
@@ -58,14 +81,26 @@ export interface UseBrowseCatalogResult {
   hasLoadedOnce: boolean;
   /** The continue token for pagination (null if no more pages) */
   continueToken: string | null;
+  /** The previous token for pagination (null on the first page) */
+  previousToken: string | null;
   /** Whether a "load more" request is in progress */
   isRequestingMore: boolean;
   /** Handler to load the next page of items */
   handleLoadMore: () => void;
+  /** Handler to load the previous page of items */
+  handleLoadPrevious: () => void;
   /** Filter options derived from the catalog snapshot */
   filterOptions: BrowseFilterOptions;
   /** Total count of items matching the current query (before pagination) */
   totalCount: number;
+  /** Whether totalCount is exact for the current backend query */
+  totalIsExact: boolean;
+  /** Current backend cursor page size */
+  pageLimit: number;
+  /** Supported backend cursor page sizes */
+  pageLimitOptions: readonly BrowsePageLimit[];
+  /** Updates the backend cursor page size */
+  setPageLimit: (value: BrowsePageLimit) => void;
 }
 
 /**
@@ -76,15 +111,23 @@ export function useBrowseCatalog({
   clusterId,
   pinnedNamespaces,
   clusterScopedOnly = false,
+  customOnly = false,
   filters,
+  sort,
+  initialPageLimit,
   diagnosticLabel,
 }: UseBrowseCatalogOptions): UseBrowseCatalogResult {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [continueToken, setContinueToken] = useState<string | null>(null);
+  const [previousToken, setPreviousToken] = useState<string | null>(null);
   const [isRequestingMore, setIsRequestingMore] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
-  const [pageLimit, setPageLimit] = useState<number>(() => getMaxTableRows());
+  const [totalIsExact, setTotalIsExact] = useState(true);
+  const [pageLimit, setPageLimitState] = useState<number>(() =>
+    normalizeInitialPageLimit(initialPageLimit ?? getMaxTableRows())
+  );
+  const [debouncedSearch, setDebouncedSearch] = useState(filters.search ?? '');
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
   const collectionRef = useRef(emptyBrowseCatalogCollection());
@@ -92,8 +135,38 @@ export function useBrowseCatalog({
 
   useEffect(() => {
     return eventBus.on('settings:max-table-rows', (value) => {
-      setPageLimit(value);
+      setPageLimitState((current) => {
+        if (isBrowsePageLimit(current)) {
+          return current;
+        }
+        return normalizeInitialPageLimit(value);
+      });
     });
+  }, []);
+
+  useEffect(() => {
+    const nextSearch = filters.search ?? '';
+    if (nextSearch === debouncedSearch) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(nextSearch);
+    }, BROWSE_SEARCH_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [debouncedSearch, filters.search]);
+
+  const queryFilters = useMemo<BrowseFilters>(
+    () => ({
+      ...filters,
+      search: debouncedSearch,
+    }),
+    [debouncedSearch, filters]
+  );
+
+  const setPageLimit = useCallback((value: BrowsePageLimit) => {
+    setPageLimitState(value);
   }, []);
 
   // Track available namespaces from the catalog snapshot.
@@ -104,12 +177,23 @@ export function useBrowseCatalog({
       buildBrowseCatalogPlan({
         clusterId,
         clusterScopedOnly,
+        customOnly,
         pinnedNamespaces,
-        filters,
+        filters: queryFilters,
+        sort,
         availableNamespaces,
         pageLimit,
       }),
-    [availableNamespaces, clusterId, clusterScopedOnly, filters, pageLimit, pinnedNamespaces]
+    [
+      availableNamespaces,
+      clusterId,
+      clusterScopedOnly,
+      customOnly,
+      queryFilters,
+      sort,
+      pageLimit,
+      pinnedNamespaces,
+    ]
   );
   const { catalogScope, metadataScope, metadataUsesActiveScope } = plan;
 
@@ -135,6 +219,7 @@ export function useBrowseCatalog({
     // Reset pagination state on query change.
     setIsRequestingMore(false);
     setContinueToken(null);
+    setPreviousToken(null);
     // Preserve the current dataset while filter-only queries refresh so the
     // filter bar/dropdowns stay mounted and open menus don't lose their scroll
     // position. We still clear eagerly when the structural scope changes
@@ -182,7 +267,9 @@ export function useBrowseCatalog({
     }
 
     setContinueToken(next.continueToken);
+    setPreviousToken(next.previousToken);
     setTotalCount(next.totalCount);
+    setTotalIsExact(next.totalIsExact);
     setIsRequestingMore(false);
   }, [domain.data, domain.scope, domain.status, catalogScope, pinnedNamespaces]);
 
@@ -195,66 +282,93 @@ export function useBrowseCatalog({
     setHasLoadedOnce(true);
   }, [domain.data, hasLoadedOnce]);
 
-  // Load more handler.
-  // Fetches the next page using a paginated scope and applies that exact
-  // scoped result locally. The refresh store remains scoped by the request that
-  // produced the data; Browse owns assembly of base query + loaded pages.
+  // Next-page handler. Fetches the next cursor page using a paginated scope and
+  // replaces the current row window. The refresh store remains scoped by the
+  // request that produced the data; Browse keeps only the current page/window.
   const catalogScopeRef = useRef(catalogScope);
   catalogScopeRef.current = catalogScope;
 
-  const handleLoadMore = useCallback(() => {
-    if (!continueToken || isRequestingMore) {
-      return;
-    }
-    setIsRequestingMore(true);
-
-    const normalizedScope = buildBrowseCatalogPageScope(
-      plan,
-      { clusterId, filters, pageLimit, pinnedNamespaces },
-      continueToken
-    );
-    const baseScopeAtRequest = catalogScopeRef.current;
-    void (async () => {
-      try {
-        const result = await requestRefreshDomainState({
-          domain: 'catalog',
-          scope: normalizedScope,
-          reason: 'user',
-        });
-        if (result.status !== 'executed' || catalogScopeRef.current !== baseScopeAtRequest) {
-          return;
-        }
-
-        const pageResult = result.data;
-        if (!pageResult) {
-          return;
-        }
-        const payload = pageResult.data as CatalogSnapshotPayload | null;
-        if (!payload || (pageResult.status !== 'ready' && pageResult.status !== 'updating')) {
-          return;
-        }
-
-        const currentLength = collectionRef.current.items.length;
-        const next = applyCatalogPage(collectionRef.current, payload);
-        collectionRef.current = { items: next.items, indexByUid: next.indexByUid };
-        if (next.changed || currentLength === 0) {
-          setItems(next.items);
-        }
-        setContinueToken(next.continueToken);
-        setTotalCount(next.totalCount);
-        if (!hasLoadedOnceRef.current) {
-          hasLoadedOnceRef.current = true;
-          setHasLoadedOnce(true);
-        }
-      } catch (error) {
-        console.error('Failed to load additional catalog page', error);
-      } finally {
-        if (catalogScopeRef.current === baseScopeAtRequest) {
-          setIsRequestingMore(false);
-        }
+  const requestPage = useCallback(
+    (token: string | null) => {
+      if (!token || isRequestingMore) {
+        return;
       }
-    })();
-  }, [continueToken, isRequestingMore, pageLimit, filters, plan, pinnedNamespaces, clusterId]);
+      setIsRequestingMore(true);
+
+      const normalizedScope = buildBrowseCatalogPageScope(
+        plan,
+        { clusterId, filters: queryFilters, sort, pageLimit, pinnedNamespaces, customOnly },
+        token
+      );
+      const baseScopeAtRequest = catalogScopeRef.current;
+      void (async () => {
+        try {
+          const result = await requestRefreshDomainState({
+            domain: 'catalog',
+            scope: normalizedScope,
+            reason: 'user',
+          });
+          if (result.status !== 'executed' || catalogScopeRef.current !== baseScopeAtRequest) {
+            return;
+          }
+
+          const pageResult = result.data;
+          if (!pageResult) {
+            return;
+          }
+          const payload = pageResult.data as CatalogSnapshotPayload | null;
+          if (!payload || (pageResult.status !== 'ready' && pageResult.status !== 'updating')) {
+            return;
+          }
+          if (payload.cursorInvalid) {
+            collectionRef.current = emptyBrowseCatalogCollection();
+            setItems([]);
+            setContinueToken(null);
+            setPreviousToken(null);
+            void refreshCatalogScope('user');
+            return;
+          }
+
+          const next = applyCatalogPage(collectionRef.current, payload);
+          collectionRef.current = { items: next.items, indexByUid: next.indexByUid };
+          setItems(next.items);
+          setContinueToken(next.continueToken);
+          setPreviousToken(next.previousToken);
+          setTotalCount(next.totalCount);
+          setTotalIsExact(next.totalIsExact);
+          if (!hasLoadedOnceRef.current) {
+            hasLoadedOnceRef.current = true;
+            setHasLoadedOnce(true);
+          }
+        } catch (error) {
+          console.error('Failed to load additional catalog page', error);
+        } finally {
+          if (catalogScopeRef.current === baseScopeAtRequest) {
+            setIsRequestingMore(false);
+          }
+        }
+      })();
+    },
+    [
+      isRequestingMore,
+      pageLimit,
+      queryFilters,
+      sort,
+      plan,
+      pinnedNamespaces,
+      clusterId,
+      customOnly,
+      refreshCatalogScope,
+    ]
+  );
+
+  const handleLoadMore = useCallback(() => {
+    requestPage(continueToken);
+  }, [continueToken, requestPage]);
+
+  const handleLoadPrevious = useCallback(() => {
+    requestPage(previousToken);
+  }, [previousToken, requestPage]);
 
   // Filter items by scope (cluster-scoped vs namespace-scoped)
   // Note: Cluster isolation is handled by the backend via the scope prefix (e.g., 'cluster-1|...'),
@@ -309,9 +423,15 @@ export function useBrowseCatalog({
     loading: passiveLoadingState.loading,
     hasLoadedOnce,
     continueToken,
+    previousToken,
     isRequestingMore,
     handleLoadMore,
+    handleLoadPrevious,
     filterOptions,
     totalCount,
+    totalIsExact,
+    pageLimit,
+    pageLimitOptions: BROWSE_PAGE_LIMIT_OPTIONS,
+    setPageLimit,
   };
 }

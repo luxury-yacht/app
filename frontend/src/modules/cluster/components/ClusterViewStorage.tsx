@@ -261,6 +261,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     ]);
 
     const { gridTableProps, favModal } = useClusterResourceGridTable<StorageData>({
+      tableMode: 'Local Complete',
       viewId: 'cluster-storage',
       columns,
       data,

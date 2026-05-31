@@ -20,6 +20,8 @@
 import React, { useCallback, useMemo } from 'react';
 import './BrowseView.css';
 import { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -37,6 +39,7 @@ import {
   toTableRows,
   type BrowseTableRow,
 } from '@modules/browse/hooks/useBrowseColumns';
+import type { BrowsePageLimit } from '@modules/browse/hooks/useBrowseCatalog';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -318,10 +321,16 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     loading,
     hasLoadedOnce,
     continueToken,
+    previousToken,
     isRequestingMore,
     handleLoadMore,
+    handleLoadPrevious,
     filterOptions,
     totalCount,
+    totalIsExact,
+    pageLimit,
+    pageLimitOptions,
+    setPageLimit,
   } = useBrowseCatalog({
     clusterId: selectedClusterId,
     pinnedNamespaces,
@@ -331,8 +340,43 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       kinds: persistence.filters.kinds ?? [],
       namespaces: persistence.filters.namespaces ?? [],
     },
+    sort: persistence.sortConfig,
     diagnosticLabel: scope === 'namespace' ? 'Namespace Browse' : 'Browse',
   });
+
+  const pageSizeOptions = useMemo<DropdownOption[]>(
+    () =>
+      pageLimitOptions.map((value) => ({
+        value: String(value),
+        label: `${value} rows`,
+      })),
+    [pageLimitOptions]
+  );
+
+  const pageSizeControl = useMemo(
+    () => (
+      <Dropdown
+        id={`${resolvedViewId}-page-size`}
+        name="browse-page-size"
+        size="compact"
+        variant="outlined"
+        ariaLabel="Page size"
+        value={String(pageLimit)}
+        options={pageSizeOptions}
+        onChange={(value) => {
+          const next = Number(Array.isArray(value) ? value[0] : value);
+          if (pageLimitOptions.includes(next as BrowsePageLimit)) {
+            setPageLimit(next as BrowsePageLimit);
+          }
+        }}
+        renderValue={(value) => {
+          const selected = pageSizeOptions.find((option) => option.value === value);
+          return selected?.label ?? 'Page size';
+        }}
+      />
+    ),
+    [pageLimit, pageLimitOptions, pageSizeOptions, resolvedViewId, setPageLimit]
+  );
 
   // Convert items to table rows
   const rows = useMemo(
@@ -352,11 +396,21 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       namespaceDropdownSearchable: true,
       includeClusterScopedSyntheticNamespace: false,
       totalCount,
+      totalIsExact,
+      customActions: pageSizeControl,
     }),
-    [filterOptions.kinds, filterOptions.namespaces, showNamespaceColumn, totalCount]
+    [
+      filterOptions.kinds,
+      filterOptions.namespaces,
+      pageSizeControl,
+      showNamespaceColumn,
+      totalCount,
+      totalIsExact,
+    ]
   );
 
   const { gridTableProps, favModal } = useQueryResourceGridTable<BrowseTableRow>({
+    tableMode: 'Query Backed Static',
     data: rows,
     columns,
     persistence,
@@ -399,8 +453,13 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         getCustomContextMenuItems={getContextMenuItems}
         emptyMessage={resolvedEmptyMessage}
         hasMore={Boolean(continueToken)}
+        hasPrevious={Boolean(previousToken)}
         isRequestingMore={isRequestingMore}
-        onRequestMore={continueToken ? handleLoadMore : undefined}
+        autoLoadMore={false}
+        onRequestMore={handleLoadMore}
+        onRequestPrevious={handleLoadPrevious}
+        loadMoreLabel="Next page"
+        previousPageLabel="Previous page"
       />
       {objectActions.modals}
     </>

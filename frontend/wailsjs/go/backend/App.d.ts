@@ -43,6 +43,8 @@ export function DeleteTheme(arg1:string):Promise<void>;
 
 export function DiscoverNodeLogs(arg1:string,arg2:string):Promise<types.NodeLogDiscoveryResponse>;
 
+export function ExportCatalogQueryCSV(arg1:string,arg2:Array<string>,arg3:Array<string>,arg4:string,arg5:string,arg6:string):Promise<string>;
+
 export function FetchContainerLogs(arg1:string,arg2:types.ContainerLogsFetchRequest):Promise<types.ContainerLogsFetchResponse>;
 
 export function FetchNodeLogs(arg1:string,arg2:string,arg3:types.NodeLogFetchRequest):Promise<types.NodeLogFetchResponse>;

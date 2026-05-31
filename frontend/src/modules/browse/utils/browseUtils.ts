@@ -131,62 +131,6 @@ export const reconcileByUID = (current: CatalogItem[], incoming: CatalogItem[]):
 };
 
 /**
- * Upserts incoming items into the current list by UID.
- * Updates existing items if their resourceVersion differs, appends new items.
- *
- * WARNING: This function only handles additions and updates — it never removes
- * items from `current` that are absent in `incoming`. Do NOT use this for
- * auto-refresh where deletions must be reflected. Use `dedupeByUID` with full
- * replacement instead. This function is only correct for append/pagination
- * (load-more) where the incoming set is additive by definition.
- */
-export const upsertByUID = (
-  current: CatalogItem[],
-  indexByUid: Map<string, number>,
-  incoming: CatalogItem[]
-): UpsertResult => {
-  if (incoming.length === 0) {
-    return { nextItems: current, changed: false };
-  }
-
-  let changed = false;
-  let nextItems = current;
-
-  const ensureWritable = () => {
-    if (changed) {
-      return;
-    }
-    changed = true;
-    nextItems = current.slice();
-  };
-
-  for (const item of incoming) {
-    const uid = item.uid;
-    if (!uid) {
-      continue;
-    }
-
-    const index = indexByUid.get(uid);
-    if (index == null) {
-      ensureWritable();
-      indexByUid.set(uid, nextItems.length);
-      nextItems.push(item);
-      continue;
-    }
-
-    const existing = nextItems[index];
-    if (existing?.resourceVersion === item.resourceVersion) {
-      continue;
-    }
-
-    ensureWritable();
-    nextItems[index] = item;
-  }
-
-  return { nextItems, changed };
-};
-
-/**
  * Filters catalog items to keep only cluster-scoped items (not namespace-scoped).
  */
 export const filterClusterScopedItems = (items: CatalogItem[]): CatalogItem[] => {
@@ -208,7 +152,10 @@ export interface BuildCatalogScopeParams {
   search: string;
   kinds: string[];
   namespaces: string[];
+  sort?: string;
+  sortDirection?: string;
   continueToken?: string | null;
+  customOnly?: boolean;
 }
 
 /**
@@ -218,6 +165,17 @@ export interface BuildCatalogScopeParams {
 export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
   const query = new URLSearchParams();
   query.set('limit', String(params.limit));
+  if (params.customOnly) {
+    query.set('customOnly', 'true');
+  }
+  const sort = params.sort?.trim();
+  if (sort) {
+    query.set('sort', sort);
+  }
+  const sortDirection = params.sortDirection?.trim();
+  if (sortDirection) {
+    query.set('sortDirection', sortDirection);
+  }
 
   const search = params.search.trim();
   if (search.length > 0) {
@@ -286,7 +244,10 @@ export const normalizeCatalogScope = (
         ? Number(limitRaw)
         : fallbackLimit;
     const search = params.get('search') ?? '';
+    const sort = params.get('sort') ?? undefined;
+    const sortDirection = params.get('sortDirection') ?? undefined;
     const continueToken = params.get('continue');
+    const customOnly = params.get('customOnly') === 'true';
     const kinds = params.getAll('kind');
     // Use pinned namespaces if provided, otherwise use namespaces from the scope.
     const namespaces = pinnedNamespaces.length > 0 ? pinnedNamespaces : params.getAll('namespace');
@@ -296,7 +257,10 @@ export const normalizeCatalogScope = (
       search,
       kinds,
       namespaces,
+      sort,
+      sortDirection,
       continueToken,
+      customOnly,
     });
     if (prefix) {
       return `${prefix}|${normalized}`;

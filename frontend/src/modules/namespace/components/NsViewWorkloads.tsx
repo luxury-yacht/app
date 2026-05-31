@@ -178,6 +178,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     }, []);
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<WorkloadData>({
+      tableMode: 'Local Partial',
       viewId: 'namespace-workloads',
       namespace,
       data,

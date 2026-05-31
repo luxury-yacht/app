@@ -1105,10 +1105,11 @@ describe('GridTable interactions (non-virtualized)', () => {
 
     await flushAsync();
 
-    const loadMoreButton = container.querySelector<HTMLButtonElement>(
+    const paginationButtons = container.querySelectorAll<HTMLButtonElement>(
       '.gridtable-pagination-button'
     );
-    expect(loadMoreButton).not.toBeNull();
+    const loadMoreButton = paginationButtons[paginationButtons.length - 1];
+    expect(loadMoreButton).toBeDefined();
     act(() => {
       loadMoreButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1117,7 +1118,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     await flushAsync();
 
     expect(container.querySelector('.gridtable-pagination-status')?.textContent).toContain(
-      'Scroll or click to load more results'
+      'Use Next page to navigate results'
     );
 
     rerender({ hasMore: false });
@@ -1261,8 +1262,11 @@ it('invokes manual pagination when the Load more button is clicked', () => {
     autoLoadMore: false,
   });
 
-  const loadMoreButton = container.querySelector<HTMLButtonElement>('.gridtable-pagination-button');
-  expect(loadMoreButton).not.toBeNull();
+  const paginationButtons = container.querySelectorAll<HTMLButtonElement>(
+    '.gridtable-pagination-button'
+  );
+  const loadMoreButton = paginationButtons[paginationButtons.length - 1];
+  expect(loadMoreButton).toBeDefined();
   expect(loadMoreButton!.disabled).toBe(false);
 
   act(() => {
@@ -1286,8 +1290,11 @@ it('disables the Load more button while a request is pending', () => {
     autoLoadMore: false,
   });
 
-  const loadMoreButton = container.querySelector<HTMLButtonElement>('.gridtable-pagination-button');
-  expect(loadMoreButton).not.toBeNull();
+  const paginationButtons = container.querySelectorAll<HTMLButtonElement>(
+    '.gridtable-pagination-button'
+  );
+  const loadMoreButton = paginationButtons[paginationButtons.length - 1];
+  expect(loadMoreButton).toBeDefined();
   expect(loadMoreButton!.disabled).toBe(true);
 
   act(() => {
@@ -1380,7 +1387,7 @@ it('updates pagination status messaging as pagination state evolves', async () =
 
   const statusNode = () => container.querySelector<HTMLDivElement>('.gridtable-pagination-status');
   expect(statusNode()).not.toBeNull();
-  expect(statusNode()!.textContent?.trim()).toBe('Scroll or click to load more results');
+  expect(statusNode()!.textContent?.trim()).toBe('Use Next page to navigate results');
 
   await act(async () => {
     rerender({ isRequestingMore: true });
@@ -1500,7 +1507,7 @@ it('copies the current visible table contents as CSV from the filter icon bar', 
   await flushAsync();
 
   const copyButton = container.querySelector<HTMLButtonElement>(
-    '.icon-bar-button[aria-label="Copy table as CSV"]'
+    '.icon-bar-button[aria-label="Copy visible rows as CSV"]'
   );
   expect(copyButton).not.toBeNull();
 
@@ -1570,7 +1577,7 @@ it('copies resource-bar columns using their displayed CPU and memory values', as
   await flushAsync();
 
   const copyButton = container.querySelector<HTMLButtonElement>(
-    '.icon-bar-button[aria-label="Copy table as CSV"]'
+    '.icon-bar-button[aria-label="Copy visible rows as CSV"]'
   );
   expect(copyButton).not.toBeNull();
 

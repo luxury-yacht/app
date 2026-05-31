@@ -83,6 +83,7 @@ const Harness = forwardRef<HarnessHandle, { requestMock: (trigger: 'manual' | 'a
       paginationEnabled: true,
       autoLoadMore: true,
       hasMore,
+      hasPrevious: false,
       isRequestingMore,
       onRequestMore: requestMock,
       tableDataLength: 5,

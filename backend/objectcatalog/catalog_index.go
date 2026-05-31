@@ -24,9 +24,30 @@ type catalogIndex struct {
 	cachedKinds       []KindInfo
 	cachedNamespaces  []string
 	cachedDescriptors []Descriptor
+	queryIndex        catalogQueryIndex
 	cachesReady       bool
 
 	lastFirstBatchLatency time.Duration
+}
+
+type catalogIndexedSummaryRef struct {
+	chunk int
+	item  int
+}
+
+type catalogQueryIndex struct {
+	byNamespace        map[string][]catalogIndexedSummaryRef
+	byKind             map[string][]catalogIndexedSummaryRef
+	byNamespaceAndKind map[string][]catalogIndexedSummaryRef
+	kindsByNamespace   map[string]map[string]bool
+}
+
+type catalogCachedQueryState struct {
+	chunks      []*summaryChunk
+	kinds       []KindInfo
+	namespaces  []string
+	descriptors []Descriptor
+	queryIndex  catalogQueryIndex
 }
 
 type catalogObjectIdentity struct {
@@ -120,13 +141,16 @@ func (idx *catalogIndex) resourceForGroupResource(group, resource string) (strin
 	return "", nil
 }
 
-func (idx *catalogIndex) cachedQueryState() ([]*summaryChunk, []KindInfo, []string, []Descriptor) {
+func (idx *catalogIndex) cachedQueryState() catalogCachedQueryState {
 	chunks := make([]*summaryChunk, len(idx.sortedChunks))
 	copy(chunks, idx.sortedChunks)
-	return chunks,
-		append([]KindInfo(nil), idx.cachedKinds...),
-		append([]string(nil), idx.cachedNamespaces...),
-		append([]Descriptor(nil), idx.cachedDescriptors...)
+	return catalogCachedQueryState{
+		chunks:      chunks,
+		kinds:       append([]KindInfo(nil), idx.cachedKinds...),
+		namespaces:  append([]string(nil), idx.cachedNamespaces...),
+		descriptors: append([]Descriptor(nil), idx.cachedDescriptors...),
+		queryIndex:  idx.queryIndex.clone(),
+	}
 }
 
 func (idx *catalogIndex) cachesAreReady() bool {
@@ -202,10 +226,86 @@ func (idx *catalogIndex) publishStreamingState(
 	idx.sortedChunks = chunkSnapshot
 	idx.cachedKinds = snapshotSortedKindInfos(kindSet)
 	idx.cachedNamespaces = snapshotSortedKeys(namespaceSet)
+	idx.queryIndex = buildCatalogQueryIndex(chunkSnapshot)
 	if descriptors != nil {
 		idx.cachedDescriptors = append([]Descriptor(nil), descriptors...)
 	}
 	idx.cachesReady = ready
+}
+
+func buildCatalogQueryIndex(chunks []*summaryChunk) catalogQueryIndex {
+	index := catalogQueryIndex{
+		byNamespace:        make(map[string][]catalogIndexedSummaryRef),
+		byKind:             make(map[string][]catalogIndexedSummaryRef),
+		byNamespaceAndKind: make(map[string][]catalogIndexedSummaryRef),
+		kindsByNamespace:   make(map[string]map[string]bool),
+	}
+	for chunkIdx, chunk := range chunks {
+		if chunk == nil {
+			continue
+		}
+		for itemIdx, item := range chunk.items {
+			ref := catalogIndexedSummaryRef{chunk: chunkIdx, item: itemIdx}
+			namespaceKey := catalogQueryNamespaceIndexKey(item.Namespace, item.Scope)
+			index.byNamespace[namespaceKey] = append(index.byNamespace[namespaceKey], ref)
+			if item.Kind != "" {
+				kinds := index.kindsByNamespace[namespaceKey]
+				if kinds == nil {
+					kinds = make(map[string]bool)
+					index.kindsByNamespace[namespaceKey] = kinds
+				}
+				kinds[item.Kind] = item.Scope == ScopeNamespace
+			}
+			for _, kindKey := range catalogQueryKindIndexKeys(item) {
+				index.byKind[kindKey] = append(index.byKind[kindKey], ref)
+				compound := catalogQueryCompoundIndexKey(namespaceKey, kindKey)
+				index.byNamespaceAndKind[compound] = append(index.byNamespaceAndKind[compound], ref)
+			}
+		}
+	}
+	return index
+}
+
+func (idx catalogQueryIndex) clone() catalogQueryIndex {
+	return catalogQueryIndex{
+		byNamespace:        cloneCatalogQueryRefMap(idx.byNamespace),
+		byKind:             cloneCatalogQueryRefMap(idx.byKind),
+		byNamespaceAndKind: cloneCatalogQueryRefMap(idx.byNamespaceAndKind),
+		kindsByNamespace:   cloneCatalogNamespaceKinds(idx.kindsByNamespace),
+	}
+}
+
+func cloneCatalogQueryRefMap(src map[string][]catalogIndexedSummaryRef) map[string][]catalogIndexedSummaryRef {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string][]catalogIndexedSummaryRef, len(src))
+	for key, refs := range src {
+		dst[key] = append([]catalogIndexedSummaryRef(nil), refs...)
+	}
+	return dst
+}
+
+func cloneCatalogNamespaceKinds(src map[string]map[string]bool) map[string]map[string]bool {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]map[string]bool, len(src))
+	for namespace, kinds := range src {
+		dst[namespace] = cloneKindSet(kinds)
+	}
+	return dst
+}
+
+func catalogQueryNamespaceIndexKey(namespace string, scope Scope) string {
+	if scope == ScopeCluster || namespace == "" {
+		return "cluster"
+	}
+	return strings.ToLower(strings.TrimSpace(namespace))
+}
+
+func catalogQueryCompoundIndexKey(namespace, kind string) string {
+	return namespace + "\x00" + kind
 }
 
 func (idx *catalogIndex) rebuildCacheFromItems(items map[string]Summary, descriptors []Descriptor) {

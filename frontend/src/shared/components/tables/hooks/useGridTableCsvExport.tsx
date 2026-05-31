@@ -99,8 +99,8 @@ export function useGridTableCsvExport<T>({
       onClick: () => {
         void handleCopyCsv();
       },
-      title: 'Copy table as CSV',
-      ariaLabel: 'Copy table as CSV',
+      title: 'Copy visible rows as CSV',
+      ariaLabel: 'Copy visible rows as CSV',
       disabled: !canCopyToClipboard || !hasCopyableContent,
       feedback: copyFeedback,
     }),

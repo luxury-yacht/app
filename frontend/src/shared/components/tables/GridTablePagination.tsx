@@ -10,23 +10,29 @@ import type { RefObject } from 'react';
 
 interface GridTablePaginationProps {
   hasMore: boolean;
+  hasPrevious: boolean;
   isRequestingMore: boolean;
   showLoadMoreButton: boolean;
   showPaginationStatus: boolean;
   loadMoreLabel: string;
+  previousPageLabel: string;
   paginationStatus: string;
   onManualLoadMore: () => void;
+  onManualLoadPrevious: () => void;
   sentinelRef: RefObject<HTMLDivElement | null>;
 }
 
 const GridTablePagination: React.FC<GridTablePaginationProps> = ({
   hasMore,
+  hasPrevious,
   isRequestingMore,
   showLoadMoreButton,
   showPaginationStatus,
   loadMoreLabel,
+  previousPageLabel,
   paginationStatus,
   onManualLoadMore,
+  onManualLoadPrevious,
   sentinelRef,
 }) => {
   return (
@@ -37,14 +43,24 @@ const GridTablePagination: React.FC<GridTablePaginationProps> = ({
         aria-hidden="true"
       />
       {showLoadMoreButton && (
-        <button
-          type="button"
-          className="gridtable-pagination-button"
-          onClick={onManualLoadMore}
-          disabled={!hasMore || isRequestingMore}
-        >
-          {isRequestingMore ? 'Loading…' : loadMoreLabel}
-        </button>
+        <div className="gridtable-pagination-buttons">
+          <button
+            type="button"
+            className="gridtable-pagination-button"
+            onClick={onManualLoadPrevious}
+            disabled={!hasPrevious || isRequestingMore}
+          >
+            {previousPageLabel}
+          </button>
+          <button
+            type="button"
+            className="gridtable-pagination-button"
+            onClick={onManualLoadMore}
+            disabled={!hasMore || isRequestingMore}
+          >
+            {isRequestingMore ? 'Loading…' : loadMoreLabel}
+          </button>
+        </div>
       )}
       {showPaginationStatus && (
         <div className="gridtable-pagination-status" aria-live="polite">

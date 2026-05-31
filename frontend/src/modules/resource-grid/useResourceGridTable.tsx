@@ -25,9 +25,16 @@ import type {
   ObjectPanelResourceGridTableParams,
   QueryResourceGridTableParams,
   ResourceGridCommonParams,
+  ResourceGridTableMode,
   ResourceGridTableResult,
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
+import { isQueryBackedResourceGridTableMode } from './resourceGridTableTypes';
+
+const resourceGridPartialDataLabel = (tableMode: ResourceGridTableMode) =>
+  tableMode === 'Local Partial'
+    ? 'This table is showing a bounded or recent local window. Search, filters, sort, export, and selection apply only to the visible dataset.'
+    : undefined;
 
 const useDefaultResourceGridKey = <T extends ResourceGridTableRow>(
   fallbackClusterId?: string | null
@@ -39,6 +46,7 @@ const useDefaultResourceGridKey = <T extends ResourceGridTableRow>(
 
 export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
   viewId,
+  tableMode,
   data,
   persistenceData,
   columns,
@@ -65,6 +73,7 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
 
   return useResourceGridTableCommon({
     ...common,
+    tableMode,
     data,
     columns,
     keyExtractor: resolvedKeyExtractor,
@@ -79,6 +88,7 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
 
 export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
   viewId,
+  tableMode,
   namespace,
   data,
   persistenceData,
@@ -107,6 +117,7 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
 
   return useResourceGridTableCommon({
     ...common,
+    tableMode,
     data,
     columns,
     keyExtractor: resolvedKeyExtractor,
@@ -123,6 +134,7 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
 
 export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>({
   viewId,
+  tableMode,
   clusterIdentity,
   enabled = true,
   data,
@@ -151,6 +163,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
 
   const binding = useGridTableBinding({
     data,
+    tableMode,
     columns,
     keyExtractor: resolvedKeyExtractor,
     defaultSortKey: defaultSort.key,
@@ -167,9 +180,17 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
       accessors: filterAccessors,
       onChange: persistence.setFilters,
       onReset: persistence.resetState,
-      options: {},
+      options: {
+        partialDataLabel: resourceGridPartialDataLabel(tableMode),
+      },
     }),
-    [filterAccessors, persistence.filters, persistence.resetState, persistence.setFilters]
+    [
+      filterAccessors,
+      persistence.filters,
+      persistence.resetState,
+      persistence.setFilters,
+      tableMode,
+    ]
   );
 
   const gridTableProps = useMemo(
@@ -184,6 +205,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
 }
 
 export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
+  tableMode,
   data,
   columns,
   persistence,
@@ -200,6 +222,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
   const resolvedKeyExtractor = keyExtractor ?? defaultKeyExtractor;
   const binding = useGridTableBinding({
     data,
+    tableMode,
     columns,
     keyExtractor: resolvedKeyExtractor,
     defaultSortKey,
@@ -232,6 +255,10 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
       onReset: persistence.resetState,
       options: {
         ...filterOptions,
+        searchBehavior: isQueryBackedResourceGridTableMode(tableMode)
+          ? 'query'
+          : (filterOptions.searchBehavior ?? 'local'),
+        partialDataLabel: resourceGridPartialDataLabel(tableMode),
         preActions: [...(filterOptions.preActions ?? []), favToggle],
       },
     }),
@@ -239,6 +266,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
       favToggle,
       filterAccessors,
       filterOptions,
+      tableMode,
       persistence.filters,
       persistence.resetState,
       persistence.setFilters,
@@ -258,6 +286,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
 
 function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   data,
+  tableMode,
   columns,
   availableKinds: kindOptions,
   diagnosticsLabel,
@@ -279,6 +308,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
 }: ResourceGridCommonParams<T>): ResourceGridTableResult<T> {
   const binding = useGridTableBinding({
     data,
+    tableMode,
     columns,
     keyExtractor,
     defaultSortKey,
@@ -366,12 +396,14 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       options: {
         kinds: availableKinds,
         namespaces: showNamespaceFilters ? availableFilterNamespaces : undefined,
+        searchBehavior: isQueryBackedResourceGridTableMode(tableMode) ? 'query' : 'local',
         showKindDropdown,
         kindDropdownSearchable,
         kindDropdownBulkActions,
         showNamespaceDropdown: showNamespaceFilters,
         namespaceDropdownSearchable: showNamespaceFilters,
         namespaceDropdownBulkActions: showNamespaceFilters,
+        partialDataLabel: resourceGridPartialDataLabel(tableMode),
         preActions: filterPreActions,
       },
     }),
@@ -387,6 +419,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       persistence.setFilters,
       showKindDropdown,
       showNamespaceFilters,
+      tableMode,
     ]
   );
 

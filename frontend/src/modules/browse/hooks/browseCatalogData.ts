@@ -9,7 +9,6 @@ import {
   reconcileByUID,
   rebuildIndexByUID,
   splitClusterScope,
-  upsertByUID,
 } from '@modules/browse/utils/browseUtils';
 
 export interface BrowseFilters {
@@ -27,8 +26,10 @@ export interface BrowseFilterOptions {
 export interface BrowseCatalogPlanInput {
   clusterId: string | null | undefined;
   clusterScopedOnly: boolean;
+  customOnly?: boolean;
   pinnedNamespaces: string[];
   filters: BrowseFilters;
+  sort?: { key: string; direction: 'asc' | 'desc' | null } | null;
   availableNamespaces: string[];
   pageLimit: number;
 }
@@ -50,7 +51,9 @@ export interface BrowseCatalogCollection {
 export interface BrowseCatalogApplyResult extends BrowseCatalogCollection {
   changed: boolean;
   continueToken: string | null;
+  previousToken: string | null;
   totalCount: number;
+  totalIsExact: boolean;
 }
 
 export const emptyBrowseCatalogCollection = (): BrowseCatalogCollection => ({
@@ -61,12 +64,15 @@ export const emptyBrowseCatalogCollection = (): BrowseCatalogCollection => ({
 export const buildBrowseCatalogPlan = ({
   clusterId,
   clusterScopedOnly,
+  customOnly = false,
   pinnedNamespaces,
   filters,
+  sort,
   availableNamespaces,
   pageLimit,
 }: BrowseCatalogPlanInput): BrowseCatalogPlan => {
   const isNamespaceScoped = pinnedNamespaces.length > 0;
+  const sortScope = catalogSortScope(sort);
   const selectedNamespaces = filters.namespaces ?? [];
   const namespacesToQuery = clusterScopedOnly
     ? ['cluster']
@@ -81,6 +87,9 @@ export const buildBrowseCatalogPlan = ({
     search: filters.search ?? '',
     kinds: filters.kinds ?? [],
     namespaces: namespacesToQuery,
+    sort: sortScope.sort,
+    sortDirection: sortScope.sortDirection,
+    customOnly,
   });
   const catalogScope =
     normalizeCatalogScope(baseScope, pageLimit, pinnedNamespaces, clusterId) ??
@@ -96,6 +105,7 @@ export const buildBrowseCatalogPlan = ({
     search: '',
     kinds: [],
     namespaces: metadataNamespaces,
+    customOnly,
   });
   const metadataScope =
     normalizeCatalogScope(metadataBaseScope, 1, pinnedNamespaces, clusterId) ??
@@ -110,6 +120,7 @@ export const buildBrowseCatalogPlan = ({
     scopeIdentityKey: JSON.stringify({
       clusterId: clusterId ?? '',
       clusterScopedOnly,
+      customOnly,
       pinnedNamespaces: pinnedNamespaces.map((ns) => ns.trim()).sort(),
     }),
   };
@@ -117,7 +128,10 @@ export const buildBrowseCatalogPlan = ({
 
 export const buildBrowseCatalogPageScope = (
   plan: BrowseCatalogPlan,
-  input: Pick<BrowseCatalogPlanInput, 'clusterId' | 'filters' | 'pageLimit' | 'pinnedNamespaces'>,
+  input: Pick<
+    BrowseCatalogPlanInput,
+    'clusterId' | 'filters' | 'sort' | 'pageLimit' | 'pinnedNamespaces'
+  > & { customOnly?: boolean },
   continueToken: string
 ): string => {
   const pageScope = buildCatalogScope({
@@ -125,12 +139,26 @@ export const buildBrowseCatalogPageScope = (
     search: input.filters.search ?? '',
     kinds: input.filters.kinds ?? [],
     namespaces: plan.namespacesToQuery,
+    sort: catalogSortScope(input.sort).sort,
+    sortDirection: catalogSortScope(input.sort).sortDirection,
     continueToken,
+    customOnly: input.customOnly ?? false,
   });
   return (
     normalizeCatalogScope(pageScope, input.pageLimit, input.pinnedNamespaces, input.clusterId) ??
     buildClusterScope(input.clusterId ?? undefined, pageScope)
   );
+};
+
+const catalogSortScope = (
+  sort?: { key: string; direction: 'asc' | 'desc' | null } | null
+): { sort?: string; sortDirection?: string } => {
+  const key = sort?.key?.trim();
+  const direction = sort?.direction;
+  if (!key || !direction || (key === 'kind' && direction === 'asc')) {
+    return {};
+  }
+  return { sort: key, sortDirection: direction };
 };
 
 export const acceptsCatalogSnapshotScope = (
@@ -162,25 +190,25 @@ export const applyCatalogBaseline = (
     indexByUid: rebuildIndexByUID(nextItems),
     changed,
     continueToken: parseContinueToken(payload.continue),
+    previousToken: parseContinueToken(payload.previous),
     totalCount: payload.total ?? 0,
+    totalIsExact: payload.totalIsExact !== false,
   };
 };
 
 export const applyCatalogPage = (
-  collection: BrowseCatalogCollection,
+  _collection: BrowseCatalogCollection,
   payload: CatalogSnapshotPayload
 ): BrowseCatalogApplyResult => {
-  const { nextItems, changed } = upsertByUID(
-    collection.items,
-    collection.indexByUid,
-    payload.items ?? []
-  );
+  const nextItems = payload.items ?? [];
   return {
-    items: changed || collection.items.length === 0 ? nextItems : collection.items,
+    items: nextItems,
     indexByUid: rebuildIndexByUID(nextItems),
-    changed,
+    changed: true,
     continueToken: parseContinueToken(payload.continue),
+    previousToken: parseContinueToken(payload.previous),
     totalCount: payload.total ?? 0,
+    totalIsExact: payload.totalIsExact !== false,
   };
 };
 

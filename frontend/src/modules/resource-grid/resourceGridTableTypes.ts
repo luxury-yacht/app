@@ -45,8 +45,18 @@ export interface ResourceGridTableRow {
   version?: string | null;
 }
 
+export type ResourceGridTableMode =
+  | 'Local Complete'
+  | 'Local Partial'
+  | 'Query Backed Static'
+  | 'Query Backed Dynamic';
+
+export const isQueryBackedResourceGridTableMode = (mode: ResourceGridTableMode): boolean =>
+  mode === 'Query Backed Static' || mode === 'Query Backed Dynamic';
+
 export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   viewId: string;
+  tableMode: ResourceGridTableMode;
   data: T[];
   columns: GridColumnDefinition<T>[];
   keyExtractor?: (item: T, index: number) => string;
@@ -141,6 +151,7 @@ export interface ObjectPanelResourceGridTableSurfaceProps<T extends ResourceGrid
 }
 
 export interface QueryResourceGridTableParams<T extends ResourceGridTableRow> {
+  tableMode: ResourceGridTableMode;
   data: T[];
   columns: GridColumnDefinition<T>[];
   persistence: ResourceGridPersistence<T>;

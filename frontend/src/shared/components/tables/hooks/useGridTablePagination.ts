@@ -15,8 +15,10 @@ interface UseGridTablePaginationOptions {
   paginationEnabled: boolean;
   autoLoadMore: boolean;
   hasMore: boolean;
+  hasPrevious: boolean;
   isRequestingMore: boolean;
   onRequestMore?: (trigger: 'manual' | 'auto') => void;
+  onRequestPrevious?: () => void;
   tableDataLength: number;
   tableRef: RefObject<HTMLElement | null>;
 }
@@ -24,6 +26,7 @@ interface UseGridTablePaginationOptions {
 interface UseGridTablePaginationResult {
   loadMoreSentinelRef: RefObject<HTMLDivElement | null>;
   handleManualLoadMore: () => void;
+  handleManualLoadPrevious: () => void;
   paginationStatus: string;
 }
 
@@ -31,8 +34,10 @@ export function useGridTablePagination({
   paginationEnabled,
   autoLoadMore,
   hasMore,
+  hasPrevious,
   isRequestingMore,
   onRequestMore,
+  onRequestPrevious,
   tableDataLength,
   tableRef,
 }: UseGridTablePaginationOptions): UseGridTablePaginationResult {
@@ -65,6 +70,13 @@ export function useGridTablePagination({
   const handleManualLoadMore = useCallback(() => {
     handleRequestMore('manual');
   }, [handleRequestMore]);
+
+  const handleManualLoadPrevious = useCallback(() => {
+    if (!paginationEnabled || !onRequestPrevious || !hasPrevious || isRequestingMore) {
+      return;
+    }
+    onRequestPrevious();
+  }, [hasPrevious, isRequestingMore, onRequestPrevious, paginationEnabled]);
 
   useEffect(() => {
     if (
@@ -122,14 +134,19 @@ export function useGridTablePagination({
       return 'Loading more…';
     }
     if (hasMore) {
-      return 'Scroll or click to load more results';
+      return hasPrevious
+        ? 'Use Previous page or Next page to navigate results'
+        : autoLoadMore
+          ? 'Scroll or click to load more results'
+          : 'Use Next page to navigate results';
     }
-    return 'No additional pages';
-  }, [paginationEnabled, tableDataLength, isRequestingMore, hasMore]);
+    return hasPrevious ? 'First/previous pages available' : 'No additional pages';
+  }, [paginationEnabled, tableDataLength, isRequestingMore, hasMore, hasPrevious, autoLoadMore]);
 
   return {
     loadMoreSentinelRef,
     handleManualLoadMore,
+    handleManualLoadPrevious,
     paginationStatus,
   };
 }

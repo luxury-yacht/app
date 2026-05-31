@@ -19,7 +19,10 @@ import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
+import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
+import type { CatalogItem } from '@/core/refresh/types';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -78,6 +81,21 @@ interface CustomViewProps {
   loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
+
+const catalogItemToCustomResourceData = (item: CatalogItem): CustomResourceData => ({
+  kind: item.kind,
+  kindAlias: item.kind,
+  name: item.name,
+  namespace: item.namespace ?? '',
+  clusterId: item.clusterId,
+  clusterName: item.clusterName,
+  apiGroup: item.group,
+  apiVersion: item.version,
+  crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
+  status: item.actionFacts?.status ?? 'Unknown',
+  statusPresentation: item.actionFacts?.status,
+  age: item.creationTimestamp,
+});
 
 /**
  * GridTable component for namespace custom resources (instances of CRDs)
@@ -307,20 +325,81 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Custom' : 'Namespace Custom';
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<CustomResourceData>({
+    const persistenceState = useNamespaceGridTablePersistence<CustomResourceData>({
       viewId: 'namespace-custom',
       namespace,
-      data,
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      availableKinds: kindOptions ?? [],
-      showKindDropdown: true,
-      kindDropdownSearchable: true,
-      kindDropdownBulkActions: true,
-      showNamespaceFilters: showNamespaceFilter,
-      diagnosticsLabel,
+      data: [],
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
+    });
+    const persistence = useMemo(
+      () => ({
+        sortConfig: persistenceState.sortConfig,
+        setSortConfig: persistenceState.onSortChange,
+        columnWidths: persistenceState.columnWidths,
+        setColumnWidths: persistenceState.setColumnWidths,
+        columnVisibility: persistenceState.columnVisibility,
+        setColumnVisibility: persistenceState.setColumnVisibility,
+        filters: persistenceState.filters,
+        setFilters: persistenceState.setFilters,
+        resetState: persistenceState.resetState,
+        hydrated: persistenceState.hydrated,
+      }),
+      [persistenceState]
+    );
+
+    const {
+      items: catalogItems,
+      loading: catalogLoading,
+      hasLoadedOnce: catalogLoaded,
+      filterOptions: catalogFilterOptions,
+      totalCount,
+      totalIsExact,
+    } = useBrowseCatalog({
+      clusterId: selectedClusterId,
+      pinnedNamespaces: namespace === ALL_NAMESPACES_SCOPE ? [] : [namespace],
+      customOnly: true,
+      filters: {
+        search: persistence.filters.search ?? '',
+        kinds: persistence.filters.kinds ?? [],
+        namespaces: persistence.filters.namespaces ?? [],
+      },
+      sort: persistence.sortConfig,
+      diagnosticLabel: diagnosticsLabel,
+    });
+
+    const rows = useMemo(() => {
+      if (!catalogLoaded && catalogItems.length === 0 && data.length > 0) {
+        return data;
+      }
+      return catalogItems.map(catalogItemToCustomResourceData);
+    }, [catalogItems, catalogLoaded, data]);
+
+    const { gridTableProps, favModal } = useQueryResourceGridTable<CustomResourceData>({
+      tableMode: 'Query Backed Static',
+      data: rows,
+      columns,
+      persistence,
+      keyExtractor,
+      defaultSortKey: 'name',
+      defaultSortDirection: 'asc',
+      diagnosticsLabel,
+      filterOptions: {
+        searchBehavior: 'query',
+        kinds:
+          catalogFilterOptions.kinds.length > 0 ? catalogFilterOptions.kinds : (kindOptions ?? []),
+        namespaces: showNamespaceFilter ? catalogFilterOptions.namespaces : undefined,
+        showKindDropdown: true,
+        showNamespaceDropdown: showNamespaceFilter,
+        kindDropdownSearchable: true,
+        kindDropdownBulkActions: true,
+        namespaceDropdownSearchable: showNamespaceFilter,
+        namespaceDropdownBulkActions: showNamespaceFilter,
+        totalCount,
+        totalIsExact,
+      },
     });
 
     const objectActions = useObjectActionController({
@@ -371,13 +450,13 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
+          boundaryLoading={catalogLoading || (loading ?? false)}
+          loaded={catalogLoaded || loaded}
           spinnerMessage="Loading custom resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
-          loading={loading}
+          loading={catalogLoading || loading}
           onRowClick={handleResourceClick}
           tableClassName="ns-custom-table"
           enableContextMenu={true}

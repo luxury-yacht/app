@@ -64,9 +64,12 @@ describe('GridTableBody', () => {
       showPaginationStatus: true,
       showLoadMoreButton: true,
       loadMoreLabel: 'Load more',
+      previousPageLabel: 'Previous page',
       hasMore: true,
+      hasPrevious: false,
       isRequestingMore: false,
       onManualLoadMore: vi.fn(),
+      onManualLoadPrevious: vi.fn(),
       sentinelRef,
       onWrapperFocus: vi.fn(),
       onWrapperBlur: vi.fn(),
@@ -100,8 +103,9 @@ describe('GridTableBody', () => {
     expect(rows.length).toBe(2);
     expect(rows[0]?.textContent).toContain('Row 1');
 
-    const button = container.querySelector<HTMLButtonElement>('.gridtable-pagination-button');
-    expect(button).not.toBeNull();
+    const buttons = container.querySelectorAll<HTMLButtonElement>('.gridtable-pagination-button');
+    const button = buttons[buttons.length - 1];
+    expect(button).toBeDefined();
 
     await act(async () => {
       button!.click();

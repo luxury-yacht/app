@@ -96,6 +96,10 @@ export interface GridTableFilterOptions {
   customActions?: React.ReactNode;
   /** Override the total item count shown in the filter bar (e.g. server-side total for paginated views). */
   totalCount?: number;
+  /** Indicates whether totalCount is exact; false renders an approximate count. */
+  totalIsExact?: boolean;
+  /** Marks local rows as a bounded/recent/capped window rather than a global dataset. */
+  partialDataLabel?: string;
 }
 
 export interface GridTableFilterConfig<T> {
@@ -154,10 +158,13 @@ export interface GridTableProps<T> {
   enableColumnVisibilityMenu?: boolean;
   emptyMessage?: string;
   hasMore?: boolean;
+  hasPrevious?: boolean;
   onRequestMore?: (trigger: 'manual' | 'auto') => void;
+  onRequestPrevious?: () => void;
   isRequestingMore?: boolean;
   autoLoadMore?: boolean;
   loadMoreLabel?: string;
+  previousPageLabel?: string;
   showLoadMoreButton?: boolean;
   showPaginationStatus?: boolean;
   virtualization?: GridTableVirtualizationOptions;
@@ -188,4 +195,6 @@ export interface InternalFilterOptions {
   preActions?: IconBarItem[];
   postActions?: IconBarItem[];
   customActions?: React.ReactNode;
+  totalIsExact?: boolean;
+  partialDataLabel?: string;
 }
