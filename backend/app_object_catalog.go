@@ -563,3 +563,87 @@ func (a *App) ExportCatalogQueryCSV(
 		SortDirection: sortDirection,
 	})
 }
+
+const catalogQueryBulkActionPageLimit = 100
+
+// RunCatalogQueryBulkAction executes a query-wide catalog action from a durable
+// selector instead of requiring the frontend to materialize every matching row.
+// Only catalog-backed delete is currently supported because catalog rows carry
+// the full GVK identity required by the existing object action permission path.
+func (a *App) RunCatalogQueryBulkAction(req snapshot.QueryBulkActionRequest) (snapshot.QueryBulkActionResult, error) {
+	var empty snapshot.QueryBulkActionResult
+	if a == nil {
+		return empty, fmt.Errorf("app is not initialised")
+	}
+	selection := req.Selection
+	if selection.Table != "catalog" && selection.Table != "browse" {
+		return empty, fmt.Errorf("query bulk action is unsupported for table %q", selection.Table)
+	}
+	if strings.TrimSpace(req.Action) != string(ObjectActionDelete) {
+		return empty, fmt.Errorf("query bulk action %q is unsupported", req.Action)
+	}
+	clusterID := strings.TrimSpace(selection.ClusterID)
+	if clusterID == "" {
+		return empty, fmt.Errorf("cluster ID is required")
+	}
+	if !req.DryRun && !req.Confirmed {
+		return snapshot.QueryBulkActionResult{RequiresConfirmation: true}, nil
+	}
+
+	svc := a.objectCatalogServiceForCluster(clusterID)
+	if svc == nil {
+		return empty, fmt.Errorf("object catalog service unavailable for cluster %q", clusterID)
+	}
+	limit := req.Limit
+	if limit <= 0 || limit > catalogQueryBulkActionPageLimit {
+		limit = catalogQueryBulkActionPageLimit
+	}
+	result := svc.Query(objectcatalog.QueryOptions{
+		Kinds:         selection.Kinds,
+		Namespaces:    selection.Namespaces,
+		Search:        selection.Search,
+		SortField:     selection.SortField,
+		SortDirection: selection.SortDirection,
+		Limit:         limit,
+		Continue:      req.Continue,
+	})
+
+	response := snapshot.QueryBulkActionResult{
+		Processed: len(result.Items),
+		Continue:  result.ContinueToken,
+	}
+	for _, item := range result.Items {
+		ref := catalogSummaryToResourceQueryRow(item)
+		if req.DryRun {
+			response.Succeeded++
+			continue
+		}
+		apiVersion := item.Version
+		if item.Group != "" {
+			apiVersion = item.Group + "/" + item.Version
+		}
+		if err := a.deleteResourceByGVK(clusterID, apiVersion, item.Kind, item.Namespace, item.Name); err != nil {
+			response.Failed++
+			response.Failures = append(response.Failures, snapshot.QueryBulkActionFailure{
+				Ref:     ref,
+				Message: err.Error(),
+			})
+			continue
+		}
+		response.Succeeded++
+	}
+	return response, nil
+}
+
+func catalogSummaryToResourceQueryRow(item objectcatalog.Summary) snapshot.ResourceQueryRow {
+	return snapshot.ResourceQueryRow{
+		ClusterID: item.ClusterID,
+		Group:     item.Group,
+		Version:   item.Version,
+		Kind:      item.Kind,
+		Resource:  item.Resource,
+		Namespace: item.Namespace,
+		Name:      item.Name,
+		UID:       item.UID,
+	}
+}

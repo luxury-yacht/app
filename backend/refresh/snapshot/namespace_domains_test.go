@@ -1350,6 +1350,117 @@ func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {
 	require.Len(t, namespaces, 2)
 }
 
+func TestNamespaceWorkloadsBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T) {
+	now := time.Now()
+	replicas := int32(1)
+	deployments := []*appsv1.Deployment{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "alpha",
+				Namespace:         "team-a",
+				ResourceVersion:   "101",
+				CreationTimestamp: metav1.NewTime(now.Add(-30 * time.Minute)),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "alpha"}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "bravo",
+				Namespace:         "team-b",
+				ResourceVersion:   "102",
+				CreationTimestamp: metav1.NewTime(now.Add(-20 * time.Minute)),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "bravo"}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "charlie",
+				Namespace:         "team-b",
+				ResourceVersion:   "103",
+				CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "charlie"}},
+			},
+		},
+	}
+	ownerController := true
+	pods := []*corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "alpha-pod",
+				Namespace: "team-a",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "Deployment",
+					Name:       "alpha",
+					Controller: &ownerController,
+				}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "bravo-pod",
+				Namespace: "team-b",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "Deployment",
+					Name:       "bravo",
+					Controller: &ownerController,
+				}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "charlie-pod",
+				Namespace: "team-b",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "Deployment",
+					Name:       "charlie",
+					Controller: &ownerController,
+				}},
+			},
+		},
+	}
+
+	builder := &NamespaceWorkloadsBuilder{
+		podLister:        testsupport.NewPodLister(t, pods...),
+		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
+		statefulLister:   testsupport.NewStatefulSetLister(t),
+		daemonLister:     testsupport.NewDaemonSetLister(t),
+		jobLister:        testsupport.NewJobLister(t),
+		cronJobLister:    testsupport.NewCronJobLister(t),
+		metrics: &workloadMetricsProvider{pods: map[string]metrics.PodUsage{
+			"team-a/alpha-pod":   {MemoryUsageBytes: 64 * 1024 * 1024},
+			"team-b/bravo-pod":   {MemoryUsageBytes: 512 * 1024 * 1024},
+			"team-b/charlie-pod": {MemoryUsageBytes: 128 * 1024 * 1024},
+		}},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=memory&sortDirection=desc&limit=1")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
+	require.Equal(t, 2, payload.Total)
+	require.True(t, payload.TotalIsExact)
+	require.Equal(t, []string{"Deployment"}, payload.Kinds)
+	require.Equal(t, []string{"team-b"}, payload.Namespaces)
+	require.Len(t, payload.Workloads, 1)
+	require.Equal(t, "bravo", payload.Workloads[0].Name)
+	require.NotEmpty(t, payload.Continue)
+
+	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=memory&sortDirection=desc&limit=1&continue="+payload.Continue)
+	require.NoError(t, err)
+	nextPayload := next.Payload.(NamespaceWorkloadsSnapshot)
+	require.Len(t, nextPayload.Workloads, 1)
+	require.Equal(t, "charlie", nextPayload.Workloads[0].Name)
+	require.Empty(t, nextPayload.Continue)
+}
+
 func mustQuantity(t testing.TB, value string) resource.Quantity {
 	t.Helper()
 	q, err := resource.ParseQuantity(value)

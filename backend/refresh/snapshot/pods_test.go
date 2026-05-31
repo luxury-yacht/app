@@ -408,6 +408,67 @@ func TestPodBuilderAllNamespacesScope(t *testing.T) {
 	require.Equal(t, []string{"team-a", "team-b"}, []string{payload.Pods[0].Namespace, payload.Pods[1].Namespace})
 }
 
+func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T) {
+	now := time.Now()
+	pods := []*corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "alpha",
+				Namespace:         "team-a",
+				ResourceVersion:   "20",
+				CreationTimestamp: metav1.NewTime(now.Add(-20 * time.Minute)),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "bravo",
+				Namespace:         "team-b",
+				ResourceVersion:   "25",
+				CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "charlie",
+				Namespace:         "team-b",
+				ResourceVersion:   "26",
+				CreationTimestamp: metav1.NewTime(now.Add(-5 * time.Minute)),
+			},
+		},
+	}
+
+	builder := &PodBuilder{
+		podLister: testsupport.NewPodLister(t, pods...),
+		rsLister:  testsupport.NewReplicaSetLister(t),
+		metrics: fakePodMetricsProvider{
+			usage: map[string]metrics.PodUsage{
+				"team-a/alpha":   {CPUUsageMilli: 25},
+				"team-b/bravo":   {CPUUsageMilli: 300},
+				"team-b/charlie": {CPUUsageMilli: 100},
+			},
+			metadata: metrics.Metadata{CollectedAt: now},
+		},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=cpu&sortDirection=desc&limit=1")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(PodSnapshot)
+	require.Equal(t, 2, payload.Total)
+	require.True(t, payload.TotalIsExact)
+	require.Equal(t, []string{"team-b"}, payload.Namespaces)
+	require.Equal(t, []string{"Pod"}, payload.Kinds)
+	require.Len(t, payload.Pods, 1)
+	require.Equal(t, "bravo", payload.Pods[0].Name)
+	require.NotEmpty(t, payload.Continue)
+
+	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=cpu&sortDirection=desc&limit=1&continue="+payload.Continue)
+	require.NoError(t, err)
+	nextPayload := next.Payload.(PodSnapshot)
+	require.Len(t, nextPayload.Pods, 1)
+	require.Equal(t, "charlie", nextPayload.Pods[0].Name)
+	require.Empty(t, nextPayload.Continue)
+}
+
 func boolPtr(v bool) *bool {
 	return &v
 }

@@ -4,7 +4,7 @@
  * Coordinates shared resource-grid table state, identity, and context menus.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
@@ -292,9 +292,11 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   diagnosticsLabel,
   filterAccessors,
   leadingFilterActions = [],
+  filterOptionOverrides,
   kindDropdownBulkActions = false,
   kindDropdownSearchable = false,
   metadataSearch,
+  onTableStateChange,
   rowIdentity,
   keyExtractor,
   persistence,
@@ -318,6 +320,13 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     persistence,
   });
   const { sortedData, sortConfig } = binding;
+
+  useEffect(() => {
+    onTableStateChange?.({
+      filters: persistence.filters,
+      sortConfig: sortConfig ?? null,
+    });
+  }, [onTableStateChange, persistence.filters, sortConfig]);
 
   const fallbackKinds = useKindFilterOptions(data);
   const availableKinds = kindOptions && kindOptions.length > 0 ? kindOptions : fallbackKinds;
@@ -394,8 +403,14 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       onChange: persistence.setFilters,
       onReset: persistence.resetState,
       options: {
-        kinds: availableKinds,
-        namespaces: showNamespaceFilters ? availableFilterNamespaces : undefined,
+        ...filterOptionOverrides,
+        kinds: filterOptionOverrides?.kinds ?? availableKinds,
+        namespaces:
+          showNamespaceFilters && filterOptionOverrides?.namespaces
+            ? filterOptionOverrides.namespaces
+            : showNamespaceFilters
+              ? availableFilterNamespaces
+              : undefined,
         searchBehavior: isQueryBackedResourceGridTableMode(tableMode) ? 'query' : 'local',
         showKindDropdown,
         kindDropdownSearchable,
@@ -403,7 +418,8 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
         showNamespaceDropdown: showNamespaceFilters,
         namespaceDropdownSearchable: showNamespaceFilters,
         namespaceDropdownBulkActions: showNamespaceFilters,
-        partialDataLabel: resourceGridPartialDataLabel(tableMode),
+        partialDataLabel:
+          filterOptionOverrides?.partialDataLabel ?? resourceGridPartialDataLabel(tableMode),
         preActions: filterPreActions,
       },
     }),
@@ -411,6 +427,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       availableFilterNamespaces,
       availableKinds,
       effectiveFilterAccessors,
+      filterOptionOverrides,
       filterPreActions,
       kindDropdownBulkActions,
       kindDropdownSearchable,

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -63,8 +64,12 @@ type NamespaceWorkloadsBuilder struct {
 // NamespaceWorkloadsSnapshot is returned to the frontend.
 type NamespaceWorkloadsSnapshot struct {
 	ClusterMeta
-	Workloads []WorkloadSummary `json:"workloads"`
-	Kinds     []string          `json:"kinds,omitempty"`
+	Workloads    []WorkloadSummary `json:"workloads"`
+	Kinds        []string          `json:"kinds,omitempty"`
+	Continue     string            `json:"continue,omitempty"`
+	Total        int               `json:"total,omitempty"`
+	TotalIsExact bool              `json:"totalIsExact"`
+	Namespaces   []string          `json:"namespaces,omitempty"`
 }
 
 // WorkloadSummary mirrors the data required by the workloads table.
@@ -139,7 +144,12 @@ func RegisterNamespaceWorkloadsDomain(
 // Build assembles workload summaries for the requested namespace scope.
 func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, errNamespaceScopeRequired)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceWorkloadsDomainName, b.workloadsDynamicRevision())
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), errNamespaceScopeRequired)
 	if err != nil {
 		return nil, err
 	}
@@ -192,11 +202,12 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	// coverage is unavailable, leave ownership unknown instead of emitting false.
 	hpas, hpaErr := b.listHPAs(namespace)
 
-	return b.buildSnapshot(meta, parsedScope.CanonicalScope, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas, hpaErr == nil)
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas, hpaErr == nil)
 }
 func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	meta ClusterMeta,
 	scope string,
+	query typedTableQuery,
 	pods []*corev1.Pod,
 	deployments []*appsv1.Deployment,
 	statefulSets []*appsv1.StatefulSet,
@@ -311,6 +322,28 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		appendSummary(summary, pod)
 	}
 
+	if query.Enabled {
+		page := applyTypedTableQuery(items, query, workloadTableQueryAdapter())
+		items = page.Rows
+		return &refresh.Snapshot{
+			Domain:  namespaceWorkloadsDomainName,
+			Scope:   scope,
+			Version: version,
+			Payload: NamespaceWorkloadsSnapshot{
+				ClusterMeta:  meta,
+				Workloads:    items,
+				Kinds:        page.Kinds,
+				Continue:     page.Continue,
+				Total:        page.Total,
+				TotalIsExact: page.TotalIsExact,
+				Namespaces:   page.Namespaces,
+			},
+			Stats: refresh.SnapshotStats{
+				ItemCount: len(items),
+			},
+		}, nil
+	}
+
 	sortWorkloadSummaries(items)
 
 	if len(items) > config.SnapshotNamespaceWorkloadsEntryLimit {
@@ -322,9 +355,11 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceWorkloadsSnapshot{
-			ClusterMeta: meta,
-			Workloads:   items,
-			Kinds:       snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }),
+			ClusterMeta:  meta,
+			Workloads:    items,
+			Kinds:        snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }),
+			Total:        len(items),
+			TotalIsExact: true,
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(items),
@@ -345,6 +380,92 @@ func sortWorkloadSummaries(items []WorkloadSummary) {
 		}
 		return items[i].Status < items[j].Status
 	})
+}
+
+func (b *NamespaceWorkloadsBuilder) workloadsDynamicRevision() string {
+	if b.metrics == nil {
+		return ""
+	}
+	metadata := b.metrics.Metadata()
+	if metadata.CollectedAt.IsZero() {
+		return ""
+	}
+	return strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10)
+}
+
+func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
+	return typedTableQueryAdapter[WorkloadSummary]{
+		Key: func(row WorkloadSummary) string {
+			return fmt.Sprintf("%s/%s/%s", strings.ToLower(row.Kind), strings.ToLower(row.Namespace), strings.ToLower(row.Name))
+		},
+		Namespace: func(row WorkloadSummary) string { return row.Namespace },
+		Kind:      func(row WorkloadSummary) string { return row.Kind },
+		SearchText: func(row WorkloadSummary) []string {
+			return []string{
+				row.Kind,
+				row.Name,
+				row.Namespace,
+				row.Status,
+				row.Ready,
+			}
+		},
+		Predicate: func(row WorkloadSummary, field, value string) bool {
+			switch strings.ToLower(strings.TrimSpace(field)) {
+			case "health":
+				switch strings.ToLower(strings.TrimSpace(value)) {
+				case "restarts":
+					return row.Restarts > 0
+				case "not-ready":
+					ready, total, ok := parseReadyPair(row.Ready)
+					return ok && total > 0 && ready < total
+				case "unhealthy":
+					presentation := strings.ToLower(strings.TrimSpace(row.StatusPresentation))
+					return presentation == "warning" || presentation == "error" || presentation == "not-ready"
+				default:
+					return true
+				}
+			default:
+				return true
+			}
+		},
+		SortValue: func(row WorkloadSummary, field string) string {
+			switch strings.ToLower(field) {
+			case "kind":
+				return row.Kind
+			case "namespace":
+				return row.Namespace
+			case "status":
+				return row.Status
+			case "ready":
+				return row.Ready
+			case "restarts":
+				return strconv.Itoa(int(row.Restarts))
+			case "cpu":
+				return row.CPUUsage
+			case "memory":
+				return row.MemUsage
+			case "age":
+				return row.Age
+			default:
+				return row.Name
+			}
+		},
+		NumericSort: func(row WorkloadSummary, field string) (float64, bool) {
+			switch strings.ToLower(field) {
+			case "cpu":
+				return parseFormattedCPUToMilli(row.CPUUsage)
+			case "memory":
+				return parseFormattedMemoryToBytes(row.MemUsage)
+			case "restarts":
+				return float64(row.Restarts), true
+			case "ready":
+				ready, total, ok := parseReadyPair(row.Ready)
+				return float64(ready*1000000 + total), ok
+			default:
+				return 0, false
+			}
+		},
+	}
 }
 
 func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(

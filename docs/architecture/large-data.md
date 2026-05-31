@@ -85,8 +85,11 @@ sorted, and paged by the backend. Shared table logic must not locally narrow or
 resort those rows. Browse is the reference implementation.
 
 `Query Backed Dynamic` tables are query-backed and include volatile projected
-fields such as CPU or memory metrics. Their cursor contract must name the
-metric snapshot continuity model before large-scope metric sorting ships.
+fields such as CPU or memory metrics. All-namespaces Pods and Workloads use
+their refresh-domain query scopes for backend search, filters, keyset paging,
+and CPU/memory sort. Cursor continuity is keyset-based: the cursor carries the
+dynamic metrics revision for diagnostics and signature stability, but ordinary
+metrics refreshes do not reject the cursor or bounce the user back to page 1.
 
 ## Typed Resource Query Contract
 
@@ -116,13 +119,15 @@ object-panel table becomes namespace or cluster scale.
 
 Pods: `backend/refresh/snapshot/pods.go` feeds namespace and all-namespaces pod
 tables. It carries pod identity, status, restart, readiness, node, owner, and
-metrics projection state; all-namespaces Pods are `Query Backed Dynamic` once
-migrated because CPU and memory are metric snapshot fields.
+metrics projection state. All-namespaces Pods are `Query Backed Dynamic`:
+search, namespace filters, health predicates, pagination, and CPU/memory sort
+are backend-owned for the current metrics snapshot.
 
 Workloads: `backend/refresh/snapshot/namespace_workloads.go` feeds namespace
-workload tables and currently caps large snapshots. Workload CPU/memory fields
-are dynamic aggregate metric fields, so large all-namespaces workload views
-must use the typed query dynamic contract.
+workload tables. Single-namespace workloads remain `Local Complete`.
+All-namespaces Workloads are `Query Backed Dynamic`: kind and namespace filters,
+search, pagination, and CPU/memory aggregate sorts are backend-owned for the
+current metrics snapshot.
 
 Custom resources: cluster and namespace custom views are backed by CRD fanout
 snapshot paths. They are high risk because cardinality scales with every CRD

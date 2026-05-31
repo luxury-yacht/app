@@ -967,11 +967,11 @@ large.
 
 - [x] Move namespace and cluster custom-resource tables away from CRD fanout
       plus local transforms and onto query-backed custom-resource paging.
-- [ ] Move All-Namespaces Pods onto Query Backed Dynamic mode for search,
+- [x] Move All-Namespaces Pods onto Query Backed Dynamic mode for search,
       namespace filter, health filters, CPU sort, and memory sort.
-- [ ] Move All-Namespaces Workloads onto Query Backed Dynamic mode for search,
+- [x] Move All-Namespaces Workloads onto Query Backed Dynamic mode for search,
       kind filter, namespace filter, CPU sort, and memory sort.
-- [ ] Add backend metric-snapshot sorting for Pods and Workloads before
+- [x] Add backend metric-snapshot sorting for Pods and Workloads before
       disabling local CPU/memory sort for large scopes.
 - [x] Audit config/RBAC/storage/network/quotas/autoscaling tables against
       measured large-cluster fixtures and either:
@@ -999,7 +999,7 @@ the frontend.
 - [x] Add "export current page" using loaded concrete rows.
 - [x] Add "export all matching query" as a backend operation.
 - [x] Keep visible-row bulk actions over concrete object refs.
-- [ ] Add query-selection bulk action support only where the backend can
+- [x] Add query-selection bulk action support only where the backend can
       execute safely against a query descriptor.
 - [x] Require confirmation for query-wide bulk actions.
 - [x] Surface partial failure results without requiring all object rows in the

@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
@@ -282,6 +283,62 @@ func TestExportCatalogQueryCSVUsesClusterScopedCatalog(t *testing.T) {
 			"cluster-b,Deployment,apps,alpha,apps,v1,deployments,alpha-uid\n",
 		csvText,
 	)
+}
+
+func TestRunCatalogQueryBulkActionRequiresConfirmationAndSupportsDryRun(t *testing.T) {
+	app := NewApp()
+	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
+	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
+		"apps/v1, Resource=deployments/apps/alpha": {
+			ClusterID: "cluster-b",
+			Kind:      "Deployment",
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Namespace: "apps",
+			Name:      "alpha",
+			UID:       "alpha-uid",
+			Scope:     objectcatalog.ScopeNamespace,
+		},
+		"v1, Resource=pods/apps/alpha-pod": {
+			ClusterID: "cluster-b",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "apps",
+			Name:      "alpha-pod",
+			UID:       "pod-uid",
+			Scope:     objectcatalog.ScopeNamespace,
+		},
+	})
+	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
+
+	req := snapshot.QueryBulkActionRequest{
+		Selection: snapshot.QuerySelectionDescriptor{
+			ClusterID:  "cluster-b",
+			Table:      "catalog",
+			Kinds:      []string{"apps/v1/Deployment"},
+			Namespaces: []string{"apps"},
+			SortField:  "name",
+		},
+		Action: string(ObjectActionDelete),
+		Limit:  10,
+	}
+
+	confirm, err := app.RunCatalogQueryBulkAction(req)
+	require.NoError(t, err)
+	require.True(t, confirm.RequiresConfirmation)
+	require.Zero(t, confirm.Processed)
+
+	req.DryRun = true
+	dryRun, err := app.RunCatalogQueryBulkAction(req)
+	require.NoError(t, err)
+	require.False(t, dryRun.RequiresConfirmation)
+	require.Equal(t, 1, dryRun.Processed)
+	require.Equal(t, 1, dryRun.Succeeded)
+	require.Equal(t, 0, dryRun.Failed)
+	require.Empty(t, dryRun.Continue)
 }
 
 func TestWaitForFactorySyncHandlesNilFactory(t *testing.T) {

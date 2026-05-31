@@ -78,6 +78,10 @@ export function ExportCatalogQueryCSV(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['backend']['App']['ExportCatalogQueryCSV'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
+export function RunCatalogQueryBulkAction(arg1) {
+  return window['go']['backend']['App']['RunCatalogQueryBulkAction'](arg1);
+}
+
 export function FetchContainerLogs(arg1, arg2) {
   return window['go']['backend']['App']['FetchContainerLogs'](arg1, arg2);
 }

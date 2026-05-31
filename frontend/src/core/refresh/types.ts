@@ -687,6 +687,11 @@ export interface PodMetricsInfo {
 export interface PodSnapshotPayload extends ClusterMeta {
   pods: PodSnapshotEntry[];
   metrics?: PodMetricsInfo;
+  continue?: string;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  kinds?: string[];
 }
 
 export interface ObjectDetailsSnapshotPayload extends ClusterMeta {
@@ -830,6 +835,10 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
 export interface NamespaceWorkloadSnapshotPayload extends ClusterMeta {
   workloads: NamespaceWorkloadSummary[];
   kinds?: string[];
+  continue?: string;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
 }
 
 export interface NamespaceConfigSummary extends ClusterMeta {

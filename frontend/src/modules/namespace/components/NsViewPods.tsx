@@ -16,7 +16,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
+import type { GridTableFilterState } from '@shared/components/tables/GridTable';
+import type { SortConfig } from '@hooks/useTableSort';
+import type { PodSnapshotEntry, PodMetricsInfo, PodSnapshotPayload } from '@/core/refresh/types';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import {
   getPodsUnhealthyStorageKey,
@@ -37,6 +40,7 @@ import {
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 import { WarningTriangleIcon } from '@shared/components/icons/SharedIcons';
+import { useAllNamespacesTypedQuery } from './useAllNamespacesTypedQuery';
 
 interface PodsViewProps {
   namespace: string;
@@ -457,9 +461,54 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       showNamespaceColumn,
     ]);
 
-    const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
+    const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
+    const showNamespaceFilter = isAllNamespaces;
+    const [tableState, setTableState] = useState<{
+      filters: GridTableFilterState;
+      sortConfig: SortConfig | null;
+    }>({
+      filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+      sortConfig: { key: 'name', direction: 'asc' },
+    });
+    const handleTableStateChange = useCallback(
+      (next: { filters: GridTableFilterState; sortConfig: SortConfig | null }) => {
+        setTableState((previous) => {
+          if (
+            previous.sortConfig?.key === next.sortConfig?.key &&
+            previous.sortConfig?.direction === next.sortConfig?.direction &&
+            JSON.stringify(previous.filters) === JSON.stringify(next.filters)
+          ) {
+            return previous;
+          }
+          return next;
+        });
+      },
+      []
+    );
+    const podQueryPredicates = useMemo(
+      () => (activePodFilter ? { health: activePodFilter } : undefined),
+      [activePodFilter]
+    );
+    const selectPodRows = useCallback((payload: PodSnapshotPayload) => payload.pods ?? [], []);
+    const allNamespacesQuery = useAllNamespacesTypedQuery<PodSnapshotPayload, PodSnapshotEntry>({
+      enabled: isAllNamespaces,
+      clusterId: selectedClusterId,
+      domain: 'pods',
+      label: 'All Namespaces Pods',
+      filters: tableState.filters,
+      sortConfig: tableState.sortConfig,
+      predicates: podQueryPredicates,
+      selectRows: selectPodRows,
+    });
+    const tableData = isAllNamespaces ? allNamespacesQuery.rows : data;
+    const tableLoading = isAllNamespaces ? allNamespacesQuery.loading : loading;
+    const tableLoaded = isAllNamespaces ? allNamespacesQuery.loaded : loaded;
+    const tableError = isAllNamespaces ? (allNamespacesQuery.error ?? error) : error;
 
-    const unhealthyCount = useMemo(() => data.filter((pod) => isPodUnhealthy(pod)).length, [data]);
+    const unhealthyCount = useMemo(
+      () => tableData.filter((pod) => isPodUnhealthy(pod)).length,
+      [tableData]
+    );
 
     const handleToggleUnhealthy = useCallback(() => {
       setActivePodFilter((prev) => (prev ? null : 'unhealthy'));
@@ -472,7 +521,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
       const title = activePodFilter
         ? 'Show all pods'
-        : `Show unhealthy pods (${unhealthyCount}/${data.length})`;
+        : `Show unhealthy pods (${unhealthyCount}/${tableData.length})`;
 
       return {
         type: 'toggle',
@@ -483,7 +532,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         title,
         ariaLabel: title,
       };
-    }, [activePodFilter, data.length, handleToggleUnhealthy, unhealthyCount]);
+    }, [activePodFilter, handleToggleUnhealthy, tableData.length, unhealthyCount]);
 
     const transformSortedPods = useCallback(
       (sortedPods: PodSnapshotEntry[]) =>
@@ -499,10 +548,10 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     );
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<PodSnapshotEntry>({
-      tableMode: namespace === ALL_NAMESPACES_SCOPE ? 'Local Partial' : 'Local Complete',
+      tableMode: isAllNamespaces ? 'Query Backed Dynamic' : 'Local Complete',
       viewId: 'namespace-pods',
       namespace,
-      data,
+      data: tableData,
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
@@ -512,10 +561,31 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       showKindDropdown: false,
       showNamespaceFilters: showNamespaceFilter,
       getTrailingFilterActions,
-      transformSortedData: transformSortedPods,
+      transformSortedData: isAllNamespaces ? undefined : transformSortedPods,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
+      filterOptionOverrides: isAllNamespaces
+        ? {
+            ...allNamespacesQuery.filterOptions,
+          }
+        : undefined,
+      onTableStateChange: isAllNamespaces ? handleTableStateChange : undefined,
     });
     const displayedPods = gridTableProps.data;
+    const resolvedGridTableProps = useMemo(
+      () =>
+        isAllNamespaces
+          ? {
+              ...gridTableProps,
+              hasMore: Boolean(allNamespacesQuery.continueToken),
+              onRequestMore: () => allNamespacesQuery.loadMore(),
+              isRequestingMore: allNamespacesQuery.isRequestingMore,
+              loadMoreLabel: 'Next page',
+              showLoadMoreButton: true,
+              showPaginationStatus: true,
+            }
+          : gridTableProps,
+      [allNamespacesQuery, gridTableProps, isAllNamespaces]
+    );
 
     useEffect(() => {
       if (typeof window === 'undefined' || !selectedClusterId) {
@@ -531,7 +601,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         if (!request || request.scope !== namespace) {
           return;
         }
-        const matchingCount = data.filter((pod) => matchesPodsFilter(request.filter, pod)).length;
+        const matchingCount = tableData.filter((pod) =>
+          matchesPodsFilter(request.filter, pod)
+        ).length;
         if (matchingCount === 0) {
           return;
         }
@@ -563,7 +635,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         }
         applyPendingFilter({ scope, filter }, true);
       });
-    }, [data, namespace, selectedClusterId]);
+    }, [namespace, selectedClusterId, tableData]);
 
     const getContextMenuItems = useCallback(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {
@@ -597,7 +669,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
     return (
       <>
-        {error && <div className="namespace-error-message">{error}</div>}
+        {tableError && <div className="namespace-error-message">{tableError}</div>}
         {metricsBanner && (
           <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
             <span className="metrics-warning-banner__dot" />
@@ -605,9 +677,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           </div>
         )}
         <ResourceGridTableView
-          gridTableProps={gridTableProps}
-          boundaryLoading={loading}
-          loaded={loaded}
+          gridTableProps={resolvedGridTableProps}
+          boundaryLoading={tableLoading}
+          loaded={tableLoaded}
           spinnerMessage="Loading pods..."
           favModal={favModal}
           columns={columns}
@@ -615,14 +687,14 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods'
           }
           diagnosticsMode="live"
-          loading={loading && displayedPods.length === 0}
+          loading={tableLoading && displayedPods.length === 0}
           onRowClick={handlePodOpen}
           tableClassName={`gridtable-pods${showNamespaceColumn ? ' gridtable-pods--namespaced' : ''}`}
           enableContextMenu
           getCustomContextMenuItems={getContextMenuItems}
           emptyMessage={emptyMessage}
           loadingOverlay={{
-            show: Boolean(loading) && displayedPods.length > 0,
+            show: Boolean(tableLoading) && displayedPods.length > 0,
             message: 'Updating pods…',
           }}
         />

@@ -66,9 +66,14 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   filterAccessors?: GridTableFilterConfig<T>['accessors'];
   leadingFilterActions?: IconBarItem[];
   filterOptions?: GridTableFilterPersistenceOptions;
+  filterOptionOverrides?: Partial<GridTableFilterOptions>;
   kindDropdownBulkActions?: boolean;
   kindDropdownSearchable?: boolean;
   metadataSearch?: ResourceGridMetadataSearchParams<T>;
+  onTableStateChange?: (state: {
+    filters: GridTableFilterState;
+    sortConfig: SortConfig | null;
+  }) => void;
   persistenceData?: T[];
   rowIdentity?: (item: T, index: number) => string;
   showKindDropdown?: boolean;

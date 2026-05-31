@@ -24,6 +24,7 @@ const {
   useUserPermissionsMock,
   runObjectActionMock,
   errorHandlerMock,
+  requestRefreshDomainStateMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   confirmationPropsRef: { current: null as any },
@@ -38,6 +39,7 @@ const {
   useUserPermissionsMock: vi.fn(),
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
+  requestRefreshDomainStateMock: vi.fn(),
 }));
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
@@ -159,6 +161,10 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   },
 }));
 
+vi.mock('@/core/data-access', () => ({
+  requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...(args as [])),
+}));
+
 vi.mock('@wailsjs/go/backend/App', () => ({
   RunObjectAction: (...args: unknown[]) => runObjectActionMock(...(args as [])),
 }));
@@ -225,6 +231,7 @@ describe('NsViewPods', () => {
     openWithObjectMock.mockReset();
     navigateToViewMock.mockReset();
     runObjectActionMock.mockClear();
+    requestRefreshDomainStateMock.mockReset();
     useTableSortMock.mockReset();
     useUserPermissionsMock.mockReset();
     errorHandlerMock.handle.mockClear();
@@ -242,6 +249,10 @@ describe('NsViewPods', () => {
       ])
     );
     clusterMetricsMock.current = null;
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: { pods: [] } },
+    });
   });
 
   afterEach(() => {
@@ -673,6 +684,17 @@ describe('NsViewPods', () => {
         ready: '0/1',
       }),
     ];
+    requestRefreshDomainStateMock.mockImplementation(({ scope }: { scope: string }) =>
+      Promise.resolve({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            pods: scope.includes('predicate.health=unhealthy') ? [pods[1]] : pods,
+          },
+        },
+      })
+    );
 
     await renderPods({
       namespace: ALL_NAMESPACES_SCOPE,
@@ -680,11 +702,12 @@ describe('NsViewPods', () => {
       showNamespaceColumn: true,
     });
 
-    act(() => {
+    await act(async () => {
       eventBus.emit('pods:show-unhealthy', {
         clusterId: 'alpha:ctx',
         scope: ALL_NAMESPACES_SCOPE,
       });
+      await Promise.resolve();
     });
 
     expect(gridTablePropsRef.current.data).toEqual([pods[1]]);

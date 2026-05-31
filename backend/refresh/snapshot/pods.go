@@ -35,8 +35,13 @@ type PodBuilder struct {
 // PodSnapshot is the payload for the pods domain.
 type PodSnapshot struct {
 	ClusterMeta
-	Pods    []PodSummary   `json:"pods"`
-	Metrics PodMetricsInfo `json:"metrics"`
+	Pods         []PodSummary   `json:"pods"`
+	Metrics      PodMetricsInfo `json:"metrics"`
+	Continue     string         `json:"continue,omitempty"`
+	Total        int            `json:"total,omitempty"`
+	TotalIsExact bool           `json:"totalIsExact"`
+	Namespaces   []string       `json:"namespaces,omitempty"`
+	Kinds        []string       `json:"kinds,omitempty"`
 }
 
 // PodSummary captures essential pod information for UI tables.
@@ -109,16 +114,24 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		return nil, fmt.Errorf("pods scope is required")
 	}
 
-	pods, err := b.collectPods(trimmed)
-	if err != nil {
-		return nil, err
-	}
-
 	podUsage := map[string]metrics.PodUsage{}
 	var metadata metrics.Metadata
 	if b.metrics != nil {
 		podUsage = b.metrics.LatestPodUsage()
 		metadata = b.metrics.Metadata()
+	}
+	dynamicRevision := ""
+	if !metadata.CollectedAt.IsZero() {
+		dynamicRevision = strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10)
+	}
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, trimmed, podDomainName, dynamicRevision)
+	if err != nil {
+		return nil, err
+	}
+
+	pods, err := b.collectPods(baseScope)
+	if err != nil {
+		return nil, err
 	}
 
 	rsMap, err := b.replicasetDeploymentMap(pods)
@@ -139,12 +152,14 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		}
 	}
 
-	sort.Slice(summaries, func(i, j int) bool {
-		if summaries[i].Namespace == summaries[j].Namespace {
-			return summaries[i].Name < summaries[j].Name
-		}
-		return summaries[i].Namespace < summaries[j].Namespace
-	})
+	if !query.Enabled {
+		sort.Slice(summaries, func(i, j int) bool {
+			if summaries[i].Namespace == summaries[j].Namespace {
+				return summaries[i].Name < summaries[j].Name
+			}
+			return summaries[i].Namespace < summaries[j].Namespace
+		})
+	}
 
 	metricsInfo := PodMetricsInfo{Stale: true}
 	if !metadata.CollectedAt.IsZero() {
@@ -158,17 +173,120 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	metricsInfo.SuccessCount = metadata.SuccessCount
 	metricsInfo.FailureCount = metadata.FailureCount
 
+	page := applyTypedTableQuery(summaries, query, podTableQueryAdapter())
 	snapshot := &refresh.Snapshot{
 		Domain:  podDomainName,
 		Scope:   refresh.JoinClusterScope(clusterID, trimmed),
 		Version: version,
-		Payload: PodSnapshot{ClusterMeta: meta, Pods: summaries, Metrics: metricsInfo},
+		Payload: PodSnapshot{
+			ClusterMeta:  meta,
+			Pods:         page.Rows,
+			Metrics:      metricsInfo,
+			Continue:     page.Continue,
+			Total:        page.Total,
+			TotalIsExact: page.TotalIsExact,
+			Namespaces:   page.Namespaces,
+			Kinds:        page.Kinds,
+		},
 		Stats: refresh.SnapshotStats{
-			ItemCount: len(summaries),
+			ItemCount: len(page.Rows),
 		},
 	}
 
 	return snapshot, nil
+}
+
+func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
+	return typedTableQueryAdapter[PodSummary]{
+		Key: func(pod PodSummary) string {
+			return fmt.Sprintf("%s/%s", strings.ToLower(pod.Namespace), strings.ToLower(pod.Name))
+		},
+		Namespace: func(pod PodSummary) string { return pod.Namespace },
+		Kind:      func(PodSummary) string { return "Pod" },
+		SearchText: func(pod PodSummary) []string {
+			return []string{
+				pod.Name,
+				pod.Namespace,
+				pod.Status,
+				pod.Ready,
+				pod.OwnerKind,
+				pod.OwnerName,
+				pod.Node,
+			}
+		},
+		Predicate: func(pod PodSummary, field, value string) bool {
+			switch strings.ToLower(strings.TrimSpace(field)) {
+			case "health":
+				switch strings.ToLower(strings.TrimSpace(value)) {
+				case "restarts":
+					return pod.Restarts > 0
+				case "not-ready":
+					ready, total, ok := parseReadyPair(pod.Ready)
+					status := strings.ToLower(strings.TrimSpace(pod.Status))
+					return ok && total > 0 && ready < total && status != "completed"
+				case "unhealthy":
+					presentation := strings.ToLower(strings.TrimSpace(pod.StatusPresentation))
+					return presentation == "warning" || presentation == "error" || presentation == "not-ready" || presentation == "terminating"
+				default:
+					return true
+				}
+			default:
+				return true
+			}
+		},
+		SortValue: func(pod PodSummary, field string) string {
+			switch strings.ToLower(field) {
+			case "namespace":
+				return pod.Namespace
+			case "status":
+				return pod.Status
+			case "ready":
+				return pod.Ready
+			case "restarts":
+				return strconv.Itoa(int(pod.Restarts))
+			case "owner":
+				return pod.OwnerName
+			case "node":
+				return pod.Node
+			case "cpu":
+				return pod.CPUUsage
+			case "memory":
+				return pod.MemUsage
+			case "age":
+				return pod.Age
+			default:
+				return pod.Name
+			}
+		},
+		NumericSort: func(pod PodSummary, field string) (float64, bool) {
+			switch strings.ToLower(field) {
+			case "cpu":
+				return parseFormattedCPUToMilli(pod.CPUUsage)
+			case "memory":
+				return parseFormattedMemoryToBytes(pod.MemUsage)
+			case "restarts":
+				return float64(pod.Restarts), true
+			case "ready":
+				ready, total, ok := parseReadyPair(pod.Ready)
+				return float64(ready*1000000 + total), ok
+			default:
+				return 0, false
+			}
+		},
+	}
+}
+
+func parseReadyPair(value string) (int, int, bool) {
+	parts := strings.Split(strings.TrimSpace(value), "/")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	ready, readyErr := strconv.Atoi(strings.TrimSpace(parts[0]))
+	total, totalErr := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if readyErr != nil || totalErr != nil {
+		return 0, 0, false
+	}
+	return ready, total, true
 }
 
 func (b *PodBuilder) collectPods(scope string) ([]*corev1.Pod, error) {
