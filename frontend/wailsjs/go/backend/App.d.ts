@@ -121,6 +121,8 @@ export function GetHelmValues(arg1:string,arg2:string,arg3:string):Promise<Recor
 
 export function GetHorizontalPodAutoscaler(arg1:string,arg2:string,arg3:string):Promise<types.HorizontalPodAutoscalerDetails>;
 
+export function HydrateCatalogCustomRows(arg1:string,arg2:Array<any>):Promise<Array<any>>;
+
 export function GetIngress(arg1:string,arg2:string,arg3:string):Promise<types.IngressDetails>;
 
 export function GetIngressClass(arg1:string,arg2:string):Promise<types.IngressClassDetails>;

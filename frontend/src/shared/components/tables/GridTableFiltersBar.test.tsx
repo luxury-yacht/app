@@ -249,6 +249,18 @@ describe('GridTableFiltersBar', () => {
     ).toBeNull();
   });
 
+  it('hides the case-sensitive toggle for query-backed search', async () => {
+    await renderFilters({
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [],
+        searchBehavior: 'query',
+      },
+    });
+
+    expect(container.querySelector('.icon-bar-button[title="Match case"]')).toBeNull();
+  });
+
   it('marks approximate backend totals with visible copy', async () => {
     vi.useFakeTimers();
     await renderFilters({

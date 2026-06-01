@@ -15,6 +15,10 @@ import (
 	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
 )
 
@@ -562,6 +566,84 @@ func (a *App) ExportCatalogQueryCSV(
 		SortField:     sortField,
 		SortDirection: sortDirection,
 	})
+}
+
+// HydrateCatalogCustomRows fetches rich custom-resource row facts for the
+// current catalog page. It intentionally works only on caller-provided page
+// rows so production Custom tables keep catalog-backed paging without starting
+// the legacy full CRD fanout domains.
+func (a *App) HydrateCatalogCustomRows(clusterID string, rows []snapshot.ResourceQueryRow) ([]snapshot.CustomResourceSummary, error) {
+	if a == nil {
+		return nil, fmt.Errorf("app is not initialised")
+	}
+	trimmedClusterID := strings.TrimSpace(clusterID)
+	if trimmedClusterID == "" {
+		return nil, fmt.Errorf("cluster ID is required")
+	}
+	clients := a.clusterClientsForID(trimmedClusterID)
+	if clients == nil || clients.dynamicClient == nil {
+		return nil, fmt.Errorf("dynamic client unavailable for cluster %q", trimmedClusterID)
+	}
+	meta := snapshot.ClusterMeta{ClusterID: clients.meta.ID, ClusterName: clients.meta.Name}
+	result := make([]snapshot.CustomResourceSummary, 0, len(rows))
+	for _, row := range rows {
+		if row.ClusterID != "" && row.ClusterID != trimmedClusterID {
+			return nil, fmt.Errorf("row clusterId %q does not match request clusterId %q", row.ClusterID, trimmedClusterID)
+		}
+		if strings.TrimSpace(row.Kind) == "" || strings.TrimSpace(row.Version) == "" || strings.TrimSpace(row.Resource) == "" {
+			return nil, fmt.Errorf("custom row %q is missing kind, version, or resource", row.Name)
+		}
+		gvr := schema.GroupVersionResource{
+			Group:    strings.TrimSpace(row.Group),
+			Version:  strings.TrimSpace(row.Version),
+			Resource: strings.TrimSpace(row.Resource),
+		}
+		name := strings.TrimSpace(row.Name)
+		if name == "" {
+			return nil, fmt.Errorf("custom row is missing name")
+		}
+		resource := clients.dynamicClient.Resource(gvr)
+		var (
+			obj *unstructured.Unstructured
+			err error
+		)
+		if namespace := strings.TrimSpace(row.Namespace); namespace != "" {
+			obj, err = resource.Namespace(namespace).Get(context.Background(), name, metav1.GetOptions{})
+		} else {
+			obj, err = resource.Get(context.Background(), name, metav1.GetOptions{})
+		}
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return nil, fmt.Errorf("hydrate custom row %s/%s/%s: %w", gvr.String(), row.Namespace, name, err)
+		}
+		crdName := row.Resource
+		if row.Group != "" {
+			crdName = row.Resource + "." + row.Group
+		}
+		if row.Namespace != "" {
+			result = append(result, snapshot.CustomResourceSummaryFromNamespace(snapshot.BuildNamespaceCustomSummary(
+				meta,
+				obj,
+				row.Group,
+				row.Version,
+				row.Kind,
+				crdName,
+				row.Namespace,
+			)))
+			continue
+		}
+		result = append(result, snapshot.CustomResourceSummaryFromCluster(snapshot.BuildClusterCustomSummary(
+			meta,
+			obj,
+			row.Group,
+			row.Version,
+			row.Kind,
+			crdName,
+		)))
+	}
+	return result, nil
 }
 
 const catalogQueryBulkActionPageLimit = 100

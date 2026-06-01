@@ -93,6 +93,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const hasActiveFilters = hasNonDefaultGridTableFilters(activeFilters);
+  const showCaseSensitiveToggle = resolvedFilterOptions.searchBehavior !== 'query';
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
@@ -125,16 +126,17 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         title: 'Reset filters',
         disabled: !hasActiveFilters,
       },
-      // Case-sensitive toggle is built into the filter bar so every view gets it.
-      {
+    ];
+    if (showCaseSensitiveToggle) {
+      items.push({
         type: 'toggle',
         id: 'case-sensitive',
         icon: <CaseSensitiveIcon width={18} height={18} />,
         active: activeFilters.caseSensitive,
         onClick: onToggleCaseSensitive,
         title: 'Match case',
-      },
-    ];
+      });
+    }
     if (preActions && preActions.length > 0) {
       items.push(...preActions);
     }
@@ -148,6 +150,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     hasActiveFilters,
     activeFilters.caseSensitive,
     onToggleCaseSensitive,
+    showCaseSensitiveToggle,
     preActions,
     postActions,
   ]);

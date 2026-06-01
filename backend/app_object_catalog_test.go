@@ -14,6 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic/fake"
 	informers "k8s.io/client-go/informers"
 	cgofake "k8s.io/client-go/kubernetes/fake"
 )
@@ -283,6 +288,75 @@ func TestExportCatalogQueryCSVUsesClusterScopedCatalog(t *testing.T) {
 			"cluster-b,Deployment,apps,alpha,apps,v1,deployments,alpha-uid\n",
 		csvText,
 	)
+}
+
+func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
+	clusterID := "cluster-b"
+	gvrObject := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "example.com/v1",
+			"kind":       "Widget",
+			"status": map[string]any{
+				"phase":              "Ready",
+				"ready":              true,
+				"observedGeneration": int64(7),
+				"conditions": []any{
+					map[string]any{
+						"type":    "Ready",
+						"status":  "True",
+						"reason":  "Reconciled",
+						"message": "ready",
+					},
+				},
+			},
+		},
+	}
+	gvrObject.SetName("alpha")
+	gvrObject.SetNamespace("apps")
+	gvrObject.SetUID(types.UID("alpha-uid"))
+	gvrObject.SetResourceVersion("12")
+	gvrObject.SetCreationTimestamp(metav1.Now())
+	gvrObject.SetLabels(map[string]string{"env": "prod"})
+	gvrObject.SetAnnotations(map[string]string{"owner": "platform"})
+
+	app := NewApp()
+	app.clusterClients[clusterID] = &clusterClients{
+		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
+		dynamicClient: fake.NewSimpleDynamicClient(runtime.NewScheme(), gvrObject),
+	}
+
+	rows, err := app.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
+		{
+			ClusterID: clusterID,
+			Group:     "example.com",
+			Version:   "v1",
+			Kind:      "Widget",
+			Resource:  "widgets",
+			Namespace: "apps",
+			Name:      "alpha",
+			UID:       "alpha-uid",
+		},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, clusterID, rows[0].ClusterID)
+	require.Equal(t, "Cluster B", rows[0].ClusterName)
+	require.Equal(t, "Widget", rows[0].Kind)
+	require.Equal(t, "apps", rows[0].Namespace)
+	require.Equal(t, "example.com", rows[0].APIGroup)
+	require.Equal(t, "v1", rows[0].APIVersion)
+	require.Equal(t, "widgets.example.com", rows[0].CRDName)
+	require.Equal(t, "Ready", rows[0].Status)
+	require.Equal(t, "ready", rows[0].StatusPresentation)
+	require.Equal(t, map[string]string{"env": "prod"}, rows[0].Labels)
+	require.Equal(t, map[string]string{"owner": "platform"}, rows[0].Annotations)
+	require.NotNil(t, rows[0].Ready)
+	require.True(t, *rows[0].Ready)
+	require.NotNil(t, rows[0].ObservedGeneration)
+	require.EqualValues(t, 7, *rows[0].ObservedGeneration)
+	require.Len(t, rows[0].Conditions, 1)
+	require.Equal(t, "Ready", rows[0].Conditions[0].Type)
 }
 
 func TestRunCatalogQueryBulkActionRequiresConfirmationAndSupportsDryRun(t *testing.T) {

@@ -469,6 +469,62 @@ func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T)
 	require.Empty(t, nextPayload.Continue)
 }
 
+func TestPodBuilderAllNamespacesMetricCursorContinuesAcrossMetricsRefresh(t *testing.T) {
+	now := time.Now()
+	pods := []*corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "bravo",
+				Namespace:         "team-b",
+				ResourceVersion:   "25",
+				CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "charlie",
+				Namespace:         "team-b",
+				ResourceVersion:   "26",
+				CreationTimestamp: metav1.NewTime(now.Add(-5 * time.Minute)),
+			},
+		},
+	}
+
+	builder := &PodBuilder{
+		podLister: testsupport.NewPodLister(t, pods...),
+		rsLister:  testsupport.NewReplicaSetLister(t),
+		metrics: fakePodMetricsProvider{
+			usage: map[string]metrics.PodUsage{
+				"team-b/bravo":   {CPUUsageMilli: 300},
+				"team-b/charlie": {CPUUsageMilli: 100},
+			},
+			metadata: metrics.Metadata{CollectedAt: now},
+		},
+	}
+
+	first, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=cpu&sortDirection=desc&limit=1")
+	require.NoError(t, err)
+	firstPayload := first.Payload.(PodSnapshot)
+	require.Len(t, firstPayload.Pods, 1)
+	require.Equal(t, "bravo", firstPayload.Pods[0].Name)
+	require.NotEmpty(t, firstPayload.Continue)
+
+	builder.metrics = fakePodMetricsProvider{
+		usage: map[string]metrics.PodUsage{
+			"team-b/bravo":   {CPUUsageMilli: 320},
+			"team-b/charlie": {CPUUsageMilli: 110},
+		},
+		metadata: metrics.Metadata{CollectedAt: now.Add(5 * time.Second)},
+	}
+
+	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=cpu&sortDirection=desc&limit=1&continue="+firstPayload.Continue)
+	require.NoError(t, err)
+	nextPayload := next.Payload.(PodSnapshot)
+	require.Len(t, nextPayload.Pods, 1)
+	require.Equal(t, "charlie", nextPayload.Pods[0].Name)
+	require.Empty(t, nextPayload.Continue)
+}
+
 func boolPtr(v bool) *bool {
 	return &v
 }

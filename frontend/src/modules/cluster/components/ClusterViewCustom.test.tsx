@@ -9,6 +9,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
+import type { CatalogItem } from '@/core/refresh/types';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -36,6 +37,8 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 const gridTablePropsRef: { current: any } = { current: null };
 const openWithObjectMock = vi.fn();
 const runObjectActionMock = vi.fn();
+const useBrowseCatalogMock = vi.hoisted(() => vi.fn());
+const useHydratedCustomCatalogRowsMock = vi.hoisted(() => vi.fn());
 const modalProps: { current: any } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -94,6 +97,14 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
   }),
 }));
 
+vi.mock('@modules/browse/hooks/useBrowseCatalog', () => ({
+  useBrowseCatalog: (...args: unknown[]) => useBrowseCatalogMock(...args),
+}));
+
+vi.mock('@modules/browse/hooks/useHydratedCustomCatalogRows', () => ({
+  useHydratedCustomCatalogRows: (...args: unknown[]) => useHydratedCustomCatalogRowsMock(...args),
+}));
+
 vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => false,
 }));
@@ -142,6 +153,71 @@ const baseCustom = {
   annotations: { owner: 'custom-team' },
 };
 
+const browseCatalogResult = (items: CatalogItem[] = []) => ({
+  items,
+  loading: false,
+  hasLoadedOnce: true,
+  filterOptions: {
+    kinds: [],
+    namespaces: [],
+  },
+  totalCount: items.length,
+  totalIsExact: true,
+  queryDescriptor: {
+    clusterId: 'cluster-a',
+    namespaces: ['cluster'],
+    kinds: [],
+    search: '',
+    sortField: 'name',
+    sortDirection: 'asc',
+    scope: 'cluster-a|customOnly=true&limit=1000&namespace=cluster&sort=name&sortDirection=asc',
+    customOnly: true,
+  },
+  queryPending: false,
+});
+
+const catalogItemFromCustom = (
+  resource: {
+    kind: string;
+    name: string;
+    apiGroup?: string;
+    apiVersion?: string;
+    age?: string;
+    clusterId: string;
+    clusterName?: string;
+    status?: string;
+  },
+  overrides: Partial<CatalogItem> = {}
+): CatalogItem => ({
+  kind: resource.kind,
+  group: resource.apiGroup ?? '',
+  version: resource.apiVersion ?? '',
+  resource: 'widgets',
+  name: resource.name,
+  uid: `${resource.name}-uid`,
+  resourceVersion: '1',
+  creationTimestamp: resource.age ?? '',
+  scope: 'Cluster',
+  clusterId: resource.clusterId,
+  clusterName: resource.clusterName,
+  actionFacts: resource.status ? { status: resource.status } : undefined,
+  ...overrides,
+});
+
+const catalogItemToClusterCustomData = (item: CatalogItem) => ({
+  kind: item.kind,
+  kindAlias: item.kind,
+  name: item.name,
+  clusterId: item.clusterId,
+  clusterName: item.clusterName,
+  apiGroup: item.group,
+  apiVersion: item.version,
+  crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
+  status: item.actionFacts?.status,
+  statusPresentation: item.actionFacts?.status,
+  age: item.creationTimestamp,
+});
+
 describe('ClusterViewCustom', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -158,6 +234,12 @@ describe('ClusterViewCustom', () => {
     modalProps.current = null;
     openWithObjectMock.mockReset();
     runObjectActionMock.mockReset();
+    useBrowseCatalogMock.mockReset();
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult());
+    useHydratedCustomCatalogRowsMock.mockReset();
+    useHydratedCustomCatalogRowsMock.mockImplementation(
+      (_clusterId: string, items: CatalogItem[]) => items.map(catalogItemToClusterCustomData)
+    );
   });
 
   afterEach(() => {
@@ -168,6 +250,8 @@ describe('ClusterViewCustom', () => {
   });
 
   it('passes metadata to the object panel when opening a resource', async () => {
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
+
     await act(async () => {
       root.render(<ClusterViewCustom data={[baseCustom]} loaded={true} />);
       await Promise.resolve();
@@ -175,16 +259,26 @@ describe('ClusterViewCustom', () => {
 
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
+    expect(props.data).toEqual([
+      expect.objectContaining({
+        kind: 'Widget',
+        name: 'gizmo',
+        clusterId: 'alpha:ctx',
+        apiGroup: 'example.com',
+        apiVersion: 'v1',
+        crdName: 'widgets.example.com',
+      }),
+    ]);
 
-    props.getCustomContextMenuItems(baseCustom, 'kind')[0].onClick();
+    props.getCustomContextMenuItems(props.data[0], 'kind')[0].onClick();
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'Widget',
         name: 'gizmo',
         age: '1d',
-        labels: { env: 'prod' },
-        annotations: { owner: 'custom-team' },
         clusterId: 'alpha:ctx',
+        group: 'example.com',
+        version: 'v1',
       })
     );
   });
@@ -205,22 +299,54 @@ describe('ClusterViewCustom', () => {
     expect(props?.filters?.options?.showKindDropdown).toBe(true);
     expect(props?.filters?.options?.kindDropdownSearchable).toBe(true);
     expect(props?.filters?.options?.kindDropdownBulkActions).toBe(true);
+    expect(
+      props?.filters?.options?.postActions?.some(
+        (item: any) => item.id === 'copy-cluster-custom-query-csv'
+      )
+    ).toBe(true);
   });
 
-  it('uses the provided kind metadata instead of deriving kinds from loaded rows', async () => {
+  it('uses catalog facet metadata instead of deriving kinds from loaded rows', async () => {
+    useBrowseCatalogMock.mockReturnValue({
+      ...browseCatalogResult(),
+      filterOptions: { kinds: ['DBCluster', 'Widget'], namespaces: [] },
+    });
+
     await act(async () => {
-      root.render(
-        <ClusterViewCustom
-          data={[baseCustom]}
-          availableKinds={['DBCluster', 'Widget']}
-          loaded={true}
-        />
-      );
+      root.render(<ClusterViewCustom data={[baseCustom]} loaded={true} />);
       await Promise.resolve();
     });
 
     const props = gridTablePropsRef.current;
     expect(props?.filters?.options?.kinds).toEqual(['DBCluster', 'Widget']);
+  });
+
+  it('renders hydrated custom-resource status and metadata for the current page', async () => {
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
+    useHydratedCustomCatalogRowsMock.mockReturnValue([
+      {
+        ...baseCustom,
+        crdName: 'widgets.example.com',
+        status: 'Ready',
+        statusState: 'Ready',
+        statusPresentation: 'ready',
+      },
+    ]);
+
+    await act(async () => {
+      root.render(<ClusterViewCustom data={[]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props?.data?.[0]).toEqual(
+      expect.objectContaining({
+        status: 'Ready',
+        statusPresentation: 'ready',
+        labels: { env: 'prod' },
+        annotations: { owner: 'custom-team' },
+      })
+    );
   });
 
   // Regression test mirroring NsViewCustom's colliding-CRD guardrail.

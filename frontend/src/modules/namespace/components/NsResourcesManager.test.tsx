@@ -131,8 +131,6 @@ describe('NamespaceResourcesManager', () => {
     resourceStates.quotas.meta = {
       kinds: ['LimitRange', 'PodDisruptionBudget', 'ResourceQuota'],
     };
-    resourceStates.custom.meta = { kinds: ['DBCluster', 'Widget'] };
-
     await renderManager('network');
     expect(setActiveResourceTypeMock).toHaveBeenCalledWith('network');
 
@@ -151,7 +149,8 @@ describe('NamespaceResourcesManager', () => {
     expect(props.nsRBACKinds).toEqual(['Role', 'RoleBinding', 'ServiceAccount']);
     expect(props.nsAutoscalingKinds).toEqual(['HorizontalPodAutoscaler']);
     expect(props.nsQuotasKinds).toEqual(['LimitRange', 'PodDisruptionBudget', 'ResourceQuota']);
-    expect(props.nsCustomKinds).toEqual(['DBCluster', 'Widget']);
+    expect(props.nsCustom).toEqual([]);
+    expect(props.nsCustomKinds).toBeUndefined();
   });
 
   it('cancels outstanding resource operations on unmount', async () => {

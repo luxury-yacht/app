@@ -1461,6 +1461,99 @@ func TestNamespaceWorkloadsBuilderAllNamespacesQuerySortsFiltersAndPagesByMetric
 	require.Empty(t, nextPayload.Continue)
 }
 
+func TestNamespaceWorkloadsBuilderMetricCursorContinuesAcrossMetricsRefresh(t *testing.T) {
+	now := time.Now()
+	replicas := int32(1)
+	deployments := []*appsv1.Deployment{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "bravo",
+				Namespace:         "team-b",
+				ResourceVersion:   "102",
+				CreationTimestamp: metav1.NewTime(now.Add(-20 * time.Minute)),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "bravo"}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "charlie",
+				Namespace:         "team-b",
+				ResourceVersion:   "103",
+				CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "charlie"}},
+			},
+		},
+	}
+	ownerController := true
+	pods := []*corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "bravo-pod",
+				Namespace: "team-b",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "Deployment",
+					Name:       "bravo",
+					Controller: &ownerController,
+				}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "charlie-pod",
+				Namespace: "team-b",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "Deployment",
+					Name:       "charlie",
+					Controller: &ownerController,
+				}},
+			},
+		},
+	}
+
+	provider := &workloadMetricsProvider{
+		pods: map[string]metrics.PodUsage{
+			"team-b/bravo-pod":   {MemoryUsageBytes: 512 * 1024 * 1024},
+			"team-b/charlie-pod": {MemoryUsageBytes: 128 * 1024 * 1024},
+		},
+		metadata: metrics.Metadata{CollectedAt: now},
+	}
+	builder := &NamespaceWorkloadsBuilder{
+		podLister:        testsupport.NewPodLister(t, pods...),
+		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
+		statefulLister:   testsupport.NewStatefulSetLister(t),
+		daemonLister:     testsupport.NewDaemonSetLister(t),
+		jobLister:        testsupport.NewJobLister(t),
+		cronJobLister:    testsupport.NewCronJobLister(t),
+		metrics:          provider,
+	}
+
+	first, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=memory&sortDirection=desc&limit=1")
+	require.NoError(t, err)
+	firstPayload := first.Payload.(NamespaceWorkloadsSnapshot)
+	require.Len(t, firstPayload.Workloads, 1)
+	require.Equal(t, "bravo", firstPayload.Workloads[0].Name)
+	require.NotEmpty(t, firstPayload.Continue)
+
+	provider.pods = map[string]metrics.PodUsage{
+		"team-b/bravo-pod":   {MemoryUsageBytes: 640 * 1024 * 1024},
+		"team-b/charlie-pod": {MemoryUsageBytes: 256 * 1024 * 1024},
+	}
+	provider.metadata = metrics.Metadata{CollectedAt: now.Add(5 * time.Second)}
+
+	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=memory&sortDirection=desc&limit=1&continue="+firstPayload.Continue)
+	require.NoError(t, err)
+	nextPayload := next.Payload.(NamespaceWorkloadsSnapshot)
+	require.Len(t, nextPayload.Workloads, 1)
+	require.Equal(t, "charlie", nextPayload.Workloads[0].Name)
+	require.Empty(t, nextPayload.Continue)
+}
+
 func mustQuantity(t testing.TB, value string) resource.Quantity {
 	t.Helper()
 	q, err := resource.ParseQuantity(value)
@@ -1480,7 +1573,8 @@ func findNetworkSummary(resources []NetworkSummary, kind, name string) (NetworkS
 }
 
 type workloadMetricsProvider struct {
-	pods map[string]metrics.PodUsage
+	pods     map[string]metrics.PodUsage
+	metadata metrics.Metadata
 }
 
 func (f *workloadMetricsProvider) LatestNodeUsage() map[string]metrics.NodeUsage {
@@ -1492,5 +1586,5 @@ func (f *workloadMetricsProvider) LatestPodUsage() map[string]metrics.PodUsage {
 }
 
 func (f *workloadMetricsProvider) Metadata() metrics.Metadata {
-	return metrics.Metadata{}
+	return f.metadata
 }

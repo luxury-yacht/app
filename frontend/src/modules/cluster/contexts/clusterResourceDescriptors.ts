@@ -54,14 +54,6 @@ export const clusterResourceDescriptors = {
     fallback: [],
     select: (payload, clusterId) => selectClusterRows(payload?.definitions, clusterId),
   },
-  custom: {
-    resourceKey: 'custom',
-    domain: 'cluster-custom',
-    scopeKind: 'cluster',
-    fallback: [],
-    select: (payload, clusterId) => selectClusterRows(payload?.resources, clusterId),
-    meta: resourceKindsMeta,
-  },
   events: {
     resourceKey: 'events',
     domain: 'cluster-events',

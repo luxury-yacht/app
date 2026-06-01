@@ -21,7 +21,8 @@ import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
-import type { CatalogItem } from '@/core/refresh/types';
+import { useHydratedCustomCatalogRows } from '@modules/browse/hooks/useHydratedCustomCatalogRows';
+import { useCatalogQueryCsvAction } from '@modules/browse/hooks/useCatalogQueryCsvAction';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -42,9 +43,9 @@ interface ClusterCustomData {
   apiVersion?: string;
   /**
    * Canonical CRD name (`<plural>.<group>`) for the CustomResourceDefinition
-   * that defines this resource's Kind. Threaded from the backend
-   * ClusterCustomSummary so the CRD column can render a clickable cell
-   * that opens the owning CRD in the object panel.
+   * that defines this resource's Kind. Derived from catalog GVR/resource
+   * metadata so the CRD column can render a clickable cell that opens the
+   * owning CRD in the object panel.
    */
   crdName?: string;
   status?: string;
@@ -72,26 +73,12 @@ interface ClusterCustomViewProps {
   error?: string | null;
 }
 
-const catalogItemToClusterCustomData = (item: CatalogItem): ClusterCustomData => ({
-  kind: item.kind,
-  kindAlias: item.kind,
-  name: item.name,
-  clusterId: item.clusterId,
-  clusterName: item.clusterName,
-  apiGroup: item.group,
-  apiVersion: item.version,
-  crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
-  status: item.actionFacts?.status ?? 'Unknown',
-  statusPresentation: item.actionFacts?.status,
-  age: item.creationTimestamp,
-});
-
 /**
  * GridTable component for cluster custom resources
  * Displays various custom resources in the cluster
  */
 const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
-  ({ data, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
+  ({ loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -301,6 +288,8 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       filterOptions: catalogFilterOptions,
       totalCount,
       totalIsExact,
+      queryDescriptor,
+      queryPending,
     } = useBrowseCatalog({
       clusterId: selectedClusterId,
       pinnedNamespaces: [],
@@ -315,12 +304,16 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       diagnosticLabel: 'Cluster Custom',
     });
 
-    const rows = useMemo(() => {
-      if (!catalogLoaded && catalogItems.length === 0 && data.length > 0) {
-        return data;
-      }
-      return catalogItems.map(catalogItemToClusterCustomData);
-    }, [catalogItems, catalogLoaded, data]);
+    const rows = useHydratedCustomCatalogRows(
+      selectedClusterId,
+      catalogItems
+    ) as ClusterCustomData[];
+    const copyAllMatchingCsvAction = useCatalogQueryCsvAction({
+      query: queryDescriptor,
+      totalCount,
+      pending: queryPending,
+      id: 'copy-cluster-custom-query-csv',
+    });
 
     const { gridTableProps, favModal } = useQueryResourceGridTable<ClusterCustomData>({
       tableMode: 'Query Backed Static',
@@ -333,14 +326,14 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       diagnosticsLabel: 'Cluster Custom',
       filterOptions: {
         searchBehavior: 'query',
-        kinds:
-          catalogFilterOptions.kinds.length > 0 ? catalogFilterOptions.kinds : (kindOptions ?? []),
+        kinds: catalogFilterOptions.kinds,
         namespaces: undefined,
         showKindDropdown: true,
         kindDropdownSearchable: true,
         kindDropdownBulkActions: true,
         totalCount,
         totalIsExact,
+        postActions: [copyAllMatchingCsvAction],
       },
     });
 

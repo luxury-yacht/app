@@ -52,6 +52,10 @@ Producer: `backend/objectcatalog.Service.Query` owns Browse filtering, search,
 sort, page limits, cursor validation, totals, and facets. Cursor tokens are
 bound to `clusterId`, query signature, backend sort contract, page direction,
 page limit, cursor version, and the last row's stable sort/tie-breaker values.
+Namespace and kind filters use the catalog query index. Default, search-only,
+and sort-only catalog queries may still stream over all catalog chunks as an
+O(N) CPU scan, but they feed a bounded page buffer and exact-metadata budget
+instead of collecting the full result set in memory.
 
 Snapshot boundary: `backend/refresh/snapshot/catalog.go` parses the refresh
 scope into catalog query options and emits `CatalogSnapshot` payloads with full
@@ -67,8 +71,9 @@ cursor.
 Consumers: `BrowseView` renders a `Query Backed Static` resource-grid table.
 Favorites persist query-backed filter and sort state. Object actions receive
 concrete visible-row refs with `clusterId`, group, version, kind, namespace,
-and name. CSV export is visible/current-page only until a backend query-wide
-export operation exists.
+and name. Query-wide CSV export and guarded query-wide bulk delete execute in
+the backend against a query descriptor; visible-row actions continue to use
+concrete refs.
 
 ## Table Modes
 
@@ -121,23 +126,30 @@ Pods: `backend/refresh/snapshot/pods.go` feeds namespace and all-namespaces pod
 tables. It carries pod identity, status, restart, readiness, node, owner, and
 metrics projection state. All-namespaces Pods are `Query Backed Dynamic`:
 search, namespace filters, health predicates, pagination, and CPU/memory sort
-are backend-owned for the current metrics snapshot.
+are backend-owned for the current metrics snapshot. The current implementation
+still scans the informer-backed object set for each query page, but it no
+longer retains the full projected pod row universe before sorting and slicing;
+matching rows feed a bounded keyset candidate buffer plus exact facet/total
+accounting.
 
 Workloads: `backend/refresh/snapshot/namespace_workloads.go` feeds namespace
 workload tables. Single-namespace workloads remain `Local Complete`.
 All-namespaces Workloads are `Query Backed Dynamic`: kind and namespace filters,
 search, pagination, and CPU/memory aggregate sorts are backend-owned for the
-current metrics snapshot.
+current metrics snapshot. Like Pods, this is a bounded projected-row query path,
+not a persistent secondary index for workload summaries.
 
-Custom resources: cluster and namespace custom views are backed by CRD fanout
-snapshot paths. They are high risk because cardinality scales with every CRD
-and instance; large scopes must move to query-backed static custom-resource
-paging.
-
-Custom-resource table row universes now come from the object catalog query path
-with `customOnly=true`. The legacy CRD fanout snapshots can still warm during
-transition, but search, kind filters, sort, and paging for the visible table are
-owned by the backend catalog query contract.
+Custom resources: cluster and namespace custom table row universes come from
+the object catalog query path with `customOnly=true`. Search, kind filters,
+sort, paging, counts, and facets for the visible table are owned by the backend
+catalog query contract. The frontend hydrates only the current catalog page
+through `HydrateCatalogCustomRows` to recover status, readiness, conditions,
+labels, and annotations. Production Custom tabs do not subscribe to, enable, or
+load the legacy `cluster-custom` and `namespace-custom` CRD fanout domains, and
+they do not pass those full-row payloads through the Wails boundary. Those
+legacy domains remain registered only for explicit resource-stream and
+diagnostic compatibility surfaces; any future surface that enables them pays the
+old full-CR-row fanout cost and must not be described as large-table-safe.
 
 Events: cluster, namespace, and object-panel events are recent/capped snapshot
 windows. They remain `Local Partial` until a real event query API exists.

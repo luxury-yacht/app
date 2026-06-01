@@ -34,6 +34,17 @@ const BROWSE_SEARCH_DEBOUNCE_MS = 250;
 export const BROWSE_PAGE_LIMIT_OPTIONS = [100, 250, 500, 1000] as const;
 export type BrowsePageLimit = (typeof BROWSE_PAGE_LIMIT_OPTIONS)[number];
 
+const browseCatalogSortDescriptor = (
+  sort?: { key: string; direction: 'asc' | 'desc' | null } | null
+): { sortField: string; sortDirection: string } => {
+  const key = sort?.key?.trim();
+  const direction = sort?.direction;
+  if (!key || !direction || (key === 'kind' && direction === 'asc')) {
+    return { sortField: '', sortDirection: '' };
+  }
+  return { sortField: key, sortDirection: direction };
+};
+
 const normalizeInitialPageLimit = (value: number): number => {
   if (!Number.isFinite(value)) {
     return BROWSE_PAGE_LIMIT_OPTIONS[2];
@@ -101,6 +112,23 @@ export interface UseBrowseCatalogResult {
   pageLimitOptions: readonly BrowsePageLimit[];
   /** Updates the backend cursor page size */
   setPageLimit: (value: BrowsePageLimit) => void;
+  /** Refreshes the current query scope without changing filters or page size. */
+  refresh: () => void;
+  /** Exact debounced backend query descriptor currently used by this table. */
+  queryDescriptor: BrowseCatalogQueryDescriptor;
+  /** True while persisted search text is ahead of the active backend query. */
+  queryPending: boolean;
+}
+
+export interface BrowseCatalogQueryDescriptor {
+  clusterId: string;
+  namespaces: string[];
+  kinds: string[];
+  search: string;
+  sortField: string;
+  sortDirection: string;
+  scope: string;
+  customOnly: boolean;
 }
 
 /**
@@ -196,6 +224,30 @@ export function useBrowseCatalog({
     ]
   );
   const { catalogScope, metadataScope, metadataUsesActiveScope } = plan;
+  const activeSort = browseCatalogSortDescriptor(sort);
+  const queryPending = (filters.search ?? '') !== debouncedSearch;
+  const queryDescriptor = useMemo<BrowseCatalogQueryDescriptor>(
+    () => ({
+      clusterId: clusterId ?? '',
+      namespaces: plan.namespacesToQuery,
+      kinds: queryFilters.kinds ?? [],
+      search: queryFilters.search ?? '',
+      sortField: activeSort.sortField,
+      sortDirection: activeSort.sortDirection,
+      scope: catalogScope,
+      customOnly,
+    }),
+    [
+      activeSort.sortField,
+      activeSort.sortDirection,
+      catalogScope,
+      clusterId,
+      customOnly,
+      plan.namespacesToQuery,
+      queryFilters.kinds,
+      queryFilters.search,
+    ]
+  );
 
   // Read scoped state for the current catalog scope.
   const { state: domain, refresh: refreshCatalogScope } = useRefreshDomainHandle({
@@ -370,6 +422,10 @@ export function useBrowseCatalog({
     requestPage(previousToken);
   }, [previousToken, requestPage]);
 
+  const refreshCurrentQuery = useCallback(() => {
+    void refreshCatalogScope('user');
+  }, [refreshCatalogScope]);
+
   // Filter items by scope (cluster-scoped vs namespace-scoped)
   // Note: Cluster isolation is handled by the backend via the scope prefix (e.g., 'cluster-1|...'),
   // so we don't need to filter by clusterId here.
@@ -433,5 +489,8 @@ export function useBrowseCatalog({
     pageLimit,
     pageLimitOptions: BROWSE_PAGE_LIMIT_OPTIONS,
     setPageLimit,
+    refresh: refreshCurrentQuery,
+    queryDescriptor,
+    queryPending,
   };
 }

@@ -459,31 +459,16 @@ describe('AllNamespacesView', () => {
     expect(getLatestProps('storage-view')?.data).toBe(storageData);
   });
 
-  it('renders custom view using namespace resources provider', async () => {
-    const customData = [
-      { kind: 'Widget', name: 'alpha', namespace: 'team-a', apiGroup: 'example.com/v1', age: '2h' },
-    ];
-    namespaceResourcesMocks.useNamespaceResourceMock.mockImplementation((resourceKey: string) => {
-      if (resourceKey === 'custom') {
-        return {
-          data: customData,
-          meta: { kinds: ['DBCluster', 'Widget'] },
-          loading: false,
-          hasLoaded: true,
-          error: new Error('custom down'),
-        };
-      }
-      return { data: [], loading: false, hasLoaded: false, error: null };
-    });
-
+  it('renders custom view without subscribing to the namespace custom fanout', async () => {
     await renderView('custom');
     await flush();
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('custom');
-    expect(container.textContent).toContain('Failed to load custom resources: custom down');
-    expect(getLatestProps('custom-view')?.data).toBe(customData);
-    expect(getLatestProps('custom-view')?.availableKinds).toEqual(['DBCluster', 'Widget']);
+    expect(namespaceResourcesMocks.useNamespaceResourceMock).not.toHaveBeenCalledWith('custom');
+    expect(getLatestProps('custom-view')?.data).toEqual([]);
+    expect(getLatestProps('custom-view')?.availableKinds).toBeUndefined();
+    expect(getLatestProps('custom-view')?.loading).toBe(false);
+    expect(getLatestProps('custom-view')?.loaded).toBe(false);
   });
 
   it('renders events view using namespace resources provider', async () => {

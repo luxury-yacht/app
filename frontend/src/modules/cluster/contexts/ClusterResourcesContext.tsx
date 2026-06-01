@@ -83,7 +83,6 @@ const CLUSTER_REFRESHER_TO_DOMAIN: Partial<Record<ClusterRefresherName, RefreshD
   [CLUSTER_REFRESHERS.storage]: 'cluster-storage',
   [CLUSTER_REFRESHERS.config]: 'cluster-config',
   [CLUSTER_REFRESHERS.crds]: 'cluster-crds',
-  [CLUSTER_REFRESHERS.custom]: 'cluster-custom',
   [CLUSTER_REFRESHERS.events]: 'cluster-events',
 };
 
@@ -94,6 +93,19 @@ const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>(Object.values(CLUSTER_REFRESHE
 const CLUSTER_EVENTS_DOMAIN: RefreshDomain = 'cluster-events';
 
 const noop = () => {};
+
+const createCatalogBackedCustomResource = (): ResourceDataReturn<ClusterCustomEntry[]> => ({
+  data: [],
+  loading: false,
+  refreshing: false,
+  error: null,
+  load: async () => {},
+  refresh: async () => {},
+  reset: noop,
+  cancel: noop,
+  lastFetchTime: null,
+  hasLoaded: false,
+});
 
 // Keep merged multi-cluster payloads scoped to the active tab.
 const filterByClusterId = <T extends { clusterId?: string | null }>(
@@ -266,7 +278,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const storageDomain = useRefreshScopedDomain('cluster-storage', clusterScope);
   const configDomain = useRefreshScopedDomain('cluster-config', clusterScope);
   const crdDomain = useRefreshScopedDomain('cluster-crds', clusterScope);
-  const customDomain = useRefreshScopedDomain('cluster-custom', clusterScope);
   const eventsDomain = useRefreshScopedDomain('cluster-events', clusterEventsScope);
   // Ensure permission state is tracked per-cluster to prevent cross-cluster leakage.
   const permissionClusterId = selectedClusterId || null;
@@ -370,7 +381,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       ),
       'cluster-config': configDenied,
       'cluster-crds': isPermissionDenied(crdListPermission),
-      'cluster-custom': isPermissionDenied(crdListPermission),
       'cluster-events': isPermissionDenied(eventListPermission),
     } as Partial<Record<RefreshDomain, boolean>>;
   }, [
@@ -519,7 +529,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     'cluster-storage': storageDomain,
     'cluster-config': configDomain,
     'cluster-crds': crdDomain,
-    'cluster-custom': customDomain,
     'cluster-events': eventsDomain,
   });
 
@@ -530,10 +539,9 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       'cluster-storage': storageDomain,
       'cluster-config': configDomain,
       'cluster-crds': crdDomain,
-      'cluster-custom': customDomain,
       'cluster-events': eventsDomain,
     };
-  }, [configDomain, crdDomain, customDomain, eventsDomain, nodeDomain, rbacDomain, storageDomain]);
+  }, [configDomain, crdDomain, eventsDomain, nodeDomain, rbacDomain, storageDomain]);
 
   // Resolve the scoped key for a cluster domain — events uses a different scope suffix.
   const getScopeForDomain = useCallback(
@@ -639,14 +647,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     isPaused,
     isManualRefreshActive
   );
-  const custom = useDescriptorBackedClusterResource<any[]>(
-    clusterResourceDescriptors.custom,
-    customDomain,
-    clusterScope,
-    selectedClusterId,
-    isPaused,
-    isManualRefreshActive
-  );
+  const custom = useMemo(() => createCatalogBackedCustomResource(), []);
   const events = useDescriptorBackedClusterResource<any[]>(
     clusterResourceDescriptors.events,
     eventsDomain,
@@ -686,9 +687,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
             ? true
             : crds.loading || !!crds.error || domainPermissionDenied['cluster-crds'];
         case 'custom':
-          return custom.data !== null
-            ? true
-            : custom.loading || !!custom.error || domainPermissionDenied['cluster-custom'];
+          return true;
         case 'events':
           return events.data !== null
             ? true

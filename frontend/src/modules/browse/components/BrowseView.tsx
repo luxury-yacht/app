@@ -17,13 +17,15 @@
  * This keeps Browse stable without modifying the shared GridTable component.
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './BrowseView.css';
 import { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -46,8 +48,12 @@ import {
 } from '@shared/utils/objectIdentity';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { RunCatalogQueryBulkAction } from '@wailsjs/go/backend/App';
+import { DeleteIcon } from '@shared/components/icons/SharedIcons';
+import { useCatalogQueryCsvAction } from '@modules/browse/hooks/useCatalogQueryCsvAction';
 
 const VIRTUALIZATION_THRESHOLD = 80;
+const COPY_QUERY_CSV_FEEDBACK_RESET_MS = 750;
 
 /**
  * Derives the browse scope from the namespace prop.
@@ -100,6 +106,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   const { openWithObject } = useObjectPanel();
   const namespaceContext = useNamespace();
   const viewState = useViewState();
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteFeedback, setBulkDeleteFeedback] = useState<'success' | 'error' | null>(null);
+  const bulkDeleteResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Derive the scope from the namespace prop
   const scope = deriveBrowseScope(namespace);
@@ -123,6 +132,23 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     }
     return [];
   }, [isNamespaceScoped, namespace]);
+
+  const scheduleBulkDeleteReset = useCallback(() => {
+    if (bulkDeleteResetTimerRef.current) {
+      clearTimeout(bulkDeleteResetTimerRef.current);
+    }
+    bulkDeleteResetTimerRef.current = setTimeout(() => {
+      setBulkDeleteFeedback(null);
+    }, COPY_QUERY_CSV_FEEDBACK_RESET_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (bulkDeleteResetTimerRef.current) {
+        clearTimeout(bulkDeleteResetTimerRef.current);
+      }
+    };
+  }, []);
 
   // Keep persistence isolated per Browse scope so cluster and
   // all-namespaces views do not share filters/state.
@@ -331,6 +357,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     pageLimit,
     pageLimitOptions,
     setPageLimit,
+    refresh: refreshBrowseCatalog,
+    queryDescriptor,
+    queryPending,
   } = useBrowseCatalog({
     clusterId: selectedClusterId,
     pinnedNamespaces,
@@ -384,6 +413,85 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     [items, useShortResourceNames]
   );
 
+  const disableUnscopedQueryActions = !clusterScopedOnly && !isNamespaceScoped;
+  const copyAllMatchingCsvAction = useCatalogQueryCsvAction({
+    query: queryDescriptor,
+    totalCount,
+    pending: queryPending,
+    disableWhenUnscoped: disableUnscopedQueryActions,
+    id: 'copy-browse-query-csv',
+  });
+
+  const querySelection = useMemo(
+    () => ({
+      clusterId: queryDescriptor.clusterId,
+      table: 'browse',
+      namespaces: queryDescriptor.namespaces,
+      kinds: queryDescriptor.kinds,
+      search: queryDescriptor.search,
+      sortField: queryDescriptor.sortField,
+      sortDirection: queryDescriptor.sortDirection,
+    }),
+    [queryDescriptor]
+  );
+
+  const bulkDeleteAllMatchingAction = useMemo<IconBarItem>(
+    () => ({
+      type: 'action',
+      id: 'delete-browse-query',
+      icon: <DeleteIcon width={18} height={18} />,
+      onClick: () => setBulkDeleteOpen(true),
+      title: 'Delete all matching rows',
+      ariaLabel: 'Delete all matching rows',
+      disabled:
+        !selectedClusterId ||
+        queryPending ||
+        totalCount === 0 ||
+        (disableUnscopedQueryActions && queryDescriptor.namespaces.length === 0),
+      feedback: bulkDeleteFeedback,
+    }),
+    [
+      bulkDeleteFeedback,
+      disableUnscopedQueryActions,
+      queryDescriptor.namespaces.length,
+      queryPending,
+      selectedClusterId,
+      totalCount,
+    ]
+  );
+
+  const handleConfirmBulkDelete = useCallback(async () => {
+    if (!selectedClusterId) {
+      setBulkDeleteOpen(false);
+      setBulkDeleteFeedback('error');
+      scheduleBulkDeleteReset();
+      return;
+    }
+    try {
+      let continueToken: string | undefined;
+      let failed = 0;
+      do {
+        const result = await RunCatalogQueryBulkAction({
+          selection: querySelection,
+          action: 'delete',
+          confirmed: true,
+          limit: 100,
+          continue: continueToken,
+        });
+        failed += result?.failed ?? 0;
+        continueToken = result?.continue || undefined;
+      } while (continueToken);
+      setBulkDeleteFeedback(failed > 0 ? 'error' : 'success');
+      refreshBrowseCatalog();
+    } catch (error) {
+      console.error('Failed to delete all matching Browse rows', error);
+      setBulkDeleteFeedback('error');
+    } finally {
+      setBulkDeleteOpen(false);
+      scheduleBulkDeleteReset();
+    }
+  }, [querySelection, refreshBrowseCatalog, scheduleBulkDeleteReset, selectedClusterId]);
+
   const gridFilterOptions = useMemo(
     () => ({
       searchBehavior: 'query' as const,
@@ -397,9 +505,12 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       includeClusterScopedSyntheticNamespace: false,
       totalCount,
       totalIsExact,
+      postActions: [copyAllMatchingCsvAction, bulkDeleteAllMatchingAction],
       customActions: pageSizeControl,
     }),
     [
+      bulkDeleteAllMatchingAction,
+      copyAllMatchingCsvAction,
       filterOptions.kinds,
       filterOptions.namespaces,
       pageSizeControl,
@@ -462,6 +573,19 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         previousPageLabel="Previous page"
       />
       {objectActions.modals}
+      <ConfirmationModal
+        isOpen={bulkDeleteOpen}
+        title="Delete all matching rows"
+        message={`Delete ${totalIsExact ? totalCount : `about ${totalCount}`} matching objects from this Browse query?`}
+        warning="This runs against the backend query, not only the visible page."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmButtonClass="danger"
+        onConfirm={() => {
+          void handleConfirmBulkDelete();
+        }}
+        onCancel={() => setBulkDeleteOpen(false)}
+      />
     </>
   );
 };

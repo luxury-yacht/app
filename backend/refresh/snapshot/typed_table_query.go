@@ -157,32 +157,9 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 		}
 	}
 
-	namespaceSet := stringSet(query.Namespaces)
-	kindSet := stringSet(query.Kinds)
-	searchNeedle := strings.ToLower(strings.TrimSpace(query.Search))
 	filtered := make([]T, 0, len(items))
 	for _, item := range items {
-		if len(namespaceSet) > 0 {
-			if _, ok := namespaceSet[strings.ToLower(strings.TrimSpace(adapter.Namespace(item)))]; !ok {
-				continue
-			}
-		}
-		if len(kindSet) > 0 {
-			if _, ok := kindSet[strings.ToLower(strings.TrimSpace(adapter.Kind(item)))]; !ok {
-				continue
-			}
-		}
-		if searchNeedle != "" && !typedTableSearchMatches(adapter.SearchText(item), searchNeedle) {
-			continue
-		}
-		matchesPredicates := true
-		for field, value := range query.Predicates {
-			if !adapter.Predicate(item, field, value) {
-				matchesPredicates = false
-				break
-			}
-		}
-		if !matchesPredicates {
+		if !typedTableQueryMatches(item, query, adapter) {
 			continue
 		}
 		filtered = append(filtered, item)
@@ -227,6 +204,120 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 		Namespaces:   collectTypedTableFacet(filtered, adapter.Namespace),
 		Kinds:        collectTypedTableFacet(filtered, adapter.Kind),
 	}
+}
+
+type typedTableQueryCollector[T any] struct {
+	query       typedTableQuery
+	adapter     typedTableQueryAdapter[T]
+	cursor      typedTableQueryCursor
+	cursorValid bool
+	total       int
+	namespaces  map[string]string
+	kinds       map[string]string
+	candidates  []T
+}
+
+func newTypedTableQueryCollector[T any](query typedTableQuery, adapter typedTableQueryAdapter[T]) *typedTableQueryCollector[T] {
+	collector := &typedTableQueryCollector[T]{
+		query:      query,
+		adapter:    adapter,
+		namespaces: make(map[string]string),
+		kinds:      make(map[string]string),
+	}
+	if query.Continue != "" {
+		if cursor, ok := decodeTypedTableQueryCursor(query.Continue); ok && cursor.matches(query) {
+			collector.cursor = cursor
+			collector.cursorValid = true
+		}
+	}
+	return collector
+}
+
+func (c *typedTableQueryCollector[T]) Add(item T) {
+	if c == nil {
+		return
+	}
+	if !typedTableQueryMatches(item, c.query, c.adapter) {
+		return
+	}
+	c.total++
+	addTypedTableFacetValue(c.namespaces, c.adapter.Namespace(item))
+	addTypedTableFacetValue(c.kinds, c.adapter.Kind(item))
+	if c.cursorValid && !typedTableItemAfterCursor(item, c.cursor, c.query, c.adapter) {
+		return
+	}
+	c.candidates = append(c.candidates, item)
+	sortTypedTableRows(c.candidates, c.query, c.adapter)
+	maxCandidates := max(c.query.Limit+1, 1)
+	if len(c.candidates) > maxCandidates {
+		c.candidates = c.candidates[:maxCandidates]
+	}
+}
+
+func (c *typedTableQueryCollector[T]) Page() typedTableQueryPage[T] {
+	if c == nil {
+		return typedTableQueryPage[T]{TotalIsExact: true}
+	}
+	sortTypedTableRows(c.candidates, c.query, c.adapter)
+	end := min(c.query.Limit, len(c.candidates))
+	pageRows := append([]T(nil), c.candidates[:end]...)
+	continueToken := ""
+	if len(c.candidates) > c.query.Limit && len(pageRows) > 0 {
+		last := pageRows[len(pageRows)-1]
+		continueToken = encodeTypedTableQueryCursor(typedTableQueryCursor{
+			ClusterID:       c.query.ClusterID,
+			Table:           c.query.Table,
+			Signature:       c.query.signature(),
+			SortField:       c.query.SortField,
+			SortDirection:   c.query.SortDirection,
+			Limit:           c.query.Limit,
+			LastValue:       typedTableComparableSortValue(last, c.query.SortField, c.adapter),
+			LastKey:         c.adapter.Key(last),
+			DynamicRevision: c.query.DynamicRevision,
+		})
+	}
+	return typedTableQueryPage[T]{
+		Rows:         pageRows,
+		Continue:     continueToken,
+		Total:        c.total,
+		TotalIsExact: true,
+		Namespaces:   typedTableFacetMapValues(c.namespaces),
+		Kinds:        typedTableFacetMapValues(c.kinds),
+	}
+}
+
+func typedTableQueryMatches[T any](item T, query typedTableQuery, adapter typedTableQueryAdapter[T]) bool {
+	namespaceSet := stringSet(query.Namespaces)
+	kindSet := stringSet(query.Kinds)
+	searchNeedle := strings.ToLower(strings.TrimSpace(query.Search))
+	if len(namespaceSet) > 0 {
+		if _, ok := namespaceSet[strings.ToLower(strings.TrimSpace(adapter.Namespace(item)))]; !ok {
+			return false
+		}
+	}
+	if len(kindSet) > 0 {
+		if _, ok := kindSet[strings.ToLower(strings.TrimSpace(adapter.Kind(item)))]; !ok {
+			return false
+		}
+	}
+	if searchNeedle != "" && !typedTableSearchMatches(adapter.SearchText(item), searchNeedle) {
+		return false
+	}
+	for field, value := range query.Predicates {
+		if !adapter.Predicate(item, field, value) {
+			return false
+		}
+	}
+	return true
+}
+
+func typedTableItemAfterCursor[T any](item T, cursor typedTableQueryCursor, query typedTableQuery, adapter typedTableQueryAdapter[T]) bool {
+	value := typedTableComparableSortValue(item, query.SortField, adapter)
+	key := adapter.Key(item)
+	if query.SortDirection == "desc" {
+		return value < cursor.LastValue || (value == cursor.LastValue && key > cursor.LastKey)
+	}
+	return value > cursor.LastValue || (value == cursor.LastValue && key > cursor.LastKey)
 }
 
 func (c typedTableQueryCursor) matches(query typedTableQuery) bool {
@@ -348,15 +439,23 @@ func typedTableSearchMatches(values []string, needle string) bool {
 func collectTypedTableFacet[T any](items []T, accessor func(T) string) []string {
 	seen := map[string]string{}
 	for _, item := range items {
-		value := strings.TrimSpace(accessor(item))
-		if value == "" || value == "—" {
-			continue
-		}
-		key := strings.ToLower(value)
-		if _, ok := seen[key]; !ok {
-			seen[key] = value
-		}
+		addTypedTableFacetValue(seen, accessor(item))
 	}
+	return typedTableFacetMapValues(seen)
+}
+
+func addTypedTableFacetValue(seen map[string]string, raw string) {
+	value := strings.TrimSpace(raw)
+	if value == "" || value == "—" {
+		return
+	}
+	key := strings.ToLower(value)
+	if _, ok := seen[key]; !ok {
+		seen[key] = value
+	}
+}
+
+func typedTableFacetMapValues(seen map[string]string) []string {
 	result := make([]string, 0, len(seen))
 	for _, value := range seen {
 		result = append(result, value)

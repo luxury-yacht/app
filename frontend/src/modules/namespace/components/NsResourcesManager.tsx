@@ -17,7 +17,8 @@ import { NamespaceViewType } from '@/types/navigation/views';
 // The browse tab is catalog-driven, not a namespace resource loader.
 const isLoadableNamespaceTab = (
   tab: NamespaceViewType
-): tab is Exclude<NamespaceViewType, 'browse' | 'map'> => tab !== 'browse' && tab !== 'map';
+): tab is Exclude<NamespaceViewType, 'browse' | 'map' | 'custom'> =>
+  tab !== 'browse' && tab !== 'map' && tab !== 'custom';
 
 interface NamespaceResourcesManagerProps {
   namespace: string;
@@ -50,7 +51,6 @@ export function NamespaceResourcesManager({
   const storage = useNamespaceResource('storage');
   const autoscaling = useNamespaceResource('autoscaling');
   const quotas = useNamespaceResource('quotas');
-  const custom = useNamespaceResource('custom');
   const helm = useNamespaceResource('helm');
   const events = useNamespaceResource('events');
 
@@ -73,7 +73,7 @@ export function NamespaceResourcesManager({
       storage: wrap(storage?.load),
       autoscaling: wrap(autoscaling?.load),
       quotas: wrap(quotas?.load),
-      custom: wrap(custom?.load),
+      custom: async () => {},
       helm: wrap(helm?.load),
       events: wrap(events?.load),
     };
@@ -81,7 +81,6 @@ export function NamespaceResourcesManager({
     pods?.load,
     autoscaling?.load,
     config?.load,
-    custom?.load,
     events?.load,
     helm?.load,
     network?.load,
@@ -100,10 +99,9 @@ export function NamespaceResourcesManager({
     storage?.cancel?.();
     autoscaling?.cancel?.();
     quotas?.cancel?.();
-    custom?.cancel?.();
     helm?.cancel?.();
     events?.cancel?.();
-  }, [autoscaling, config, custom, events, helm, network, pods, quotas, rbac, storage, workloads]);
+  }, [autoscaling, config, events, helm, network, pods, quotas, rbac, storage, workloads]);
 
   // Cancel all operations on unmount without retriggering mid-render
   const cancelAllRef = useRef(cancelAll);
@@ -171,12 +169,6 @@ export function NamespaceResourcesManager({
         error: quotas?.error ?? null,
         hasLoaded: quotas?.hasLoaded ?? false,
       },
-      custom: {
-        data: custom?.data,
-        loading: custom?.loading ?? false,
-        error: custom?.error ?? null,
-        hasLoaded: custom?.hasLoaded ?? false,
-      },
       helm: {
         data: helm?.data,
         loading: helm?.loading ?? false,
@@ -223,10 +215,6 @@ export function NamespaceResourcesManager({
       quotas?.loading,
       quotas?.error,
       quotas?.hasLoaded,
-      custom?.data,
-      custom?.loading,
-      custom?.error,
-      custom?.hasLoaded,
       helm?.data,
       helm?.loading,
       helm?.error,
@@ -325,12 +313,12 @@ export function NamespaceResourcesManager({
       loadQuotas={manualLoaders.quotas}
       nsQuotasLoaded={quotas?.hasLoaded ?? false}
       // Custom resources data
-      nsCustom={custom?.data || []}
-      nsCustomKinds={(custom?.meta as { kinds?: string[] } | undefined)?.kinds}
-      nsCustomLoading={custom?.loading || false}
-      nsCustomError={custom?.error?.message || null}
+      nsCustom={[]}
+      nsCustomKinds={undefined}
+      nsCustomLoading={false}
+      nsCustomError={null}
       loadCustom={manualLoaders.custom}
-      nsCustomLoaded={custom?.hasLoaded ?? false}
+      nsCustomLoaded={false}
       // Helm data
       nsHelm={helm?.data || []}
       nsHelmLoading={helm?.loading || false}

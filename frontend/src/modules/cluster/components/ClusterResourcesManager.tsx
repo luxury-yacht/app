@@ -30,13 +30,12 @@ export function ClusterResourcesManager({
   onTabChange,
   objectPanel,
 }: ClusterResourceManagerProps) {
-  const { nodes, rbac, storage, config, crds, custom, events, setActiveResourceType } =
+  const { nodes, rbac, storage, config, crds, events, setActiveResourceType } =
     useClusterResources();
 
   const { data: nodesData, loading: nodesLoading, error: nodesError } = nodes;
   const { data: configData, loading: configLoading, error: configError } = config;
   const { data: crdsData, loading: crdsLoading, error: crdsError } = crds;
-  const { data: customData, loading: customLoading, error: customError } = custom;
   const { data: eventsData, loading: eventsLoading, error: eventsError } = events;
   const { data: rbacData, loading: rbacLoading, error: rbacError } = rbac;
   const { data: storageData, loading: storageLoading, error: storageError } = storage;
@@ -127,7 +126,7 @@ export function ClusterResourcesManager({
   const nodesErrorMessage = nodesError?.message || permissionToMessage(nodesListPermission) || null;
   const configErrorMessage = configError?.message || configPermissionMessage || null;
   const crdsErrorMessage = crdsError?.message || permissionToMessage(crdListPermission) || null;
-  const customErrorMessage = customError?.message || permissionToMessage(crdListPermission) || null;
+  const customErrorMessage = permissionToMessage(crdListPermission) || null;
   const eventsErrorMessage =
     eventsError?.message || permissionToMessage(eventsListPermission) || null;
   const rbacErrorMessage = rbacError?.message || permissionToMessage(rbacListPermission) || null;
@@ -165,11 +164,11 @@ export function ClusterResourcesManager({
       crdsError={crdsErrorMessage}
       crdsLoaded={(crds?.hasLoaded ?? false) || Boolean(crdsErrorMessage)}
       // Custom
-      custom={customData || []}
-      customKinds={(custom?.meta as { kinds?: string[] } | undefined)?.kinds}
-      customLoading={customLoading || false}
+      custom={[]}
+      customKinds={undefined}
+      customLoading={false}
       customError={customErrorMessage}
-      customLoaded={(custom?.hasLoaded ?? false) || Boolean(customErrorMessage)}
+      customLoaded={Boolean(customErrorMessage)}
       // Events
       events={eventsData || []}
       eventsLoading={eventsLoading || false}

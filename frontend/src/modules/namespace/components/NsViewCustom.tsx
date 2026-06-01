@@ -22,7 +22,8 @@ import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespa
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
-import type { CatalogItem } from '@/core/refresh/types';
+import { useHydratedCustomCatalogRows } from '@modules/browse/hooks/useHydratedCustomCatalogRows';
+import { useCatalogQueryCsvAction } from '@modules/browse/hooks/useCatalogQueryCsvAction';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -42,9 +43,9 @@ export interface CustomResourceData {
   apiVersion?: string;
   /**
    * Canonical CRD name (`<plural>.<group>`) for the CustomResourceDefinition
-   * that defines this resource's Kind. Threaded from the backend
-   * NamespaceCustomSummary so the CRD column can render a clickable cell
-   * that opens the owning CRD in the object panel.
+   * that defines this resource's Kind. Derived from catalog GVR/resource
+   * metadata so the CRD column can render a clickable cell that opens the
+   * owning CRD in the object panel.
    */
   crdName?: string;
   labels?: Record<string, string>;
@@ -82,33 +83,11 @@ interface CustomViewProps {
   showNamespaceColumn?: boolean;
 }
 
-const catalogItemToCustomResourceData = (item: CatalogItem): CustomResourceData => ({
-  kind: item.kind,
-  kindAlias: item.kind,
-  name: item.name,
-  namespace: item.namespace ?? '',
-  clusterId: item.clusterId,
-  clusterName: item.clusterName,
-  apiGroup: item.group,
-  apiVersion: item.version,
-  crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
-  status: item.actionFacts?.status ?? 'Unknown',
-  statusPresentation: item.actionFacts?.status,
-  age: item.creationTimestamp,
-});
-
 /**
  * GridTable component for namespace custom resources (instances of CRDs)
  */
 const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    availableKinds: kindOptions,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-  }) => {
+  ({ namespace, loading = false, loaded = false, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -357,6 +336,8 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       filterOptions: catalogFilterOptions,
       totalCount,
       totalIsExact,
+      queryDescriptor,
+      queryPending,
     } = useBrowseCatalog({
       clusterId: selectedClusterId,
       pinnedNamespaces: namespace === ALL_NAMESPACES_SCOPE ? [] : [namespace],
@@ -370,12 +351,17 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       diagnosticLabel: diagnosticsLabel,
     });
 
-    const rows = useMemo(() => {
-      if (!catalogLoaded && catalogItems.length === 0 && data.length > 0) {
-        return data;
-      }
-      return catalogItems.map(catalogItemToCustomResourceData);
-    }, [catalogItems, catalogLoaded, data]);
+    const rows = useHydratedCustomCatalogRows(
+      selectedClusterId,
+      catalogItems
+    ) as CustomResourceData[];
+    const copyAllMatchingCsvAction = useCatalogQueryCsvAction({
+      query: queryDescriptor,
+      totalCount,
+      pending: queryPending,
+      disableWhenUnscoped: namespace === ALL_NAMESPACES_SCOPE,
+      id: 'copy-namespace-custom-query-csv',
+    });
 
     const { gridTableProps, favModal } = useQueryResourceGridTable<CustomResourceData>({
       tableMode: 'Query Backed Static',
@@ -388,8 +374,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       diagnosticsLabel,
       filterOptions: {
         searchBehavior: 'query',
-        kinds:
-          catalogFilterOptions.kinds.length > 0 ? catalogFilterOptions.kinds : (kindOptions ?? []),
+        kinds: catalogFilterOptions.kinds,
         namespaces: showNamespaceFilter ? catalogFilterOptions.namespaces : undefined,
         showKindDropdown: true,
         showNamespaceDropdown: showNamespaceFilter,
@@ -399,6 +384,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         namespaceDropdownBulkActions: showNamespaceFilter,
         totalCount,
         totalIsExact,
+        postActions: [copyAllMatchingCsvAction],
       },
     });
 

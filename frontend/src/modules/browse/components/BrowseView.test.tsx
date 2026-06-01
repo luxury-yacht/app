@@ -12,6 +12,9 @@ import BrowseView from '@/modules/browse/components/BrowseView';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
+const exportCatalogQueryCSVMock = vi.hoisted(() => vi.fn());
+const runCatalogQueryBulkActionMock = vi.hoisted(() => vi.fn());
+
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
     favorites: [],
@@ -91,6 +94,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  ExportCatalogQueryCSV: (...args: unknown[]) => exportCatalogQueryCSVMock(...args),
+  RunCatalogQueryBulkAction: (...args: unknown[]) => runCatalogQueryBulkActionMock(...args),
 }));
 
 vi.mock('@/core/capabilities', () => ({
@@ -214,6 +222,18 @@ describe('BrowseView', () => {
     persistenceArgsRef.cluster = null;
     persistenceArgsRef.namespace = null;
     persistenceFiltersRef.current = { search: '', kinds: [], namespaces: [], caseSensitive: false };
+    exportCatalogQueryCSVMock.mockReset().mockResolvedValue('clusterId,kind\ncluster-1,Pod\n');
+    runCatalogQueryBulkActionMock.mockReset().mockResolvedValue({
+      processed: 1,
+      succeeded: 1,
+      failed: 0,
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   afterEach(() => {
@@ -423,7 +443,11 @@ describe('BrowseView', () => {
       });
 
       expect(gridTablePropsRef.current.data).toHaveLength(1);
-      expect(gridTablePropsRef.current.filters.options.postActions ?? []).toEqual([]);
+      expect(
+        (gridTablePropsRef.current.filters.options.postActions ?? []).some(
+          (item: any) => item.title === 'Load more'
+        )
+      ).toBe(false);
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledTimes(2);
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
         1,
@@ -506,6 +530,162 @@ describe('BrowseView', () => {
       expect(cronMenu.some((item: any) => item.actionId === OBJECT_ACTION_IDS.resume)).toBe(true);
       const trigger = cronMenu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.triggerNow);
       expect(trigger?.disabled).toBe(true);
+    });
+  });
+
+  describe('Query-wide CSV export', () => {
+    it('disables all-matching actions while search debounce is pending', async () => {
+      persistenceFiltersRef.current = {
+        search: 'api',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+      };
+      refreshMocks.scopedDomains.set('cluster-1|limit=1000&namespace=default', {
+        status: 'ready',
+        data: {
+          items: [],
+          kinds: [{ kind: 'Pod', namespaced: true }],
+          namespaces: ['default'],
+          total: 1,
+        },
+        scope: 'cluster-1|limit=1000&namespace=default',
+      });
+
+      await act(async () => {
+        root.render(<BrowseView namespace="default" />);
+        await Promise.resolve();
+      });
+
+      const postActions = gridTablePropsRef.current?.filters?.options?.postActions ?? [];
+      expect(postActions.find((item: any) => item.id === 'copy-browse-query-csv')?.disabled).toBe(
+        true
+      );
+      expect(postActions.find((item: any) => item.id === 'delete-browse-query')?.disabled).toBe(
+        true
+      );
+    });
+
+    it('copies all backend-matching rows with the Browse query scope', async () => {
+      refreshMocks.scopedDomains.set('cluster-1|limit=1000&namespace=default', {
+        status: 'ready',
+        data: {
+          items: [
+            {
+              uid: 'pod-1',
+              kind: 'Pod',
+              name: 'api',
+              namespace: 'default',
+              scope: 'Namespace',
+              resource: 'pods',
+              group: '',
+              version: 'v1',
+              resourceVersion: '1',
+              creationTimestamp: new Date().toISOString(),
+              clusterId: 'cluster-1',
+            },
+          ],
+          kinds: [{ kind: 'Pod', namespaced: true }],
+          namespaces: ['default'],
+          total: 1,
+        },
+        scope: 'cluster-1|limit=1000&namespace=default',
+      });
+
+      await act(async () => {
+        root.render(<BrowseView namespace="default" />);
+        await Promise.resolve();
+      });
+
+      const copyAllAction = gridTablePropsRef.current?.filters?.options?.postActions?.find(
+        (item: any) => item.id === 'copy-browse-query-csv'
+      );
+      expect(copyAllAction).toBeTruthy();
+
+      await act(async () => {
+        copyAllAction.onClick();
+        await Promise.resolve();
+      });
+
+      expect(exportCatalogQueryCSVMock).toHaveBeenCalledWith(
+        'cluster-1',
+        [],
+        ['default'],
+        '',
+        '',
+        ''
+      );
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('clusterId,kind\ncluster-1,Pod\n');
+    });
+  });
+
+  describe('Query-wide bulk actions', () => {
+    it('confirms and runs delete against the backend Browse query descriptor', async () => {
+      refreshMocks.scopedDomains.set('cluster-1|limit=1000&namespace=default', {
+        status: 'ready',
+        data: {
+          items: [
+            {
+              uid: 'pod-1',
+              kind: 'Pod',
+              name: 'api',
+              namespace: 'default',
+              scope: 'Namespace',
+              resource: 'pods',
+              group: '',
+              version: 'v1',
+              resourceVersion: '1',
+              creationTimestamp: new Date().toISOString(),
+              clusterId: 'cluster-1',
+            },
+          ],
+          kinds: [{ kind: 'Pod', namespaced: true }],
+          namespaces: ['default'],
+          total: 1,
+        },
+        scope: 'cluster-1|limit=1000&namespace=default',
+      });
+
+      await act(async () => {
+        root.render(<BrowseView namespace="default" />);
+        await Promise.resolve();
+      });
+
+      const deleteAllAction = gridTablePropsRef.current?.filters?.options?.postActions?.find(
+        (item: any) => item.id === 'delete-browse-query'
+      );
+      expect(deleteAllAction).toBeTruthy();
+
+      await act(async () => {
+        deleteAllAction.onClick();
+        await Promise.resolve();
+      });
+
+      expect(document.querySelector('.confirmation-modal')).not.toBeNull();
+      const confirm = document.querySelector<HTMLButtonElement>(
+        '.confirmation-modal-footer .button.danger'
+      );
+
+      await act(async () => {
+        confirm?.click();
+        await Promise.resolve();
+      });
+
+      expect(runCatalogQueryBulkActionMock).toHaveBeenCalledWith({
+        selection: {
+          clusterId: 'cluster-1',
+          table: 'browse',
+          namespaces: ['default'],
+          kinds: [],
+          search: '',
+          sortField: '',
+          sortDirection: '',
+        },
+        action: 'delete',
+        confirmed: true,
+        limit: 100,
+        continue: undefined,
+      });
     });
   });
 });

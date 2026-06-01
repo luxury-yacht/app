@@ -88,7 +88,7 @@ export const namespaceViewToRefresher: Record<NamespaceViewType, NamespaceRefres
   storage: NAMESPACE_REFRESHERS.storage,
   autoscaling: NAMESPACE_REFRESHERS.autoscaling,
   quotas: NAMESPACE_REFRESHERS.quotas,
-  custom: NAMESPACE_REFRESHERS.custom,
+  custom: null,
   helm: NAMESPACE_REFRESHERS.helm,
   events: NAMESPACE_REFRESHERS.events,
 };
@@ -99,7 +99,7 @@ export const clusterViewToRefresher: Record<ClusterViewType, ClusterRefresherNam
   storage: CLUSTER_REFRESHERS.storage,
   config: CLUSTER_REFRESHERS.config,
   crds: CLUSTER_REFRESHERS.crds,
-  custom: CLUSTER_REFRESHERS.custom,
+  custom: null,
   events: CLUSTER_REFRESHERS.events,
   browse: CLUSTER_REFRESHERS.browse,
 };

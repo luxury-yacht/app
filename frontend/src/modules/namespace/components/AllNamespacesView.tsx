@@ -48,22 +48,13 @@ const AllNamespacesConfigView: React.FC = () => {
 };
 
 const AllNamespacesCustomView: React.FC = () => {
-  const customResource = useNamespaceResource('custom');
-  const errorMessage = customResource.error ? customResource.error.message : null;
-
   return (
     <>
-      {errorMessage && (
-        <div className="namespace-error-message">
-          Failed to load custom resources: {errorMessage}
-        </div>
-      )}
       <NsViewCustom
         namespace={ALL_NAMESPACES_SCOPE}
-        data={customResource.data ?? []}
-        availableKinds={(customResource.meta as { kinds?: string[] } | undefined)?.kinds}
-        loading={customResource.loading}
-        loaded={customResource.hasLoaded}
+        data={[]}
+        loading={false}
+        loaded={false}
         showNamespaceColumn
       />
     </>

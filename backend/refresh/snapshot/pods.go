@@ -139,26 +139,40 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		return nil, err
 	}
 
-	summaries := make([]PodSummary, 0, len(pods))
 	var version uint64
-	for _, pod := range pods {
-		if pod == nil {
-			continue
+	var page typedTableQueryPage[PodSummary]
+	if query.Enabled {
+		collector := newTypedTableQueryCollector(query, podTableQueryAdapter())
+		for _, pod := range pods {
+			if pod == nil {
+				continue
+			}
+			summary := buildPodSummary(meta, pod, podUsage, rsMap)
+			collector.Add(summary)
+			if v := parsePodResourceVersion(pod); v > version {
+				version = v
+			}
 		}
-		summary := buildPodSummary(meta, pod, podUsage, rsMap)
-		summaries = append(summaries, summary)
-		if v := parsePodResourceVersion(pod); v > version {
-			version = v
+		page = collector.Page()
+	} else {
+		summaries := make([]PodSummary, 0, len(pods))
+		for _, pod := range pods {
+			if pod == nil {
+				continue
+			}
+			summary := buildPodSummary(meta, pod, podUsage, rsMap)
+			summaries = append(summaries, summary)
+			if v := parsePodResourceVersion(pod); v > version {
+				version = v
+			}
 		}
-	}
-
-	if !query.Enabled {
 		sort.Slice(summaries, func(i, j int) bool {
 			if summaries[i].Namespace == summaries[j].Namespace {
 				return summaries[i].Name < summaries[j].Name
 			}
 			return summaries[i].Namespace < summaries[j].Namespace
 		})
+		page = applyTypedTableQuery(summaries, query, podTableQueryAdapter())
 	}
 
 	metricsInfo := PodMetricsInfo{Stale: true}
@@ -173,7 +187,6 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	metricsInfo.SuccessCount = metadata.SuccessCount
 	metricsInfo.FailureCount = metadata.FailureCount
 
-	page := applyTypedTableQuery(summaries, query, podTableQueryAdapter())
 	snapshot := &refresh.Snapshot{
 		Domain:  podDomainName,
 		Scope:   refresh.JoinClusterScope(clusterID, trimmed),

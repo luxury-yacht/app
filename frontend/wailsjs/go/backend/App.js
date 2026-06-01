@@ -230,6 +230,10 @@ export function GetHorizontalPodAutoscaler(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetHorizontalPodAutoscaler'](arg1, arg2, arg3);
 }
 
+export function HydrateCatalogCustomRows(arg1, arg2) {
+  return window['go']['backend']['App']['HydrateCatalogCustomRows'](arg1, arg2);
+}
+
 export function GetIngress(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetIngress'](arg1, arg2, arg3);
 }

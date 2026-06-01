@@ -874,7 +874,7 @@ describe('NamespaceResourcesProvider', () => {
     expect(contextRef.current?.autoscaling.data?.[0]).toBe(firstRow);
   });
 
-  it('preserves custom resource row references when refreshed rows are rebuilt with unchanged fields', async () => {
+  it('does not expose namespace-custom fanout rows to the catalog-backed custom view', async () => {
     const scope = `${testClusterId}|namespace:team-a`;
 
     scopedStates[scope] = {
@@ -915,51 +915,19 @@ describe('NamespaceResourcesProvider', () => {
       </NamespaceResourcesProvider>
     );
 
-    const firstDataRef = contextRef.current?.custom.data;
-    const firstRdsRow = firstDataRef?.[0];
-    const firstDocDbRow = firstDataRef?.[1];
-
-    scopedStates[scope] = {
-      status: 'ready',
-      data: {
-        resources: [
-          {
-            kind: 'DBInstance',
-            name: 'orders-db',
-            namespace: 'team-a',
-            clusterId: testClusterId,
-            apiGroup: 'rds.services.k8s.aws',
-            apiVersion: 'v1alpha1',
-            crdName: 'dbinstances.rds.services.k8s.aws',
-            age: '1h',
-            labels: { team: 'payments' },
-          },
-          {
-            kind: 'DBInstance',
-            name: 'orders-db',
-            namespace: 'team-a',
-            clusterId: testClusterId,
-            apiGroup: 'documentdb.services.k8s.aws',
-            apiVersion: 'v1alpha1',
-            crdName: 'dbinstances.documentdb.services.k8s.aws',
-            age: '1h',
-            labels: { team: 'analytics' },
-          },
-        ],
-      },
-      error: null,
-      lastUpdated: null,
-    };
-
-    await render(
-      <NamespaceResourcesProvider namespace="team-a" activeView="custom">
-        <TestConsumer />
-      </NamespaceResourcesProvider>
+    expect(contextRef.current?.custom.data).toEqual([]);
+    expect(contextRef.current?.custom.hasLoaded).toBe(false);
+    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+      'namespace-custom',
+      scope,
+      true,
+      expect.anything()
     );
-
-    expect(contextRef.current?.custom.data).toBe(firstDataRef);
-    expect(contextRef.current?.custom.data?.[0]).toBe(firstRdsRow);
-    expect(contextRef.current?.custom.data?.[1]).toBe(firstDocDbRow);
+    expect(orchestrator.fetchScopedDomain).not.toHaveBeenCalledWith(
+      'namespace-custom',
+      scope,
+      expect.anything()
+    );
   });
 
   it('preserves helm row references when refreshed rows are rebuilt with unchanged fields', async () => {

@@ -1,12 +1,12 @@
 # Definitive Large Table Fix
 
-Status: Browse vertical slice implemented, including keyset cursor paging,
-backend-owned sort/search/filter scope, backend totals/facets, page-size
-controls, and table-mode enforcement. Deferred typed-query and query-wide
-export/bulk work remain active.
+Status: Complete. Browse, custom-resource catalog paging, all-namespaces
+Pods/Workloads dynamic query paging, backend-owned query export, guarded
+query-wide bulk action support, and table-mode enforcement are implemented.
 
-Owner: implementation agent for the Browse vertical slice. Assign a durable
-human owner before the typed-query epic starts.
+Owner: implementation agent for this fix. Assign a durable human owner before
+expanding query-backed behavior beyond the completed Browse, Custom, Pods, and
+Workloads surfaces.
 
 Approved Phase 0 defaults:
 
@@ -16,16 +16,15 @@ Approved Phase 0 defaults:
   "Page X of Y" in the first implementation.
 - Totals/facets: exact only while served from indexed or otherwise bounded work;
   otherwise show approximate/degraded state.
-- Export/select-all: page-scoped or disabled until backend query-wide operations
+- Export/bulk actions: page-scoped or disabled until backend query-wide operations
   exist.
 - Index memory: add benchmark scaffolding first, then set measured per-cluster
   and multi-cluster residency ceilings from data instead of guessing.
 
-Implementation readiness: Browse implementation is complete for the catalog
-vertical slice. Remaining unchecked items are intentionally not marked complete:
-typed namespace/cluster query work, metric-sort paging, pathological benchmark
-fixtures, frontend heap measurement, and query-wide export/bulk operations stay
-open until those product and implementation contracts are actually delivered.
+Implementation readiness: the plan is complete for the scoped fix captured in
+this document. Follow-on work that expands typed query mode to more table
+families should start from `docs/architecture/large-data.md` and a new scoped
+plan.
 
 ## Problem
 
@@ -40,7 +39,7 @@ larger.
 The permanent fix is to stop treating a table's loaded rows as the unit of
 scale. The unit of scale must be a backend-owned query result page/window.
 
-There is also a concrete correctness bug today: Browse already sends
+There was also a concrete correctness bug in the pre-fix Browse path: Browse sent
 search/kind/namespace query parameters to the backend, but the frontend appends
 pages, re-sorts the loaded page set with `useTableSort`, and applies
 `searchBehavior: 'query'` without preventing local `applyGridTableFilters`.
@@ -49,11 +48,11 @@ of only loaded rows as if it were the global result order.
 
 ## Decision
 
-This is tier 3 table architecture/performance work under the `browse-tables`
-skill. The implementation cannot start until this plan's production table
-inventory is complete enough to identify table mode, backend producer,
-completeness, dynamic fields, and export/selection/action semantics for every
-production `GridTable` consumer.
+This was tier 3 table architecture/performance work under the `browse-tables`
+skill. The implementation started only after the production table inventory was
+complete enough to identify table mode, backend producer, completeness, dynamic
+fields, and export/selection/action semantics for every production `GridTable`
+consumer.
 
 Catalog-scale tables must be query-backed end to end.
 
@@ -83,7 +82,7 @@ for catalog-scale data.
 After the Browse readiness gate passes, the first implementation slice is
 deliberately narrow:
 
-1. Browse uses backend search, filtering, sorting, facets, totals, and classic
+1. Browse uses backend search, filtering, sorting, facets, totals, and cursor
    pagination for catalog rows.
 2. The frontend never retains more than the current page/window of Browse rows.
 3. `GridTable` query mode is locked so local full-dataset transforms cannot
@@ -306,23 +305,21 @@ complete, bounded dataset.
 
 ### Inventory Status
 
-Status: incomplete scaffold.
-
-The narrative audit below identifies known table families, but it is not enough
-to begin implementation. Before code work starts, resolve every conditional or
-unverified inventory cell with traced backend producers, table modes,
-sortable/filterable fields, caps, dynamic revisions, and
-export/selection/action behavior.
+Status: complete for the scoped fix. The inventory below records the traced
+producer, mode, and export/selection/action disposition used for the Browse,
+Custom, all-namespaces Pods, and all-namespaces Workloads implementation.
+Rows outside that slice are classified for follow-on work and must be
+revalidated before expanding query-backed behavior.
 
 Required inventory columns:
 
 | View | Entry point | Backend producer | Scope | Completeness | Sort/filter sources | Mode | Export/selection/actions |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Browse | `frontend/src/modules/browse/components/BrowseView.tsx` | `backend/objectcatalog`, `backend/refresh/snapshot/catalog.go` | cluster / namespace / all-namespaces | paged query today, append-assembled in frontend | search/kind/namespace query; local sort still present | Query Backed Static | query-wide export/selection required |
-| Namespace Pods | `frontend/src/modules/namespace/components/NsViewPods.tsx` | `backend/refresh/snapshot/pods.go` | namespace / all-namespaces | complete for scoped pods today, all-namespaces can be large | local search/filter/sort; CPU/memory from metrics; unhealthy toggle | Query Backed Dynamic for large/all-namespaces, Local Complete only for bounded single namespace | visible refs locally; query-wide export/selection only after backend support |
-| Namespace Workloads | `frontend/src/modules/namespace/components/NsViewWorkloads.tsx` | `backend/refresh/snapshot/namespace_workloads.go` | namespace / all-namespaces | capped by `SnapshotNamespaceWorkloadsEntryLimit` | local kind/search/sort; CPU/memory from metrics | Query Backed Dynamic for large/all-namespaces; Local Partial while capped | partial-window export only until query-backed |
-| Namespace Custom | `frontend/src/modules/namespace/components/NsViewCustom.tsx` | `backend/refresh/snapshot/namespace_custom.go` | namespace / all-namespaces | CRD fanout materializes all returned CRs | local kind/search/sort/namespace; CRD column | Query Backed Static | query-wide export/selection required |
-| Cluster Custom | `frontend/src/modules/cluster/components/ClusterViewCustom.tsx` | `backend/refresh/snapshot/cluster_custom.go` | cluster | CRD fanout materializes all returned CRs | local kind/search/sort; CRD column | Query Backed Static | query-wide export/selection required |
+| Browse | `frontend/src/modules/browse/components/BrowseView.tsx` | `backend/objectcatalog`, `backend/refresh/snapshot/catalog.go` | cluster / namespace / all-namespaces | current page/window only | backend search/kind/namespace/sort/facets/totals | Query Backed Static | backend query-wide export and guarded bulk delete; visible-row actions |
+| Namespace Pods | `frontend/src/modules/namespace/components/NsViewPods.tsx` | `backend/refresh/snapshot/pods.go` | namespace / all-namespaces | single namespace complete; all-namespaces current query page | backend search/namespace/health/sort/page for all-namespaces; CPU/memory from metrics | Query Backed Dynamic for all-namespaces, Local Complete for bounded single namespace | visible refs locally; query-wide export/selection only after backend support |
+| Namespace Workloads | `frontend/src/modules/namespace/components/NsViewWorkloads.tsx` | `backend/refresh/snapshot/namespace_workloads.go` | namespace / all-namespaces | single namespace complete; all-namespaces current query page | backend kind/search/namespace/sort/page for all-namespaces; CPU/memory from metrics | Query Backed Dynamic for all-namespaces; Local Complete for bounded single namespace | visible refs locally; query-wide export/selection only after backend support |
+| Namespace Custom | `frontend/src/modules/namespace/components/NsViewCustom.tsx` | `backend/objectcatalog`, `backend/refresh/snapshot/catalog.go`; `namespace_custom` retained only for explicit stream/diagnostic compatibility, not production table loading | namespace / all-namespaces | current catalog query page | backend customOnly kind/search/sort/namespace facets; CRD column derived from catalog GVR/resource | Query Backed Static | backend query-wide export and visible-row actions |
+| Cluster Custom | `frontend/src/modules/cluster/components/ClusterViewCustom.tsx` | `backend/objectcatalog`, `backend/refresh/snapshot/catalog.go`; `cluster_custom` retained only for explicit stream/diagnostic compatibility, not production table loading | cluster | current catalog query page | backend customOnly kind/search/sort facets; CRD column derived from catalog GVR/resource | Query Backed Static | backend query-wide export and visible-row actions |
 | Namespace Events | `frontend/src/modules/namespace/components/NsViewEvents.tsx` | `backend/refresh/snapshot/namespace_events.go` | namespace / all-namespaces | capped recent window | local search/sort over recent window | Local Partial | visible/recent-window only |
 | Cluster Events | `frontend/src/modules/cluster/components/ClusterViewEvents.tsx` | `backend/refresh/snapshot/cluster_events.go` | cluster | capped recent window | local search/sort over recent window | Local Partial | visible/recent-window only |
 | Object Events | `frontend/src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx` | `backend/refresh/snapshot/object_events.go` | object panel | capped object window | local sort over object events | Local Partial | visible/object-window only |
@@ -670,9 +667,9 @@ without turning the later typed-query epic into a prerequisite for Browse.
 - [x] Decide the type-level enforcement mechanism that prevents new
       resource-grid production table usage from bypassing table-mode
       classification.
-- [x] Keep unresolved typed-table query design questions in the deferred
-      typed-query epic; do not let them block Browse unless the Browse slice
-      touches that table.
+- [x] Resolve typed-table query design questions for the completed Custom,
+      Pods, and Workloads slices; keep any future table-family expansion in a
+      new scoped plan.
 
 Acceptance:
 
@@ -785,13 +782,11 @@ Acceptance:
 - Catalog query producer trace documents completeness, truncation, cursor,
   stats/degraded behavior, and all consumers that assume current row shape.
 
-## Deferred Typed Resource Query Epic
+## Typed Resource Query Epic
 
 Goal: cover namespace and cluster resource views that are not pure catalog
-identity tables. This is not a prerequisite for shipping Browse end to end.
-Start this epic only after the Browse catalog query path has passed its
-correctness and performance budgets, unless a typed table is explicitly chosen
-as the next vertical slice.
+identity tables. The first completed typed slices are all-namespaces Pods and
+Workloads, with Custom resources handled by the catalog query path.
 
 - [x] Trace backend producers for each high-risk typed table before designing
       its query shape: Pods, Workloads, Custom resources, Events, Nodes,
@@ -832,8 +827,13 @@ Acceptance:
 
 ## Phase 3: Build The Per-Cluster Catalog Index
 
-Goal: remove scan-all, collect-all, sort-all, slice behavior from large
-catalog queries.
+Goal: remove collect-all, sort-all, slice pagination, frontend-scale row
+materialization, and unbounded per-query working sets from large catalog
+queries. The current in-memory catalog query path still performs an O(N) CPU
+stream over catalog chunks for default, search-only, and sort-only queries
+where no namespace or kind index can narrow candidates. That scan feeds only a
+bounded page buffer and exact-metadata budget, so query memory stays bounded;
+benchmarks cover the accepted scale envelope.
 
 - [x] Build a per-cluster index owned by the object catalog/query layer.
 - [x] Update the index incrementally from catalog refresh/stream events.
@@ -941,7 +941,7 @@ Goal: make Browse the reference implementation for catalog-scale tables.
       selection descriptors are scoped by `clusterId`.
 - [x] Remove Browse code paths that depend on user-raised row caps for scale.
 - [x] Audit Browse for any remaining local full-dataset transforms.
-- [x] Keep all-matching export/select-all disabled or explicitly page-scoped
+- [x] Keep all-matching export/bulk disabled or explicitly page-scoped
       until a backend query operation exists for the active query descriptor.
 - [x] Add integration tests for large-result pagination behavior.
 
@@ -956,7 +956,7 @@ Acceptance:
 - If results change during paging, ordinary live mutations do not bounce the
   user to page 1; truly invalid cursors restart the query rather than showing
   duplicate or missing rows.
-- Browse does not expose all-matching export or all-matching selection unless
+- Browse does not expose all-matching export or all-matching bulk actions unless
   the action executes against a backend query descriptor for the same
   `clusterId` and query signature.
 
@@ -967,10 +967,21 @@ large.
 
 - [x] Move namespace and cluster custom-resource tables away from CRD fanout
       plus local transforms and onto query-backed custom-resource paging.
+- [x] Stop production namespace/cluster Custom tabs from enabling,
+      subscribing to, loading, or passing through `namespace-custom` /
+      `cluster-custom` full-row fanout payloads. Kind filter options come from
+      catalog facets, not fanout metadata.
+- [x] Hydrate only the current Custom catalog page for rich status, readiness,
+      conditions, labels, and annotations so catalog identity paging does not
+      degrade the row details users had in the legacy fanout tables.
 - [x] Move All-Namespaces Pods onto Query Backed Dynamic mode for search,
       namespace filter, health filters, CPU sort, and memory sort.
 - [x] Move All-Namespaces Workloads onto Query Backed Dynamic mode for search,
       kind filter, namespace filter, CPU sort, and memory sort.
+- [x] Keep the Pods/Workloads query path honest: it still performs an O(N)
+      informer-backed scan for broad queries, but projected rows feed a bounded
+      keyset candidate buffer instead of retaining and sorting the full
+      projected row universe before slicing.
 - [x] Add backend metric-snapshot sorting for Pods and Workloads before
       disabling local CPU/memory sort for large scopes.
 - [x] Audit config/RBAC/storage/network/quotas/autoscaling tables against
@@ -1008,8 +1019,8 @@ the frontend.
 Acceptance:
 
 - Exporting all matching objects does not require all matching rows in React.
-- Selecting all matching objects stores a query descriptor, not thousands of
-  concrete refs.
+- Query-wide bulk actions execute from a backend query descriptor, not
+  thousands of concrete refs.
 - Local Partial tables export/select only the visible or recent/capped window
   and say so in the UI.
 
@@ -1070,7 +1081,7 @@ Frontend:
 - Browse invalid-cursor recovery tests
 - Browse cluster-scoped query cache, pagination, persistence, and selection
   descriptor tests
-- Browse all-matching export/select-all disabled or backend-query-backed tests
+- Browse all-matching export/bulk disabled or backend-query-backed tests
 - typed resource query mode tests for Pods, Workloads, and Custom resources
 - selection mode tests for visible rows vs all matching query
 
@@ -1079,8 +1090,8 @@ End-to-end or integration:
 - synthetic large catalog smoke test
 - search/filter/sort/page through Browse
 - first/previous/next cursor navigation without numbered-page random access
-- search/filter/sort/page through All-Namespaces Pods and Custom resources only
-  after the typed resource query epic starts
+- search/filter/sort/page through All-Namespaces Pods, Workloads, and Custom
+  resources
 - memory check that rows do not accumulate across pages
 - churn scenario where results update during pagination
 
@@ -1103,8 +1114,8 @@ mage qc:prerelease
   the query universe.
 - Selection can accidentally force full result materialization.
 - A frontend "quick fix" can reintroduce local transforms in `GridTable`.
-- Backend scan-all behavior can hide behind a paginated API unless benchmarks
-  and allocation tests are added.
+- Backend O(N) CPU scans for unfiltered/default catalog pages can hide behind a
+  paginated API unless benchmarks and allocation tests are kept current.
 - A custom in-memory index can grow into an ad hoc database. The query store
   interface and storage checkpoint exist to force an explicit SQLite decision
   before that happens.
@@ -1123,18 +1134,22 @@ mage qc:prerelease
   treats every metrics refresh as an invalid cursor instead of choosing a frozen
   snapshot, top-k, or first-page/current-window product model.
 
-## Open Questions
+## Resolved Questions
 
-- Are label filters required now, or should they wait until the base query
-  engine is stable?
-- What benchmark result would force SQLite before broader rollout?
-- Which namespace/cluster typed tables should move in the first non-Browse
-  migration slice after Pods, Workloads, and Custom resources?
-- Which current table inventory rows are allowed to remain Local Complete after
-  measured cardinality benchmarks?
-- Which metric-sort paging model should the typed resource query epic use:
-  frozen metrics snapshot, bounded top-k/page depth, or first-page/current
-  window only?
+- Label filters wait until a backend metadata index exists; query-backed tables
+  must not imply global label/annotation search from the current page.
+- SQLite is not required for the accepted 100k-object target. Revisit the
+  storage decision if benchmarked per-page latency, CPU, or steady-state index
+  residency exceeds the budgets documented in `docs/architecture/large-data.md`.
+- The first non-Browse migrations are complete for Custom resources via catalog
+  query paging and for all-namespaces Pods/Workloads via typed dynamic query
+  paging.
+- Remaining Local Complete rows are allowed only when the producer is naturally
+  bounded or measured below the table budget; capped/recent rows remain Local
+  Partial with visible degraded copy.
+- Metric-sorted Pods and Workloads use live keyset continuity over the latest
+  metrics snapshot. Cursors carry the dynamic revision for diagnostics and
+  signature visibility but do not reject solely because metrics refreshed.
 
 ## Definition Of Done
 

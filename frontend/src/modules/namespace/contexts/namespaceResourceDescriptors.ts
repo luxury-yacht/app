@@ -9,8 +9,6 @@ import type { NamespaceRefresherKey } from '@/core/refresh/refresherTypes';
 import type {
   NamespaceAutoscalingSnapshotPayload,
   NamespaceAutoscalingSummary,
-  NamespaceCustomSnapshotPayload,
-  NamespaceCustomSummary,
   NamespaceHelmSnapshotPayload,
   NamespaceHelmSummary,
   RefreshDomain,
@@ -22,7 +20,6 @@ import {
   namespaceEventResourceRowIdentity,
   parseAutoscalingTarget,
   resourceKindsMeta,
-  versionedNamespacedRowIdentity,
 } from '@shared/resources/resourceDescriptorSelectors';
 
 export interface NamespaceResourceDescriptor<T = any[]> {
@@ -113,28 +110,6 @@ export const namespaceResourceDescriptors = {
     fallback: [],
     select: (payload, clusterId) => filterRowsForCluster(payload?.events, clusterId),
     rowIdentity: namespaceEventResourceRowIdentity,
-  },
-  custom: {
-    resourceKey: 'custom',
-    domain: 'namespace-custom',
-    fallback: [],
-    select: (payload: NamespaceCustomSnapshotPayload | undefined, clusterId) =>
-      filterRowsForCluster(payload?.resources, clusterId).map((item: NamespaceCustomSummary) => ({
-        kind: item.kind,
-        kindAlias: item.kind,
-        name: item.name,
-        namespace: item.namespace,
-        apiGroup: item.apiGroup,
-        apiVersion: item.apiVersion,
-        crdName: item.crdName,
-        age: item.age,
-        clusterId: item.clusterId,
-        clusterName: item.clusterName,
-        labels: item.labels,
-        annotations: item.annotations,
-      })),
-    meta: resourceKindsMeta,
-    rowIdentity: versionedNamespacedRowIdentity,
   },
   helm: {
     resourceKey: 'helm',

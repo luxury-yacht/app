@@ -236,9 +236,14 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	}
 
 	var (
-		items   []WorkloadSummary
-		version uint64
+		items           []WorkloadSummary
+		version         uint64
+		processedOwners = map[string]struct{}{}
 	)
+	var queryCollector *typedTableQueryCollector[WorkloadSummary]
+	if query.Enabled {
+		queryCollector = newTypedTableQueryCollector(query, workloadTableQueryAdapter())
+	}
 
 	appendSummary := func(summary WorkloadSummary, obj metav1.Object) {
 		summary.ClusterMeta = meta
@@ -251,7 +256,14 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 			}
 			summary.HPAManaged = &managed
 		}
-		items = append(items, summary)
+		if summary.Kind != "Pod" {
+			processedOwners[workloadOwnerKey(summary.Kind, summary.Namespace, summary.Name)] = struct{}{}
+		}
+		if queryCollector != nil {
+			queryCollector.Add(summary)
+		} else {
+			items = append(items, summary)
+		}
 		if obj == nil {
 			return
 		}
@@ -300,12 +312,6 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		appendSummary(summary, cron)
 	}
 
-	processedOwners := make(map[string]struct{}, len(items))
-	for _, summary := range items {
-		key := workloadOwnerKey(summary.Kind, summary.Namespace, summary.Name)
-		processedOwners[key] = struct{}{}
-	}
-
 	for _, pod := range pods {
 		if pod == nil {
 			continue
@@ -323,15 +329,14 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	}
 
 	if query.Enabled {
-		page := applyTypedTableQuery(items, query, workloadTableQueryAdapter())
-		items = page.Rows
+		page := queryCollector.Page()
 		return &refresh.Snapshot{
 			Domain:  namespaceWorkloadsDomainName,
 			Scope:   scope,
 			Version: version,
 			Payload: NamespaceWorkloadsSnapshot{
 				ClusterMeta:  meta,
-				Workloads:    items,
+				Workloads:    page.Rows,
 				Kinds:        page.Kinds,
 				Continue:     page.Continue,
 				Total:        page.Total,
@@ -339,7 +344,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 				Namespaces:   page.Namespaces,
 			},
 			Stats: refresh.SnapshotStats{
-				ItemCount: len(items),
+				ItemCount: len(page.Rows),
 			},
 		}, nil
 	}

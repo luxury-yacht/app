@@ -123,10 +123,12 @@ describe('ClusterResourcesProvider', () => {
     container.remove();
   });
 
-  const render = async () => {
+  const render = async (
+    activeView: React.ComponentProps<typeof ClusterResourcesProvider>['activeView'] = 'config'
+  ) => {
     await act(async () => {
       root.render(
-        <ClusterResourcesProvider activeView="config">
+        <ClusterResourcesProvider activeView={activeView}>
           <TestConsumer />
         </ClusterResourcesProvider>
       );
@@ -308,5 +310,32 @@ describe('ClusterResourcesProvider', () => {
       { preserveState: true }
     );
     expect(dataAccessMocks.requestRefreshDomain).not.toHaveBeenCalled();
+  });
+
+  it('does not enable or fetch the cluster-custom fanout for the catalog-backed custom view', async () => {
+    scopedStates[`cluster-custom:${testClusterScope}`] = createDomainState({
+      status: 'ready',
+      scope: testClusterScope,
+      data: {
+        resources: [{ clusterId: testClusterId, kind: 'Widget', name: 'legacy-row' }],
+        kinds: ['Widget'],
+      },
+    });
+
+    await render('custom');
+
+    expect(contextRef.current?.custom.data).toEqual([]);
+    expect(contextRef.current?.custom.hasLoaded).toBe(false);
+    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+      'cluster-custom',
+      testClusterScope,
+      true,
+      expect.anything()
+    );
+    expect(dataAccessMocks.requestRefreshDomain).not.toHaveBeenCalledWith({
+      domain: 'cluster-custom',
+      scope: testClusterScope,
+      reason: 'startup',
+    });
   });
 });
