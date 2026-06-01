@@ -149,8 +149,6 @@ describe('NamespaceResourcesManager', () => {
     expect(props.nsRBACKinds).toEqual(['Role', 'RoleBinding', 'ServiceAccount']);
     expect(props.nsAutoscalingKinds).toEqual(['HorizontalPodAutoscaler']);
     expect(props.nsQuotasKinds).toEqual(['LimitRange', 'PodDisruptionBudget', 'ResourceQuota']);
-    expect(props.nsCustom).toEqual([]);
-    expect(props.nsCustomKinds).toBeUndefined();
   });
 
   it('cancels outstanding resource operations on unmount', async () => {

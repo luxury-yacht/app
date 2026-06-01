@@ -129,6 +129,7 @@ type RenderOptions = Partial<{
   onColumnWidthsChange: (widths: Record<string, any>) => void;
   columnWidths: Record<string, any>;
   allowHorizontalOverflow: boolean;
+  disableMaxTableRowsLimit: boolean;
   keyExtractor: (item: SimpleRow, index: number) => string;
 }>;
 
@@ -234,6 +235,30 @@ describe('GridTable virtualization', () => {
     expect(container.textContent).toContain('Row 0');
     expect(container.textContent).toContain('Row 2');
     expect(container.textContent).not.toContain('Row 3');
+  });
+
+  it('does not apply the max table rows setting to backend query windows', () => {
+    setAppPreferencesForTesting({ maxTableRows: 3 });
+    const { container, cleanup } = renderGridTable({
+      data: createRows(8),
+      disableMaxTableRowsLimit: true,
+      virtualization: { enabled: false },
+      filters: {
+        enabled: true,
+        options: {
+          searchBehavior: 'query',
+          totalCount: 20,
+          totalIsExact: true,
+        },
+      },
+    });
+    cleanupRoot = cleanup;
+
+    const renderedRows = container.querySelectorAll('.gridtable-row');
+    expect(renderedRows).toHaveLength(8);
+    expect(container.textContent).toContain('Row 7');
+    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+    expect(resultCount?.textContent).toBe('8 of 20 items');
   });
 
   it('updates the rendered slice when scrolling', async () => {
@@ -1183,6 +1208,7 @@ function renderGridTable(options: RenderOptions = {}) {
     onColumnWidthsChange: options.onColumnWidthsChange,
     columnWidths: options.columnWidths ?? {},
     allowHorizontalOverflow: options.allowHorizontalOverflow ?? false,
+    disableMaxTableRowsLimit: options.disableMaxTableRowsLimit ?? false,
   };
 
   let currentProps = initialProps;

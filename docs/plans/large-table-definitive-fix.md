@@ -744,9 +744,11 @@ Goal: harden the existing catalog query boundary before optimizing internals.
 - [x] Preserve cluster and full GVK identity through the existing refresh scope,
       data-access, and row contracts.
 - [x] Add backend-owned sort parameters for the Browse day-one sort fields.
-- [x] Add a catalog query service/store interface behind `backend/objectcatalog`
+- [ ] Add a catalog query service/store interface behind `backend/objectcatalog`
       so the storage implementation can be replaced without changing frontend
-      contracts.
+      contracts. Deferred: the current implementation still embeds the in-memory
+      `catalogIndex` directly in `Service`; this branch keeps the query contract
+      stable but does not add the swappable storage seam.
 - [x] Include page limit validation and a hard backend maximum.
 - [x] Replace the current integer-offset `Continue` token with a keyset cursor
       bound to `clusterId`, canonical query signature, backend sort, page
@@ -1116,9 +1118,9 @@ mage qc:prerelease
 - A frontend "quick fix" can reintroduce local transforms in `GridTable`.
 - Backend O(N) CPU scans for unfiltered/default catalog pages can hide behind a
   paginated API unless benchmarks and allocation tests are kept current.
-- A custom in-memory index can grow into an ad hoc database. The query store
-  interface and storage checkpoint exist to force an explicit SQLite decision
-  before that happens.
+- A custom in-memory index can grow into an ad hoc database. The storage
+  checkpoint remains open until a real query-store interface exists; make an
+  explicit SQLite decision before expanding the catalog query surface further.
 - Cursor pagination may be less fluid than browsing by scroll. That tradeoff
   is intentional for the first implementation because correctness and bounded
   memory come first.

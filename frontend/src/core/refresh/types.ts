@@ -845,6 +845,7 @@ export interface NamespaceWorkloadSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 

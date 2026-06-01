@@ -35,7 +35,7 @@ export type CustomResourceData = CatalogBackedCustomResourceRow;
 
 interface CustomViewProps {
   namespace: string;
-  data: CustomResourceData[];
+  data?: CustomResourceData[];
   availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;

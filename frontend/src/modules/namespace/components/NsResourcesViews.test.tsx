@@ -249,19 +249,10 @@ describe('NamespaceResourcesViews', () => {
     },
     {
       tab: 'custom' as const,
-      props: {
-        nsCustom: [{ name: 'crd' }],
-        nsCustomKinds: ['DBCluster', 'Widget'],
-        nsCustomLoading: false,
-        nsCustomLoaded: true,
-      },
+      props: {},
       mock: customViewMock,
       expected: {
         namespace: 'team-a',
-        data: [{ name: 'crd' }],
-        availableKinds: ['DBCluster', 'Widget'],
-        loading: false,
-        loaded: true,
       },
     },
     {
@@ -314,9 +305,6 @@ describe('NamespaceResourcesViews', () => {
     await renderView({
       namespace: 'team-a',
       activeTab: 'custom',
-      nsCustom: [{ name: 'crd' }],
-      nsCustomLoading: false,
-      nsCustomLoaded: true,
       objectPanel: <aside data-testid="panel" />,
     });
 

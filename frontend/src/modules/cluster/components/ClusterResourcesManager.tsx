@@ -164,8 +164,6 @@ export function ClusterResourcesManager({
       crdsError={crdsErrorMessage}
       crdsLoaded={(crds?.hasLoaded ?? false) || Boolean(crdsErrorMessage)}
       // Custom
-      custom={[]}
-      customKinds={undefined}
       customLoading={false}
       customError={customErrorMessage}
       customLoaded={Boolean(customErrorMessage)}

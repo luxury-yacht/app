@@ -147,8 +147,6 @@ describe('ClusterResourcesManager', () => {
       'MutatingWebhookConfiguration',
       'StorageClass',
     ]);
-    expect(props.custom).toEqual([]);
-    expect(props.customKinds).toBeUndefined();
     expect(props.rbacKinds).toEqual(['ClusterRole', 'ClusterRoleBinding']);
   });
 

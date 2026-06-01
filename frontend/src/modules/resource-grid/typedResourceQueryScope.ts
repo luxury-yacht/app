@@ -4,7 +4,7 @@ import type {
   GridTableFilterState,
 } from '@shared/components/tables/GridTable';
 import type { SortConfig } from '@hooks/useTableSort';
-import type { ResourceQueryDynamicRef } from '@/core/refresh/types';
+import type { ResourceQueryDynamicRef, ResourceQueryIssue } from '@/core/refresh/types';
 
 export interface TypedQueryPayload {
   continue?: string;
@@ -14,6 +14,7 @@ export interface TypedQueryPayload {
   namespaces?: string[];
   kinds?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
@@ -110,10 +111,18 @@ export function buildTypedResourceQueryScope(
 export function filterOptionsFromTypedPayload(
   payload: TypedQueryPayload
 ): Partial<GridTableFilterOptions> {
+  const issueLabel = payload.issues?.length
+    ? payload.issues.map((issue) => `${issue.kind}: ${issue.message}`).join('\n')
+    : undefined;
+  const facetsLabel =
+    payload.facetsExact === false
+      ? 'Facet options are approximate because one or more backend data sources were unavailable.'
+      : undefined;
   return {
     kinds: payload.kinds,
     namespaces: payload.namespaces,
     totalCount: payload.total,
     totalIsExact: payload.totalIsExact,
+    partialDataLabel: [issueLabel, facetsLabel].filter(Boolean).join('\n') || undefined,
   };
 }

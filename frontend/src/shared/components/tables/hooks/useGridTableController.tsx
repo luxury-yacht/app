@@ -147,6 +147,7 @@ export function useGridTableController<T>({
   virtualization,
   loadingOverlay,
   filters,
+  disableMaxTableRowsLimit = false,
   diagnosticsLabel,
   diagnosticsMode = 'local',
   allowHorizontalOverflow = true,
@@ -225,7 +226,7 @@ export function useGridTableController<T>({
   } = useGridTableFiltersWiring<T>({
     data: sourceData,
     totalDataCount,
-    maxDisplayRows: maxTableRows,
+    maxDisplayRows: disableMaxTableRowsLimit ? undefined : maxTableRows,
     filters,
     diagnosticsLabel,
     columnsDropdown: columnsDropdownConfig ?? undefined,
@@ -234,8 +235,8 @@ export function useGridTableController<T>({
   });
 
   const tableData = useMemo<T[]>(
-    () => filteredData.slice(0, maxTableRows),
-    [filteredData, maxTableRows]
+    () => (disableMaxTableRowsLimit ? filteredData : filteredData.slice(0, maxTableRows)),
+    [disableMaxTableRowsLimit, filteredData, maxTableRows]
   );
 
   useEffect(() => {
@@ -248,7 +249,9 @@ export function useGridTableController<T>({
     recordGridTablePerformanceSnapshot(diagnosticsLabel, {
       mode: diagnosticsMode,
       inputRows: totalDataCount,
-      sourceRows: Math.min(totalDataCount, maxTableRows),
+      sourceRows: disableMaxTableRowsLimit
+        ? totalDataCount
+        : Math.min(totalDataCount, maxTableRows),
       displayedRows: tableData.length,
       inputReferenceChanged,
     });
@@ -256,6 +259,7 @@ export function useGridTableController<T>({
   }, [
     diagnosticsLabel,
     diagnosticsMode,
+    disableMaxTableRowsLimit,
     inputData,
     maxTableRows,
     tableData.length,

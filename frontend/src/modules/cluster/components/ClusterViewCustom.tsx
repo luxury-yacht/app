@@ -34,7 +34,7 @@ type ClusterCustomData = CatalogBackedCustomResourceRow;
 
 // Define props for ClusterViewCustom component
 interface ClusterCustomViewProps {
-  data: ClusterCustomData[];
+  data?: ClusterCustomData[];
   availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;

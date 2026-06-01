@@ -104,14 +104,6 @@ interface NamespaceResourcesViewsProps {
   loadQuotas?: () => Promise<void>;
   nsQuotasLoaded?: boolean;
 
-  // Custom resources data
-  nsCustom?: any[];
-  nsCustomKinds?: string[];
-  nsCustomLoading?: boolean;
-  nsCustomError?: string | null;
-  loadCustom?: () => Promise<void>;
-  nsCustomLoaded?: boolean;
-
   // Helm data
   nsHelm?: any[];
   nsHelmLoading?: boolean;
@@ -178,11 +170,6 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   nsQuotasKinds,
   nsQuotasLoading = false,
   nsQuotasLoaded = false,
-
-  nsCustom = [],
-  nsCustomKinds,
-  nsCustomLoading = false,
-  nsCustomLoaded = false,
 
   nsHelm = [],
   nsHelmLoading = false,
@@ -351,13 +338,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="Custom Resources" reset={reset} />}
           >
-            <NsViewCustom
-              namespace={namespace}
-              data={nsCustom}
-              availableKinds={nsCustomKinds}
-              loading={nsCustomLoading}
-              loaded={nsCustomLoaded}
-            />
+            <NsViewCustom namespace={namespace} />
           </ErrorBoundary>
         );
       case 'helm':

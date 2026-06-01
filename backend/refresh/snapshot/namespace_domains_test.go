@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -1552,6 +1553,58 @@ func TestNamespaceWorkloadsBuilderMetricCursorContinuesAcrossMetricsRefresh(t *t
 	require.Len(t, nextPayload.Workloads, 1)
 	require.Equal(t, "charlie", nextPayload.Workloads[0].Name)
 	require.Empty(t, nextPayload.Continue)
+}
+
+func TestNamespaceWorkloadsQueryMarksDeniedKindsPartial(t *testing.T) {
+	now := time.Now()
+	replicas := int32(1)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "api",
+			Namespace:         "team-a",
+			ResourceVersion:   "101",
+			CreationTimestamp: metav1.NewTime(now.Add(-20 * time.Minute)),
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api"}},
+		},
+	}
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "migration",
+			Namespace:         "team-a",
+			ResourceVersion:   "102",
+			CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+		},
+	}
+	builder := &NamespaceWorkloadsBuilder{
+		podLister:        testsupport.NewPodLister(t),
+		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
+		statefulLister:   testsupport.NewStatefulSetLister(t),
+		daemonLister:     testsupport.NewDaemonSetLister(t),
+		jobLister:        testsupport.NewJobLister(t, job),
+		cronJobLister:    testsupport.NewCronJobLister(t),
+	}
+	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceWorkloadsDomainName, domainpermissions.AllowedResources{
+		"core/pods":         true,
+		"apps/deployments":  true,
+		"apps/statefulsets": true,
+		"apps/daemonsets":   true,
+		"batch/jobs":        false,
+		"batch/cronjobs":    true,
+	})
+
+	snapshot, err := builder.Build(ctx, "cluster-a|namespace:all?limit=10")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
+	require.False(t, payload.TotalIsExact)
+	require.False(t, payload.FacetsExact)
+	require.Len(t, payload.Issues, 1)
+	require.Equal(t, "Job", payload.Issues[0].Kind)
+	require.Contains(t, payload.Issues[0].Message, "partial")
+	require.Len(t, payload.Workloads, 1)
+	require.Equal(t, "Deployment", payload.Workloads[0].Kind)
 }
 
 func mustQuantity(t testing.TB, value string) resource.Quantity {

@@ -628,6 +628,9 @@ func validateCatalogQuerySelection(selection snapshot.QuerySelectionDescriptor) 
 	if clusterID == "" {
 		return "", fmt.Errorf("cluster ID is required")
 	}
+	if len(selection.Predicates) > 0 {
+		return "", fmt.Errorf("catalog query selection predicates are unsupported")
+	}
 	return clusterID, nil
 }
 

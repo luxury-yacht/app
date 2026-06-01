@@ -313,12 +313,6 @@ export function NamespaceResourcesManager({
       loadQuotas={manualLoaders.quotas}
       nsQuotasLoaded={quotas?.hasLoaded ?? false}
       // Custom resources data
-      nsCustom={[]}
-      nsCustomKinds={undefined}
-      nsCustomLoading={false}
-      nsCustomError={null}
-      loadCustom={manualLoaders.custom}
-      nsCustomLoaded={false}
       // Helm data
       nsHelm={helm?.data || []}
       nsHelmLoading={helm?.loading || false}

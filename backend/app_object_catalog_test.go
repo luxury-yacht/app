@@ -446,6 +446,19 @@ func TestHydrateCatalogCustomRowsKeepsPageOnRowFailure(t *testing.T) {
 	require.Equal(t, "widgets.example.com", byName["beta"].CRDName)
 }
 
+func TestValidateCatalogQuerySelectionRejectsUnsupportedPredicates(t *testing.T) {
+	_, err := validateCatalogQuerySelection(snapshot.QuerySelectionDescriptor{
+		ClusterID: "cluster-b",
+		Table:     "browse",
+		Predicates: []snapshot.ResourceQueryPredicate{
+			{Field: "health", Op: "eq", Value: "unhealthy"},
+		},
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "predicates are unsupported")
+}
+
 func TestRunCatalogQueryBulkActionRequiresConfirmationAndSupportsDryRun(t *testing.T) {
 	app := NewApp()
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)

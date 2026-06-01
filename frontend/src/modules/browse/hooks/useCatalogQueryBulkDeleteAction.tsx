@@ -89,7 +89,13 @@ export function useCatalogQueryBulkDeleteAction({
     (disableWhenUnscoped && !query.hasUserNamespaceScope);
 
   const handleConfirm = useCallback(async () => {
-    if (!query.clusterId) {
+    if (
+      !query.clusterId ||
+      pending ||
+      running ||
+      totalCount === 0 ||
+      (disableWhenUnscoped && !query.hasUserNamespaceScope)
+    ) {
       setOpen(false);
       setFeedback('error');
       scheduleReset();
@@ -131,7 +137,7 @@ export function useCatalogQueryBulkDeleteAction({
       setOpen(false);
       scheduleReset();
     }
-  }, [onComplete, query, scheduleReset]);
+  }, [disableWhenUnscoped, onComplete, pending, query, running, scheduleReset, totalCount]);
 
   const action = useMemo<IconBarItem>(
     () => ({

@@ -72,6 +72,7 @@ type NamespaceWorkloadsSnapshot struct {
 	TotalIsExact  bool                     `json:"totalIsExact"`
 	Namespaces    []string                 `json:"namespaces,omitempty"`
 	FacetsExact   bool                     `json:"facetsExact"`
+	Issues        []ResourceQueryIssue     `json:"issues,omitempty"`
 	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
@@ -157,6 +158,7 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 		return nil, err
 	}
 	namespace := parsedScope.Namespace
+	issues := b.queryIssues(ctx, query)
 
 	var pods []*corev1.Pod
 	if b.podLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "", "pods") {
@@ -205,7 +207,7 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	// coverage is unavailable, leave ownership unknown instead of emitting false.
 	hpas, hpaErr := b.listHPAs(namespace)
 
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas, hpaErr == nil)
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas, hpaErr == nil, issues)
 }
 func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	meta ClusterMeta,
@@ -219,6 +221,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	cronJobs []*batchv1.CronJob,
 	hpas []*autoscalingv1.HorizontalPodAutoscaler,
 	hpaKnown bool,
+	issues []ResourceQueryIssue,
 ) (*refresh.Snapshot, error) {
 	podUsage := map[string]metrics.PodUsage{}
 	if b.metrics != nil {
@@ -333,6 +336,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 
 	if query.Enabled {
 		page := queryCollector.Page()
+		exact := len(issues) == 0
 		return &refresh.Snapshot{
 			Domain:  namespaceWorkloadsDomainName,
 			Scope:   scope,
@@ -344,9 +348,10 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 				Continue:      page.Continue,
 				CursorInvalid: page.CursorInvalid,
 				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
+				TotalIsExact:  page.TotalIsExact && exact,
 				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
+				FacetsExact:   page.FacetsExact && exact,
+				Issues:        issues,
 				Dynamic:       page.Dynamic,
 			},
 			Stats: refresh.SnapshotStats{
@@ -371,6 +376,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 			Kinds:        snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }),
 			Total:        len(items),
 			TotalIsExact: true,
+			Issues:       issues,
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(items),
@@ -391,6 +397,69 @@ func sortWorkloadSummaries(items []WorkloadSummary) {
 		}
 		return items[i].Status < items[j].Status
 	})
+}
+
+func (b *NamespaceWorkloadsBuilder) queryIssues(ctx context.Context, query typedTableQuery) []ResourceQueryIssue {
+	if !query.Enabled {
+		return nil
+	}
+	sources := []struct {
+		kind     string
+		group    string
+		resource string
+		ok       bool
+	}{
+		{kind: "Pod", group: "", resource: "pods", ok: b.podLister != nil},
+		{kind: "Deployment", group: "apps", resource: "deployments", ok: b.deploymentLister != nil},
+		{kind: "StatefulSet", group: "apps", resource: "statefulsets", ok: b.statefulLister != nil},
+		{kind: "DaemonSet", group: "apps", resource: "daemonsets", ok: b.daemonLister != nil},
+		{kind: "Job", group: "batch", resource: "jobs", ok: b.jobLister != nil},
+		{kind: "CronJob", group: "batch", resource: "cronjobs", ok: b.cronJobLister != nil},
+	}
+	issues := make([]ResourceQueryIssue, 0)
+	for _, source := range sources {
+		needed := workloadQueryIncludesKind(query, source.kind)
+		if source.kind == "Pod" {
+			needed = workloadQueryNeedsPods(query)
+		}
+		if !needed {
+			continue
+		}
+		if source.ok && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, source.group, source.resource) {
+			continue
+		}
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    source.kind,
+			Message: fmt.Sprintf("%s resources are unavailable; workload totals and facets are partial", source.kind),
+		})
+	}
+	return issues
+}
+
+func workloadQueryNeedsPods(query typedTableQuery) bool {
+	if len(query.Request.Kinds) == 0 {
+		return true
+	}
+	for _, requested := range query.Request.Kinds {
+		switch strings.ToLower(strings.TrimSpace(requested)) {
+		case "pod", "deployment", "statefulset", "daemonset", "job", "cronjob":
+			return true
+		}
+	}
+	return false
+}
+
+func workloadQueryIncludesKind(query typedTableQuery, kind string) bool {
+	if len(query.Request.Kinds) == 0 {
+		return true
+	}
+	normalized := strings.ToLower(strings.TrimSpace(kind))
+	for _, requested := range query.Request.Kinds {
+		if strings.ToLower(strings.TrimSpace(requested)) == normalized {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *NamespaceWorkloadsBuilder) workloadsDynamicRevision() string {
