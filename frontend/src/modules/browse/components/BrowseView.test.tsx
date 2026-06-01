@@ -613,7 +613,8 @@ describe('BrowseView', () => {
         ['default'],
         '',
         '',
-        ''
+        '',
+        false
       );
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith('clusterId,kind\ncluster-1,Pod\n');
     });

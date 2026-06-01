@@ -691,6 +691,75 @@ func TestExportQueryCSVPagesThroughAllMatchingRows(t *testing.T) {
 	}
 }
 
+func TestExportQueryCSVHonorsCustomOnlyWithEmptyKindFilters(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	podDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Kind:       "Pod",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+	widgetDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+		Namespaced: true,
+		Kind:       "Widget",
+		Group:      "example.com",
+		Version:    "v1",
+		Resource:   "widgets",
+		Scope:      ScopeNamespace,
+	}
+
+	svc.mu.Lock()
+	svc.items = map[string]Summary{
+		catalogKey(podDesc, "default", "pod-a"): {
+			ClusterID: "cluster-a",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      "pod-a",
+			UID:       "uid-pod-a",
+			Scope:     ScopeNamespace,
+		},
+		catalogKey(widgetDesc, "default", "widget-a"): {
+			ClusterID: "cluster-a",
+			Kind:      "Widget",
+			Group:     "example.com",
+			Version:   "v1",
+			Resource:  "widgets",
+			Namespace: "default",
+			Name:      "widget-a",
+			UID:       "uid-widget-a",
+			Scope:     ScopeNamespace,
+		},
+	}
+	svc.resources = map[string]resourceDescriptor{
+		podDesc.GVR.String():    podDesc,
+		widgetDesc.GVR.String(): widgetDesc,
+	}
+	svc.mu.Unlock()
+	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
+
+	csvText, err := svc.ExportQueryCSV(QueryOptions{
+		Namespaces: []string{"default"},
+		CustomOnly: true,
+		Limit:      1,
+		SortField:  "name",
+	})
+	if err != nil {
+		t.Fatalf("ExportQueryCSV returned error: %v", err)
+	}
+	expected := "clusterId,kind,namespace,name,group,version,resource,uid\n" +
+		"cluster-a,Widget,default,widget-a,example.com,v1,widgets,uid-widget-a\n"
+	if csvText != expected {
+		t.Fatalf("unexpected CSV:\n%s", csvText)
+	}
+}
+
 func TestQueryPreviousCursorReturnsReverseWindow(t *testing.T) {
 	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
 	podDesc := resourceDescriptor{

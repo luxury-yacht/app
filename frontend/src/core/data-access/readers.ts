@@ -116,8 +116,10 @@ export const readCatalogQueryCSV = (
   namespaces: string[],
   search: string,
   sortField: string,
-  sortDirection: string
-) => ExportCatalogQueryCSV(clusterId, kinds, namespaces, search, sortField, sortDirection);
+  sortDirection: string,
+  customOnly: boolean
+) =>
+  ExportCatalogQueryCSV(clusterId, kinds, namespaces, search, sortField, sortDirection, customOnly);
 
 export interface CustomCatalogHydrationRow {
   clusterId: string;

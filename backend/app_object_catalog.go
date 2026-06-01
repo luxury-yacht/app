@@ -544,6 +544,7 @@ func (a *App) ExportCatalogQueryCSV(
 	search string,
 	sortField string,
 	sortDirection string,
+	customOnly bool,
 ) (string, error) {
 	if a == nil {
 		return "", fmt.Errorf("app is not initialised")
@@ -565,6 +566,7 @@ func (a *App) ExportCatalogQueryCSV(
 		Search:        search,
 		SortField:     sortField,
 		SortDirection: sortDirection,
+		CustomOnly:    customOnly,
 	})
 }
 

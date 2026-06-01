@@ -72,7 +72,8 @@ export function useCatalogQueryCsvAction({
             query.namespaces,
             query.search,
             query.sortField,
-            query.sortDirection
+            query.sortDirection,
+            query.customOnly
           ),
       });
       if (result.status !== 'executed') {

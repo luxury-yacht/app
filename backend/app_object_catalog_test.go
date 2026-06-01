@@ -280,6 +280,7 @@ func TestExportCatalogQueryCSVUsesClusterScopedCatalog(t *testing.T) {
 		"",
 		"name",
 		"asc",
+		false,
 	)
 	require.NoError(t, err)
 	require.Equal(
