@@ -9,6 +9,10 @@ without an explicit cap or pagination model.
 - Preserve `clusterId` in row identity and persisted table state.
 - Every resource-grid table declares a required `tableMode`: `Local Complete`,
   `Local Partial`, `Query Backed Static`, or `Query Backed Dynamic`.
+- A table is not large-data safe just because it has been classified.
+  Classification is only the starting point. The table must either provide
+  backend-owned global semantics, prove a real complete bound, or visibly
+  present itself as a bounded/recent/partial view with matching action limits.
 - Prefer server/query-side bounds for catalog-scale data.
 - Use GridTable virtualization for large row sets; do not disable it to mask
   focus, hover, or width bugs.
@@ -18,10 +22,14 @@ without an explicit cap or pagination model.
   or facet generation over the current page as if it were the full result set.
 - Cursor pagination for catalog-scale data is first/previous/next keyset
   navigation. Numbered page jumps require a separate bounded offset contract.
+- Query-backed pagination controls belong together in the table footer. Show
+  page size and visible range. Show exact totals and page counts only when the
+  backend result says the total is exact; otherwise make the count approximate
+  and avoid random page-jump UI.
 - Browse page size is user-selectable only from bounded options. Changing page
   size starts a new backend query scope and invalidates prior page cursors.
-- Make truncation, load-more, degraded data, and blocked reads visible in UI
-  state.
+- Make truncation, load-more, degraded data, stale data, unavailable metrics,
+  permission-blocked reads, and capped windows visible in UI state.
 - Exact totals are preferred for Browse while they remain within measured
   backend budgets. The catalog query path stops exact total/facet metadata above
   its backend exact-metadata budget and emits `totalIsExact: false` /
@@ -84,6 +92,11 @@ table scope.
 `Local Partial` tables may run local transforms only over the visible bounded
 window. They must not imply global totals, global facets, global sorting, or
 query-wide export/selection.
+
+Local Partial is a user-facing contract, not an internal excuse. The table must
+label the window source, such as recent, capped, degraded, or buffered; totals
+and facets must be scoped to that window; destructive and export actions must
+say or enforce that they apply only to visible/windowed rows.
 
 `Query Backed Static` tables receive rows that are already searched, filtered,
 sorted, and paged by the backend. Shared table logic must not locally narrow or
@@ -163,6 +176,17 @@ Config, RBAC, storage, network, quotas, autoscaling, and Helm: current snapshot
 producers are typed refresh domains. Single-namespace bounded views may remain
 local; all-namespaces or capped snapshot views either remain visibly `Local
 Partial` or migrate to `Query Backed Static` after measured fixtures justify it.
+
+## App-Wide Remaining Work
+
+The completed large-table slice covers Browse, Custom resource tables,
+all-namespaces Pods, all-namespaces Workloads, and shared table-mode
+enforcement. It does not make every production table globally query-backed.
+
+The active remaining plan is
+[`docs/plans/app-wide-table-hardening.md`](../plans/app-wide-table-hardening.md).
+Do not claim app-wide large-table completion until that plan's Definition of
+Done is satisfied.
 
 ## Current Browse Budget
 

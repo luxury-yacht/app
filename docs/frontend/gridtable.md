@@ -18,6 +18,9 @@ workflow and that exception is documented.
   menu bugs.
 - Do not build CSS selectors from raw row or column keys; keys may contain
   characters that are not selector-safe.
+- Do not split pagination controls across unrelated parts of the view. For
+  query-backed tables, the control group belongs with the table footer and must
+  show page size, visible range, and honest total/page-count state.
 
 ## Ownership
 
@@ -49,14 +52,30 @@ cluster-scoped row keys.
 - Metadata filters that describe the object universe should come from catalog or
   query metadata, not a capped row slice.
 
+## Table Modes And User Claims
+
+- `Local Complete` means the loaded rows are the complete bounded dataset for
+  this table scope.
+- `Local Partial` means the loaded rows are only a recent, capped, buffered, or
+  degraded window. UI text, counts, filters, export, selection, and bulk actions
+  must be scoped to that window.
+- `Query Backed Static` and `Query Backed Dynamic` mean the backend owns global
+  search, filters, sort, counts, facets, and pagination. `GridTable` renders the
+  current page/window and emits query changes.
+- A classified table is not automatically production-ready. The UI and actions
+  must match the mode.
+
 ## Change Checklist
 
 When changing table behavior:
 
 1. Check row key, column key, and persisted-state compatibility.
 2. Verify virtualization, keyboard focus, hover, context menu, and empty states.
-3. Keep shared behavior in focused table hooks rather than feature components.
-4. Add tests with enough rows and columns to exercise the shared path.
+3. Verify pagination placement, page-size behavior, visible range, and total
+   exactness for query-backed tables.
+4. Verify partial/degraded copy and action limits for Local Partial tables.
+5. Keep shared behavior in focused table hooks rather than feature components.
+6. Add tests with enough rows and columns to exercise the shared path.
 
 ## Validation
 

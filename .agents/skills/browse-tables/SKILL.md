@@ -68,6 +68,11 @@ to `docs/frontend/gridtable.md` or `docs/architecture/large-data.md` when the
 plan is complete. If an artifact is not needed for a narrow edit, say why in
 the final response.
 
+For app-wide large-table work, classification is not completion. A table is
+complete only when it is query-backed, proven Local Complete by a real bound, or
+visibly Local Partial with matching counts, filters, export, selection, and
+bulk-action limits.
+
 Inventory these entry points:
 
 - `<GridTable` render sites
@@ -132,6 +137,10 @@ If a table is `Local Partial`, the UI must make partial, capped, recent, or
 degraded state visible and must not imply global counts, facets, sorting, or
 export semantics.
 
+If a table is `Local Complete`, verify the bound at the producer or with
+measured fixtures. Do not use a user-facing row cap as proof that the dataset is
+complete.
+
 If a table is `Query Backed Dynamic`, backend cursor/snapshot identity must
 include both the base resource snapshot/revision and the dynamic input revision
 such as metrics. Do not sort dynamic fields locally for a global table.
@@ -166,6 +175,8 @@ workaround.
 For any table change that affects row sets, filters, search, sort, or
 pagination, explicitly check:
 
+- pagination control placement, visible range, page size, exact/approximate
+  total display, and whether page count/random access is actually supported
 - CSV/export: current page/window vs all matching query
 - selection: visible concrete refs vs query-wide selection descriptor
 - select-all: visible rows only vs all matching rows
@@ -188,6 +199,9 @@ pagination, explicitly check:
       table performance behavior.
 - [ ] Broad table architecture work includes a complete production `GridTable`
       inventory and mode classification.
+- [ ] Mode classification is backed by implementation: query-backed tables own
+      global semantics in the backend, Local Complete tables have a real bound,
+      and Local Partial tables visibly limit user claims/actions.
 - [ ] Query-backed tables do not run local full-dataset search, filter, sort, or
       facet generation.
 - [ ] Metric-backed global sorts are backend-owned and tied to a metrics or
