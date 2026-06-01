@@ -89,6 +89,9 @@ const (
 	// SnapshotNamespaceQuotasEntryLimit caps namespace quota snapshot rows.
 	SnapshotNamespaceQuotasEntryLimit = 1000
 
+	// SnapshotNamespaceHelmEntryLimit caps all-namespaces Helm snapshot rows.
+	SnapshotNamespaceHelmEntryLimit = 1000
+
 	// SnapshotNamespaceCustomWorkerLimit caps namespace custom-resource list fanout.
 	SnapshotNamespaceCustomWorkerLimit = 8
 

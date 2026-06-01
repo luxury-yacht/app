@@ -208,6 +208,9 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(
 		}
 		return summaries[i].Namespace < summaries[j].Namespace
 	})
+	if len(summaries) > config.SnapshotNamespaceHelmEntryLimit {
+		summaries = summaries[:config.SnapshotNamespaceHelmEntryLimit]
+	}
 
 	return &refresh.Snapshot{
 		Domain:  namespaceHelmDomainName,

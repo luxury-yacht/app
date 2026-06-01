@@ -277,19 +277,20 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
+    const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
+
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<HelmData>({
-      tableMode: 'Local Complete',
+      tableMode: isAllNamespaces ? 'Local Partial' : 'Local Complete',
       viewId: 'namespace-helm',
       namespace,
       data,
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm',
+      diagnosticsLabel: isAllNamespaces ? 'All Namespaces Helm' : 'Namespace Helm',
       showKindDropdown: true,
       showNamespaceFilters: showNamespaceColumn,
-      filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
+      filterOptions: { isNamespaceScoped: !isAllNamespaces },
     });
 
     const getContextMenuItems = useCallback(

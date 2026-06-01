@@ -20,6 +20,7 @@ import (
 	"helm.sh/helm/v3/pkg/storage/driver"
 	releasetime "helm.sh/helm/v3/pkg/time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -240,6 +241,57 @@ func TestNamespaceHelmBuilderAllNamespaces(t *testing.T) {
 	}
 	require.Equal(t, 1, getInvocation("default"))
 	require.Equal(t, 1, getInvocation("staging"))
+}
+
+func TestNamespaceHelmBuilderAllNamespacesCapsRows(t *testing.T) {
+	now := time.Now()
+	baseChart := &chart.Chart{
+		Metadata: &chart.Metadata{
+			Name:       "example",
+			Version:    "1.0.0",
+			AppVersion: "3.2.1",
+		},
+	}
+	namespaces := make([]*corev1.Namespace, 0, config.SnapshotNamespaceHelmEntryLimit+1)
+	for i := 0; i < config.SnapshotNamespaceHelmEntryLimit+1; i++ {
+		namespaces = append(namespaces, &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("ns-%04d", i)},
+		})
+	}
+	factory := func(namespace string) (*action.Configuration, error) {
+		memDriver := driver.NewMemory()
+		memDriver.SetNamespace(namespace)
+		store := storage.Init(memDriver)
+		err := store.Create(&release.Release{
+			Name:      "app",
+			Namespace: namespace,
+			Version:   1,
+			Chart:     baseChart,
+			Info: &release.Info{
+				Status:        release.StatusDeployed,
+				FirstDeployed: releasetime.Time{Time: now.Add(-time.Hour)},
+				LastDeployed:  releasetime.Time{Time: now},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &action.Configuration{
+			Releases:   store,
+			KubeClient: stubKubeClient{},
+		}, nil
+	}
+	builder := &NamespaceHelmBuilder{
+		factory:         factory,
+		namespaceLister: testsupport.NewNamespaceLister(t, namespaces...),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:all")
+	require.NoError(t, err)
+	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
+	require.True(t, ok)
+	require.Len(t, payload.Releases, config.SnapshotNamespaceHelmEntryLimit)
+	require.Equal(t, config.SnapshotNamespaceHelmEntryLimit, snapshot.Stats.ItemCount)
 }
 
 type stubKubeClient struct{}

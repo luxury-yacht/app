@@ -685,5 +685,81 @@ describe('BrowseView', () => {
         continue: undefined,
       });
     });
+
+    it('surfaces query-wide delete partial failures after completion', async () => {
+      runCatalogQueryBulkActionMock.mockResolvedValueOnce({
+        processed: 1,
+        succeeded: 0,
+        failed: 1,
+        failures: [
+          {
+            ref: {
+              clusterId: 'cluster-1',
+              group: '',
+              version: 'v1',
+              kind: 'Pod',
+              resource: 'pods',
+              namespace: 'default',
+              name: 'api',
+            },
+            message: 'pods "api" is forbidden',
+          },
+        ],
+      });
+      refreshMocks.scopedDomains.set('cluster-1|limit=1000&namespace=default', {
+        status: 'ready',
+        data: {
+          items: [
+            {
+              uid: 'pod-1',
+              kind: 'Pod',
+              name: 'api',
+              namespace: 'default',
+              scope: 'Namespace',
+              resource: 'pods',
+              group: '',
+              version: 'v1',
+              resourceVersion: '1',
+              creationTimestamp: new Date().toISOString(),
+              clusterId: 'cluster-1',
+            },
+          ],
+          kinds: [{ kind: 'Pod', namespaced: true }],
+          namespaces: ['default'],
+          total: 1,
+        },
+        scope: 'cluster-1|limit=1000&namespace=default',
+      });
+
+      await act(async () => {
+        root.render(<BrowseView namespace="default" />);
+        await Promise.resolve();
+      });
+
+      const deleteAllAction = gridTablePropsRef.current?.filters?.options?.postActions?.find(
+        (item: any) => item.id === 'delete-browse-query'
+      );
+      expect(deleteAllAction).toBeTruthy();
+
+      await act(async () => {
+        deleteAllAction.onClick();
+        await Promise.resolve();
+      });
+
+      const confirm = document.querySelector<HTMLButtonElement>(
+        '.confirmation-modal-footer .button.danger'
+      );
+
+      await act(async () => {
+        confirm?.click();
+        await Promise.resolve();
+      });
+
+      expect(document.body.textContent).toContain('Delete completed with failures');
+      expect(document.body.textContent).toContain(
+        'Processed 1 matching objects. Deleted 0. Failed 1.'
+      );
+      expect(document.body.textContent).toContain('Pod default/api: pods "api" is forbidden');
+    });
   });
 });

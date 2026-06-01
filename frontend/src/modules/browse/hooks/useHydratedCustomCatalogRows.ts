@@ -108,15 +108,19 @@ export function useHydratedCustomCatalogRows(
           hydratedByKey.set(customRowKey(hydrated), hydrated);
         }
         setRows(
-          fallbackRows.map((row) => ({
-            ...row,
-            ...(hydratedByKey.get(customRowKey(row)) ?? {}),
-            group: row.group,
-            version: row.version,
-            resource: row.resource,
-            apiGroup: row.group,
-            apiVersion: row.version,
-          }))
+          fallbackRows.map((row) => {
+            const hydrated = hydratedByKey.get(customRowKey(row));
+            return {
+              ...row,
+              ...(hydrated ?? {}),
+              group: row.group,
+              version: row.version,
+              resource: row.resource,
+              apiGroup: row.group,
+              apiVersion: row.version,
+              age: hydrated?.age || row.age,
+            };
+          })
         );
       })
       .catch((error) => {

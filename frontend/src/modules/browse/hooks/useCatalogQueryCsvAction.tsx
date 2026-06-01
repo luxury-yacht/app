@@ -48,11 +48,7 @@ export function useCatalogQueryCsvAction({
   }, []);
 
   const handleCopy = useCallback(async () => {
-    if (
-      !query.clusterId ||
-      pending ||
-      (disableWhenUnscoped && !query.hasUserNamespaceScope)
-    ) {
+    if (!query.clusterId || pending || (disableWhenUnscoped && !query.hasUserNamespaceScope)) {
       setFeedback('error');
       scheduleReset();
       return;
