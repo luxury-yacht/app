@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CopyIcon } from '@shared/components/icons/LogIcons';
+import { YamlSaveIcon } from '@shared/components/icons/YamlIcons';
 import { readCatalogQueryCSVFile, requestData } from '@core/data-access';
 import {
   backendSelectionFromCatalogSelection,
@@ -29,8 +29,6 @@ export function useCatalogQueryCsvAction({
 }: UseCatalogQueryCsvActionOptions): IconBarItem {
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [feedback, setFeedback] = useState<'success' | 'error' | null>(null);
-  const canCopy =
-    typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function';
 
   const scheduleReset = useCallback(() => {
     if (resetTimerRef.current) {
@@ -52,7 +50,6 @@ export function useCatalogQueryCsvAction({
   const handleCopy = useCallback(async () => {
     if (
       !query.clusterId ||
-      !canCopy ||
       pending ||
       (disableWhenUnscoped && !query.hasUserNamespaceScope)
     ) {
@@ -74,21 +71,20 @@ export function useCatalogQueryCsvAction({
         setFeedback('error');
         return;
       }
-      await navigator.clipboard.writeText(result.data?.path ?? '');
-      setFeedback('success');
+      setFeedback(result.data?.path ? 'success' : 'error');
     } catch (error) {
-      console.error('Failed to copy all matching catalog rows as CSV', error);
+      console.error('Failed to export all matching catalog rows as CSV', error);
       setFeedback('error');
     } finally {
       scheduleReset();
     }
-  }, [canCopy, disableWhenUnscoped, pending, query, scheduleReset, title]);
+  }, [disableWhenUnscoped, pending, query, scheduleReset, title]);
 
   return useMemo<IconBarItem>(
     () => ({
       type: 'action',
       id,
-      icon: <CopyIcon width={18} height={18} />,
+      icon: <YamlSaveIcon width={18} height={18} />,
       onClick: () => {
         void handleCopy();
       },
@@ -96,12 +92,11 @@ export function useCatalogQueryCsvAction({
       ariaLabel: title,
       disabled:
         !query.clusterId ||
-        !canCopy ||
         pending ||
         totalCount === 0 ||
         (disableWhenUnscoped && !query.hasUserNamespaceScope),
       feedback,
     }),
-    [canCopy, disableWhenUnscoped, feedback, handleCopy, id, pending, query, title, totalCount]
+    [disableWhenUnscoped, feedback, handleCopy, id, pending, query, title, totalCount]
   );
 }

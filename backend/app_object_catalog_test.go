@@ -13,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -247,6 +248,7 @@ func TestFindCatalogObjectByUIDUsesCatalogIdentity(t *testing.T) {
 
 func TestExportCatalogSelectionCSVFileUsesDurableQuerySelection(t *testing.T) {
 	app := NewApp()
+	app.Ctx = context.Background()
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
 	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
 		"example.com/v1, Resource=widgets/apps/alpha": {
@@ -273,6 +275,14 @@ func TestExportCatalogSelectionCSVFileUsesDurableQuerySelection(t *testing.T) {
 		},
 	})
 	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
+	exportPath := t.TempDir() + "/catalog.csv"
+	origSaveFileDialog := runtimeSaveFileDialog
+	runtimeSaveFileDialog = func(context.Context, wailsruntime.SaveDialogOptions) (string, error) {
+		return exportPath, nil
+	}
+	t.Cleanup(func() {
+		runtimeSaveFileDialog = origSaveFileDialog
+	})
 
 	export, err := app.ExportCatalogSelectionCSVFile(snapshot.QuerySelectionDescriptor{
 		ClusterID:  "cluster-b",
@@ -282,7 +292,7 @@ func TestExportCatalogSelectionCSVFileUsesDurableQuerySelection(t *testing.T) {
 		SortField:  "name",
 	})
 	require.NoError(t, err)
-	defer os.Remove(export.Path)
+	require.Equal(t, exportPath, export.Path)
 
 	csvBytes, err := os.ReadFile(export.Path)
 	require.NoError(t, err)

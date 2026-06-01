@@ -9,7 +9,7 @@ import type { RefreshDomain, ResourceQueryDynamicRef } from '@/core/refresh/type
 import {
   buildTypedResourceQueryScope,
   filterOptionsFromTypedPayload,
-  typedResourceQueryIdentity,
+  typedResourceQueryLifecycleIdentity,
   type TypedQueryPayload,
 } from './typedResourceQueryScope';
 export type { TypedQueryPayload } from './typedResourceQueryScope';
@@ -61,8 +61,17 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   const [filterOptions, setFilterOptions] = useState<Partial<GridTableFilterOptions>>({});
   const [dynamic, setDynamic] = useState<ResourceQueryDynamicRef | null>(null);
   const queryIdentity = useMemo(
-    () => typedResourceQueryIdentity({ filters, sortConfig, predicates }),
-    [filters, predicates, sortConfig]
+    () =>
+      typedResourceQueryLifecycleIdentity({
+        enabled,
+        clusterId,
+        domain,
+        filters,
+        sortConfig,
+        pageLimit,
+        predicates,
+      }),
+    [clusterId, domain, enabled, filters, pageLimit, predicates, sortConfig]
   );
   const queryIdentityRef = useRef(queryIdentity);
   queryIdentityRef.current = queryIdentity;

@@ -24,6 +24,7 @@ var newRefreshSubsystemWithServices = system.NewSubsystemWithServices
 var (
 	runtimeEventsEmit     = runtime.EventsEmit
 	runtimeMessageDialog  = runtime.MessageDialog
+	runtimeSaveFileDialog = runtime.SaveFileDialog
 	runtimeQuit           = runtime.Quit
 	runtimeWindowSetSize  = runtime.WindowSetSize
 	runtimeWindowSetPos   = runtime.WindowSetPosition

@@ -230,12 +230,6 @@ describe('BrowseView', () => {
       succeeded: 1,
       failed: 0,
     });
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: {
-        writeText: vi.fn().mockResolvedValue(undefined),
-      },
-    });
   });
 
   afterEach(() => {
@@ -619,7 +613,6 @@ describe('BrowseView', () => {
         sortDirection: '',
         customOnly: false,
       });
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('/tmp/catalog.csv');
     });
   });
 

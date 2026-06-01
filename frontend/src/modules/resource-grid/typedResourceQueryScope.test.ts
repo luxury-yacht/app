@@ -3,6 +3,7 @@ import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridT
 import {
   buildTypedResourceQueryScope,
   typedResourceQueryIdentity,
+  typedResourceQueryLifecycleIdentity,
 } from './typedResourceQueryScope';
 
 describe('typedResourceQueryScope', () => {
@@ -46,5 +47,39 @@ describe('typedResourceQueryScope', () => {
     });
 
     expect(left).toBe(right);
+  });
+
+  it('includes cluster, domain, and page limit in lifecycle identity', () => {
+    const base = {
+      enabled: true,
+      domain: 'pods' as const,
+      pageLimit: 250,
+      filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+      sortConfig: { key: 'name', direction: 'asc' } as const,
+    };
+
+    expect(
+      typedResourceQueryLifecycleIdentity({
+        ...base,
+        clusterId: 'cluster-a',
+      })
+    ).not.toBe(
+      typedResourceQueryLifecycleIdentity({
+        ...base,
+        clusterId: 'cluster-b',
+      })
+    );
+    expect(
+      typedResourceQueryLifecycleIdentity({
+        ...base,
+        clusterId: 'cluster-a',
+      })
+    ).not.toBe(
+      typedResourceQueryLifecycleIdentity({
+        ...base,
+        clusterId: 'cluster-a',
+        pageLimit: 500,
+      })
+    );
   });
 });

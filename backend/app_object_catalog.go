@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -542,12 +544,15 @@ func (a *App) FindCatalogObjectByUID(clusterID, uid string) (*objectcatalog.Summ
 }
 
 // ExportCatalogSelectionCSVFile exports every catalog object matching a durable
-// query selection to a temp file. Query-wide export stays file-backed so Wails
-// does not have to marshal an unbounded CSV string into the frontend.
+// query selection to a user-selected file. Query-wide export stays file-backed
+// so Wails does not have to marshal an unbounded CSV string into the frontend.
 func (a *App) ExportCatalogSelectionCSVFile(selection snapshot.QuerySelectionDescriptor) (CatalogQueryCSVExport, error) {
 	var empty CatalogQueryCSVExport
 	if a == nil {
 		return empty, fmt.Errorf("app is not initialised")
+	}
+	if a.Ctx == nil {
+		return empty, fmt.Errorf("application context is not available")
 	}
 	clusterID, err := validateCatalogQuerySelection(selection)
 	if err != nil {
@@ -558,11 +563,26 @@ func (a *App) ExportCatalogSelectionCSVFile(selection snapshot.QuerySelectionDes
 		return empty, fmt.Errorf("object catalog service unavailable for cluster %q", clusterID)
 	}
 
-	file, err := os.CreateTemp("", "luxury-yacht-catalog-*.csv")
+	path, err := runtimeSaveFileDialog(a.Ctx, wailsruntime.SaveDialogOptions{
+		Title:           "Export catalog query CSV",
+		DefaultFilename: catalogSelectionCSVFilename(selection),
+		Filters: []wailsruntime.FileFilter{
+			{DisplayName: "CSV files (*.csv)", Pattern: "*.csv"},
+		},
+		CanCreateDirectories: true,
+	})
+	if err != nil {
+		return empty, fmt.Errorf("select catalog CSV export file: %w", err)
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return empty, fmt.Errorf("catalog CSV export canceled")
+	}
+
+	file, err := os.Create(path)
 	if err != nil {
 		return empty, fmt.Errorf("create catalog CSV export: %w", err)
 	}
-	path := file.Name()
 	cleanup := true
 	defer func() {
 		if cleanup {
@@ -583,6 +603,19 @@ func (a *App) ExportCatalogSelectionCSVFile(selection snapshot.QuerySelectionDes
 	}
 	cleanup = false
 	return CatalogQueryCSVExport{Path: path, Bytes: info.Size()}, nil
+}
+
+func catalogSelectionCSVFilename(selection snapshot.QuerySelectionDescriptor) string {
+	table := strings.TrimSpace(selection.Table)
+	if table == "" {
+		table = "catalog"
+	}
+	clusterID := strings.TrimSpace(selection.ClusterID)
+	if clusterID == "" {
+		clusterID = "cluster"
+	}
+	replacer := strings.NewReplacer("/", "-", "\\", "-", ":", "-", " ", "-")
+	return filepath.Base(replacer.Replace(clusterID + "-" + table + ".csv"))
 }
 
 func validateCatalogQuerySelection(selection snapshot.QuerySelectionDescriptor) (string, error) {

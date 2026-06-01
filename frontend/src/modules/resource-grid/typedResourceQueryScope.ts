@@ -25,6 +25,12 @@ export interface TypedResourceQueryDescriptor {
   continueToken?: string | null;
 }
 
+export interface TypedResourceQueryLifecycleDescriptor extends TypedResourceQueryDescriptor {
+  enabled: boolean;
+  clusterId?: string | null;
+  domain: string;
+}
+
 const stableTypedQueryList = (values: string[]) =>
   values
     .map((value) => value.trim())
@@ -47,6 +53,23 @@ export const typedResourceQueryIdentity = ({
         .filter(([, value]) => Boolean(value))
         .sort(([left], [right]) => left.localeCompare(right))
     ),
+  });
+
+export const typedResourceQueryLifecycleIdentity = ({
+  enabled,
+  clusterId,
+  domain,
+  pageLimit,
+  filters,
+  sortConfig,
+  predicates,
+}: TypedResourceQueryLifecycleDescriptor) =>
+  JSON.stringify({
+    enabled,
+    clusterId: clusterId?.trim() ?? '',
+    domain,
+    pageLimit,
+    query: typedResourceQueryIdentity({ filters, sortConfig, predicates }),
   });
 
 export function buildTypedResourceQueryScope(
