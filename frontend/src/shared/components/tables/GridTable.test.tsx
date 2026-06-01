@@ -1143,7 +1143,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     await flushAsync();
 
     expect(container.querySelector('.gridtable-pagination-status')?.textContent).toContain(
-      'Use Next page to navigate results'
+      'More pages available'
     );
 
     rerender({ hasMore: false });
@@ -1151,7 +1151,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     await flushAsync();
 
     expect(container.querySelector('.gridtable-pagination-status')?.textContent).toContain(
-      'No additional pages'
+      'All results loaded'
     );
   });
 });
@@ -1413,7 +1413,7 @@ it('updates pagination status messaging as pagination state evolves', async () =
 
   const statusNode = () => container.querySelector<HTMLDivElement>('.gridtable-pagination-status');
   expect(statusNode()).not.toBeNull();
-  expect(statusNode()!.textContent?.trim()).toBe('Use Next page to navigate results');
+  expect(statusNode()!.textContent?.trim()).toBe('More pages available');
 
   await act(async () => {
     rerender({ isRequestingMore: true });
@@ -1425,7 +1425,7 @@ it('updates pagination status messaging as pagination state evolves', async () =
     rerender({ isRequestingMore: false, hasMore: false });
     await Promise.resolve();
   });
-  expect(statusNode()!.textContent?.trim()).toBe('No additional pages');
+  expect(statusNode()!.textContent?.trim()).toBe('All results loaded');
 
   await act(async () => {
     rerender({ showPaginationStatus: false });

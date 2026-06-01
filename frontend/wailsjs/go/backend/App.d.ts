@@ -3,6 +3,7 @@
 import {backend} from '../models';
 import {context} from '../models';
 import {types} from '../models';
+import {snapshot} from '../models';
 import {objectcatalog} from '../models';
 import {json} from '../models';
 import {capabilities} from '../models';
@@ -43,9 +44,7 @@ export function DeleteTheme(arg1:string):Promise<void>;
 
 export function DiscoverNodeLogs(arg1:string,arg2:string):Promise<types.NodeLogDiscoveryResponse>;
 
-export function ExportCatalogSelectionCSVFile(arg1:any):Promise<any>;
-
-export function RunCatalogQueryBulkAction(arg1:any):Promise<any>;
+export function ExportCatalogSelectionCSVFile(arg1:snapshot.QuerySelectionDescriptor):Promise<backend.CatalogQueryCSVExport>;
 
 export function FetchContainerLogs(arg1:string,arg2:types.ContainerLogsFetchRequest):Promise<types.ContainerLogsFetchResponse>;
 
@@ -120,8 +119,6 @@ export function GetHelmReleaseDetails(arg1:string,arg2:string,arg3:string):Promi
 export function GetHelmValues(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>>;
 
 export function GetHorizontalPodAutoscaler(arg1:string,arg2:string,arg3:string):Promise<types.HorizontalPodAutoscalerDetails>;
-
-export function HydrateCatalogCustomRows(arg1:string,arg2:Array<any>):Promise<Array<any>>;
 
 export function GetIngress(arg1:string,arg2:string,arg3:string):Promise<types.IngressDetails>;
 
@@ -199,6 +196,8 @@ export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promi
 
 export function GetZoomLevel():Promise<number>;
 
+export function HydrateCatalogCustomRows(arg1:string,arg2:Array<snapshot.ResourceQueryRow>):Promise<Array<snapshot.CustomResourceSummary>>;
+
 export function IsAppLogsPanelVisible():Promise<boolean>;
 
 export function IsDiagnosticsPanelVisible():Promise<boolean>;
@@ -234,6 +233,8 @@ export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<
 export function RetryAuth():Promise<void>;
 
 export function RetryClusterAuth(arg1:string):Promise<void>;
+
+export function RunCatalogQueryBulkAction(arg1:snapshot.QueryBulkActionRequest):Promise<snapshot.QueryBulkActionResult>;
 
 export function RunObjectAction(arg1:backend.ObjectActionRequest):Promise<backend.ObjectActionResponse>;
 

@@ -1319,6 +1319,47 @@ describe('refreshOrchestrator', () => {
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
   });
 
+  it('uses snapshots without opening a resource stream for query-backed typed table scopes', async () => {
+    registerStreamingPodsDomain();
+    const scope = buildClusterScope(
+      'cluster-a',
+      'namespace:all?limit=250&sort=name&sortDirection=asc'
+    );
+    refreshOrchestrator.updateContext({
+      currentView: 'namespace',
+      activeNamespaceView: 'pods',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+    });
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope,
+        version: 1,
+        checksum: 'etag-query',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          clusterId: 'cluster-a',
+          pods: [makePodRow({ clusterId: 'cluster-a', namespace: 'team-a', name: 'pod-a' })],
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      etag: 'etag-query',
+      notModified: false,
+    });
+
+    refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
+    await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: false });
+
+    expect(resourceStreamMocks.start).not.toHaveBeenCalled();
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
+      'pods',
+      expect.objectContaining({ scope })
+    );
+    expect(getScopedDomainState('pods', scope).data?.pods).toHaveLength(1);
+  });
+
   it('falls back to full snapshots for metrics domains when a stream is unhealthy', async () => {
     registerStreamingPodsDomain();
     const scope = buildClusterScope('cluster-a', 'namespace:team-a');

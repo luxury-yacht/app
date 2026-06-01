@@ -21,8 +21,7 @@ import {
   HydrateCatalogCustomRows,
   IsWorkloadHPAManaged,
 } from '@wailsjs/go/backend/App';
-import type { types } from '@wailsjs/go/models';
-import type { QuerySelectionDescriptor } from '@/core/refresh/types';
+import type { snapshot, types } from '@wailsjs/go/models';
 
 export interface ObjectReadTarget {
   clusterId: string;
@@ -116,7 +115,7 @@ export interface CatalogQueryCSVExport {
   bytes: number;
 }
 
-export const readCatalogQueryCSVFile = (selection: QuerySelectionDescriptor) =>
+export const readCatalogQueryCSVFile = (selection: snapshot.QuerySelectionDescriptor) =>
   ExportCatalogSelectionCSVFile(selection) as Promise<CatalogQueryCSVExport>;
 
 export interface CustomCatalogHydrationRow {

@@ -96,6 +96,8 @@ export interface UseBrowseCatalogResult {
   previousToken: string | null;
   /** Whether a "load more" request is in progress */
   isRequestingMore: boolean;
+  /** One-based cursor page index for the current backend page */
+  pageIndex: number;
   /** Handler to load the next page of items */
   handleLoadMore: () => void;
   /** Handler to load the previous page of items */
@@ -150,6 +152,7 @@ export function useBrowseCatalog({
   const [continueToken, setContinueToken] = useState<string | null>(null);
   const [previousToken, setPreviousToken] = useState<string | null>(null);
   const [isRequestingMore, setIsRequestingMore] = useState(false);
+  const [pageIndex, setPageIndex] = useState(1);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [totalIsExact, setTotalIsExact] = useState(true);
@@ -273,6 +276,7 @@ export function useBrowseCatalog({
 
     // Reset pagination state on query change.
     setIsRequestingMore(false);
+    setPageIndex(1);
     setContinueToken(null);
     setPreviousToken(null);
     // Preserve the current dataset while filter-only queries refresh so the
@@ -337,14 +341,14 @@ export function useBrowseCatalog({
     setHasLoadedOnce(true);
   }, [domain.data, hasLoadedOnce]);
 
-  // Next-page handler. Fetches the next cursor page using a paginated scope and
+  // Cursor-page handler. Fetches a cursor page using a paginated scope and
   // replaces the current row window. The refresh store remains scoped by the
   // request that produced the data; Browse keeps only the current page/window.
   const catalogScopeRef = useRef(catalogScope);
   catalogScopeRef.current = catalogScope;
 
   const requestPage = useCallback(
-    (token: string | null) => {
+    (token: string | null, direction: 'next' | 'previous') => {
       if (!token || isRequestingMore) {
         return;
       }
@@ -380,6 +384,7 @@ export function useBrowseCatalog({
             setItems([]);
             setContinueToken(null);
             setPreviousToken(null);
+            setPageIndex(1);
             void refreshCatalogScope('user');
             return;
           }
@@ -391,6 +396,9 @@ export function useBrowseCatalog({
           setPreviousToken(next.previousToken);
           setTotalCount(next.totalCount);
           setTotalIsExact(next.totalIsExact);
+          setPageIndex((current) =>
+            direction === 'next' ? current + 1 : Math.max(1, current - 1)
+          );
           if (!hasLoadedOnceRef.current) {
             hasLoadedOnceRef.current = true;
             setHasLoadedOnce(true);
@@ -418,14 +426,15 @@ export function useBrowseCatalog({
   );
 
   const handleLoadMore = useCallback(() => {
-    requestPage(continueToken);
+    requestPage(continueToken, 'next');
   }, [continueToken, requestPage]);
 
   const handleLoadPrevious = useCallback(() => {
-    requestPage(previousToken);
+    requestPage(previousToken, 'previous');
   }, [previousToken, requestPage]);
 
   const refreshCurrentQuery = useCallback(() => {
+    setPageIndex(1);
     void refreshCatalogScope('user');
   }, [refreshCatalogScope]);
 
@@ -484,6 +493,7 @@ export function useBrowseCatalog({
     continueToken,
     previousToken,
     isRequestingMore,
+    pageIndex,
     handleLoadMore,
     handleLoadPrevious,
     filterOptions,

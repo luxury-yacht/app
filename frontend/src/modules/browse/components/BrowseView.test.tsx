@@ -410,7 +410,7 @@ describe('BrowseView', () => {
   });
 
   describe('Row cap UI', () => {
-    it('does not expose a load-more action when a catalog response is truncated', async () => {
+    it('renders query pagination in the table footer and suppresses split top counts', async () => {
       refreshMocks.catalogDomain.scope = 'cluster-1|limit=1000&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [
@@ -430,6 +430,7 @@ describe('BrowseView', () => {
         ],
         continue: '200',
         batchSize: 200,
+        total: 1200,
       };
       refreshMocks.catalogDomain.status = 'ready';
 
@@ -444,6 +445,18 @@ describe('BrowseView', () => {
           (item: any) => item.title === 'Load more'
         )
       ).toBe(false);
+      expect(gridTablePropsRef.current.showLoadMoreButton).toBe(false);
+      expect(gridTablePropsRef.current.showPaginationStatus).toBe(false);
+      expect(gridTablePropsRef.current.filters.options.customActions).toBeUndefined();
+      expect(gridTablePropsRef.current.filters.options.showResultCount).toBe(false);
+      expect(gridTablePropsRef.current.paginationControls?.props).toMatchObject({
+        pageIndex: 1,
+        pageSize: 1000,
+        totalCount: 1200,
+        totalIsExact: true,
+        hasPrevious: false,
+        hasNext: true,
+      });
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledTimes(2);
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
         1,
@@ -668,22 +681,24 @@ describe('BrowseView', () => {
         await Promise.resolve();
       });
 
-      expect(runCatalogQueryBulkActionMock).toHaveBeenCalledWith({
-        selection: {
-          clusterId: 'cluster-1',
-          table: 'browse',
-          namespaces: ['default'],
-          kinds: [],
-          search: '',
-          sortField: '',
-          sortDirection: '',
-          customOnly: false,
-        },
-        action: 'delete',
-        confirmed: true,
-        limit: 100,
-        continue: undefined,
-      });
+      expect(runCatalogQueryBulkActionMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          selection: expect.objectContaining({
+            clusterId: 'cluster-1',
+            table: 'browse',
+            namespaces: ['default'],
+            kinds: [],
+            search: '',
+            sortField: '',
+            sortDirection: '',
+            customOnly: false,
+          }),
+          action: 'delete',
+          confirmed: true,
+          limit: 100,
+          continue: undefined,
+        })
+      );
     });
 
     it('surfaces query-wide delete partial failures after completion', async () => {

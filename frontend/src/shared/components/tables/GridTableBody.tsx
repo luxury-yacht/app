@@ -39,6 +39,7 @@ interface GridTableBodyProps<T> {
   paginationStatus: string;
   showPaginationStatus: boolean;
   showLoadMoreButton: boolean;
+  paginationControls?: React.ReactNode;
   loadMoreLabel: string;
   previousPageLabel: string;
   hasMore: boolean;
@@ -82,6 +83,7 @@ function GridTableBody<T>({
   paginationStatus,
   showPaginationStatus,
   showLoadMoreButton,
+  paginationControls,
   loadMoreLabel,
   previousPageLabel,
   hasMore,
@@ -252,6 +254,7 @@ function GridTableBody<T>({
             isRequestingMore={isRequestingMore}
             showLoadMoreButton={showLoadMoreButton}
             showPaginationStatus={showPaginationStatus}
+            paginationControls={paginationControls}
             loadMoreLabel={loadMoreLabel}
             previousPageLabel={previousPageLabel}
             paginationStatus={paginationStatus}

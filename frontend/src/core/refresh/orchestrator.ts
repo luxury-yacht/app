@@ -537,6 +537,9 @@ class RefreshOrchestrator {
     if (parsed.isMultiCluster) {
       return false;
     }
+    if (parsed.scope.includes('?')) {
+      return false;
+    }
     if (this.isStreamingBlocked(domain, trimmed)) {
       return false;
     }

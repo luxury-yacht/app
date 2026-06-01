@@ -17,6 +17,7 @@ interface GridTablePaginationProps {
   loadMoreLabel: string;
   previousPageLabel: string;
   paginationStatus: string;
+  paginationControls?: React.ReactNode;
   onManualLoadMore: () => void;
   onManualLoadPrevious: () => void;
   sentinelRef: RefObject<HTMLDivElement | null>;
@@ -31,6 +32,7 @@ const GridTablePagination: React.FC<GridTablePaginationProps> = ({
   loadMoreLabel,
   previousPageLabel,
   paginationStatus,
+  paginationControls,
   onManualLoadMore,
   onManualLoadPrevious,
   sentinelRef,
@@ -42,6 +44,7 @@ const GridTablePagination: React.FC<GridTablePaginationProps> = ({
         className="gridtable-pagination-sentinel"
         aria-hidden="true"
       />
+      {paginationControls}
       {showLoadMoreButton && (
         <div className="gridtable-pagination-buttons">
           <button

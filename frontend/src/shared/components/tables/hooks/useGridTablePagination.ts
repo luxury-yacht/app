@@ -135,12 +135,12 @@ export function useGridTablePagination({
     }
     if (hasMore) {
       return hasPrevious
-        ? 'Use Previous page or Next page to navigate results'
+        ? 'Additional pages available'
         : autoLoadMore
-          ? 'Scroll or click to load more results'
-          : 'Use Next page to navigate results';
+          ? 'More results available'
+          : 'More pages available';
     }
-    return hasPrevious ? 'First/previous pages available' : 'No additional pages';
+    return hasPrevious ? 'End of results' : 'All results loaded';
   }, [paginationEnabled, tableDataLength, isRequestingMore, hasMore, hasPrevious, autoLoadMore]);
 
   return {

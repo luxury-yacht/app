@@ -186,6 +186,20 @@ export namespace backend {
 	}
 	
 	
+	export class CatalogQueryCSVExport {
+	    path: string;
+	    bytes: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CatalogQueryCSVExport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.bytes = source["bytes"];
+	    }
+	}
 	export class ContainerPortInfo {
 	    port: number;
 	    name?: string;
@@ -962,6 +976,44 @@ export namespace objectcatalog {
 
 export namespace resourcemodel {
 	
+	export class ConditionFacts {
+	    type: string;
+	    status: string;
+	    reason?: string;
+	    message?: string;
+	    lastTransitionTime?: v1.Time;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConditionFacts(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.status = source["status"];
+	        this.reason = source["reason"];
+	        this.message = source["message"];
+	        this.lastTransitionTime = this.convertValues(source["lastTransitionTime"], v1.Time);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class DisplayRef {
 	    clusterId: string;
 	    group?: string;
@@ -1014,6 +1066,338 @@ export namespace resourcemodel {
 	        this.uid = source["uid"];
 	    }
 	}
+
+}
+
+export namespace snapshot {
+	
+	export class CustomResourceSummary {
+	    clusterId: string;
+	    clusterName: string;
+	    kind: string;
+	    name: string;
+	    namespace?: string;
+	    apiGroup: string;
+	    apiVersion: string;
+	    crdName?: string;
+	    status?: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    ready?: boolean;
+	    observedGeneration?: number;
+	    conditions?: resourcemodel.ConditionFacts[];
+	    age: string;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomResourceSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.clusterId = source["clusterId"];
+	        this.clusterName = source["clusterName"];
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.apiGroup = source["apiGroup"];
+	        this.apiVersion = source["apiVersion"];
+	        this.crdName = source["crdName"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.ready = source["ready"];
+	        this.observedGeneration = source["observedGeneration"];
+	        this.conditions = this.convertValues(source["conditions"], resourcemodel.ConditionFacts);
+	        this.age = source["age"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ResourceQueryRow {
+	    clusterId: string;
+	    group: string;
+	    version: string;
+	    kind: string;
+	    resource: string;
+	    namespace?: string;
+	    name: string;
+	    uid?: string;
+	    status?: string;
+	    ready?: string;
+	    details?: string;
+	    age?: string;
+	    restarts?: number;
+	    owner?: string;
+	    node?: string;
+	    crdName?: string;
+	    crdGroup?: string;
+	    crdScope?: string;
+	    storageVersion?: string;
+	    storageClass?: string;
+	    capacity?: string;
+	    claim?: string;
+	    chartVersion?: string;
+	    appVersion?: string;
+	    helmRevision?: string;
+	    helmUpdated?: string;
+	    autoscalingTarget?: string;
+	    autoscalingCurrent?: string;
+	    autoscalingDesired?: string;
+	    cpu?: string;
+	    memory?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResourceQueryRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.clusterId = source["clusterId"];
+	        this.group = source["group"];
+	        this.version = source["version"];
+	        this.kind = source["kind"];
+	        this.resource = source["resource"];
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	        this.uid = source["uid"];
+	        this.status = source["status"];
+	        this.ready = source["ready"];
+	        this.details = source["details"];
+	        this.age = source["age"];
+	        this.restarts = source["restarts"];
+	        this.owner = source["owner"];
+	        this.node = source["node"];
+	        this.crdName = source["crdName"];
+	        this.crdGroup = source["crdGroup"];
+	        this.crdScope = source["crdScope"];
+	        this.storageVersion = source["storageVersion"];
+	        this.storageClass = source["storageClass"];
+	        this.capacity = source["capacity"];
+	        this.claim = source["claim"];
+	        this.chartVersion = source["chartVersion"];
+	        this.appVersion = source["appVersion"];
+	        this.helmRevision = source["helmRevision"];
+	        this.helmUpdated = source["helmUpdated"];
+	        this.autoscalingTarget = source["autoscalingTarget"];
+	        this.autoscalingCurrent = source["autoscalingCurrent"];
+	        this.autoscalingDesired = source["autoscalingDesired"];
+	        this.cpu = source["cpu"];
+	        this.memory = source["memory"];
+	    }
+	}
+	export class QueryBulkActionFailure {
+	    ref: ResourceQueryRow;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new QueryBulkActionFailure(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ref = this.convertValues(source["ref"], ResourceQueryRow);
+	        this.message = source["message"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ResourceQueryPredicate {
+	    field: string;
+	    op: string;
+	    value?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResourceQueryPredicate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.field = source["field"];
+	        this.op = source["op"];
+	        this.value = source["value"];
+	    }
+	}
+	export class QuerySelectionDescriptor {
+	    clusterId: string;
+	    table: string;
+	    namespaces?: string[];
+	    kinds?: string[];
+	    search?: string;
+	    predicates?: ResourceQueryPredicate[];
+	    sortField?: string;
+	    sortDirection?: string;
+	    customOnly?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new QuerySelectionDescriptor(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.clusterId = source["clusterId"];
+	        this.table = source["table"];
+	        this.namespaces = source["namespaces"];
+	        this.kinds = source["kinds"];
+	        this.search = source["search"];
+	        this.predicates = this.convertValues(source["predicates"], ResourceQueryPredicate);
+	        this.sortField = source["sortField"];
+	        this.sortDirection = source["sortDirection"];
+	        this.customOnly = source["customOnly"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class QueryBulkActionRequest {
+	    selection: QuerySelectionDescriptor;
+	    action: string;
+	    dryRun?: boolean;
+	    confirmed?: boolean;
+	    limit?: number;
+	    continue?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new QueryBulkActionRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.selection = this.convertValues(source["selection"], QuerySelectionDescriptor);
+	        this.action = source["action"];
+	        this.dryRun = source["dryRun"];
+	        this.confirmed = source["confirmed"];
+	        this.limit = source["limit"];
+	        this.continue = source["continue"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ResourceQueryIssue {
+	    kind: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResourceQueryIssue(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.message = source["message"];
+	    }
+	}
+	export class QueryBulkActionResult {
+	    requiresConfirmation?: boolean;
+	    processed: number;
+	    succeeded: number;
+	    failed: number;
+	    continue?: string;
+	    failures?: QueryBulkActionFailure[];
+	    issues?: ResourceQueryIssue[];
+	
+	    static createFrom(source: any = {}) {
+	        return new QueryBulkActionResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.requiresConfirmation = source["requiresConfirmation"];
+	        this.processed = source["processed"];
+	        this.succeeded = source["succeeded"];
+	        this.failed = source["failed"];
+	        this.continue = source["continue"];
+	        this.failures = this.convertValues(source["failures"], QueryBulkActionFailure);
+	        this.issues = this.convertValues(source["issues"], ResourceQueryIssue);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	
 
 }
 

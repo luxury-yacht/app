@@ -1,7 +1,8 @@
-import type { QuerySelectionDescriptor } from '@/core/refresh/types';
+import { snapshot } from '@wailsjs/go/models';
+import type { QuerySelectionDescriptor as FrontendQuerySelectionDescriptor } from '@/core/refresh/types';
 import type { BrowseCatalogQueryDescriptor } from './hooks/useBrowseCatalog';
 
-export interface CatalogQuerySelectionDescriptor extends QuerySelectionDescriptor {
+export interface CatalogQuerySelectionDescriptor extends FrontendQuerySelectionDescriptor {
   scope: string;
   customOnly: boolean;
   hasUserNamespaceScope: boolean;
@@ -27,11 +28,11 @@ export function catalogSelectionFromBrowseQuery(
 
 export function backendSelectionFromCatalogSelection(
   selection: CatalogQuerySelectionDescriptor
-): QuerySelectionDescriptor {
+): snapshot.QuerySelectionDescriptor {
   const {
     scope: _scope,
     hasUserNamespaceScope: _hasUserNamespaceScope,
     ...backendSelection
   } = selection;
-  return backendSelection;
+  return snapshot.QuerySelectionDescriptor.createFrom(backendSelection);
 }

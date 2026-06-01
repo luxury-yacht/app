@@ -20,8 +20,6 @@
 import React, { useCallback, useMemo } from 'react';
 import './BrowseView.css';
 import { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
-import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -39,7 +37,6 @@ import {
   toTableRows,
   type BrowseTableRow,
 } from '@modules/browse/hooks/useBrowseColumns';
-import type { BrowsePageLimit } from '@modules/browse/hooks/useBrowseCatalog';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -49,6 +46,7 @@ import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGri
 import { useCatalogQueryCsvAction } from '@modules/browse/hooks/useCatalogQueryCsvAction';
 import { useCatalogQueryBulkDeleteAction } from '@modules/browse/hooks/useCatalogQueryBulkDeleteAction';
 import { catalogSelectionFromBrowseQuery } from '@modules/browse/querySelection';
+import CatalogPaginationControls from './CatalogPaginationControls';
 
 const VIRTUALIZATION_THRESHOLD = 80;
 
@@ -326,6 +324,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     continueToken,
     previousToken,
     isRequestingMore,
+    pageIndex,
     handleLoadMore,
     handleLoadPrevious,
     filterOptions,
@@ -350,38 +349,38 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     diagnosticLabel: scope === 'namespace' ? 'Namespace Browse' : 'Browse',
   });
 
-  const pageSizeOptions = useMemo<DropdownOption[]>(
-    () =>
-      pageLimitOptions.map((value) => ({
-        value: String(value),
-        label: `${value} rows`,
-      })),
-    [pageLimitOptions]
-  );
-
-  const pageSizeControl = useMemo(
+  const paginationControls = useMemo(
     () => (
-      <Dropdown
-        id={`${resolvedViewId}-page-size`}
-        name="browse-page-size"
-        size="compact"
-        variant="outlined"
-        ariaLabel="Page size"
-        value={String(pageLimit)}
-        options={pageSizeOptions}
-        onChange={(value) => {
-          const next = Number(Array.isArray(value) ? value[0] : value);
-          if (pageLimitOptions.includes(next as BrowsePageLimit)) {
-            setPageLimit(next as BrowsePageLimit);
-          }
-        }}
-        renderValue={(value) => {
-          const selected = pageSizeOptions.find((option) => option.value === value);
-          return selected?.label ?? 'Page size';
-        }}
+      <CatalogPaginationControls
+        idPrefix={resolvedViewId}
+        pageIndex={pageIndex}
+        pageSize={pageLimit}
+        pageSizeOptions={pageLimitOptions}
+        totalCount={totalCount}
+        totalIsExact={totalIsExact}
+        hasPrevious={Boolean(previousToken)}
+        hasNext={Boolean(continueToken)}
+        loading={isRequestingMore || queryPending}
+        onPrevious={handleLoadPrevious}
+        onNext={handleLoadMore}
+        onPageSizeChange={setPageLimit}
       />
     ),
-    [pageLimit, pageLimitOptions, pageSizeOptions, resolvedViewId, setPageLimit]
+    [
+      continueToken,
+      handleLoadMore,
+      handleLoadPrevious,
+      isRequestingMore,
+      pageIndex,
+      pageLimit,
+      pageLimitOptions,
+      previousToken,
+      queryPending,
+      resolvedViewId,
+      setPageLimit,
+      totalCount,
+      totalIsExact,
+    ]
   );
 
   // Convert items to table rows
@@ -425,17 +424,16 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       kindDropdownBulkActions: true,
       namespaceDropdownSearchable: true,
       includeClusterScopedSyntheticNamespace: false,
+      showResultCount: false,
       totalCount,
       totalIsExact,
       postActions: [copyAllMatchingCsvAction, bulkDeleteAllMatchingAction],
-      customActions: pageSizeControl,
     }),
     [
       bulkDeleteAllMatchingAction,
       copyAllMatchingCsvAction,
       filterOptions.kinds,
       filterOptions.namespaces,
-      pageSizeControl,
       showNamespaceColumn,
       totalCount,
       totalIsExact,
@@ -493,6 +491,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         onRequestPrevious={handleLoadPrevious}
         loadMoreLabel="Next page"
         previousPageLabel="Previous page"
+        paginationControls={paginationControls}
+        showLoadMoreButton={false}
+        showPaginationStatus={false}
       />
       {objectActions.modals}
       {bulkDeleteModal}

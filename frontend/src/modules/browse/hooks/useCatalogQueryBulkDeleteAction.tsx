@@ -5,6 +5,7 @@ import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import { RunCatalogQueryBulkAction } from '@wailsjs/go/backend/App';
+import { snapshot } from '@wailsjs/go/models';
 import type { QueryBulkActionFailure } from '@core/refresh/types';
 import {
   backendSelectionFromCatalogSelection,
@@ -111,13 +112,15 @@ export function useCatalogQueryBulkDeleteAction({
       };
       setRunning(true);
       do {
-        const result = await RunCatalogQueryBulkAction({
-          selection: backendSelectionFromCatalogSelection(query),
-          action: 'delete',
-          confirmed: true,
-          limit: BULK_DELETE_PAGE_LIMIT,
-          continue: continueToken,
-        });
+        const result = await RunCatalogQueryBulkAction(
+          snapshot.QueryBulkActionRequest.createFrom({
+            selection: backendSelectionFromCatalogSelection(query),
+            action: 'delete',
+            confirmed: true,
+            limit: BULK_DELETE_PAGE_LIMIT,
+            continue: continueToken,
+          })
+        );
         nextSummary.processed += result?.processed ?? 0;
         nextSummary.succeeded += result?.succeeded ?? 0;
         nextSummary.failed += result?.failed ?? 0;

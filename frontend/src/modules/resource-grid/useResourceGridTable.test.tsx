@@ -11,8 +11,36 @@ import { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useObjectPanelResourceGridTable } from './useResourceGridTable';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { NamespaceContext } from '@modules/namespace/contexts/NamespaceContext';
+import {
+  useNamespaceResourceGridTable,
+  useObjectPanelResourceGridTable,
+} from './useResourceGridTable';
 import type { ResourceGridTableResult, ResourceGridTableRow } from './resourceGridTableTypes';
+
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({
+    selectedClusterId: 'alpha:ctx',
+    selectedKubeconfig: 'mock-path:mock-context',
+    selectedClusterName: 'alpha',
+  }),
+}));
+
+vi.mock('@ui/favorites/FavToggle', () => ({
+  useFavToggle: () => ({
+    item: {
+      type: 'toggle',
+      id: 'favorite',
+      icon: null,
+      active: false,
+      onClick: () => {},
+      title: 'Save as favorite',
+    },
+    modal: null,
+  }),
+}));
 
 interface TestRow extends ResourceGridTableRow {
   kind: string;
@@ -70,6 +98,101 @@ const renderObjectPanelGrid = (
   return result.current;
 };
 
+const renderNamespaceGrid = () => {
+  const result: { current: ResourceGridTableResult<TestRow> | undefined } = { current: undefined };
+  const onTableStateChange = vi.fn();
+
+  const Probe: React.FC = () => {
+    result.current = useNamespaceResourceGridTable<TestRow>({
+      viewId: 'namespace-pods',
+      tableMode: 'Query Backed Dynamic',
+      namespace: ALL_NAMESPACES_SCOPE,
+      data: [row],
+      columns,
+      keyExtractor: (item) => item.name,
+      showNamespaceFilters: true,
+      filterOptions: { isNamespaceScoped: false },
+      filterOptionOverrides: {
+        namespaces: ['team-a'],
+      },
+      onTableStateChange,
+    });
+    return null;
+  };
+
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOM.createRoot(container);
+
+  act(() => {
+    root.render(
+      <NamespaceContext.Provider
+        value={{
+          namespaces: [
+            {
+              name: 'All Namespaces',
+              scope: ALL_NAMESPACES_SCOPE,
+              status: '',
+              details: '',
+              age: '',
+              hasWorkloads: true,
+              workloadsUnknown: false,
+              resourceVersion: '',
+              isSynthetic: true,
+            },
+            {
+              name: 'team-a',
+              scope: 'team-a',
+              status: '',
+              details: '',
+              age: '',
+              hasWorkloads: true,
+              workloadsUnknown: false,
+              resourceVersion: '',
+            },
+            {
+              name: 'team-b',
+              scope: 'team-b',
+              status: '',
+              details: '',
+              age: '',
+              hasWorkloads: true,
+              workloadsUnknown: false,
+              resourceVersion: '',
+            },
+          ],
+          selectedNamespace: ALL_NAMESPACES_SCOPE,
+          selectedNamespaceClusterId: 'alpha:ctx',
+          namespaceLoading: false,
+          namespaceRefreshing: false,
+          namespaceReady: true,
+          setSelectedNamespace: () => {},
+          loadNamespaces: async () => {},
+          refreshNamespaces: async () => {},
+          getClusterNamespace: () => undefined,
+        }}
+      >
+        <Probe />
+      </NamespaceContext.Provider>
+    );
+  });
+
+  if (!result.current) {
+    throw new Error('namespace resource grid hook did not render');
+  }
+
+  return {
+    result,
+    onTableStateChange,
+    cleanup() {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    },
+  };
+};
+
 describe('useObjectPanelResourceGridTable', () => {
   it('publishes the default canonical object key on gridTableProps', () => {
     const result = renderObjectPanelGrid();
@@ -83,5 +206,32 @@ describe('useObjectPanelResourceGridTable', () => {
 
     expect(result.gridTableProps.keyExtractor(row, 0)).toBe('custom:api');
     expect(keyExtractor).toHaveBeenCalledWith(row, 0);
+  });
+});
+
+describe('useNamespaceResourceGridTable', () => {
+  it('keeps all namespace options and normalizes selecting all to no namespace query filter', () => {
+    const harness = renderNamespaceGrid();
+
+    expect(harness.result.current?.gridTableProps.filters?.options?.namespaces).toEqual([
+      'team-a',
+      'team-b',
+    ]);
+
+    act(() => {
+      harness.result.current?.gridTableProps.filters?.onChange?.({
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        namespaces: ['team-a', 'team-b'],
+      });
+    });
+
+    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual([]);
+    expect(harness.onTableStateChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ namespaces: [] }),
+      })
+    );
+
+    harness.cleanup();
   });
 });

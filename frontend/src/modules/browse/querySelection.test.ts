@@ -29,7 +29,7 @@ describe('catalog query selection', () => {
       sortDirection: 'desc',
       customOnly: true,
     });
-    expect(backendSelectionFromCatalogSelection(selection)).toEqual({
+    expect(backendSelectionFromCatalogSelection(selection)).toMatchObject({
       clusterId: 'cluster-a',
       table: 'browse',
       namespaces: ['default'],

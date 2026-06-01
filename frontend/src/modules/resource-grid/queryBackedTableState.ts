@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type {
   GridTableFilterOptions,
   GridTableFilterState,
@@ -41,6 +42,63 @@ export function mergeQueryBackedFilterOptions(
   return {
     ...base,
     ...query,
+  };
+}
+
+const normalizeOptionSet = (values: string[] | undefined): Set<string> =>
+  new Set((values ?? []).map((value) => value.trim()).filter(Boolean));
+
+const isAllNamespacesFilterSentinel = (value: string): boolean => {
+  const normalized = value.trim().toLowerCase();
+  return normalized === ALL_NAMESPACES_SCOPE || normalized === 'all' || normalized === '*';
+};
+
+export function queryBackedNamespaceFilterOptions(
+  explicitNamespaces: string[] | undefined,
+  queryFacetNamespaces: string[] | undefined
+): string[] | undefined {
+  return explicitNamespaces && explicitNamespaces.length > 0
+    ? explicitNamespaces
+    : queryFacetNamespaces;
+}
+
+export function normalizeQueryBackedNamespaceFilters(
+  filters: GridTableFilterState,
+  availableNamespaces: string[] | undefined
+): GridTableFilterState {
+  const namespaceFilters = filters.namespaces.filter(
+    (namespace) => !isAllNamespacesFilterSentinel(namespace)
+  );
+  const withoutSentinels =
+    namespaceFilters.length === filters.namespaces.length
+      ? filters
+      : { ...filters, namespaces: namespaceFilters };
+
+  const available = normalizeOptionSet(availableNamespaces);
+  if (withoutSentinels.namespaces.length === 0) {
+    return withoutSentinels;
+  }
+  if (available.size === 0) {
+    return {
+      ...withoutSentinels,
+      namespaces: [],
+    };
+  }
+
+  const selected = normalizeOptionSet(withoutSentinels.namespaces);
+  if (selected.size !== available.size) {
+    return withoutSentinels;
+  }
+
+  for (const namespace of available) {
+    if (!selected.has(namespace)) {
+      return withoutSentinels;
+    }
+  }
+
+  return {
+    ...withoutSentinels,
+    namespaces: [],
   };
 }
 

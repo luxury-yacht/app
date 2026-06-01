@@ -78,10 +78,6 @@ export function ExportCatalogSelectionCSVFile(arg1) {
   return window['go']['backend']['App']['ExportCatalogSelectionCSVFile'](arg1);
 }
 
-export function RunCatalogQueryBulkAction(arg1) {
-  return window['go']['backend']['App']['RunCatalogQueryBulkAction'](arg1);
-}
-
 export function FetchContainerLogs(arg1, arg2) {
   return window['go']['backend']['App']['FetchContainerLogs'](arg1, arg2);
 }
@@ -228,10 +224,6 @@ export function GetHelmValues(arg1, arg2, arg3) {
 
 export function GetHorizontalPodAutoscaler(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetHorizontalPodAutoscaler'](arg1, arg2, arg3);
-}
-
-export function HydrateCatalogCustomRows(arg1, arg2) {
-  return window['go']['backend']['App']['HydrateCatalogCustomRows'](arg1, arg2);
 }
 
 export function GetIngress(arg1, arg2, arg3) {
@@ -386,6 +378,10 @@ export function GetZoomLevel() {
   return window['go']['backend']['App']['GetZoomLevel']();
 }
 
+export function HydrateCatalogCustomRows(arg1, arg2) {
+  return window['go']['backend']['App']['HydrateCatalogCustomRows'](arg1, arg2);
+}
+
 export function IsAppLogsPanelVisible() {
   return window['go']['backend']['App']['IsAppLogsPanelVisible']();
 }
@@ -456,6 +452,10 @@ export function RetryAuth() {
 
 export function RetryClusterAuth(arg1) {
   return window['go']['backend']['App']['RetryClusterAuth'](arg1);
+}
+
+export function RunCatalogQueryBulkAction(arg1) {
+  return window['go']['backend']['App']['RunCatalogQueryBulkAction'](arg1);
 }
 
 export function RunObjectAction(arg1) {

@@ -94,6 +94,8 @@ export interface GridTableFilterOptions {
   postActions?: IconBarItem[];
   /** Arbitrary ReactNode content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
+  /** Controls whether the filter bar renders the displayed/total row count. */
+  showResultCount?: boolean;
   /** Override the total item count shown in the filter bar (e.g. server-side total for paginated views). */
   totalCount?: number;
   /** Indicates whether totalCount is exact; false renders an approximate count. */
@@ -167,6 +169,8 @@ export interface GridTableProps<T> {
   previousPageLabel?: string;
   showLoadMoreButton?: boolean;
   showPaginationStatus?: boolean;
+  /** Replaces the default pagination footer buttons/status with custom controls. */
+  paginationControls?: React.ReactNode;
   virtualization?: GridTableVirtualizationOptions;
   loadingOverlay?: {
     show: boolean;

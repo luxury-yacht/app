@@ -189,7 +189,7 @@ export function useGridTableFiltersWiring<T>({
   // Compute result count: displayed items vs total items.
   // If the consumer provides a totalCount override (e.g. server-side paginated total), use it.
   const resultCount = useMemo(() => {
-    if (!filteringEnabled) return undefined;
+    if (!filteringEnabled || filters?.options?.showResultCount === false) return undefined;
     const total = filters?.options?.totalCount ?? totalDataCount ?? data.length;
     const displayed =
       typeof maxDisplayRows === 'number' && maxDisplayRows > 0
@@ -207,6 +207,7 @@ export function useGridTableFiltersWiring<T>({
     };
   }, [
     filteringEnabled,
+    filters?.options?.showResultCount,
     filters?.options?.totalCount,
     filters?.options?.totalIsExact,
     filters?.options?.partialDataLabel,

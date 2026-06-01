@@ -50,6 +50,7 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     previousPageLabel = 'Previous page',
     showLoadMoreButton = true,
     showPaginationStatus = true,
+    paginationControls,
     allowHorizontalOverflow = true,
     showTrailingColumnBoundary = true,
     keyExtractor,
@@ -131,6 +132,7 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       paginationStatus={resolvedPaginationStatus}
       showPaginationStatus={showPaginationStatus}
       showLoadMoreButton={showLoadMoreButton}
+      paginationControls={paginationControls}
       loadMoreLabel={loadMoreLabel}
       previousPageLabel={previousPageLabel}
       hasMore={hasMore}

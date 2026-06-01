@@ -199,6 +199,7 @@ describe('useBrowseCatalog', () => {
 
     expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
     expect(result?.continueToken).toBe('2');
+    expect(result?.pageIndex).toBe(1);
 
     await act(async () => {
       result?.handleLoadMore();
@@ -221,6 +222,7 @@ describe('useBrowseCatalog', () => {
     expect(result?.items.map((item) => item.name)).toEqual(['pod-b']);
     expect(result?.continueToken).toBeNull();
     expect(result?.isRequestingMore).toBe(false);
+    expect(result?.pageIndex).toBe(2);
   });
 
   it('replaces the current row window with the previous cursor page', async () => {
@@ -287,6 +289,7 @@ describe('useBrowseCatalog', () => {
     expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
     expect(result?.previousToken).toBeNull();
     expect(result?.continueToken).toBe('next');
+    expect(result?.pageIndex).toBe(1);
   });
 
   it('refreshes the first page when the backend reports an invalid cursor', async () => {
@@ -337,6 +340,7 @@ describe('useBrowseCatalog', () => {
 
     expect(result?.items).toEqual([]);
     expect(result?.continueToken).toBeNull();
+    expect(result?.pageIndex).toBe(1);
     expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
       domain: 'catalog',
       scope: baseScope,
@@ -482,6 +486,7 @@ describe('useBrowseCatalog', () => {
       });
       expect(result?.items.map((item) => item.name)).toEqual([`pod-${page}`]);
       expect(result?.items).toHaveLength(1);
+      expect(result?.pageIndex).toBe(page + 1);
     }
   });
 });

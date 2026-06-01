@@ -123,6 +123,8 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         }
         const payload = result.data?.data as TPayload | null | undefined;
         if (!payload) {
+          setError(`${label} returned no data`);
+          setLoaded(true);
           return;
         }
         if (payload.cursorInvalid) {
@@ -138,6 +140,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       } catch (caught) {
         if (!cancelled) {
           setError(caught instanceof Error ? caught.message : String(caught));
+          setLoaded(true);
         }
       } finally {
         if (!cancelled) {
