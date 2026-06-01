@@ -137,7 +137,7 @@ const getCapabilityNamespace = (value?: string | null): string | null => {
   return trimmed === 'all' ? null : trimmed;
 };
 
-const createCatalogBackedCustomResource = (): ResourceDataReturn<any[]> => ({
+const createCatalogBackedCustomResourceHandle = (): ResourceDataReturn<any[]> => ({
   data: [],
   loading: false,
   refreshing: false,
@@ -148,6 +148,10 @@ const createCatalogBackedCustomResource = (): ResourceDataReturn<any[]> => ({
   cancel: () => {},
   lastFetchTime: null,
   hasLoaded: false,
+  meta: {
+    source: 'catalog-backed-custom',
+    refreshDomainEnabled: false,
+  },
 });
 
 const useNamespacePodsResource = (
@@ -576,7 +580,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     isManualRefreshActive
   );
 
-  const custom = useMemo(() => createCatalogBackedCustomResource(), []);
+  const custom = useMemo(() => createCatalogBackedCustomResourceHandle(), []);
 
   const helm = useDescriptorBackedResource<any[]>(
     namespaceResourceDescriptors.helm,

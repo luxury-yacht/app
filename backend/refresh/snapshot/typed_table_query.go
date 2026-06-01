@@ -18,27 +18,22 @@ const (
 
 type typedTableQuery struct {
 	Enabled         bool
-	Table           string
-	ClusterID       string
 	BaseScope       string
-	Search          string
-	Namespaces      []string
-	Kinds           []string
-	Predicates      map[string]string
-	SortField       string
-	SortDirection   string
-	Limit           int
-	Continue        string
+	Request         ResourceQueryRequest
 	DynamicRevision string
 }
 
 type typedTableQueryPage[T any] struct {
-	Rows         []T
-	Continue     string
-	Total        int
-	TotalIsExact bool
-	Namespaces   []string
-	Kinds        []string
+	Rows          []T
+	Continue      string
+	Previous      string
+	CursorInvalid bool
+	Total         int
+	TotalIsExact  bool
+	Namespaces    []string
+	Kinds         []string
+	FacetsExact   bool
+	Dynamic       *ResourceQueryDynamicRef
 }
 
 type typedTableQueryCursor struct {
@@ -66,14 +61,17 @@ type typedTableQueryAdapter[T any] struct {
 func parseTypedTableQueryScope(clusterID, scope, table string, dynamicRevision string) (string, typedTableQuery, error) {
 	base, rawQuery, found := strings.Cut(scope, "?")
 	base = strings.TrimSpace(base)
+	request := ResourceQueryRequest{
+		ClusterID:     clusterID,
+		Table:         table,
+		SortField:     "name",
+		SortDirection: "asc",
+		Limit:         defaultTypedTableQueryLimit,
+	}
 	query := typedTableQuery{
 		Enabled:         found,
-		Table:           table,
-		ClusterID:       clusterID,
 		BaseScope:       base,
-		SortField:       "name",
-		SortDirection:   "asc",
-		Limit:           defaultTypedTableQueryLimit,
+		Request:         request,
 		DynamicRevision: dynamicRevision,
 	}
 	if !found {
@@ -83,16 +81,16 @@ func parseTypedTableQueryScope(clusterID, scope, table string, dynamicRevision s
 	if err != nil {
 		return base, query, fmt.Errorf("%s query scope: %w", table, err)
 	}
-	query.Search = strings.TrimSpace(values.Get("search"))
-	query.Namespaces = splitTypedTableList(values.Get("namespaces"))
-	query.Kinds = splitTypedTableList(values.Get("kinds"))
-	query.SortField = normalizeTypedTableSortField(values.Get("sort"), query.SortField)
-	query.SortDirection = normalizeTypedTableSortDirection(values.Get("sortDirection"))
-	query.Continue = strings.TrimSpace(values.Get("continue"))
+	query.Request.Search = strings.TrimSpace(values.Get("search"))
+	query.Request.Namespaces = splitTypedTableList(values.Get("namespaces"))
+	query.Request.Kinds = splitTypedTableList(values.Get("kinds"))
+	query.Request.SortField = normalizeTypedTableSortField(values.Get("sort"), query.Request.SortField)
+	query.Request.SortDirection = normalizeTypedTableSortDirection(values.Get("sortDirection"))
+	query.Request.Continue = strings.TrimSpace(values.Get("continue"))
 	if limit, err := strconv.Atoi(strings.TrimSpace(values.Get("limit"))); err == nil && limit > 0 {
-		query.Limit = min(limit, maxTypedTableQueryLimit)
+		query.Request.Limit = min(limit, maxTypedTableQueryLimit)
 	}
-	query.Predicates = map[string]string{}
+	predicates := map[string]string{}
 	for key, valuesForKey := range values {
 		if !strings.HasPrefix(key, "predicate.") || len(valuesForKey) == 0 {
 			continue
@@ -101,8 +99,9 @@ func parseTypedTableQueryScope(clusterID, scope, table string, dynamicRevision s
 		if field == "" {
 			continue
 		}
-		query.Predicates[field] = strings.TrimSpace(valuesForKey[0])
+		predicates[field] = strings.TrimSpace(valuesForKey[0])
 	}
+	query.Request.Predicates = resourceQueryPredicateMapToList(predicates)
 	return base, query, nil
 }
 
@@ -152,8 +151,10 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 			Rows:         items,
 			Total:        len(items),
 			TotalIsExact: true,
+			FacetsExact:  true,
 			Namespaces:   collectTypedTableFacet(items, adapter.Namespace),
 			Kinds:        collectTypedTableFacet(items, adapter.Kind),
+			Dynamic:      query.dynamicRef(),
 		}
 	}
 
@@ -169,40 +170,46 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 	total := len(filtered)
 
 	start := 0
-	if query.Continue != "" {
-		if cursor, ok := decodeTypedTableQueryCursor(query.Continue); ok && cursor.matches(query) {
+	cursorInvalid := false
+	if query.Request.Continue != "" {
+		if cursor, ok := decodeTypedTableQueryCursor(query.Request.Continue); ok && cursor.matches(query) {
 			start = typedTableCursorStart(filtered, cursor, query, adapter)
+		} else {
+			cursorInvalid = true
 		}
 	}
 
 	if start > len(filtered) {
 		start = len(filtered)
 	}
-	end := min(start+query.Limit, len(filtered))
+	end := min(start+query.Request.Limit, len(filtered))
 	pageRows := append([]T(nil), filtered[start:end]...)
 	continueToken := ""
 	if end < len(filtered) && len(pageRows) > 0 {
 		last := pageRows[len(pageRows)-1]
 		continueToken = encodeTypedTableQueryCursor(typedTableQueryCursor{
-			ClusterID:       query.ClusterID,
-			Table:           query.Table,
+			ClusterID:       query.Request.ClusterID,
+			Table:           query.Request.Table,
 			Signature:       query.signature(),
-			SortField:       query.SortField,
-			SortDirection:   query.SortDirection,
-			Limit:           query.Limit,
-			LastValue:       typedTableComparableSortValue(last, query.SortField, adapter),
+			SortField:       query.Request.SortField,
+			SortDirection:   query.Request.SortDirection,
+			Limit:           query.Request.Limit,
+			LastValue:       typedTableComparableSortValue(last, query.Request.SortField, adapter),
 			LastKey:         adapter.Key(last),
 			DynamicRevision: query.DynamicRevision,
 		})
 	}
 
 	return typedTableQueryPage[T]{
-		Rows:         pageRows,
-		Continue:     continueToken,
-		Total:        total,
-		TotalIsExact: true,
-		Namespaces:   collectTypedTableFacet(filtered, adapter.Namespace),
-		Kinds:        collectTypedTableFacet(filtered, adapter.Kind),
+		Rows:          pageRows,
+		Continue:      continueToken,
+		CursorInvalid: cursorInvalid,
+		Total:         total,
+		TotalIsExact:  true,
+		FacetsExact:   true,
+		Namespaces:    collectTypedTableFacet(filtered, adapter.Namespace),
+		Kinds:         collectTypedTableFacet(filtered, adapter.Kind),
+		Dynamic:       query.dynamicRef(),
 	}
 }
 
@@ -215,6 +222,7 @@ type typedTableQueryCollector[T any] struct {
 	namespaces  map[string]string
 	kinds       map[string]string
 	candidates  []T
+	invalid     bool
 }
 
 func newTypedTableQueryCollector[T any](query typedTableQuery, adapter typedTableQueryAdapter[T]) *typedTableQueryCollector[T] {
@@ -224,10 +232,12 @@ func newTypedTableQueryCollector[T any](query typedTableQuery, adapter typedTabl
 		namespaces: make(map[string]string),
 		kinds:      make(map[string]string),
 	}
-	if query.Continue != "" {
-		if cursor, ok := decodeTypedTableQueryCursor(query.Continue); ok && cursor.matches(query) {
+	if query.Request.Continue != "" {
+		if cursor, ok := decodeTypedTableQueryCursor(query.Request.Continue); ok && cursor.matches(query) {
 			collector.cursor = cursor
 			collector.cursorValid = true
+		} else {
+			collector.invalid = true
 		}
 	}
 	return collector
@@ -248,7 +258,7 @@ func (c *typedTableQueryCollector[T]) Add(item T) {
 	}
 	c.candidates = append(c.candidates, item)
 	sortTypedTableRows(c.candidates, c.query, c.adapter)
-	maxCandidates := max(c.query.Limit+1, 1)
+	maxCandidates := max(c.query.Request.Limit+1, 1)
 	if len(c.candidates) > maxCandidates {
 		c.candidates = c.candidates[:maxCandidates]
 	}
@@ -256,40 +266,43 @@ func (c *typedTableQueryCollector[T]) Add(item T) {
 
 func (c *typedTableQueryCollector[T]) Page() typedTableQueryPage[T] {
 	if c == nil {
-		return typedTableQueryPage[T]{TotalIsExact: true}
+		return typedTableQueryPage[T]{TotalIsExact: true, FacetsExact: true}
 	}
 	sortTypedTableRows(c.candidates, c.query, c.adapter)
-	end := min(c.query.Limit, len(c.candidates))
+	end := min(c.query.Request.Limit, len(c.candidates))
 	pageRows := append([]T(nil), c.candidates[:end]...)
 	continueToken := ""
-	if len(c.candidates) > c.query.Limit && len(pageRows) > 0 {
+	if len(c.candidates) > c.query.Request.Limit && len(pageRows) > 0 {
 		last := pageRows[len(pageRows)-1]
 		continueToken = encodeTypedTableQueryCursor(typedTableQueryCursor{
-			ClusterID:       c.query.ClusterID,
-			Table:           c.query.Table,
+			ClusterID:       c.query.Request.ClusterID,
+			Table:           c.query.Request.Table,
 			Signature:       c.query.signature(),
-			SortField:       c.query.SortField,
-			SortDirection:   c.query.SortDirection,
-			Limit:           c.query.Limit,
-			LastValue:       typedTableComparableSortValue(last, c.query.SortField, c.adapter),
+			SortField:       c.query.Request.SortField,
+			SortDirection:   c.query.Request.SortDirection,
+			Limit:           c.query.Request.Limit,
+			LastValue:       typedTableComparableSortValue(last, c.query.Request.SortField, c.adapter),
 			LastKey:         c.adapter.Key(last),
 			DynamicRevision: c.query.DynamicRevision,
 		})
 	}
 	return typedTableQueryPage[T]{
-		Rows:         pageRows,
-		Continue:     continueToken,
-		Total:        c.total,
-		TotalIsExact: true,
-		Namespaces:   typedTableFacetMapValues(c.namespaces),
-		Kinds:        typedTableFacetMapValues(c.kinds),
+		Rows:          pageRows,
+		Continue:      continueToken,
+		CursorInvalid: c.invalid,
+		Total:         c.total,
+		TotalIsExact:  true,
+		FacetsExact:   true,
+		Namespaces:    typedTableFacetMapValues(c.namespaces),
+		Kinds:         typedTableFacetMapValues(c.kinds),
+		Dynamic:       c.query.dynamicRef(),
 	}
 }
 
 func typedTableQueryMatches[T any](item T, query typedTableQuery, adapter typedTableQueryAdapter[T]) bool {
-	namespaceSet := stringSet(query.Namespaces)
-	kindSet := stringSet(query.Kinds)
-	searchNeedle := strings.ToLower(strings.TrimSpace(query.Search))
+	namespaceSet := stringSet(query.Request.Namespaces)
+	kindSet := stringSet(query.Request.Kinds)
+	searchNeedle := strings.ToLower(strings.TrimSpace(query.Request.Search))
 	if len(namespaceSet) > 0 {
 		if _, ok := namespaceSet[strings.ToLower(strings.TrimSpace(adapter.Namespace(item)))]; !ok {
 			return false
@@ -303,7 +316,7 @@ func typedTableQueryMatches[T any](item T, query typedTableQuery, adapter typedT
 	if searchNeedle != "" && !typedTableSearchMatches(adapter.SearchText(item), searchNeedle) {
 		return false
 	}
-	for field, value := range query.Predicates {
+	for field, value := range resourceQueryPredicatesToMap(query.Request.Predicates) {
 		if !adapter.Predicate(item, field, value) {
 			return false
 		}
@@ -312,44 +325,44 @@ func typedTableQueryMatches[T any](item T, query typedTableQuery, adapter typedT
 }
 
 func typedTableItemAfterCursor[T any](item T, cursor typedTableQueryCursor, query typedTableQuery, adapter typedTableQueryAdapter[T]) bool {
-	value := typedTableComparableSortValue(item, query.SortField, adapter)
+	value := typedTableComparableSortValue(item, query.Request.SortField, adapter)
 	key := adapter.Key(item)
-	if query.SortDirection == "desc" {
+	if query.Request.SortDirection == "desc" {
 		return value < cursor.LastValue || (value == cursor.LastValue && key > cursor.LastKey)
 	}
 	return value > cursor.LastValue || (value == cursor.LastValue && key > cursor.LastKey)
 }
 
 func (c typedTableQueryCursor) matches(query typedTableQuery) bool {
-	return c.ClusterID == query.ClusterID &&
-		c.Table == query.Table &&
+	return c.ClusterID == query.Request.ClusterID &&
+		c.Table == query.Request.Table &&
 		c.Signature == query.signature() &&
-		c.SortField == query.SortField &&
-		c.SortDirection == query.SortDirection &&
-		c.Limit == query.Limit
+		c.SortField == query.Request.SortField &&
+		c.SortDirection == query.Request.SortDirection &&
+		c.Limit == query.Request.Limit
 }
 
 func (q typedTableQuery) signature() string {
 	payload := struct {
-		ClusterID     string            `json:"clusterId"`
-		Table         string            `json:"table"`
-		BaseScope     string            `json:"baseScope"`
-		Search        string            `json:"search,omitempty"`
-		Namespaces    []string          `json:"namespaces,omitempty"`
-		Kinds         []string          `json:"kinds,omitempty"`
-		Predicates    map[string]string `json:"predicates,omitempty"`
-		SortField     string            `json:"sortField"`
-		SortDirection string            `json:"sortDirection"`
+		ClusterID     string                   `json:"clusterId"`
+		Table         string                   `json:"table"`
+		BaseScope     string                   `json:"baseScope"`
+		Search        string                   `json:"search,omitempty"`
+		Namespaces    []string                 `json:"namespaces,omitempty"`
+		Kinds         []string                 `json:"kinds,omitempty"`
+		Predicates    []ResourceQueryPredicate `json:"predicates,omitempty"`
+		SortField     string                   `json:"sortField"`
+		SortDirection string                   `json:"sortDirection"`
 	}{
-		ClusterID:     q.ClusterID,
-		Table:         q.Table,
+		ClusterID:     q.Request.ClusterID,
+		Table:         q.Request.Table,
 		BaseScope:     q.BaseScope,
-		Search:        q.Search,
-		Namespaces:    q.Namespaces,
-		Kinds:         q.Kinds,
-		Predicates:    q.Predicates,
-		SortField:     q.SortField,
-		SortDirection: q.SortDirection,
+		Search:        q.Request.Search,
+		Namespaces:    q.Request.Namespaces,
+		Kinds:         q.Request.Kinds,
+		Predicates:    q.Request.Predicates,
+		SortField:     q.Request.SortField,
+		SortDirection: q.Request.SortDirection,
 	}
 	raw, _ := json.Marshal(payload)
 	return base64.RawURLEncoding.EncodeToString(raw)
@@ -374,9 +387,9 @@ func decodeTypedTableQueryCursor(value string) (typedTableQueryCursor, bool) {
 
 func typedTableCursorStart[T any](items []T, cursor typedTableQueryCursor, query typedTableQuery, adapter typedTableQueryAdapter[T]) int {
 	for i, item := range items {
-		value := typedTableComparableSortValue(item, query.SortField, adapter)
+		value := typedTableComparableSortValue(item, query.Request.SortField, adapter)
 		key := adapter.Key(item)
-		if query.SortDirection == "desc" {
+		if query.Request.SortDirection == "desc" {
 			if value < cursor.LastValue || (value == cursor.LastValue && key > cursor.LastKey) {
 				return i
 			}
@@ -391,8 +404,8 @@ func typedTableCursorStart[T any](items []T, cursor typedTableQueryCursor, query
 
 func sortTypedTableRows[T any](items []T, query typedTableQuery, adapter typedTableQueryAdapter[T]) {
 	sort.SliceStable(items, func(i, j int) bool {
-		leftNumeric, leftOK := adapter.NumericSort(items[i], query.SortField)
-		rightNumeric, rightOK := adapter.NumericSort(items[j], query.SortField)
+		leftNumeric, leftOK := adapter.NumericSort(items[i], query.Request.SortField)
+		rightNumeric, rightOK := adapter.NumericSort(items[j], query.Request.SortField)
 		if leftOK || rightOK {
 			if !leftOK {
 				leftNumeric = math.Inf(-1)
@@ -401,16 +414,16 @@ func sortTypedTableRows[T any](items []T, query typedTableQuery, adapter typedTa
 				rightNumeric = math.Inf(-1)
 			}
 			if leftNumeric != rightNumeric {
-				if query.SortDirection == "desc" {
+				if query.Request.SortDirection == "desc" {
 					return leftNumeric > rightNumeric
 				}
 				return leftNumeric < rightNumeric
 			}
 		} else {
-			left := strings.ToLower(adapter.SortValue(items[i], query.SortField))
-			right := strings.ToLower(adapter.SortValue(items[j], query.SortField))
+			left := strings.ToLower(adapter.SortValue(items[i], query.Request.SortField))
+			right := strings.ToLower(adapter.SortValue(items[j], query.Request.SortField))
 			if left != right {
-				if query.SortDirection == "desc" {
+				if query.Request.SortDirection == "desc" {
 					return left > right
 				}
 				return left < right
@@ -418,6 +431,17 @@ func sortTypedTableRows[T any](items []T, query typedTableQuery, adapter typedTa
 		}
 		return adapter.Key(items[i]) < adapter.Key(items[j])
 	})
+}
+
+func (q typedTableQuery) dynamicRef() *ResourceQueryDynamicRef {
+	if strings.TrimSpace(q.DynamicRevision) == "" {
+		return nil
+	}
+	return &ResourceQueryDynamicRef{
+		Source:   "metrics",
+		Revision: q.DynamicRevision,
+		Policy:   "live-keyset",
+	}
 }
 
 func typedTableComparableSortValue[T any](item T, field string, adapter typedTableQueryAdapter[T]) string {

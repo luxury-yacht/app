@@ -43,7 +43,7 @@ function walkSourceFiles(dir: string): string[] {
 function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] {
   const files = walkSourceFiles(sourceRoot);
   const hookPattern =
-    /useGridTablePersistence|useNamespaceGridTablePersistence|useClusterResourceGridTable|useNamespaceResourceGridTable|useObjectPanelResourceGridTable/;
+    /useGridTablePersistence|useNamespaceGridTablePersistence|useClusterResourceGridTable|useNamespaceResourceGridTable|useQueryBackedNamespaceResourceGridTable|useObjectPanelResourceGridTable/;
   const staticViewIdPattern = /viewId:\s*['"]([^'"]+)['"]/g;
   const dynamicViewIdPattern = /viewId:\s*([a-zA-Z_$][a-zA-Z0-9_$]*)/g;
 

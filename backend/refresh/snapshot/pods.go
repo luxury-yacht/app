@@ -35,13 +35,16 @@ type PodBuilder struct {
 // PodSnapshot is the payload for the pods domain.
 type PodSnapshot struct {
 	ClusterMeta
-	Pods         []PodSummary   `json:"pods"`
-	Metrics      PodMetricsInfo `json:"metrics"`
-	Continue     string         `json:"continue,omitempty"`
-	Total        int            `json:"total,omitempty"`
-	TotalIsExact bool           `json:"totalIsExact"`
-	Namespaces   []string       `json:"namespaces,omitempty"`
-	Kinds        []string       `json:"kinds,omitempty"`
+	Pods          []PodSummary             `json:"pods"`
+	Metrics       PodMetricsInfo           `json:"metrics"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // PodSummary captures essential pod information for UI tables.
@@ -192,14 +195,17 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		Scope:   refresh.JoinClusterScope(clusterID, trimmed),
 		Version: version,
 		Payload: PodSnapshot{
-			ClusterMeta:  meta,
-			Pods:         page.Rows,
-			Metrics:      metricsInfo,
-			Continue:     page.Continue,
-			Total:        page.Total,
-			TotalIsExact: page.TotalIsExact,
-			Namespaces:   page.Namespaces,
-			Kinds:        page.Kinds,
+			ClusterMeta:   meta,
+			Pods:          page.Rows,
+			Metrics:       metricsInfo,
+			Continue:      page.Continue,
+			CursorInvalid: page.CursorInvalid,
+			Total:         page.Total,
+			TotalIsExact:  page.TotalIsExact,
+			Namespaces:    page.Namespaces,
+			Kinds:         page.Kinds,
+			FacetsExact:   page.FacetsExact,
+			Dynamic:       page.Dynamic,
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(page.Rows),

@@ -20,9 +20,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
-import { useHydratedCustomCatalogRows } from '@modules/browse/hooks/useHydratedCustomCatalogRows';
-import { useCatalogQueryCsvAction } from '@modules/browse/hooks/useCatalogQueryCsvAction';
+import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -282,37 +280,19 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     });
 
     const {
-      items: catalogItems,
+      rows,
       loading: catalogLoading,
       hasLoadedOnce: catalogLoaded,
       filterOptions: catalogFilterOptions,
       totalCount,
       totalIsExact,
-      queryDescriptor,
-      queryPending,
-    } = useBrowseCatalog({
+      csvAction: copyAllMatchingCsvAction,
+    } = useCatalogBackedCustomResourceRows<ClusterCustomData>({
       clusterId: selectedClusterId,
-      pinnedNamespaces: [],
       clusterScopedOnly: true,
-      customOnly: true,
-      filters: {
-        search: persistence.filters.search ?? '',
-        kinds: persistence.filters.kinds ?? [],
-        namespaces: [],
-      },
-      sort: persistence.sortConfig,
+      persistence,
       diagnosticLabel: 'Cluster Custom',
-    });
-
-    const rows = useHydratedCustomCatalogRows(
-      selectedClusterId,
-      catalogItems
-    ) as ClusterCustomData[];
-    const copyAllMatchingCsvAction = useCatalogQueryCsvAction({
-      query: queryDescriptor,
-      totalCount,
-      pending: queryPending,
-      id: 'copy-cluster-custom-query-csv',
+      csvActionId: 'copy-cluster-custom-query-csv',
     });
 
     const { gridTableProps, favModal } = useQueryResourceGridTable<ClusterCustomData>({

@@ -31,6 +31,7 @@ describe('resource query contract types', () => {
       selection: {
         clusterId: request.clusterId,
         table: request.table,
+        customOnly: true,
         querySignature: 'signature',
       },
       action: 'delete',
@@ -45,6 +46,7 @@ describe('resource query contract types', () => {
 
     expect(result.rows).toHaveLength(0);
     expect(bulkRequest.selection.clusterId).toBe('cluster-a');
+    expect(bulkRequest.selection.customOnly).toBe(true);
     expect(bulkResult.failed).toBe(0);
   });
 });

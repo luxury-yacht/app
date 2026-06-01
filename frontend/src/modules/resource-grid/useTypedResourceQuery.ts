@@ -6,17 +6,20 @@ import type {
   GridTableFilterOptions,
 } from '@shared/components/tables/GridTable';
 import type { SortConfig } from '@hooks/useTableSort';
-import type { RefreshDomain } from '@/core/refresh/types';
+import type { RefreshDomain, ResourceQueryDynamicRef } from '@/core/refresh/types';
 
-interface TypedQueryPayload {
+export interface TypedQueryPayload {
   continue?: string;
+  cursorInvalid?: boolean;
   total?: number;
   totalIsExact?: boolean;
   namespaces?: string[];
   kinds?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
-interface UseAllNamespacesTypedQueryParams<TPayload extends TypedQueryPayload, TRow> {
+export interface UseTypedResourceQueryParams<TPayload extends TypedQueryPayload, TRow> {
   enabled: boolean;
   clusterId?: string | null;
   domain: RefreshDomain;
@@ -28,7 +31,7 @@ interface UseAllNamespacesTypedQueryParams<TPayload extends TypedQueryPayload, T
   selectRows: (payload: TPayload) => TRow[];
 }
 
-interface UseAllNamespacesTypedQueryResult<TRow> {
+export interface UseTypedResourceQueryResult<TRow> {
   rows: TRow[];
   loading: boolean;
   loaded: boolean;
@@ -37,6 +40,7 @@ interface UseAllNamespacesTypedQueryResult<TRow> {
   isRequestingMore: boolean;
   loadMore: () => void;
   filterOptions: Partial<GridTableFilterOptions>;
+  dynamic: ResourceQueryDynamicRef | null;
 }
 
 const DEFAULT_PAGE_LIMIT = 250;
@@ -65,7 +69,7 @@ const queryIdentityFor = (
     ),
   });
 
-export function useAllNamespacesTypedQuery<TPayload extends TypedQueryPayload, TRow>({
+export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>({
   enabled,
   clusterId,
   domain,
@@ -75,7 +79,7 @@ export function useAllNamespacesTypedQuery<TPayload extends TypedQueryPayload, T
   pageLimit = DEFAULT_PAGE_LIMIT,
   predicates,
   selectRows,
-}: UseAllNamespacesTypedQueryParams<TPayload, TRow>): UseAllNamespacesTypedQueryResult<TRow> {
+}: UseTypedResourceQueryParams<TPayload, TRow>): UseTypedResourceQueryResult<TRow> {
   const [rows, setRows] = useState<TRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -84,6 +88,7 @@ export function useAllNamespacesTypedQuery<TPayload extends TypedQueryPayload, T
   const [requestToken, setRequestToken] = useState<string | null>(null);
   const [isRequestingMore, setIsRequestingMore] = useState(false);
   const [filterOptions, setFilterOptions] = useState<Partial<GridTableFilterOptions>>({});
+  const [dynamic, setDynamic] = useState<ResourceQueryDynamicRef | null>(null);
   const queryIdentity = useMemo(
     () => queryIdentityFor(filters, sortConfig, predicates),
     [filters, predicates, sortConfig]
@@ -96,6 +101,7 @@ export function useAllNamespacesTypedQuery<TPayload extends TypedQueryPayload, T
     setContinueToken(null);
     setRows([]);
     setLoaded(false);
+    setDynamic(null);
   }, [queryIdentity]);
 
   const scope = useMemo(() => {
@@ -156,6 +162,11 @@ export function useAllNamespacesTypedQuery<TPayload extends TypedQueryPayload, T
         if (!payload) {
           return;
         }
+        if (payload.cursorInvalid) {
+          setRequestToken(null);
+          setContinueToken(null);
+          return;
+        }
         setRows(selectRows(payload));
         setContinueToken(payload.continue ?? null);
         setFilterOptions({
@@ -164,6 +175,7 @@ export function useAllNamespacesTypedQuery<TPayload extends TypedQueryPayload, T
           totalCount: payload.total,
           totalIsExact: payload.totalIsExact,
         });
+        setDynamic(payload.dynamic ?? null);
         setLoaded(true);
       } catch (caught) {
         if (!cancelled) {
@@ -199,5 +211,6 @@ export function useAllNamespacesTypedQuery<TPayload extends TypedQueryPayload, T
     isRequestingMore,
     loadMore,
     filterOptions,
+    dynamic,
   };
 }

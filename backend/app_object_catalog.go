@@ -688,6 +688,7 @@ func (a *App) RunCatalogQueryBulkAction(req snapshot.QueryBulkActionRequest) (sn
 		Search:        selection.Search,
 		SortField:     selection.SortField,
 		SortDirection: selection.SortDirection,
+		CustomOnly:    selection.CustomOnly,
 		Limit:         limit,
 		Continue:      req.Continue,
 	})

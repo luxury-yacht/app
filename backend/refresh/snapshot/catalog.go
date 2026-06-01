@@ -38,6 +38,8 @@ type CatalogSnapshot struct {
 	Kinds               []objectcatalog.KindInfo `json:"kinds,omitempty"`
 	Namespaces          []string                 `json:"namespaces,omitempty"`
 	FacetsExact         bool                     `json:"facetsExact"`
+	HasNext             bool                     `json:"hasNext"`
+	HasPrevious         bool                     `json:"hasPrevious"`
 	NamespaceGroups     []CatalogNamespaceGroup  `json:"namespaceGroups,omitempty"`
 	BatchIndex          int                      `json:"batchIndex"`
 	BatchSize           int                      `json:"batchSize"`
@@ -130,12 +132,6 @@ func buildCatalogSnapshot(
 	cachesReady bool,
 	forceFinal bool,
 ) (CatalogSnapshot, bool) {
-	startOffset := 0
-	if opts.Continue != "" {
-		if parsed, err := strconv.Atoi(opts.Continue); err == nil && parsed >= 0 {
-			startOffset = parsed
-		}
-	}
 	effectiveLimit := opts.Limit
 	if effectiveLimit <= 0 {
 		effectiveLimit = len(result.Items)
@@ -143,15 +139,14 @@ func buildCatalogSnapshot(
 	if effectiveLimit <= 0 {
 		effectiveLimit = 1
 	}
-	batchIndex := 0
-	if startOffset > 0 {
-		batchIndex = startOffset / effectiveLimit
-	}
+	hasNext := result.ContinueToken != ""
+	hasPrevious := result.PreviousToken != ""
+	batchIndex := keysetCatalogBatchIndex(hasPrevious)
 	totalBatches := 0
-	if result.TotalItems > 0 && effectiveLimit > 0 {
+	if result.TotalIsExact && !hasPrevious && result.TotalItems > 0 && effectiveLimit > 0 {
 		totalBatches = (result.TotalItems + effectiveLimit - 1) / effectiveLimit
 	}
-	isFinal := result.ContinueToken == "" || result.TotalItems == 0
+	isFinal := !hasNext || result.TotalItems == 0
 	streamingDisabled := health.Status == objectcatalog.HealthStateError ||
 		health.Status == objectcatalog.HealthStateDegraded ||
 		health.Stale ||
@@ -159,14 +154,12 @@ func buildCatalogSnapshot(
 	if streamingDisabled {
 		isFinal = true
 		result.ContinueToken = ""
-		if totalBatches == 0 {
-			totalBatches = batchIndex + 1
-		}
+		hasNext = false
 	}
 
 	if forceFinal {
 		isFinal = true
-		if totalBatches == 0 {
+		if totalBatches == 0 && !hasPrevious {
 			totalBatches = max(1, totalBatches)
 		}
 	} else if !cachesReady {
@@ -184,6 +177,8 @@ func buildCatalogSnapshot(
 		Kinds:         cloneKindInfos(result.Kinds),
 		Namespaces:    cloneStrings(result.Namespaces),
 		FacetsExact:   result.FacetsExact,
+		HasNext:       hasNext,
+		HasPrevious:   hasPrevious,
 		BatchIndex:    batchIndex,
 		BatchSize:     len(result.Items),
 		TotalBatches:  totalBatches,
@@ -193,6 +188,13 @@ func buildCatalogSnapshot(
 	truncated := result.ContinueToken != "" || (payload.Total > 0 && len(payload.Items) < payload.Total)
 
 	return payload, truncated
+}
+
+func keysetCatalogBatchIndex(hasPrevious bool) int {
+	if hasPrevious {
+		return -1
+	}
+	return 0
 }
 
 func buildCatalogNamespaceGroups(

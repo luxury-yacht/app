@@ -1,5 +1,7 @@
 package snapshot
 
+import "sort"
+
 // ResourceQueryRequest is the shared contract for future query-backed typed
 // resource tables. It is deliberately separate from the catalog query because
 // typed rows include projected status, owner, storage, Helm, autoscaling, and
@@ -95,6 +97,38 @@ type ResourceQueryDynamicRef struct {
 	Policy   string `json:"policy"`
 }
 
+func resourceQueryPredicatesToMap(predicates []ResourceQueryPredicate) map[string]string {
+	if len(predicates) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(predicates))
+	for _, predicate := range predicates {
+		if predicate.Field == "" {
+			continue
+		}
+		result[predicate.Field] = predicate.Value
+	}
+	return result
+}
+
+func resourceQueryPredicateMapToList(predicates map[string]string) []ResourceQueryPredicate {
+	if len(predicates) == 0 {
+		return nil
+	}
+	result := make([]ResourceQueryPredicate, 0, len(predicates))
+	for field, value := range predicates {
+		result = append(result, ResourceQueryPredicate{
+			Field: field,
+			Op:    "eq",
+			Value: value,
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Field < result[j].Field
+	})
+	return result
+}
+
 // QuerySelectionDescriptor is the durable selector used for query-wide export,
 // selection, and bulk-action flows. It intentionally carries the same scoped
 // query identity as ResourceQueryRequest so callers do not send thousands of
@@ -108,6 +142,7 @@ type QuerySelectionDescriptor struct {
 	Predicates     []ResourceQueryPredicate `json:"predicates,omitempty"`
 	SortField      string                   `json:"sortField,omitempty"`
 	SortDirection  string                   `json:"sortDirection,omitempty"`
+	CustomOnly     bool                     `json:"customOnly,omitempty"`
 	QuerySignature string                   `json:"querySignature,omitempty"`
 }
 

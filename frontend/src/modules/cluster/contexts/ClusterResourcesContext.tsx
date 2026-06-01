@@ -94,7 +94,7 @@ const CLUSTER_EVENTS_DOMAIN: RefreshDomain = 'cluster-events';
 
 const noop = () => {};
 
-const createCatalogBackedCustomResource = (): ResourceDataReturn<ClusterCustomEntry[]> => ({
+const createCatalogBackedCustomResourceHandle = (): ResourceDataReturn<ClusterCustomEntry[]> => ({
   data: [],
   loading: false,
   refreshing: false,
@@ -105,6 +105,10 @@ const createCatalogBackedCustomResource = (): ResourceDataReturn<ClusterCustomEn
   cancel: noop,
   lastFetchTime: null,
   hasLoaded: false,
+  meta: {
+    source: 'catalog-backed-custom',
+    refreshDomainEnabled: false,
+  },
 });
 
 // Keep merged multi-cluster payloads scoped to the active tab.
@@ -647,7 +651,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     isPaused,
     isManualRefreshActive
   );
-  const custom = useMemo(() => createCatalogBackedCustomResource(), []);
+  const custom = useMemo(() => createCatalogBackedCustomResourceHandle(), []);
   const events = useDescriptorBackedClusterResource<any[]>(
     clusterResourceDescriptors.events,
     eventsDomain,

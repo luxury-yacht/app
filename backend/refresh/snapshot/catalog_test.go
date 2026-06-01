@@ -112,6 +112,39 @@ func TestCatalogBuildUsesCatalogOnly(t *testing.T) {
 	}
 }
 
+func TestCatalogSnapshotMetadataUsesKeysetSemantics(t *testing.T) {
+	payload, _ := buildCatalogSnapshot(
+		objectcatalog.QueryResult{
+			Items: []objectcatalog.Summary{{
+				Kind:      "Pod",
+				Version:   "v1",
+				Resource:  "pods",
+				Namespace: "default",
+				Name:      "pod-b",
+			}},
+			ContinueToken: "next-keyset",
+			PreviousToken: "previous-keyset",
+			TotalItems:    3,
+			TotalIsExact:  true,
+			FacetsExact:   true,
+		},
+		browseQueryOptions{Limit: 1, Continue: "previous-keyset"},
+		objectcatalog.HealthStatus{},
+		true,
+		false,
+	)
+
+	if !payload.HasNext || !payload.HasPrevious {
+		t.Fatalf("expected keyset next/previous flags, got next=%t previous=%t", payload.HasNext, payload.HasPrevious)
+	}
+	if payload.BatchIndex != -1 {
+		t.Fatalf("expected keyset batch index sentinel -1, got %d", payload.BatchIndex)
+	}
+	if payload.TotalBatches != 0 {
+		t.Fatalf("expected no offset total batches for previous keyset page, got %d", payload.TotalBatches)
+	}
+}
+
 func TestCatalogBuildPreservesContinueWhenCachesReady(t *testing.T) {
 	summaries := []objectcatalog.Summary{
 		{

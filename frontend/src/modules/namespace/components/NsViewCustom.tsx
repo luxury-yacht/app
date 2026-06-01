@@ -21,9 +21,7 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
-import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
-import { useHydratedCustomCatalogRows } from '@modules/browse/hooks/useHydratedCustomCatalogRows';
-import { useCatalogQueryCsvAction } from '@modules/browse/hooks/useCatalogQueryCsvAction';
+import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -330,37 +328,21 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     );
 
     const {
-      items: catalogItems,
+      rows,
       loading: catalogLoading,
       hasLoadedOnce: catalogLoaded,
       filterOptions: catalogFilterOptions,
       totalCount,
       totalIsExact,
-      queryDescriptor,
-      queryPending,
-    } = useBrowseCatalog({
+      csvAction: copyAllMatchingCsvAction,
+    } = useCatalogBackedCustomResourceRows<CustomResourceData>({
       clusterId: selectedClusterId,
-      pinnedNamespaces: namespace === ALL_NAMESPACES_SCOPE ? [] : [namespace],
-      customOnly: true,
-      filters: {
-        search: persistence.filters.search ?? '',
-        kinds: persistence.filters.kinds ?? [],
-        namespaces: persistence.filters.namespaces ?? [],
-      },
-      sort: persistence.sortConfig,
+      namespace,
+      allNamespaces: namespace === ALL_NAMESPACES_SCOPE,
+      persistence,
       diagnosticLabel: diagnosticsLabel,
-    });
-
-    const rows = useHydratedCustomCatalogRows(
-      selectedClusterId,
-      catalogItems
-    ) as CustomResourceData[];
-    const copyAllMatchingCsvAction = useCatalogQueryCsvAction({
-      query: queryDescriptor,
-      totalCount,
-      pending: queryPending,
-      disableWhenUnscoped: namespace === ALL_NAMESPACES_SCOPE,
-      id: 'copy-namespace-custom-query-csv',
+      disableCsvWhenUnscoped: namespace === ALL_NAMESPACES_SCOPE,
+      csvActionId: 'copy-namespace-custom-query-csv',
     });
 
     const { gridTableProps, favModal } = useQueryResourceGridTable<CustomResourceData>({

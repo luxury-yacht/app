@@ -51,6 +51,7 @@ import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGri
 import { RunCatalogQueryBulkAction } from '@wailsjs/go/backend/App';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import { useCatalogQueryCsvAction } from '@modules/browse/hooks/useCatalogQueryCsvAction';
+import { catalogSelectionFromBrowseQuery } from '@modules/browse/querySelection';
 
 const VIRTUALIZATION_THRESHOLD = 80;
 const COPY_QUERY_CSV_FEEDBACK_RESET_MS = 750;
@@ -415,7 +416,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   const disableUnscopedQueryActions = !clusterScopedOnly && !isNamespaceScoped;
   const copyAllMatchingCsvAction = useCatalogQueryCsvAction({
-    query: queryDescriptor,
+    query: catalogSelectionFromBrowseQuery(queryDescriptor),
     totalCount,
     pending: queryPending,
     disableWhenUnscoped: disableUnscopedQueryActions,
@@ -423,15 +424,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   });
 
   const querySelection = useMemo(
-    () => ({
-      clusterId: queryDescriptor.clusterId,
-      table: 'browse',
-      namespaces: queryDescriptor.namespaces,
-      kinds: queryDescriptor.kinds,
-      search: queryDescriptor.search,
-      sortField: queryDescriptor.sortField,
-      sortDirection: queryDescriptor.sortDirection,
-    }),
+    () => catalogSelectionFromBrowseQuery(queryDescriptor),
     [queryDescriptor]
   );
 

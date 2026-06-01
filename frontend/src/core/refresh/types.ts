@@ -501,6 +501,8 @@ export interface CatalogSnapshotPayload extends ClusterMeta {
   kinds?: KindInfo[];
   namespaces?: string[];
   facetsExact?: boolean;
+  hasNext?: boolean;
+  hasPrevious?: boolean;
   namespaceGroups?: CatalogNamespaceGroup[];
   parity?: CatalogParity | null;
   batchIndex: number;
@@ -603,6 +605,7 @@ export interface QuerySelectionDescriptor {
   predicates?: ResourceQueryPredicate[];
   sortField?: string;
   sortDirection?: string;
+  customOnly?: boolean;
   querySignature?: string;
 }
 
@@ -688,10 +691,13 @@ export interface PodSnapshotPayload extends ClusterMeta {
   pods: PodSnapshotEntry[];
   metrics?: PodMetricsInfo;
   continue?: string;
+  cursorInvalid?: boolean;
   total?: number;
   totalIsExact?: boolean;
   namespaces?: string[];
   kinds?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface ObjectDetailsSnapshotPayload extends ClusterMeta {
@@ -836,9 +842,12 @@ export interface NamespaceWorkloadSnapshotPayload extends ClusterMeta {
   workloads: NamespaceWorkloadSummary[];
   kinds?: string[];
   continue?: string;
+  cursorInvalid?: boolean;
   total?: number;
   totalIsExact?: boolean;
   namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface NamespaceConfigSummary extends ClusterMeta {

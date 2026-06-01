@@ -3,12 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
 import { readCatalogQueryCSV, requestData } from '@core/data-access';
-import type { BrowseCatalogQueryDescriptor } from '@modules/browse/hooks/useBrowseCatalog';
+import type { CatalogQuerySelectionDescriptor } from '@modules/browse/querySelection';
 
 const COPY_QUERY_CSV_FEEDBACK_RESET_MS = 750;
 
 interface UseCatalogQueryCsvActionOptions {
-  query: BrowseCatalogQueryDescriptor;
+  query: CatalogQuerySelectionDescriptor;
   totalCount: number;
   pending?: boolean;
   disableWhenUnscoped?: boolean;
@@ -51,7 +51,7 @@ export function useCatalogQueryCsvAction({
       !query.clusterId ||
       !canCopy ||
       pending ||
-      (disableWhenUnscoped && query.namespaces.length === 0)
+      (disableWhenUnscoped && (query.namespaces?.length ?? 0) === 0)
     ) {
       setFeedback('error');
       scheduleReset();
@@ -68,11 +68,11 @@ export function useCatalogQueryCsvAction({
         read: () =>
           readCatalogQueryCSV(
             query.clusterId,
-            query.kinds,
-            query.namespaces,
-            query.search,
-            query.sortField,
-            query.sortDirection,
+            query.kinds ?? [],
+            query.namespaces ?? [],
+            query.search ?? '',
+            query.sortField ?? '',
+            query.sortDirection ?? '',
             query.customOnly
           ),
       });
@@ -105,7 +105,7 @@ export function useCatalogQueryCsvAction({
         !canCopy ||
         pending ||
         totalCount === 0 ||
-        (disableWhenUnscoped && query.namespaces.length === 0),
+        (disableWhenUnscoped && (query.namespaces?.length ?? 0) === 0),
       feedback,
     }),
     [canCopy, disableWhenUnscoped, feedback, handleCopy, id, pending, query, title, totalCount]

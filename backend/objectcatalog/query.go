@@ -59,13 +59,29 @@ type catalogQueryCursor struct {
 	Created   string `json:"ct,omitempty"`
 }
 
+type catalogQueryExecutor struct {
+	service          *Service
+	state            catalogCachedQueryState
+	opts             QueryOptions
+	limit            int
+	kindMatcher      kindMatcher
+	namespaceMatcher namespaceMatcher
+	searchMatcher    searchMatcher
+	customMatcher    customOnlyMatcher
+}
+
+type catalogQueryPageResult struct {
+	items         []Summary
+	continueToken string
+	previousToken string
+	cursorInvalid bool
+}
+
 // Query filters catalog entries and returns a paginated result.
 func (s *Service) Query(opts QueryOptions) QueryResult {
 	kindMatcher := newKindMatcher(opts.Kinds)
 	namespaceMatcher := newNamespaceMatcher(opts.Namespaces)
 	searchMatcher := newSearchMatcher(opts.Search)
-	customMatcher := newCustomOnlyMatcher(opts.CustomOnly)
-	hasNamespaceFilter := len(opts.Namespaces) > 0
 
 	s.mu.RLock()
 	cachedState := s.catalogIndex.cachedQueryState()
@@ -75,47 +91,62 @@ func (s *Service) Query(opts QueryOptions) QueryResult {
 		return s.queryWithoutCache(opts, kindMatcher, namespaceMatcher, searchMatcher)
 	}
 
-	limit := clampQueryLimit(opts.Limit)
+	executor := s.newCatalogQueryExecutor(opts, cachedState, kindMatcher, namespaceMatcher, searchMatcher)
+	return executor.executeCached()
+}
+
+func (s *Service) newCatalogQueryExecutor(
+	opts QueryOptions,
+	state catalogCachedQueryState,
+	kindMatcher kindMatcher,
+	namespaceMatcher namespaceMatcher,
+	searchMatcher searchMatcher,
+) catalogQueryExecutor {
+	return catalogQueryExecutor{
+		service:          s,
+		state:            state,
+		opts:             opts,
+		limit:            clampQueryLimit(opts.Limit),
+		kindMatcher:      kindMatcher,
+		namespaceMatcher: namespaceMatcher,
+		searchMatcher:    searchMatcher,
+		customMatcher:    newCustomOnlyMatcher(opts.CustomOnly),
+	}
+}
+
+func (e catalogQueryExecutor) executeCached() QueryResult {
+	hasNamespaceFilter := len(e.opts.Namespaces) > 0
 
 	matchKinds := make(map[string]bool)
 	matchNamespaces := make(map[string]struct{})
 	totalMatches := 0
 	metadataExact := true
-	namespaceKinds := cachedState.queryIndex.kindFacetsForNamespaces(opts.Namespaces)
-	if hasNamespaceFilter && len(namespaceKinds) == 0 && !cachedState.queryIndex.hasIndex() {
-		namespaceKinds = cachedState.kindFacetsForNamespaces(namespaceMatcher)
+	namespaceKinds := e.state.queryIndex.kindFacetsForNamespaces(e.opts.Namespaces)
+	if hasNamespaceFilter && len(namespaceKinds) == 0 && !e.state.queryIndex.hasIndex() {
+		namespaceKinds = e.state.kindFacetsForNamespaces(e.namespaceMatcher)
 	}
-	page, next, previous, cursorInvalid := s.pageCatalogChunks(
-		cachedState,
-		opts,
-		limit,
-		kindMatcher,
-		namespaceMatcher,
-		searchMatcher,
-		customMatcher,
-		func(item Summary) {
-			if !customMatcher(item) {
-				return
-			}
-			if !metadataExact {
-				return
-			}
-			totalMatches++
-			if totalMatches > catalogQueryExactMetadataThreshold {
-				metadataExact = false
-				return
-			}
-			if item.Kind != "" {
-				matchKinds[item.Kind] = item.Scope == ScopeNamespace
-			}
-			matchNamespaces[item.Namespace] = struct{}{}
-		},
-	)
+	page := e.pageCatalogChunks(func(item Summary) {
+		if !e.customMatcher(item) {
+			return
+		}
+		if !metadataExact {
+			return
+		}
+		totalMatches++
+		if totalMatches > catalogQueryExactMetadataThreshold {
+			metadataExact = false
+			return
+		}
+		if item.Kind != "" {
+			matchKinds[item.Kind] = item.Scope == ScopeNamespace
+		}
+		matchNamespaces[item.Namespace] = struct{}{}
+	})
 
-	resourceCount := countMatchingDescriptorsWithOptions(cachedState.descriptors, kindMatcher, opts)
+	resourceCount := countMatchingDescriptorsWithOptions(e.state.descriptors, e.kindMatcher, e.opts)
 
-	kinds := cachedState.kinds
-	if opts.CustomOnly {
+	kinds := e.state.kinds
+	if e.opts.CustomOnly {
 		kinds = snapshotSortedKindInfos(matchKinds)
 	} else if hasNamespaceFilter {
 		if len(namespaceKinds) > 0 {
@@ -127,16 +158,16 @@ func (s *Service) Query(opts QueryOptions) QueryResult {
 		kinds = snapshotSortedKindInfos(matchKinds)
 	}
 
-	namespaces := cachedState.namespaces
+	namespaces := e.state.namespaces
 	if len(namespaces) == 0 && len(matchNamespaces) > 0 {
 		namespaces = snapshotSortedKeys(matchNamespaces)
 	}
 
 	return QueryResult{
-		Items:         page,
-		ContinueToken: next,
-		PreviousToken: previous,
-		CursorInvalid: cursorInvalid,
+		Items:         page.items,
+		ContinueToken: page.continueToken,
+		PreviousToken: page.previousToken,
+		CursorInvalid: page.cursorInvalid,
 		TotalItems:    totalMatches,
 		TotalIsExact:  metadataExact,
 		ResourceCount: resourceCount,
@@ -146,17 +177,8 @@ func (s *Service) Query(opts QueryOptions) QueryResult {
 	}
 }
 
-func (s *Service) pageCatalogChunks(
-	cachedState catalogCachedQueryState,
-	opts QueryOptions,
-	limit int,
-	kindMatcher kindMatcher,
-	namespaceMatcher namespaceMatcher,
-	searchMatcher searchMatcher,
-	customMatcher customOnlyMatcher,
-	onMatch func(Summary),
-) ([]Summary, string, string, bool) {
-	cursor, cursorValid, cursorInvalid := s.validateCatalogQueryCursor(opts, limit)
+func (e catalogQueryExecutor) pageCatalogChunks(onMatch func(Summary)) catalogQueryPageResult {
+	cursor, cursorValid, cursorInvalid := e.service.validateCatalogQueryCursor(e.opts, e.limit)
 	direction := catalogQueryDirectionNext
 	if cursorValid {
 		direction = cursor.Direction
@@ -167,86 +189,74 @@ func (s *Service) pageCatalogChunks(
 	}
 
 	if direction == catalogQueryDirectionPrev && cursorValid {
-		return s.pageCatalogChunksPrevious(
-			cachedState,
-			opts,
-			limit,
-			cursor,
-			kindMatcher,
-			namespaceMatcher,
-			searchMatcher,
-			customMatcher,
-			onMatch,
-		)
+		return e.pageCatalogChunksPrevious(cursor, onMatch)
 	}
 
-	page := make([]Summary, 0, limit)
+	page := make([]Summary, 0, e.limit)
 	hasMore := false
 	hasPrevious := false
-	cachedState.forEachCatalogQueryCandidate(opts, func(item Summary) {
-		if !customMatcher(item) || !matchesCatalogQuery(item, kindMatcher, namespaceMatcher, searchMatcher) {
+	e.state.forEachCatalogQueryCandidate(e.opts, func(item Summary) {
+		if !e.matches(item) {
 			return
 		}
 		if onMatch != nil {
 			onMatch(item)
 		}
-		if cursorValid && compareSummariesForCatalogQueryWithOptions(item, summaryFromCatalogCursor(cursor), opts) <= 0 {
+		if cursorValid && compareSummariesForCatalogQueryWithOptions(item, summaryFromCatalogCursor(cursor), e.opts) <= 0 {
 			hasPrevious = true
 			return
 		}
-		if insertCatalogQueryForwardPage(&page, item, limit, opts) {
+		if insertCatalogQueryForwardPage(&page, item, e.limit, e.opts) {
 			hasMore = true
 		}
 	})
 
 	next := ""
 	if hasMore && len(page) > 0 {
-		next = encodeCatalogQueryCursor(s.catalogQueryCursorFor(opts, limit, catalogQueryDirectionNext, page[len(page)-1]))
+		next = encodeCatalogQueryCursor(e.service.catalogQueryCursorFor(e.opts, e.limit, catalogQueryDirectionNext, page[len(page)-1]))
 	}
 	previous := ""
 	if hasPrevious && len(page) > 0 {
-		previous = encodeCatalogQueryCursor(s.catalogQueryCursorFor(opts, limit, catalogQueryDirectionPrev, page[0]))
+		previous = encodeCatalogQueryCursor(e.service.catalogQueryCursorFor(e.opts, e.limit, catalogQueryDirectionPrev, page[0]))
 	}
-	return page, next, previous, cursorInvalid
+	return catalogQueryPageResult{items: page, continueToken: next, previousToken: previous, cursorInvalid: cursorInvalid}
 }
 
-func (s *Service) pageCatalogChunksPrevious(
-	cachedState catalogCachedQueryState,
-	opts QueryOptions,
-	limit int,
+func (e catalogQueryExecutor) pageCatalogChunksPrevious(
 	cursor catalogQueryCursor,
-	kindMatcher kindMatcher,
-	namespaceMatcher namespaceMatcher,
-	searchMatcher searchMatcher,
-	customMatcher customOnlyMatcher,
 	onMatch func(Summary),
-) ([]Summary, string, string, bool) {
+) catalogQueryPageResult {
 	anchor := summaryFromCatalogCursor(cursor)
-	buffer := make([]Summary, 0, limit)
+	buffer := make([]Summary, 0, e.limit)
 	beforeCount := 0
-	cachedState.forEachCatalogQueryCandidate(opts, func(item Summary) {
-		if !customMatcher(item) || !matchesCatalogQuery(item, kindMatcher, namespaceMatcher, searchMatcher) {
+	e.state.forEachCatalogQueryCandidate(e.opts, func(item Summary) {
+		if !e.matches(item) {
 			return
 		}
 		if onMatch != nil {
 			onMatch(item)
 		}
-		if compareSummariesForCatalogQueryWithOptions(item, anchor, opts) >= 0 {
+		if compareSummariesForCatalogQueryWithOptions(item, anchor, e.opts) >= 0 {
 			return
 		}
 		beforeCount++
-		insertCatalogQueryPreviousPage(&buffer, item, limit, opts)
+		insertCatalogQueryPreviousPage(&buffer, item, e.limit, e.opts)
 	})
 
 	next := ""
 	if len(buffer) > 0 {
-		next = encodeCatalogQueryCursor(s.catalogQueryCursorFor(opts, limit, catalogQueryDirectionNext, buffer[len(buffer)-1]))
+		next = encodeCatalogQueryCursor(e.service.catalogQueryCursorFor(e.opts, e.limit, catalogQueryDirectionNext, buffer[len(buffer)-1]))
 	}
 	previous := ""
-	if beforeCount > limit && len(buffer) > 0 {
-		previous = encodeCatalogQueryCursor(s.catalogQueryCursorFor(opts, limit, catalogQueryDirectionPrev, buffer[0]))
+	if beforeCount > e.limit && len(buffer) > 0 {
+		previous = encodeCatalogQueryCursor(e.service.catalogQueryCursorFor(e.opts, e.limit, catalogQueryDirectionPrev, buffer[0]))
 	}
-	return buffer, next, previous, false
+	return catalogQueryPageResult{items: buffer, continueToken: next, previousToken: previous}
+}
+
+func (e catalogQueryExecutor) matches(item Summary) bool {
+	return e.customMatcher(item) &&
+		matchesCatalogQuery(item, e.kindMatcher, e.namespaceMatcher, e.searchMatcher)
 }
 
 func (state catalogCachedQueryState) forEachCatalogQueryCandidate(opts QueryOptions, visit func(Summary)) {

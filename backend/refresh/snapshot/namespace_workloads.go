@@ -64,12 +64,15 @@ type NamespaceWorkloadsBuilder struct {
 // NamespaceWorkloadsSnapshot is returned to the frontend.
 type NamespaceWorkloadsSnapshot struct {
 	ClusterMeta
-	Workloads    []WorkloadSummary `json:"workloads"`
-	Kinds        []string          `json:"kinds,omitempty"`
-	Continue     string            `json:"continue,omitempty"`
-	Total        int               `json:"total,omitempty"`
-	TotalIsExact bool              `json:"totalIsExact"`
-	Namespaces   []string          `json:"namespaces,omitempty"`
+	Workloads     []WorkloadSummary        `json:"workloads"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // WorkloadSummary mirrors the data required by the workloads table.
@@ -335,13 +338,16 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 			Scope:   scope,
 			Version: version,
 			Payload: NamespaceWorkloadsSnapshot{
-				ClusterMeta:  meta,
-				Workloads:    page.Rows,
-				Kinds:        page.Kinds,
-				Continue:     page.Continue,
-				Total:        page.Total,
-				TotalIsExact: page.TotalIsExact,
-				Namespaces:   page.Namespaces,
+				ClusterMeta:   meta,
+				Workloads:     page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
 			},
 			Stats: refresh.SnapshotStats{
 				ItemCount: len(page.Rows),
