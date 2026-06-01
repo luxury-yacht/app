@@ -22,6 +22,8 @@ const {
   namespaceColumnLinkMock,
   useTableSortMock,
   useUserPermissionsMock,
+  queryNamespacesPermissionsMock,
+  requestRefreshDomainStateMock,
   runObjectActionMock,
   errorHandlerMock,
 } = vi.hoisted(() => ({
@@ -36,6 +38,8 @@ const {
   },
   useTableSortMock: vi.fn(),
   useUserPermissionsMock: vi.fn(),
+  queryNamespacesPermissionsMock: vi.fn(),
+  requestRefreshDomainStateMock: vi.fn(),
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
 }));
@@ -43,6 +47,30 @@ const {
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => namespaceColumnLinkMock,
 }));
+
+vi.mock('@modules/namespace/contexts/NamespaceContext', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@modules/namespace/contexts/NamespaceContext')>();
+  return {
+    ...actual,
+    useNamespace: () => ({
+      namespaces: [
+        { name: 'All Namespaces', scope: ALL_NAMESPACES_SCOPE, isSynthetic: true },
+        { name: 'team-a', scope: 'team-a' },
+        { name: 'team-b', scope: 'team-b' },
+      ],
+      selectedNamespace: ALL_NAMESPACES_SCOPE,
+      selectedNamespaceClusterId: 'alpha:ctx',
+      namespaceLoading: false,
+      namespaceRefreshing: false,
+      namespaceReady: true,
+      setSelectedNamespace: vi.fn(),
+      loadNamespaces: vi.fn(),
+      refreshNamespaces: vi.fn(),
+      getClusterNamespace: vi.fn(),
+    }),
+  };
+});
 
 const clusterMetricsMock = vi.hoisted(() => ({ current: null as any }));
 
@@ -159,12 +187,19 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   },
 }));
 
+vi.mock('@/core/data-access', () => ({
+  requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...(args as [])),
+}));
+
 vi.mock('@wailsjs/go/backend/App', () => ({
   RunObjectAction: (...args: unknown[]) => runObjectActionMock(...(args as [])),
 }));
 
 vi.mock('@/core/capabilities', () => ({
+  POD_PERMISSIONS: { feature: 'namespacePods', specs: [{ kind: 'Pod', verb: 'list' }] },
   getPermissionKey: (kind: string, action: string, ns?: string) => `${kind}:${action}:${ns ?? ''}`,
+  queryNamespacesPermissions: (...args: unknown[]) =>
+    queryNamespacesPermissionsMock(...(args as [])),
   useUserPermissions: () => useUserPermissionsMock(),
 }));
 
@@ -225,6 +260,8 @@ describe('NsViewPods', () => {
     openWithObjectMock.mockReset();
     navigateToViewMock.mockReset();
     runObjectActionMock.mockClear();
+    queryNamespacesPermissionsMock.mockReset();
+    requestRefreshDomainStateMock.mockReset();
     useTableSortMock.mockReset();
     useUserPermissionsMock.mockReset();
     errorHandlerMock.handle.mockClear();
@@ -242,6 +279,20 @@ describe('NsViewPods', () => {
       ])
     );
     clusterMetricsMock.current = null;
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          pods: [],
+          total: 0,
+          totalIsExact: true,
+          namespaces: ['team-a', 'team-b'],
+          kinds: ['Pod'],
+          facetsExact: true,
+        },
+      },
+    });
   });
 
   afterEach(() => {
@@ -310,6 +361,48 @@ describe('NsViewPods', () => {
     expect(gridProps.enableContextMenu).toBe(true);
     expect(gridProps.columns.map((col: any) => col.key)).toEqual(
       expect.arrayContaining(['name', 'status', 'cpu', 'memory'])
+    );
+  });
+
+  it('uses the typed query result for all-namespaces pods on first render', async () => {
+    const localPod = createPod({ name: 'local-provider-row', namespace: 'team-a' });
+    const queryPod = createPod({ name: 'query-row', namespace: 'team-b' });
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          pods: [queryPod],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a', 'team-b'],
+          kinds: ['Pod'],
+          facetsExact: true,
+        },
+      },
+    });
+
+    await renderPods({
+      namespace: ALL_NAMESPACES_SCOPE,
+      data: [localPod],
+      showNamespaceColumn: true,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current.data).toEqual([queryPod]);
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: 'pods',
+        scope: 'alpha:ctx|namespace:all?limit=250&sort=name&sortDirection=asc',
+      })
+    );
+    expect(queryNamespacesPermissionsMock).toHaveBeenCalledWith(
+      [{ namespace: 'team-b', clusterId: 'alpha:ctx' }],
+      expect.objectContaining({ specLists: expect.any(Array) })
     );
   });
 
@@ -673,6 +766,22 @@ describe('NsViewPods', () => {
         ready: '0/1',
       }),
     ];
+    requestRefreshDomainStateMock.mockImplementation(({ scope }: { scope: string }) =>
+      Promise.resolve({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            pods: scope.includes('predicate.health=unhealthy') ? [pods[1]] : [],
+            total: scope.includes('predicate.health=unhealthy') ? 1 : 0,
+            totalIsExact: true,
+            namespaces: ['team-a', 'team-b'],
+            kinds: ['Pod'],
+            facetsExact: true,
+          },
+        },
+      })
+    );
 
     await renderPods({
       namespace: ALL_NAMESPACES_SCOPE,
@@ -680,7 +789,12 @@ describe('NsViewPods', () => {
       showNamespaceColumn: true,
     });
 
-    expect(gridTablePropsRef.current.data).toEqual(pods);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current.data).toEqual([]);
 
     await act(async () => {
       eventBus.emit('pods:show-unhealthy', {
@@ -688,9 +802,16 @@ describe('NsViewPods', () => {
         scope: ALL_NAMESPACES_SCOPE,
       });
       await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
+    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        domain: 'pods',
+        scope: expect.stringContaining('predicate.health=unhealthy'),
+      })
+    );
   });
 
   it('filters restarted pods when a restart signal targets the namespace and cluster', async () => {

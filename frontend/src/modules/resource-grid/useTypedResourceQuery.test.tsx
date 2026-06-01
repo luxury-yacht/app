@@ -89,4 +89,32 @@ describe('useTypedResourceQuery', () => {
     expect(result?.loaded).toBe(true);
     expect(result?.error).toBe('query failed');
   });
+
+  it('uses a user-visible request reason for table queries', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: { rows: [] } },
+    });
+
+    await renderQuery();
+
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'user' })
+    );
+  });
+
+  it('marks blocked query requests as loaded so the table does not stay in an initial spinner', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'blocked',
+      blockedReason: 'auto-refresh-disabled',
+    });
+
+    await renderQuery();
+
+    expect(result?.loading).toBe(false);
+    expect(result?.loaded).toBe(true);
+    expect(result?.error).toBe(
+      'All Namespaces Pods could not load because auto-refresh is disabled'
+    );
+  });
 });

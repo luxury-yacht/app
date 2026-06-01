@@ -309,6 +309,21 @@ describe('NamespaceResourcesProvider', () => {
     );
   });
 
+  it('does not enable the full all-namespaces pods snapshot for the query-backed pods table', async () => {
+    await render(
+      <NamespaceResourcesProvider namespace="namespace:all" activeView="pods">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+      'pods',
+      `${testClusterId}|namespace:all`,
+      true,
+      { preserveState: true }
+    );
+  });
+
   it('resets domains and triggers reload when the namespace changes', async () => {
     scopedStates[`${testClusterId}|namespace:team-a`] = {
       status: 'ready',

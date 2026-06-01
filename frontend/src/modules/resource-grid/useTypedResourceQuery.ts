@@ -111,14 +111,19 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         const result = await requestRefreshDomainState({
           domain,
           scope,
-          reason: requestToken ? 'user' : 'startup',
+          reason: 'user',
           label,
         });
-        if (
-          cancelled ||
-          result.status !== 'executed' ||
-          queryIdentityRef.current !== identityAtRequest
-        ) {
+        if (cancelled || queryIdentityRef.current !== identityAtRequest) {
+          return;
+        }
+        if (result.status !== 'executed') {
+          setError(
+            result.blockedReason === 'auto-refresh-disabled'
+              ? `${label} could not load because auto-refresh is disabled`
+              : `${label} request was blocked`
+          );
+          setLoaded(true);
           return;
         }
         const payload = result.data?.data as TPayload | null | undefined;

@@ -44,6 +44,7 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useStableKeyedArray, useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 import {
   namespaceResourceDescriptors,
@@ -555,7 +556,10 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   );
 
   const podsEnabled =
-    Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === 'pods';
+    Boolean(currentNamespace) &&
+    currentNamespace !== ALL_NAMESPACES_SCOPE &&
+    isNamespaceView &&
+    activeNamespaceView === 'pods';
   const pods = useNamespacePodsResource(
     podsEnabled,
     currentNamespace,

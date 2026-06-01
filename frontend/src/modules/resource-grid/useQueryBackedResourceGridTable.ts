@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { RefreshDomain } from '@/core/refresh/types';
 import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
 import { useNamespaceResourceGridTable } from './useResourceGridTable';
@@ -13,6 +13,7 @@ import {
   queryBackedPaginationProps,
   useQueryBackedTableState,
 } from './queryBackedTableState';
+import type { QueryBackedTableState } from './queryBackedTableState';
 
 export interface QueryBackedNamespaceGridResult<
   T extends ResourceGridTableRow,
@@ -62,9 +63,18 @@ export function useQueryBackedNamespaceResourceGridTable<
   ...tableParams
 }: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
+  const [tableStateReady, setTableStateReady] = useState(false);
+  const handlePublishedTableState = useCallback(
+    (next: QueryBackedTableState) => {
+      setTableStateReady(true);
+      handleTableStateChange(next);
+    },
+    [handleTableStateChange]
+  );
+  const queryEnabled = enabled && tableStateReady;
 
   const query = useTypedResourceQuery<TPayload, TRow>({
-    enabled,
+    enabled: queryEnabled,
     clusterId,
     domain,
     label,
@@ -75,8 +85,8 @@ export function useQueryBackedNamespaceResourceGridTable<
   });
 
   const data = enabled ? query.rows : localData;
-  const loading = enabled ? query.loading : localLoading;
-  const loaded = enabled ? query.loaded : localLoaded;
+  const loading = enabled ? !tableStateReady || query.loading : localLoading;
+  const loaded = enabled ? tableStateReady && query.loaded : localLoaded;
   const error = enabled ? query.error : localError;
 
   const table = useNamespaceResourceGridTable<TRow>({
@@ -87,7 +97,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     filterOptionOverrides: enabled
       ? mergeQueryBackedFilterOptions(filterOptionOverrides, query.filterOptions)
       : filterOptionOverrides,
-    onTableStateChange: enabled ? handleTableStateChange : undefined,
+    onTableStateChange: enabled ? handlePublishedTableState : undefined,
   });
 
   const gridTableProps = useMemo(
