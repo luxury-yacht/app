@@ -560,14 +560,58 @@ func (a *App) ExportCatalogQueryCSV(
 		return "", fmt.Errorf("object catalog service unavailable for cluster %q", trimmedClusterID)
 	}
 
-	return svc.ExportQueryCSV(objectcatalog.QueryOptions{
+	return svc.ExportQueryCSV(catalogQueryOptionsFromSelection(snapshot.QuerySelectionDescriptor{
+		ClusterID:     trimmedClusterID,
+		Table:         "catalog",
 		Kinds:         kinds,
 		Namespaces:    namespaces,
 		Search:        search,
 		SortField:     sortField,
 		SortDirection: sortDirection,
 		CustomOnly:    customOnly,
-	})
+	}, 0, ""))
+}
+
+// ExportCatalogSelectionCSV exports every catalog object matching a durable
+// query selection. It is the preferred query-wide export path because it shares
+// selection semantics with query-wide actions.
+func (a *App) ExportCatalogSelectionCSV(selection snapshot.QuerySelectionDescriptor) (string, error) {
+	if a == nil {
+		return "", fmt.Errorf("app is not initialised")
+	}
+	clusterID, err := validateCatalogQuerySelection(selection)
+	if err != nil {
+		return "", err
+	}
+	svc := a.objectCatalogServiceForCluster(clusterID)
+	if svc == nil {
+		return "", fmt.Errorf("object catalog service unavailable for cluster %q", clusterID)
+	}
+	return svc.ExportQueryCSV(catalogQueryOptionsFromSelection(selection, 0, ""))
+}
+
+func validateCatalogQuerySelection(selection snapshot.QuerySelectionDescriptor) (string, error) {
+	if selection.Table != "catalog" && selection.Table != "browse" {
+		return "", fmt.Errorf("catalog query selection is unsupported for table %q", selection.Table)
+	}
+	clusterID := strings.TrimSpace(selection.ClusterID)
+	if clusterID == "" {
+		return "", fmt.Errorf("cluster ID is required")
+	}
+	return clusterID, nil
+}
+
+func catalogQueryOptionsFromSelection(selection snapshot.QuerySelectionDescriptor, limit int, continueToken string) objectcatalog.QueryOptions {
+	return objectcatalog.QueryOptions{
+		Kinds:         selection.Kinds,
+		Namespaces:    selection.Namespaces,
+		Search:        selection.Search,
+		SortField:     selection.SortField,
+		SortDirection: selection.SortDirection,
+		CustomOnly:    selection.CustomOnly,
+		Limit:         limit,
+		Continue:      continueToken,
+	}
 }
 
 // HydrateCatalogCustomRows fetches rich custom-resource row facts for the
@@ -660,15 +704,12 @@ func (a *App) RunCatalogQueryBulkAction(req snapshot.QueryBulkActionRequest) (sn
 		return empty, fmt.Errorf("app is not initialised")
 	}
 	selection := req.Selection
-	if selection.Table != "catalog" && selection.Table != "browse" {
-		return empty, fmt.Errorf("query bulk action is unsupported for table %q", selection.Table)
-	}
 	if strings.TrimSpace(req.Action) != string(ObjectActionDelete) {
 		return empty, fmt.Errorf("query bulk action %q is unsupported", req.Action)
 	}
-	clusterID := strings.TrimSpace(selection.ClusterID)
-	if clusterID == "" {
-		return empty, fmt.Errorf("cluster ID is required")
+	clusterID, err := validateCatalogQuerySelection(selection)
+	if err != nil {
+		return empty, err
 	}
 	if !req.DryRun && !req.Confirmed {
 		return snapshot.QueryBulkActionResult{RequiresConfirmation: true}, nil
@@ -682,16 +723,7 @@ func (a *App) RunCatalogQueryBulkAction(req snapshot.QueryBulkActionRequest) (sn
 	if limit <= 0 || limit > catalogQueryBulkActionPageLimit {
 		limit = catalogQueryBulkActionPageLimit
 	}
-	result := svc.Query(objectcatalog.QueryOptions{
-		Kinds:         selection.Kinds,
-		Namespaces:    selection.Namespaces,
-		Search:        selection.Search,
-		SortField:     selection.SortField,
-		SortDirection: selection.SortDirection,
-		CustomOnly:    selection.CustomOnly,
-		Limit:         limit,
-		Continue:      req.Continue,
-	})
+	result := svc.Query(catalogQueryOptionsFromSelection(selection, limit, req.Continue))
 
 	response := snapshot.QueryBulkActionResult{
 		Processed: len(result.Items),

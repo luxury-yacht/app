@@ -97,7 +97,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  ExportCatalogQueryCSV: (...args: unknown[]) => exportCatalogQueryCSVMock(...args),
+  ExportCatalogSelectionCSV: (...args: unknown[]) => exportCatalogQueryCSVMock(...args),
   RunCatalogQueryBulkAction: (...args: unknown[]) => runCatalogQueryBulkActionMock(...args),
 }));
 
@@ -607,15 +607,18 @@ describe('BrowseView', () => {
         await Promise.resolve();
       });
 
-      expect(exportCatalogQueryCSVMock).toHaveBeenCalledWith(
-        'cluster-1',
-        [],
-        ['default'],
-        '',
-        '',
-        '',
-        false
-      );
+      expect(exportCatalogQueryCSVMock).toHaveBeenCalledWith({
+        clusterId: 'cluster-1',
+        table: 'browse',
+        namespaces: ['default'],
+        kinds: [],
+        search: '',
+        sortField: '',
+        sortDirection: '',
+        customOnly: false,
+        querySignature: 'cluster-1|limit=1000&namespace=default',
+        scope: 'cluster-1|limit=1000&namespace=default',
+      });
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith('clusterId,kind\ncluster-1,Pod\n');
     });
   });

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
@@ -247,19 +246,16 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 	if err != nil {
 		return browseQueryOptions{}, err
 	}
+	request := resourceQueryRequestFromValues("", "browse", values, ResourceQueryRequest{})
 	opts := browseQueryOptions{
-		Kinds:      values["kind"],
-		Namespaces: values["namespace"],
-		Search:     values.Get("search"),
-		SortField:  values.Get("sort"),
-		SortDir:    values.Get("sortDirection"),
-		Continue:   values.Get("continue"),
+		Kinds:      request.Kinds,
+		Namespaces: request.Namespaces,
+		Search:     request.Search,
+		SortField:  request.SortField,
+		SortDir:    request.SortDirection,
+		Continue:   request.Continue,
+		Limit:      request.Limit,
 		CustomOnly: values.Get("customOnly") == "true",
-	}
-	if limit := values.Get("limit"); limit != "" {
-		if parsed, err := strconv.Atoi(limit); err == nil {
-			opts.Limit = parsed
-		}
 	}
 	return opts, nil
 }

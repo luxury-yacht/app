@@ -1,6 +1,9 @@
 package snapshot
 
-import "testing"
+import (
+	"net/url"
+	"testing"
+)
 
 type typedQueryTestRow struct {
 	key       string
@@ -58,6 +61,50 @@ func TestTypedTableQueryIncludesDynamicRef(t *testing.T) {
 	}
 	if page.Continue == "" {
 		t.Fatal("expected continue cursor")
+	}
+}
+
+func TestResourceQueryRequestFromValuesAcceptsCatalogAndTypedListKeys(t *testing.T) {
+	values := mapValues(
+		"kinds=Pod,Deployment&kind=StatefulSet&namespaces=apps,default&namespace=kube-system&sort=cpu&sortDirection=desc&limit=500&predicate.health=unhealthy",
+	)
+
+	request := resourceQueryRequestFromValues("cluster-a", "pods", values, ResourceQueryRequest{
+		SortField:     "name",
+		SortDirection: "asc",
+		Limit:         250,
+	})
+
+	if request.ClusterID != "cluster-a" || request.Table != "pods" {
+		t.Fatalf("unexpected request identity: %+v", request)
+	}
+	assertStringSlicesEqual(t, []string{"Deployment", "Pod", "StatefulSet"}, request.Kinds)
+	assertStringSlicesEqual(t, []string{"apps", "default", "kube-system"}, request.Namespaces)
+	if request.SortField != "cpu" || request.SortDirection != "desc" || request.Limit != 500 {
+		t.Fatalf("unexpected sort/limit: %+v", request)
+	}
+	if got := resourceQueryPredicatesToMap(request.Predicates)["health"]; got != "unhealthy" {
+		t.Fatalf("expected health predicate, got %q", got)
+	}
+}
+
+func mapValues(raw string) map[string][]string {
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		panic(err)
+	}
+	return values
+}
+
+func assertStringSlicesEqual(t *testing.T, want, got []string) {
+	t.Helper()
+	if len(want) != len(got) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+	for i := range want {
+		if want[i] != got[i] {
+			t.Fatalf("expected %v, got %v", want, got)
+		}
 	}
 }
 

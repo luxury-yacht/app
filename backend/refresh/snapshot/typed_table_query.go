@@ -61,7 +61,7 @@ type typedTableQueryAdapter[T any] struct {
 func parseTypedTableQueryScope(clusterID, scope, table string, dynamicRevision string) (string, typedTableQuery, error) {
 	base, rawQuery, found := strings.Cut(scope, "?")
 	base = strings.TrimSpace(base)
-	request := ResourceQueryRequest{
+	defaultRequest := ResourceQueryRequest{
 		ClusterID:     clusterID,
 		Table:         table,
 		SortField:     "name",
@@ -71,7 +71,7 @@ func parseTypedTableQueryScope(clusterID, scope, table string, dynamicRevision s
 	query := typedTableQuery{
 		Enabled:         found,
 		BaseScope:       base,
-		Request:         request,
+		Request:         defaultRequest,
 		DynamicRevision: dynamicRevision,
 	}
 	if !found {
@@ -81,51 +81,12 @@ func parseTypedTableQueryScope(clusterID, scope, table string, dynamicRevision s
 	if err != nil {
 		return base, query, fmt.Errorf("%s query scope: %w", table, err)
 	}
-	query.Request.Search = strings.TrimSpace(values.Get("search"))
-	query.Request.Namespaces = splitTypedTableList(values.Get("namespaces"))
-	query.Request.Kinds = splitTypedTableList(values.Get("kinds"))
+	query.Request = resourceQueryRequestFromValues(clusterID, table, values, defaultRequest)
 	query.Request.SortField = normalizeTypedTableSortField(values.Get("sort"), query.Request.SortField)
-	query.Request.SortDirection = normalizeTypedTableSortDirection(values.Get("sortDirection"))
-	query.Request.Continue = strings.TrimSpace(values.Get("continue"))
-	if limit, err := strconv.Atoi(strings.TrimSpace(values.Get("limit"))); err == nil && limit > 0 {
-		query.Request.Limit = min(limit, maxTypedTableQueryLimit)
+	if query.Request.Limit > maxTypedTableQueryLimit {
+		query.Request.Limit = maxTypedTableQueryLimit
 	}
-	predicates := map[string]string{}
-	for key, valuesForKey := range values {
-		if !strings.HasPrefix(key, "predicate.") || len(valuesForKey) == 0 {
-			continue
-		}
-		field := strings.TrimPrefix(key, "predicate.")
-		if field == "" {
-			continue
-		}
-		predicates[field] = strings.TrimSpace(valuesForKey[0])
-	}
-	query.Request.Predicates = resourceQueryPredicateMapToList(predicates)
 	return base, query, nil
-}
-
-func splitTypedTableList(value string) []string {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	parts := strings.Split(value, ",")
-	result := make([]string, 0, len(parts))
-	seen := make(map[string]struct{}, len(parts))
-	for _, part := range parts {
-		item := strings.TrimSpace(part)
-		if item == "" {
-			continue
-		}
-		key := strings.ToLower(item)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		result = append(result, item)
-	}
-	sort.Strings(result)
-	return result
 }
 
 func normalizeTypedTableSortField(value, fallback string) string {
@@ -134,15 +95,6 @@ func normalizeTypedTableSortField(value, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-func normalizeTypedTableSortDirection(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "desc":
-		return "desc"
-	default:
-		return "asc"
-	}
 }
 
 func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typedTableQueryAdapter[T]) typedTableQueryPage[T] {

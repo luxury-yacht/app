@@ -77,6 +77,19 @@ type catalogQueryPageResult struct {
 	cursorInvalid bool
 }
 
+type catalogQueryMetadata struct {
+	kinds              []KindInfo
+	namespaces         []string
+	namespaceKinds     map[string]bool
+	matchKinds         map[string]bool
+	matchNamespaces    map[string]struct{}
+	hasNamespaceFilter bool
+	customOnly         bool
+	totalMatches       int
+	metadataExact      bool
+	resourceCount      int
+}
+
 // Query filters catalog entries and returns a paginated result.
 func (s *Service) Query(opts QueryOptions) QueryResult {
 	kindMatcher := newKindMatcher(opts.Kinds)
@@ -115,66 +128,83 @@ func (s *Service) newCatalogQueryExecutor(
 }
 
 func (e catalogQueryExecutor) executeCached() QueryResult {
-	hasNamespaceFilter := len(e.opts.Namespaces) > 0
-
-	matchKinds := make(map[string]bool)
-	matchNamespaces := make(map[string]struct{})
-	totalMatches := 0
-	metadataExact := true
-	namespaceKinds := e.state.queryIndex.kindFacetsForNamespaces(e.opts.Namespaces)
-	if hasNamespaceFilter && len(namespaceKinds) == 0 && !e.state.queryIndex.hasIndex() {
-		namespaceKinds = e.state.kindFacetsForNamespaces(e.namespaceMatcher)
-	}
+	metadata := e.state.queryMetadata(e.opts, e.kindMatcher, e.namespaceMatcher, e.customMatcher)
 	page := e.pageCatalogChunks(func(item Summary) {
-		if !e.customMatcher(item) {
-			return
-		}
-		if !metadataExact {
-			return
-		}
-		totalMatches++
-		if totalMatches > catalogQueryExactMetadataThreshold {
-			metadataExact = false
-			return
-		}
-		if item.Kind != "" {
-			matchKinds[item.Kind] = item.Scope == ScopeNamespace
-		}
-		matchNamespaces[item.Namespace] = struct{}{}
+		metadata.observe(item, e.customMatcher)
 	})
-
-	resourceCount := countMatchingDescriptorsWithOptions(e.state.descriptors, e.kindMatcher, e.opts)
-
-	kinds := e.state.kinds
-	if e.opts.CustomOnly {
-		kinds = snapshotSortedKindInfos(matchKinds)
-	} else if hasNamespaceFilter {
-		if len(namespaceKinds) > 0 {
-			kinds = snapshotSortedKindInfos(namespaceKinds)
-		} else {
-			kinds = []KindInfo{}
-		}
-	} else if len(kinds) == 0 && len(matchKinds) > 0 {
-		kinds = snapshotSortedKindInfos(matchKinds)
-	}
-
-	namespaces := e.state.namespaces
-	if len(namespaces) == 0 && len(matchNamespaces) > 0 {
-		namespaces = snapshotSortedKeys(matchNamespaces)
-	}
+	resolvedMetadata := metadata.resolve()
 
 	return QueryResult{
 		Items:         page.items,
 		ContinueToken: page.continueToken,
 		PreviousToken: page.previousToken,
 		CursorInvalid: page.cursorInvalid,
-		TotalItems:    totalMatches,
-		TotalIsExact:  metadataExact,
-		ResourceCount: resourceCount,
-		Kinds:         kinds,
-		Namespaces:    namespaces,
-		FacetsExact:   metadataExact,
+		TotalItems:    resolvedMetadata.totalMatches,
+		TotalIsExact:  resolvedMetadata.metadataExact,
+		ResourceCount: resolvedMetadata.resourceCount,
+		Kinds:         resolvedMetadata.kinds,
+		Namespaces:    resolvedMetadata.namespaces,
+		FacetsExact:   resolvedMetadata.metadataExact,
 	}
+}
+
+func (state catalogCachedQueryState) queryMetadata(
+	opts QueryOptions,
+	kindMatcher kindMatcher,
+	namespaceMatcher namespaceMatcher,
+	customMatcher customOnlyMatcher,
+) catalogQueryMetadata {
+	hasNamespaceFilter := len(opts.Namespaces) > 0
+	namespaceKinds := state.queryIndex.kindFacetsForNamespaces(opts.Namespaces)
+	if hasNamespaceFilter && len(namespaceKinds) == 0 && !state.queryIndex.hasIndex() {
+		namespaceKinds = state.kindFacetsForNamespaces(namespaceMatcher)
+	}
+	return catalogQueryMetadata{
+		kinds:              state.kinds,
+		namespaces:         state.namespaces,
+		namespaceKinds:     namespaceKinds,
+		matchKinds:         make(map[string]bool),
+		matchNamespaces:    make(map[string]struct{}),
+		hasNamespaceFilter: hasNamespaceFilter,
+		customOnly:         opts.CustomOnly,
+		metadataExact:      true,
+		resourceCount:      countMatchingDescriptorsWithOptions(state.descriptors, kindMatcher, opts),
+	}
+}
+
+func (m *catalogQueryMetadata) observe(item Summary, customMatcher customOnlyMatcher) {
+	if m == nil || !customMatcher(item) || !m.metadataExact {
+		return
+	}
+	m.totalMatches++
+	if m.totalMatches > catalogQueryExactMetadataThreshold {
+		m.metadataExact = false
+		return
+	}
+	if item.Kind != "" {
+		m.matchKinds[item.Kind] = item.Scope == ScopeNamespace
+	}
+	if item.Namespace != "" {
+		m.matchNamespaces[item.Namespace] = struct{}{}
+	}
+}
+
+func (m catalogQueryMetadata) resolve() catalogQueryMetadata {
+	if m.customOnly {
+		m.kinds = snapshotSortedKindInfos(m.matchKinds)
+	} else if m.hasNamespaceFilter {
+		if len(m.namespaceKinds) > 0 {
+			m.kinds = snapshotSortedKindInfos(m.namespaceKinds)
+		} else {
+			m.kinds = []KindInfo{}
+		}
+	} else if len(m.kinds) == 0 && len(m.matchKinds) > 0 {
+		m.kinds = snapshotSortedKindInfos(m.matchKinds)
+	}
+	if len(m.namespaces) == 0 && len(m.matchNamespaces) > 0 {
+		m.namespaces = snapshotSortedKeys(m.matchNamespaces)
+	}
+	return m
 }
 
 func (e catalogQueryExecutor) pageCatalogChunks(onMatch func(Summary)) catalogQueryPageResult {

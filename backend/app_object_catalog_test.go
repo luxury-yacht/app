@@ -291,6 +291,51 @@ func TestExportCatalogQueryCSVUsesClusterScopedCatalog(t *testing.T) {
 	)
 }
 
+func TestExportCatalogSelectionCSVUsesDurableQuerySelection(t *testing.T) {
+	app := NewApp()
+	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
+	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
+		"example.com/v1, Resource=widgets/apps/alpha": {
+			ClusterID: "cluster-b",
+			Kind:      "Widget",
+			Group:     "example.com",
+			Version:   "v1",
+			Resource:  "widgets",
+			Namespace: "apps",
+			Name:      "alpha",
+			UID:       "alpha-uid",
+			Scope:     objectcatalog.ScopeNamespace,
+		},
+		"v1, Resource=pods/apps/alpha-pod": {
+			ClusterID: "cluster-b",
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "apps",
+			Name:      "alpha-pod",
+			UID:       "pod-uid",
+			Scope:     objectcatalog.ScopeNamespace,
+		},
+	})
+	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
+
+	csvText, err := app.ExportCatalogSelectionCSV(snapshot.QuerySelectionDescriptor{
+		ClusterID:  "cluster-b",
+		Table:      "browse",
+		Namespaces: []string{"apps"},
+		CustomOnly: true,
+		SortField:  "name",
+	})
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		"clusterId,kind,namespace,name,group,version,resource,uid\n"+
+			"cluster-b,Widget,apps,alpha,example.com,v1,widgets,alpha-uid\n",
+		csvText,
+	)
+}
+
 func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
 	clusterID := "cluster-b"
 	gvrObject := &unstructured.Unstructured{

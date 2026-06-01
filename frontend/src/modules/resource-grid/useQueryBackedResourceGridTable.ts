@@ -1,11 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { RefreshDomain } from '@/core/refresh/types';
-import type {
-  GridTableFilterOptions,
-  GridTableFilterState,
-} from '@shared/components/tables/GridTable';
-import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
-import type { SortConfig } from '@hooks/useTableSort';
+import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
 import { useNamespaceResourceGridTable } from './useResourceGridTable';
 import type {
   NamespaceResourceGridTableParams,
@@ -13,6 +8,11 @@ import type {
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
 import { useTypedResourceQuery, type TypedQueryPayload } from './useTypedResourceQuery';
+import {
+  mergeQueryBackedFilterOptions,
+  queryBackedPaginationProps,
+  useQueryBackedTableState,
+} from './queryBackedTableState';
 
 export interface QueryBackedNamespaceGridResult<
   T extends ResourceGridTableRow,
@@ -61,29 +61,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   defaultSort = { key: 'name', direction: 'asc' },
   ...tableParams
 }: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow> {
-  const [tableState, setTableState] = useState<{
-    filters: GridTableFilterState;
-    sortConfig: SortConfig | null;
-  }>({
-    filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-    sortConfig: defaultSort,
-  });
-
-  const handleTableStateChange = useCallback(
-    (next: { filters: GridTableFilterState; sortConfig: SortConfig | null }) => {
-      setTableState((previous) => {
-        if (
-          previous.sortConfig?.key === next.sortConfig?.key &&
-          previous.sortConfig?.direction === next.sortConfig?.direction &&
-          JSON.stringify(previous.filters) === JSON.stringify(next.filters)
-        ) {
-          return previous;
-        }
-        return next;
-      });
-    },
-    []
-  );
+  const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
 
   const query = useTypedResourceQuery<TPayload, TRow>({
     enabled,
@@ -107,27 +85,14 @@ export function useQueryBackedNamespaceResourceGridTable<
     tableMode: enabled ? 'Query Backed Dynamic' : 'Local Complete',
     data,
     filterOptionOverrides: enabled
-      ? {
-          ...filterOptionOverrides,
-          ...query.filterOptions,
-        }
+      ? mergeQueryBackedFilterOptions(filterOptionOverrides, query.filterOptions)
       : filterOptionOverrides,
     onTableStateChange: enabled ? handleTableStateChange : undefined,
   });
 
   const gridTableProps = useMemo(
     () =>
-      enabled
-        ? {
-            ...table.gridTableProps,
-            hasMore: Boolean(query.continueToken),
-            onRequestMore: () => query.loadMore(),
-            isRequestingMore: query.isRequestingMore,
-            loadMoreLabel: 'Next page',
-            showLoadMoreButton: true,
-            showPaginationStatus: true,
-          }
-        : table.gridTableProps,
+      enabled ? queryBackedPaginationProps(table.gridTableProps, query) : table.gridTableProps,
     [enabled, query, table.gridTableProps]
   );
 

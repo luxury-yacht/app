@@ -65,16 +65,7 @@ export function useCatalogQueryCsvAction({
         reason: 'user',
         label: title,
         scope: query.scope,
-        read: () =>
-          readCatalogQueryCSV(
-            query.clusterId,
-            query.kinds ?? [],
-            query.namespaces ?? [],
-            query.search ?? '',
-            query.sortField ?? '',
-            query.sortDirection ?? '',
-            query.customOnly
-          ),
+        read: () => readCatalogQueryCSV(query),
       });
       if (result.status !== 'executed') {
         setFeedback('error');

@@ -1,6 +1,11 @@
 package snapshot
 
-import "sort"
+import (
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+)
 
 // ResourceQueryRequest is the shared contract for future query-backed typed
 // resource tables. It is deliberately separate from the catalog query because
@@ -95,6 +100,76 @@ type ResourceQueryDynamicRef struct {
 	Source   string `json:"source"`
 	Revision string `json:"revision"`
 	Policy   string `json:"policy"`
+}
+
+func resourceQueryRequestFromValues(clusterID, table string, values url.Values, defaults ResourceQueryRequest) ResourceQueryRequest {
+	request := defaults
+	request.ClusterID = clusterID
+	request.Table = table
+	request.Search = strings.TrimSpace(values.Get("search"))
+	request.Namespaces = resourceQueryListValues(values, "namespaces", "namespace")
+	request.Kinds = resourceQueryListValues(values, "kinds", "kind")
+	request.SortField = strings.TrimSpace(values.Get("sort"))
+	if request.SortField == "" {
+		request.SortField = defaults.SortField
+	}
+	request.SortDirection = normalizeResourceQuerySortDirection(values.Get("sortDirection"), request.SortDirection)
+	request.Continue = strings.TrimSpace(values.Get("continue"))
+	if limit, err := strconv.Atoi(strings.TrimSpace(values.Get("limit"))); err == nil && limit > 0 {
+		request.Limit = limit
+	}
+
+	predicates := map[string]string{}
+	for key, valuesForKey := range values {
+		if !strings.HasPrefix(key, "predicate.") || len(valuesForKey) == 0 {
+			continue
+		}
+		field := strings.TrimPrefix(key, "predicate.")
+		if field == "" {
+			continue
+		}
+		predicates[field] = strings.TrimSpace(valuesForKey[0])
+	}
+	request.Predicates = resourceQueryPredicateMapToList(predicates)
+	return request
+}
+
+func resourceQueryListValues(values url.Values, pluralKey, singularKey string) []string {
+	raw := make([]string, 0)
+	for _, value := range values[pluralKey] {
+		raw = append(raw, strings.Split(value, ",")...)
+	}
+	raw = append(raw, values[singularKey]...)
+	if len(raw) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(raw))
+	result := make([]string, 0, len(raw))
+	for _, value := range raw {
+		item := strings.TrimSpace(value)
+		if item == "" {
+			continue
+		}
+		key := strings.ToLower(item)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, item)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func normalizeResourceQuerySortDirection(value, fallback string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "desc":
+		return "desc"
+	case "asc":
+		return "asc"
+	default:
+		return strings.TrimSpace(fallback)
+	}
 }
 
 func resourceQueryPredicatesToMap(predicates []ResourceQueryPredicate) map[string]string {

@@ -12,7 +12,7 @@ import {
   FetchNodeLogs,
   FindCatalogObjectByUID,
   FindCatalogObjectMatch,
-  ExportCatalogQueryCSV,
+  ExportCatalogSelectionCSV,
   GetContainerLogsScopeContainers,
   GetObjectYAMLByGVK,
   GetPodContainers,
@@ -22,6 +22,7 @@ import {
   IsWorkloadHPAManaged,
 } from '@wailsjs/go/backend/App';
 import type { types } from '@wailsjs/go/models';
+import type { QuerySelectionDescriptor } from '@/core/refresh/types';
 
 export interface ObjectReadTarget {
   clusterId: string;
@@ -110,16 +111,8 @@ export const readCatalogObjectMatchForRef = (
 export const readCatalogObjectByUID = (clusterId: string, uid: string) =>
   FindCatalogObjectByUID(clusterId, uid);
 
-export const readCatalogQueryCSV = (
-  clusterId: string,
-  kinds: string[],
-  namespaces: string[],
-  search: string,
-  sortField: string,
-  sortDirection: string,
-  customOnly: boolean
-) =>
-  ExportCatalogQueryCSV(clusterId, kinds, namespaces, search, sortField, sortDirection, customOnly);
+export const readCatalogQueryCSV = (selection: QuerySelectionDescriptor) =>
+  ExportCatalogSelectionCSV(selection);
 
 export interface CustomCatalogHydrationRow {
   clusterId: string;

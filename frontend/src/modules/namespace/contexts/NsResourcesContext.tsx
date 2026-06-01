@@ -49,6 +49,7 @@ import {
   namespaceResourceDescriptors,
   type NamespaceResourceDescriptor,
 } from './namespaceResourceDescriptors';
+import { createCatalogBackedCustomResourceHandle } from '@modules/browse/catalogBackedCustomResourceHandle';
 
 export interface PodsResourceDataReturn extends ResourceDataReturn<PodSnapshotEntry[]> {
   metrics: PodMetricsInfo | null;
@@ -136,23 +137,6 @@ const getCapabilityNamespace = (value?: string | null): string | null => {
   }
   return trimmed === 'all' ? null : trimmed;
 };
-
-const createCatalogBackedCustomResourceHandle = (): ResourceDataReturn<any[]> => ({
-  data: [],
-  loading: false,
-  refreshing: false,
-  error: null,
-  load: async () => {},
-  refresh: async () => {},
-  reset: () => {},
-  cancel: () => {},
-  lastFetchTime: null,
-  hasLoaded: false,
-  meta: {
-    source: 'catalog-backed-custom',
-    refreshDomainEnabled: false,
-  },
-});
 
 const useNamespacePodsResource = (
   enabled: boolean,
@@ -580,7 +564,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     isManualRefreshActive
   );
 
-  const custom = useMemo(() => createCatalogBackedCustomResourceHandle(), []);
+  const custom = useMemo(() => createCatalogBackedCustomResourceHandle<any>(), []);
 
   const helm = useDescriptorBackedResource<any[]>(
     namespaceResourceDescriptors.helm,
