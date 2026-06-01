@@ -22,45 +22,15 @@ import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGri
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
 import {
-  buildRequiredCanonicalObjectRowKey,
-  buildRequiredObjectReference,
-} from '@shared/utils/objectIdentity';
+  customCatalogCRDReference,
+  customCatalogObjectReference,
+  customCatalogRowKey,
+  type CatalogBackedCustomResourceRow,
+} from '@modules/browse/hooks/customCatalogRowAdapter';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Define the data structure for cluster custom resources
-interface ClusterCustomData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  clusterId: string;
-  clusterName?: string;
-  apiGroup?: string;
-  /** API version for the owning CRD. Paired with apiGroup so the object
-   * panel can disambiguate colliding Kinds across API groups.
-   */
-  apiVersion?: string;
-  /**
-   * Canonical CRD name (`<plural>.<group>`) for the CustomResourceDefinition
-   * that defines this resource's Kind. Derived from catalog GVR/resource
-   * metadata so the CRD column can render a clickable cell that opens the
-   * owning CRD in the object panel.
-   */
-  crdName?: string;
-  status?: string;
-  statusState?: string;
-  statusPresentation?: string;
-  ready?: boolean;
-  observedGeneration?: number;
-  conditions?: Array<{
-    type: string;
-    status: string;
-    reason?: string;
-    message?: string;
-  }>;
-  age?: string;
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
-}
+type ClusterCustomData = CatalogBackedCustomResourceRow;
 
 // Define props for ClusterViewCustom component
 interface ClusterCustomViewProps {
@@ -85,27 +55,9 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (resource: ClusterCustomData) => {
         // Preserve metadata and age so the object panel shows labels/annotations and Age.
-        // CRITICAL: pass apiGroup/apiVersion so downstream scope/capability
-        // resolution can disambiguate colliding Kinds. See
-        //  step 1.
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: resource.kind,
-              name: resource.name,
-              group: resource.apiGroup,
-              version: resource.apiVersion,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId },
-            {
-              age: resource.age,
-              labels: resource.labels,
-              annotations: resource.annotations,
-            }
-          )
-        );
+        // CRITICAL: pass group/version so downstream scope/capability
+        // resolution can disambiguate colliding Kinds.
+        openWithObject(customCatalogObjectReference(resource, selectedClusterId));
       },
       [openWithObject, selectedClusterId]
     );
@@ -116,43 +68,19 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     // built-in lookup table, not from row data. Mirrors NsViewCustom.
     const handleCRDClick = useCallback(
       (resource: ClusterCustomData) => {
-        if (!resource.crdName) {
+        const ref = customCatalogCRDReference(resource, selectedClusterId, {
+          includeRowMetadata: true,
+        });
+        if (!ref) {
           return;
         }
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: 'CustomResourceDefinition',
-              name: resource.crdName,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId },
-            {
-              age: resource.age,
-              labels: resource.labels,
-              annotations: resource.annotations,
-              requiresExplicitVersion: true,
-              explicitVersionProvided: Boolean(resource.apiVersion),
-            }
-          )
-        );
+        openWithObject(ref);
       },
       [openWithObject, selectedClusterId]
     );
 
     const keyExtractor = useCallback(
-      (resource: ClusterCustomData) =>
-        buildRequiredCanonicalObjectRowKey(
-          {
-            kind: resource.kind,
-            name: resource.name,
-            clusterId: resource.clusterId,
-            group: resource.apiGroup,
-            version: resource.apiVersion,
-          },
-          { fallbackClusterId: selectedClusterId }
-        ),
+      (resource: ClusterCustomData) => customCatalogRowKey(resource, selectedClusterId),
       [selectedClusterId]
     );
 
@@ -166,37 +94,13 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: resource.kind,
-                  name: resource.name,
-                  clusterId: resource.clusterId,
-                  clusterName: resource.clusterName,
-                  group: resource.apiGroup,
-                  version: resource.apiVersion,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
+            navigateToView(customCatalogObjectReference(resource, selectedClusterId)),
         }),
         cf.createTextColumn<ClusterCustomData>('name', 'Name', {
           sortable: true,
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: resource.kind,
-                  name: resource.name,
-                  clusterId: resource.clusterId,
-                  clusterName: resource.clusterName,
-                  group: resource.apiGroup,
-                  version: resource.apiVersion,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
+            navigateToView(customCatalogObjectReference(resource, selectedClusterId)),
           getClassName: () => 'object-panel-link',
         }),
         // CRD column: each cell is a clickable link back to the CRD
@@ -219,17 +123,10 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
                 if (!resource.crdName) {
                   return;
                 }
-                navigateToView(
-                  buildRequiredObjectReference(
-                    {
-                      kind: 'CustomResourceDefinition',
-                      name: resource.crdName,
-                      clusterId: resource.clusterId,
-                      clusterName: resource.clusterName,
-                    },
-                    { fallbackClusterId: selectedClusterId }
-                  )
-                );
+                const ref = customCatalogCRDReference(resource, selectedClusterId);
+                if (ref) {
+                  navigateToView(ref);
+                }
               },
               isInteractive: (resource) => Boolean(resource.crdName),
               getClassName: (resource) => (resource.crdName ? 'object-panel-link' : undefined),
@@ -287,7 +184,8 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       totalCount,
       totalIsExact,
       csvAction: copyAllMatchingCsvAction,
-    } = useCatalogBackedCustomResourceRows<ClusterCustomData>({
+      pagination,
+    } = useCatalogBackedCustomResourceRows({
       clusterId: selectedClusterId,
       clusterScopedOnly: true,
       persistence,
@@ -327,24 +225,9 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (resource: ClusterCustomData): ContextMenuItem[] => {
         return objectActions.getMenuItems(
-          buildRequiredObjectReference(
-            {
-              kind: resource.kind,
-              name: resource.name,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-              group: resource.apiGroup ?? undefined,
-              version: resource.apiVersion ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId },
-            {
-              age: resource.age,
-              labels: resource.labels,
-              annotations: resource.annotations,
-              requiresExplicitVersion: true,
-              explicitVersionProvided: Boolean(resource.apiVersion),
-            }
-          )
+          customCatalogObjectReference(resource, selectedClusterId, {
+            requiresExplicitVersion: true,
+          })
         );
       },
       [objectActions, selectedClusterId]
@@ -373,6 +256,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           getCustomContextMenuItems={getContextMenuItems}
           useShortNames={useShortResourceNames}
           emptyMessage={emptyMessage}
+          {...pagination}
         />
 
         {objectActions.modals}

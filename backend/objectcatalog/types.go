@@ -165,12 +165,6 @@ type QueryOptions struct {
 	CustomOnly    bool     // restricts results to non-built-in discovered resources
 }
 
-// CatalogQueryStore is the backend boundary consumed by refresh snapshots.
-// Implementations own filtering, sorting, cursor pagination, totals, and facets.
-type CatalogQueryStore interface {
-	Query(opts QueryOptions) QueryResult
-}
-
 // KindInfo captures metadata about a resource kind for filtering.
 type KindInfo struct {
 	Kind       string `json:"kind"`       // resource kind name

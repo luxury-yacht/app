@@ -26,7 +26,6 @@ type typedTableQuery struct {
 type typedTableQueryPage[T any] struct {
 	Rows          []T
 	Continue      string
-	Previous      string
 	CursorInvalid bool
 	Total         int
 	TotalIsExact  bool

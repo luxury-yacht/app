@@ -32,7 +32,6 @@ describe('resource query contract types', () => {
         clusterId: request.clusterId,
         table: request.table,
         customOnly: true,
-        querySignature: 'signature',
       },
       action: 'delete',
       confirmed: true,

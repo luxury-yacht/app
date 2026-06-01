@@ -30,8 +30,6 @@ const (
 	catalogQueryDirectionPrev    = "prev"
 )
 
-var _ CatalogQueryStore = (*Service)(nil)
-
 var catalogQueryExactMetadataThreshold = 100000
 
 var catalogQueryBuiltinKeys = func() map[resourceIdentityKey]struct{} {

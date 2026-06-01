@@ -172,6 +172,7 @@ const browseCatalogResult = (items: CatalogItem[] = []) => ({
   queryDescriptor: {
     clusterId: 'cluster-a',
     namespaces: ['team-a'],
+    hasUserNamespaceScope: true,
     kinds: [],
     search: '',
     sortField: 'name',
@@ -211,6 +212,9 @@ const catalogItemToCustomResourceData = (item: CatalogItem): CustomResourceData 
   clusterName: item.clusterName,
   apiGroup: item.group,
   apiVersion: item.version,
+  group: item.group,
+  version: item.version,
+  resource: item.resource,
   crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
   status: item.actionFacts?.status,
   statusPresentation: item.actionFacts?.status,
@@ -685,7 +689,7 @@ describe('NsViewCustom', () => {
       data: [
         {
           ...baseResource,
-          kind: undefined,
+          kind: undefined as unknown as string,
           kindAlias: 'CR',
         },
       ],

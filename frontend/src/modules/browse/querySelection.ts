@@ -4,6 +4,7 @@ import type { BrowseCatalogQueryDescriptor } from './hooks/useBrowseCatalog';
 export interface CatalogQuerySelectionDescriptor extends QuerySelectionDescriptor {
   scope: string;
   customOnly: boolean;
+  hasUserNamespaceScope: boolean;
 }
 
 export function catalogSelectionFromBrowseQuery(
@@ -14,12 +15,23 @@ export function catalogSelectionFromBrowseQuery(
     clusterId: query.clusterId,
     table,
     namespaces: query.namespaces,
+    hasUserNamespaceScope: query.hasUserNamespaceScope,
     kinds: query.kinds,
     search: query.search,
     sortField: query.sortField,
     sortDirection: query.sortDirection,
     customOnly: query.customOnly,
-    querySignature: query.scope,
     scope: query.scope,
   };
+}
+
+export function backendSelectionFromCatalogSelection(
+  selection: CatalogQuerySelectionDescriptor
+): QuerySelectionDescriptor {
+  const {
+    scope: _scope,
+    hasUserNamespaceScope: _hasUserNamespaceScope,
+    ...backendSelection
+  } = selection;
+  return backendSelection;
 }

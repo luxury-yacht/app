@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -67,6 +68,12 @@ type CatalogHealth struct {
 	LastError           string `json:"lastError,omitempty"`
 	Stale               bool   `json:"stale"`
 	FailedResources     int    `json:"failedResources,omitempty"`
+}
+
+// CatalogQueryCSVExport describes a file-backed catalog query export.
+type CatalogQueryCSVExport struct {
+	Path  string `json:"path"`
+	Bytes int64  `json:"bytes"`
 }
 
 type objectCatalogEntry struct {
@@ -534,60 +541,48 @@ func (a *App) FindCatalogObjectByUID(clusterID, uid string) (*objectcatalog.Summ
 	return &match, nil
 }
 
-// ExportCatalogQueryCSV exports every catalog object matching the provided
-// query from the backend. The query is scoped to one cluster and uses catalog
-// keyset pagination internally so the frontend does not need to load all rows.
-func (a *App) ExportCatalogQueryCSV(
-	clusterID string,
-	kinds []string,
-	namespaces []string,
-	search string,
-	sortField string,
-	sortDirection string,
-	customOnly bool,
-) (string, error) {
+// ExportCatalogSelectionCSVFile exports every catalog object matching a durable
+// query selection to a temp file. Query-wide export stays file-backed so Wails
+// does not have to marshal an unbounded CSV string into the frontend.
+func (a *App) ExportCatalogSelectionCSVFile(selection snapshot.QuerySelectionDescriptor) (CatalogQueryCSVExport, error) {
+	var empty CatalogQueryCSVExport
 	if a == nil {
-		return "", fmt.Errorf("app is not initialised")
-	}
-
-	trimmedClusterID := strings.TrimSpace(clusterID)
-	if trimmedClusterID == "" {
-		return "", fmt.Errorf("cluster ID is required")
-	}
-
-	svc := a.objectCatalogServiceForCluster(trimmedClusterID)
-	if svc == nil {
-		return "", fmt.Errorf("object catalog service unavailable for cluster %q", trimmedClusterID)
-	}
-
-	return svc.ExportQueryCSV(catalogQueryOptionsFromSelection(snapshot.QuerySelectionDescriptor{
-		ClusterID:     trimmedClusterID,
-		Table:         "catalog",
-		Kinds:         kinds,
-		Namespaces:    namespaces,
-		Search:        search,
-		SortField:     sortField,
-		SortDirection: sortDirection,
-		CustomOnly:    customOnly,
-	}, 0, ""))
-}
-
-// ExportCatalogSelectionCSV exports every catalog object matching a durable
-// query selection. It is the preferred query-wide export path because it shares
-// selection semantics with query-wide actions.
-func (a *App) ExportCatalogSelectionCSV(selection snapshot.QuerySelectionDescriptor) (string, error) {
-	if a == nil {
-		return "", fmt.Errorf("app is not initialised")
+		return empty, fmt.Errorf("app is not initialised")
 	}
 	clusterID, err := validateCatalogQuerySelection(selection)
 	if err != nil {
-		return "", err
+		return empty, err
 	}
 	svc := a.objectCatalogServiceForCluster(clusterID)
 	if svc == nil {
-		return "", fmt.Errorf("object catalog service unavailable for cluster %q", clusterID)
+		return empty, fmt.Errorf("object catalog service unavailable for cluster %q", clusterID)
 	}
-	return svc.ExportQueryCSV(catalogQueryOptionsFromSelection(selection, 0, ""))
+
+	file, err := os.CreateTemp("", "luxury-yacht-catalog-*.csv")
+	if err != nil {
+		return empty, fmt.Errorf("create catalog CSV export: %w", err)
+	}
+	path := file.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(path)
+		}
+	}()
+
+	if err := svc.WriteQueryCSV(file, catalogQueryOptionsFromSelection(selection, 0, "")); err != nil {
+		_ = file.Close()
+		return empty, err
+	}
+	if err := file.Close(); err != nil {
+		return empty, fmt.Errorf("close catalog CSV export: %w", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return empty, fmt.Errorf("stat catalog CSV export: %w", err)
+	}
+	cleanup = false
+	return CatalogQueryCSVExport{Path: path, Bytes: info.Size()}, nil
 }
 
 func validateCatalogQuerySelection(selection snapshot.QuerySelectionDescriptor) (string, error) {
@@ -724,6 +719,9 @@ func (a *App) RunCatalogQueryBulkAction(req snapshot.QueryBulkActionRequest) (sn
 		limit = catalogQueryBulkActionPageLimit
 	}
 	result := svc.Query(catalogQueryOptionsFromSelection(selection, limit, req.Continue))
+	if result.CursorInvalid {
+		return empty, fmt.Errorf("catalog query cursor is invalid")
+	}
 
 	response := snapshot.QueryBulkActionResult{
 		Processed: len(result.Items),

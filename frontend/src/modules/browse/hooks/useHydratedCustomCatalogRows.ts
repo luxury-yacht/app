@@ -2,32 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { readHydratedCustomCatalogRows, requestData } from '@core/data-access';
 import type { CatalogItem } from '@/core/refresh/types';
-
-export interface HydratedCustomCatalogRow {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  namespace: string;
-  clusterId: string;
-  clusterName?: string;
-  apiGroup?: string;
-  apiVersion?: string;
-  crdName?: string;
-  status?: string;
-  statusState?: string;
-  statusPresentation?: string;
-  ready?: boolean;
-  observedGeneration?: number;
-  conditions?: Array<{
-    type: string;
-    status: string;
-    reason?: string;
-    message?: string;
-  }>;
-  age?: string;
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
-}
+import {
+  catalogItemToFallbackCustomRow,
+  normalizeHydratedCustomRow,
+  type CatalogBackedCustomResourceRow,
+} from './customCatalogRowAdapter';
 
 type HydrationQueryRow = {
   clusterId: string;
@@ -42,37 +21,20 @@ type HydrationQueryRow = {
 
 const customRowKey = ({
   clusterId,
-  apiGroup,
-  apiVersion,
+  group,
+  version,
   kind,
   namespace,
   name,
 }: {
   clusterId?: string;
-  apiGroup?: string;
-  apiVersion?: string;
+  group?: string;
+  version?: string;
   kind?: string;
   namespace?: string;
   name?: string;
 }): string =>
-  [clusterId ?? '', apiGroup ?? '', apiVersion ?? '', kind ?? '', namespace ?? '', name ?? ''].join(
-    '|'
-  );
-
-const catalogItemToFallbackRow = (item: CatalogItem): HydratedCustomCatalogRow => ({
-  kind: item.kind,
-  kindAlias: item.kind,
-  name: item.name,
-  namespace: item.namespace ?? '',
-  clusterId: item.clusterId,
-  clusterName: item.clusterName,
-  apiGroup: item.group,
-  apiVersion: item.version,
-  crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
-  status: item.actionFacts?.status,
-  statusPresentation: item.actionFacts?.status,
-  age: item.creationTimestamp,
-});
+  [clusterId ?? '', group ?? '', version ?? '', kind ?? '', namespace ?? '', name ?? ''].join('|');
 
 const catalogItemToHydrationQueryRow = (item: CatalogItem): HydrationQueryRow => ({
   clusterId: item.clusterId,
@@ -85,32 +47,14 @@ const catalogItemToHydrationQueryRow = (item: CatalogItem): HydrationQueryRow =>
   uid: item.uid,
 });
 
-const normalizeHydratedRow = (row: any): HydratedCustomCatalogRow => ({
-  kind: row.kind,
-  kindAlias: row.kindAlias ?? row.kind,
-  name: row.name,
-  namespace: row.namespace ?? '',
-  clusterId: row.clusterId,
-  clusterName: row.clusterName,
-  apiGroup: row.apiGroup,
-  apiVersion: row.apiVersion,
-  crdName: row.crdName,
-  status: row.status,
-  statusState: row.statusState,
-  statusPresentation: row.statusPresentation,
-  ready: row.ready,
-  observedGeneration: row.observedGeneration,
-  conditions: row.conditions,
-  age: row.age,
-  labels: row.labels,
-  annotations: row.annotations,
-});
-
 export function useHydratedCustomCatalogRows(
   clusterId: string | null | undefined,
   catalogItems: CatalogItem[]
-): HydratedCustomCatalogRow[] {
-  const fallbackRows = useMemo(() => catalogItems.map(catalogItemToFallbackRow), [catalogItems]);
+): CatalogBackedCustomResourceRow[] {
+  const fallbackRows = useMemo(
+    () => catalogItems.map(catalogItemToFallbackCustomRow),
+    [catalogItems]
+  );
   const requestRows = useMemo(
     () => catalogItems.map(catalogItemToHydrationQueryRow),
     [catalogItems]
@@ -121,8 +65,8 @@ export function useHydratedCustomCatalogRows(
         .map((row) =>
           customRowKey({
             clusterId: row.clusterId,
-            apiGroup: row.group,
-            apiVersion: row.version,
+            group: row.group,
+            version: row.version,
             kind: row.kind,
             namespace: row.namespace,
             name: row.name,
@@ -131,7 +75,7 @@ export function useHydratedCustomCatalogRows(
         .join('\n'),
     [requestRows]
   );
-  const [rows, setRows] = useState<HydratedCustomCatalogRow[]>(fallbackRows);
+  const [rows, setRows] = useState<CatalogBackedCustomResourceRow[]>(fallbackRows);
 
   useEffect(() => {
     setRows(fallbackRows);
@@ -158,12 +102,22 @@ export function useHydratedCustomCatalogRows(
           return;
         }
         const hydratedRows = result.data;
-        const hydratedByKey = new Map<string, HydratedCustomCatalogRow>();
+        const hydratedByKey = new Map<string, CatalogBackedCustomResourceRow>();
         for (const rawRow of hydratedRows ?? []) {
-          const hydrated = normalizeHydratedRow(rawRow);
+          const hydrated = normalizeHydratedCustomRow(rawRow);
           hydratedByKey.set(customRowKey(hydrated), hydrated);
         }
-        setRows(fallbackRows.map((row) => hydratedByKey.get(customRowKey(row)) ?? row));
+        setRows(
+          fallbackRows.map((row) => ({
+            ...row,
+            ...(hydratedByKey.get(customRowKey(row)) ?? {}),
+            group: row.group,
+            version: row.version,
+            resource: row.resource,
+            apiGroup: row.group,
+            apiVersion: row.version,
+          }))
+        );
       })
       .catch((error) => {
         console.error('Failed to hydrate custom catalog rows', error);

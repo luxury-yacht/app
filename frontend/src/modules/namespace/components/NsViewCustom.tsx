@@ -23,54 +23,15 @@ import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGri
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
 import {
-  buildRequiredCanonicalObjectRowKey,
-  buildRequiredObjectReference,
-} from '@shared/utils/objectIdentity';
+  customCatalogCRDReference,
+  customCatalogObjectReference,
+  customCatalogRowKey,
+  type CatalogBackedCustomResourceRow,
+} from '@modules/browse/hooks/customCatalogRowAdapter';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Data interface for custom resources
-export interface CustomResourceData {
-  kind?: string;
-  kindAlias?: string;
-  name: string;
-  namespace: string;
-  // Multi-cluster metadata used for per-tab actions and stable row keys.
-  clusterId: string;
-  clusterName?: string;
-  apiGroup?: string;
-  apiVersion?: string;
-  /**
-   * Canonical CRD name (`<plural>.<group>`) for the CustomResourceDefinition
-   * that defines this resource's Kind. Derived from catalog GVR/resource
-   * metadata so the CRD column can render a clickable cell that opens the
-   * owning CRD in the object panel.
-   */
-  crdName?: string;
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
-  spec?: {
-    image?: string;
-    url?: string;
-    host?: string;
-    endpoint?: string;
-    serviceName?: string;
-    replicas?: number;
-    [key: string]: any;
-  };
-  status?: string;
-  statusState?: string;
-  statusPresentation?: string;
-  ready?: boolean;
-  observedGeneration?: number;
-  conditions?: Array<{
-    type: string;
-    status: string;
-    reason?: string;
-    message?: string;
-  }>;
-  age?: string;
-  [key: string]: any; // Allow additional fields
-}
+export type CustomResourceData = CatalogBackedCustomResourceRow;
 
 interface CustomViewProps {
   namespace: string;
@@ -95,31 +56,12 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (resource: CustomResourceData) => {
         // Preserve metadata and age so the object panel shows labels/annotations and Age.
-        // CRITICAL: pass apiGroup/apiVersion so downstream scope/capability
+        // CRITICAL: pass group/version so downstream scope/capability
         // resolution can disambiguate colliding Kinds (e.g. two DBInstance
         // CRDs from different operators). Without these, the object panel
         // falls back to first-match-wins discovery and opens the wrong
         // resource.
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: resource.kind || resource.kindAlias || 'CustomResource',
-              kindAlias: resource.kindAlias,
-              name: resource.name,
-              namespace: resource.namespace,
-              group: resource.apiGroup,
-              version: resource.apiVersion,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId },
-            {
-              age: resource.age,
-              labels: resource.labels,
-              annotations: resource.annotations,
-            }
-          )
-        );
+        openWithObject(customCatalogObjectReference(resource, selectedClusterId));
       },
       [openWithObject, selectedClusterId]
     );
@@ -130,44 +72,19 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     // built-in lookup table, not from row data.
     const handleCRDClick = useCallback(
       (resource: CustomResourceData) => {
-        if (!resource.crdName) {
+        const ref = customCatalogCRDReference(resource, selectedClusterId, {
+          includeRowMetadata: true,
+        });
+        if (!ref) {
           return;
         }
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: 'CustomResourceDefinition',
-              name: resource.crdName,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId },
-            {
-              age: resource.age,
-              labels: resource.labels,
-              annotations: resource.annotations,
-              requiresExplicitVersion: true,
-              explicitVersionProvided: Boolean(resource.apiVersion),
-            }
-          )
-        );
+        openWithObject(ref);
       },
       [openWithObject, selectedClusterId]
     );
 
     const keyExtractor = useCallback(
-      (resource: CustomResourceData) =>
-        buildRequiredCanonicalObjectRowKey(
-          {
-            kind: resource.kind || resource.kindAlias || 'CustomResource',
-            name: resource.name,
-            namespace: resource.namespace,
-            clusterId: resource.clusterId,
-            group: resource.apiGroup,
-            version: resource.apiVersion,
-          },
-          { fallbackClusterId: selectedClusterId }
-        ),
+      (resource: CustomResourceData) => customCatalogRowKey(resource, selectedClusterId),
       [selectedClusterId]
     );
 
@@ -180,40 +97,12 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
             getDisplayKind(resource.kind || resource.kindAlias || 'Custom', useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: resource.kind || resource.kindAlias || 'CustomResource',
-                  kindAlias: resource.kindAlias,
-                  name: resource.name,
-                  namespace: resource.namespace,
-                  clusterId: resource.clusterId,
-                  clusterName: resource.clusterName,
-                  group: resource.apiGroup,
-                  version: resource.apiVersion,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
+            navigateToView(customCatalogObjectReference(resource, selectedClusterId)),
         }),
         cf.createTextColumn<CustomResourceData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: resource.kind || resource.kindAlias || 'CustomResource',
-                  kindAlias: resource.kindAlias,
-                  name: resource.name,
-                  namespace: resource.namespace,
-                  clusterId: resource.clusterId,
-                  clusterName: resource.clusterName,
-                  group: resource.apiGroup,
-                  version: resource.apiVersion,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
+            navigateToView(customCatalogObjectReference(resource, selectedClusterId)),
           getClassName: () => 'object-panel-link',
         }),
         // CRD column: each cell is a clickable link back to the CRD
@@ -238,17 +127,10 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
                 if (!resource.crdName) {
                   return;
                 }
-                navigateToView(
-                  buildRequiredObjectReference(
-                    {
-                      kind: 'CustomResourceDefinition',
-                      name: resource.crdName,
-                      clusterId: resource.clusterId,
-                      clusterName: resource.clusterName,
-                    },
-                    { fallbackClusterId: selectedClusterId }
-                  )
-                );
+                const ref = customCatalogCRDReference(resource, selectedClusterId);
+                if (ref) {
+                  navigateToView(ref);
+                }
               },
               isInteractive: (resource) => Boolean(resource.crdName),
               getClassName: (resource) => (resource.crdName ? 'object-panel-link' : undefined),
@@ -335,7 +217,8 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       totalCount,
       totalIsExact,
       csvAction: copyAllMatchingCsvAction,
-    } = useCatalogBackedCustomResourceRows<CustomResourceData>({
+      pagination,
+    } = useCatalogBackedCustomResourceRows({
       clusterId: selectedClusterId,
       namespace,
       allNamespaces: namespace === ALL_NAMESPACES_SCOPE,
@@ -378,28 +261,10 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (resource: CustomResourceData): ContextMenuItem[] => {
-        const kind = resource.kind || resource.kindAlias || 'CustomResource';
         return objectActions.getMenuItems(
-          buildRequiredObjectReference(
-            {
-              kind,
-              kindAlias: resource.kindAlias,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-              group: resource.apiGroup ?? undefined,
-              version: resource.apiVersion ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId },
-            {
-              age: resource.age,
-              labels: resource.labels,
-              annotations: resource.annotations,
-              requiresExplicitVersion: true,
-              explicitVersionProvided: Boolean(resource.apiVersion),
-            }
-          )
+          customCatalogObjectReference(resource, selectedClusterId, {
+            requiresExplicitVersion: true,
+          })
         );
       },
       [objectActions, selectedClusterId]
@@ -431,6 +296,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           getCustomContextMenuItems={getContextMenuItems}
           useShortNames={useShortResourceNames}
           emptyMessage={emptyMessage}
+          {...pagination}
         />
 
         {objectActions.modals}

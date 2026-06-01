@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -244,54 +245,7 @@ func TestFindCatalogObjectByUIDUsesCatalogIdentity(t *testing.T) {
 	require.Nil(t, noMatch)
 }
 
-func TestExportCatalogQueryCSVUsesClusterScopedCatalog(t *testing.T) {
-	app := NewApp()
-	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
-	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
-		"apps/v1, Resource=deployments/apps/alpha": {
-			ClusterID: "cluster-b",
-			Kind:      "Deployment",
-			Group:     "apps",
-			Version:   "v1",
-			Resource:  "deployments",
-			Namespace: "apps",
-			Name:      "alpha",
-			UID:       "alpha-uid",
-			Scope:     objectcatalog.ScopeNamespace,
-		},
-		"v1, Resource=pods/apps/alpha-pod": {
-			ClusterID: "cluster-b",
-			Kind:      "Pod",
-			Group:     "",
-			Version:   "v1",
-			Resource:  "pods",
-			Namespace: "apps",
-			Name:      "alpha-pod",
-			UID:       "pod-uid",
-			Scope:     objectcatalog.ScopeNamespace,
-		},
-	})
-	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
-
-	csvText, err := app.ExportCatalogQueryCSV(
-		"cluster-b",
-		[]string{"apps/v1/Deployment"},
-		[]string{"apps"},
-		"",
-		"name",
-		"asc",
-		false,
-	)
-	require.NoError(t, err)
-	require.Equal(
-		t,
-		"clusterId,kind,namespace,name,group,version,resource,uid\n"+
-			"cluster-b,Deployment,apps,alpha,apps,v1,deployments,alpha-uid\n",
-		csvText,
-	)
-}
-
-func TestExportCatalogSelectionCSVUsesDurableQuerySelection(t *testing.T) {
+func TestExportCatalogSelectionCSVFileUsesDurableQuerySelection(t *testing.T) {
 	app := NewApp()
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
 	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
@@ -320,7 +274,7 @@ func TestExportCatalogSelectionCSVUsesDurableQuerySelection(t *testing.T) {
 	})
 	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
 
-	csvText, err := app.ExportCatalogSelectionCSV(snapshot.QuerySelectionDescriptor{
+	export, err := app.ExportCatalogSelectionCSVFile(snapshot.QuerySelectionDescriptor{
 		ClusterID:  "cluster-b",
 		Table:      "browse",
 		Namespaces: []string{"apps"},
@@ -328,11 +282,16 @@ func TestExportCatalogSelectionCSVUsesDurableQuerySelection(t *testing.T) {
 		SortField:  "name",
 	})
 	require.NoError(t, err)
+	defer os.Remove(export.Path)
+
+	csvBytes, err := os.ReadFile(export.Path)
+	require.NoError(t, err)
+	require.Equal(t, int64(len(csvBytes)), export.Bytes)
 	require.Equal(
 		t,
 		"clusterId,kind,namespace,name,group,version,resource,uid\n"+
 			"cluster-b,Widget,apps,alpha,example.com,v1,widgets,alpha-uid\n",
-		csvText,
+		string(csvBytes),
 	)
 }
 
@@ -459,6 +418,42 @@ func TestRunCatalogQueryBulkActionRequiresConfirmationAndSupportsDryRun(t *testi
 	require.Equal(t, 1, dryRun.Succeeded)
 	require.Equal(t, 0, dryRun.Failed)
 	require.Empty(t, dryRun.Continue)
+}
+
+func TestRunCatalogQueryBulkActionRejectsInvalidCursor(t *testing.T) {
+	app := NewApp()
+	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
+	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
+		"apps/v1, Resource=deployments/apps/alpha": {
+			ClusterID: "cluster-b",
+			Kind:      "Deployment",
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Namespace: "apps",
+			Name:      "alpha",
+			UID:       "alpha-uid",
+			Scope:     objectcatalog.ScopeNamespace,
+		},
+	})
+	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
+
+	result, err := app.RunCatalogQueryBulkAction(snapshot.QueryBulkActionRequest{
+		Selection: snapshot.QuerySelectionDescriptor{
+			ClusterID:  "cluster-b",
+			Table:      "browse",
+			Namespaces: []string{"apps"},
+		},
+		Action:    string(ObjectActionDelete),
+		DryRun:    true,
+		Limit:     10,
+		Continue:  "not-a-catalog-cursor",
+		Confirmed: true,
+	})
+
+	require.ErrorContains(t, err, "catalog query cursor is invalid")
+	require.Zero(t, result.Processed)
+	require.Zero(t, result.Succeeded)
 }
 
 func TestWaitForFactorySyncHandlesNilFactory(t *testing.T) {

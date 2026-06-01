@@ -8,11 +8,11 @@
 
 import {
   DiscoverNodeLogs,
+  ExportCatalogSelectionCSVFile,
   FetchContainerLogs,
   FetchNodeLogs,
   FindCatalogObjectByUID,
   FindCatalogObjectMatch,
-  ExportCatalogSelectionCSV,
   GetContainerLogsScopeContainers,
   GetObjectYAMLByGVK,
   GetPodContainers,
@@ -111,8 +111,13 @@ export const readCatalogObjectMatchForRef = (
 export const readCatalogObjectByUID = (clusterId: string, uid: string) =>
   FindCatalogObjectByUID(clusterId, uid);
 
-export const readCatalogQueryCSV = (selection: QuerySelectionDescriptor) =>
-  ExportCatalogSelectionCSV(selection);
+export interface CatalogQueryCSVExport {
+  path: string;
+  bytes: number;
+}
+
+export const readCatalogQueryCSVFile = (selection: QuerySelectionDescriptor) =>
+  ExportCatalogSelectionCSVFile(selection) as Promise<CatalogQueryCSVExport>;
 
 export interface CustomCatalogHydrationRow {
   clusterId: string;

@@ -74,12 +74,8 @@ export function DiscoverNodeLogs(arg1, arg2) {
   return window['go']['backend']['App']['DiscoverNodeLogs'](arg1, arg2);
 }
 
-export function ExportCatalogQueryCSV(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['backend']['App']['ExportCatalogQueryCSV'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
-}
-
-export function ExportCatalogSelectionCSV(arg1) {
-  return window['go']['backend']['App']['ExportCatalogSelectionCSV'](arg1);
+export function ExportCatalogSelectionCSVFile(arg1) {
+  return window['go']['backend']['App']['ExportCatalogSelectionCSVFile'](arg1);
 }
 
 export function RunCatalogQueryBulkAction(arg1) {

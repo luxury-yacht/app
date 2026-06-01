@@ -123,6 +123,7 @@ export interface UseBrowseCatalogResult {
 export interface BrowseCatalogQueryDescriptor {
   clusterId: string;
   namespaces: string[];
+  hasUserNamespaceScope: boolean;
   kinds: string[];
   search: string;
   sortField: string;
@@ -230,6 +231,7 @@ export function useBrowseCatalog({
     () => ({
       clusterId: clusterId ?? '',
       namespaces: plan.namespacesToQuery,
+      hasUserNamespaceScope: plan.hasUserNamespaceScope,
       kinds: queryFilters.kinds ?? [],
       search: queryFilters.search ?? '',
       sortField: activeSort.sortField,
@@ -243,6 +245,7 @@ export function useBrowseCatalog({
       catalogScope,
       clusterId,
       customOnly,
+      plan.hasUserNamespaceScope,
       plan.namespacesToQuery,
       queryFilters.kinds,
       queryFilters.search,

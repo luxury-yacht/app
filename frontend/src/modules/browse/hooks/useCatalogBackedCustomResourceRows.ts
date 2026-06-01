@@ -1,24 +1,22 @@
 import { useCatalogQueryCsvAction } from './useCatalogQueryCsvAction';
 import { useBrowseCatalog } from './useBrowseCatalog';
 import { useHydratedCustomCatalogRows } from './useHydratedCustomCatalogRows';
-import type {
-  ResourceGridPersistence,
-  ResourceGridTableRow,
-} from '@modules/resource-grid/resourceGridTableTypes';
+import type { ResourceGridPersistence } from '@modules/resource-grid/resourceGridTableTypes';
 import { catalogSelectionFromBrowseQuery } from '@modules/browse/querySelection';
+import type { CatalogBackedCustomResourceRow } from './customCatalogRowAdapter';
 
-export interface UseCatalogBackedCustomResourceRowsOptions<T extends ResourceGridTableRow> {
+export interface UseCatalogBackedCustomResourceRowsOptions {
   clusterId?: string | null;
   namespace?: string;
   allNamespaces?: boolean;
   clusterScopedOnly?: boolean;
-  persistence: ResourceGridPersistence<T>;
+  persistence: ResourceGridPersistence<CatalogBackedCustomResourceRow>;
   diagnosticLabel: string;
   csvActionId: string;
   disableCsvWhenUnscoped?: boolean;
 }
 
-export function useCatalogBackedCustomResourceRows<T extends ResourceGridTableRow>({
+export function useCatalogBackedCustomResourceRows({
   clusterId,
   namespace,
   allNamespaces = false,
@@ -27,7 +25,7 @@ export function useCatalogBackedCustomResourceRows<T extends ResourceGridTableRo
   diagnosticLabel,
   csvActionId,
   disableCsvWhenUnscoped = false,
-}: UseCatalogBackedCustomResourceRowsOptions<T>) {
+}: UseCatalogBackedCustomResourceRowsOptions) {
   const pinnedNamespaces = !clusterScopedOnly && namespace && !allNamespaces ? [namespace] : [];
   const {
     items: catalogItems,
@@ -38,6 +36,11 @@ export function useCatalogBackedCustomResourceRows<T extends ResourceGridTableRo
     totalIsExact,
     queryDescriptor,
     queryPending,
+    continueToken,
+    previousToken,
+    isRequestingMore,
+    handleLoadMore,
+    handleLoadPrevious,
   } = useBrowseCatalog({
     clusterId,
     pinnedNamespaces,
@@ -62,12 +65,21 @@ export function useCatalogBackedCustomResourceRows<T extends ResourceGridTableRo
   });
 
   return {
-    rows: rows as unknown as T[],
+    rows,
     loading,
     hasLoadedOnce,
     filterOptions,
     totalCount,
     totalIsExact,
     csvAction,
+    pagination: {
+      hasMore: Boolean(continueToken),
+      hasPrevious: Boolean(previousToken),
+      isRequestingMore,
+      onRequestMore: handleLoadMore,
+      onRequestPrevious: handleLoadPrevious,
+      loadMoreLabel: 'Next page',
+      previousPageLabel: 'Previous page',
+    },
   };
 }

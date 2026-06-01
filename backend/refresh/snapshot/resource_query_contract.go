@@ -33,7 +33,6 @@ type ResourceQueryPredicate struct {
 type ResourceQueryResult struct {
 	Rows          []ResourceQueryRow       `json:"rows"`
 	Continue      string                   `json:"continue,omitempty"`
-	Previous      string                   `json:"previous,omitempty"`
 	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
 	Total         int                      `json:"total"`
 	TotalIsExact  bool                     `json:"totalIsExact"`
@@ -209,16 +208,15 @@ func resourceQueryPredicateMapToList(predicates map[string]string) []ResourceQue
 // query identity as ResourceQueryRequest so callers do not send thousands of
 // concrete frontend rows back to the backend.
 type QuerySelectionDescriptor struct {
-	ClusterID      string                   `json:"clusterId"`
-	Table          string                   `json:"table"`
-	Namespaces     []string                 `json:"namespaces,omitempty"`
-	Kinds          []string                 `json:"kinds,omitempty"`
-	Search         string                   `json:"search,omitempty"`
-	Predicates     []ResourceQueryPredicate `json:"predicates,omitempty"`
-	SortField      string                   `json:"sortField,omitempty"`
-	SortDirection  string                   `json:"sortDirection,omitempty"`
-	CustomOnly     bool                     `json:"customOnly,omitempty"`
-	QuerySignature string                   `json:"querySignature,omitempty"`
+	ClusterID     string                   `json:"clusterId"`
+	Table         string                   `json:"table"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Search        string                   `json:"search,omitempty"`
+	Predicates    []ResourceQueryPredicate `json:"predicates,omitempty"`
+	SortField     string                   `json:"sortField,omitempty"`
+	SortDirection string                   `json:"sortDirection,omitempty"`
+	CustomOnly    bool                     `json:"customOnly,omitempty"`
 }
 
 type QueryBulkActionRequest struct {

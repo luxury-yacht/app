@@ -36,6 +36,7 @@ export interface BrowseCatalogPlanInput {
 
 export interface BrowseCatalogPlan {
   isNamespaceScoped: boolean;
+  hasUserNamespaceScope: boolean;
   namespacesToQuery: string[];
   catalogScope: string;
   metadataScope: string;
@@ -74,6 +75,7 @@ export const buildBrowseCatalogPlan = ({
   const isNamespaceScoped = pinnedNamespaces.length > 0;
   const sortScope = catalogSortScope(sort);
   const selectedNamespaces = filters.namespaces ?? [];
+  const hasUserNamespaceScope = isNamespaceScoped || selectedNamespaces.length > 0;
   const namespacesToQuery = clusterScopedOnly
     ? ['cluster']
     : isNamespaceScoped
@@ -113,6 +115,7 @@ export const buildBrowseCatalogPlan = ({
 
   return {
     isNamespaceScoped,
+    hasUserNamespaceScope,
     namespacesToQuery,
     catalogScope,
     metadataScope,

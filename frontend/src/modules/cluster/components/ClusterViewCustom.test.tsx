@@ -144,6 +144,7 @@ vi.mock('@/core/capabilities', () => ({
 const baseCustom = {
   kind: 'Widget',
   name: 'gizmo',
+  namespace: '',
   apiGroup: 'example.com',
   apiVersion: 'v1',
   age: '1d',
@@ -166,6 +167,7 @@ const browseCatalogResult = (items: CatalogItem[] = []) => ({
   queryDescriptor: {
     clusterId: 'cluster-a',
     namespaces: ['cluster'],
+    hasUserNamespaceScope: false,
     kinds: [],
     search: '',
     sortField: 'name',
@@ -212,6 +214,9 @@ const catalogItemToClusterCustomData = (item: CatalogItem) => ({
   clusterName: item.clusterName,
   apiGroup: item.group,
   apiVersion: item.version,
+  group: item.group,
+  version: item.version,
+  resource: item.resource,
   crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
   status: item.actionFacts?.status,
   statusPresentation: item.actionFacts?.status,
@@ -358,6 +363,7 @@ describe('ClusterViewCustom', () => {
     const clusterScopedCR = {
       kind: 'DBCluster',
       name: 'shared-pg',
+      namespace: '',
       apiGroup: 'postgresql.cnpg.io',
       apiVersion: 'v1',
       age: '3d',
@@ -405,6 +411,7 @@ describe('ClusterViewCustom', () => {
     const clusterScopedCR = {
       kind: 'DBCluster',
       name: 'shared-pg',
+      namespace: '',
       apiGroup: 'postgresql.cnpg.io',
       apiVersion: 'v1',
       age: '3d',

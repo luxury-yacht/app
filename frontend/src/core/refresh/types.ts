@@ -534,7 +534,6 @@ export interface ResourceQueryPredicate {
 export interface ResourceQueryResult {
   rows: ResourceQueryRow[];
   continue?: string;
-  previous?: string;
   cursorInvalid?: boolean;
   total: number;
   totalIsExact: boolean;
@@ -606,7 +605,6 @@ export interface QuerySelectionDescriptor {
   sortField?: string;
   sortDirection?: string;
   customOnly?: boolean;
-  querySignature?: string;
 }
 
 export interface QueryBulkActionRequest {

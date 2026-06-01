@@ -1,23 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState } from '@/core/data-access';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type {
   GridTableFilterState,
   GridTableFilterOptions,
 } from '@shared/components/tables/GridTable';
 import type { SortConfig } from '@hooks/useTableSort';
 import type { RefreshDomain, ResourceQueryDynamicRef } from '@/core/refresh/types';
-
-export interface TypedQueryPayload {
-  continue?: string;
-  cursorInvalid?: boolean;
-  total?: number;
-  totalIsExact?: boolean;
-  namespaces?: string[];
-  kinds?: string[];
-  facetsExact?: boolean;
-  dynamic?: ResourceQueryDynamicRef;
-}
+import {
+  buildTypedResourceQueryScope,
+  filterOptionsFromTypedPayload,
+  typedResourceQueryIdentity,
+  type TypedQueryPayload,
+} from './typedResourceQueryScope';
+export type { TypedQueryPayload } from './typedResourceQueryScope';
 
 export interface UseTypedResourceQueryParams<TPayload extends TypedQueryPayload, TRow> {
   enabled: boolean;
@@ -45,30 +40,6 @@ export interface UseTypedResourceQueryResult<TRow> {
 
 const DEFAULT_PAGE_LIMIT = 250;
 
-const stableList = (values: string[]) =>
-  values
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b));
-
-const queryIdentityFor = (
-  filters: GridTableFilterState,
-  sortConfig: SortConfig | null,
-  predicates?: Record<string, string | null | undefined>
-) =>
-  JSON.stringify({
-    search: filters.search,
-    caseSensitive: filters.caseSensitive,
-    kinds: stableList(filters.kinds),
-    namespaces: stableList(filters.namespaces),
-    sort: sortConfig,
-    predicates: Object.fromEntries(
-      Object.entries(predicates ?? {})
-        .filter(([, value]) => Boolean(value))
-        .sort(([left], [right]) => left.localeCompare(right))
-    ),
-  });
-
 export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>({
   enabled,
   clusterId,
@@ -90,7 +61,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   const [filterOptions, setFilterOptions] = useState<Partial<GridTableFilterOptions>>({});
   const [dynamic, setDynamic] = useState<ResourceQueryDynamicRef | null>(null);
   const queryIdentity = useMemo(
-    () => queryIdentityFor(filters, sortConfig, predicates),
+    () => typedResourceQueryIdentity({ filters, sortConfig, predicates }),
     [filters, predicates, sortConfig]
   );
   const queryIdentityRef = useRef(queryIdentity);
@@ -105,33 +76,16 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   }, [queryIdentity]);
 
   const scope = useMemo(() => {
-    if (!enabled || !clusterId) {
+    if (!enabled) {
       return null;
     }
-    const params = new URLSearchParams();
-    params.set('limit', String(pageLimit));
-    if (filters.search.trim()) {
-      params.set('search', filters.search.trim());
-    }
-    if (filters.namespaces.length > 0) {
-      params.set('namespaces', stableList(filters.namespaces).join(','));
-    }
-    if (filters.kinds.length > 0) {
-      params.set('kinds', stableList(filters.kinds).join(','));
-    }
-    if (sortConfig?.key && sortConfig.direction) {
-      params.set('sort', sortConfig.key);
-      params.set('sortDirection', sortConfig.direction);
-    }
-    for (const [key, value] of Object.entries(predicates ?? {})) {
-      if (value) {
-        params.set(`predicate.${key}`, value);
-      }
-    }
-    if (requestToken) {
-      params.set('continue', requestToken);
-    }
-    return buildClusterScope(clusterId, `namespace:all?${params.toString()}`);
+    return buildTypedResourceQueryScope(clusterId, {
+      filters,
+      sortConfig,
+      pageLimit,
+      predicates,
+      continueToken: requestToken,
+    });
   }, [clusterId, enabled, filters, pageLimit, predicates, requestToken, sortConfig]);
 
   useEffect(() => {
@@ -169,12 +123,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         }
         setRows(selectRows(payload));
         setContinueToken(payload.continue ?? null);
-        setFilterOptions({
-          kinds: payload.kinds,
-          namespaces: payload.namespaces,
-          totalCount: payload.total,
-          totalIsExact: payload.totalIsExact,
-        });
+        setFilterOptions(filterOptionsFromTypedPayload(payload));
         setDynamic(payload.dynamic ?? null);
         setLoaded(true);
       } catch (caught) {

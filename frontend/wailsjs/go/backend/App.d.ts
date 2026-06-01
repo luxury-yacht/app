@@ -43,9 +43,7 @@ export function DeleteTheme(arg1:string):Promise<void>;
 
 export function DiscoverNodeLogs(arg1:string,arg2:string):Promise<types.NodeLogDiscoveryResponse>;
 
-export function ExportCatalogQueryCSV(arg1:string,arg2:Array<string>,arg3:Array<string>,arg4:string,arg5:string,arg6:string,arg7:boolean):Promise<string>;
-
-export function ExportCatalogSelectionCSV(arg1:any):Promise<string>;
+export function ExportCatalogSelectionCSVFile(arg1:any):Promise<any>;
 
 export function RunCatalogQueryBulkAction(arg1:any):Promise<any>;
 

@@ -12,7 +12,7 @@ import BrowseView from '@/modules/browse/components/BrowseView';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
-const exportCatalogQueryCSVMock = vi.hoisted(() => vi.fn());
+const exportCatalogQueryCSVFileMock = vi.hoisted(() => vi.fn());
 const runCatalogQueryBulkActionMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
@@ -97,7 +97,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  ExportCatalogSelectionCSV: (...args: unknown[]) => exportCatalogQueryCSVMock(...args),
+  ExportCatalogSelectionCSVFile: (...args: unknown[]) => exportCatalogQueryCSVFileMock(...args),
   RunCatalogQueryBulkAction: (...args: unknown[]) => runCatalogQueryBulkActionMock(...args),
 }));
 
@@ -222,7 +222,9 @@ describe('BrowseView', () => {
     persistenceArgsRef.cluster = null;
     persistenceArgsRef.namespace = null;
     persistenceFiltersRef.current = { search: '', kinds: [], namespaces: [], caseSensitive: false };
-    exportCatalogQueryCSVMock.mockReset().mockResolvedValue('clusterId,kind\ncluster-1,Pod\n');
+    exportCatalogQueryCSVFileMock
+      .mockReset()
+      .mockResolvedValue({ path: '/tmp/catalog.csv', bytes: 29 });
     runCatalogQueryBulkActionMock.mockReset().mockResolvedValue({
       processed: 1,
       succeeded: 1,
@@ -607,7 +609,7 @@ describe('BrowseView', () => {
         await Promise.resolve();
       });
 
-      expect(exportCatalogQueryCSVMock).toHaveBeenCalledWith({
+      expect(exportCatalogQueryCSVFileMock).toHaveBeenCalledWith({
         clusterId: 'cluster-1',
         table: 'browse',
         namespaces: ['default'],
@@ -616,10 +618,8 @@ describe('BrowseView', () => {
         sortField: '',
         sortDirection: '',
         customOnly: false,
-        querySignature: 'cluster-1|limit=1000&namespace=default',
-        scope: 'cluster-1|limit=1000&namespace=default',
       });
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('clusterId,kind\ncluster-1,Pod\n');
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('/tmp/catalog.csv');
     });
   });
 
@@ -685,8 +685,6 @@ describe('BrowseView', () => {
           sortField: '',
           sortDirection: '',
           customOnly: false,
-          querySignature: 'cluster-1|limit=1000&namespace=default',
-          scope: 'cluster-1|limit=1000&namespace=default',
         },
         action: 'delete',
         confirmed: true,

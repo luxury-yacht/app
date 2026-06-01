@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
-import { readCatalogQueryCSV, requestData } from '@core/data-access';
-import type { CatalogQuerySelectionDescriptor } from '@modules/browse/querySelection';
+import { readCatalogQueryCSVFile, requestData } from '@core/data-access';
+import {
+  backendSelectionFromCatalogSelection,
+  type CatalogQuerySelectionDescriptor,
+} from '@modules/browse/querySelection';
 
 const COPY_QUERY_CSV_FEEDBACK_RESET_MS = 750;
 
@@ -22,7 +25,7 @@ export function useCatalogQueryCsvAction({
   pending = false,
   disableWhenUnscoped = false,
   id = 'copy-catalog-query-csv',
-  title = 'Copy all matching rows as CSV',
+  title = 'Export all matching rows as CSV',
 }: UseCatalogQueryCsvActionOptions): IconBarItem {
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [feedback, setFeedback] = useState<'success' | 'error' | null>(null);
@@ -51,7 +54,7 @@ export function useCatalogQueryCsvAction({
       !query.clusterId ||
       !canCopy ||
       pending ||
-      (disableWhenUnscoped && (query.namespaces?.length ?? 0) === 0)
+      (disableWhenUnscoped && !query.hasUserNamespaceScope)
     ) {
       setFeedback('error');
       scheduleReset();
@@ -60,18 +63,18 @@ export function useCatalogQueryCsvAction({
 
     try {
       const result = await requestData({
-        resource: 'catalog-query-csv',
+        resource: 'catalog-query-csv-file',
         adapter: 'rpc-read',
         reason: 'user',
         label: title,
         scope: query.scope,
-        read: () => readCatalogQueryCSV(query),
+        read: () => readCatalogQueryCSVFile(backendSelectionFromCatalogSelection(query)),
       });
       if (result.status !== 'executed') {
         setFeedback('error');
         return;
       }
-      await navigator.clipboard.writeText(result.data ?? '');
+      await navigator.clipboard.writeText(result.data?.path ?? '');
       setFeedback('success');
     } catch (error) {
       console.error('Failed to copy all matching catalog rows as CSV', error);
@@ -96,7 +99,7 @@ export function useCatalogQueryCsvAction({
         !canCopy ||
         pending ||
         totalCount === 0 ||
-        (disableWhenUnscoped && (query.namespaces?.length ?? 0) === 0),
+        (disableWhenUnscoped && !query.hasUserNamespaceScope),
       feedback,
     }),
     [canCopy, disableWhenUnscoped, feedback, handleCopy, id, pending, query, title, totalCount]

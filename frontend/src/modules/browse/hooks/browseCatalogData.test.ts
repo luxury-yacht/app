@@ -57,6 +57,7 @@ describe('browseCatalogData', () => {
     expect(plan.catalogScope).toBe('cluster-1|limit=200&search=api&kind=Pod&namespace=default');
     expect(plan.metadataScope).toBe('cluster-1|limit=1&namespace=default');
     expect(plan.metadataUsesActiveScope).toBe(false);
+    expect(plan.hasUserNamespaceScope).toBe(true);
     expect(plan.namespacesToQuery).toEqual(['default']);
     expect(
       buildBrowseCatalogPageScope(
@@ -70,6 +71,20 @@ describe('browseCatalogData', () => {
         '200'
       )
     ).toBe('cluster-1|limit=200&search=api&kind=Pod&namespace=default&continue=200');
+  });
+
+  it('separates user namespace scope from backend namespace expansion', () => {
+    const plan = buildBrowseCatalogPlan({
+      clusterId: 'cluster-1',
+      clusterScopedOnly: false,
+      pinnedNamespaces: [],
+      filters: { search: '', kinds: [], namespaces: [] },
+      availableNamespaces: ['default', 'kube-system'],
+      pageLimit: 200,
+    });
+
+    expect(plan.namespacesToQuery).toEqual(['default', 'kube-system']);
+    expect(plan.hasUserNamespaceScope).toBe(false);
   });
 
   it('includes backend sort in catalog scopes when the sort is not the default', () => {

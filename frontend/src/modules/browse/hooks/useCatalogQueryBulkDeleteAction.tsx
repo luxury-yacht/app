@@ -5,7 +5,10 @@ import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import { RunCatalogQueryBulkAction } from '@wailsjs/go/backend/App';
-import type { CatalogQuerySelectionDescriptor } from '@modules/browse/querySelection';
+import {
+  backendSelectionFromCatalogSelection,
+  type CatalogQuerySelectionDescriptor,
+} from '@modules/browse/querySelection';
 
 const BULK_DELETE_FEEDBACK_RESET_MS = 750;
 const BULK_DELETE_PAGE_LIMIT = 100;
@@ -52,7 +55,7 @@ export function useCatalogQueryBulkDeleteAction({
     !query.clusterId ||
     pending ||
     totalCount === 0 ||
-    (disableWhenUnscoped && (query.namespaces?.length ?? 0) === 0);
+    (disableWhenUnscoped && !query.hasUserNamespaceScope);
 
   const handleConfirm = useCallback(async () => {
     if (!query.clusterId) {
@@ -66,7 +69,7 @@ export function useCatalogQueryBulkDeleteAction({
       let failed = 0;
       do {
         const result = await RunCatalogQueryBulkAction({
-          selection: query,
+          selection: backendSelectionFromCatalogSelection(query),
           action: 'delete',
           confirmed: true,
           limit: BULK_DELETE_PAGE_LIMIT,
