@@ -1036,31 +1036,31 @@ describe('refreshOrchestrator', () => {
 
   it('keeps one active scope by default within a cluster runtime', () => {
     refreshOrchestrator.registerDomain({
-      domain: 'cluster-config',
-      refresherName: CLUSTER_REFRESHERS.config,
-      category: 'cluster',
+      domain: 'cluster-overview',
+      refresherName: SYSTEM_REFRESHERS.clusterOverview,
+      category: 'system',
     });
 
-    const firstScope = buildClusterScope('cluster-a', 'config');
-    const secondScope = buildClusterScope('cluster-a', 'secrets');
+    const firstScope = buildClusterScope('cluster-a', 'overview-a');
+    const secondScope = buildClusterScope('cluster-a', 'overview-b');
 
-    refreshOrchestrator.setScopedDomainEnabled('cluster-config', firstScope, true);
-    setScopedDomainState('cluster-config', firstScope, (previous) => ({
+    refreshOrchestrator.setScopedDomainEnabled('cluster-overview', firstScope, true);
+    setScopedDomainState('cluster-overview', firstScope, (previous) => ({
       ...previous,
       status: 'ready',
-      data: { resources: [{ kind: 'ConfigMap', name: 'app-config' }] } as any,
+      data: { clusterId: 'cluster-a' } as any,
       stats: { itemCount: 1, buildDurationMs: 0 },
       scope: firstScope,
     }));
 
-    refreshOrchestrator.setScopedDomainEnabled('cluster-config', secondScope, true);
+    refreshOrchestrator.setScopedDomainEnabled('cluster-overview', secondScope, true);
 
     const scopedMap = orchestratorInternals.clusterRuntimes
       .get('cluster-a')
-      ?.scopedEnabledState.get('cluster-config');
+      ?.scopedEnabledState.get('cluster-overview');
     expect(scopedMap?.get(firstScope)).toBe(false);
     expect(scopedMap?.get(secondScope)).toBe(true);
-    expect(getScopedDomainState('cluster-config', firstScope).status).toBe('idle');
+    expect(getScopedDomainState('cluster-overview', firstScope).status).toBe('idle');
   });
 
   it('allows object-panel domains to keep multiple active object scopes', () => {

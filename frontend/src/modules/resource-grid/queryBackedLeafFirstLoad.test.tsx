@@ -58,6 +58,7 @@ vi.mock('@/core/data-access', async (importOriginal) => {
     ...actual,
     requestRefreshDomain: vi.fn().mockResolvedValue(undefined),
     requestRefreshDomainState: (request: unknown) => requestRefreshDomainStateMock(request),
+    useScopedRefreshDomainLifecycle: vi.fn(),
   };
 });
 

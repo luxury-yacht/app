@@ -1,5 +1,8 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import type { RefreshDomain } from '@/core/refresh/types';
+import { useRefreshScopedDomain } from '@/core/refresh';
+import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
 import { useClusterResourceGridTable, useNamespaceResourceGridTable } from './useResourceGridTable';
 import type {
@@ -22,6 +25,20 @@ import {
   useQueryBackedTableState,
 } from './queryBackedTableState';
 import type { QueryBackedTableState } from './queryBackedTableState';
+
+const liveDomainVersion = (state: {
+  version?: number | string;
+  checksum?: string;
+  etag?: string;
+  lastUpdated?: number;
+  lastAutoRefresh?: number;
+  lastManualRefresh?: number;
+}): string =>
+  [
+    state.version ?? '',
+    state.checksum ?? state.etag ?? '',
+    state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh ?? '',
+  ].join(':');
 
 export interface QueryBackedNamespaceGridResult<
   T extends ResourceGridTableRow,
@@ -72,11 +89,25 @@ export function useQueryBackedNamespaceResourceGridTable<
   predicates,
   filterOptionOverrides,
   defaultSort = { key: 'name', direction: 'asc' },
+  namespace,
   ...tableParams
 }: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
   const [pageLimit, setPageLimit] = useState<TypedQueryPageLimit>(50);
+  const liveScope = useMemo(
+    () => (clusterId ? buildClusterScope(clusterId, baseScope ?? namespace) : ''),
+    [baseScope, clusterId, namespace]
+  );
+  useScopedRefreshDomainLifecycle({
+    domain,
+    scope: liveScope || null,
+    enabled,
+    preserveState: true,
+    fetchOnEnable: false,
+  });
+  const liveDomain = useRefreshScopedDomain(domain, liveScope);
+  const liveDataVersion = liveDomainVersion(liveDomain);
   const handlePublishedTableState = useCallback(
     (next: QueryBackedTableState) => {
       setTableStateReady(true);
@@ -96,16 +127,18 @@ export function useQueryBackedNamespaceResourceGridTable<
     sortConfig: tableState.sortConfig,
     pageLimit,
     predicates,
+    liveDataVersion,
     selectRows,
   });
 
   const data = queryEnabled ? query.rows : localData;
-  const loading = queryEnabled ? query.loading : localLoading;
+  const loading = queryEnabled ? query.loading && query.rows.length === 0 : localLoading;
   const loaded = queryEnabled ? query.loaded : localLoaded;
   const error = queryEnabled ? query.error : localError;
 
   const table = useNamespaceResourceGridTable<TRow>({
     ...tableParams,
+    namespace,
     defaultSort,
     tableMode: enabled ? queryTableMode : 'Local Complete',
     data,
@@ -201,6 +234,19 @@ export function useQueryBackedClusterResourceGridTable<
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
   const [pageLimit, setPageLimit] = useState<TypedQueryPageLimit>(50);
+  const liveScope = useMemo(
+    () => (clusterId ? buildClusterScope(clusterId, baseScope) : ''),
+    [baseScope, clusterId]
+  );
+  useScopedRefreshDomainLifecycle({
+    domain,
+    scope: liveScope || null,
+    enabled,
+    preserveState: true,
+    fetchOnEnable: false,
+  });
+  const liveDomain = useRefreshScopedDomain(domain, liveScope);
+  const liveDataVersion = liveDomainVersion(liveDomain);
   const handlePublishedTableState = useCallback(
     (next: QueryBackedTableState) => {
       setTableStateReady(true);
@@ -220,11 +266,12 @@ export function useQueryBackedClusterResourceGridTable<
     sortConfig: tableState.sortConfig,
     pageLimit,
     predicates,
+    liveDataVersion,
     selectRows,
   });
 
   const data = queryEnabled ? query.rows : localData;
-  const loading = queryEnabled ? query.loading : localLoading;
+  const loading = queryEnabled ? query.loading && query.rows.length === 0 : localLoading;
   const loaded = queryEnabled ? query.loaded : localLoaded;
   const error = queryEnabled ? query.error : localError;
 

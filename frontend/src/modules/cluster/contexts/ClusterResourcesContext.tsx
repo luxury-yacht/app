@@ -91,8 +91,6 @@ const CLUSTER_REFRESHER_TO_DOMAIN: Partial<Record<ClusterRefresherName, RefreshD
 // Managed cluster domains derived from the mapping (exclude catalog to avoid touching browse)
 const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>(Object.values(CLUSTER_REFRESHER_TO_DOMAIN));
 
-// Domains that use 'cluster' as their domain scope suffix (events need special scope).
-const CLUSTER_EVENTS_DOMAIN: RefreshDomain = 'cluster-events';
 const QUERY_BACKED_CLUSTER_VIEWS = new Set<ClusterViewType>([
   'nodes',
   'rbac',
@@ -102,6 +100,8 @@ const QUERY_BACKED_CLUSTER_VIEWS = new Set<ClusterViewType>([
   'events',
 ]);
 
+// Domains that use 'cluster' as their domain scope suffix (events need special scope).
+const CLUSTER_EVENTS_DOMAIN: RefreshDomain = 'cluster-events';
 const noop = () => {};
 
 const withSnapshotStatsMeta = (base: unknown, stats?: SnapshotStats | null): unknown => {
@@ -675,14 +675,12 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     if (!activeResourceType) {
       return;
     }
-
-    const tabToEnsure = activeResourceType;
-    if (QUERY_BACKED_CLUSTER_VIEWS.has(tabToEnsure)) {
+    if (QUERY_BACKED_CLUSTER_VIEWS.has(activeResourceType)) {
       return;
     }
 
     const shouldSkip = (() => {
-      switch (tabToEnsure) {
+      switch (activeResourceType) {
         case 'nodes':
           return nodes.data !== null
             ? true
@@ -718,7 +716,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       return;
     }
 
-    const refresher = clusterViewToRefresher[tabToEnsure];
+    const refresher = clusterViewToRefresher[activeResourceType];
     const domain = refresher ? CLUSTER_REFRESHER_TO_DOMAIN[refresher] : undefined;
     if (!domain) {
       return;

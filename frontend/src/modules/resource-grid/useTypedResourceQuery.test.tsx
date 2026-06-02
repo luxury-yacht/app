@@ -125,6 +125,142 @@ describe('useTypedResourceQuery', () => {
     );
   });
 
+  it('reloads the current query when live refresh data changes', async () => {
+    const Probe: React.FC<{ liveDataVersion: string }> = ({ liveDataVersion }) => {
+      result = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        sortConfig,
+        liveDataVersion,
+        selectRows,
+      });
+      return null;
+    };
+    const renderInvalidatedQuery = async (liveDataVersion: string) => {
+      await act(async () => {
+        root.render(<Probe liveDataVersion={liveDataVersion} />);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-a' }],
+            total: 1,
+            totalIsExact: true,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-b' }],
+            total: 1,
+            totalIsExact: true,
+          },
+        },
+      });
+
+    await renderInvalidatedQuery('version-1');
+    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
+
+    await renderInvalidatedQuery('version-2');
+
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
+    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
+      })
+    );
+    expect(result?.rows).toEqual([{ name: 'pod-b' }]);
+  });
+
+  it('keeps the current rows visible while live refresh invalidation refetches', async () => {
+    let resolveSecondRequest:
+      | ((value: {
+          status: 'executed';
+          data: { status: 'ready'; data: { rows: TestRow[]; total: number } };
+        }) => void)
+      | undefined;
+    const secondRequest = new Promise<{
+      status: 'executed';
+      data: { status: 'ready'; data: { rows: TestRow[]; total: number } };
+    }>((resolve) => {
+      resolveSecondRequest = resolve;
+    });
+    const Probe: React.FC<{ liveDataVersion: string }> = ({ liveDataVersion }) => {
+      result = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        sortConfig,
+        liveDataVersion,
+        selectRows,
+      });
+      return null;
+    };
+
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-a' }],
+            total: 1,
+          },
+        },
+      })
+      .mockReturnValueOnce(secondRequest);
+
+    await act(async () => {
+      root.render(<Probe liveDataVersion="version-1" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
+    expect(result?.loading).toBe(false);
+
+    await act(async () => {
+      root.render(<Probe liveDataVersion="version-2" />);
+      await Promise.resolve();
+    });
+
+    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
+    expect(result?.loading).toBe(true);
+
+    await act(async () => {
+      resolveSecondRequest?.({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-b' }],
+            total: 1,
+          },
+        },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result?.loading).toBe(false);
+    expect(result?.rows).toEqual([{ name: 'pod-b' }]);
+  });
+
   it('marks blocked query requests as loaded so the table does not stay in an initial spinner', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'blocked',

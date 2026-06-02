@@ -156,6 +156,42 @@ func TestMigratedClusterStaticTableAdaptersQueryAndPage(t *testing.T) {
 	})
 }
 
+func TestNodeTableQuerySortsAgeByTimestamp(t *testing.T) {
+	query := typedTableQuery{
+		Enabled:   true,
+		BaseScope: "cluster",
+		Request: ResourceQueryRequest{
+			ClusterID:     "cluster-a",
+			Table:         "nodes",
+			SortField:     "age",
+			SortDirection: "asc",
+			Limit:         10,
+		},
+	}
+
+	page := applyTypedTableQuery([]NodeSummary{
+		{Kind: "Node", Name: "old-node", Age: "10d", AgeTimestamp: 1_700_000_000_000},
+		{Kind: "Node", Name: "young-node", Age: "2h", AgeTimestamp: 1_700_856_000_000},
+	}, query, nodeTableQueryAdapter())
+
+	if len(page.Rows) != 2 {
+		t.Fatalf("len(page.Rows)=%d, want 2", len(page.Rows))
+	}
+	if page.Rows[0].Name != "young-node" {
+		t.Fatalf("first node=%q, want young-node", page.Rows[0].Name)
+	}
+
+	query.Request.SortDirection = "desc"
+	page = applyTypedTableQuery([]NodeSummary{
+		{Kind: "Node", Name: "old-node", Age: "10d", AgeTimestamp: 1_700_000_000_000},
+		{Kind: "Node", Name: "young-node", Age: "2h", AgeTimestamp: 1_700_856_000_000},
+	}, query, nodeTableQueryAdapter())
+
+	if page.Rows[0].Name != "old-node" {
+		t.Fatalf("first node=%q, want old-node", page.Rows[0].Name)
+	}
+}
+
 func BenchmarkMigratedStaticTableQueries(b *testing.B) {
 	query := migratedStaticQuery()
 	query.Request.Limit = 250

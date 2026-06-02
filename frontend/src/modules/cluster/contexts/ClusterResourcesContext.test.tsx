@@ -136,14 +136,13 @@ describe('ClusterResourcesProvider', () => {
     });
   };
 
-  it('reports an idle query-backed selected cluster view as loading without requesting startup data', async () => {
+  it('does not provider-start query-backed cluster table domains', async () => {
     scopedStates[`cluster-config:${testClusterScope}`] = createDomainState({
       scope: testClusterScope,
     });
 
     await render();
 
-    expect(contextRef.current?.config.loading).toBe(true);
     expect(contextRef.current?.config.hasLoaded).toBe(false);
     expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
       'cluster-config',
@@ -216,7 +215,7 @@ describe('ClusterResourcesProvider', () => {
     root = ReactDOM.createRoot(container);
   });
 
-  it('does not toggle query-backed cluster domains when switching active cluster views', async () => {
+  it('leaves query-backed cluster view live lifecycles to the table adapter', async () => {
     await render();
 
     orchestrator.setScopedDomainEnabled.mockClear();
@@ -233,12 +232,18 @@ describe('ClusterResourcesProvider', () => {
     expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
       'cluster-config',
       testClusterScope,
-      false,
+      true,
+      expect.anything()
+    );
+    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+      'nodes',
+      testClusterScope,
+      true,
       expect.anything()
     );
   });
 
-  it('does not enable query-backed cluster domains when at least one resource permission is allowed', async () => {
+  it('does not provider-start query-backed cluster domains when permissions allow them', async () => {
     permissionStates.StorageClass = {
       allowed: true,
       pending: false,

@@ -31,6 +31,7 @@ export interface TypedResourceQueryLifecycleDescriptor extends TypedResourceQuer
   enabled: boolean;
   clusterId?: string | null;
   domain: string;
+  liveDataVersion?: string | null;
 }
 
 const stableTypedQueryList = (values: string[]) =>
@@ -66,11 +67,13 @@ export const typedResourceQueryLifecycleIdentity = ({
   filters,
   sortConfig,
   predicates,
+  liveDataVersion,
 }: TypedResourceQueryLifecycleDescriptor) =>
   JSON.stringify({
     enabled,
     clusterId: clusterId?.trim() ?? '',
     domain,
+    liveDataVersion: liveDataVersion ?? '',
     pageLimit,
     baseScope: baseScope ?? 'namespace:all',
     query: typedResourceQueryIdentity({ filters, sortConfig, predicates }),

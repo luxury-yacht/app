@@ -341,8 +341,8 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 				return row.Pods
 			case "restarts":
 				return strconv.Itoa(int(row.Restarts))
-			case "age":
-				return row.Age
+			case "age", "agetimestamp":
+				return strconv.FormatInt(row.AgeTimestamp, 10)
 			default:
 				return row.Name
 			}
@@ -355,6 +355,10 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 				return parseFormattedMemoryToBytes(row.MemoryUsage)
 			case "restarts":
 				return float64(row.Restarts), true
+			case "age":
+				return -float64(row.AgeTimestamp), true
+			case "agetimestamp":
+				return float64(row.AgeTimestamp), true
 			default:
 				return 0, false
 			}

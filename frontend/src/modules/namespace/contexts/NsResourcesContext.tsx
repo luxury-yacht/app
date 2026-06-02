@@ -45,13 +45,13 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useStableKeyedArray, useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 import {
   namespaceResourceDescriptors,
   type NamespaceResourceDescriptor,
 } from './namespaceResourceDescriptors';
 import { createCatalogBackedCustomResourceHandle } from '@modules/browse/catalogBackedCustomResourceHandle';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
 export interface PodsResourceDataReturn extends ResourceDataReturn<PodSnapshotEntry[]> {
   metrics: PodMetricsInfo | null;
@@ -82,7 +82,9 @@ const NamespaceResourcesContext = createContext<NamespaceResourcesContextType | 
 );
 
 const DEFAULT_NAMESPACE_VIEW: NamespaceViewType = 'workloads';
-const QUERY_BACKED_ALL_NAMESPACE_VIEWS = new Set<NamespaceRefresherKey>([
+
+const QUERY_BACKED_ALL_NAMESPACE_VIEWS = new Set<NamespaceViewType>([
+  'pods',
   'workloads',
   'config',
   'network',
@@ -90,8 +92,8 @@ const QUERY_BACKED_ALL_NAMESPACE_VIEWS = new Set<NamespaceRefresherKey>([
   'storage',
   'autoscaling',
   'quotas',
-  'events',
   'helm',
+  'events',
 ]);
 
 const DOMAIN_BY_RESOURCE: Partial<Record<NamespaceViewType, RefreshDomain | null>> = {
@@ -502,13 +504,15 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
 
   const activeNamespaceView = activeResourceType ?? DEFAULT_NAMESPACE_VIEW;
 
+  const isAllNamespacesQueryBackedView =
+    currentNamespace === ALL_NAMESPACES_SCOPE &&
+    QUERY_BACKED_ALL_NAMESPACE_VIEWS.has(activeNamespaceView);
+
   const isResourceActive = (resourceKey: NamespaceRefresherKey) =>
     Boolean(currentNamespace) &&
     isNamespaceView &&
     activeNamespaceView === resourceKey &&
-    !(
-      currentNamespace === ALL_NAMESPACES_SCOPE && QUERY_BACKED_ALL_NAMESPACE_VIEWS.has(resourceKey)
-    );
+    !isAllNamespacesQueryBackedView;
 
   const workloads = useDescriptorBackedResource<any[]>(
     namespaceResourceDescriptors.workloads,
@@ -773,6 +777,13 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
 
     const activeKey = activeResourceType ?? DEFAULT_NAMESPACE_VIEW;
     const podsResource = resourcesRef.current.pods;
+
+    if (
+      currentNamespace === ALL_NAMESPACES_SCOPE &&
+      QUERY_BACKED_ALL_NAMESPACE_VIEWS.has(activeKey)
+    ) {
+      return;
+    }
 
     if (activeKey === 'pods') {
       if (!podsResource.hasLoaded && !podsResource.loading) {

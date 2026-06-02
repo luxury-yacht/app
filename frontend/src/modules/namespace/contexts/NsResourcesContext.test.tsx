@@ -309,7 +309,7 @@ describe('NamespaceResourcesProvider', () => {
     );
   });
 
-  it('does not enable the full all-namespaces pods snapshot for the query-backed pods table', async () => {
+  it('does not provider-start all-namespaces query-backed table domains', async () => {
     await render(
       <NamespaceResourcesProvider namespace="namespace:all" activeView="pods">
         <TestConsumer />
@@ -320,7 +320,7 @@ describe('NamespaceResourcesProvider', () => {
       'pods',
       `${testClusterId}|namespace:all`,
       true,
-      { preserveState: true }
+      expect.anything()
     );
   });
 

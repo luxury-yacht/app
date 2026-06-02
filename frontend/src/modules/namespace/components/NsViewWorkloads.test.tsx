@@ -140,6 +140,7 @@ vi.mock('@/core/refresh', () => ({
 
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...args),
+  useScopedRefreshDomainLifecycle: vi.fn(),
 }));
 
 vi.mock('@/hooks/useShortNames', () => ({

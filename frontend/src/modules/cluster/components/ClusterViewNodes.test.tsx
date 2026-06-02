@@ -11,41 +11,54 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
-const { latestTableRowsRef, typedQueryRowsRef, requestRefreshDomainStateMock, useTableSortMock } =
-  vi.hoisted(() => {
-    const latestRows: { current: unknown[] } = { current: [] };
-    const typedQueryRows: { current: unknown[] } = { current: [] };
+const {
+  latestTableRowsRef,
+  typedQueryRowsRef,
+  scopedDomainStateRef,
+  requestRefreshDomainStateMock,
+  useTableSortMock,
+} = vi.hoisted(() => {
+  const latestRows: { current: unknown[] } = { current: [] };
+  const typedQueryRows: { current: unknown[] } = { current: [] };
+  const scopedDomainState: { current: Record<string, unknown> } = {
+    current: {
+      data: { metrics: null, nodes: [] },
+      status: 'idle',
+      isManual: false,
+    },
+  };
 
-    return {
-      latestTableRowsRef: latestRows,
-      typedQueryRowsRef: typedQueryRows,
-      requestRefreshDomainStateMock: vi.fn((_request?: unknown) =>
-        Promise.resolve({
-          status: 'executed',
+  return {
+    latestTableRowsRef: latestRows,
+    typedQueryRowsRef: typedQueryRows,
+    scopedDomainStateRef: scopedDomainState,
+    requestRefreshDomainStateMock: vi.fn((_request?: unknown) =>
+      Promise.resolve({
+        status: 'executed',
+        data: {
+          status: 'ready',
           data: {
-            status: 'ready',
-            data: {
-              nodes: typedQueryRows.current,
-              total: typedQueryRows.current.length,
-              totalIsExact: true,
-              kinds: ['Node'],
-              facetsExact: true,
-            },
+            nodes: typedQueryRows.current,
+            total: typedQueryRows.current.length,
+            totalIsExact: true,
+            kinds: ['Node'],
+            facetsExact: true,
           },
-        })
-      ),
-      useTableSortMock: vi.fn(
-        (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => {
-          latestRows.current = data;
-          return {
-            sortedData: data,
-            sortConfig: opts?.controlledSort ?? { key: '', direction: null },
-            handleSort: vi.fn(),
-          };
-        }
-      ),
-    };
-  });
+        },
+      })
+    ),
+    useTableSortMock: vi.fn(
+      (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => {
+        latestRows.current = data;
+        return {
+          sortedData: data,
+          sortConfig: opts?.controlledSort ?? { key: '', direction: null },
+          handleSort: vi.fn(),
+        };
+      }
+    ),
+  };
+});
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -129,11 +142,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 vi.mock('@/core/refresh', () => ({
   useRefreshScopedDomain: (domain: string, scope: string) => {
     scopedDomainCallsRef.current.push([domain, scope]);
-    return {
-      data: { metrics: null, nodes: [] },
-      status: 'idle',
-      isManual: false,
-    };
+    return scopedDomainStateRef.current;
   },
   refreshManager: { triggerManualRefresh: vi.fn() },
   refreshOrchestrator: {
@@ -177,6 +186,8 @@ const baseNode = {
   restarts: 0,
   clusterId: 'alpha:ctx',
   clusterName: 'alpha',
+  age: '2h',
+  ageTimestamp: 1_700_000_000_000,
 };
 
 describe('ClusterViewNodes', () => {
@@ -195,6 +206,11 @@ describe('ClusterViewNodes', () => {
     scopedDomainCallsRef.current = [];
     latestTableRowsRef.current = [];
     typedQueryRowsRef.current = [];
+    scopedDomainStateRef.current = {
+      data: { metrics: null, nodes: [] },
+      status: 'idle',
+      isManual: false,
+    };
     openWithObjectMock.mockReset();
     requestRefreshDomainStateMock.mockClear();
     useTableSortMock.mockClear();
@@ -232,7 +248,7 @@ describe('ClusterViewNodes', () => {
     expect(props.columnWidths).toBe(null);
   });
 
-  it('passes numeric CPU and memory sort values into useTableSort', async () => {
+  it('passes numeric CPU, memory, and age sort values into useTableSort', async () => {
     await renderNodes([baseNode]);
 
     expect(useTableSortMock).toHaveBeenCalled();
@@ -243,9 +259,15 @@ describe('ClusterViewNodes', () => {
     }>;
     const cpuColumn = columns.find((column) => column.key === 'cpu');
     const memoryColumn = columns.find((column) => column.key === 'memory');
+    const ageColumn = columns.find((column) => column.key === 'age');
 
     expect(cpuColumn?.sortValue?.(baseNode)).toBe(1000);
     expect(memoryColumn?.sortValue?.(baseNode)).toBe(2048);
+    expect(
+      Number(ageColumn?.sortValue?.({ ...baseNode, ageTimestamp: 1_700_000_000_000 }))
+    ).toBeGreaterThan(
+      Number(ageColumn?.sortValue?.({ ...baseNode, ageTimestamp: 1_700_003_600_000 }))
+    );
   });
 
   it('renders the backend node status without reinterpreting cordon state', async () => {
@@ -383,5 +405,38 @@ describe('ClusterViewNodes', () => {
       'nodes',
       'clusters=path:context,other:context|',
     ]);
+  });
+
+  it('reloads the query-backed node rows when the live nodes domain updates', async () => {
+    const initialQueryNode = { ...baseNode, name: 'query-node-1' };
+    const updatedQueryNode = { ...baseNode, name: 'query-node-2' };
+    typedQueryRowsRef.current = [initialQueryNode];
+
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[baseNode] as any} loaded={true} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(1);
+    expect(latestTableRowsRef.current).toEqual([initialQueryNode]);
+
+    typedQueryRowsRef.current = [updatedQueryNode];
+    scopedDomainStateRef.current = {
+      data: { metrics: null, nodes: [updatedQueryNode] },
+      status: 'ready',
+      isManual: false,
+      lastUpdated: 2,
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[baseNode] as any} loaded={true} />);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
+    expect(latestTableRowsRef.current).toEqual([updatedQueryNode]);
   });
 });

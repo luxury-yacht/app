@@ -24,6 +24,7 @@ export interface UseTypedResourceQueryParams<TPayload extends TypedQueryPayload,
   sortConfig: SortConfig | null;
   pageLimit?: number;
   predicates?: Record<string, string | null | undefined>;
+  liveDataVersion?: string | null;
   selectRows: (payload: TPayload) => TRow[];
 }
 
@@ -59,6 +60,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   sortConfig,
   pageLimit = DEFAULT_PAGE_LIMIT,
   predicates,
+  liveDataVersion,
   selectRows,
 }: UseTypedResourceQueryParams<TPayload, TRow>): UseTypedResourceQueryResult<TRow> {
   const [rows, setRows] = useState<TRow[]>([]);
@@ -89,6 +91,31 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         sortConfig,
         pageLimit,
         predicates,
+        liveDataVersion,
+      }),
+    [
+      baseScope,
+      clusterId,
+      domain,
+      enabled,
+      filters,
+      liveDataVersion,
+      pageLimit,
+      predicates,
+      sortConfig,
+    ]
+  );
+  const queryResetIdentity = useMemo(
+    () =>
+      typedResourceQueryLifecycleIdentity({
+        enabled,
+        clusterId,
+        domain,
+        baseScope,
+        filters,
+        sortConfig,
+        pageLimit,
+        predicates,
       }),
     [baseScope, clusterId, domain, enabled, filters, pageLimit, predicates, sortConfig]
   );
@@ -106,7 +133,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setLoaded(false);
     setDynamic(null);
     pendingNavigationRef.current = null;
-  }, [queryIdentity]);
+  }, [queryResetIdentity]);
 
   const scope = useMemo(() => {
     if (!enabled) {
@@ -205,7 +232,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     return () => {
       cancelled = true;
     };
-  }, [domain, enabled, label, requestToken, scope, selectRows]);
+  }, [domain, enabled, label, queryIdentity, requestToken, scope, selectRows]);
 
   const loadMore = useCallback(() => {
     if (!continueToken || isRequestingMore) {

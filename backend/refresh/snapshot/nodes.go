@@ -74,6 +74,7 @@ type NodeSummary struct {
 	StatusReason       string            `json:"statusReason,omitempty"`
 	Roles              string            `json:"roles"`
 	Age                string            `json:"age"`
+	AgeTimestamp       int64             `json:"ageTimestamp,omitempty"`
 	Version            string            `json:"version"`
 	InternalIP         string            `json:"internalIP,omitempty"`
 	ExternalIP         string            `json:"externalIP,omitempty"`
@@ -262,6 +263,10 @@ func buildNodeSnapshotFromUsage(
 		}
 		model := resourcemodel.BuildNodeResourceModel(meta.ClusterID, node)
 		nodeFacts := model.Facts.Node
+		ageTimestamp := int64(0)
+		if !node.CreationTimestamp.Time.IsZero() {
+			ageTimestamp = node.CreationTimestamp.Time.UnixMilli()
+		}
 		summary := NodeSummary{
 			ClusterMeta:        meta,
 			Name:               node.Name,
@@ -271,6 +276,7 @@ func buildNodeSnapshotFromUsage(
 			StatusReason:       model.Status.Reason,
 			Roles:              formatRoles(extractRoles(node.Labels)),
 			Age:                formatAge(node.CreationTimestamp.Time),
+			AgeTimestamp:       ageTimestamp,
 			Version:            node.Status.NodeInfo.KubeletVersion,
 			Labels:             copyStringMap(node.Labels),
 			Annotations:        copyStringMap(node.Annotations),

@@ -189,6 +189,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...(args as [])),
+  useScopedRefreshDomainLifecycle: vi.fn(),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({

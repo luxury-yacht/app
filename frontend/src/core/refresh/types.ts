@@ -192,6 +192,7 @@ export interface ClusterNodeSnapshotEntry extends ClusterMeta {
   statusReason?: string;
   roles: string;
   age: string;
+  ageTimestamp?: number;
   version: string;
   internalIP?: string;
   externalIP?: string;

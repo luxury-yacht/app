@@ -25,21 +25,23 @@ describe('ClusterRefreshRuntime', () => {
     ]);
 
     expect(
-      runtime.applyScopedDomainEnabled('cluster-config', 'cluster-a|namespace:default', true)
+      runtime.applyScopedDomainEnabled('cluster-overview', 'cluster-a|namespace:default', true)
     ).toEqual({
       previous: undefined,
       changed: true,
       staleScopes: [],
     });
     expect(
-      runtime.applyScopedDomainEnabled('cluster-config', 'cluster-a|namespace:kube-system', true)
+      runtime.applyScopedDomainEnabled('cluster-overview', 'cluster-a|namespace:kube-system', true)
     ).toEqual({
       previous: undefined,
       changed: true,
       staleScopes: ['cluster-a|namespace:default'],
     });
-    expect(runtime.getEnabledScopes('cluster-config')).toEqual(['cluster-a|namespace:kube-system']);
-    expect(runtime.isScopedDomainEnabled('cluster-config', 'cluster-a|namespace:default')).toBe(
+    expect(runtime.getEnabledScopes('cluster-overview')).toEqual([
+      'cluster-a|namespace:kube-system',
+    ]);
+    expect(runtime.isScopedDomainEnabled('cluster-overview', 'cluster-a|namespace:default')).toBe(
       false
     );
 
@@ -53,6 +55,47 @@ describe('ClusterRefreshRuntime', () => {
       'cluster-a|namespace:kube-system',
       'cluster-a|namespace:prod',
     ]);
+  });
+
+  it('keeps live resource-stream table scopes enabled while typed query scopes run', () => {
+    const runtime = new ClusterRefreshRuntime('cluster-a');
+
+    expect(runtime.applyScopedDomainEnabled('nodes', 'cluster-a|', true)).toEqual({
+      previous: undefined,
+      changed: true,
+      staleScopes: [],
+    });
+    expect(
+      runtime.applyScopedDomainEnabled(
+        'nodes',
+        'cluster-a|?limit=50&sort=name&sortDirection=asc',
+        true
+      )
+    ).toEqual({
+      previous: undefined,
+      changed: true,
+      staleScopes: [],
+    });
+
+    expect(runtime.getEnabledScopes('nodes')).toEqual([
+      'cluster-a|',
+      'cluster-a|?limit=50&sort=name&sortDirection=asc',
+    ]);
+    expect(runtime.isScopedDomainEnabled('nodes', 'cluster-a|')).toBe(true);
+
+    expect(
+      runtime.applyScopedDomainEnabled(
+        'nodes',
+        'cluster-a|?limit=50&sort=name&sortDirection=asc',
+        false
+      )
+    ).toEqual({
+      previous: true,
+      changed: true,
+      staleScopes: [],
+    });
+
+    expect(runtime.getEnabledScopes('nodes')).toEqual(['cluster-a|']);
   });
 
   it('owns async streaming lifecycle bookkeeping', async () => {
