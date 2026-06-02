@@ -9,7 +9,6 @@ import React, { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import { getStableRowId } from '@shared/components/tables/GridTable.utils';
-import GridTablePagination from '@shared/components/tables/GridTablePagination';
 
 interface HoverState {
   visible: boolean;
@@ -36,17 +35,7 @@ interface GridTableBodyProps<T> {
   virtualOffset: number;
   renderRowContent: RenderRowContentFn<T>;
   paginationEnabled: boolean;
-  paginationStatus: string;
-  showPaginationStatus: boolean;
-  showLoadMoreButton: boolean;
-  paginationControls?: React.ReactNode;
-  loadMoreLabel: string;
-  previousPageLabel: string;
   hasMore: boolean;
-  hasPrevious: boolean;
-  isRequestingMore: boolean;
-  onManualLoadMore: () => void;
-  onManualLoadPrevious: () => void;
   sentinelRef: RefObject<HTMLDivElement | null>;
   onWrapperFocus: (event: React.FocusEvent<HTMLDivElement>) => void;
   onWrapperBlur: (event: React.FocusEvent<HTMLDivElement>) => void;
@@ -80,17 +69,7 @@ function GridTableBody<T>({
   virtualOffset,
   renderRowContent,
   paginationEnabled,
-  paginationStatus,
-  showPaginationStatus,
-  showLoadMoreButton,
-  paginationControls,
-  loadMoreLabel,
-  previousPageLabel,
   hasMore,
-  hasPrevious,
-  isRequestingMore,
-  onManualLoadMore,
-  onManualLoadPrevious,
   sentinelRef,
   onWrapperFocus,
   onWrapperBlur,
@@ -248,19 +227,10 @@ function GridTableBody<T>({
       >
         {renderRows()}
         {paginationEnabled && (
-          <GridTablePagination
-            hasMore={hasMore}
-            hasPrevious={hasPrevious}
-            isRequestingMore={isRequestingMore}
-            showLoadMoreButton={showLoadMoreButton}
-            showPaginationStatus={showPaginationStatus}
-            paginationControls={paginationControls}
-            loadMoreLabel={loadMoreLabel}
-            previousPageLabel={previousPageLabel}
-            paginationStatus={paginationStatus}
-            onManualLoadMore={onManualLoadMore}
-            onManualLoadPrevious={onManualLoadPrevious}
-            sentinelRef={sentinelRef}
+          <div
+            ref={hasMore ? sentinelRef : null}
+            className="gridtable-pagination-sentinel"
+            aria-hidden="true"
           />
         )}
       </div>

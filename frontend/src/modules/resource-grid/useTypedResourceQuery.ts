@@ -119,21 +119,46 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       }),
     [baseScope, clusterId, domain, enabled, filters, pageLimit, predicates, sortConfig]
   );
+  const queryHardResetIdentity = useMemo(
+    () =>
+      typedResourceQueryLifecycleIdentity({
+        enabled,
+        clusterId,
+        domain,
+        baseScope,
+        filters: {
+          search: '',
+          kinds: [],
+          namespaces: [],
+          caseSensitive: false,
+        },
+        sortConfig: null,
+        pageLimit: DEFAULT_PAGE_LIMIT,
+        predicates,
+      }),
+    [baseScope, clusterId, domain, enabled, predicates]
+  );
   const queryIdentityRef = useRef(queryIdentity);
+  const queryHardResetIdentityRef = useRef(queryHardResetIdentity);
   queryIdentityRef.current = queryIdentity;
 
   useEffect(() => {
+    const hardReset = queryHardResetIdentityRef.current !== queryHardResetIdentity;
+    queryHardResetIdentityRef.current = queryHardResetIdentity;
     setRequestToken(null);
     setContinueToken(null);
     setPreviousTokens([]);
     setPageIndex(1);
-    setTotalCount(0);
-    setTotalIsExact(true);
-    setRows([]);
-    setLoaded(false);
-    setDynamic(null);
+    if (hardReset) {
+      setTotalCount(0);
+      setTotalIsExact(true);
+      setRows([]);
+      setLoaded(false);
+      setFilterOptions({});
+      setDynamic(null);
+    }
     pendingNavigationRef.current = null;
-  }, [queryResetIdentity]);
+  }, [queryHardResetIdentity, queryResetIdentity]);
 
   const scope = useMemo(() => {
     if (!enabled) {

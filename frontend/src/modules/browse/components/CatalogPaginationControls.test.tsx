@@ -25,7 +25,7 @@ describe('CatalogPaginationControls', () => {
     container.remove();
   });
 
-  it('shows exact page count only when the backend total is exact', () => {
+  it('shows an exact visible range when the backend total is exact', () => {
     act(() => {
       root.render(
         <CatalogPaginationControls
@@ -46,9 +46,9 @@ describe('CatalogPaginationControls', () => {
       );
     });
 
-    expect(container.textContent).toContain('Page 2 of 2');
-    expect(container.textContent).toContain('Showing 101-175');
-    expect(container.textContent).toContain('175 results');
+    expect(container.textContent).toContain('Rows per page');
+    expect(container.textContent).toContain('101-175 of 175');
+    expect(container.textContent).not.toContain('Page');
   });
 
   it('does not invent total pages for approximate totals', () => {
@@ -72,10 +72,8 @@ describe('CatalogPaginationControls', () => {
       );
     });
 
-    expect(container.textContent).toContain('Page 2');
-    expect(container.textContent).not.toContain('Page 2 of');
-    expect(container.textContent).toContain('Showing 101-200');
-    expect(container.textContent).toContain('~10,000 results');
+    expect(container.textContent).toContain('101-200 of 10,000+');
+    expect(container.textContent).not.toContain('Page');
   });
 
   it('dispatches previous, next, and page-size changes from one control group', () => {
@@ -105,18 +103,46 @@ describe('CatalogPaginationControls', () => {
 
     const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('button'));
     act(() => {
-      buttons.find((button) => button.textContent === 'Previous')?.click();
-      buttons.find((button) => button.textContent === 'Next')?.click();
+      buttons.find((button) => button.getAttribute('aria-label') === 'Previous page')?.click();
+      buttons.find((button) => button.getAttribute('aria-label') === 'Next page')?.click();
       container.querySelector<HTMLElement>('[role="combobox"]')?.click();
     });
     act(() => {
       Array.from(container.querySelectorAll<HTMLElement>('[role="option"]'))
-        .find((option) => option.textContent?.includes('250 / page'))
+        .find((option) => option.textContent?.includes('250'))
         ?.click();
     });
 
     expect(onPrevious).toHaveBeenCalledTimes(1);
     expect(onNext).toHaveBeenCalledTimes(1);
     expect(onPageSizeChange).toHaveBeenCalledWith(250);
+  });
+
+  it('keeps pagination loading state out of visible button text', () => {
+    act(() => {
+      root.render(
+        <CatalogPaginationControls
+          idPrefix="browse"
+          pageIndex={1}
+          pageSize={100}
+          visibleItemCount={100}
+          pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
+          totalCount={1000}
+          totalIsExact={true}
+          hasPrevious={false}
+          hasNext={true}
+          loading={true}
+          onPrevious={vi.fn()}
+          onNext={vi.fn()}
+          onPageSizeChange={vi.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).not.toContain('Loading');
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')?.disabled
+    ).toBe(true);
+    expect(container.querySelector('[aria-label="Page request in progress"]')).not.toBeNull();
   });
 });

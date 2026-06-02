@@ -132,7 +132,9 @@ export function useQueryBackedNamespaceResourceGridTable<
   });
 
   const data = queryEnabled ? query.rows : localData;
-  const loading = queryEnabled ? query.loading && query.rows.length === 0 : localLoading;
+  const loading = queryEnabled
+    ? query.loading && query.rows.length === 0 && !query.loaded
+    : localLoading;
   const loaded = queryEnabled ? query.loaded : localLoaded;
   const error = queryEnabled ? query.error : localError;
 
@@ -271,7 +273,9 @@ export function useQueryBackedClusterResourceGridTable<
   });
 
   const data = queryEnabled ? query.rows : localData;
-  const loading = queryEnabled ? query.loading && query.rows.length === 0 : localLoading;
+  const loading = queryEnabled
+    ? query.loading && query.rows.length === 0 && !query.loaded
+    : localLoading;
   const loaded = queryEnabled ? query.loaded : localLoaded;
   const error = queryEnabled ? query.error : localError;
 
