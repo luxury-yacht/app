@@ -35,18 +35,16 @@ const {
   shortNamesMock: vi.fn(() => false),
   formatAgeMock: vi.fn((timestamp: number) => `${timestamp}s`),
   findCatalogObjectByUIDMock: vi.fn(),
-  useTableSortMock: vi.fn(
-    (data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => {
-      const fallbackSort = defaultKey
-        ? { key: defaultKey, direction: defaultDir ?? 'asc' }
-        : { key: '', direction: null };
-      return {
-        sortedData: data,
-        sortConfig: opts?.controlledSort ?? fallbackSort,
-        handleSort: vi.fn(),
-      };
-    }
-  ),
+  useTableSortMock: vi.fn((data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => {
+    const fallbackSort = defaultKey
+      ? { key: defaultKey, direction: defaultDir ?? 'asc' }
+      : { key: '', direction: null };
+    return {
+      sortedData: data,
+      sortConfig: opts?.controlledSort ?? fallbackSort,
+      handleSort: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
@@ -188,7 +186,9 @@ describe('NsViewEvents', () => {
 
   const renderEventsView = async (
     rows: EventData[] = [baseEvent()],
-    showNamespaceColumnOrOptions: boolean | { showNamespaceColumn?: boolean; stats?: any } = true
+    showNamespaceColumnOrOptions:
+      | boolean
+      | { namespace?: string; showNamespaceColumn?: boolean; stats?: any } = true
   ) => {
     const options =
       typeof showNamespaceColumnOrOptions === 'boolean'
@@ -201,7 +201,7 @@ describe('NsViewEvents', () => {
           stats={options.stats}
           loading={false}
           loaded={true}
-          namespace="team-a"
+          namespace={options.namespace ?? 'team-a'}
           showNamespaceColumn={options.showNamespaceColumn ?? true}
         />
       );
@@ -210,10 +210,14 @@ describe('NsViewEvents', () => {
     return gridTablePropsRef.current;
   };
 
-  it('passes the visible Age sort key to GridTable', async () => {
-    const props = await renderEventsView();
+  it('defines Age as the visible event timestamp sort column', async () => {
+    const event = baseEvent({ ageTimestamp: 42 });
+    const props = await renderEventsView([event]);
+    const ageColumn = props.columns.find((column: any) => column.key === 'age');
 
-    expect(props.sortConfig).toEqual({ key: 'age', direction: 'desc' });
+    expect(ageColumn).toBeTruthy();
+    expect(ageColumn.sortable).not.toBe(false);
+    expect(ageColumn.sortValue(event)).toBe(42);
   });
 
   it('offers context menu navigation to related object', async () => {

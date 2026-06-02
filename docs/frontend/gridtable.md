@@ -52,6 +52,21 @@ cluster-scoped row keys.
 - Metadata filters that describe the object universe should come from catalog or
   query metadata, not a capped row slice.
 
+## Sorting
+
+- Sort keys emitted by `GridTable` must be visible column keys. Hidden data
+  fields such as timestamps may be used by a column `sortValue`, but must not be
+  published as active table sort keys.
+- Query-backed table columns may be `sortable: true` only when the backend
+  adapter supports that exact column key, or a documented alias for it, as a
+  global query sort.
+- Do not expose hydrated post-page fields as sortable query columns. If the
+  backend cannot sort the complete matching dataset by a field, the column must
+  be non-sortable or the backend contract must be expanded first.
+- Production query-backed resource views should be covered by a rendered-column
+  contract test that compares their sortable keys against the supported query
+  sort contract.
+
 ## Table Modes And User Claims
 
 - `Local Complete` means the loaded rows are the complete bounded dataset for

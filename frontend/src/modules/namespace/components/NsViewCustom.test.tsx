@@ -916,6 +916,23 @@ describe('NsViewCustom', () => {
       expect(crdCol.sortValue(noCRD)).toBe('');
     });
 
+    it('publishes only catalog-backed sortable keys', async () => {
+      const resource: CustomResourceData = {
+        ...baseResource,
+        crdName: 'dbinstances.rds.services.k8s.aws',
+      };
+
+      await renderComponent({ data: [resource], loaded: true, showNamespaceColumn: true });
+
+      const gridProps = gridTableMock.mock.calls[0][0];
+      const sortableKeys = gridProps.columns
+        .filter((column: any) => column.sortable !== false)
+        .map((column: any) => column.key)
+        .sort((left: string, right: string) => left.localeCompare(right));
+
+      expect(sortableKeys).toEqual(['age', 'kind', 'name', 'namespace']);
+    });
+
     it('renders the CRD cell as inert text when crdName is missing', async () => {
       // Defensive: a row from a legacy snapshot or a synthetic source
       // might not carry crdName. The cell should not be clickable, must

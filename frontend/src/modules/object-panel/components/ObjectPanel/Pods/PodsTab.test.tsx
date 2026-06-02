@@ -188,6 +188,46 @@ describe('PodsTab', () => {
     expect(cell.props.className).toBe('status-text warning');
   });
 
+  it('publishes sortable local pod columns with owner sorting by displayed owner', () => {
+    const pod = {
+      name: 'api',
+      namespace: 'team-a',
+      clusterId: PANEL_CLUSTER_ID,
+      clusterName: 'Panel Cluster A',
+      ownerKind: 'Deployment',
+      ownerName: 'api',
+      node: 'node-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '1m',
+    } as any;
+
+    act(() => {
+      root.render(
+        <PodsTab pods={[pod]} metrics={null} loading={false} error={null} isActive={true} />
+      );
+    });
+
+    const sortableKeys = gridTablePropsRef.current.columns
+      .filter((column: any) => column.sortable !== false)
+      .map((column: any) => column.key)
+      .sort((left: string, right: string) => left.localeCompare(right));
+    expect(sortableKeys).toEqual([
+      'age',
+      'name',
+      'namespace',
+      'node',
+      'owner',
+      'ready',
+      'restarts',
+      'status',
+    ]);
+
+    const ownerColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'owner');
+    expect(ownerColumn.sortValue(pod)).toBe('api (Deployment)');
+  });
+
   it('opens the Map from the pod context menu', () => {
     const pod = {
       name: 'api',

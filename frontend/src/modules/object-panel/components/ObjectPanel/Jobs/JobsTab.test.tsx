@@ -207,6 +207,22 @@ describe('JobsTab', () => {
     expect(cell.props.className).toBe('status-text error');
   });
 
+  it('publishes sortable local job columns for displayed job facts', () => {
+    const job = makeJob({ name: 'nightly', namespace: 'ops' });
+
+    act(() => {
+      root.render(
+        <JobsTab jobs={[job]} loading={false} isActive={true} clusterId={PANEL_CLUSTER_ID} />
+      );
+    });
+
+    const sortableKeys = gridTablePropsRef.current.columns
+      .filter((column: any) => column.sortable !== false)
+      .map((column: any) => column.key)
+      .sort((left: string, right: string) => left.localeCompare(right));
+    expect(sortableKeys).toEqual(['age', 'completions', 'duration', 'name', 'namespace', 'status']);
+  });
+
   it('opens the Map from the job context menu', () => {
     const job = makeJob({ name: 'nightly', namespace: 'ops' });
 

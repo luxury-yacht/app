@@ -305,6 +305,117 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 			return row.Name
 		})
 	})
+
+	t.Run("autoscaling computed columns", func(t *testing.T) {
+		query.BaseScope = "namespace:all"
+		query.Request.SortField = "scaleTarget"
+		page := applyTypedTableQuery([]AutoscalingSummary{
+			{Name: "web-hpa", Target: "Deployment/web"},
+			{Name: "api-hpa", Target: "Deployment/api"},
+		}, query, autoscalingTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"api-hpa", "web-hpa"}, func(row AutoscalingSummary) string {
+			return row.Name
+		})
+
+		query.Request.SortField = "replicas"
+		page = applyTypedTableQuery([]AutoscalingSummary{
+			{Name: "large-hpa", Min: 3},
+			{Name: "small-hpa", Min: 1},
+		}, query, autoscalingTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"small-hpa", "large-hpa"}, func(row AutoscalingSummary) string {
+			return row.Name
+		})
+	})
+
+	t.Run("helm updated column", func(t *testing.T) {
+		query.BaseScope = "namespace:all"
+		query.Request.SortField = "updated"
+		page := applyTypedTableQuery([]NamespaceHelmSummary{
+			{Name: "old-release", Updated: "2026-06-01T10:00:00Z"},
+			{Name: "new-release", Updated: "2026-06-02T10:00:00Z"},
+		}, query, helmTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"old-release", "new-release"}, func(row NamespaceHelmSummary) string {
+			return row.Name
+		})
+	})
+
+	t.Run("pod relationship and metric columns", func(t *testing.T) {
+		query.BaseScope = "namespace:all"
+		query.Request.SortField = "owner"
+		page := applyTypedTableQuery([]PodSummary{
+			{Name: "web-pod", OwnerName: "web"},
+			{Name: "api-pod", OwnerName: "api"},
+		}, query, podTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"api-pod", "web-pod"}, func(row PodSummary) string {
+			return row.Name
+		})
+
+		query.Request.SortField = "node"
+		page = applyTypedTableQuery([]PodSummary{
+			{Name: "node-b-pod", Node: "node-b"},
+			{Name: "node-a-pod", Node: "node-a"},
+		}, query, podTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"node-a-pod", "node-b-pod"}, func(row PodSummary) string {
+			return row.Name
+		})
+
+		query.Request.SortField = "ready"
+		page = applyTypedTableQuery([]PodSummary{
+			{Name: "less-ready-pod", Ready: "1/2"},
+			{Name: "more-ready-pod", Ready: "2/2"},
+		}, query, podTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"less-ready-pod", "more-ready-pod"}, func(row PodSummary) string {
+			return row.Name
+		})
+
+		query.Request.SortField = "cpu"
+		page = applyTypedTableQuery([]PodSummary{
+			{Name: "high-cpu-pod", CPUUsage: "250m"},
+			{Name: "low-cpu-pod", CPUUsage: "50m"},
+		}, query, podTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"low-cpu-pod", "high-cpu-pod"}, func(row PodSummary) string {
+			return row.Name
+		})
+
+		query.Request.SortField = "memory"
+		page = applyTypedTableQuery([]PodSummary{
+			{Name: "high-memory-pod", MemUsage: "256Mi"},
+			{Name: "low-memory-pod", MemUsage: "64Mi"},
+		}, query, podTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"low-memory-pod", "high-memory-pod"}, func(row PodSummary) string {
+			return row.Name
+		})
+	})
+
+	t.Run("workload metric columns", func(t *testing.T) {
+		query.BaseScope = "namespace:all"
+		query.Request.SortField = "ready"
+		page := applyTypedTableQuery([]WorkloadSummary{
+			{Name: "less-ready-workload", Ready: "1/2"},
+			{Name: "more-ready-workload", Ready: "2/2"},
+		}, query, workloadTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"less-ready-workload", "more-ready-workload"}, func(row WorkloadSummary) string {
+			return row.Name
+		})
+
+		query.Request.SortField = "cpu"
+		page = applyTypedTableQuery([]WorkloadSummary{
+			{Name: "high-cpu-workload", CPUUsage: "250m"},
+			{Name: "low-cpu-workload", CPUUsage: "50m"},
+		}, query, workloadTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"low-cpu-workload", "high-cpu-workload"}, func(row WorkloadSummary) string {
+			return row.Name
+		})
+
+		query.Request.SortField = "memory"
+		page = applyTypedTableQuery([]WorkloadSummary{
+			{Name: "high-memory-workload", MemUsage: "256Mi"},
+			{Name: "low-memory-workload", MemUsage: "64Mi"},
+		}, query, workloadTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"low-memory-workload", "high-memory-workload"}, func(row WorkloadSummary) string {
+			return row.Name
+		})
+	})
 }
 
 func TestStaticTableQuerySortsAgeByTimestampAcrossAdapters(t *testing.T) {

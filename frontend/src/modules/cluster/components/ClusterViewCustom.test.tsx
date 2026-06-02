@@ -591,6 +591,18 @@ describe('ClusterViewCustom', () => {
       expect(crdCol.sortValue(noCRD)).toBe('');
     });
 
+    it('publishes only catalog-backed sortable keys', async () => {
+      await renderWith([resourceWithCRD]);
+
+      const props = gridTablePropsRef.current;
+      const sortableKeys = props.columns
+        .filter((column: any) => column.sortable !== false)
+        .map((column: any) => column.key)
+        .sort((left: string, right: string) => left.localeCompare(right));
+
+      expect(sortableKeys).toEqual(['age', 'kind', 'name']);
+    });
+
     it('renders the CRD cell as inert text when crdName is missing', async () => {
       // Defensive: a row from a legacy snapshot that pre-dates the
       // CRDName field. Cell should render the bare "-" placeholder

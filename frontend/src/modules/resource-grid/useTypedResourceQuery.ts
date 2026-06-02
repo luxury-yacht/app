@@ -131,6 +131,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           kinds: [],
           namespaces: [],
           caseSensitive: false,
+          includeMetadata: false,
         },
         sortConfig: null,
         pageLimit: DEFAULT_PAGE_LIMIT,
@@ -271,7 +272,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     return () => {
       cancelled = true;
     };
-  }, [domain, enabled, label, queryIdentity, requestToken, scope, selectRows]);
+  }, [domain, enabled, label, queryIdentity, scope, selectRows]);
 
   const loadMore = useCallback(() => {
     if (!continueToken || isRequestingMore) {

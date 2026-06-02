@@ -209,6 +209,12 @@ const catalogItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
   ...overrides,
 });
 
+const sortableKeys = (): string[] =>
+  (gridTablePropsRef.current?.columns ?? [])
+    .filter((column: any) => column.sortable !== false)
+    .map((column: any) => column.key)
+    .sort((left: string, right: string) => left.localeCompare(right));
+
 const catalogPayload = (
   items: CatalogItem[],
   overrides: Partial<CatalogSnapshotPayload> = {}
@@ -352,6 +358,15 @@ describe('BrowseView', () => {
       const columns = gridTablePropsRef.current?.columns ?? [];
       const hasNamespaceColumn = columns.some((col: any) => col.key === 'namespace');
       expect(hasNamespaceColumn).toBe(false);
+    });
+
+    it('publishes only catalog-backed sortable keys for cluster scope', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      expect(sortableKeys()).toEqual(['age', 'kind', 'name']);
     });
 
     it('hides namespace filtering for cluster scope (cluster-scoped objects only)', async () => {
@@ -504,6 +519,15 @@ describe('BrowseView', () => {
       const columns = gridTablePropsRef.current?.columns ?? [];
       const hasNamespaceColumn = columns.some((col: any) => col.key === 'namespace');
       expect(hasNamespaceColumn).toBe(true);
+    });
+
+    it('publishes only catalog-backed sortable keys for all-namespaces scope', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
+        await Promise.resolve();
+      });
+
+      expect(sortableKeys()).toEqual(['age', 'kind', 'name', 'namespace']);
     });
 
     it('enables namespace filtering for all-namespaces scope', async () => {

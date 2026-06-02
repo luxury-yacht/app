@@ -12,18 +12,16 @@ import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
 
 const { persistedSortRef, useTableSortMock } = vi.hoisted(() => ({
   persistedSortRef: { current: null as any },
-  useTableSortMock: vi.fn(
-    (data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => {
-      const fallbackSort = defaultKey
-        ? { key: defaultKey, direction: defaultDir ?? 'asc' }
-        : { key: '', direction: null };
-      return {
-        sortedData: data,
-        sortConfig: opts?.controlledSort ?? fallbackSort,
-        handleSort: vi.fn(),
-      };
-    }
-  ),
+  useTableSortMock: vi.fn((data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => {
+    const fallbackSort = defaultKey
+      ? { key: defaultKey, direction: defaultDir ?? 'asc' }
+      : { key: '', direction: null };
+    return {
+      sortedData: data,
+      sortConfig: opts?.controlledSort ?? fallbackSort,
+      handleSort: vi.fn(),
+    };
+  }),
 }));
 
 const openWithObjectMock = vi.fn();
