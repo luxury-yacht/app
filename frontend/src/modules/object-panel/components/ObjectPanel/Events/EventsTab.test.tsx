@@ -56,6 +56,10 @@ const hoistedSnapshot = vi.hoisted(() => ({
   error: null as string | null,
 }));
 
+const gridTableState = vi.hoisted(() => ({
+  lastProps: null as any,
+}));
+
 const autoRefreshLoadingState = vi.hoisted(() => ({
   isPaused: false,
   isManualRefreshActive: false,
@@ -97,13 +101,17 @@ vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
-  default: ({ data, onRowClick }: { data: any[]; onRowClick: (item: any) => void }) => (
-    <div data-testid="grid-table">
-      {data.map((item: any, i: number) => (
-        <button key={i} data-testid={`row-${i}`} onClick={() => onRowClick(item)} />
-      ))}
-    </div>
-  ),
+  default: (props: { data: any[]; onRowClick: (item: any) => void }) => {
+    gridTableState.lastProps = props;
+    const { data, onRowClick } = props;
+    return (
+      <div data-testid="grid-table">
+        {data.map((item: any, i: number) => (
+          <button key={i} data-testid={`row-${i}`} onClick={() => onRowClick(item)} />
+        ))}
+      </div>
+    );
+  },
   GRIDTABLE_VIRTUALIZATION_DEFAULT: {},
 }));
 
@@ -159,6 +167,7 @@ describe('EventsTab', () => {
     autoRefreshLoadingState.isManualRefreshActive = false;
     autoRefreshLoadingState.suppressPassiveLoading = false;
     appPreferencesMocks.getAutoRefreshEnabled.mockReturnValue(true);
+    gridTableState.lastProps = null;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -180,6 +189,25 @@ describe('EventsTab', () => {
     clusterId: PARENT_CLUSTER_ID,
     clusterName: PARENT_CLUSTER_NAME,
   };
+
+  it('defaults the visible Age column to newest-event sorting', async () => {
+    hoistedSnapshot.data = {
+      events: [makeEvent()],
+    };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          isActive={true}
+          eventsScope="parent-cluster|default:Deployment:my-deploy"
+        />
+      );
+    });
+
+    expect(gridTableState.lastProps?.sortConfig).toEqual({ key: 'age', direction: 'desc' });
+  });
 
   it('prefers per-event clusterId over parent panel cluster when opening related objects', async () => {
     // Event has its own cluster identity distinct from the parent panel.

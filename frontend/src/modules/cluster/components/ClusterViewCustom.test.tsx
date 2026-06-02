@@ -570,14 +570,20 @@ describe('ClusterViewCustom', () => {
       expect(callArg.clusterName).toBe('alpha');
     });
 
-    it('exposes a sortValue extractor so the column sorts by crdName', async () => {
-      // Regression guard: column key "crd" vs field "crdName" mismatch
-      // would silently break sorting without an explicit sortValue. See
-      // useTableSort.ts:124.
+    it('does not expose hydrated custom-resource fields as query-backed sort keys', async () => {
+      // Custom-resource rows are page-selected by the object catalog before
+      // CRD/status are hydrated. Those fields cannot be globally sorted by
+      // the query backend, so the columns must not advertise sorting.
       await renderWith([resourceWithCRD]);
 
       const props = gridTablePropsRef.current;
       const crdCol = findColumn(props, 'crd');
+      const statusCol = findColumn(props, 'status');
+      expect(crdCol.sortable).toBe(false);
+      expect(statusCol.sortable).toBe(false);
+
+      // Keep the local extractor intact for defensive consumers, but do not
+      // make this a query-backed sortable column.
       expect(crdCol.sortValue).toBeTypeOf('function');
       expect(crdCol.sortValue(resourceWithCRD)).toBe('dbclusters.postgresql.cnpg.io');
 

@@ -37,6 +37,32 @@ describe('columnFactories', () => {
   });
 
   describe('createTextColumn', () => {
+    it('uses the display accessor as the default local sort value', () => {
+      const column = createTextColumn<RowSample>(
+        'owner',
+        'Owner',
+        (row) => row.title ?? row.name,
+        { getClassName: () => 'owner-cell' }
+      );
+
+      expect(column.sortValue?.({ id: '1', name: 'api', title: 'Deployment/api' })).toBe(
+        'Deployment/api'
+      );
+    });
+
+    it('allows an explicit local sort value to override display text', () => {
+      const column = createTextColumn<RowSample>(
+        'updated',
+        'Updated',
+        () => '6/2/2026 10:30 AM',
+        { sortValue: (row) => row.title }
+      );
+
+      expect(column.sortValue?.({ id: '1', title: '2026-06-02T16:30:00Z' })).toBe(
+        '2026-06-02T16:30:00Z'
+      );
+    });
+
     it('renders interactive spans and triggers click handlers', () => {
       const onClick = vi.fn();
       const column = createTextColumn<RowSample>('name', 'Name', {

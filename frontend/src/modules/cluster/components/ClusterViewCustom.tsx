@@ -109,16 +109,17 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         // column — `<plural>.<group>` is a strict superset of the group
         // alone (the group is the right-hand side of the dot), and the
         // clickable link adds a navigation path the old column lacked.
-        // The column key is "crd" but the data field is "crdName", so
-        // we attach an explicit `sortValue` — without it, useTableSort
-        // would fall back to `row["crd"]` (undefined) and silently
-        // fail to sort. Matches NsViewCustom's CRD column exactly.
+        // Catalog-backed custom-resource queries only support global sorting
+        // on catalog fields. CRD/status are hydrated after the catalog page is
+        // selected, so exposing them as sortable would imply a global sort the
+        // backend cannot perform.
         (() => {
           const crdColumn = cf.createTextColumn<ClusterCustomData>(
             'crd',
             'CRD',
             (resource) => resource.crdName ?? undefined,
             {
+              sortable: false,
               onClick: handleCRDClick,
               onAltClick: (resource) => {
                 if (!resource.crdName) {
@@ -142,6 +143,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           'Status',
           (resource) => resource.status || 'Unknown',
           {
+            sortable: false,
             getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
           }
         ),

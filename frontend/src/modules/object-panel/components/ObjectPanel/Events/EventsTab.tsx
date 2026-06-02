@@ -443,7 +443,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     return base;
   }, [canOpenRelatedObject, navigateToRelatedObject, openRelatedObject]);
 
-  const { sortedData, sortConfig, handleSort } = useTableSort(events, 'ageTimestamp', 'desc', {
+  const { sortedData, sortConfig, handleSort } = useTableSort(events, 'age', 'desc', {
     columns,
   });
   const partialDataLabel = useMemo(

@@ -106,6 +106,22 @@ describe('gridTablePersistence', () => {
     });
   });
 
+  it('drops persisted sort keys that no longer map to a current sortable column', () => {
+    const pruned = prunePersistedState(
+      {
+        version: 1,
+        sort: { key: 'ageTimestamp', direction: 'desc' },
+      },
+      {
+        columns: sampleColumns,
+        rows: sampleRows,
+        keyExtractor: (row) => row.id,
+      }
+    );
+
+    expect(pruned?.sort).toBeUndefined();
+  });
+
   it('builds a persisted state for saving with pruning and namespace filter stripping', () => {
     const state = buildPersistedStateForSave({
       columns: sampleColumns,

@@ -234,7 +234,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       namespace,
       columns,
       keyExtractor,
-      defaultSort: { key: 'ageTimestamp', direction: 'desc' },
+      defaultSort: { key: 'age', direction: 'desc' },
       rowIdentity: sortRowIdentity,
       filterAccessors: { getSearchText },
       showNamespaceFilters: showNamespaceFilter,

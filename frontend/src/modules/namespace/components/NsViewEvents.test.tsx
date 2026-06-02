@@ -23,6 +23,7 @@ import NsViewEvents, { type EventData } from '@modules/namespace/components/NsVi
 const {
   gridTablePropsRef,
   openWithObjectMock,
+  persistedSortRef,
   shortNamesMock,
   formatAgeMock,
   findCatalogObjectByUIDMock,
@@ -30,15 +31,21 @@ const {
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
+  persistedSortRef: { current: null as any },
   shortNamesMock: vi.fn(() => false),
   formatAgeMock: vi.fn((timestamp: number) => `${timestamp}s`),
   findCatalogObjectByUIDMock: vi.fn(),
   useTableSortMock: vi.fn(
-    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
-      sortedData: data,
-      sortConfig: opts?.controlledSort ?? { key: 'ageTimestamp', direction: 'desc' },
-      handleSort: vi.fn(),
-    })
+    (data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => {
+      const fallbackSort = defaultKey
+        ? { key: defaultKey, direction: defaultDir ?? 'asc' }
+        : { key: '', direction: null };
+      return {
+        sortedData: data,
+        sortConfig: opts?.controlledSort ?? fallbackSort,
+        handleSort: vi.fn(),
+      };
+    }
   ),
 }));
 
@@ -122,7 +129,7 @@ vi.mock('@/utils/ageFormatter', () => ({
 
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
   useNamespaceGridTablePersistence: () => ({
-    sortConfig: { key: 'ageTimestamp', direction: 'desc' },
+    sortConfig: persistedSortRef.current,
     onSortChange: vi.fn(),
     columnWidths: null,
     setColumnWidths: vi.fn(),
@@ -148,6 +155,7 @@ describe('NsViewEvents', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    persistedSortRef.current = null;
     openWithObjectMock.mockReset();
     findCatalogObjectByUIDMock.mockReset();
     useTableSortMock.mockClear();
@@ -201,6 +209,12 @@ describe('NsViewEvents', () => {
     });
     return gridTablePropsRef.current;
   };
+
+  it('passes the visible Age sort key to GridTable', async () => {
+    const props = await renderEventsView();
+
+    expect(props.sortConfig).toEqual({ key: 'age', direction: 'desc' });
+  });
 
   it('offers context menu navigation to related object', async () => {
     const event = baseEvent();

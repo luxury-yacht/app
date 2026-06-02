@@ -260,6 +260,77 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     );
   });
 
+  it('seeds cluster query state from the configured default sort before persistence publishes', () => {
+    const Probe: React.FC = () => {
+      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'cluster-events',
+        label: 'Cluster Events',
+        localData: [row],
+        selectRows,
+        viewId: 'cluster-events',
+        columns,
+        keyExtractor: (item) => item.name,
+        defaultSortKey: 'age',
+        defaultSortDirection: 'desc',
+      });
+      return null;
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(useClusterResourceGridTableMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        defaultSortKey: 'age',
+        defaultSortDirection: 'desc',
+      })
+    );
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        domain: 'cluster-events',
+        sortConfig: { key: 'age', direction: 'desc' },
+      })
+    );
+  });
+
+  it('seeds namespace query state from the configured default sort before persistence publishes', () => {
+    const Probe: React.FC = () => {
+      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'namespace-events',
+        label: 'All Namespaces Events',
+        localData: [row],
+        selectRows,
+        viewId: 'namespace-events',
+        namespace: ALL_NAMESPACES_SCOPE,
+        columns,
+        keyExtractor: (item) => item.name,
+        defaultSort: { key: 'age', direction: 'desc' },
+      });
+      return null;
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(useNamespaceResourceGridTableMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        defaultSort: { key: 'age', direction: 'desc' },
+      })
+    );
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        domain: 'namespace-events',
+        sortConfig: { key: 'age', direction: 'desc' },
+      })
+    );
+  });
+
   it('does not expose table loading during a query refresh that already has rows', async () => {
     let result:
       | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>

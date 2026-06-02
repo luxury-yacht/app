@@ -234,6 +234,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
             return '-';
           },
           {
+            sortValue: (resource) =>
+              resource.updated || resource.info?.last_deployed || resource.lastDeployed,
             getClassName: (resource) =>
               resource.updated || resource.info?.last_deployed || resource.lastDeployed
                 ? 'last-updated'

@@ -228,6 +228,7 @@ export const applyColumnSizing = <T,>(
 export interface CreateTextColumnOptions<T> {
   className?: string;
   sortable?: boolean;
+  sortValue?: (item: T) => string | number | undefined;
   onClick?: (item: T) => void;
   /** Alt+click handler — navigates to the item's view and focuses it. */
   onAltClick?: (item: T) => void;
@@ -287,6 +288,7 @@ export function createTextColumn<T>(
     header,
     className: options?.className,
     sortable: options?.sortable ?? true,
+    sortValue: options?.sortValue ?? accessor,
     disableShortcuts: options?.disableShortcuts,
     render: (item: T) => {
       const display = renderValue(item);

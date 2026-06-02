@@ -193,7 +193,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       viewId: 'cluster-events',
       columns,
       keyExtractor,
-      defaultSortKey: 'ageTimestamp',
+      defaultSortKey: 'age',
       defaultSortDirection: 'desc',
       rowIdentity: sortRowIdentity,
       filterAccessors: { getSearchText },

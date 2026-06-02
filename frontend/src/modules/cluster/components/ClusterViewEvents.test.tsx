@@ -10,13 +10,19 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
 
-const { useTableSortMock } = vi.hoisted(() => ({
+const { persistedSortRef, useTableSortMock } = vi.hoisted(() => ({
+  persistedSortRef: { current: null as any },
   useTableSortMock: vi.fn(
-    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
-      sortedData: data,
-      sortConfig: opts?.controlledSort ?? { key: 'ageTimestamp', direction: 'desc' },
-      handleSort: vi.fn(),
-    })
+    (data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => {
+      const fallbackSort = defaultKey
+        ? { key: defaultKey, direction: defaultDir ?? 'asc' }
+        : { key: '', direction: null };
+      return {
+        sortedData: data,
+        sortConfig: opts?.controlledSort ?? fallbackSort,
+        handleSort: vi.fn(),
+      };
+    }
   ),
 }));
 
@@ -88,7 +94,7 @@ vi.mock('@/hooks/useTableSort', () => ({
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
   useGridTablePersistence: () => ({
-    sortConfig: { key: 'ageTimestamp', direction: 'desc' },
+    sortConfig: persistedSortRef.current,
     setSortConfig: vi.fn(),
     columnWidths: null,
     setColumnWidths: vi.fn(),
@@ -133,6 +139,7 @@ describe('ClusterViewEvents', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    persistedSortRef.current = null;
     openWithObjectMock.mockReset();
     findCatalogObjectByUIDMock.mockReset();
     useTableSortMock.mockClear();
@@ -145,7 +152,7 @@ describe('ClusterViewEvents', () => {
     container.remove();
   });
 
-  it('passes persisted state to GridTable', async () => {
+  it('passes the visible Age default sort to GridTable when no persisted sort exists', async () => {
     await act(async () => {
       root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
       await Promise.resolve();
@@ -153,7 +160,7 @@ describe('ClusterViewEvents', () => {
 
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
-    expect(props.sortConfig).toEqual({ key: 'ageTimestamp', direction: 'desc' });
+    expect(props.sortConfig).toEqual({ key: 'age', direction: 'desc' });
     expect(props.columnVisibility).toBe(null);
     expect(props.filters?.value).toEqual({
       search: '',

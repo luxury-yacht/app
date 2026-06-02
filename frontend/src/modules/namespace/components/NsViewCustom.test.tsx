@@ -889,12 +889,10 @@ describe('NsViewCustom', () => {
       expect(callArg.clusterName).toBe('alpha');
     });
 
-    it('exposes a sortValue extractor so the column sorts by crdName', async () => {
-      // Regression guard: the column key is "crd" but the data field is
-      // "crdName", so without an explicit sortValue the default sort
-      // (row[column.key]) reads undefined for every row and the column
-      // silently doesn't sort. The column factory only wires sortValue
-      // if we set it on the returned column object — verify that happened.
+    it('does not expose hydrated custom-resource fields as query-backed sort keys', async () => {
+      // Custom-resource rows are page-selected by the object catalog before
+      // CRD/status are hydrated. Those fields cannot be globally sorted by
+      // the query backend, so the columns must not advertise sorting.
       const resource: CustomResourceData = {
         ...baseResource,
         crdName: 'dbinstances.rds.services.k8s.aws',
@@ -904,14 +902,16 @@ describe('NsViewCustom', () => {
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
+      const statusCol = findColumn(gridProps, 'status');
+      expect(crdCol.sortable).toBe(false);
+      expect(statusCol.sortable).toBe(false);
+
+      // Keep the local extractor intact for defensive consumers, but do not
+      // make this a query-backed sortable column.
       expect(crdCol.sortValue).toBeTypeOf('function');
 
-      // The extractor should return a comparable string that useTableSort
-      // can feed into localeCompare. We lowercase for case-insensitive sort.
       expect(crdCol.sortValue(resource)).toBe('dbinstances.rds.services.k8s.aws');
 
-      // Rows without a crdName sort as empty string (they cluster at the
-      // top or bottom depending on direction, not scattered randomly).
       const noCRD: CustomResourceData = { ...baseResource };
       expect(crdCol.sortValue(noCRD)).toBe('');
     });

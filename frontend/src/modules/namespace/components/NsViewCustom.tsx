@@ -112,17 +112,17 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         // happen to have no `crdName` — e.g. legacy snapshots from
         // before the field was added.
         //
-        // The column key is "crd" but the field on CustomResourceData
-        // is "crdName", so we attach an explicit `sortValue` accessor.
-        // Without it, useTableSort falls back to `row[column.key]`
-        // (i.e. `resource['crd']`), gets undefined for every row, and
-        // the column silently doesn't sort at all.
+        // Catalog-backed custom-resource queries only support global sorting
+        // on catalog fields. CRD/status are hydrated after the catalog page is
+        // selected, so exposing them as sortable would imply a global sort the
+        // backend cannot perform.
         (() => {
           const crdColumn = cf.createTextColumn<CustomResourceData>(
             'crd',
             'CRD',
             (resource) => resource.crdName ?? undefined,
             {
+              sortable: false,
               onClick: handleCRDClick,
               onAltClick: (resource) => {
                 if (!resource.crdName) {
@@ -146,6 +146,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           'Status',
           (resource) => resource.status || 'Unknown',
           {
+            sortable: false,
             getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
           }
         ),
