@@ -17,6 +17,7 @@ import {
 import { useTableSort } from '@hooks/useTableSort';
 import { formatAge, formatFullDate } from '@utils/ageFormatter';
 import { errorHandler } from '@/utils/errorHandler';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
 import type { ObjectEventSummary } from '@/core/refresh/types';
 import { refreshManager } from '@/core/refresh';
@@ -445,6 +446,16 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   const { sortedData, sortConfig, handleSort } = useTableSort(events, 'ageTimestamp', 'desc', {
     columns,
   });
+  const partialDataLabel = useMemo(
+    () =>
+      buildLocalPartialDataLabel({
+        stats: eventsSnapshot.stats,
+        fallback: 'Object Events are loaded as a recent local window.',
+        sourceLabel: 'Object Events',
+        sourceVerb: 'are',
+      }),
+    [eventsSnapshot.stats]
+  );
 
   if (eventsLoading && events.length === 0) {
     return (
@@ -489,6 +500,9 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   return (
     <div className="object-panel-tab-content">
       <div className="events-display">
+        <div className="events-display__partial-state" role="status">
+          {partialDataLabel}
+        </div>
         <GridTable<EventDisplay>
           data={sortedData}
           columns={columns}

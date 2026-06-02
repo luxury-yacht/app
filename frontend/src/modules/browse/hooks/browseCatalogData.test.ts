@@ -189,6 +189,7 @@ describe('browseCatalogData', () => {
       kinds: ['Deployment', 'Pod'],
       namespaces: ['default', 'kube-system'],
       isNamespaceScoped: false,
+      partialDataLabel: undefined,
     });
 
     expect(
@@ -198,5 +199,28 @@ describe('browseCatalogData', () => {
         isNamespaceScoped: false,
       }).kinds
     ).toEqual(['Node']);
+  });
+
+  it('derives reason-bearing degraded copy from catalog query metadata', () => {
+    const payload = makePayload({
+      totalIsExact: false,
+      facetsExact: false,
+      issues: [
+        {
+          kind: 'Catalog health',
+          message: 'Catalog data may be stale because one resource sync failed.',
+        },
+      ],
+    });
+
+    const options = deriveBrowseFilterOptions({
+      payload,
+      clusterScopedOnly: false,
+      isNamespaceScoped: false,
+    });
+
+    expect(options.partialDataLabel).toContain('Catalog health');
+    expect(options.partialDataLabel).toContain('Facet options are approximate');
+    expect(options.partialDataLabel).toContain('total result count is approximate');
   });
 });

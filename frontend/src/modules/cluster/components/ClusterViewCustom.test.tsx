@@ -314,7 +314,11 @@ describe('ClusterViewCustom', () => {
   it('uses catalog facet metadata instead of deriving kinds from loaded rows', async () => {
     useBrowseCatalogMock.mockReturnValue({
       ...browseCatalogResult(),
-      filterOptions: { kinds: ['DBCluster', 'Widget'], namespaces: [] },
+      filterOptions: {
+        kinds: ['DBCluster', 'Widget'],
+        namespaces: [],
+        partialDataLabel: 'Catalog health: Catalog data may be stale.',
+      },
     });
 
     await act(async () => {
@@ -324,6 +328,7 @@ describe('ClusterViewCustom', () => {
 
     const props = gridTablePropsRef.current;
     expect(props?.filters?.options?.kinds).toEqual(['DBCluster', 'Widget']);
+    expect(props?.filters?.options?.partialDataLabel).toContain('Catalog health');
   });
 
   it('renders hydrated custom-resource status and metadata for the current page', async () => {

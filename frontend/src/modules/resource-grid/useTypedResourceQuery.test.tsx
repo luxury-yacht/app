@@ -67,6 +67,28 @@ describe('useTypedResourceQuery', () => {
     });
   };
 
+  const renderPagedQuery = async (pageLimit = 2) => {
+    const Probe: React.FC = () => {
+      result = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        sortConfig,
+        pageLimit,
+        selectRows,
+      });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<Probe />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+
   it('marks missing query payloads as loaded so the table does not stay in an initial spinner', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
@@ -116,5 +138,119 @@ describe('useTypedResourceQuery', () => {
     expect(result?.error).toBe(
       'All Namespaces Pods could not load because auto-refresh is disabled'
     );
+  });
+
+  it('tracks cursor-backed next and previous pages without exposing random page jumps', async () => {
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-a' }, { name: 'pod-b' }],
+            total: 3,
+            totalIsExact: true,
+            continue: 'cursor-page-2',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-c' }],
+            total: 3,
+            totalIsExact: true,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-a' }, { name: 'pod-b' }],
+            total: 3,
+            totalIsExact: true,
+            continue: 'cursor-page-2',
+          },
+        },
+      });
+
+    await renderPagedQuery();
+
+    expect(result?.pageIndex).toBe(1);
+    expect(result?.pageSize).toBe(2);
+    expect(result?.totalCount).toBe(3);
+    expect(result?.totalIsExact).toBe(true);
+    expect(result?.continueToken).toBe('cursor-page-2');
+    expect(result?.hasPrevious).toBe(false);
+
+    await act(async () => {
+      result?.loadMore();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scope: expect.stringContaining('continue=cursor-page-2'),
+      })
+    );
+    expect(result?.rows).toEqual([{ name: 'pod-c' }]);
+    expect(result?.pageIndex).toBe(2);
+    expect(result?.hasPrevious).toBe(true);
+
+    await act(async () => {
+      result?.loadPrevious();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scope: expect.not.stringContaining('continue='),
+      })
+    );
+    expect(result?.rows).toEqual([{ name: 'pod-a' }, { name: 'pod-b' }]);
+    expect(result?.pageIndex).toBe(1);
+    expect(result?.hasPrevious).toBe(false);
+  });
+
+  it('resets cursor pagination when the backend reports an invalid cursor', async () => {
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-a' }],
+            total: 2,
+            continue: 'stale-cursor',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            cursorInvalid: true,
+          },
+        },
+      });
+
+    await renderPagedQuery();
+
+    await act(async () => {
+      result?.loadMore();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result?.continueToken).toBe(null);
+    expect(result?.pageIndex).toBe(1);
+    expect(result?.hasPrevious).toBe(false);
   });
 });

@@ -21,6 +21,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
 import {
   clusterEventRowIdentity,
@@ -31,6 +32,7 @@ import {
   resolveEventGridRelatedObject,
 } from '@shared/events/eventGridModel';
 import type { ResourceLink } from '@core/refresh/types';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 interface EventData {
   kind: string;
@@ -54,6 +56,7 @@ interface EventData {
 
 interface EventViewProps {
   data: EventData[];
+  stats?: SnapshotStats | null;
   loading?: boolean;
   loaded?: boolean;
   error?: string | null;
@@ -64,7 +67,7 @@ interface EventViewProps {
  * Displays cluster-wide events
  */
 const ClusterEventsView: React.FC<EventViewProps> = React.memo(
-  ({ data, loading = false, loaded, error }) => {
+  ({ data, stats, loading = false, loaded, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -179,6 +182,14 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       filterAccessors: { getSearchText },
       showKindDropdown: false,
       filterOptions: { isNamespaceScoped: false },
+      filterOptionOverrides: {
+        partialDataLabel: buildLocalPartialDataLabel({
+          stats,
+          fallback: 'Cluster Events are loaded as a recent local window.',
+          sourceLabel: 'Cluster Events',
+          sourceVerb: 'are',
+        }),
+      },
     });
 
     const objectActions = useObjectActionController({

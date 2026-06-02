@@ -98,7 +98,9 @@ const renderObjectPanelGrid = (
   return result.current;
 };
 
-const renderNamespaceGrid = () => {
+const renderNamespaceGrid = (
+  overrides: Partial<Parameters<typeof useNamespaceResourceGridTable<TestRow>>[0]> = {}
+) => {
   const result: { current: ResourceGridTableResult<TestRow> | undefined } = { current: undefined };
   const onTableStateChange = vi.fn();
 
@@ -116,6 +118,7 @@ const renderNamespaceGrid = () => {
         namespaces: ['team-a'],
       },
       onTableStateChange,
+      ...overrides,
     });
     return null;
   };
@@ -230,6 +233,23 @@ describe('useNamespaceResourceGridTable', () => {
       expect.objectContaining({
         filters: expect.objectContaining({ namespaces: [] }),
       })
+    );
+
+    harness.cleanup();
+  });
+
+  it('marks Local Partial tables as bounded local windows', () => {
+    const harness = renderNamespaceGrid({
+      tableMode: 'Local Partial',
+      filterOptionOverrides: undefined,
+    });
+
+    expect(harness.result.current?.gridTableProps.filters?.options).toMatchObject({
+      searchBehavior: 'local',
+      kindDropdownBulkActions: false,
+    });
+    expect(harness.result.current?.gridTableProps.filters?.options?.partialDataLabel).toContain(
+      'visible dataset'
     );
 
     harness.cleanup();

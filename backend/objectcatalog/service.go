@@ -64,7 +64,8 @@ type Service struct {
 
 	mu sync.RWMutex
 	catalogIndex
-	identity *resourceIdentityResolver
+	queryStore CatalogQueryStore
+	identity   *resourceIdentityResolver
 
 	promotedMu sync.RWMutex
 	promoted   map[string]*promotedDescriptor
@@ -147,7 +148,7 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		nowFn = time.Now
 	}
 
-	return &Service{
+	service := &Service{
 		deps:              deps,
 		opts:              serviceOpts,
 		clusterID:         deps.ClusterID,
@@ -160,6 +161,8 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		now:               nowFn,
 		streamSubscribers: make(map[int]chan StreamingUpdate),
 	}
+	service.queryStore = newInMemoryCatalogQueryStore(service)
+	return service
 }
 
 // Run starts the catalog ingestion loop and blocks until the context is cancelled.

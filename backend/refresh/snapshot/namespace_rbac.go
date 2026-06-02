@@ -12,6 +12,7 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 	rbaclisters "k8s.io/client-go/listers/rbac/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -182,6 +183,8 @@ func buildNamespaceRBACSnapshot(
 	}
 
 	sortRBACSummaries(resources)
+	var totalItems int
+	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceRBACEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceRBACDomainName,
@@ -192,9 +195,7 @@ func buildNamespaceRBACSnapshot(
 			Resources:   resources,
 			Kinds:       snapshotSortedKinds(resources, func(resource RBACSummary) string { return resource.Kind }),
 		},
-		Stats: refresh.SnapshotStats{
-			ItemCount: len(resources),
-		},
+		Stats: snapshotWindowStats(len(resources), totalItems, "RBAC resources"),
 	}, nil
 }
 

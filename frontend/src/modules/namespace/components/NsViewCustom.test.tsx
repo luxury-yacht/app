@@ -347,7 +347,11 @@ describe('NsViewCustom', () => {
   it('uses catalog facet metadata instead of deriving kinds from loaded rows', async () => {
     useBrowseCatalogMock.mockReturnValue({
       ...browseCatalogResult(),
-      filterOptions: { kinds: ['DBCluster', 'Widget'], namespaces: [] },
+      filterOptions: {
+        kinds: ['DBCluster', 'Widget'],
+        namespaces: [],
+        partialDataLabel: 'Catalog health: Catalog data may be stale.',
+      },
     });
 
     await renderComponent({
@@ -357,6 +361,7 @@ describe('NsViewCustom', () => {
 
     const gridProps = getLastGridProps();
     expect(gridProps?.filters?.options?.kinds).toEqual(['DBCluster', 'Widget']);
+    expect(gridProps?.filters?.options?.partialDataLabel).toContain('Catalog health');
   });
 
   it('renders hydrated custom-resource status and metadata for the current page', async () => {

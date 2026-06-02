@@ -114,16 +114,15 @@ func (b *NamespaceStorageBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
-	if len(resources) > config.SnapshotNamespaceStorageEntryLimit {
-		resources = resources[:config.SnapshotNamespaceStorageEntryLimit]
-	}
+	var totalItems int
+	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceStorageEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceStorageDomainName,
 		Scope:   namespace,
 		Version: version,
 		Payload: NamespaceStorageSnapshot{ClusterMeta: meta, Resources: resources},
-		Stats:   refresh.SnapshotStats{ItemCount: len(resources)},
+		Stats:   snapshotWindowStats(len(resources), totalItems, "storage resources"),
 	}, nil
 }
 

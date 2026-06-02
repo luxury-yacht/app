@@ -145,6 +145,55 @@ func TestCatalogSnapshotMetadataUsesKeysetSemantics(t *testing.T) {
 	}
 }
 
+func TestCatalogSnapshotIssuesDescribeApproximateAndDegradedResults(t *testing.T) {
+	payload, _ := buildCatalogSnapshot(
+		objectcatalog.QueryResult{
+			Items: []objectcatalog.Summary{{
+				Kind:      "Pod",
+				Version:   "v1",
+				Resource:  "pods",
+				Namespace: "default",
+				Name:      "pod-a",
+			}},
+			ContinueToken: "next-keyset",
+			TotalItems:    200000,
+			TotalIsExact:  false,
+			FacetsExact:   false,
+			CursorInvalid: true,
+		},
+		browseQueryOptions{Limit: 1},
+		objectcatalog.HealthStatus{
+			Status:          objectcatalog.HealthStateDegraded,
+			Stale:           true,
+			FailedResources: 2,
+			LastError:       "forbidden",
+		},
+		true,
+		false,
+	)
+
+	if payload.Continue != "" || payload.HasNext {
+		t.Fatalf("expected degraded catalog to disable pagination, continue=%q hasNext=%t", payload.Continue, payload.HasNext)
+	}
+	var messages []string
+	for _, issue := range payload.Issues {
+		messages = append(messages, issue.Kind+": "+issue.Message)
+	}
+	joined := strings.Join(messages, "\n")
+	for _, expected := range []string{
+		"Catalog cursor",
+		"Catalog totals",
+		"Catalog facets",
+		"Catalog health",
+		"Failed resources: 2",
+		"Catalog pagination",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected issue text %q in:\n%s", expected, joined)
+		}
+	}
+}
+
 func TestCatalogBuildPreservesContinueWhenCachesReady(t *testing.T) {
 	summaries := []objectcatalog.Summary{
 		{

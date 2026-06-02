@@ -22,11 +22,13 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 const NAMESPACE_STORAGE_KIND_OPTIONS = ['PersistentVolumeClaim'];
 
@@ -50,6 +52,7 @@ export interface StorageData {
 interface StorageViewProps {
   namespace: string;
   data: StorageData[];
+  stats?: SnapshotStats | null;
   loading?: boolean;
   loaded?: boolean;
   showNamespaceColumn?: boolean;
@@ -60,7 +63,14 @@ interface StorageViewProps {
  * Aggregates PersistentVolumeClaims, VolumeAttachments, and related storage resources
  */
 const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
-  ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({
+    namespace,
+    data,
+    stats = null,
+    loading = false,
+    loaded = false,
+    showNamespaceColumn = false,
+  }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -226,6 +236,13 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       availableKinds: NAMESPACE_STORAGE_KIND_OPTIONS,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
+      filterOptionOverrides: {
+        partialDataLabel: buildLocalPartialDataLabel({
+          stats,
+          fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
+          sourceLabel: diagnosticsLabel,
+        }),
+      },
       diagnosticsLabel,
     });
 

@@ -12,6 +12,7 @@ import { ClusterViewType } from '@ui/navigation/types';
 import { useUserPermission } from '@/core/capabilities';
 import type { PermissionStatus } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 interface ClusterResourceManagerProps {
   activeTab?: ClusterViewType | null;
@@ -149,17 +150,20 @@ export function ClusterResourcesManager({
       onTabChange={onTabChange}
       // Nodes
       nodes={nodesData || []}
+      nodesStats={(nodes?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       nodesLoading={nodesLoading || false}
       nodesError={nodesErrorMessage}
       nodesLoaded={(nodes?.hasLoaded ?? false) || Boolean(nodesErrorMessage)}
       // Config
       config={configData || []}
+      configStats={(config?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       configKinds={(config?.meta as { kinds?: string[] } | undefined)?.kinds}
       configLoading={configLoading || false}
       configError={configErrorMessage}
       configLoaded={(config?.hasLoaded ?? false) || Boolean(configErrorMessage)}
       // CRDs
       crds={crdsData || []}
+      crdsStats={(crds?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       crdsLoading={crdsLoading || false}
       crdsError={crdsErrorMessage}
       crdsLoaded={(crds?.hasLoaded ?? false) || Boolean(crdsErrorMessage)}
@@ -169,17 +173,20 @@ export function ClusterResourcesManager({
       customLoaded={Boolean(customErrorMessage)}
       // Events
       events={eventsData || []}
+      eventsStats={(events?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       eventsLoading={eventsLoading || false}
       eventsError={eventsErrorMessage}
       eventsLoaded={(events?.hasLoaded ?? false) || Boolean(eventsErrorMessage)}
       // RBAC
       rbac={rbacData || []}
+      rbacStats={(rbac?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       rbacKinds={(rbac?.meta as { kinds?: string[] } | undefined)?.kinds}
       rbacLoading={rbacLoading || false}
       rbacError={rbacErrorMessage}
       rbacLoaded={(rbac?.hasLoaded ?? false) || Boolean(rbacErrorMessage)}
       // Storage
       storage={storageData || []}
+      storageStats={(storage?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       storageLoading={storageLoading || false}
       storageError={storageErrorMessage}
       storageLoaded={(storage?.hasLoaded ?? false) || Boolean(storageErrorMessage)}

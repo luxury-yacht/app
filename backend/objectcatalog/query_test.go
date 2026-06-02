@@ -14,6 +14,47 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+type fakeCatalogQueryStore struct {
+	result QueryResult
+	ok     bool
+	seen   []QueryOptions
+}
+
+func (store *fakeCatalogQueryStore) QueryCatalog(opts QueryOptions) (QueryResult, bool) {
+	store.seen = append(store.seen, opts)
+	return store.result, store.ok
+}
+
+func TestServiceQueryUsesCatalogQueryStoreContract(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+	store := &fakeCatalogQueryStore{
+		ok: true,
+		result: QueryResult{
+			Items: []Summary{{
+				Kind:     "Node",
+				Version:  "v1",
+				Resource: "nodes",
+				Name:     "node-a",
+				UID:      "node-a",
+				Scope:    ScopeCluster,
+			}},
+			TotalItems:   1,
+			TotalIsExact: true,
+			FacetsExact:  true,
+		},
+	}
+	svc.queryStore = store
+
+	result := svc.Query(QueryOptions{Limit: 10, Search: "node"})
+
+	if len(store.seen) != 1 || store.seen[0].Search != "node" {
+		t.Fatalf("expected query options to pass through store, got %+v", store.seen)
+	}
+	if len(result.Items) != 1 || result.Items[0].Name != "node-a" || result.TotalItems != 1 {
+		t.Fatalf("unexpected store-backed query result: %+v", result)
+	}
+}
+
 func TestServiceQueryStreamsWithoutFullCache(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 

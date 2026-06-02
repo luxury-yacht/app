@@ -29,16 +29,19 @@ import {
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
 import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { DrainIcon } from '@shared/components/icons/SharedIcons';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 // Define props for NodesViewGrid component
 interface NodesViewProps {
   data: ClusterNodeRow[];
+  stats?: SnapshotStats | null;
   loading?: boolean;
   loaded?: boolean;
   error?: string | null;
@@ -49,7 +52,7 @@ interface NodesViewProps {
  * Displays nodes with their status, resource usage, and other details
  */
 const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
-  ({ data, loading = false, loaded = false, error }) => {
+  ({ data, stats = null, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -300,8 +303,9 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       [selectedClusterId]
     );
 
+    const isPartial = Boolean(stats?.truncated);
     const { gridTableProps, favModal } = useClusterResourceGridTable<ClusterNodeRow>({
-      tableMode: 'Local Complete',
+      tableMode: isPartial ? 'Local Partial' : 'Local Complete',
       viewId: 'cluster-nodes',
       data,
       persistenceData: [],
@@ -317,6 +321,16 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       },
       diagnosticsLabel: 'Cluster Nodes',
       filterOptions: { isNamespaceScoped: false },
+      filterOptionOverrides: isPartial
+        ? {
+            partialDataLabel: buildLocalPartialDataLabel({
+              stats,
+              fallback: 'Cluster Nodes are loaded as a bounded local snapshot.',
+              sourceLabel: 'Cluster Nodes',
+              sourceVerb: 'are',
+            }),
+          }
+        : undefined,
     });
 
     // The maintenance hook owns the cordon and drain modals; pass its

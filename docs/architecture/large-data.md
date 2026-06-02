@@ -65,10 +65,20 @@ and sort-only catalog queries may still stream over all catalog chunks as an
 O(N) CPU scan, but they feed a bounded page buffer and exact-metadata budget
 instead of collecting the full result set in memory.
 
+Query store seam: `backend/objectcatalog.CatalogQueryStore` sits behind
+`Service.Query`. The default implementation is the current in-memory catalog
+index and preserves the public `QueryOptions` to `QueryResult` contract. A
+future SQLite or other persistent backing store may replace this seam when
+benchmarks show that O(N) chunk scans, memory residency, or startup rebuild
+costs exceed the large-cluster budget. The decision point is a measured
+regression in catalog query latency, catalog memory residency, or cursor-page
+churn benchmarks; frontend scopes and snapshot payloads must not change when
+the store changes.
+
 Snapshot boundary: `backend/refresh/snapshot/catalog.go` parses the refresh
 scope into catalog query options and emits `CatalogSnapshot` payloads with full
 catalog object identity, `continue`, `previous`, `cursorInvalid`,
-`totalIsExact`, and `facetsExact`.
+`totalIsExact`, `facetsExact`, and reason-bearing `issues`.
 
 Frontend boundary: `frontend/src/core/data-access` owns refresh-domain reads.
 `frontend/src/modules/browse/hooks/useBrowseCatalog.ts` builds the scoped

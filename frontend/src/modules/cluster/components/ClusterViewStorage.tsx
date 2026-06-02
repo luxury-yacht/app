@@ -18,11 +18,13 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 const CLUSTER_STORAGE_KIND_OPTIONS = ['PersistentVolume'];
 
@@ -47,6 +49,7 @@ interface StorageData {
 // Define props for StorageViewGrid component
 interface StorageViewProps {
   data: StorageData[];
+  stats?: SnapshotStats | null;
   loading?: boolean;
   loaded?: boolean;
   error?: string | null;
@@ -57,7 +60,7 @@ interface StorageViewProps {
  * Displays Persistent Volumes
  */
 const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
-  ({ data, loading = false, loaded = false, error }) => {
+  ({ data, stats = null, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -260,14 +263,24 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
+    const isPartial = Boolean(stats?.truncated);
     const { gridTableProps, favModal } = useClusterResourceGridTable<StorageData>({
-      tableMode: 'Local Complete',
+      tableMode: isPartial ? 'Local Partial' : 'Local Complete',
       viewId: 'cluster-storage',
       columns,
       data,
       keyExtractor,
       availableKinds: CLUSTER_STORAGE_KIND_OPTIONS,
       showKindDropdown: true,
+      filterOptionOverrides: isPartial
+        ? {
+            partialDataLabel: buildLocalPartialDataLabel({
+              stats,
+              fallback: 'Cluster Storage is loaded as a bounded local snapshot.',
+              sourceLabel: 'Cluster Storage',
+            }),
+          }
+        : undefined,
       diagnosticsLabel: 'Cluster Storage',
     });
 

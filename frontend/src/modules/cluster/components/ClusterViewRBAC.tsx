@@ -18,10 +18,12 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 // Define the data structure for RBAC resources
 interface RBACData {
@@ -36,6 +38,7 @@ interface RBACData {
 // Define props for RBACViewGrid component
 interface RBACViewProps {
   data: RBACData[];
+  stats?: SnapshotStats | null;
   availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
@@ -47,7 +50,7 @@ interface RBACViewProps {
  * Shows ClusterRoles and ClusterRoleBindings in a single aggregated table
  */
 const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
-  ({ data, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
+  ({ data, stats = null, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -135,14 +138,24 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       return baseColumns;
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
+    const isPartial = Boolean(stats?.truncated);
     const { gridTableProps, favModal } = useClusterResourceGridTable<RBACData>({
-      tableMode: 'Local Complete',
+      tableMode: isPartial ? 'Local Partial' : 'Local Complete',
       viewId: 'cluster-rbac',
       columns,
       data,
       keyExtractor,
       availableKinds: kindOptions,
       showKindDropdown: true,
+      filterOptionOverrides: isPartial
+        ? {
+            partialDataLabel: buildLocalPartialDataLabel({
+              stats,
+              fallback: 'Cluster RBAC is loaded as a bounded local snapshot.',
+              sourceLabel: 'Cluster RBAC',
+            }),
+          }
+        : undefined,
       diagnosticsLabel: 'Cluster RBAC',
     });
 

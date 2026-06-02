@@ -13,6 +13,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -102,6 +103,32 @@ func TestClusterConfigBuilder(t *testing.T) {
 	require.Contains(t, resources["MutatingWebhookConfiguration-"+mutatingWebhook.Name].Details, "2 webhook")
 }
 
+func TestClusterConfigBuilderCapsLargeSnapshots(t *testing.T) {
+	classes := make([]*storagev1.StorageClass, 0, config.SnapshotClusterConfigEntryLimit+1)
+	for i := 0; i < config.SnapshotClusterConfigEntryLimit+1; i++ {
+		classes = append(classes, &storagev1.StorageClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "storage-class-" + string(rune('a'+(i%26))) + "-" + time.Unix(int64(i), 0).Format("150405"),
+				ResourceVersion: "1",
+			},
+			Provisioner: "example.test/provisioner",
+		})
+	}
+
+	builder := &ClusterConfigBuilder{
+		storageClassLister: testsupport.NewStorageClassLister(t, classes...),
+		perms:              ClusterConfigPermissions{IncludeStorageClasses: true},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(ClusterConfigSnapshot)
+	require.Len(t, payload.Resources, config.SnapshotClusterConfigEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotClusterConfigEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "cluster configuration resources")
+}
+
 func TestClusterStorageBuilder(t *testing.T) {
 	now := time.Now()
 	pv := &corev1.PersistentVolume{
@@ -152,6 +179,30 @@ func TestClusterStorageBuilder(t *testing.T) {
 	require.NotEmpty(t, entry.Age)
 }
 
+func TestClusterStorageBuilderCapsLargeSnapshots(t *testing.T) {
+	pvs := make([]*corev1.PersistentVolume, 0, config.SnapshotClusterStorageEntryLimit+1)
+	for i := 0; i < config.SnapshotClusterStorageEntryLimit+1; i++ {
+		pvs = append(pvs, &corev1.PersistentVolume{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "pv-" + time.Unix(int64(i), 0).Format("150405"),
+				ResourceVersion: "1",
+			},
+		})
+	}
+
+	builder := &ClusterStorageBuilder{
+		pvLister: testsupport.NewPersistentVolumeLister(t, pvs...),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(ClusterStorageSnapshot)
+	require.Len(t, payload.Volumes, config.SnapshotClusterStorageEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotClusterStorageEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "persistent volumes")
+}
+
 func TestClusterCRDBuilder(t *testing.T) {
 	now := time.Now()
 	crd := &apiextensionsv1.CustomResourceDefinition{
@@ -199,6 +250,41 @@ func TestClusterCRDBuilder(t *testing.T) {
 	require.Equal(t, "v1", entry.StorageVersion)
 	require.Equal(t, 2, entry.ExtraServedVersionCount)
 	require.NotEmpty(t, entry.Age)
+}
+
+func TestClusterCRDBuilderCapsLargeSnapshots(t *testing.T) {
+	crds := make([]*apiextensionsv1.CustomResourceDefinition, 0, config.SnapshotClusterCRDEntryLimit+1)
+	for i := 0; i < config.SnapshotClusterCRDEntryLimit+1; i++ {
+		crds = append(crds, &apiextensionsv1.CustomResourceDefinition{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "widgets-" + time.Unix(int64(i), 0).Format("150405") + ".acme.test",
+				ResourceVersion: "1",
+			},
+			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+				Group: "acme.test",
+				Scope: apiextensionsv1.NamespaceScoped,
+				Names: apiextensionsv1.CustomResourceDefinitionNames{
+					Plural: "widgets",
+					Kind:   "Widget",
+				},
+				Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+					{Name: "v1", Served: true, Storage: true},
+				},
+			},
+		})
+	}
+
+	builder := &ClusterCRDBuilder{
+		crdLister: testsupport.NewCRDLister(t, crds...),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(ClusterCRDSnapshot)
+	require.Len(t, payload.Definitions, config.SnapshotClusterCRDEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotClusterCRDEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "CRDs")
 }
 
 // TestCRDVersionSummary covers the storage-version + extra-served-count

@@ -120,6 +120,41 @@ describe('useObjectPanelPods', () => {
     );
   });
 
+  it('uses node-scoped pods for Node panels', async () => {
+    await renderHook({
+      objectData: {
+        clusterId: 'alpha',
+        kind: 'Node',
+        name: 'worker-a',
+      },
+      objectKind: 'node',
+    });
+
+    expect(mockUseRefreshScopedDomain).toHaveBeenCalledWith('pods', 'alpha|node:worker-a');
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'pods',
+      'alpha|node:worker-a',
+      true
+    );
+  });
+
+  it('does not fan out to namespace or cluster pods for unsupported object kinds', async () => {
+    const { getResult } = await renderHook({
+      objectData: {
+        clusterId: 'alpha',
+        kind: 'ServiceAccount',
+        name: 'builder',
+        namespace: 'team-a',
+      },
+      objectKind: 'serviceaccount',
+    });
+
+    expect(getResult().scope).toBe(null);
+    expect(mockUseRefreshScopedDomain).toHaveBeenCalledWith('pods', '__inactive__');
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).not.toHaveBeenCalled();
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+  });
+
   it('suppresses passive loading while paused and blocks startup fetches', async () => {
     autoRefreshLoadingState.isPaused = true;
     autoRefreshLoadingState.suppressPassiveLoading = true;

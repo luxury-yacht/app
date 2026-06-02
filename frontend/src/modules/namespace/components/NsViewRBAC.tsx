@@ -21,10 +21,12 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 // Data interface for RBAC resources
 export interface RBACData {
@@ -62,6 +64,7 @@ export interface RBACData {
 interface RBACViewProps {
   namespace: string;
   data: RBACData[];
+  stats?: SnapshotStats | null;
   availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
@@ -76,6 +79,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
   ({
     namespace,
     data,
+    stats = null,
     availableKinds: kindOptions,
     loading = false,
     loaded = false,
@@ -190,9 +194,10 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
 
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces RBAC' : 'Namespace RBAC';
+    const isPartial = namespace === ALL_NAMESPACES_SCOPE || Boolean(stats?.truncated);
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<RBACData>({
-      tableMode: namespace === ALL_NAMESPACES_SCOPE ? 'Local Partial' : 'Local Complete',
+      tableMode: isPartial ? 'Local Partial' : 'Local Complete',
       viewId: 'namespace-rbac',
       namespace,
       columns,
@@ -202,6 +207,15 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
+      filterOptionOverrides: isPartial
+        ? {
+            partialDataLabel: buildLocalPartialDataLabel({
+              stats,
+              fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
+              sourceLabel: diagnosticsLabel,
+            }),
+          }
+        : undefined,
       diagnosticsLabel,
     });
 

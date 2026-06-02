@@ -8,8 +8,9 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
-const { useTableSortMock } = vi.hoisted(() => ({
+const { useTableSortMock, requestRefreshDomainStateMock } = vi.hoisted(() => ({
   useTableSortMock: vi.fn(
     (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
       sortedData: data,
@@ -17,6 +18,7 @@ const { useTableSortMock } = vi.hoisted(() => ({
       handleSort: vi.fn(),
     })
   ),
+  requestRefreshDomainStateMock: vi.fn(),
 }));
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
@@ -136,6 +138,10 @@ vi.mock('@/core/refresh', () => ({
   refreshManager: { triggerManualRefresh: vi.fn() },
 }));
 
+vi.mock('@/core/data-access', () => ({
+  requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...args),
+}));
+
 vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => false,
 }));
@@ -181,6 +187,21 @@ describe('NsViewWorkloads', () => {
     openWithObjectMock.mockReset();
     navigateToViewMock.mockReset();
     useTableSortMock.mockClear();
+    requestRefreshDomainStateMock.mockReset();
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          workloads: [],
+          total: 0,
+          totalIsExact: true,
+          namespaces: ['team-a', 'team-b'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
   });
 
   afterEach(() => {
@@ -215,6 +236,101 @@ describe('NsViewWorkloads', () => {
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('uses local provider rows for a single namespace without issuing a typed query', async () => {
+    const workload = {
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '5m',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+    };
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace="team-a"
+          data={[workload as any]}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.data).toEqual([workload]);
+    expect(requestRefreshDomainStateMock).not.toHaveBeenCalled();
+  });
+
+  it('uses the typed query result for all-namespaces workloads on first render', async () => {
+    const localWorkload = {
+      kind: 'Deployment',
+      name: 'local-provider-row',
+      namespace: 'team-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '5m',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+    };
+    const queryWorkload = {
+      ...localWorkload,
+      name: 'query-row',
+      namespace: 'team-b',
+    };
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          workloads: [queryWorkload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a', 'team-b'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace={ALL_NAMESPACES_SCOPE}
+          data={[localWorkload as any]}
+          loading={false}
+          loaded={true}
+          showNamespaceColumn={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.data).toEqual([queryWorkload]);
+    expect(gridTablePropsRef.current?.paginationControls?.props).toMatchObject({
+      pageIndex: 1,
+      pageSize: 250,
+      totalCount: 1,
+      totalIsExact: true,
+      hasPrevious: false,
+      hasNext: false,
+    });
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: 'namespace-workloads',
+        scope: 'path:context|namespace:all?limit=250&sort=name&sortDirection=asc',
+      })
+    );
   });
 
   it('resolves node metrics from the active cluster scope only', async () => {

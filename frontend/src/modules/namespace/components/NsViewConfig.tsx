@@ -21,6 +21,8 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 // Data interface for configuration resources (ConfigMaps, Secrets)
 export interface ConfigData {
@@ -37,6 +39,7 @@ export interface ConfigData {
 interface ConfigViewProps {
   namespace: string;
   data: ConfigData[];
+  stats?: SnapshotStats | null;
   availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
@@ -51,6 +54,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
   ({
     namespace,
     data,
+    stats = null,
     availableKinds: kindOptions,
     loading = false,
     loaded = false,
@@ -152,6 +156,13 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
+      filterOptionOverrides: {
+        partialDataLabel: buildLocalPartialDataLabel({
+          stats,
+          fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
+          sourceLabel: diagnosticsLabel,
+        }),
+      },
       diagnosticsLabel,
     });
 

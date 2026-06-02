@@ -23,6 +23,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
 import {
   eventGridActionReference,
@@ -34,6 +35,7 @@ import {
   resolveEventGridRelatedObject,
 } from '@shared/events/eventGridModel';
 import type { ResourceLink } from '@core/refresh/types';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 export interface EventData {
   kind: string;
@@ -57,6 +59,7 @@ export interface EventData {
 interface EventViewProps {
   namespace: string;
   data: EventData[];
+  stats?: SnapshotStats | null;
   loading?: boolean;
   loaded?: boolean;
   showNamespaceColumn?: boolean;
@@ -66,7 +69,7 @@ interface EventViewProps {
  * GridTable component for namespace Events
  */
 const NsEventsTable: React.FC<EventViewProps> = React.memo(
-  ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({ namespace, data, stats, loading = false, loaded = false, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -223,6 +226,15 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       diagnosticsLabel:
         namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events',
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
+      filterOptionOverrides: {
+        partialDataLabel: buildLocalPartialDataLabel({
+          stats,
+          fallback: 'Events are loaded as a recent local window.',
+          sourceLabel:
+            namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events',
+          sourceVerb: 'are',
+        }),
+      },
     });
 
     const objectActions = useObjectActionController({

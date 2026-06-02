@@ -128,11 +128,21 @@ describe('ClusterResourcesManager', () => {
   };
 
   it('loads the active tab data and passes props downstream', async () => {
-    clusterResourceStates.storage.meta = { kinds: ['PersistentVolume'] };
+    const tableStats = {
+      itemCount: 1,
+      totalItems: 2,
+      truncated: true,
+      buildDurationMs: 1,
+      warnings: ['Showing first 1 of 2 rows'],
+    };
+    clusterResourceStates.nodes.meta = { tableStats };
+    clusterResourceStates.storage.meta = { kinds: ['PersistentVolume'], tableStats };
     clusterResourceStates.config.meta = {
       kinds: ['IngressClass', 'MutatingWebhookConfiguration', 'StorageClass'],
+      tableStats,
     };
-    clusterResourceStates.rbac.meta = { kinds: ['ClusterRole', 'ClusterRoleBinding'] };
+    clusterResourceStates.crds.meta = { tableStats };
+    clusterResourceStates.rbac.meta = { kinds: ['ClusterRole', 'ClusterRoleBinding'], tableStats };
 
     await renderManager('storage');
 
@@ -147,6 +157,11 @@ describe('ClusterResourcesManager', () => {
       'MutatingWebhookConfiguration',
       'StorageClass',
     ]);
+    expect(props.nodesStats).toBe(tableStats);
+    expect(props.storageStats).toBe(tableStats);
+    expect(props.configStats).toBe(tableStats);
+    expect(props.crdsStats).toBe(tableStats);
+    expect(props.rbacStats).toBe(tableStats);
     expect(props.rbacKinds).toEqual(['ClusterRole', 'ClusterRoleBinding']);
   });
 

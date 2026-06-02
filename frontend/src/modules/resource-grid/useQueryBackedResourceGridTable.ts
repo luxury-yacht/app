@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import type { RefreshDomain } from '@/core/refresh/types';
 import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
 import { useNamespaceResourceGridTable } from './useResourceGridTable';
@@ -7,7 +7,13 @@ import type {
   ResourceGridTableResult,
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
-import { useTypedResourceQuery, type TypedQueryPayload } from './useTypedResourceQuery';
+import QueryPaginationControls from './QueryPaginationControls';
+import {
+  TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+  useTypedResourceQuery,
+  type TypedQueryPageLimit,
+  type TypedQueryPayload,
+} from './useTypedResourceQuery';
 import {
   mergeQueryBackedFilterOptions,
   queryBackedPaginationProps,
@@ -64,6 +70,7 @@ export function useQueryBackedNamespaceResourceGridTable<
 }: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
+  const [pageLimit, setPageLimit] = useState<TypedQueryPageLimit>(250);
   const handlePublishedTableState = useCallback(
     (next: QueryBackedTableState) => {
       setTableStateReady(true);
@@ -80,6 +87,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     label,
     filters: tableState.filters,
     sortConfig: tableState.sortConfig,
+    pageLimit,
     predicates,
     selectRows,
   });
@@ -100,11 +108,31 @@ export function useQueryBackedNamespaceResourceGridTable<
     onTableStateChange: enabled ? handlePublishedTableState : undefined,
   });
 
-  const gridTableProps = useMemo(
-    () =>
-      enabled ? queryBackedPaginationProps(table.gridTableProps, query) : table.gridTableProps,
-    [enabled, query, table.gridTableProps]
-  );
+  const gridTableProps = useMemo(() => {
+    if (!enabled) {
+      return table.gridTableProps;
+    }
+    const paginationControls = React.createElement(QueryPaginationControls, {
+      idPrefix: tableParams.viewId,
+      pageIndex: query.pageIndex,
+      pageSize: query.pageSize,
+      visibleItemCount: query.rows.length,
+      pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+      totalCount: query.totalCount,
+      totalIsExact: query.totalIsExact,
+      hasPrevious: query.hasPrevious,
+      hasNext: Boolean(query.continueToken),
+      loading: query.isRequestingMore || query.loading,
+      onPrevious: query.loadPrevious,
+      onNext: query.loadMore,
+      onPageSizeChange: (value: number) => {
+        if (TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)) {
+          setPageLimit(value as TypedQueryPageLimit);
+        }
+      },
+    });
+    return queryBackedPaginationProps(table.gridTableProps, query, paginationControls);
+  }, [enabled, query, table.gridTableProps, tableParams.viewId]);
 
   return {
     ...table,

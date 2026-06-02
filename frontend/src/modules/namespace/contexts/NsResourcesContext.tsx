@@ -17,6 +17,7 @@ import React, {
 } from 'react';
 import { errorHandler } from '@/utils/errorHandler';
 import { type ResourceDataReturn } from '@hooks/resources';
+import type { SnapshotStats } from '@/core/refresh/client';
 import { useRefreshDomainHandle } from '@/core/data-access';
 import {
   ALL_NAMESPACE_PERMISSIONS,
@@ -137,6 +138,16 @@ const getCapabilityNamespace = (value?: string | null): string | null => {
     return actual && actual !== 'all' ? actual : null;
   }
   return trimmed === 'all' ? null : trimmed;
+};
+
+const withSnapshotStatsMeta = (base: unknown, stats?: SnapshotStats | null): unknown => {
+  if (!stats) {
+    return base;
+  }
+  if (base && typeof base === 'object' && !Array.isArray(base)) {
+    return { ...base, tableStats: stats };
+  }
+  return { tableStats: stats };
 };
 
 const useNamespacePodsResource = (
@@ -336,10 +347,10 @@ function useRefreshBackedResource<T>(
 
   const selectedMeta = useMemo(() => {
     if (!domainData || !metaSelector) {
-      return undefined;
+      return withSnapshotStatsMeta(undefined, domainState.stats);
     }
-    return metaSelector(domainData);
-  }, [domainData, metaSelector]);
+    return withSnapshotStatsMeta(metaSelector(domainData), domainState.stats);
+  }, [domainData, domainState.stats, metaSelector]);
   const meta = useStableSelectedValue(selectedMeta);
 
   const initialising =

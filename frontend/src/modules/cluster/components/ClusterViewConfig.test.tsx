@@ -153,6 +153,30 @@ describe('ClusterViewConfig', () => {
     expect(props.columnWidths).toBe(null);
   });
 
+  it('marks truncated producer snapshots as Local Partial', async () => {
+    await act(async () => {
+      root.render(
+        <ClusterViewConfig
+          data={[baseConfig]}
+          stats={{
+            itemCount: 1,
+            totalItems: 12,
+            truncated: true,
+            buildDurationMs: 1,
+            warnings: ['Showing first 1 of 12 cluster configuration resources'],
+          }}
+          loaded={true}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.filters?.options?.partialDataLabel).toContain(
+      'Showing first 1 of 12 cluster configuration resources'
+    );
+    expect(gridTablePropsRef.current?.filters?.options?.partialDataLabel).toContain('visible rows');
+  });
+
   it('opens a StorageClass directly to the map tab from the context menu', async () => {
     await act(async () => {
       root.render(<ClusterViewConfig data={[baseConfig]} loaded={true} />);

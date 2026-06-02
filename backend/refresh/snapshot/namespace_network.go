@@ -401,9 +401,8 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 
 	sortNetworkSummaries(resources)
 
-	if len(resources) > config.SnapshotNamespaceNetworkEntryLimit {
-		resources = resources[:config.SnapshotNamespaceNetworkEntryLimit]
-	}
+	var totalItems int
+	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceNetworkEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceNetworkDomainName,
@@ -414,7 +413,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 			Resources:   resources,
 			Kinds:       snapshotSortedKinds(resources, func(resource NetworkSummary) string { return resource.Kind }),
 		},
-		Stats: refresh.SnapshotStats{ItemCount: len(resources)},
+		Stats: snapshotWindowStats(len(resources), totalItems, "network resources"),
 	}, nil
 }
 

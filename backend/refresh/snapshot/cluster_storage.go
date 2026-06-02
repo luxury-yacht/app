@@ -11,6 +11,7 @@ import (
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
@@ -89,12 +90,14 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Name < entries[j].Name
 	})
+	var totalItems int
+	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterStorageEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  clusterStorageDomainName,
 		Version: version,
 		Payload: ClusterStorageSnapshot{ClusterMeta: meta, Volumes: entries},
-		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
+		Stats:   snapshotWindowStats(len(entries), totalItems, "persistent volumes"),
 	}, nil
 }
 

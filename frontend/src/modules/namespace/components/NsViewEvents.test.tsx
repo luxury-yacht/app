@@ -180,16 +180,21 @@ describe('NsViewEvents', () => {
 
   const renderEventsView = async (
     rows: EventData[] = [baseEvent()],
-    showNamespaceColumn = true
+    showNamespaceColumnOrOptions: boolean | { showNamespaceColumn?: boolean; stats?: any } = true
   ) => {
+    const options =
+      typeof showNamespaceColumnOrOptions === 'boolean'
+        ? { showNamespaceColumn: showNamespaceColumnOrOptions }
+        : showNamespaceColumnOrOptions;
     await act(async () => {
       root.render(
         <NsViewEvents
           data={rows}
+          stats={options.stats}
           loading={false}
           loaded={true}
           namespace="team-a"
-          showNamespaceColumn={showNamespaceColumn}
+          showNamespaceColumn={options.showNamespaceColumn ?? true}
         />
       );
       await Promise.resolve();
@@ -372,5 +377,22 @@ describe('NsViewEvents', () => {
     expect(cell.props.className).toContain('warning');
     expect(cell.props.className).not.toContain('kind-badge');
     expect(cell.props.className).not.toMatch(/hash-color-\d+/);
+  });
+
+  it('uses backend truncation stats for Local Partial table copy', async () => {
+    await renderEventsView([baseEvent({ reason: 'Backoff' })], {
+      stats: {
+        itemCount: 1,
+        buildDurationMs: 0,
+        truncated: true,
+        totalItems: 20,
+        warnings: ['Showing most recent 1 of 20 events'],
+      },
+    });
+
+    expect(gridTablePropsRef.current.filters.options.partialDataLabel).toContain(
+      'Showing most recent 1 of 20 events'
+    );
+    expect(gridTablePropsRef.current.filters.options.partialDataLabel).toContain('visible rows');
   });
 });

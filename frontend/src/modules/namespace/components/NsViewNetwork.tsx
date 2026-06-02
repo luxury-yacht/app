@@ -21,10 +21,12 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 // Data interface for network resources
 export interface NetworkData {
@@ -41,6 +43,7 @@ export interface NetworkData {
 interface NetworkViewProps {
   namespace: string;
   data: NetworkData[];
+  stats?: SnapshotStats | null;
   availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
@@ -55,6 +58,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
   ({
     namespace,
     data,
+    stats = null,
     availableKinds: kindOptions,
     loading = false,
     loaded = false,
@@ -191,6 +195,13 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
+      filterOptionOverrides: {
+        partialDataLabel: buildLocalPartialDataLabel({
+          stats,
+          fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
+          sourceLabel: diagnosticsLabel,
+        }),
+      },
       diagnosticsLabel,
     });
 

@@ -20,11 +20,13 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 const NAMESPACE_AUTOSCALING_KIND_OPTIONS = ['HorizontalPodAutoscaler'];
 
@@ -72,6 +74,7 @@ export interface AutoscalingData {
 interface AutoscalingViewProps {
   namespace: string;
   data: AutoscalingData[];
+  stats?: SnapshotStats | null;
   availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
@@ -86,6 +89,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
   ({
     namespace,
     data,
+    stats = null,
     availableKinds: kindOptions,
     loading = false,
     loaded = false,
@@ -322,6 +326,8 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
+    const diagnosticsLabel =
+      namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Autoscaling' : 'Namespace Autoscaling';
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<AutoscalingData>({
@@ -332,13 +338,19 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Autoscaling' : 'Namespace Autoscaling',
+      diagnosticsLabel,
       availableKinds:
         kindOptions && kindOptions.length > 0 ? kindOptions : NAMESPACE_AUTOSCALING_KIND_OPTIONS,
       showKindDropdown: true,
       showNamespaceFilters: showNamespaceFilter,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
+      filterOptionOverrides: {
+        partialDataLabel: buildLocalPartialDataLabel({
+          stats,
+          fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
+          sourceLabel: diagnosticsLabel,
+        }),
+      },
     });
 
     const objectActions = useObjectActionController({
@@ -383,11 +395,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           spinnerMessage="Loading autoscaling resources..."
           favModal={favModal}
           columns={columns}
-          diagnosticsLabel={
-            namespace === ALL_NAMESPACES_SCOPE
-              ? 'All Namespaces Autoscaling'
-              : 'Namespace Autoscaling'
-          }
+          diagnosticsLabel={diagnosticsLabel}
           diagnosticsMode="live"
           loading={loading}
           onRowClick={handleResourceClick}

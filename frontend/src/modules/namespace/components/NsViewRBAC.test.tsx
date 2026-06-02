@@ -181,12 +181,16 @@ describe('NsViewRBAC', () => {
     ...overrides,
   });
 
-  const renderRBACView = async (rows: RBACData[] = [baseRBAC()]) => {
+  const renderRBACView = async (
+    rows: RBACData[] = [baseRBAC()],
+    options: { stats?: any; namespace?: string } = {}
+  ) => {
     await act(async () => {
       root.render(
         <NsViewRBAC
-          namespace="team-a"
+          namespace={options.namespace ?? 'team-a'}
           data={rows}
+          stats={options.stats}
           loading={false}
           loaded={true}
           showNamespaceColumn={true}
@@ -196,6 +200,21 @@ describe('NsViewRBAC', () => {
     });
     return gridTablePropsRef.current;
   };
+
+  it('marks truncated single-namespace RBAC snapshots as Local Partial', async () => {
+    const props = await renderRBACView([baseRBAC()], {
+      stats: {
+        itemCount: 1,
+        totalItems: 9,
+        truncated: true,
+        buildDurationMs: 1,
+        warnings: ['Showing first 1 of 9 RBAC resources'],
+      },
+    });
+
+    expect(props.filters.options.partialDataLabel).toContain('Showing first 1 of 9 RBAC resources');
+    expect(props.filters.options.partialDataLabel).toContain('visible rows');
+  });
 
   it('provides open action for RBAC rows', async () => {
     const entry = baseRBAC();

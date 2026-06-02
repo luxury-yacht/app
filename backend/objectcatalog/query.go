@@ -90,20 +90,16 @@ type catalogQueryMetadata struct {
 
 // Query filters catalog entries and returns a paginated result.
 func (s *Service) Query(opts QueryOptions) QueryResult {
+	if s.queryStore != nil {
+		if result, ok := s.queryStore.QueryCatalog(opts); ok {
+			return result
+		}
+	}
+
 	kindMatcher := newKindMatcher(opts.Kinds)
 	namespaceMatcher := newNamespaceMatcher(opts.Namespaces)
 	searchMatcher := newSearchMatcher(opts.Search)
-
-	s.mu.RLock()
-	cachedState := s.catalogIndex.cachedQueryState()
-	s.mu.RUnlock()
-
-	if len(cachedState.chunks) == 0 {
-		return s.queryWithoutCache(opts, kindMatcher, namespaceMatcher, searchMatcher)
-	}
-
-	executor := s.newCatalogQueryExecutor(opts, cachedState, kindMatcher, namespaceMatcher, searchMatcher)
-	return executor.executeCached()
+	return s.queryWithoutCache(opts, kindMatcher, namespaceMatcher, searchMatcher)
 }
 
 func (s *Service) newCatalogQueryExecutor(

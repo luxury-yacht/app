@@ -58,6 +58,14 @@ import { NamespaceViewType } from '@/types/navigation/views';
 describe('NamespaceResourcesViews', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
+  const tableStats = {
+    itemCount: 1,
+    totalItems: 20,
+    truncated: true,
+    warnings: ['Showing recent rows'],
+    generatedAt: '2026-01-01T00:00:00Z',
+    buildDurationMs: 1,
+  };
 
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -151,6 +159,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'config' as const,
       props: {
         nsConfig: [{ name: 'cm' }],
+        nsConfigStats: tableStats,
         nsConfigKinds: ['ConfigMap', 'Secret'],
         nsConfigLoading: false,
         nsConfigLoaded: true,
@@ -159,6 +168,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'cm' }],
+        stats: tableStats,
         availableKinds: ['ConfigMap', 'Secret'],
         loading: false,
         loaded: true,
@@ -168,6 +178,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'network' as const,
       props: {
         nsNetwork: [{ name: 'np' }],
+        nsNetworkStats: tableStats,
         nsNetworkKinds: ['Ingress', 'NetworkPolicy', 'Service'],
         nsNetworkLoading: false,
         nsNetworkLoaded: true,
@@ -176,6 +187,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'np' }],
+        stats: tableStats,
         availableKinds: ['Ingress', 'NetworkPolicy', 'Service'],
         loading: false,
         loaded: true,
@@ -185,6 +197,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'rbac' as const,
       props: {
         nsRBAC: [{ name: 'role' }],
+        nsRBACStats: tableStats,
         nsRBACKinds: ['Role', 'RoleBinding', 'ServiceAccount'],
         nsRBACLoading: true,
         nsRBACLoaded: false,
@@ -193,6 +206,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'role' }],
+        stats: tableStats,
         availableKinds: ['Role', 'RoleBinding', 'ServiceAccount'],
         loading: true,
         loaded: false,
@@ -202,6 +216,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'storage' as const,
       props: {
         nsStorage: [{ name: 'pvc' }],
+        nsStorageStats: tableStats,
         nsStorageLoading: true,
         nsStorageLoaded: true,
       },
@@ -209,6 +224,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'pvc' }],
+        stats: tableStats,
         loading: true,
         loaded: true,
       },
@@ -217,6 +233,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'autoscaling' as const,
       props: {
         nsAutoscaling: [{ name: 'hpa' }],
+        nsAutoscalingStats: tableStats,
         nsAutoscalingKinds: ['HorizontalPodAutoscaler'],
         nsAutoscalingLoading: false,
         nsAutoscalingLoaded: true,
@@ -225,6 +242,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'hpa' }],
+        stats: tableStats,
         availableKinds: ['HorizontalPodAutoscaler'],
         loading: false,
         loaded: true,
@@ -234,6 +252,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'quotas' as const,
       props: {
         nsQuotas: [{ name: 'rq' }],
+        nsQuotasStats: tableStats,
         nsQuotasKinds: ['LimitRange', 'PodDisruptionBudget', 'ResourceQuota'],
         nsQuotasLoading: true,
         nsQuotasLoaded: true,
@@ -242,6 +261,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'rq' }],
+        stats: tableStats,
         availableKinds: ['LimitRange', 'PodDisruptionBudget', 'ResourceQuota'],
         loading: true,
         loaded: true,
@@ -259,6 +279,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'helm' as const,
       props: {
         nsHelm: [{ name: 'release', namespace: 'team-a' }],
+        nsHelmStats: tableStats,
         nsHelmLoading: false,
         nsHelmLoaded: true,
       },
@@ -266,6 +287,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'release', namespace: 'team-a' }],
+        stats: tableStats,
         loading: false,
         loaded: true,
       },
@@ -274,12 +296,14 @@ describe('NamespaceResourcesViews', () => {
       tab: 'events' as const,
       props: {
         nsEvents: [{ message: 'Pod restarted' }],
+        nsEventsStats: tableStats,
         nsEventsLoading: false,
         nsEventsLoaded: true,
       },
       mock: eventsViewMock,
       expected: {
         data: [{ message: 'Pod restarted' }],
+        stats: tableStats,
         loading: false,
         loaded: true,
         namespace: 'team-a',

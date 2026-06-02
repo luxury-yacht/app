@@ -9,6 +9,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -86,4 +87,28 @@ func TestClusterRBACBuilderEmpty(t *testing.T) {
 	require.True(t, ok)
 	require.Empty(t, payload.Resources)
 	require.Empty(t, payload.Kinds)
+}
+
+func TestClusterRBACBuilderCapsLargeSnapshots(t *testing.T) {
+	roles := make([]*rbacv1.ClusterRole, 0, config.SnapshotClusterRBACEntryLimit+1)
+	for i := 0; i < config.SnapshotClusterRBACEntryLimit+1; i++ {
+		roles = append(roles, &rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "role-" + time.Unix(int64(i), 0).Format("150405"),
+				ResourceVersion: "1",
+			},
+		})
+	}
+
+	builder := &ClusterRBACBuilder{
+		roleLister: testsupport.NewClusterRoleLister(t, roles...),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(ClusterRBACSnapshot)
+	require.Len(t, payload.Resources, config.SnapshotClusterRBACEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotClusterRBACEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "cluster RBAC resources")
 }

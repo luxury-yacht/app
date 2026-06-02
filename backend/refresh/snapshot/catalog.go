@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
@@ -37,6 +38,7 @@ type CatalogSnapshot struct {
 	Kinds               []objectcatalog.KindInfo `json:"kinds,omitempty"`
 	Namespaces          []string                 `json:"namespaces,omitempty"`
 	FacetsExact         bool                     `json:"facetsExact"`
+	Issues              []ResourceQueryIssue     `json:"issues,omitempty"`
 	HasNext             bool                     `json:"hasNext"`
 	HasPrevious         bool                     `json:"hasPrevious"`
 	NamespaceGroups     []CatalogNamespaceGroup  `json:"namespaceGroups,omitempty"`
@@ -150,6 +152,7 @@ func buildCatalogSnapshot(
 		health.Status == objectcatalog.HealthStateDegraded ||
 		health.Stale ||
 		health.ConsecutiveFailures > 3
+	issues := catalogSnapshotIssues(result, health, streamingDisabled)
 	if streamingDisabled {
 		isFinal = true
 		result.ContinueToken = ""
@@ -176,6 +179,7 @@ func buildCatalogSnapshot(
 		Kinds:         cloneKindInfos(result.Kinds),
 		Namespaces:    cloneStrings(result.Namespaces),
 		FacetsExact:   result.FacetsExact,
+		Issues:        issues,
 		HasNext:       hasNext,
 		HasPrevious:   hasPrevious,
 		BatchIndex:    batchIndex,
@@ -187,6 +191,51 @@ func buildCatalogSnapshot(
 	truncated := result.ContinueToken != "" || (payload.Total > 0 && len(payload.Items) < payload.Total)
 
 	return payload, truncated
+}
+
+func catalogSnapshotIssues(result objectcatalog.QueryResult, health objectcatalog.HealthStatus, streamingDisabled bool) []ResourceQueryIssue {
+	issues := make([]ResourceQueryIssue, 0, 4)
+	if result.CursorInvalid {
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    "Catalog cursor",
+			Message: "The previous page cursor expired or no longer matches this query; the table reset to a valid page.",
+		})
+	}
+	if !result.TotalIsExact {
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    "Catalog totals",
+			Message: "The total result count is approximate because the match set exceeded the catalog metadata budget.",
+		})
+	}
+	if !result.FacetsExact {
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    "Catalog facets",
+			Message: "Kind and namespace filter options are approximate because the catalog metadata is incomplete.",
+		})
+	}
+	if health.Status == objectcatalog.HealthStateDegraded ||
+		health.Status == objectcatalog.HealthStateError ||
+		health.Stale ||
+		health.ConsecutiveFailures > 0 {
+		message := "Catalog data may be stale or incomplete because one or more resource syncs failed."
+		if health.FailedResources > 0 {
+			message += " Failed resources: " + strconv.Itoa(health.FailedResources) + "."
+		}
+		if health.LastError != "" {
+			message += " Last error: " + health.LastError
+		}
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    "Catalog health",
+			Message: message,
+		})
+	}
+	if streamingDisabled {
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    "Catalog pagination",
+			Message: "Pagination is disabled while the catalog is degraded to avoid serving misleading cursor pages.",
+		})
+	}
+	return issues
 }
 
 func keysetCatalogBatchIndex(hasPrevious bool) int {

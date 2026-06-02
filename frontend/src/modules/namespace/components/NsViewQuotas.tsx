@@ -21,10 +21,12 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 // Data interface for quota resources (ResourceQuotas, LimitRanges, PodDisruptionBudgets)
 export interface QuotaData {
@@ -56,6 +58,7 @@ export interface QuotaData {
 interface QuotasViewProps {
   namespace: string;
   data: QuotaData[];
+  stats?: SnapshotStats | null;
   availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
@@ -70,6 +73,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
   ({
     namespace,
     data,
+    stats = null,
     availableKinds: kindOptions,
     loading = false,
     loaded = false,
@@ -197,6 +201,14 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
+      filterOptionOverrides: {
+        partialDataLabel: buildLocalPartialDataLabel({
+          stats,
+          fallback: `${diagnosticsLabel} are loaded as a bounded local snapshot.`,
+          sourceLabel: diagnosticsLabel,
+          sourceVerb: 'are',
+        }),
+      },
       diagnosticsLabel,
     });
 

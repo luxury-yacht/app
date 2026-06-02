@@ -354,15 +354,15 @@ func buildNodeSnapshotFromUsage(
 	}
 	metricsInfo.SuccessCount = metricsMeta.SuccessCount
 	metricsInfo.FailureCount = metricsMeta.FailureCount
+	var totalItems int
+	items, totalItems = truncateSnapshotWindow(items, config.SnapshotClusterNodesEntryLimit)
 
 	snap := &refresh.Snapshot{
 		Domain:  "nodes",
 		Scope:   "",
 		Version: version,
 		Payload: NodeSnapshot{ClusterMeta: meta, Nodes: items, Metrics: metricsInfo},
-		Stats: refresh.SnapshotStats{
-			ItemCount: len(items),
-		},
+		Stats:   snapshotWindowStats(len(items), totalItems, "nodes"),
 	}
 	return snap
 }

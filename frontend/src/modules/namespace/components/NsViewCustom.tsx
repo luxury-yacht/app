@@ -21,6 +21,7 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
+import CatalogPaginationControls from '@modules/browse/components/CatalogPaginationControls';
 import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
 import {
   customCatalogCRDReference,
@@ -249,6 +250,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         namespaceDropdownBulkActions: showNamespaceFilter,
         totalCount,
         totalIsExact,
+        partialDataLabel: catalogFilterOptions.partialDataLabel,
         postActions: [copyAllMatchingCsvAction],
       },
     });
@@ -278,6 +280,26 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         ),
       [namespace]
     );
+    const paginationControls = useMemo(
+      () => (
+        <CatalogPaginationControls
+          idPrefix="namespace-custom"
+          pageIndex={pagination.pageIndex}
+          pageSize={pagination.pageLimit}
+          visibleItemCount={rows.length}
+          pageSizeOptions={pagination.pageLimitOptions}
+          totalCount={pagination.totalCount}
+          totalIsExact={pagination.totalIsExact}
+          hasPrevious={Boolean(pagination.previousToken)}
+          hasNext={Boolean(pagination.continueToken)}
+          loading={pagination.isRequestingMore || pagination.queryPending}
+          onPrevious={pagination.onRequestPrevious}
+          onNext={pagination.onRequestMore}
+          onPageSizeChange={pagination.setPageLimit}
+        />
+      ),
+      [pagination, rows.length]
+    );
 
     return (
       <>
@@ -297,6 +319,9 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           useShortNames={useShortResourceNames}
           emptyMessage={emptyMessage}
           {...pagination}
+          paginationControls={paginationControls}
+          showLoadMoreButton={false}
+          showPaginationStatus={false}
         />
 
         {objectActions.modals}

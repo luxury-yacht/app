@@ -21,6 +21,7 @@ import React, {
   ReactNode,
 } from 'react';
 import type { ResourceDataReturn } from '@hooks/resources';
+import type { SnapshotStats } from '@/core/refresh/client';
 import {
   requestRefreshDomain,
   resetRefreshDomain,
@@ -95,6 +96,16 @@ const CLUSTER_EVENTS_DOMAIN: RefreshDomain = 'cluster-events';
 
 const noop = () => {};
 
+const withSnapshotStatsMeta = (base: unknown, stats?: SnapshotStats | null): unknown => {
+  if (!stats) {
+    return base;
+  }
+  if (base && typeof base === 'object' && !Array.isArray(base)) {
+    return { ...base, tableStats: stats };
+  }
+  return { tableStats: stats };
+};
+
 // Keep merged multi-cluster payloads scoped to the active tab.
 const filterByClusterId = <T extends { clusterId?: string | null }>(
   items: T[] | null | undefined,
@@ -146,8 +157,12 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
   const selectedData = useMemo(() => extractFn(state.data ?? null), [extractFn, state.data]);
   const stableData = useStableSelectedValue(selectedData);
   const selectedMeta = useMemo(
-    () => (metaExtractor ? metaExtractor(state.data ?? null) : undefined),
-    [metaExtractor, state.data]
+    () =>
+      withSnapshotStatsMeta(
+        metaExtractor ? metaExtractor(state.data ?? null) : undefined,
+        state.stats
+      ),
+    [metaExtractor, state.data, state.stats]
   );
   const stableMeta = useStableSelectedValue(selectedMeta);
 

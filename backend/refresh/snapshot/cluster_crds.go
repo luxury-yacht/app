@@ -11,6 +11,7 @@ import (
 	apiextlisters "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -95,12 +96,14 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Name < entries[j].Name
 	})
+	var totalItems int
+	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterCRDEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  clusterCRDDomainName,
 		Version: version,
 		Payload: ClusterCRDSnapshot{ClusterMeta: meta, Definitions: entries},
-		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
+		Stats:   snapshotWindowStats(len(entries), totalItems, "CRDs"),
 	}, nil
 }
 

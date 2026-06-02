@@ -15,6 +15,15 @@
   min-height: 0;
 }
 
+.events-display__partial-state {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
 .object-panel-placeholder {
   padding: 2rem;
   text-align: center;

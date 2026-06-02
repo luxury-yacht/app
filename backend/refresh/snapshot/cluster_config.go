@@ -14,6 +14,7 @@ import (
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 	gatewaylisters "sigs.k8s.io/gateway-api/pkg/client/listers/apis/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
@@ -207,6 +208,8 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 		return entries[i].Kind < entries[j].Kind
 	})
+	var totalItems int
+	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterConfigEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  clusterConfigDomainName,
@@ -216,7 +219,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 			Resources:   entries,
 			Kinds:       snapshotSortedKinds(entries, func(entry ClusterConfigEntry) string { return entry.Kind }),
 		},
-		Stats: refresh.SnapshotStats{ItemCount: len(entries)},
+		Stats: snapshotWindowStats(len(entries), totalItems, "cluster configuration resources"),
 	}, nil
 }
 

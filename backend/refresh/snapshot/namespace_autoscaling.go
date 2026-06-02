@@ -123,9 +123,8 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
-	if len(resources) > config.SnapshotNamespaceAutoscalingEntryLimit {
-		resources = resources[:config.SnapshotNamespaceAutoscalingEntryLimit]
-	}
+	var totalItems int
+	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceAutoscalingEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceAutoscalingDomainName,
@@ -136,9 +135,7 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 			Resources:   resources,
 			Kinds:       snapshotSortedKinds(resources, func(resource AutoscalingSummary) string { return resource.Kind }),
 		},
-		Stats: refresh.SnapshotStats{
-			ItemCount: len(resources),
-		},
+		Stats: snapshotWindowStats(len(resources), totalItems, "autoscaling resources"),
 	}, nil
 }
 

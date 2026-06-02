@@ -13,6 +13,63 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { listRegisteredGridTableViews } from './gridTableViewRegistry';
 
+const TABLE_MODES = [
+  'Local Complete',
+  'Local Partial',
+  'Query Backed Static',
+  'Query Backed Dynamic',
+] as const;
+
+const TABLE_MODE_PATTERN = new RegExp(TABLE_MODES.join('|'));
+
+const DIRECT_GRIDTABLE_USAGE_EXCEPTIONS = {
+  'modules/resource-grid/ObjectPanelResourceGridTableSurface.tsx': {
+    kind: 'resource-grid-surface',
+    mode: 'Inherited from useObjectPanelResourceGridTable',
+    reason: 'Adapter shell only; callers provide gridTableProps after declaring tableMode.',
+  },
+  'modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx': {
+    kind: 'classified-table',
+    mode: 'Local Partial',
+    reason: 'Object events are a recent/capped object-scoped snapshot window.',
+  },
+  'modules/object-panel/components/ObjectPanel/Logs/ParsedLogTable.tsx': {
+    kind: 'classified-table',
+    mode: 'Local Partial',
+    reason: 'Parsed logs are derived from the bounded object-panel log buffer.',
+  },
+} as const;
+
+const DIRECT_USE_TABLE_SORT_EXCEPTIONS = {
+  'modules/resource-grid/useGridTableBinding.ts': {
+    kind: 'resource-grid-surface',
+    mode: 'Inherited from resource-grid tableMode',
+    reason: 'Shared adapter disables local sort when tableMode is query-backed.',
+  },
+  'modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx': {
+    kind: 'classified-table',
+    mode: 'Local Partial',
+    reason: 'Direct GridTable exception above owns the object-event local window.',
+  },
+} as const;
+
+const STATS_BACKED_LOCAL_PARTIAL_FILES = [
+  'modules/cluster/components/ClusterViewEvents.tsx',
+  'modules/cluster/components/ClusterViewConfig.tsx',
+  'modules/cluster/components/ClusterViewCRDs.tsx',
+  'modules/cluster/components/ClusterViewNodes.tsx',
+  'modules/cluster/components/ClusterViewRBAC.tsx',
+  'modules/cluster/components/ClusterViewStorage.tsx',
+  'modules/namespace/components/NsViewAutoscaling.tsx',
+  'modules/namespace/components/NsViewConfig.tsx',
+  'modules/namespace/components/NsViewEvents.tsx',
+  'modules/namespace/components/NsViewHelm.tsx',
+  'modules/namespace/components/NsViewNetwork.tsx',
+  'modules/namespace/components/NsViewQuotas.tsx',
+  'modules/namespace/components/NsViewRBAC.tsx',
+  'modules/namespace/components/NsViewStorage.tsx',
+] as const;
+
 /** Recursively find all .ts/.tsx files under `dir`. */
 function walkSourceFiles(dir: string): string[] {
   const results: string[] = [];
@@ -107,12 +164,31 @@ function findResourceGridCallsMissingTableMode(sourceRoot: string): string[] {
   return [...new Set(missing)].sort();
 }
 
+function findResourceGridCallsWithoutRecognizedTableMode(sourceRoot: string): string[] {
+  const files = walkSourceFiles(sourceRoot);
+  const callPattern =
+    /use(?:Cluster|Namespace|ObjectPanel|Query)ResourceGridTable(?:<[^>]+>)?\s*\(\s*\{[\s\S]*?\n\s*\}\s*\)/g;
+  const invalid: string[] = [];
+
+  for (const filePath of files) {
+    const relativePath = path.relative(sourceRoot, filePath);
+    if (
+      relativePath.split(path.sep).join('/') === 'modules/resource-grid/useResourceGridTable.tsx'
+    ) {
+      continue;
+    }
+    const content = fs.readFileSync(filePath, 'utf-8');
+    for (const match of content.matchAll(callPattern)) {
+      if (/\btableMode\s*:/.test(match[0]) && !TABLE_MODE_PATTERN.test(match[0])) {
+        invalid.push(relativePath);
+      }
+    }
+  }
+
+  return [...new Set(invalid)].sort();
+}
+
 function findProductionDirectGridTableUsages(sourceRoot: string): string[] {
-  const allowed = new Set([
-    'modules/resource-grid/ObjectPanelResourceGridTableSurface.tsx',
-    'modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx',
-    'modules/object-panel/components/ObjectPanel/Logs/ParsedLogTable.tsx',
-  ]);
   return walkSourceFiles(sourceRoot)
     .map((filePath) => path.relative(sourceRoot, filePath).split(path.sep).join('/'))
     .filter((relativePath) => !relativePath.startsWith('shared/components/tables/'))
@@ -121,15 +197,14 @@ function findProductionDirectGridTableUsages(sourceRoot: string): string[] {
       const content = fs.readFileSync(path.join(sourceRoot, relativePath), 'utf-8');
       return /<GridTable(?:<[^>]+>)?[\s>]/.test(content);
     })
-    .filter((relativePath) => !allowed.has(relativePath))
+    .filter(
+      (relativePath) =>
+        !Object.prototype.hasOwnProperty.call(DIRECT_GRIDTABLE_USAGE_EXCEPTIONS, relativePath)
+    )
     .sort();
 }
 
 function findProductionDirectUseTableSortUsages(sourceRoot: string): string[] {
-  const allowed = new Set([
-    'modules/resource-grid/useGridTableBinding.ts',
-    'modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx',
-  ]);
   return walkSourceFiles(sourceRoot)
     .map((filePath) => path.relative(sourceRoot, filePath).split(path.sep).join('/'))
     .filter((relativePath) => !relativePath.startsWith('hooks/'))
@@ -137,8 +212,33 @@ function findProductionDirectUseTableSortUsages(sourceRoot: string): string[] {
       const content = fs.readFileSync(path.join(sourceRoot, relativePath), 'utf-8');
       return /\buseTableSort\(/.test(content);
     })
-    .filter((relativePath) => !allowed.has(relativePath))
+    .filter(
+      (relativePath) =>
+        !Object.prototype.hasOwnProperty.call(DIRECT_USE_TABLE_SORT_EXCEPTIONS, relativePath)
+    )
     .sort();
+}
+
+function findUnclassifiedDirectUsageExceptions(): string[] {
+  const entries = [
+    ...Object.entries(DIRECT_GRIDTABLE_USAGE_EXCEPTIONS),
+    ...Object.entries(DIRECT_USE_TABLE_SORT_EXCEPTIONS),
+  ];
+  return entries
+    .filter(([, exception]) => !exception.mode.trim() || !exception.reason.trim())
+    .map(([file]) => file)
+    .sort();
+}
+
+function findStatsBackedLocalPartialViewsMissingCopy(sourceRoot: string): string[] {
+  return STATS_BACKED_LOCAL_PARTIAL_FILES.filter((relativePath) => {
+    const content = fs.readFileSync(path.join(sourceRoot, relativePath), 'utf-8');
+    return (
+      !/stats\?\s*:\s*SnapshotStats\s*\|\s*null/.test(content) ||
+      !/\bbuildLocalPartialDataLabel\b/.test(content) ||
+      !/\bpartialDataLabel\s*:/.test(content)
+    );
+  }).sort();
 }
 
 describe('gridTableViewRegistry contract', () => {
@@ -186,6 +286,17 @@ describe('gridTableViewRegistry contract', () => {
     }
   });
 
+  it('production resource-grid adapter tableMode values are recognized', () => {
+    const invalid = findResourceGridCallsWithoutRecognizedTableMode(srcRoot);
+    if (invalid.length > 0) {
+      throw new Error(
+        `Found resource-grid adapter calls with unrecognized tableMode:\n` +
+          invalid.map((file) => `  ${file}`).join('\n') +
+          '\n\nUse Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic.'
+      );
+    }
+  });
+
   it('direct production GridTable usage is explicitly allowed', () => {
     const unexpected = findProductionDirectGridTableUsages(srcRoot);
     if (unexpected.length > 0) {
@@ -204,6 +315,28 @@ describe('gridTableViewRegistry contract', () => {
         `Found direct production useTableSort usages without an explicit exception:\n` +
           unexpected.map((file) => `  ${file}`).join('\n') +
           '\n\nRoute resource tables through the resource-grid adapter tableMode path, or add a reviewed bounded/partial exception here.'
+      );
+    }
+  });
+
+  it('direct table bypass exceptions carry an explicit table-mode classification', () => {
+    const unclassified = findUnclassifiedDirectUsageExceptions();
+    if (unclassified.length > 0) {
+      throw new Error(
+        `Found direct GridTable/useTableSort exceptions without mode and reason:\n` +
+          unclassified.map((file) => `  ${file}`).join('\n') +
+          '\n\nEvery direct bypass must document whether it is an adapter shell, Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic.'
+      );
+    }
+  });
+
+  it('stats-backed Local Partial resource tables surface producer truncation copy', () => {
+    const missing = findStatsBackedLocalPartialViewsMissingCopy(srcRoot);
+    if (missing.length > 0) {
+      throw new Error(
+        `Found stats-backed Local Partial tables without SnapshotStats partial-state copy:\n` +
+          missing.map((file) => `  ${file}`).join('\n') +
+          '\n\nPass producer SnapshotStats into buildLocalPartialDataLabel and expose it as GridTable partialDataLabel.'
       );
     }
   });

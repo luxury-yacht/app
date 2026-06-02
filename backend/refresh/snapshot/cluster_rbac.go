@@ -10,6 +10,7 @@ import (
 	informers "k8s.io/client-go/informers"
 	rbaclisters "k8s.io/client-go/listers/rbac/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -123,6 +124,8 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		}
 		return entries[i].Kind < entries[j].Kind
 	})
+	var totalItems int
+	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterRBACEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  clusterRBACDomainName,
@@ -132,7 +135,7 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 			Resources:   entries,
 			Kinds:       snapshotSortedKinds(entries, func(entry ClusterRBACEntry) string { return entry.Kind }),
 		},
-		Stats: refresh.SnapshotStats{ItemCount: len(entries)},
+		Stats: snapshotWindowStats(len(entries), totalItems, "cluster RBAC resources"),
 	}, nil
 }
 

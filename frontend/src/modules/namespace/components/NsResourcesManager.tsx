@@ -13,6 +13,7 @@ import {
 import type { PodsResourceDataReturn } from '@modules/namespace/contexts/NsResourcesContext';
 import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { NamespaceViewType } from '@/types/navigation/views';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 // The browse tab is catalog-driven, not a namespace resource loader.
 const isLoadableNamespaceTab = (
@@ -273,6 +274,7 @@ export function NamespaceResourcesManager({
       nsWorkloadsLoaded={workloads?.hasLoaded ?? false}
       // Config data
       nsConfig={config?.data || []}
+      nsConfigStats={(config?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       nsConfigKinds={(config?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsConfigLoading={config?.loading || false}
       nsConfigError={config?.error?.message || null}
@@ -280,6 +282,7 @@ export function NamespaceResourcesManager({
       nsConfigLoaded={config?.hasLoaded ?? false}
       // Network data
       nsNetwork={network?.data || []}
+      nsNetworkStats={(network?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       nsNetworkKinds={(network?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsNetworkLoading={network?.loading || false}
       nsNetworkError={network?.error?.message || null}
@@ -287,6 +290,7 @@ export function NamespaceResourcesManager({
       nsNetworkLoaded={network?.hasLoaded ?? false}
       // RBAC data
       nsRBAC={rbac?.data || []}
+      nsRBACStats={(rbac?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       nsRBACKinds={(rbac?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsRBACLoading={rbac?.loading || false}
       nsRBACError={rbac?.error?.message || null}
@@ -294,12 +298,16 @@ export function NamespaceResourcesManager({
       nsRBACLoaded={rbac?.hasLoaded ?? false}
       // Storage data
       nsStorage={storage?.data || []}
+      nsStorageStats={(storage?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       nsStorageLoading={storage?.loading || false}
       nsStorageError={storage?.error?.message || null}
       loadStorage={manualLoaders.storage}
       nsStorageLoaded={storage?.hasLoaded ?? false}
       // Autoscaling data
       nsAutoscaling={autoscaling?.data || []}
+      nsAutoscalingStats={
+        (autoscaling?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats
+      }
       nsAutoscalingKinds={(autoscaling?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsAutoscalingLoading={autoscaling?.loading || false}
       nsAutoscalingError={autoscaling?.error?.message || null}
@@ -307,6 +315,7 @@ export function NamespaceResourcesManager({
       nsAutoscalingLoaded={autoscaling?.hasLoaded ?? false}
       // Quotas data
       nsQuotas={quotas?.data || []}
+      nsQuotasStats={(quotas?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       nsQuotasKinds={(quotas?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsQuotasLoading={quotas?.loading || false}
       nsQuotasError={quotas?.error?.message || null}
@@ -315,12 +324,14 @@ export function NamespaceResourcesManager({
       // Custom resources data
       // Helm data
       nsHelm={helm?.data || []}
+      nsHelmStats={(helm?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       nsHelmLoading={helm?.loading || false}
       nsHelmError={helm?.error?.message || null}
       loadHelm={manualLoaders.helm}
       nsHelmLoaded={helm?.hasLoaded ?? false}
       // Events data
       nsEvents={events?.data || []}
+      nsEventsStats={(events?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       nsEventsLoading={events?.loading || false}
       nsEventsError={events?.error?.message || null}
       loadEvents={manualLoaders.events}

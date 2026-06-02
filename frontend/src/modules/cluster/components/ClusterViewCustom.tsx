@@ -20,6 +20,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import CatalogPaginationControls from '@modules/browse/components/CatalogPaginationControls';
 import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
 import {
   customCatalogCRDReference,
@@ -211,6 +212,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         kindDropdownBulkActions: true,
         totalCount,
         totalIsExact,
+        partialDataLabel: catalogFilterOptions.partialDataLabel,
         postActions: [copyAllMatchingCsvAction],
       },
     });
@@ -238,6 +240,26 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       () => resolveEmptyStateMessage(error, 'No cluster-scoped custom objects found'),
       [error]
     );
+    const paginationControls = useMemo(
+      () => (
+        <CatalogPaginationControls
+          idPrefix="cluster-custom"
+          pageIndex={pagination.pageIndex}
+          pageSize={pagination.pageLimit}
+          visibleItemCount={rows.length}
+          pageSizeOptions={pagination.pageLimitOptions}
+          totalCount={pagination.totalCount}
+          totalIsExact={pagination.totalIsExact}
+          hasPrevious={Boolean(pagination.previousToken)}
+          hasNext={Boolean(pagination.continueToken)}
+          loading={pagination.isRequestingMore || pagination.queryPending}
+          onPrevious={pagination.onRequestPrevious}
+          onNext={pagination.onRequestMore}
+          onPageSizeChange={pagination.setPageLimit}
+        />
+      ),
+      [pagination, rows.length]
+    );
 
     return (
       <>
@@ -257,6 +279,9 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           useShortNames={useShortResourceNames}
           emptyMessage={emptyMessage}
           {...pagination}
+          paginationControls={paginationControls}
+          showLoadMoreButton={false}
+          showPaginationStatus={false}
         />
 
         {objectActions.modals}

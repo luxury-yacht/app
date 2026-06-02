@@ -11,6 +11,7 @@
 import React from 'react';
 import { NamespaceViewType } from '@/types/navigation/views';
 import type { PodMetricsInfo } from '@/core/refresh/types';
+import type { SnapshotStats } from '@/core/refresh/client';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
 import NsViewConfig from '@modules/namespace/components/NsViewConfig';
 import NsViewCustom from '@modules/namespace/components/NsViewCustom';
@@ -59,6 +60,7 @@ interface NamespaceResourcesViewsProps {
 
   // Config data
   nsConfig?: any[];
+  nsConfigStats?: SnapshotStats | null;
   nsConfigKinds?: string[];
   nsConfigLoading?: boolean;
   nsConfigError?: string | null;
@@ -67,6 +69,7 @@ interface NamespaceResourcesViewsProps {
 
   // Network data
   nsNetwork?: any[];
+  nsNetworkStats?: SnapshotStats | null;
   nsNetworkKinds?: string[];
   nsNetworkLoading?: boolean;
   nsNetworkError?: string | null;
@@ -75,6 +78,7 @@ interface NamespaceResourcesViewsProps {
 
   // RBAC data
   nsRBAC?: any[];
+  nsRBACStats?: SnapshotStats | null;
   nsRBACKinds?: string[];
   nsRBACLoading?: boolean;
   nsRBACError?: string | null;
@@ -83,6 +87,7 @@ interface NamespaceResourcesViewsProps {
 
   // Storage data
   nsStorage?: any[];
+  nsStorageStats?: SnapshotStats | null;
   nsStorageLoading?: boolean;
   nsStorageError?: string | null;
   loadStorage?: () => Promise<void>;
@@ -90,6 +95,7 @@ interface NamespaceResourcesViewsProps {
 
   // Autoscaling data
   nsAutoscaling?: any[];
+  nsAutoscalingStats?: SnapshotStats | null;
   nsAutoscalingKinds?: string[];
   nsAutoscalingLoading?: boolean;
   nsAutoscalingError?: string | null;
@@ -98,6 +104,7 @@ interface NamespaceResourcesViewsProps {
 
   // Quotas data
   nsQuotas?: any[];
+  nsQuotasStats?: SnapshotStats | null;
   nsQuotasKinds?: string[];
   nsQuotasLoading?: boolean;
   nsQuotasError?: string | null;
@@ -106,6 +113,7 @@ interface NamespaceResourcesViewsProps {
 
   // Helm data
   nsHelm?: any[];
+  nsHelmStats?: SnapshotStats | null;
   nsHelmLoading?: boolean;
   nsHelmError?: string | null;
   loadHelm?: () => Promise<void>;
@@ -113,6 +121,7 @@ interface NamespaceResourcesViewsProps {
 
   // Events data
   nsEvents?: any[];
+  nsEventsStats?: SnapshotStats | null;
   nsEventsLoading?: boolean;
   nsEventsError?: string | null;
   loadEvents?: () => Promise<void>;
@@ -143,39 +152,47 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   nsWorkloadsLoaded = false,
 
   nsConfig = [],
+  nsConfigStats = null,
   nsConfigKinds,
   nsConfigLoading = false,
   nsConfigLoaded = false,
 
   nsNetwork = [],
+  nsNetworkStats = null,
   nsNetworkKinds,
   nsNetworkLoading = false,
   nsNetworkLoaded = false,
 
   nsRBAC = [],
+  nsRBACStats = null,
   nsRBACKinds,
   nsRBACLoading = false,
   nsRBACLoaded = false,
 
   nsStorage = [],
+  nsStorageStats = null,
   nsStorageLoading = false,
   nsStorageLoaded = false,
 
   nsAutoscaling = [],
+  nsAutoscalingStats = null,
   nsAutoscalingKinds,
   nsAutoscalingLoading = false,
   nsAutoscalingLoaded = false,
 
   nsQuotas = [],
+  nsQuotasStats = null,
   nsQuotasKinds,
   nsQuotasLoading = false,
   nsQuotasLoaded = false,
 
   nsHelm = [],
+  nsHelmStats = null,
   nsHelmLoading = false,
   nsHelmLoaded = false,
 
   nsEvents = [],
+  nsEventsStats = null,
   nsEventsLoading = false,
   nsEventsLoaded = false,
   objectPanel,
@@ -246,6 +263,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewConfig
               namespace={namespace}
               data={nsConfig}
+              stats={nsConfigStats}
               availableKinds={nsConfigKinds}
               loading={nsConfigLoading}
               loaded={nsConfigLoaded}
@@ -262,6 +280,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewNetwork
               namespace={namespace}
               data={nsNetwork}
+              stats={nsNetworkStats}
               availableKinds={nsNetworkKinds}
               loading={nsNetworkLoading}
               loaded={nsNetworkLoaded}
@@ -278,6 +297,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewRBAC
               namespace={namespace}
               data={nsRBAC}
+              stats={nsRBACStats}
               availableKinds={nsRBACKinds}
               loading={nsRBACLoading}
               loaded={nsRBACLoaded}
@@ -294,6 +314,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewStorage
               namespace={namespace}
               data={nsStorage}
+              stats={nsStorageStats}
               loading={nsStorageLoading}
               loaded={nsStorageLoaded}
             />
@@ -309,6 +330,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewAutoscaling
               namespace={namespace}
               data={nsAutoscaling}
+              stats={nsAutoscalingStats}
               availableKinds={nsAutoscalingKinds}
               loading={nsAutoscalingLoading}
               loaded={nsAutoscalingLoaded}
@@ -325,6 +347,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewQuotas
               namespace={namespace}
               data={nsQuotas}
+              stats={nsQuotasStats}
               availableKinds={nsQuotasKinds}
               loading={nsQuotasLoading}
               loaded={nsQuotasLoaded}
@@ -351,6 +374,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewHelm
               namespace={namespace}
               data={nsHelm}
+              stats={nsHelmStats}
               loading={nsHelmLoading}
               loaded={nsHelmLoaded}
             />
@@ -365,6 +389,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
           >
             <NsViewEvents
               data={nsEvents}
+              stats={nsEventsStats}
               loading={nsEventsLoading}
               loaded={nsEventsLoaded}
               namespace={namespace}

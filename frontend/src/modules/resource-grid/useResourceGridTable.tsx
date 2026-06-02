@@ -263,7 +263,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
         searchBehavior: isQueryBackedResourceGridTableMode(tableMode)
           ? 'query'
           : (filterOptions.searchBehavior ?? 'local'),
-        partialDataLabel: resourceGridPartialDataLabel(tableMode),
+        partialDataLabel: filterOptions.partialDataLabel ?? resourceGridPartialDataLabel(tableMode),
         preActions: [...(filterOptions.preActions ?? []), favToggle],
       },
     }),

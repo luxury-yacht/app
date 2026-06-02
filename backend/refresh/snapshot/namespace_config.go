@@ -149,9 +149,8 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 
 	sortConfigSummaries(resources)
 
-	if len(resources) > config.SnapshotNamespaceConfigEntryLimit {
-		resources = resources[:config.SnapshotNamespaceConfigEntryLimit]
-	}
+	var totalItems int
+	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceConfigEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceConfigDomainName,
@@ -162,7 +161,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 			Resources:   resources,
 			Kinds:       snapshotSortedKinds(resources, func(resource ConfigSummary) string { return resource.Kind }),
 		},
-		Stats: refresh.SnapshotStats{ItemCount: len(resources)},
+		Stats: snapshotWindowStats(len(resources), totalItems, "config resources"),
 	}, nil
 }
 

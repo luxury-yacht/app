@@ -20,8 +20,10 @@ import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 // Data interface for Helm releases
 export interface HelmData {
@@ -59,6 +61,7 @@ export interface HelmData {
 interface HelmViewProps {
   namespace: string;
   data: HelmData[];
+  stats?: SnapshotStats | null;
   loading?: boolean;
   loaded?: boolean;
   showNamespaceColumn?: boolean;
@@ -68,7 +71,14 @@ interface HelmViewProps {
  * GridTable component for namespace Helm releases
  */
 const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
-  ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({
+    namespace,
+    data,
+    stats = null,
+    loading = false,
+    loaded = false,
+    showNamespaceColumn = false,
+  }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
@@ -278,19 +288,30 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     ]);
 
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
+    const isPartial = isAllNamespaces || Boolean(stats?.truncated);
+    const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Helm' : 'Namespace Helm';
 
     const { gridTableProps, favModal } = useNamespaceResourceGridTable<HelmData>({
-      tableMode: isAllNamespaces ? 'Local Partial' : 'Local Complete',
+      tableMode: isPartial ? 'Local Partial' : 'Local Complete',
       viewId: 'namespace-helm',
       namespace,
       data,
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      diagnosticsLabel: isAllNamespaces ? 'All Namespaces Helm' : 'Namespace Helm',
+      diagnosticsLabel,
       showKindDropdown: true,
       showNamespaceFilters: showNamespaceColumn,
       filterOptions: { isNamespaceScoped: !isAllNamespaces },
+      filterOptionOverrides: isPartial
+        ? {
+            partialDataLabel: buildLocalPartialDataLabel({
+              stats,
+              fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
+              sourceLabel: diagnosticsLabel,
+            }),
+          }
+        : undefined,
     });
 
     const getContextMenuItems = useCallback(

@@ -65,6 +65,21 @@ const (
 	// SnapshotObjectEventsLimit caps object event summaries in refresh snapshots.
 	SnapshotObjectEventsLimit = 500
 
+	// SnapshotClusterNodesEntryLimit caps cluster node snapshot rows before the table becomes partial.
+	SnapshotClusterNodesEntryLimit = 1000
+
+	// SnapshotClusterConfigEntryLimit caps cluster configuration snapshot rows.
+	SnapshotClusterConfigEntryLimit = 1000
+
+	// SnapshotClusterStorageEntryLimit caps cluster storage snapshot rows.
+	SnapshotClusterStorageEntryLimit = 1000
+
+	// SnapshotClusterRBACEntryLimit caps cluster RBAC snapshot rows.
+	SnapshotClusterRBACEntryLimit = 1000
+
+	// SnapshotClusterCRDEntryLimit caps cluster CRD snapshot rows.
+	SnapshotClusterCRDEntryLimit = 1000
+
 	// SnapshotClusterOverviewRecentEventsLimit caps recent warning events in cluster overview snapshots.
 	SnapshotClusterOverviewRecentEventsLimit = 20
 
@@ -91,6 +106,9 @@ const (
 
 	// SnapshotNamespaceHelmEntryLimit caps all-namespaces Helm snapshot rows.
 	SnapshotNamespaceHelmEntryLimit = 1000
+
+	// SnapshotNamespaceRBACEntryLimit caps all-namespaces namespace RBAC snapshot rows.
+	SnapshotNamespaceRBACEntryLimit = 1000
 
 	// SnapshotNamespaceCustomWorkerLimit caps namespace custom-resource list fanout.
 	SnapshotNamespaceCustomWorkerLimit = 8

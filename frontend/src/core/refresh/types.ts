@@ -501,6 +501,7 @@ export interface CatalogSnapshotPayload extends ClusterMeta {
   kinds?: KindInfo[];
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   hasNext?: boolean;
   hasPrevious?: boolean;
   namespaceGroups?: CatalogNamespaceGroup[];

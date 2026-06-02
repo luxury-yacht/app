@@ -292,6 +292,51 @@ func TestNamespaceHelmBuilderAllNamespacesCapsRows(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, payload.Releases, config.SnapshotNamespaceHelmEntryLimit)
 	require.Equal(t, config.SnapshotNamespaceHelmEntryLimit, snapshot.Stats.ItemCount)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotNamespaceHelmEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "Helm releases")
+}
+
+func TestNamespaceHelmBuilderSingleNamespaceCapsRows(t *testing.T) {
+	now := time.Now()
+	baseChart := &chart.Chart{
+		Metadata: &chart.Metadata{Name: "example", Version: "1.0.0"},
+	}
+	factory := func(namespace string) (*action.Configuration, error) {
+		memDriver := driver.NewMemory()
+		memDriver.SetNamespace(namespace)
+		store := storage.Init(memDriver)
+		for i := 0; i < config.SnapshotNamespaceHelmEntryLimit+1; i++ {
+			err := store.Create(&release.Release{
+				Name:      fmt.Sprintf("app-%04d", i),
+				Namespace: namespace,
+				Version:   1,
+				Chart:     baseChart,
+				Info: &release.Info{
+					Status:        release.StatusDeployed,
+					FirstDeployed: releasetime.Time{Time: now.Add(-time.Hour)},
+					LastDeployed:  releasetime.Time{Time: now},
+				},
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+		return &action.Configuration{
+			Releases:   store,
+			KubeClient: stubKubeClient{},
+		}, nil
+	}
+	builder := &NamespaceHelmBuilder{factory: factory}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:default")
+	require.NoError(t, err)
+	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
+	require.True(t, ok)
+	require.Len(t, payload.Releases, config.SnapshotNamespaceHelmEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotNamespaceHelmEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "Helm releases")
 }
 
 type stubKubeClient struct{}

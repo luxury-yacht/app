@@ -349,12 +349,19 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     diagnosticLabel: scope === 'namespace' ? 'Namespace Browse' : 'Browse',
   });
 
+  // Convert items to table rows
+  const rows = useMemo(
+    () => toTableRows(items, useShortResourceNames),
+    [items, useShortResourceNames]
+  );
+
   const paginationControls = useMemo(
     () => (
       <CatalogPaginationControls
         idPrefix={resolvedViewId}
         pageIndex={pageIndex}
         pageSize={pageLimit}
+        visibleItemCount={rows.length}
         pageSizeOptions={pageLimitOptions}
         totalCount={totalCount}
         totalIsExact={totalIsExact}
@@ -377,16 +384,11 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       previousToken,
       queryPending,
       resolvedViewId,
+      rows.length,
       setPageLimit,
       totalCount,
       totalIsExact,
     ]
-  );
-
-  // Convert items to table rows
-  const rows = useMemo(
-    () => toTableRows(items, useShortResourceNames),
-    [items, useShortResourceNames]
   );
 
   const disableUnscopedQueryActions = !clusterScopedOnly && !isNamespaceScoped;
@@ -427,6 +429,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       showResultCount: false,
       totalCount,
       totalIsExact,
+      partialDataLabel: filterOptions.partialDataLabel,
       postActions: [copyAllMatchingCsvAction, bulkDeleteAllMatchingAction],
     }),
     [
@@ -434,6 +437,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       copyAllMatchingCsvAction,
       filterOptions.kinds,
       filterOptions.namespaces,
+      filterOptions.partialDataLabel,
       showNamespaceColumn,
       totalCount,
       totalIsExact,

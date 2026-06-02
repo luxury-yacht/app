@@ -14,21 +14,25 @@ import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
 import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
+import type { SnapshotStats } from '@/core/refresh/client';
 
 interface ClusterResourcesViewsProps {
   // Resource data and loading states
   nodes?: any[];
+  nodesStats?: SnapshotStats | null;
   nodesLoading?: boolean;
   nodesError?: string | null;
   nodesLoaded?: boolean;
 
   config?: any[];
+  configStats?: SnapshotStats | null;
   configKinds?: string[];
   configLoading?: boolean;
   configError?: string | null;
   configLoaded?: boolean;
 
   crds?: any[];
+  crdsStats?: SnapshotStats | null;
   crdsLoading?: boolean;
   crdsError?: string | null;
   crdsLoaded?: boolean;
@@ -38,17 +42,20 @@ interface ClusterResourcesViewsProps {
   customLoaded?: boolean;
 
   events?: any[];
+  eventsStats?: SnapshotStats | null;
   eventsLoading?: boolean;
   eventsError?: string | null;
   eventsLoaded?: boolean;
 
   rbac?: any[];
+  rbacStats?: SnapshotStats | null;
   rbacKinds?: string[];
   rbacLoading?: boolean;
   rbacError?: string | null;
   rbacLoaded?: boolean;
 
   storage?: any[];
+  storageStats?: SnapshotStats | null;
   storageLoading?: boolean;
   storageError?: string | null;
   storageLoaded?: boolean;
@@ -63,17 +70,20 @@ interface ClusterResourcesViewsProps {
 
 function ClusterResourcesViews({
   nodes = [],
+  nodesStats = null,
   nodesLoading = false,
   nodesError = null,
   nodesLoaded = false,
 
   config = [],
+  configStats = null,
   configKinds,
   configLoading = false,
   configError = null,
   configLoaded = false,
 
   crds = [],
+  crdsStats = null,
   crdsLoading = false,
   crdsError = null,
   crdsLoaded = false,
@@ -83,17 +93,20 @@ function ClusterResourcesViews({
   customLoaded = false,
 
   events = [],
+  eventsStats = null,
   eventsLoading = false,
   eventsError = null,
   eventsLoaded = false,
 
   rbac = [],
+  rbacStats = null,
   rbacKinds,
   rbacLoading = false,
   rbacError = null,
   rbacLoaded = false,
 
   storage = [],
+  storageStats = null,
   storageLoading = false,
   storageError = null,
   storageLoaded = false,
@@ -115,6 +128,7 @@ function ClusterResourcesViews({
         return (
           <ClusterViewNodes
             data={nodes}
+            stats={nodesStats}
             loading={nodesLoading}
             loaded={nodesLoaded}
             error={nodesError}
@@ -124,6 +138,7 @@ function ClusterResourcesViews({
         return (
           <ClusterViewConfig
             data={config}
+            stats={configStats}
             availableKinds={configKinds}
             loading={configLoading}
             loaded={configLoaded}
@@ -134,6 +149,7 @@ function ClusterResourcesViews({
         return (
           <ClusterViewCRDs
             data={crds}
+            stats={crdsStats}
             loading={crdsLoading}
             loaded={crdsLoaded}
             error={crdsError}
@@ -147,6 +163,7 @@ function ClusterResourcesViews({
         return (
           <ClusterViewEvents
             data={events}
+            stats={eventsStats}
             loading={eventsLoading}
             loaded={eventsLoaded}
             error={eventsError}
@@ -156,6 +173,7 @@ function ClusterResourcesViews({
         return (
           <ClusterViewRBAC
             data={rbac}
+            stats={rbacStats}
             availableKinds={rbacKinds}
             loading={rbacLoading}
             loaded={rbacLoaded}
@@ -166,6 +184,7 @@ function ClusterResourcesViews({
         return (
           <ClusterViewStorage
             data={storage}
+            stats={storageStats}
             loading={storageLoading}
             loaded={storageLoaded}
             error={storageError}

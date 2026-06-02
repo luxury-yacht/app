@@ -471,6 +471,34 @@ describe('BrowseView', () => {
         expect.objectContaining({ isManual: false })
       );
     });
+
+    it('surfaces catalog degraded reasons in table filter state', async () => {
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=1000&namespace=cluster';
+      refreshMocks.catalogDomain.data = {
+        items: [],
+        batchSize: 0,
+        total: 150000,
+        totalIsExact: false,
+        facetsExact: false,
+        issues: [
+          {
+            kind: 'Catalog health',
+            message: 'Catalog data may be stale because one resource sync failed.',
+          },
+        ],
+      };
+      refreshMocks.catalogDomain.status = 'ready';
+
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      const label = gridTablePropsRef.current.filters.options.partialDataLabel;
+      expect(label).toContain('Catalog health');
+      expect(label).toContain('Facet options are approximate');
+      expect(label).toContain('total result count is approximate');
+    });
   });
 
   describe('Action facts', () => {

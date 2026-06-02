@@ -104,15 +104,15 @@ func (b *NamespaceHelmBuilder) buildSingleNamespace(snapshotScope string, meta C
 	}
 
 	summaries, version := mapHelmReleases(releases, namespace, meta)
+	var totalItems int
+	summaries, totalItems = truncateSnapshotWindow(summaries, config.SnapshotNamespaceHelmEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceHelmDomainName,
 		Scope:   snapshotScope,
 		Version: version,
 		Payload: NamespaceHelmSnapshot{ClusterMeta: meta, Releases: summaries},
-		Stats: refresh.SnapshotStats{
-			ItemCount: len(summaries),
-		},
+		Stats:   snapshotWindowStats(len(summaries), totalItems, "Helm releases"),
 	}, nil
 }
 
@@ -208,18 +208,15 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(
 		}
 		return summaries[i].Namespace < summaries[j].Namespace
 	})
-	if len(summaries) > config.SnapshotNamespaceHelmEntryLimit {
-		summaries = summaries[:config.SnapshotNamespaceHelmEntryLimit]
-	}
+	var totalItems int
+	summaries, totalItems = truncateSnapshotWindow(summaries, config.SnapshotNamespaceHelmEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceHelmDomainName,
 		Scope:   snapshotScope,
 		Version: version,
 		Payload: NamespaceHelmSnapshot{ClusterMeta: meta, Releases: summaries},
-		Stats: refresh.SnapshotStats{
-			ItemCount: len(summaries),
-		},
+		Stats:   snapshotWindowStats(len(summaries), totalItems, "Helm releases"),
 	}, nil
 }
 

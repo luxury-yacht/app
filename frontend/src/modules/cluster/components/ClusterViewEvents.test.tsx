@@ -276,4 +276,28 @@ describe('ClusterViewEvents', () => {
 
     expect(openWithObjectMock).not.toHaveBeenCalled();
   });
+
+  it('uses backend truncation stats for Local Partial table copy', async () => {
+    await act(async () => {
+      root.render(
+        <ClusterViewEvents
+          data={[baseEvent]}
+          loaded={true}
+          stats={{
+            itemCount: 1,
+            buildDurationMs: 0,
+            truncated: true,
+            totalItems: 12,
+            warnings: ['Showing most recent 1 of 12 events'],
+          }}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current.filters.options.partialDataLabel).toContain(
+      'Showing most recent 1 of 12 events'
+    );
+    expect(gridTablePropsRef.current.filters.options.partialDataLabel).toContain('visible rows');
+  });
 });

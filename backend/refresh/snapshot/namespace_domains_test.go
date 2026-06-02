@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -1025,6 +1026,56 @@ func TestNamespaceRBACBuilderAllNamespaces(t *testing.T) {
 		namespaces[entry.Namespace] = struct{}{}
 	}
 	require.True(t, len(namespaces) >= 2)
+}
+
+func TestNamespaceRBACBuilderAllNamespacesCapsLargeSnapshots(t *testing.T) {
+	roles := make([]*rbacv1.Role, 0, config.SnapshotNamespaceRBACEntryLimit+1)
+	for i := 0; i < config.SnapshotNamespaceRBACEntryLimit+1; i++ {
+		roles = append(roles, &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            fmt.Sprintf("role-%04d", i),
+				Namespace:       fmt.Sprintf("ns-%04d", i),
+				ResourceVersion: "1",
+			},
+		})
+	}
+
+	builder := &NamespaceRBACBuilder{
+		roleLister: testsupport.NewRoleLister(t, roles...),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:all")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceRBACSnapshot)
+	require.Len(t, payload.Resources, config.SnapshotNamespaceRBACEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotNamespaceRBACEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "RBAC resources")
+}
+
+func TestNamespaceRBACBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T) {
+	roles := make([]*rbacv1.Role, 0, config.SnapshotNamespaceRBACEntryLimit+1)
+	for i := 0; i < config.SnapshotNamespaceRBACEntryLimit+1; i++ {
+		roles = append(roles, &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            fmt.Sprintf("role-%04d", i),
+				Namespace:       "team-a",
+				ResourceVersion: "1",
+			},
+		})
+	}
+
+	builder := &NamespaceRBACBuilder{
+		roleLister: testsupport.NewRoleLister(t, roles...),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceRBACSnapshot)
+	require.Len(t, payload.Resources, config.SnapshotNamespaceRBACEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotNamespaceRBACEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "RBAC resources")
 }
 
 func TestNamespaceRBACBuilderStableOrdering(t *testing.T) {

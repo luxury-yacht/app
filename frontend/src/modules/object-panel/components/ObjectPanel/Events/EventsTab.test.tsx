@@ -51,6 +51,7 @@ vi.mock('@/core/refresh/clusterScope', () => ({
 
 const hoistedSnapshot = vi.hoisted(() => ({
   data: null as any,
+  stats: null as any,
   status: 'ready' as string,
   error: null as string | null,
 }));
@@ -167,6 +168,7 @@ describe('EventsTab', () => {
     act(() => root.unmount());
     container.remove();
     hoistedSnapshot.data = null;
+    hoistedSnapshot.stats = null;
     hoistedSnapshot.status = 'ready';
     hoistedSnapshot.error = null;
   });
@@ -208,6 +210,33 @@ describe('EventsTab', () => {
     const call = mockOpenWithObject.mock.calls[0][0];
     expect(call.clusterId).toBe(EVENT_CLUSTER_ID);
     expect(call.clusterName).toBe(EVENT_CLUSTER_NAME);
+  });
+
+  it('renders backend truncation stats for the object-events Local Partial window', async () => {
+    hoistedSnapshot.data = {
+      events: [makeEvent()],
+    };
+    hoistedSnapshot.stats = {
+      itemCount: 1,
+      buildDurationMs: 0,
+      truncated: true,
+      totalItems: 9,
+      warnings: ['Showing most recent 1 of 9 events'],
+    };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          isActive={true}
+          eventsScope="parent-cluster|default:Deployment:my-deploy"
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Showing most recent 1 of 9 events');
+    expect(container.textContent).toContain('visible rows');
   });
 
   it('passes isManual flag through to fetchScopedDomain without inversion', async () => {

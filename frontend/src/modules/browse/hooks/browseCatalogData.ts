@@ -21,6 +21,7 @@ export interface BrowseFilterOptions {
   kinds: string[];
   namespaces: string[];
   isNamespaceScoped: boolean;
+  partialDataLabel?: string;
 }
 
 export interface BrowseCatalogPlanInput {
@@ -235,10 +236,23 @@ export const deriveBrowseFilterOptions = ({
     ? kindInfos.filter((kind) => !kind.namespaced)
     : kindInfos.filter((kind) => kind.namespaced);
 
+  const issueLabel = payload?.issues?.length
+    ? payload.issues.map((issue) => `${issue.kind}: ${issue.message}`).join('\n')
+    : undefined;
+  const facetsLabel =
+    payload?.facetsExact === false
+      ? 'Facet options are approximate because catalog metadata is incomplete.'
+      : undefined;
+  const totalLabel =
+    payload?.totalIsExact === false
+      ? 'The total result count is approximate because the catalog metadata budget was exceeded.'
+      : undefined;
+
   return {
     kinds: filteredKinds.map((kind) => kind.kind).sort(),
     namespaces: isNamespaceScoped ? [] : (payload?.namespaces ?? []).slice().sort(),
     isNamespaceScoped,
+    partialDataLabel: [issueLabel, facetsLabel, totalLabel].filter(Boolean).join('\n') || undefined,
   };
 };
 

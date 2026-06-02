@@ -197,9 +197,8 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
-	if len(resources) > config.SnapshotNamespaceQuotasEntryLimit {
-		resources = resources[:config.SnapshotNamespaceQuotasEntryLimit]
-	}
+	var totalItems int
+	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceQuotasEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceQuotasDomainName,
@@ -210,7 +209,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 			Resources:   resources,
 			Kinds:       snapshotSortedKinds(resources, func(resource QuotaSummary) string { return resource.Kind }),
 		},
-		Stats: refresh.SnapshotStats{ItemCount: len(resources)},
+		Stats: snapshotWindowStats(len(resources), totalItems, "quota resources"),
 	}, nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
@@ -257,4 +258,42 @@ func TestNodeBuilderBuild(t *testing.T) {
 	require.Equal(t, "annotation", summary.Annotations["example"])
 
 	require.Equal(t, uint64(42), snapshot.Version)
+}
+
+func TestNodeBuilderCapsLargeSnapshots(t *testing.T) {
+	nodes := make([]*corev1.Node, 0, config.SnapshotClusterNodesEntryLimit+1)
+	for i := 0; i < config.SnapshotClusterNodesEntryLimit+1; i++ {
+		nodes = append(nodes, &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "node-" + time.Unix(int64(i), 0).Format("150405"),
+				ResourceVersion: "1",
+			},
+			Status: corev1.NodeStatus{
+				Capacity: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("1"),
+					corev1.ResourceMemory: resource.MustParse("1Gi"),
+					corev1.ResourcePods:   resource.MustParse("10"),
+				},
+				Allocatable: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("1"),
+					corev1.ResourceMemory: resource.MustParse("1Gi"),
+					corev1.ResourcePods:   resource.MustParse("10"),
+				},
+			},
+		})
+	}
+
+	builder := &NodeBuilder{
+		lister:    testsupport.NewNodeLister(t, nodes...),
+		podLister: testsupport.NewPodLister(t),
+		metrics:   fakeMetricsProvider{},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NodeSnapshot)
+	require.Len(t, payload.Nodes, config.SnapshotClusterNodesEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotClusterNodesEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "nodes")
 }
