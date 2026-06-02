@@ -231,6 +231,117 @@ func TestNodeTableQueryPaginatesAgeSort(t *testing.T) {
 	}
 }
 
+func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
+	query := typedTableQuery{
+		Enabled:   true,
+		BaseScope: "cluster",
+		Request: ResourceQueryRequest{
+			ClusterID:     "cluster-a",
+			Table:         "test",
+			SortDirection: "asc",
+			Limit:         10,
+		},
+	}
+
+	t.Run("cluster crd version column", func(t *testing.T) {
+		query.Request.SortField = "version"
+		page := applyTypedTableQuery([]ClusterCRDEntry{
+			{Name: "widgets.example.com", StorageVersion: "v2"},
+			{Name: "gadgets.example.com", StorageVersion: "v1"},
+		}, query, clusterCRDTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"gadgets.example.com", "widgets.example.com"}, func(row ClusterCRDEntry) string {
+			return row.Name
+		})
+	})
+
+	t.Run("cluster storage access modes column", func(t *testing.T) {
+		query.Request.SortField = "accessModes"
+		page := applyTypedTableQuery([]ClusterStorageEntry{
+			{Name: "pv-read-write-many", AccessModes: "ReadWriteMany"},
+			{Name: "pv-read-only-many", AccessModes: "ReadOnlyMany"},
+		}, query, clusterStorageTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"pv-read-only-many", "pv-read-write-many"}, func(row ClusterStorageEntry) string {
+			return row.Name
+		})
+	})
+
+	t.Run("cluster event object columns", func(t *testing.T) {
+		query.Request.SortField = "objectType"
+		page := applyTypedTableQuery([]ClusterEventEntry{
+			{Name: "event-pod", Object: "Pod/api"},
+			{Name: "event-deployment", Object: "Deployment/web"},
+		}, query, clusterEventTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"event-deployment", "event-pod"}, func(row ClusterEventEntry) string {
+			return row.Name
+		})
+
+		query.Request.SortField = "objectName"
+		page = applyTypedTableQuery([]ClusterEventEntry{
+			{Name: "event-zulu", Object: "Pod/zulu"},
+			{Name: "event-alpha", Object: "Pod/alpha"},
+		}, query, clusterEventTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"event-alpha", "event-zulu"}, func(row ClusterEventEntry) string {
+			return row.Name
+		})
+	})
+
+	t.Run("namespace event object columns", func(t *testing.T) {
+		query.BaseScope = "namespace:all"
+		query.Request.SortField = "objectType"
+		page := applyTypedTableQuery([]EventSummary{
+			{Name: "event-pod", Object: "Pod/api"},
+			{Name: "event-deployment", Object: "Deployment/web"},
+		}, query, namespacedEventTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"event-deployment", "event-pod"}, func(row EventSummary) string {
+			return row.Name
+		})
+
+		query.Request.SortField = "objectName"
+		page = applyTypedTableQuery([]EventSummary{
+			{Name: "event-zulu", Object: "Pod/zulu"},
+			{Name: "event-alpha", Object: "Pod/alpha"},
+		}, query, namespacedEventTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"event-alpha", "event-zulu"}, func(row EventSummary) string {
+			return row.Name
+		})
+	})
+}
+
+func TestStaticTableQuerySortsAgeByTimestampAcrossAdapters(t *testing.T) {
+	query := typedTableQuery{
+		Enabled:   true,
+		BaseScope: "namespace:all",
+		Request: ResourceQueryRequest{
+			ClusterID:     "cluster-a",
+			Table:         "test",
+			SortField:     "age",
+			SortDirection: "asc",
+			Limit:         10,
+		},
+	}
+
+	t.Run("namespace static rows", func(t *testing.T) {
+		page := applyTypedTableQuery([]ConfigSummary{
+			{Name: "old-config", Age: "10d", AgeTimestamp: 1_700_000_000_000},
+			{Name: "young-config", Age: "2h", AgeTimestamp: 1_700_856_000_000},
+		}, query, configTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"young-config", "old-config"}, func(row ConfigSummary) string {
+			return row.Name
+		})
+	})
+
+	t.Run("cluster static rows", func(t *testing.T) {
+		query.BaseScope = "cluster"
+		page := applyTypedTableQuery([]ClusterStorageEntry{
+			{Name: "old-pv", Age: "10d", AgeTimestamp: 1_700_000_000_000},
+			{Name: "young-pv", Age: "2h", AgeTimestamp: 1_700_856_000_000},
+		}, query, clusterStorageTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"young-pv", "old-pv"}, func(row ClusterStorageEntry) string {
+			return row.Name
+		})
+	})
+}
+
 func requireNodePageNames(t *testing.T, page typedTableQueryPage[NodeSummary], want []string) {
 	t.Helper()
 	if len(page.Rows) != len(want) {
@@ -239,6 +350,18 @@ func requireNodePageNames(t *testing.T, page typedTableQueryPage[NodeSummary], w
 	for i, row := range page.Rows {
 		if row.Name != want[i] {
 			t.Fatalf("page.Rows[%d].Name=%q, want %q", i, row.Name, want[i])
+		}
+	}
+}
+
+func requirePageNames[T any](t *testing.T, rows []T, want []string, getName func(T) string) {
+	t.Helper()
+	if len(rows) != len(want) {
+		t.Fatalf("len(rows)=%d, want %d", len(rows), len(want))
+	}
+	for i, row := range rows {
+		if got := getName(row); got != want[i] {
+			t.Fatalf("rows[%d].Name=%q, want %q", i, got, want[i])
 		}
 	}
 }

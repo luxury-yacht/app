@@ -52,11 +52,12 @@ type NamespaceRBACSnapshot struct {
 // RBACSummary describes a Role/RoleBinding/ServiceAccount entry.
 type RBACSummary struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Details   string `json:"details"`
-	Age       string `json:"age"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Namespace    string `json:"namespace"`
+	Details      string `json:"details"`
+	Age          string `json:"age"`
+	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterNamespaceRBACDomain registers the namespace RBAC domain.

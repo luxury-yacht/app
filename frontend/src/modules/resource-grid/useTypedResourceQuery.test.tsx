@@ -4,6 +4,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import type { SortConfig } from '@hooks/useTableSort';
 import { useTypedResourceQuery, type UseTypedResourceQueryResult } from './useTypedResourceQuery';
 import type { TypedQueryPayload } from './typedResourceQueryScope';
 
@@ -352,6 +353,90 @@ describe('useTypedResourceQuery', () => {
     expect(result?.rows).toEqual([{ name: 'pod-a' }, { name: 'pod-b' }]);
     expect(result?.pageIndex).toBe(1);
     expect(result?.hasPrevious).toBe(false);
+  });
+
+  it('drops the current cursor before requesting a changed sort query', async () => {
+    const Probe: React.FC<{ activeSort: SortConfig }> = ({ activeSort }) => {
+      result = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        sortConfig: activeSort,
+        pageLimit: 2,
+        selectRows,
+      });
+      return null;
+    };
+
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-a' }, { name: 'pod-b' }],
+            total: 3,
+            continue: 'cursor-page-2',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-c' }],
+            total: 3,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-status-a' }, { name: 'pod-status-b' }],
+            total: 3,
+            continue: 'status-cursor-page-2',
+          },
+        },
+      });
+
+    await act(async () => {
+      root.render(<Probe activeSort={sortConfig} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      result?.loadMore();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scope: expect.stringContaining('continue=cursor-page-2'),
+      })
+    );
+
+    await act(async () => {
+      root.render(<Probe activeSort={{ key: 'status', direction: 'asc' }} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scope: expect.stringMatching(
+          /^cluster-a\|namespace:all\?limit=2&sort=status&sortDirection=asc$/
+        ),
+      })
+    );
+    expect(result?.pageIndex).toBe(1);
+    expect(result?.rows).toEqual([{ name: 'pod-status-a' }, { name: 'pod-status-b' }]);
   });
 
   it('resets cursor pagination when the backend reports an invalid cursor', async () => {

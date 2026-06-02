@@ -57,11 +57,12 @@ type ClusterConfigSnapshot struct {
 // ClusterConfigEntry covers a storage class, ingress class, or webhook config.
 type ClusterConfigEntry struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Details   string `json:"details"`
-	IsDefault bool   `json:"isDefault,omitempty"`
-	Age       string `json:"age"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Details      string `json:"details"`
+	IsDefault    bool   `json:"isDefault,omitempty"`
+	Age          string `json:"age"`
+	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterClusterConfigDomain registers the domain with the registry.

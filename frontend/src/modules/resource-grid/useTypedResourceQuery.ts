@@ -139,10 +139,15 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     [baseScope, clusterId, domain, enabled, predicates]
   );
   const queryIdentityRef = useRef(queryIdentity);
+  const queryResetIdentityRef = useRef(queryResetIdentity);
   const queryHardResetIdentityRef = useRef(queryHardResetIdentity);
   queryIdentityRef.current = queryIdentity;
 
+  const requestTokenForScope =
+    queryResetIdentityRef.current === queryResetIdentity ? requestToken : null;
+
   useEffect(() => {
+    queryResetIdentityRef.current = queryResetIdentity;
     const hardReset = queryHardResetIdentityRef.current !== queryHardResetIdentity;
     queryHardResetIdentityRef.current = queryHardResetIdentity;
     setRequestToken(null);
@@ -170,9 +175,18 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       sortConfig,
       pageLimit,
       predicates,
-      continueToken: requestToken,
+      continueToken: requestTokenForScope,
     });
-  }, [baseScope, clusterId, enabled, filters, pageLimit, predicates, requestToken, sortConfig]);
+  }, [
+    baseScope,
+    clusterId,
+    enabled,
+    filters,
+    pageLimit,
+    predicates,
+    requestTokenForScope,
+    sortConfig,
+  ]);
 
   useEffect(() => {
     if (!enabled || !scope) {

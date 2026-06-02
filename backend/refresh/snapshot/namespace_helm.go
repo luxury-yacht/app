@@ -56,6 +56,7 @@ type NamespaceHelmSummary struct {
 	Updated            string `json:"updated"`
 	Description        string `json:"description,omitempty"`
 	Age                string `json:"age"`
+	AgeTimestamp       int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterNamespaceHelmDomain registers the Helm snapshot builder.
@@ -326,12 +327,14 @@ func mapHelmReleases(
 		updated := ""
 		description := ""
 		age := ""
+		ageTimestamp := int64(0)
 		if facts.Updated != nil && !facts.Updated.IsZero() {
 			updated = facts.Updated.Time.Format(time.RFC3339)
 		}
 		description = facts.Description
 		if !model.Metadata.CreationTimestamp.IsZero() {
 			age = formatAge(model.Metadata.CreationTimestamp.Time)
+			ageTimestamp = model.Metadata.CreationTimestamp.UnixMilli()
 		}
 		summaries = append(summaries, NamespaceHelmSummary{
 			ClusterMeta:        meta,
@@ -347,6 +350,7 @@ func mapHelmReleases(
 			Updated:            updated,
 			Description:        description,
 			Age:                age,
+			AgeTimestamp:       ageTimestamp,
 		})
 		if v := uint64(release.Version); v > version {
 			version = v

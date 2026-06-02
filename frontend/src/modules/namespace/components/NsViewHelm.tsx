@@ -57,6 +57,7 @@ export interface HelmData {
   lastDeployed?: string;
   description?: string;
   age?: string;
+  ageTimestamp?: number;
   [key: string]: any; // Allow additional fields
 }
 
@@ -310,6 +311,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           updated: release.updated,
           description: release.description,
           age: release.age,
+          ageTimestamp: release.ageTimestamp,
         })),
       []
     );

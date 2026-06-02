@@ -76,11 +76,12 @@ type NamespaceNetworkSnapshot struct {
 // NetworkSummary mirrors the UI requirements for namespace network resources.
 type NetworkSummary struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Details   string `json:"details"`
-	Age       string `json:"age"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Namespace    string `json:"namespace"`
+	Details      string `json:"details"`
+	Age          string `json:"age"`
+	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterNamespaceNetworkDomain registers the network domain with the registry.

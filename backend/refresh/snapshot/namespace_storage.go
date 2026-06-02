@@ -53,6 +53,7 @@ type StorageSummary struct {
 	StatusReason       string `json:"statusReason,omitempty"`
 	StorageClass       string `json:"storageClass"`
 	Age                string `json:"age"`
+	AgeTimestamp       int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterNamespaceStorageDomain registers the storage domain.

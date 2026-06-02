@@ -91,6 +91,7 @@ export const namespaceResourceDescriptors = {
             maxReplicas: item.max,
             currentReplicas: item.current,
             age: item.age,
+            ageTimestamp: item.ageTimestamp,
           };
         }
       ),
@@ -129,6 +130,7 @@ export const namespaceResourceDescriptors = {
         updated: release.updated,
         description: release.description,
         age: release.age,
+        ageTimestamp: release.ageTimestamp,
       })),
     rowIdentity: helmReleaseRowIdentity,
   },

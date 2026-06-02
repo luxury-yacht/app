@@ -60,6 +60,7 @@ type PodSummary struct {
 	Ready                string `json:"ready"`
 	Restarts             int32  `json:"restarts"`
 	Age                  string `json:"age"`
+	AgeTimestamp         int64  `json:"ageTimestamp,omitempty"`
 	OwnerKind            string `json:"ownerKind"`
 	OwnerName            string `json:"ownerName"`
 	PortForwardAvailable bool   `json:"portForwardAvailable"`
@@ -288,6 +289,8 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 			case "ready":
 				ready, total, ok := parseReadyPair(pod.Ready)
 				return float64(ready*1000000 + total), ok
+			case "age":
+				return numericAgeSortValue(pod.AgeTimestamp)
 			default:
 				return 0, false
 			}
@@ -523,6 +526,7 @@ func buildPodSummary(
 		Ready:                fmt.Sprintf("%d/%d", ready, total),
 		Restarts:             restarts,
 		Age:                  formatAge(pod.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(pod),
 		OwnerKind:            ownerKind,
 		OwnerName:            ownerName,
 		PortForwardAvailable: hasForwardablePodPorts(pod),

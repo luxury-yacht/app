@@ -89,6 +89,7 @@ type WorkloadSummary struct {
 	StatusReason         string `json:"statusReason,omitempty"`
 	Restarts             int32  `json:"restarts"`
 	Age                  string `json:"age"`
+	AgeTimestamp         int64  `json:"ageTimestamp,omitempty"`
 	CPUUsage             string `json:"cpuUsage,omitempty"`
 	CPURequest           string `json:"cpuRequest,omitempty"`
 	CPULimit             string `json:"cpuLimit,omitempty"`
@@ -547,6 +548,8 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 			case "ready":
 				ready, total, ok := parseReadyPair(row.Ready)
 				return float64(ready*1000000 + total), ok
+			case "age":
+				return numericAgeSortValue(row.AgeTimestamp)
 			default:
 				return 0, false
 			}
@@ -588,6 +591,7 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(deployment.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(deployment),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
@@ -633,6 +637,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(stateful.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(stateful),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
@@ -676,6 +681,7 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(daemon.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(daemon),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
@@ -719,6 +725,7 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(job.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(job),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
@@ -758,6 +765,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(cron.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(cron),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
@@ -784,6 +792,7 @@ func buildStandalonePodSummary(clusterID string, pod *corev1.Pod, usage map[stri
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(pod.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(pod),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),

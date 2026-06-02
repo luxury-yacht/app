@@ -50,12 +50,13 @@ type NamespaceConfigSnapshot struct {
 // ConfigSummary describes a ConfigMap or Secret entry.
 type ConfigSummary struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	TypeAlias string `json:"typeAlias,omitempty"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Data      int    `json:"data"`
-	Age       string `json:"age"`
+	Kind         string `json:"kind"`
+	TypeAlias    string `json:"typeAlias,omitempty"`
+	Name         string `json:"name"`
+	Namespace    string `json:"namespace"`
+	Data         int    `json:"data"`
+	Age          string `json:"age"`
+	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterNamespaceConfigDomain registers the namespace config domain.

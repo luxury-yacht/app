@@ -54,11 +54,12 @@ type NamespaceQuotasSnapshot struct {
 // QuotaSummary captures quota/limit range/PDB info.
 type QuotaSummary struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Details   string `json:"details"`
-	Age       string `json:"age"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Namespace    string `json:"namespace"`
+	Details      string `json:"details"`
+	Age          string `json:"age"`
+	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
 	// PDB-specific fields used by the quotas view.
 	MinAvailable   *string      `json:"minAvailable,omitempty"`
 	MaxUnavailable *string      `json:"maxUnavailable,omitempty"`

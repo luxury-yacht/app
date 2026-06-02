@@ -61,6 +61,7 @@ type AutoscalingSummary struct {
 	Max              int32  `json:"max"`
 	Current          int32  `json:"current"`
 	Age              string `json:"age"`
+	AgeTimestamp     int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterNamespaceAutoscalingDomain registers the autoscaling domain.

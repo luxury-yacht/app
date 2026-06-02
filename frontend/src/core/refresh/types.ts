@@ -335,6 +335,7 @@ export interface ClusterRBACEntry extends ClusterMeta {
   name: string;
   details: string;
   age: string;
+  ageTimestamp?: number;
   typeAlias?: string;
 }
 
@@ -362,6 +363,7 @@ export interface ClusterStorageEntry extends ClusterMeta {
   statusReason?: string;
   claim: string;
   age: string;
+  ageTimestamp?: number;
 }
 
 export interface ClusterStorageSnapshotPayload extends ClusterMeta {
@@ -382,6 +384,7 @@ export interface ClusterConfigEntry extends ClusterMeta {
   details: string;
   isDefault?: boolean;
   age: string;
+  ageTimestamp?: number;
 }
 
 export interface ClusterConfigSnapshotPayload extends ClusterMeta {
@@ -417,6 +420,7 @@ export interface ClusterCRDEntry extends ClusterMeta {
    */
   extraServedVersionCount?: number;
   age: string;
+  ageTimestamp?: number;
   typeAlias?: string;
 }
 
@@ -705,6 +709,7 @@ export interface PodSnapshotEntry extends ClusterMeta {
   ready: string;
   restarts: number;
   age: string;
+  ageTimestamp?: number;
   ownerKind: string;
   ownerName: string;
   portForwardAvailable?: boolean;
@@ -873,6 +878,7 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
   statusReason?: string;
   restarts: number;
   age: string;
+  ageTimestamp?: number;
   portForwardAvailable?: boolean;
   hpaManaged?: boolean | null;
   cpuUsage?: string;
@@ -904,6 +910,7 @@ export interface NamespaceConfigSummary extends ClusterMeta {
   namespace: string;
   data: number;
   age: string;
+  ageTimestamp?: number;
 }
 
 export interface NamespaceConfigSnapshotPayload extends ClusterMeta {
@@ -924,6 +931,7 @@ export interface NamespaceNetworkSummary extends ClusterMeta {
   namespace: string;
   details: string;
   age: string;
+  ageTimestamp?: number;
 }
 
 export interface NamespaceNetworkSnapshotPayload extends ClusterMeta {
@@ -944,6 +952,7 @@ export interface NamespaceRBACSummary extends ClusterMeta {
   namespace: string;
   details: string;
   age: string;
+  ageTimestamp?: number;
 }
 
 export interface NamespaceRBACSnapshotPayload extends ClusterMeta {
@@ -969,6 +978,7 @@ export interface NamespaceStorageSummary extends ClusterMeta {
   statusReason?: string;
   storageClass: string;
   age: string;
+  ageTimestamp?: number;
 }
 
 export interface NamespaceStorageSnapshotPayload extends ClusterMeta {
@@ -1001,6 +1011,7 @@ export interface NamespaceAutoscalingSummary extends ClusterMeta {
   max: number;
   current: number;
   age: string;
+  ageTimestamp?: number;
 }
 
 export interface NamespaceAutoscalingSnapshotPayload extends ClusterMeta {
@@ -1021,6 +1032,7 @@ export interface NamespaceQuotaSummary extends ClusterMeta {
   namespace: string;
   details: string;
   age: string;
+  ageTimestamp?: number;
   // PDB-only fields used by the quotas view.
   minAvailable?: string;
   maxUnavailable?: string;
@@ -1120,6 +1132,7 @@ export interface NamespaceHelmSummary extends ClusterMeta {
   updated: string;
   description?: string;
   age: string;
+  ageTimestamp?: number;
 }
 
 export interface NamespaceHelmSnapshotPayload extends ClusterMeta {

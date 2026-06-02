@@ -18,10 +18,12 @@ import { getUseShortResourceNames } from '@/core/settings/appPreferences';
  * Analogous to the HTML table columnFactories but for CSS Grid tables
  */
 
+type AgeColumnRow = { age?: string; ageTimestamp?: number };
+
 /**
- * Creates an age column for resources with an age property
+ * Creates an age column for resources with an age property.
  */
-export const createAgeColumn = <T extends { age?: string }>(
+export const createAgeColumn = <T extends AgeColumnRow>(
   key: string = 'age',
   header: string = 'Age',
   getValue: (item: T) => string | undefined = (item) => item.age
@@ -30,6 +32,10 @@ export const createAgeColumn = <T extends { age?: string }>(
   header,
   render: (item) => getValue(item) || '-',
   sortable: true,
+  sortValue: (item) =>
+    typeof item.ageTimestamp === 'number' && Number.isFinite(item.ageTimestamp)
+      ? -item.ageTimestamp
+      : getValue(item),
 });
 
 export interface CreateResourceBarColumnOptions<T> {

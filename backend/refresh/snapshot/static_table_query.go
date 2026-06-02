@@ -6,6 +6,35 @@ import (
 	"strings"
 )
 
+func numericAgeSortValue(ageTimestamp int64) (float64, bool) {
+	if ageTimestamp <= 0 {
+		return 0, false
+	}
+	return -float64(ageTimestamp), true
+}
+
+func eventObjectTypeForSort(object string) string {
+	object = strings.TrimSpace(object)
+	if object == "" {
+		return ""
+	}
+	if before, _, found := strings.Cut(object, "/"); found {
+		return before
+	}
+	return object
+}
+
+func eventObjectNameForSort(object string) string {
+	object = strings.TrimSpace(object)
+	if object == "" {
+		return ""
+	}
+	if _, after, found := strings.Cut(object, "/"); found {
+		return after
+	}
+	return ""
+}
+
 func configTableQueryAdapter() typedTableQueryAdapter[ConfigSummary] {
 	return typedTableQueryAdapter[ConfigSummary]{
 		Key:       func(row ConfigSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
@@ -32,6 +61,9 @@ func configTableQueryAdapter() typedTableQueryAdapter[ConfigSummary] {
 		NumericSort: func(row ConfigSummary, field string) (float64, bool) {
 			if strings.EqualFold(field, "data") {
 				return float64(row.Data), true
+			}
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
 			}
 			return 0, false
 		},
@@ -61,7 +93,12 @@ func networkTableQueryAdapter() typedTableQueryAdapter[NetworkSummary] {
 				return row.Name
 			}
 		},
-		NumericSort: func(NetworkSummary, string) (float64, bool) { return 0, false },
+		NumericSort: func(row NetworkSummary, field string) (float64, bool) {
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
+			}
+			return 0, false
+		},
 	}
 }
 
@@ -92,7 +129,12 @@ func storageTableQueryAdapter() typedTableQueryAdapter[StorageSummary] {
 				return row.Name
 			}
 		},
-		NumericSort: func(StorageSummary, string) (float64, bool) { return 0, false },
+		NumericSort: func(row StorageSummary, field string) (float64, bool) {
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
+			}
+			return 0, false
+		},
 	}
 }
 
@@ -111,9 +153,9 @@ func autoscalingTableQueryAdapter() typedTableQueryAdapter[AutoscalingSummary] {
 				return row.Kind
 			case "namespace":
 				return row.Namespace
-			case "target":
+			case "target", "scaletarget":
 				return row.Target
-			case "min", "minreplicas":
+			case "min", "minreplicas", "replicas":
 				return strconv.Itoa(int(row.Min))
 			case "max", "maxreplicas":
 				return strconv.Itoa(int(row.Max))
@@ -127,12 +169,14 @@ func autoscalingTableQueryAdapter() typedTableQueryAdapter[AutoscalingSummary] {
 		},
 		NumericSort: func(row AutoscalingSummary, field string) (float64, bool) {
 			switch strings.ToLower(field) {
-			case "min", "minreplicas":
+			case "min", "minreplicas", "replicas":
 				return float64(row.Min), true
 			case "max", "maxreplicas":
 				return float64(row.Max), true
 			case "current", "currentreplicas":
 				return float64(row.Current), true
+			case "age":
+				return numericAgeSortValue(row.AgeTimestamp)
 			default:
 				return 0, false
 			}
@@ -163,7 +207,12 @@ func quotaTableQueryAdapter() typedTableQueryAdapter[QuotaSummary] {
 				return row.Name
 			}
 		},
-		NumericSort: func(QuotaSummary, string) (float64, bool) { return 0, false },
+		NumericSort: func(row QuotaSummary, field string) (float64, bool) {
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
+			}
+			return 0, false
+		},
 	}
 }
 
@@ -190,7 +239,12 @@ func rbacTableQueryAdapter() typedTableQueryAdapter[RBACSummary] {
 				return row.Name
 			}
 		},
-		NumericSort: func(RBACSummary, string) (float64, bool) { return 0, false },
+		NumericSort: func(row RBACSummary, field string) (float64, bool) {
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
+			}
+			return 0, false
+		},
 	}
 }
 
@@ -231,6 +285,9 @@ func helmTableQueryAdapter() typedTableQueryAdapter[NamespaceHelmSummary] {
 			if strings.EqualFold(field, "revision") {
 				return float64(row.Revision), true
 			}
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
+			}
 			return 0, false
 		},
 	}
@@ -259,6 +316,10 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 				return row.Reason
 			case "object":
 				return row.Object
+			case "objecttype":
+				return eventObjectTypeForSort(row.Object)
+			case "objectname":
+				return eventObjectNameForSort(row.Object)
 			case "message":
 				return row.Message
 			case "age", "agetimestamp":
@@ -297,6 +358,10 @@ func clusterEventTableQueryAdapter() typedTableQueryAdapter[ClusterEventEntry] {
 				return row.Reason
 			case "object":
 				return row.Object
+			case "objecttype":
+				return eventObjectTypeForSort(row.Object)
+			case "objectname":
+				return eventObjectNameForSort(row.Object)
 			case "message":
 				return row.Message
 			case "age", "agetimestamp":
@@ -387,7 +452,12 @@ func clusterConfigTableQueryAdapter() typedTableQueryAdapter[ClusterConfigEntry]
 				return row.Name
 			}
 		},
-		NumericSort: func(ClusterConfigEntry, string) (float64, bool) { return 0, false },
+		NumericSort: func(row ClusterConfigEntry, field string) (float64, bool) {
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
+			}
+			return 0, false
+		},
 	}
 }
 
@@ -408,6 +478,8 @@ func clusterStorageTableQueryAdapter() typedTableQueryAdapter[ClusterStorageEntr
 				return row.StorageClass
 			case "capacity":
 				return row.Capacity
+			case "accessmodes":
+				return row.AccessModes
 			case "status":
 				return row.Status
 			case "claim":
@@ -418,7 +490,12 @@ func clusterStorageTableQueryAdapter() typedTableQueryAdapter[ClusterStorageEntr
 				return row.Name
 			}
 		},
-		NumericSort: func(ClusterStorageEntry, string) (float64, bool) { return 0, false },
+		NumericSort: func(row ClusterStorageEntry, field string) (float64, bool) {
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
+			}
+			return 0, false
+		},
 	}
 }
 
@@ -443,7 +520,12 @@ func clusterRBACTableQueryAdapter() typedTableQueryAdapter[ClusterRBACEntry] {
 				return row.Name
 			}
 		},
-		NumericSort: func(ClusterRBACEntry, string) (float64, bool) { return 0, false },
+		NumericSort: func(row ClusterRBACEntry, field string) (float64, bool) {
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
+			}
+			return 0, false
+		},
 	}
 }
 
@@ -466,7 +548,7 @@ func clusterCRDTableQueryAdapter() typedTableQueryAdapter[ClusterCRDEntry] {
 				return row.Scope
 			case "details":
 				return row.Details
-			case "storageversion":
+			case "version", "storageversion":
 				return row.StorageVersion
 			case "age":
 				return row.Age
@@ -474,7 +556,12 @@ func clusterCRDTableQueryAdapter() typedTableQueryAdapter[ClusterCRDEntry] {
 				return row.Name
 			}
 		},
-		NumericSort: func(ClusterCRDEntry, string) (float64, bool) { return 0, false },
+		NumericSort: func(row ClusterCRDEntry, field string) (float64, bool) {
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
+			}
+			return 0, false
+		},
 	}
 }
 

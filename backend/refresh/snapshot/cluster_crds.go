@@ -56,6 +56,7 @@ type ClusterCRDEntry struct {
 	StorageVersion          string `json:"storageVersion,omitempty"`
 	ExtraServedVersionCount int    `json:"extraServedVersionCount,omitempty"`
 	Age                     string `json:"age"`
+	AgeTimestamp            int64  `json:"ageTimestamp,omitempty"`
 	TypeAlias               string `json:"typeAlias,omitempty"`
 }
 

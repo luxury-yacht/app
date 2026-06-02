@@ -48,11 +48,12 @@ type ClusterRBACSnapshot struct {
 // ClusterRBACEntry represents either a ClusterRole or ClusterRoleBinding.
 type ClusterRBACEntry struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Details   string `json:"details"`
-	Age       string `json:"age"`
-	TypeAlias string `json:"typeAlias,omitempty"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Details      string `json:"details"`
+	Age          string `json:"age"`
+	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
+	TypeAlias    string `json:"typeAlias,omitempty"`
 }
 
 // RegisterClusterRBACDomain wires the cluster RBAC domain into the registry.

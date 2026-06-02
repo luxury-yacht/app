@@ -73,6 +73,7 @@ export interface AutoscalingData {
   };
   status?: string;
   age?: string;
+  ageTimestamp?: number;
   [key: string]: any; // Allow additional fields
 }
 
@@ -356,6 +357,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
             maxReplicas: item.max,
             currentReplicas: item.current,
             age: item.age,
+            ageTimestamp: item.ageTimestamp,
           };
         }),
       []

@@ -51,6 +51,7 @@ type ClusterStorageEntry struct {
 	StatusReason       string `json:"statusReason,omitempty"`
 	Claim              string `json:"claim"`
 	Age                string `json:"age"`
+	AgeTimestamp       int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterClusterStorageDomain registers the storage domain.
