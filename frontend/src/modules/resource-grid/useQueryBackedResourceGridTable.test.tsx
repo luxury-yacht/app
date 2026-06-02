@@ -90,6 +90,13 @@ const publishedTableState = {
   sortConfig: { key: 'name', direction: 'asc' } as const,
 };
 
+const paginationLoading = (
+  result:
+    | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+    | undefined
+): boolean | undefined =>
+  ((result?.gridTableProps as any)?.paginationControls as any)?.props?.loading;
+
 describe('useQueryBackedResourceGridTable live invalidation', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -308,6 +315,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     });
 
     expect(result?.loading).toBe(false);
+    expect(paginationLoading(result)).toBe(false);
   });
 
   it('exposes table loading during a query load with no rows yet', async () => {
@@ -365,5 +373,64 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     });
 
     expect(result?.loading).toBe(true);
+    expect(paginationLoading(result)).toBe(false);
+  });
+
+  it('exposes pagination loading only while a pagination request is in flight', async () => {
+    let result:
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const Probe: React.FC = () => {
+      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        localData: [],
+        selectRows,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    useTypedResourceQueryMock.mockReturnValue({
+      rows: [row],
+      loading: true,
+      loaded: true,
+      error: null,
+      continueToken: 'next-page',
+      hasPrevious: false,
+      isRequestingMore: true,
+      loadMore: vi.fn(),
+      loadPrevious: vi.fn(),
+      pageIndex: 1,
+      pageSize: 50,
+      totalCount: 2,
+      totalIsExact: true,
+      filterOptions: {},
+      dynamic: null,
+    });
+    useClusterResourceGridTableMock.mockReturnValue({
+      gridTableProps: {
+        data: [row],
+      },
+      favModal: null,
+    });
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useClusterResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange(publishedTableState);
+      await Promise.resolve();
+    });
+
+    expect(result?.loading).toBe(false);
+    expect(paginationLoading(result)).toBe(true);
   });
 });

@@ -162,7 +162,7 @@ export function useQueryBackedNamespaceResourceGridTable<
       totalIsExact: query.totalIsExact,
       hasPrevious: query.hasPrevious,
       hasNext: Boolean(query.continueToken),
-      loading: query.isRequestingMore || query.loading,
+      loading: query.isRequestingMore,
       onPrevious: query.loadPrevious,
       onNext: query.loadMore,
       onPageSizeChange: (value: number) => {
@@ -301,7 +301,7 @@ export function useQueryBackedClusterResourceGridTable<
       totalIsExact: query.totalIsExact,
       hasPrevious: query.hasPrevious,
       hasNext: Boolean(query.continueToken),
-      loading: query.isRequestingMore || query.loading,
+      loading: query.isRequestingMore,
       onPrevious: query.loadPrevious,
       onNext: query.loadMore,
       onPageSizeChange: (value: number) => {
