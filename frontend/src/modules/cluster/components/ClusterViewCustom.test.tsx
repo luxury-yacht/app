@@ -288,6 +288,41 @@ describe('ClusterViewCustom', () => {
     );
   });
 
+  it('uses the catalog query current page on first render instead of legacy local props', async () => {
+    const staleLocalRow = {
+      ...baseCustom,
+      name: 'stale-local-widget',
+      clusterId: 'stale:ctx',
+    };
+    const queryItem = catalogItemFromCustom({
+      ...baseCustom,
+      name: 'query-widget',
+      clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
+    });
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
+
+    await act(async () => {
+      root.render(<ClusterViewCustom data={[staleLocalRow]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
+    expect(gridTablePropsRef.current?.data).toEqual([
+      expect.objectContaining({
+        kind: 'Widget',
+        name: 'query-widget',
+        clusterId: 'cluster-a',
+        apiGroup: 'example.com',
+        apiVersion: 'v1',
+        crdName: 'widgets.example.com',
+      }),
+    ]);
+    expect(gridTablePropsRef.current?.data).not.toEqual([
+      expect.objectContaining({ name: 'stale-local-widget' }),
+    ]);
+  });
+
   it('enables searchable kind dropdown bulk actions for custom resources', async () => {
     await act(async () => {
       root.render(

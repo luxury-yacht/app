@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
@@ -27,7 +28,15 @@ type ClusterCRDBuilder struct {
 // ClusterCRDSnapshot is returned to the frontend.
 type ClusterCRDSnapshot struct {
 	ClusterMeta
-	Definitions []ClusterCRDEntry `json:"definitions"`
+	Definitions   []ClusterCRDEntry        `json:"definitions"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // ClusterCRDEntry represents an individual CRD in the table.
@@ -73,6 +82,11 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 		return nil, fmt.Errorf("cluster crds: CRD lister unavailable")
 	}
 	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterCRDDomainName, "")
+	if err != nil {
+		return nil, err
+	}
 	crds, err := b.crdLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("cluster crds: failed to list CRDs: %w", err)
@@ -96,14 +110,43 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Name < entries[j].Name
 	})
+
+	if query.Enabled {
+		page := applyTypedTableQuery(entries, query, clusterCRDTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  clusterCRDDomainName,
+			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
+			Version: version,
+			Payload: ClusterCRDSnapshot{
+				ClusterMeta:   meta,
+				Definitions:   page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
 	var totalItems int
 	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterCRDEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  clusterCRDDomainName,
 		Version: version,
-		Payload: ClusterCRDSnapshot{ClusterMeta: meta, Definitions: entries},
-		Stats:   snapshotWindowStats(len(entries), totalItems, "CRDs"),
+		Payload: ClusterCRDSnapshot{
+			ClusterMeta:  meta,
+			Definitions:  entries,
+			Kinds:        snapshotSortedKinds(entries, func(ClusterCRDEntry) string { return "CustomResourceDefinition" }),
+			Total:        totalItems,
+			TotalIsExact: totalItems == len(entries),
+		},
+		Stats: snapshotWindowStats(len(entries), totalItems, "CRDs"),
 	}, nil
 }
 

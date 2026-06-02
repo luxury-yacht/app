@@ -20,8 +20,7 @@ import ResourceGridTableView from '@shared/components/tables/ResourceGridTableVi
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
 import {
   clusterEventRowIdentity,
@@ -31,7 +30,7 @@ import {
   eventGridStableKey,
   resolveEventGridRelatedObject,
 } from '@shared/events/eventGridModel';
-import type { ResourceLink } from '@core/refresh/types';
+import type { ClusterEventsSnapshotPayload, ResourceLink } from '@core/refresh/types';
 import type { SnapshotStats } from '@/core/refresh/client';
 
 interface EventData {
@@ -67,7 +66,7 @@ interface EventViewProps {
  * Displays cluster-wide events
  */
 const ClusterEventsView: React.FC<EventViewProps> = React.memo(
-  ({ data, stats, loading = false, loaded, error }) => {
+  ({ data, loading = false, loaded, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -170,10 +169,28 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       return baseColumns;
     }, [canOpenEventObject, handleEventAltClick, handleEventClick, useShortResourceNames]);
 
-    const { gridTableProps, favModal } = useClusterResourceGridTable<EventData>({
-      tableMode: 'Local Partial',
+    const selectRows = useCallback(
+      (payload: ClusterEventsSnapshotPayload) => payload.events ?? [],
+      []
+    );
+    const {
+      gridTableProps,
+      favModal,
+      rows: displayedEvents,
+      loading: tableLoading,
+      loaded: tableLoaded,
+    } = useQueryBackedClusterResourceGridTable<ClusterEventsSnapshotPayload, EventData>({
+      enabled: true,
+      queryTableMode: 'Query Backed Static',
+      clusterId: selectedClusterId,
+      domain: 'cluster-events',
+      label: 'Cluster Events',
+      baseScope: 'cluster',
+      localData: data,
+      localLoading: loading,
+      localLoaded: Boolean(loaded),
+      selectRows,
       viewId: 'cluster-events',
-      data,
       columns,
       keyExtractor,
       defaultSortKey: 'ageTimestamp',
@@ -182,21 +199,13 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       filterAccessors: { getSearchText },
       showKindDropdown: false,
       filterOptions: { isNamespaceScoped: false },
-      filterOptionOverrides: {
-        partialDataLabel: buildLocalPartialDataLabel({
-          stats,
-          fallback: 'Cluster Events are loaded as a recent local window.',
-          sourceLabel: 'Cluster Events',
-          sourceVerb: 'are',
-        }),
-      },
     });
 
     const objectActions = useObjectActionController({
       context: 'gridtable',
       useDefaultHandlers: false,
       onViewInvolvedObject: (object) => {
-        const event = data.find(
+        const event = displayedEvents.find(
           (candidate) =>
             candidate.clusterId === object.clusterId &&
             candidate.namespace === object.namespace &&
@@ -237,14 +246,14 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
+          boundaryLoading={tableLoading && displayedEvents.length === 0}
+          loaded={tableLoaded || displayedEvents.length > 0}
           spinnerMessage="Loading events..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster Events"
           diagnosticsMode="live"
-          loading={loading}
+          loading={tableLoading}
           onRowClick={handleEventClick}
           tableClassName="gridtable-cluster-events"
           enableContextMenu={true}

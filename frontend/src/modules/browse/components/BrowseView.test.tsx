@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import BrowseView from '@/modules/browse/components/BrowseView';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 
 const exportCatalogQueryCSVFileMock = vi.hoisted(() => vi.fn());
 const runCatalogQueryBulkActionMock = vi.hoisted(() => vi.fn());
@@ -193,6 +194,52 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
   },
 }));
 
+const catalogItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
+  clusterId: 'cluster-1',
+  clusterName: 'Cluster 1',
+  kind: 'Pod',
+  group: '',
+  version: 'v1',
+  resource: 'pods',
+  namespace: 'default',
+  name: 'pod-a',
+  uid: 'pod-a',
+  resourceVersion: '1',
+  creationTimestamp: '2026-01-01T00:00:00Z',
+  scope: 'Namespace',
+  ...overrides,
+});
+
+const catalogPayload = (
+  items: CatalogItem[],
+  overrides: Partial<CatalogSnapshotPayload> = {}
+): CatalogSnapshotPayload => ({
+  clusterId: 'cluster-1',
+  clusterName: 'Cluster 1',
+  items,
+  continue: '',
+  total: items.length,
+  totalIsExact: true,
+  resourceCount: items.length,
+  kinds: [
+    { kind: 'Node', namespaced: false },
+    { kind: 'Pod', namespaced: true },
+  ],
+  namespaces: Array.from(
+    new Set(
+      items
+        .map((item) => item.namespace)
+        .filter((namespace): namespace is string => Boolean(namespace))
+    )
+  ),
+  facetsExact: true,
+  batchIndex: 0,
+  batchSize: items.length,
+  totalBatches: 1,
+  isFinal: true,
+  ...overrides,
+});
+
 describe('BrowseView', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -240,6 +287,44 @@ describe('BrowseView', () => {
   });
 
   describe('Cluster scope (namespace=undefined)', () => {
+    it('renders the first cluster-scoped page directly from the catalog query payload', async () => {
+      const node = catalogItem({
+        kind: 'Node',
+        resource: 'nodes',
+        namespace: undefined,
+        name: 'query-node',
+        uid: 'node-1',
+        scope: 'Cluster',
+      });
+      refreshMocks.catalogDomain.status = 'ready';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=1000&namespace=cluster';
+      refreshMocks.catalogDomain.data = catalogPayload([node], {
+        kinds: [
+          { kind: 'Node', namespaced: false },
+          { kind: 'Pod', namespaced: true },
+        ],
+      });
+
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      expect(gridTablePropsRef.current?.data).toEqual([
+        expect.objectContaining({
+          name: 'query-node',
+          scope: 'Cluster',
+          item: expect.objectContaining({
+            clusterId: 'cluster-1',
+            group: '',
+            version: 'v1',
+            kind: 'Node',
+            name: 'query-node',
+          }),
+        }),
+      ]);
+    });
+
     it('sets the catalog scope and triggers a manual refresh on mount', async () => {
       await act(async () => {
         root.render(<BrowseView />);
@@ -300,6 +385,38 @@ describe('BrowseView', () => {
   });
 
   describe('Namespace scope (namespace=specific)', () => {
+    it('renders the first namespace page directly from the catalog query payload', async () => {
+      refreshMocks.catalogDomain.status = 'ready';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=1000&namespace=team-a';
+      refreshMocks.catalogDomain.data = catalogPayload([
+        catalogItem({
+          namespace: 'team-a',
+          name: 'query-pod',
+          uid: 'pod-1',
+        }),
+      ]);
+
+      await act(async () => {
+        root.render(<BrowseView namespace="team-a" />);
+        await Promise.resolve();
+      });
+
+      expect(gridTablePropsRef.current?.data).toEqual([
+        expect.objectContaining({
+          name: 'query-pod',
+          namespaceDisplay: 'team-a',
+          item: expect.objectContaining({
+            clusterId: 'cluster-1',
+            group: '',
+            version: 'v1',
+            kind: 'Pod',
+            namespace: 'team-a',
+            name: 'query-pod',
+          }),
+        }),
+      ]);
+    });
+
     it('hides namespace column for namespace scope', async () => {
       await act(async () => {
         root.render(<BrowseView namespace="default" />);
@@ -337,6 +454,38 @@ describe('BrowseView', () => {
   });
 
   describe('All Namespaces scope', () => {
+    it('renders the first all-namespaces page directly from the catalog query payload', async () => {
+      refreshMocks.catalogDomain.status = 'ready';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=1000';
+      refreshMocks.catalogDomain.data = catalogPayload([
+        catalogItem({
+          namespace: 'team-b',
+          name: 'query-all-pod',
+          uid: 'pod-all-1',
+        }),
+      ]);
+
+      await act(async () => {
+        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
+        await Promise.resolve();
+      });
+
+      expect(gridTablePropsRef.current?.data).toEqual([
+        expect.objectContaining({
+          name: 'query-all-pod',
+          namespaceDisplay: 'team-b',
+          item: expect.objectContaining({
+            clusterId: 'cluster-1',
+            group: '',
+            version: 'v1',
+            kind: 'Pod',
+            namespace: 'team-b',
+            name: 'query-all-pod',
+          }),
+        }),
+      ]);
+    });
+
     it('uses a distinct persistence id from cluster browse', async () => {
       await act(async () => {
         root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);

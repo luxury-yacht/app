@@ -21,7 +21,7 @@ import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
@@ -29,6 +29,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import type { SnapshotStats } from '@/core/refresh/client';
+import type { NamespaceStorageSnapshotPayload } from '@/core/refresh/types';
 
 const NAMESPACE_STORAGE_KIND_OPTIONS = ['PersistentVolumeClaim'];
 
@@ -74,6 +75,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const objectLink = useObjectLink();
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<StorageData>('storage');
@@ -225,24 +227,41 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Storage' : 'Namespace Storage';
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<StorageData>({
-      tableMode: 'Local Partial',
+    const selectRows = useCallback(
+      (payload: NamespaceStorageSnapshotPayload) => payload.resources ?? [],
+      []
+    );
+    const { gridTableProps, favModal } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceStorageSnapshotPayload,
+      StorageData
+    >({
+      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-storage',
+      label: 'All Namespaces Storage',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'namespace-storage',
       namespace,
       columns,
-      data,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
       availableKinds: NAMESPACE_STORAGE_KIND_OPTIONS,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
-      filterOptionOverrides: {
-        partialDataLabel: buildLocalPartialDataLabel({
-          stats,
-          fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
-          sourceLabel: diagnosticsLabel,
-        }),
-      },
+      filterOptionOverrides:
+        namespace === ALL_NAMESPACES_SCOPE
+          ? undefined
+          : {
+              partialDataLabel: buildLocalPartialDataLabel({
+                stats,
+                fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
+                sourceLabel: diagnosticsLabel,
+              }),
+            },
       diagnosticsLabel,
     });
 

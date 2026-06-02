@@ -20,13 +20,14 @@ import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import type { SnapshotStats } from '@/core/refresh/client';
+import type { NamespaceQuotasSnapshotPayload } from '@/core/refresh/types';
 
 // Data interface for quota resources (ResourceQuotas, LimitRanges, PodDisruptionBudgets)
 export interface QuotaData {
@@ -82,6 +83,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<QuotaData>('quotas');
 
@@ -190,25 +192,42 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Quotas' : 'Namespace Quotas';
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<QuotaData>({
-      tableMode: 'Local Partial',
+    const selectRows = useCallback(
+      (payload: NamespaceQuotasSnapshotPayload) => payload.resources ?? [],
+      []
+    );
+    const { gridTableProps, favModal } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceQuotasSnapshotPayload,
+      QuotaData
+    >({
+      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-quotas',
+      label: 'All Namespaces Quotas',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'namespace-quotas',
       namespace,
       columns,
-      data,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
       availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
-      filterOptionOverrides: {
-        partialDataLabel: buildLocalPartialDataLabel({
-          stats,
-          fallback: `${diagnosticsLabel} are loaded as a bounded local snapshot.`,
-          sourceLabel: diagnosticsLabel,
-          sourceVerb: 'are',
-        }),
-      },
+      filterOptionOverrides:
+        namespace === ALL_NAMESPACES_SCOPE
+          ? undefined
+          : {
+              partialDataLabel: buildLocalPartialDataLabel({
+                stats,
+                fallback: `${diagnosticsLabel} are loaded as a bounded local snapshot.`,
+                sourceLabel: diagnosticsLabel,
+                sourceVerb: 'are',
+              }),
+            },
       diagnosticsLabel,
     });
 

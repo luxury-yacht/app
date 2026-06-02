@@ -20,13 +20,14 @@ import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import type { SnapshotStats } from '@/core/refresh/client';
+import type { NamespaceRBACSnapshotPayload } from '@/core/refresh/types';
 
 // Data interface for RBAC resources
 export interface RBACData {
@@ -88,6 +89,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<RBACData>('rbac');
 
@@ -196,26 +198,41 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces RBAC' : 'Namespace RBAC';
     const isPartial = namespace === ALL_NAMESPACES_SCOPE || Boolean(stats?.truncated);
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<RBACData>({
-      tableMode: isPartial ? 'Local Partial' : 'Local Complete',
+    const selectRows = useCallback(
+      (payload: NamespaceRBACSnapshotPayload) => payload.resources ?? [],
+      []
+    );
+    const { gridTableProps, favModal } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceRBACSnapshotPayload,
+      RBACData
+    >({
+      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-rbac',
+      label: 'All Namespaces RBAC',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'namespace-rbac',
       namespace,
       columns,
-      data,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
       availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
-      filterOptionOverrides: isPartial
-        ? {
-            partialDataLabel: buildLocalPartialDataLabel({
-              stats,
-              fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
-              sourceLabel: diagnosticsLabel,
-            }),
-          }
-        : undefined,
+      filterOptionOverrides:
+        isPartial && namespace !== ALL_NAMESPACES_SCOPE
+          ? {
+              partialDataLabel: buildLocalPartialDataLabel({
+                stats,
+                fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
+                sourceLabel: diagnosticsLabel,
+              }),
+            }
+          : undefined,
       diagnosticsLabel,
     });
 

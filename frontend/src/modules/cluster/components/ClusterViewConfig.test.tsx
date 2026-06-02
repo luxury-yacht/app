@@ -153,7 +153,7 @@ describe('ClusterViewConfig', () => {
     expect(props.columnWidths).toBe(null);
   });
 
-  it('marks truncated producer snapshots as Local Partial', async () => {
+  it('does not expose local partial copy for query-backed cluster config', async () => {
     await act(async () => {
       root.render(
         <ClusterViewConfig
@@ -171,10 +171,7 @@ describe('ClusterViewConfig', () => {
       await Promise.resolve();
     });
 
-    expect(gridTablePropsRef.current?.filters?.options?.partialDataLabel).toContain(
-      'Showing first 1 of 12 cluster configuration resources'
-    );
-    expect(gridTablePropsRef.current?.filters?.options?.partialDataLabel).toContain('visible rows');
+    expect(gridTablePropsRef.current?.filters?.options?.partialDataLabel).toBeUndefined();
   });
 
   it('opens a StorageClass directly to the map tab from the context menu', async () => {

@@ -17,14 +17,14 @@ import ResourceGridTableView from '@shared/components/tables/ResourceGridTableVi
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import type { SnapshotStats } from '@/core/refresh/client';
+import type { ClusterStorageSnapshotPayload } from '@/core/refresh/types';
 
 const CLUSTER_STORAGE_KIND_OPTIONS = ['PersistentVolume'];
 
@@ -60,7 +60,7 @@ interface StorageViewProps {
  * Displays Persistent Volumes
  */
 const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
-  ({ data, stats = null, loading = false, loaded = false, error }) => {
+  ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -263,24 +263,31 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
-    const isPartial = Boolean(stats?.truncated);
-    const { gridTableProps, favModal } = useClusterResourceGridTable<StorageData>({
-      tableMode: isPartial ? 'Local Partial' : 'Local Complete',
+    const selectRows = useCallback(
+      (payload: ClusterStorageSnapshotPayload) => payload.volumes ?? [],
+      []
+    );
+    const {
+      gridTableProps,
+      favModal,
+      loading: tableLoading,
+      loaded: tableLoaded,
+      rows,
+    } = useQueryBackedClusterResourceGridTable<ClusterStorageSnapshotPayload, StorageData>({
+      enabled: true,
+      queryTableMode: 'Query Backed Static',
+      clusterId: selectedClusterId,
+      domain: 'cluster-storage',
+      label: 'Cluster Storage',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'cluster-storage',
       columns,
-      data,
       keyExtractor,
       availableKinds: CLUSTER_STORAGE_KIND_OPTIONS,
       showKindDropdown: true,
-      filterOptionOverrides: isPartial
-        ? {
-            partialDataLabel: buildLocalPartialDataLabel({
-              stats,
-              fallback: 'Cluster Storage is loaded as a bounded local snapshot.',
-              sourceLabel: 'Cluster Storage',
-            }),
-          }
-        : undefined,
       diagnosticsLabel: 'Cluster Storage',
     });
 
@@ -317,13 +324,13 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
+          boundaryLoading={tableLoading && rows.length === 0}
+          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading storage resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster Storage"
-          loading={loading}
+          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="gridtable-pvs"
           enableContextMenu={true}

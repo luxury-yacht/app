@@ -19,7 +19,7 @@ import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
@@ -27,6 +27,11 @@ import {
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
 import type { SnapshotStats } from '@/core/refresh/client';
+import type {
+  NamespaceAutoscalingSnapshotPayload,
+  NamespaceAutoscalingSummary,
+} from '@/core/refresh/types';
+import { parseAutoscalingTarget } from '@shared/resources/resourceDescriptorSelectors';
 
 const NAMESPACE_AUTOSCALING_KIND_OPTIONS = ['HorizontalPodAutoscaler'];
 
@@ -98,6 +103,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<AutoscalingData>('autoscaling');
 
@@ -330,11 +336,45 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Autoscaling' : 'Namespace Autoscaling';
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<AutoscalingData>({
-      tableMode: 'Local Partial',
+    const selectRows = useCallback(
+      (payload: NamespaceAutoscalingSnapshotPayload) =>
+        (payload.resources ?? []).map((item: NamespaceAutoscalingSummary) => {
+          const scaleTargetRef = parseAutoscalingTarget(item.target, item.targetApiVersion);
+          return {
+            kind: item.kind,
+            kindAlias: item.kind,
+            name: item.name,
+            namespace: item.namespace,
+            clusterId: item.clusterId,
+            clusterName: item.clusterName,
+            scaleTargetRef,
+            target: item.target,
+            min: item.min,
+            max: item.max,
+            current: item.current,
+            minReplicas: item.min,
+            maxReplicas: item.max,
+            currentReplicas: item.current,
+            age: item.age,
+          };
+        }),
+      []
+    );
+    const { gridTableProps, favModal } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceAutoscalingSnapshotPayload,
+      AutoscalingData
+    >({
+      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-autoscaling',
+      label: 'All Namespaces Autoscaling',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'namespace-autoscaling',
       namespace,
-      data,
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
@@ -344,13 +384,16 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       showKindDropdown: true,
       showNamespaceFilters: showNamespaceFilter,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      filterOptionOverrides: {
-        partialDataLabel: buildLocalPartialDataLabel({
-          stats,
-          fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
-          sourceLabel: diagnosticsLabel,
-        }),
-      },
+      filterOptionOverrides:
+        namespace === ALL_NAMESPACES_SCOPE
+          ? undefined
+          : {
+              partialDataLabel: buildLocalPartialDataLabel({
+                stats,
+                fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
+                sourceLabel: diagnosticsLabel,
+              }),
+            },
     });
 
     const objectActions = useObjectActionController({

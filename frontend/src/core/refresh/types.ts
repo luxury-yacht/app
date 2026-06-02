@@ -232,6 +232,14 @@ export interface ClusterNodeSnapshotPayload extends ClusterMeta {
   nodes: ClusterNodeSnapshotEntry[];
   metrics?: NodeMetricsInfo;
   metricsByCluster?: Record<string, NodeMetricsInfo>;
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  kinds?: string[];
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export type ClusterNodeRow = ClusterNodeSnapshotEntry;
@@ -332,6 +340,13 @@ export interface ClusterRBACEntry extends ClusterMeta {
 export interface ClusterRBACSnapshotPayload extends ClusterMeta {
   resources: ClusterRBACEntry[];
   kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface ClusterStorageEntry extends ClusterMeta {
@@ -350,6 +365,14 @@ export interface ClusterStorageEntry extends ClusterMeta {
 
 export interface ClusterStorageSnapshotPayload extends ClusterMeta {
   volumes: ClusterStorageEntry[];
+  kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface ClusterConfigEntry extends ClusterMeta {
@@ -363,6 +386,13 @@ export interface ClusterConfigEntry extends ClusterMeta {
 export interface ClusterConfigSnapshotPayload extends ClusterMeta {
   resources: ClusterConfigEntry[];
   kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface ClusterCRDEntry extends ClusterMeta {
@@ -391,6 +421,14 @@ export interface ClusterCRDEntry extends ClusterMeta {
 
 export interface ClusterCRDSnapshotPayload extends ClusterMeta {
   definitions: ClusterCRDEntry[];
+  kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface ClusterCustomEntry extends ClusterMeta {
@@ -447,6 +485,14 @@ export interface ClusterEventEntry extends ClusterMeta {
 
 export interface ClusterEventsSnapshotPayload extends ClusterMeta {
   events: ClusterEventEntry[];
+  kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export type CatalogItemScope = 'Cluster' | 'Namespace';
@@ -862,6 +908,13 @@ export interface NamespaceConfigSummary extends ClusterMeta {
 export interface NamespaceConfigSnapshotPayload extends ClusterMeta {
   resources: NamespaceConfigSummary[];
   kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface NamespaceNetworkSummary extends ClusterMeta {
@@ -875,6 +928,13 @@ export interface NamespaceNetworkSummary extends ClusterMeta {
 export interface NamespaceNetworkSnapshotPayload extends ClusterMeta {
   resources: NamespaceNetworkSummary[];
   kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface NamespaceRBACSummary extends ClusterMeta {
@@ -888,6 +948,13 @@ export interface NamespaceRBACSummary extends ClusterMeta {
 export interface NamespaceRBACSnapshotPayload extends ClusterMeta {
   resources: NamespaceRBACSummary[];
   kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface NamespaceStorageSummary extends ClusterMeta {
@@ -905,6 +972,14 @@ export interface NamespaceStorageSummary extends ClusterMeta {
 
 export interface NamespaceStorageSnapshotPayload extends ClusterMeta {
   resources: NamespaceStorageSummary[];
+  kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface NamespaceAutoscalingSummary extends ClusterMeta {
@@ -930,6 +1005,13 @@ export interface NamespaceAutoscalingSummary extends ClusterMeta {
 export interface NamespaceAutoscalingSnapshotPayload extends ClusterMeta {
   resources: NamespaceAutoscalingSummary[];
   kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface NamespaceQuotaSummary extends ClusterMeta {
@@ -951,6 +1033,13 @@ export interface NamespaceQuotaSummary extends ClusterMeta {
 export interface NamespaceQuotasSnapshotPayload extends ClusterMeta {
   resources: NamespaceQuotaSummary[];
   kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface NamespaceEventSummary extends ClusterMeta {
@@ -975,6 +1064,14 @@ export interface NamespaceEventSummary extends ClusterMeta {
 
 export interface NamespaceEventsSnapshotPayload extends ClusterMeta {
   events: NamespaceEventSummary[];
+  kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface NamespaceCustomSummary extends ClusterMeta {
@@ -1026,6 +1123,14 @@ export interface NamespaceHelmSummary extends ClusterMeta {
 
 export interface NamespaceHelmSnapshotPayload extends ClusterMeta {
   releases: NamespaceHelmSummary[];
+  kinds?: string[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  namespaces?: string[];
+  facetsExact?: boolean;
+  dynamic?: ResourceQueryDynamicRef;
 }
 
 export interface ContainerLogsEntry {

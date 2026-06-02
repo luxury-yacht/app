@@ -11,15 +11,41 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
-const { useTableSortMock } = vi.hoisted(() => ({
-  useTableSortMock: vi.fn(
-    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
-      sortedData: data,
-      sortConfig: opts?.controlledSort ?? { key: '', direction: null },
-      handleSort: vi.fn(),
-    })
-  ),
-}));
+const { latestTableRowsRef, typedQueryRowsRef, requestRefreshDomainStateMock, useTableSortMock } =
+  vi.hoisted(() => {
+    const latestRows: { current: unknown[] } = { current: [] };
+    const typedQueryRows: { current: unknown[] } = { current: [] };
+
+    return {
+      latestTableRowsRef: latestRows,
+      typedQueryRowsRef: typedQueryRows,
+      requestRefreshDomainStateMock: vi.fn((_request?: unknown) =>
+        Promise.resolve({
+          status: 'executed',
+          data: {
+            status: 'ready',
+            data: {
+              nodes: typedQueryRows.current,
+              total: typedQueryRows.current.length,
+              totalIsExact: true,
+              kinds: ['Node'],
+              facetsExact: true,
+            },
+          },
+        })
+      ),
+      useTableSortMock: vi.fn(
+        (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => {
+          latestRows.current = data;
+          return {
+            sortedData: data,
+            sortConfig: opts?.controlledSort ?? { key: '', direction: null },
+            handleSort: vi.fn(),
+          };
+        }
+      ),
+    };
+  });
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -122,6 +148,7 @@ vi.mock('@/core/data-access', async (importOriginal) => {
   return {
     ...actual,
     requestRefreshDomain: vi.fn().mockResolvedValue(undefined),
+    requestRefreshDomainState: (request: unknown) => requestRefreshDomainStateMock(request),
   };
 });
 
@@ -166,7 +193,10 @@ describe('ClusterViewNodes', () => {
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
     scopedDomainCallsRef.current = [];
+    latestTableRowsRef.current = [];
+    typedQueryRowsRef.current = [];
     openWithObjectMock.mockReset();
+    requestRefreshDomainStateMock.mockClear();
     useTableSortMock.mockClear();
   });
 
@@ -177,11 +207,17 @@ describe('ClusterViewNodes', () => {
     container.remove();
   });
 
-  it('passes persisted state to GridTable', async () => {
+  const renderNodes = async (nodes: Array<typeof baseNode | Record<string, unknown>>) => {
+    typedQueryRowsRef.current = nodes;
     await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
+      root.render(<ClusterViewNodes data={nodes as any} loaded={true} />);
+      await Promise.resolve();
       await Promise.resolve();
     });
+  };
+
+  it('passes persisted state to GridTable', async () => {
+    await renderNodes([baseNode]);
 
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
@@ -197,10 +233,7 @@ describe('ClusterViewNodes', () => {
   });
 
   it('passes numeric CPU and memory sort values into useTableSort', async () => {
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([baseNode]);
 
     expect(useTableSortMock).toHaveBeenCalled();
     const options = useTableSortMock.mock.calls[0]?.[3];
@@ -225,10 +258,7 @@ describe('ClusterViewNodes', () => {
       taints: [{ key: 'node.kubernetes.io/unschedulable', effect: 'NoSchedule' }],
     };
 
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
     const statusColumn = props.columns.find((column: any) => column.key === 'status');
@@ -248,10 +278,7 @@ describe('ClusterViewNodes', () => {
       unschedulable: true,
     };
 
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
     const statusColumn = props.columns.find((column: any) => column.key === 'status');
@@ -270,10 +297,7 @@ describe('ClusterViewNodes', () => {
       statusPresentation: 'terminating',
     };
 
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
     const statusColumn = props.columns.find((column: any) => column.key === 'status');
@@ -292,10 +316,7 @@ describe('ClusterViewNodes', () => {
       statusPresentation: undefined,
     };
 
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
     const statusColumn = props.columns.find((column: any) => column.key === 'status');
@@ -307,10 +328,7 @@ describe('ClusterViewNodes', () => {
   });
 
   it('opens the object panel with cluster metadata when clicking a node name', async () => {
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([baseNode]);
 
     const props = gridTablePropsRef.current;
     const nameColumn = props.columns.find((column: any) => column.key === 'name');
@@ -332,10 +350,7 @@ describe('ClusterViewNodes', () => {
   });
 
   it('opens the Map from the node context menu', async () => {
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([baseNode]);
 
     const props = gridTablePropsRef.current;
     const objectMapItem = props
@@ -361,10 +376,7 @@ describe('ClusterViewNodes', () => {
   });
 
   it('resolves node metrics from the active cluster scope only', async () => {
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([baseNode]);
 
     expect(scopedDomainCallsRef.current).toContainEqual(['nodes', 'path:context|']);
     expect(scopedDomainCallsRef.current).not.toContainEqual([

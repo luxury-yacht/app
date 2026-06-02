@@ -677,7 +677,14 @@ func (a *App) HydrateCatalogCustomRows(clusterID string, rows []snapshot.Resourc
 	}
 	requests := make([]hydrationRequest, 0, len(rows))
 	for _, row := range rows {
-		if row.ClusterID != "" && row.ClusterID != trimmedClusterID {
+		// Every object reference crossing this boundary must carry clusterId. The
+		// catalog page rows always populate it, so a blank value is a programming
+		// error rather than a case to paper over with the request clusterId.
+		rowClusterID := strings.TrimSpace(row.ClusterID)
+		if rowClusterID == "" {
+			return nil, fmt.Errorf("custom row %q is missing clusterId", row.Name)
+		}
+		if rowClusterID != trimmedClusterID {
 			return nil, fmt.Errorf("row clusterId %q does not match request clusterId %q", row.ClusterID, trimmedClusterID)
 		}
 		if strings.TrimSpace(row.Kind) == "" || strings.TrimSpace(row.Version) == "" || strings.TrimSpace(row.Resource) == "" {

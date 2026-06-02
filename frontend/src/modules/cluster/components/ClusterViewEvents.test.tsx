@@ -277,7 +277,7 @@ describe('ClusterViewEvents', () => {
     expect(openWithObjectMock).not.toHaveBeenCalled();
   });
 
-  it('uses backend truncation stats for Local Partial table copy', async () => {
+  it('does not expose recent-window copy for query-backed cluster events', async () => {
     await act(async () => {
       root.render(
         <ClusterViewEvents
@@ -295,9 +295,6 @@ describe('ClusterViewEvents', () => {
       await Promise.resolve();
     });
 
-    expect(gridTablePropsRef.current.filters.options.partialDataLabel).toContain(
-      'Showing most recent 1 of 12 events'
-    );
-    expect(gridTablePropsRef.current.filters.options.partialDataLabel).toContain('visible rows');
+    expect(gridTablePropsRef.current.filters.options.partialDataLabel).toBeUndefined();
   });
 });

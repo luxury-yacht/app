@@ -45,6 +45,13 @@ type NodeSnapshot struct {
 	Nodes            []NodeSummary              `json:"nodes"`
 	Metrics          NodeMetricsInfo            `json:"metrics"`
 	MetricsByCluster map[string]NodeMetricsInfo `json:"metricsByCluster,omitempty"`
+	Continue         string                     `json:"continue,omitempty"`
+	CursorInvalid    bool                       `json:"cursorInvalid,omitempty"`
+	Total            int                        `json:"total,omitempty"`
+	TotalIsExact     bool                       `json:"totalIsExact"`
+	Kinds            []string                   `json:"kinds,omitempty"`
+	FacetsExact      bool                       `json:"facetsExact"`
+	Dynamic          *ResourceQueryDynamicRef   `json:"dynamic,omitempty"`
 }
 
 // NodeMetricsInfo captures metadata about metrics collection.
@@ -151,7 +158,7 @@ func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapsho
 		}
 		pods = append(pods, podList...)
 	}
-	return buildNodeSnapshot(ctx, list, pods, b.metrics), nil
+	return buildNodeSnapshot(ctx, scope, list, pods, b.metrics), nil
 }
 
 // Build returns the node snapshot payload using direct list API calls.
@@ -201,11 +208,11 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 	if podsForbidden {
 		pods = nil
 	}
-	return buildNodeSnapshot(ctx, nodes, pods, b.metrics), nil
+	return buildNodeSnapshot(ctx, scope, nodes, pods, b.metrics), nil
 }
 
 // buildNodeSnapshot assembles node summaries with cluster metadata.
-func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1.Pod, provider metrics.Provider) *refresh.Snapshot {
+func buildNodeSnapshot(ctx context.Context, scope string, nodes []*corev1.Node, pods []*corev1.Pod, provider metrics.Provider) *refresh.Snapshot {
 	var (
 		nodeMetrics map[string]metrics.NodeUsage
 		podMetrics  map[string]metrics.PodUsage
@@ -216,7 +223,7 @@ func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1
 		podMetrics = provider.LatestPodUsage()
 		metaSrc = provider.Metadata()
 	}
-	return buildNodeSnapshotFromUsage(ctx, nodes, pods, nodeUsageOrEmpty(nodeMetrics), podUsageOrEmpty(podMetrics), metaSrc)
+	return buildNodeSnapshotFromUsage(ctx, scope, nodes, pods, nodeUsageOrEmpty(nodeMetrics), podUsageOrEmpty(podMetrics), metaSrc)
 }
 
 // buildNodeSnapshotFromUsage assembles node summaries using pre-resolved
@@ -226,6 +233,7 @@ func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1
 // deterministic and tests can use fixture metrics.
 func buildNodeSnapshotFromUsage(
 	ctx context.Context,
+	scope string,
 	nodes []*corev1.Node,
 	pods []*corev1.Pod,
 	nodeMetrics map[string]metrics.NodeUsage,
@@ -233,6 +241,8 @@ func buildNodeSnapshotFromUsage(
 	metricsMeta metrics.Metadata,
 ) *refresh.Snapshot {
 	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	_, query, _ := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), "nodes", "")
 	items := make([]NodeSummary, 0, len(nodes))
 	var version uint64
 
@@ -356,6 +366,30 @@ func buildNodeSnapshotFromUsage(
 	}
 	metricsInfo.SuccessCount = metricsMeta.SuccessCount
 	metricsInfo.FailureCount = metricsMeta.FailureCount
+
+	if query.Enabled {
+		query.DynamicRevision = dynamicRevision
+		page := applyTypedTableQuery(items, query, nodeTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  "nodes",
+			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
+			Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
+			Payload: NodeSnapshot{
+				ClusterMeta:   meta,
+				Nodes:         page.Rows,
+				Metrics:       metricsInfo,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Kinds:         page.Kinds,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}
+	}
+
 	var totalItems int
 	items, totalItems = truncateSnapshotWindow(items, config.SnapshotClusterNodesEntryLimit)
 
@@ -363,8 +397,15 @@ func buildNodeSnapshotFromUsage(
 		Domain:  "nodes",
 		Scope:   "",
 		Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
-		Payload: NodeSnapshot{ClusterMeta: meta, Nodes: items, Metrics: metricsInfo},
-		Stats:   snapshotWindowStats(len(items), totalItems, "nodes"),
+		Payload: NodeSnapshot{
+			ClusterMeta:  meta,
+			Nodes:        items,
+			Metrics:      metricsInfo,
+			Total:        totalItems,
+			TotalIsExact: totalItems == len(items),
+			Kinds:        snapshotSortedKinds(items, func(NodeSummary) string { return "Node" }),
+		},
+		Stats: snapshotWindowStats(len(items), totalItems, "nodes"),
 	}
 	return snap
 }

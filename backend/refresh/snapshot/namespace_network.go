@@ -62,8 +62,15 @@ type NamespaceNetworkBuilder struct {
 // NamespaceNetworkSnapshot payload for the network tab.
 type NamespaceNetworkSnapshot struct {
 	ClusterMeta
-	Resources []NetworkSummary `json:"resources"`
-	Kinds     []string         `json:"kinds,omitempty"`
+	Resources     []NetworkSummary         `json:"resources"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // NetworkSummary mirrors the UI requirements for namespace network resources.
@@ -142,7 +149,12 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 // Build gathers services, endpoint slices, ingresses, and policies for the namespace.
 func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, errNamespaceNetworkScopeRequired)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceNetworkDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), errNamespaceNetworkScopeRequired)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +194,7 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 
 	slicesByService := groupEndpointSlicesByService(slices)
 
-	return b.buildSnapshot(meta, parsedScope.CanonicalScope, services, slices, slicesByService, ingresses, policies, gatewayItems)
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, services, slices, slicesByService, ingresses, policies, gatewayItems)
 }
 
 func (b *NamespaceNetworkBuilder) listServices(namespace string) ([]*corev1.Service, error) {
@@ -302,6 +314,7 @@ func (b *NamespaceNetworkBuilder) listGatewayAPIResources(ctx context.Context, n
 func (b *NamespaceNetworkBuilder) buildSnapshot(
 	meta ClusterMeta,
 	scope string,
+	query typedTableQuery,
 	services []*corev1.Service,
 	slices []*discoveryv1.EndpointSlice,
 	slicesByService map[string][]*discoveryv1.EndpointSlice,
@@ -401,6 +414,28 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 
 	sortNetworkSummaries(resources)
 
+	if query.Enabled {
+		page := applyTypedTableQuery(resources, query, networkTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  namespaceNetworkDomainName,
+			Scope:   scope,
+			Version: version,
+			Payload: NamespaceNetworkSnapshot{
+				ClusterMeta:   meta,
+				Resources:     page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
 	var totalItems int
 	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceNetworkEntryLimit)
 
@@ -409,9 +444,11 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceNetworkSnapshot{
-			ClusterMeta: meta,
-			Resources:   resources,
-			Kinds:       snapshotSortedKinds(resources, func(resource NetworkSummary) string { return resource.Kind }),
+			ClusterMeta:  meta,
+			Resources:    resources,
+			Kinds:        snapshotSortedKinds(resources, func(resource NetworkSummary) string { return resource.Kind }),
+			Total:        totalItems,
+			TotalIsExact: totalItems == len(resources),
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "network resources"),
 	}, nil

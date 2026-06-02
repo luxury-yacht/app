@@ -43,8 +43,15 @@ type ClusterConfigPermissions struct {
 // ClusterConfigSnapshot represents the payload exposed to the UI.
 type ClusterConfigSnapshot struct {
 	ClusterMeta
-	Resources []ClusterConfigEntry `json:"resources"`
-	Kinds     []string             `json:"kinds,omitempty"`
+	Resources     []ClusterConfigEntry     `json:"resources"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // ClusterConfigEntry covers a storage class, ingress class, or webhook config.
@@ -108,10 +115,15 @@ func RegisterClusterConfigDomainWithGatewayAPI(
 
 // Build produces the cluster configuration snapshot.
 func (b *ClusterConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return b.buildFromListers(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterConfigDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	return b.buildFromListers(ctx, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query)
 }
 
-func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.Snapshot, error) {
+func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope string, query typedTableQuery) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	var version uint64
 	entries := make([]ClusterConfigEntry, 0, 64)
@@ -208,6 +220,29 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 		return entries[i].Kind < entries[j].Kind
 	})
+
+	if query.Enabled {
+		page := applyTypedTableQuery(entries, query, clusterConfigTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  clusterConfigDomainName,
+			Scope:   scope,
+			Version: version,
+			Payload: ClusterConfigSnapshot{
+				ClusterMeta:   meta,
+				Resources:     page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
 	var totalItems int
 	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterConfigEntryLimit)
 
@@ -215,9 +250,11 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		Domain:  clusterConfigDomainName,
 		Version: version,
 		Payload: ClusterConfigSnapshot{
-			ClusterMeta: meta,
-			Resources:   entries,
-			Kinds:       snapshotSortedKinds(entries, func(entry ClusterConfigEntry) string { return entry.Kind }),
+			ClusterMeta:  meta,
+			Resources:    entries,
+			Kinds:        snapshotSortedKinds(entries, func(entry ClusterConfigEntry) string { return entry.Kind }),
+			Total:        totalItems,
+			TotalIsExact: totalItems == len(entries),
 		},
 		Stats: snapshotWindowStats(len(entries), totalItems, "cluster configuration resources"),
 	}, nil

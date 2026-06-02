@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -37,8 +38,15 @@ type NamespaceRBACBuilder struct {
 // NamespaceRBACSnapshot payload for RBAC view.
 type NamespaceRBACSnapshot struct {
 	ClusterMeta
-	Resources []RBACSummary `json:"resources"`
-	Kinds     []string      `json:"kinds,omitempty"`
+	Resources     []RBACSummary            `json:"resources"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // RBACSummary describes a Role/RoleBinding/ServiceAccount entry.
@@ -82,7 +90,12 @@ func RegisterNamespaceRBACDomain(
 func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	_ = ctx
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, "namespace scope is required")
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceRBACDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), "namespace scope is required")
 	if err != nil {
 		return nil, err
 	}
@@ -135,12 +148,13 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 		}
 	}
 
-	return buildNamespaceRBACSnapshot(meta, parsedScope.CanonicalScope, roles, bindings, serviceAccounts)
+	return buildNamespaceRBACSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, roles, bindings, serviceAccounts)
 }
 
 func buildNamespaceRBACSnapshot(
 	meta ClusterMeta,
 	scope string,
+	query typedTableQuery,
 	roles []*rbacv1.Role,
 	bindings []*rbacv1.RoleBinding,
 	serviceAccounts []*corev1.ServiceAccount,
@@ -183,6 +197,28 @@ func buildNamespaceRBACSnapshot(
 	}
 
 	sortRBACSummaries(resources)
+	if query.Enabled {
+		page := applyTypedTableQuery(resources, query, rbacTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  namespaceRBACDomainName,
+			Scope:   scope,
+			Version: version,
+			Payload: NamespaceRBACSnapshot{
+				ClusterMeta:   meta,
+				Resources:     page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
 	var totalItems int
 	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceRBACEntryLimit)
 
@@ -191,9 +227,11 @@ func buildNamespaceRBACSnapshot(
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceRBACSnapshot{
-			ClusterMeta: meta,
-			Resources:   resources,
-			Kinds:       snapshotSortedKinds(resources, func(resource RBACSummary) string { return resource.Kind }),
+			ClusterMeta:  meta,
+			Resources:    resources,
+			Kinds:        snapshotSortedKinds(resources, func(resource RBACSummary) string { return resource.Kind }),
+			Total:        totalItems,
+			TotalIsExact: totalItems == len(resources),
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "RBAC resources"),
 	}, nil

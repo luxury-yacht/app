@@ -27,7 +27,15 @@ type NamespaceEventsBuilder struct {
 // NamespaceEventsSnapshot payload for events tab.
 type NamespaceEventsSnapshot struct {
 	ClusterMeta
-	Events []EventSummary `json:"events"`
+	Events        []EventSummary           `json:"events"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // EventSummary captures the essential event fields for display.
@@ -69,7 +77,12 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	_ = ctx
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, "namespace scope is required")
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceEventsDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), "namespace scope is required")
 	if err != nil {
 		return nil, err
 	}
@@ -104,15 +117,6 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		filtered = append(filtered, event)
 	}
 	events = filtered
-
-	sort.Slice(events, func(i, j int) bool {
-		return compareEventOrder(events[i], events[j]) < 0
-	})
-
-	originalCount := len(events)
-	if originalCount > config.SnapshotNamespaceEventsLimit {
-		events = events[:config.SnapshotNamespaceEventsLimit]
-	}
 
 	summaries := make([]EventSummary, 0, len(events))
 	var version uint64
@@ -152,6 +156,40 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		}
 	}
 
+	if query.Enabled {
+		page := applyTypedTableQuery(summaries, query, namespacedEventTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  namespaceEventsDomainName,
+			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
+			Version: version,
+			Payload: NamespaceEventsSnapshot{
+				ClusterMeta:   meta,
+				Events:        page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].AgeTimestamp != summaries[j].AgeTimestamp {
+			return summaries[i].AgeTimestamp > summaries[j].AgeTimestamp
+		}
+		return summaries[i].Name < summaries[j].Name
+	})
+
+	originalCount := len(summaries)
+	if originalCount > config.SnapshotNamespaceEventsLimit {
+		summaries = summaries[:config.SnapshotNamespaceEventsLimit]
+	}
+
 	stats := refresh.SnapshotStats{
 		ItemCount: len(summaries),
 	}
@@ -165,7 +203,13 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		Domain:  namespaceEventsDomainName,
 		Scope:   parsedScope.CanonicalScope,
 		Version: version,
-		Payload: NamespaceEventsSnapshot{ClusterMeta: meta, Events: summaries},
-		Stats:   stats,
+		Payload: NamespaceEventsSnapshot{
+			ClusterMeta:  meta,
+			Events:       summaries,
+			Kinds:        snapshotSortedKinds(summaries, func(event EventSummary) string { return event.Kind }),
+			Total:        originalCount,
+			TotalIsExact: originalCount == len(summaries),
+		},
+		Stats: stats,
 	}, nil
 }

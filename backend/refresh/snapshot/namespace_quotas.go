@@ -40,8 +40,15 @@ type NamespaceQuotasBuilder struct {
 // NamespaceQuotasSnapshot payload for quotas tab.
 type NamespaceQuotasSnapshot struct {
 	ClusterMeta
-	Resources []QuotaSummary `json:"resources"`
-	Kinds     []string       `json:"kinds,omitempty"`
+	Resources     []QuotaSummary           `json:"resources"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // QuotaSummary captures quota/limit range/PDB info.
@@ -95,7 +102,12 @@ func RegisterNamespaceQuotasDomain(
 // Build assembles quota summaries for the namespace.
 func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, "namespace scope is required")
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceQuotasDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), "namespace scope is required")
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +134,7 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 		}
 	}
 
-	return b.buildSnapshot(meta, parsedScope.CanonicalScope, quotas, limits, pdbs)
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, quotas, limits, pdbs)
 }
 
 func (b *NamespaceQuotasBuilder) listResourceQuotas(namespace string) ([]*corev1.ResourceQuota, error) {
@@ -149,6 +161,7 @@ func (b *NamespaceQuotasBuilder) listPodDisruptionBudgets(namespace string) ([]*
 func (b *NamespaceQuotasBuilder) buildSnapshot(
 	meta ClusterMeta,
 	namespace string,
+	query typedTableQuery,
 	quotas []*corev1.ResourceQuota,
 	limits []*corev1.LimitRange,
 	pdbs []*policyv1.PodDisruptionBudget,
@@ -197,6 +210,28 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
+	if query.Enabled {
+		page := applyTypedTableQuery(resources, query, quotaTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  namespaceQuotasDomainName,
+			Scope:   namespace,
+			Version: version,
+			Payload: NamespaceQuotasSnapshot{
+				ClusterMeta:   meta,
+				Resources:     page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
 	var totalItems int
 	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceQuotasEntryLimit)
 
@@ -205,9 +240,11 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		Scope:   namespace,
 		Version: version,
 		Payload: NamespaceQuotasSnapshot{
-			ClusterMeta: meta,
-			Resources:   resources,
-			Kinds:       snapshotSortedKinds(resources, func(resource QuotaSummary) string { return resource.Kind }),
+			ClusterMeta:  meta,
+			Resources:    resources,
+			Kinds:        snapshotSortedKinds(resources, func(resource QuotaSummary) string { return resource.Kind }),
+			Total:        totalItems,
+			TotalIsExact: totalItems == len(resources),
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "quota resources"),
 	}, nil

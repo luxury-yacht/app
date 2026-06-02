@@ -19,10 +19,11 @@ import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import type { SnapshotStats } from '@/core/refresh/client';
+import type { NamespaceConfigSnapshotPayload } from '@/core/refresh/types';
 
 // Data interface for configuration resources (ConfigMaps, Secrets)
 export interface ConfigData {
@@ -63,6 +64,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<ConfigData>('config');
 
@@ -145,24 +147,41 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         ? 'All Namespaces Configuration'
         : 'Namespace Configuration';
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<ConfigData>({
-      tableMode: 'Local Partial',
+    const selectRows = useCallback(
+      (payload: NamespaceConfigSnapshotPayload) => payload.resources ?? [],
+      []
+    );
+    const { gridTableProps, favModal } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceConfigSnapshotPayload,
+      ConfigData
+    >({
+      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-config',
+      label: 'All Namespaces Configuration',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'namespace-config',
       namespace,
       columns,
-      data,
       objectIdentity: resourceIdentity,
       defaultSort: { key: 'name', direction: 'asc' },
       availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
-      filterOptionOverrides: {
-        partialDataLabel: buildLocalPartialDataLabel({
-          stats,
-          fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
-          sourceLabel: diagnosticsLabel,
-        }),
-      },
+      filterOptionOverrides:
+        namespace === ALL_NAMESPACES_SCOPE
+          ? undefined
+          : {
+              partialDataLabel: buildLocalPartialDataLabel({
+                stats,
+                fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
+                sourceLabel: diagnosticsLabel,
+              }),
+            },
       diagnosticsLabel,
     });
 

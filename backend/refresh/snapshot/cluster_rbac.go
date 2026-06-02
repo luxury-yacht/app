@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -33,8 +34,15 @@ type ClusterRBACBuilder struct {
 // ClusterRBACSnapshot is the payload returned to the frontend.
 type ClusterRBACSnapshot struct {
 	ClusterMeta
-	Resources []ClusterRBACEntry `json:"resources"`
-	Kinds     []string           `json:"kinds,omitempty"`
+	Resources     []ClusterRBACEntry       `json:"resources"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // ClusterRBACEntry represents either a ClusterRole or ClusterRoleBinding.
@@ -74,9 +82,13 @@ func RegisterClusterRBACDomain(
 // Build constructs a snapshot of cluster RBAC resources.
 func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterRBACDomainName, "")
+	if err != nil {
+		return nil, err
+	}
 	var roles []*rbacv1.ClusterRole
 	if b.roleLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterroles") {
-		var err error
 		roles, err = b.roleLister.List(labels.Everything())
 		if err != nil {
 			return nil, fmt.Errorf("cluster rbac: failed to list clusterroles: %w", err)
@@ -84,7 +96,6 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 	}
 	var bindings []*rbacv1.ClusterRoleBinding
 	if b.bindingLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterrolebindings") {
-		var err error
 		bindings, err = b.bindingLister.List(labels.Everything())
 		if err != nil {
 			return nil, fmt.Errorf("cluster rbac: failed to list clusterrolebindings: %w", err)
@@ -124,6 +135,29 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		}
 		return entries[i].Kind < entries[j].Kind
 	})
+
+	if query.Enabled {
+		page := applyTypedTableQuery(entries, query, clusterRBACTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  clusterRBACDomainName,
+			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
+			Version: version,
+			Payload: ClusterRBACSnapshot{
+				ClusterMeta:   meta,
+				Resources:     page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
 	var totalItems int
 	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterRBACEntryLimit)
 
@@ -131,9 +165,11 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		Domain:  clusterRBACDomainName,
 		Version: version,
 		Payload: ClusterRBACSnapshot{
-			ClusterMeta: meta,
-			Resources:   entries,
-			Kinds:       snapshotSortedKinds(entries, func(entry ClusterRBACEntry) string { return entry.Kind }),
+			ClusterMeta:  meta,
+			Resources:    entries,
+			Kinds:        snapshotSortedKinds(entries, func(entry ClusterRBACEntry) string { return entry.Kind }),
+			Total:        totalItems,
+			TotalIsExact: totalItems == len(entries),
 		},
 		Stats: snapshotWindowStats(len(entries), totalItems, "cluster RBAC resources"),
 	}, nil

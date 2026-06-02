@@ -93,6 +93,14 @@ const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>(Object.values(CLUSTER_REFRESHE
 
 // Domains that use 'cluster' as their domain scope suffix (events need special scope).
 const CLUSTER_EVENTS_DOMAIN: RefreshDomain = 'cluster-events';
+const QUERY_BACKED_CLUSTER_VIEWS = new Set<ClusterViewType>([
+  'nodes',
+  'rbac',
+  'storage',
+  'config',
+  'crds',
+  'events',
+]);
 
 const noop = () => {};
 
@@ -554,6 +562,9 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   );
 
   const activeClusterDomain = useMemo(() => {
+    if (activeResourceType && QUERY_BACKED_CLUSTER_VIEWS.has(activeResourceType)) {
+      return null;
+    }
     const refresher = activeResourceType ? clusterViewToRefresher[activeResourceType] : null;
     return refresher ? (CLUSTER_REFRESHER_TO_DOMAIN[refresher] ?? null) : null;
   }, [activeResourceType]);
@@ -666,6 +677,9 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     }
 
     const tabToEnsure = activeResourceType;
+    if (QUERY_BACKED_CLUSTER_VIEWS.has(tabToEnsure)) {
+      return;
+    }
 
     const shouldSkip = (() => {
       switch (tabToEnsure) {

@@ -26,7 +26,15 @@ type ClusterStorageBuilder struct {
 // ClusterStorageSnapshot is the payload exposed to the frontend.
 type ClusterStorageSnapshot struct {
 	ClusterMeta
-	Volumes []ClusterStorageEntry `json:"volumes"`
+	Volumes       []ClusterStorageEntry    `json:"volumes"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // ClusterStorageEntry represents a persistent volume in the cluster view.
@@ -68,6 +76,11 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 		return nil, fmt.Errorf("cluster storage: persistent volume lister unavailable")
 	}
 	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterStorageDomainName, "")
+	if err != nil {
+		return nil, err
+	}
 	pvs, err := b.pvLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("cluster storage: failed to list persistent volumes: %w", err)
@@ -90,14 +103,43 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Name < entries[j].Name
 	})
+
+	if query.Enabled {
+		page := applyTypedTableQuery(entries, query, clusterStorageTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  clusterStorageDomainName,
+			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
+			Version: version,
+			Payload: ClusterStorageSnapshot{
+				ClusterMeta:   meta,
+				Volumes:       page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
 	var totalItems int
 	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterStorageEntryLimit)
 
 	return &refresh.Snapshot{
 		Domain:  clusterStorageDomainName,
 		Version: version,
-		Payload: ClusterStorageSnapshot{ClusterMeta: meta, Volumes: entries},
-		Stats:   snapshotWindowStats(len(entries), totalItems, "persistent volumes"),
+		Payload: ClusterStorageSnapshot{
+			ClusterMeta:  meta,
+			Volumes:      entries,
+			Kinds:        snapshotSortedKinds(entries, func(entry ClusterStorageEntry) string { return entry.Kind }),
+			Total:        totalItems,
+			TotalIsExact: totalItems == len(entries),
+		},
+		Stats: snapshotWindowStats(len(entries), totalItems, "persistent volumes"),
 	}, nil
 }
 

@@ -20,13 +20,14 @@ import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import type { SnapshotStats } from '@/core/refresh/client';
+import type { NamespaceNetworkSnapshotPayload } from '@/core/refresh/types';
 
 // Data interface for network resources
 export interface NetworkData {
@@ -67,6 +68,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<NetworkData>('network');
 
@@ -184,24 +186,41 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Network' : 'Namespace Network';
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<NetworkData>({
-      tableMode: 'Local Partial',
+    const selectRows = useCallback(
+      (payload: NamespaceNetworkSnapshotPayload) => payload.resources ?? [],
+      []
+    );
+    const { gridTableProps, favModal } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceNetworkSnapshotPayload,
+      NetworkData
+    >({
+      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-network',
+      label: 'All Namespaces Network',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'namespace-network',
       namespace,
       columns,
-      data,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
       availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
-      filterOptionOverrides: {
-        partialDataLabel: buildLocalPartialDataLabel({
-          stats,
-          fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
-          sourceLabel: diagnosticsLabel,
-        }),
-      },
+      filterOptionOverrides:
+        namespace === ALL_NAMESPACES_SCOPE
+          ? undefined
+          : {
+              partialDataLabel: buildLocalPartialDataLabel({
+                stats,
+                fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
+                sourceLabel: diagnosticsLabel,
+              }),
+            },
       diagnosticsLabel,
     });
 

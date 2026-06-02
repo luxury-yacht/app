@@ -324,6 +324,102 @@ describe('NsViewCustom', () => {
     );
   });
 
+  it('uses the catalog query current page on first render for a single namespace', async () => {
+    const staleLocalRow: CustomResourceData = {
+      ...baseResource,
+      name: 'stale-local-custom',
+      namespace: 'team-a',
+      clusterId: 'stale:ctx',
+    };
+    const queryResource: CustomResourceData = {
+      ...baseResource,
+      name: 'query-custom',
+      namespace: 'team-a',
+      clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
+    };
+    const queryItem = catalogItemFromResource(queryResource);
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
+
+    await renderComponent({
+      namespace: 'team-a',
+      data: [staleLocalRow],
+      loaded: true,
+      showNamespaceColumn: false,
+    });
+
+    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'cluster-a',
+        pinnedNamespaces: ['team-a'],
+        customOnly: true,
+      })
+    );
+    expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
+    expect(getLastGridProps()?.data).toEqual([
+      expect.objectContaining({
+        kind: 'CronJob',
+        name: 'query-custom',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        apiGroup: 'batch',
+        apiVersion: 'v1',
+        crdName: 'cronjobs.batch',
+      }),
+    ]);
+    expect(getLastGridProps()?.data).not.toEqual([
+      expect.objectContaining({ name: 'stale-local-custom' }),
+    ]);
+  });
+
+  it('uses the catalog query current page on first render for all namespaces', async () => {
+    const staleLocalRow: CustomResourceData = {
+      ...baseResource,
+      name: 'stale-local-custom',
+      namespace: 'team-a',
+      clusterId: 'stale:ctx',
+    };
+    const queryResource: CustomResourceData = {
+      ...baseResource,
+      name: 'query-all-custom',
+      namespace: 'team-b',
+      clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
+    };
+    const queryItem = catalogItemFromResource(queryResource);
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
+
+    await renderComponent({
+      namespace: ALL_NAMESPACES_SCOPE,
+      data: [staleLocalRow],
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'cluster-a',
+        pinnedNamespaces: [],
+        customOnly: true,
+      })
+    );
+    expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
+    expect(getLastGridProps()?.data).toEqual([
+      expect.objectContaining({
+        kind: 'CronJob',
+        name: 'query-all-custom',
+        namespace: 'team-b',
+        clusterId: 'cluster-a',
+        apiGroup: 'batch',
+        apiVersion: 'v1',
+        crdName: 'cronjobs.batch',
+      }),
+    ]);
+    expect(getLastGridProps()?.data).not.toEqual([
+      expect.objectContaining({ name: 'stale-local-custom' }),
+    ]);
+  });
+
   it('enables searchable kind dropdown bulk actions in all-namespaces custom view', async () => {
     await renderComponent({
       namespace: ALL_NAMESPACES_SCOPE,

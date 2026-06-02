@@ -22,6 +22,7 @@ export interface TypedResourceQueryDescriptor {
   filters: GridTableFilterState;
   sortConfig: SortConfig | null;
   pageLimit: number;
+  baseScope?: string;
   predicates?: Record<string, string | null | undefined>;
   continueToken?: string | null;
 }
@@ -61,6 +62,7 @@ export const typedResourceQueryLifecycleIdentity = ({
   clusterId,
   domain,
   pageLimit,
+  baseScope,
   filters,
   sortConfig,
   predicates,
@@ -70,6 +72,7 @@ export const typedResourceQueryLifecycleIdentity = ({
     clusterId: clusterId?.trim() ?? '',
     domain,
     pageLimit,
+    baseScope: baseScope ?? 'namespace:all',
     query: typedResourceQueryIdentity({ filters, sortConfig, predicates }),
   });
 
@@ -105,7 +108,8 @@ export function buildTypedResourceQueryScope(
   if (descriptor.continueToken) {
     params.set('continue', descriptor.continueToken);
   }
-  return buildClusterScope(clusterId, `namespace:all?${params.toString()}`);
+  const baseScope = descriptor.baseScope ?? 'namespace:all';
+  return buildClusterScope(clusterId, `${baseScope}?${params.toString()}`);
 }
 
 export function filterOptionsFromTypedPayload(

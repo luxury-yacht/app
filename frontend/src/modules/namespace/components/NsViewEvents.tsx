@@ -22,7 +22,7 @@ import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
 import {
@@ -34,7 +34,7 @@ import {
   namespaceEventRowIdentity,
   resolveEventGridRelatedObject,
 } from '@shared/events/eventGridModel';
-import type { ResourceLink } from '@core/refresh/types';
+import type { NamespaceEventsSnapshotPayload, ResourceLink } from '@core/refresh/types';
 import type { SnapshotStats } from '@/core/refresh/client';
 
 export interface EventData {
@@ -73,6 +73,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<EventData>('events', (event) =>
       event.objectNamespace && event.objectNamespace.length > 0
@@ -211,11 +212,26 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<EventData>({
-      tableMode: 'Local Partial',
+    const selectRows = useCallback(
+      (payload: NamespaceEventsSnapshotPayload) => payload.events ?? [],
+      []
+    );
+    const {
+      gridTableProps,
+      favModal,
+      rows: displayedEvents,
+    } = useQueryBackedNamespaceResourceGridTable<NamespaceEventsSnapshotPayload, EventData>({
+      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-events',
+      label: 'All Namespaces Events',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'namespace-events',
       namespace,
-      data,
       columns,
       keyExtractor,
       defaultSort: { key: 'ageTimestamp', direction: 'desc' },
@@ -226,22 +242,25 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       diagnosticsLabel:
         namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events',
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      filterOptionOverrides: {
-        partialDataLabel: buildLocalPartialDataLabel({
-          stats,
-          fallback: 'Events are loaded as a recent local window.',
-          sourceLabel:
-            namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events',
-          sourceVerb: 'are',
-        }),
-      },
+      filterOptionOverrides:
+        namespace === ALL_NAMESPACES_SCOPE
+          ? undefined
+          : {
+              partialDataLabel: buildLocalPartialDataLabel({
+                stats,
+                fallback: 'Events are loaded as a recent local window.',
+                sourceLabel:
+                  namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events',
+                sourceVerb: 'are',
+              }),
+            },
     });
 
     const objectActions = useObjectActionController({
       context: 'gridtable',
       useDefaultHandlers: false,
       onViewInvolvedObject: (object) => {
-        const event = data.find(
+        const event = displayedEvents.find(
           (candidate) =>
             candidate.clusterId === object.clusterId &&
             candidate.namespace === object.namespace &&

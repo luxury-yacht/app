@@ -30,7 +30,15 @@ type ClusterEventsBuilder struct {
 // ClusterEventsSnapshot is the payload returned to the UI.
 type ClusterEventsSnapshot struct {
 	ClusterMeta
-	Events []ClusterEventEntry `json:"events"`
+	Events        []ClusterEventEntry      `json:"events"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // ClusterEventEntry mirrors the fields consumed by the frontend grid.
@@ -71,18 +79,15 @@ func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedI
 // Build gathers recent cluster events.
 func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	events, err := b.eventLister.List(labels.Everything())
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterEventsDomainName, "")
 	if err != nil {
 		return nil, err
 	}
-
-	sort.Slice(events, func(i, j int) bool {
-		return compareEventOrder(events[i], events[j]) < 0
-	})
-
-	originalCount := len(events)
-	if originalCount > config.SnapshotClusterEventsLimit {
-		events = events[:config.SnapshotClusterEventsLimit]
+	_ = baseScope
+	events, err := b.eventLister.List(labels.Everything())
+	if err != nil {
+		return nil, err
 	}
 
 	entries := make([]ClusterEventEntry, 0, len(events))
@@ -130,6 +135,40 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		}
 	}
 
+	if query.Enabled {
+		page := applyTypedTableQuery(entries, query, clusterEventTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  clusterEventsDomainName,
+			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
+			Version: version,
+			Payload: ClusterEventsSnapshot{
+				ClusterMeta:   meta,
+				Events:        page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].AgeTimestamp != entries[j].AgeTimestamp {
+			return entries[i].AgeTimestamp > entries[j].AgeTimestamp
+		}
+		return entries[i].Name < entries[j].Name
+	})
+
+	originalCount := len(entries)
+	if originalCount > config.SnapshotClusterEventsLimit {
+		entries = entries[:config.SnapshotClusterEventsLimit]
+	}
+
 	stats := refresh.SnapshotStats{
 		ItemCount: len(entries),
 	}
@@ -142,8 +181,14 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 	return &refresh.Snapshot{
 		Domain:  clusterEventsDomainName,
 		Version: version,
-		Payload: ClusterEventsSnapshot{ClusterMeta: meta, Events: entries},
-		Stats:   stats,
+		Payload: ClusterEventsSnapshot{
+			ClusterMeta:  meta,
+			Events:       entries,
+			Kinds:        snapshotSortedKinds(entries, func(event ClusterEventEntry) string { return event.Kind }),
+			Total:        originalCount,
+			TotalIsExact: originalCount == len(entries),
+		},
+		Stats: stats,
 	}, nil
 }
 

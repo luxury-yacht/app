@@ -82,6 +82,17 @@ const NamespaceResourcesContext = createContext<NamespaceResourcesContextType | 
 );
 
 const DEFAULT_NAMESPACE_VIEW: NamespaceViewType = 'workloads';
+const QUERY_BACKED_ALL_NAMESPACE_VIEWS = new Set<NamespaceRefresherKey>([
+  'workloads',
+  'config',
+  'network',
+  'rbac',
+  'storage',
+  'autoscaling',
+  'quotas',
+  'events',
+  'helm',
+]);
 
 const DOMAIN_BY_RESOURCE: Partial<Record<NamespaceViewType, RefreshDomain | null>> = {
   pods: null,
@@ -492,7 +503,12 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const activeNamespaceView = activeResourceType ?? DEFAULT_NAMESPACE_VIEW;
 
   const isResourceActive = (resourceKey: NamespaceRefresherKey) =>
-    Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === resourceKey;
+    Boolean(currentNamespace) &&
+    isNamespaceView &&
+    activeNamespaceView === resourceKey &&
+    !(
+      currentNamespace === ALL_NAMESPACES_SCOPE && QUERY_BACKED_ALL_NAMESPACE_VIEWS.has(resourceKey)
+    );
 
   const workloads = useDescriptorBackedResource<any[]>(
     namespaceResourceDescriptors.workloads,

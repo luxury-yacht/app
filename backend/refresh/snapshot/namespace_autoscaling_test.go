@@ -63,6 +63,7 @@ func TestBuildSnapshotPopulatesTargetAPIVersion(t *testing.T) {
 	snap, err := builder.buildSnapshot(
 		ClusterMeta{},
 		"namespace:default",
+		typedTableQuery{},
 		[]*autoscalingv1.HorizontalPodAutoscaler{ackHPA, cnpgHPA, builtinHPA},
 	)
 	if err != nil {

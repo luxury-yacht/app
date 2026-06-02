@@ -54,12 +54,6 @@ const DIRECT_USE_TABLE_SORT_EXCEPTIONS = {
 } as const;
 
 const STATS_BACKED_LOCAL_PARTIAL_FILES = [
-  'modules/cluster/components/ClusterViewEvents.tsx',
-  'modules/cluster/components/ClusterViewConfig.tsx',
-  'modules/cluster/components/ClusterViewCRDs.tsx',
-  'modules/cluster/components/ClusterViewNodes.tsx',
-  'modules/cluster/components/ClusterViewRBAC.tsx',
-  'modules/cluster/components/ClusterViewStorage.tsx',
   'modules/namespace/components/NsViewAutoscaling.tsx',
   'modules/namespace/components/NsViewConfig.tsx',
   'modules/namespace/components/NsViewEvents.tsx',
@@ -100,7 +94,7 @@ function walkSourceFiles(dir: string): string[] {
 function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] {
   const files = walkSourceFiles(sourceRoot);
   const hookPattern =
-    /useGridTablePersistence|useNamespaceGridTablePersistence|useClusterResourceGridTable|useNamespaceResourceGridTable|useQueryBackedNamespaceResourceGridTable|useObjectPanelResourceGridTable/;
+    /useGridTablePersistence|useNamespaceGridTablePersistence|useClusterResourceGridTable|useNamespaceResourceGridTable|useQueryBackedNamespaceResourceGridTable|useQueryBackedClusterResourceGridTable|useObjectPanelResourceGridTable/;
   const staticViewIdPattern = /viewId:\s*['"]([^'"]+)['"]/g;
   const dynamicViewIdPattern = /viewId:\s*([a-zA-Z_$][a-zA-Z0-9_$]*)/g;
 
@@ -109,7 +103,9 @@ function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] 
   for (const filePath of files) {
     const relativePath = path.relative(sourceRoot, filePath);
     if (
-      relativePath.split(path.sep).join('/') === 'modules/resource-grid/useResourceGridTable.tsx'
+      relativePath.split(path.sep).join('/') === 'modules/resource-grid/useResourceGridTable.tsx' ||
+      relativePath.split(path.sep).join('/') ===
+        'modules/resource-grid/useQueryBackedResourceGridTable.ts'
     ) {
       continue;
     }
@@ -143,19 +139,21 @@ function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] 
 function findResourceGridCallsMissingTableMode(sourceRoot: string): string[] {
   const files = walkSourceFiles(sourceRoot);
   const callPattern =
-    /use(?:Cluster|Namespace|ObjectPanel|Query)ResourceGridTable(?:<[^>]+>)?\s*\(\s*\{[\s\S]*?\n\s*\}\s*\)/g;
+    /use(?:(?:Cluster|Namespace|ObjectPanel|Query)ResourceGridTable|QueryBacked(?:Namespace|Cluster)ResourceGridTable)(?:<[^>]+>)?\s*\(\s*\{[\s\S]*?\n\s*\}\s*\)/g;
   const missing: string[] = [];
 
   for (const filePath of files) {
     const relativePath = path.relative(sourceRoot, filePath);
     if (
-      relativePath.split(path.sep).join('/') === 'modules/resource-grid/useResourceGridTable.tsx'
+      relativePath.split(path.sep).join('/') === 'modules/resource-grid/useResourceGridTable.tsx' ||
+      relativePath.split(path.sep).join('/') ===
+        'modules/resource-grid/useQueryBackedResourceGridTable.ts'
     ) {
       continue;
     }
     const content = fs.readFileSync(filePath, 'utf-8');
     for (const match of content.matchAll(callPattern)) {
-      if (!/\btableMode\s*:/.test(match[0])) {
+      if (!/\b(?:tableMode|queryTableMode)\s*:/.test(match[0])) {
         missing.push(relativePath);
       }
     }
@@ -167,7 +165,7 @@ function findResourceGridCallsMissingTableMode(sourceRoot: string): string[] {
 function findResourceGridCallsWithoutRecognizedTableMode(sourceRoot: string): string[] {
   const files = walkSourceFiles(sourceRoot);
   const callPattern =
-    /use(?:Cluster|Namespace|ObjectPanel|Query)ResourceGridTable(?:<[^>]+>)?\s*\(\s*\{[\s\S]*?\n\s*\}\s*\)/g;
+    /use(?:(?:Cluster|Namespace|ObjectPanel|Query)ResourceGridTable|QueryBacked(?:Namespace|Cluster)ResourceGridTable)(?:<[^>]+>)?\s*\(\s*\{[\s\S]*?\n\s*\}\s*\)/g;
   const invalid: string[] = [];
 
   for (const filePath of files) {
@@ -179,7 +177,10 @@ function findResourceGridCallsWithoutRecognizedTableMode(sourceRoot: string): st
     }
     const content = fs.readFileSync(filePath, 'utf-8');
     for (const match of content.matchAll(callPattern)) {
-      if (/\btableMode\s*:/.test(match[0]) && !TABLE_MODE_PATTERN.test(match[0])) {
+      if (
+        /\b(?:tableMode|queryTableMode)\s*:/.test(match[0]) &&
+        !TABLE_MODE_PATTERN.test(match[0])
+      ) {
         invalid.push(relativePath);
       }
     }

@@ -17,13 +17,13 @@ import ResourceGridTableView from '@shared/components/tables/ResourceGridTableVi
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import type { SnapshotStats } from '@/core/refresh/client';
+import type { ClusterRBACSnapshotPayload } from '@/core/refresh/types';
 
 // Define the data structure for RBAC resources
 interface RBACData {
@@ -50,7 +50,7 @@ interface RBACViewProps {
  * Shows ClusterRoles and ClusterRoleBindings in a single aggregated table
  */
 const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
-  ({ data, stats = null, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
+  ({ data, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -138,24 +138,31 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       return baseColumns;
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
-    const isPartial = Boolean(stats?.truncated);
-    const { gridTableProps, favModal } = useClusterResourceGridTable<RBACData>({
-      tableMode: isPartial ? 'Local Partial' : 'Local Complete',
+    const selectRows = useCallback(
+      (payload: ClusterRBACSnapshotPayload) => payload.resources ?? [],
+      []
+    );
+    const {
+      gridTableProps,
+      favModal,
+      loading: tableLoading,
+      loaded: tableLoaded,
+      rows,
+    } = useQueryBackedClusterResourceGridTable<ClusterRBACSnapshotPayload, RBACData>({
+      enabled: true,
+      queryTableMode: 'Query Backed Static',
+      clusterId: selectedClusterId,
+      domain: 'cluster-rbac',
+      label: 'Cluster RBAC',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'cluster-rbac',
       columns,
-      data,
       keyExtractor,
       availableKinds: kindOptions,
       showKindDropdown: true,
-      filterOptionOverrides: isPartial
-        ? {
-            partialDataLabel: buildLocalPartialDataLabel({
-              stats,
-              fallback: 'Cluster RBAC is loaded as a bounded local snapshot.',
-              sourceLabel: 'Cluster RBAC',
-            }),
-          }
-        : undefined,
       diagnosticsLabel: 'Cluster RBAC',
     });
 
@@ -193,13 +200,13 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
+          boundaryLoading={tableLoading && rows.length === 0}
+          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading RBAC resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster RBAC"
-          loading={loading}
+          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="gridtable-rbac"
           enableContextMenu={true}

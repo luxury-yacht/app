@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -29,8 +30,15 @@ type NamespaceAutoscalingBuilder struct {
 // NamespaceAutoscalingSnapshot payload for autoscaling tab.
 type NamespaceAutoscalingSnapshot struct {
 	ClusterMeta
-	Resources []AutoscalingSummary `json:"resources"`
-	Kinds     []string             `json:"kinds,omitempty"`
+	Resources     []AutoscalingSummary     `json:"resources"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // AutoscalingSummary captures HPA details for display.
@@ -75,7 +83,12 @@ func RegisterNamespaceAutoscalingDomain(
 // Build assembles HPA summaries for a namespace.
 func (b *NamespaceAutoscalingBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, errNamespaceAutoscalingScopeRequired)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceAutoscalingDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), errNamespaceAutoscalingScopeRequired)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +98,7 @@ func (b *NamespaceAutoscalingBuilder) Build(ctx context.Context, scope string) (
 		return nil, fmt.Errorf("namespace autoscaling: failed to list hpas: %w", err)
 	}
 
-	return b.buildSnapshot(meta, parsedScope.CanonicalScope, hpas)
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, hpas)
 }
 
 func (b *NamespaceAutoscalingBuilder) listHPAs(namespace string) ([]*autoscalingv1.HorizontalPodAutoscaler, error) {
@@ -98,6 +111,7 @@ func (b *NamespaceAutoscalingBuilder) listHPAs(namespace string) ([]*autoscaling
 func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 	meta ClusterMeta,
 	scope string,
+	query typedTableQuery,
 	hpas []*autoscalingv1.HorizontalPodAutoscaler,
 ) (*refresh.Snapshot, error) {
 	resources := make([]AutoscalingSummary, 0, len(hpas))
@@ -123,6 +137,28 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
+	if query.Enabled {
+		page := applyTypedTableQuery(resources, query, autoscalingTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  namespaceAutoscalingDomainName,
+			Scope:   scope,
+			Version: version,
+			Payload: NamespaceAutoscalingSnapshot{
+				ClusterMeta:   meta,
+				Resources:     page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
 	var totalItems int
 	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceAutoscalingEntryLimit)
 
@@ -131,9 +167,11 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceAutoscalingSnapshot{
-			ClusterMeta: meta,
-			Resources:   resources,
-			Kinds:       snapshotSortedKinds(resources, func(resource AutoscalingSummary) string { return resource.Kind }),
+			ClusterMeta:  meta,
+			Resources:    resources,
+			Kinds:        snapshotSortedKinds(resources, func(resource AutoscalingSummary) string { return resource.Kind }),
+			Total:        totalItems,
+			TotalIsExact: totalItems == len(resources),
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "autoscaling resources"),
 	}, nil

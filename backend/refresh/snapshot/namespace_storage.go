@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -28,7 +29,15 @@ type NamespaceStorageBuilder struct {
 // NamespaceStorageSnapshot payload for storage tab.
 type NamespaceStorageSnapshot struct {
 	ClusterMeta
-	Resources []StorageSummary `json:"resources"`
+	Resources     []StorageSummary         `json:"resources"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // StorageSummary captures PVC info for UI consumption.
@@ -66,7 +75,12 @@ func RegisterNamespaceStorageDomain(
 // Build assembles PVC summaries for the namespace.
 func (b *NamespaceStorageBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, errNamespaceStorageScopeRequired)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceStorageDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), errNamespaceStorageScopeRequired)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +90,7 @@ func (b *NamespaceStorageBuilder) Build(ctx context.Context, scope string) (*ref
 		return nil, fmt.Errorf("namespace storage: failed to list pvcs: %w", err)
 	}
 
-	return b.buildSnapshot(meta, parsedScope.CanonicalScope, pvcs)
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, pvcs)
 }
 
 func (b *NamespaceStorageBuilder) listPVCs(namespace string) ([]*corev1.PersistentVolumeClaim, error) {
@@ -89,6 +103,7 @@ func (b *NamespaceStorageBuilder) listPVCs(namespace string) ([]*corev1.Persiste
 func (b *NamespaceStorageBuilder) buildSnapshot(
 	meta ClusterMeta,
 	namespace string,
+	query typedTableQuery,
 	pvcs []*corev1.PersistentVolumeClaim,
 ) (*refresh.Snapshot, error) {
 	resources := make([]StorageSummary, 0, len(pvcs))
@@ -114,6 +129,28 @@ func (b *NamespaceStorageBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
+	if query.Enabled {
+		page := applyTypedTableQuery(resources, query, storageTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  namespaceStorageDomainName,
+			Scope:   namespace,
+			Version: version,
+			Payload: NamespaceStorageSnapshot{
+				ClusterMeta:   meta,
+				Resources:     page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
 	var totalItems int
 	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceStorageEntryLimit)
 
@@ -121,8 +158,14 @@ func (b *NamespaceStorageBuilder) buildSnapshot(
 		Domain:  namespaceStorageDomainName,
 		Scope:   namespace,
 		Version: version,
-		Payload: NamespaceStorageSnapshot{ClusterMeta: meta, Resources: resources},
-		Stats:   snapshotWindowStats(len(resources), totalItems, "storage resources"),
+		Payload: NamespaceStorageSnapshot{
+			ClusterMeta:  meta,
+			Resources:    resources,
+			Kinds:        snapshotSortedKinds(resources, func(resource StorageSummary) string { return resource.Kind }),
+			Total:        totalItems,
+			TotalIsExact: totalItems == len(resources),
+		},
+		Stats: snapshotWindowStats(len(resources), totalItems, "storage resources"),
 	}, nil
 }
 

@@ -136,7 +136,7 @@ describe('ClusterResourcesProvider', () => {
     });
   };
 
-  it('reports an idle selected cluster view as loading while requesting startup data', async () => {
+  it('reports an idle query-backed selected cluster view as loading without requesting startup data', async () => {
     scopedStates[`cluster-config:${testClusterScope}`] = createDomainState({
       scope: testClusterScope,
     });
@@ -145,13 +145,13 @@ describe('ClusterResourcesProvider', () => {
 
     expect(contextRef.current?.config.loading).toBe(true);
     expect(contextRef.current?.config.hasLoaded).toBe(false);
-    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
       'cluster-config',
       testClusterScope,
       true,
-      { preserveState: true }
+      expect.anything()
     );
-    expect(dataAccessMocks.requestRefreshDomain).toHaveBeenCalledWith({
+    expect(dataAccessMocks.requestRefreshDomain).not.toHaveBeenCalledWith({
       domain: 'cluster-config',
       scope: testClusterScope,
       reason: 'startup',
@@ -216,7 +216,7 @@ describe('ClusterResourcesProvider', () => {
     root = ReactDOM.createRoot(container);
   });
 
-  it('preserves the previous cluster view snapshot when switching active cluster views', async () => {
+  it('does not toggle query-backed cluster domains when switching active cluster views', async () => {
     await render();
 
     orchestrator.setScopedDomainEnabled.mockClear();
@@ -230,15 +230,15 @@ describe('ClusterResourcesProvider', () => {
       await Promise.resolve();
     });
 
-    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
       'cluster-config',
       testClusterScope,
       false,
-      { preserveState: true }
+      expect.anything()
     );
   });
 
-  it('keeps partial-data cluster domains enabled when at least one resource permission is allowed', async () => {
+  it('does not enable query-backed cluster domains when at least one resource permission is allowed', async () => {
     permissionStates.StorageClass = {
       allowed: true,
       pending: false,
@@ -270,20 +270,20 @@ describe('ClusterResourcesProvider', () => {
 
     await render();
 
-    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
       'cluster-config',
       testClusterScope,
       true,
-      { preserveState: true }
+      expect.anything()
     );
-    expect(dataAccessMocks.requestRefreshDomain).toHaveBeenCalledWith({
+    expect(dataAccessMocks.requestRefreshDomain).not.toHaveBeenCalledWith({
       domain: 'cluster-config',
       scope: testClusterScope,
       reason: 'startup',
     });
   });
 
-  it('disables partial-data cluster domains only when every resource permission is denied', async () => {
+  it('leaves query-backed cluster domains disabled when every resource permission is denied', async () => {
     for (const kind of [
       'StorageClass',
       'IngressClass',
@@ -303,11 +303,11 @@ describe('ClusterResourcesProvider', () => {
 
     await render();
 
-    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
       'cluster-config',
       testClusterScope,
-      false,
-      { preserveState: true }
+      true,
+      expect.anything()
     );
     expect(dataAccessMocks.requestRefreshDomain).not.toHaveBeenCalled();
   });

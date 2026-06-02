@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -35,8 +36,15 @@ type NamespaceConfigBuilder struct {
 // NamespaceConfigSnapshot payload returned to the frontend.
 type NamespaceConfigSnapshot struct {
 	ClusterMeta
-	Resources []ConfigSummary `json:"resources"`
-	Kinds     []string        `json:"kinds,omitempty"`
+	Resources     []ConfigSummary          `json:"resources"`
+	Kinds         []string                 `json:"kinds,omitempty"`
+	Continue      string                   `json:"continue,omitempty"`
+	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
+	Total         int                      `json:"total,omitempty"`
+	TotalIsExact  bool                     `json:"totalIsExact"`
+	Namespaces    []string                 `json:"namespaces,omitempty"`
+	FacetsExact   bool                     `json:"facetsExact"`
+	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 // ConfigSummary describes a ConfigMap or Secret entry.
@@ -77,7 +85,12 @@ func RegisterNamespaceConfigDomain(
 // Build assembles ConfigMap and Secret summaries for a namespace scope.
 func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, errNamespaceConfigScopeRequired)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceConfigDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), errNamespaceConfigScopeRequired)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +111,7 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 		}
 	}
 
-	return b.buildSnapshot(meta, parsedScope.CanonicalScope, configMaps, secrets)
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, configMaps, secrets)
 }
 
 func (b *NamespaceConfigBuilder) listConfigMaps(namespace string) ([]*corev1.ConfigMap, error) {
@@ -118,6 +131,7 @@ func (b *NamespaceConfigBuilder) listSecrets(namespace string) ([]*corev1.Secret
 func (b *NamespaceConfigBuilder) buildSnapshot(
 	meta ClusterMeta,
 	scope string,
+	query typedTableQuery,
 	configMaps []*corev1.ConfigMap,
 	secrets []*corev1.Secret,
 ) (*refresh.Snapshot, error) {
@@ -149,6 +163,28 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 
 	sortConfigSummaries(resources)
 
+	if query.Enabled {
+		page := applyTypedTableQuery(resources, query, configTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  namespaceConfigDomainName,
+			Scope:   scope,
+			Version: version,
+			Payload: NamespaceConfigSnapshot{
+				ClusterMeta:   meta,
+				Resources:     page.Rows,
+				Kinds:         page.Kinds,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Dynamic:       page.Dynamic,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
 	var totalItems int
 	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceConfigEntryLimit)
 
@@ -157,9 +193,11 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceConfigSnapshot{
-			ClusterMeta: meta,
-			Resources:   resources,
-			Kinds:       snapshotSortedKinds(resources, func(resource ConfigSummary) string { return resource.Kind }),
+			ClusterMeta:  meta,
+			Resources:    resources,
+			Kinds:        snapshotSortedKinds(resources, func(resource ConfigSummary) string { return resource.Kind }),
+			Total:        totalItems,
+			TotalIsExact: totalItems == len(resources),
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "config resources"),
 	}, nil

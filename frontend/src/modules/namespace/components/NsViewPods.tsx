@@ -524,6 +524,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       error: tableError,
     } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
       enabled: isAllNamespaces,
+      queryTableMode: 'Query Backed Dynamic',
       clusterId: queryClusterId,
       domain: 'pods',
       label: 'All Namespaces Pods',

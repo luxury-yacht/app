@@ -19,6 +19,7 @@ export interface UseTypedResourceQueryParams<TPayload extends TypedQueryPayload,
   clusterId?: string | null;
   domain: RefreshDomain;
   label: string;
+  baseScope?: string;
   filters: GridTableFilterState;
   sortConfig: SortConfig | null;
   pageLimit?: number;
@@ -53,6 +54,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   clusterId,
   domain,
   label,
+  baseScope,
   filters,
   sortConfig,
   pageLimit = DEFAULT_PAGE_LIMIT,
@@ -82,12 +84,13 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         enabled,
         clusterId,
         domain,
+        baseScope,
         filters,
         sortConfig,
         pageLimit,
         predicates,
       }),
-    [clusterId, domain, enabled, filters, pageLimit, predicates, sortConfig]
+    [baseScope, clusterId, domain, enabled, filters, pageLimit, predicates, sortConfig]
   );
   const queryIdentityRef = useRef(queryIdentity);
   queryIdentityRef.current = queryIdentity;
@@ -110,13 +113,14 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       return null;
     }
     return buildTypedResourceQueryScope(clusterId, {
+      baseScope,
       filters,
       sortConfig,
       pageLimit,
       predicates,
       continueToken: requestToken,
     });
-  }, [clusterId, enabled, filters, pageLimit, predicates, requestToken, sortConfig]);
+  }, [baseScope, clusterId, enabled, filters, pageLimit, predicates, requestToken, sortConfig]);
 
   useEffect(() => {
     if (!enabled || !scope) {

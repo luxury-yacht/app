@@ -17,13 +17,13 @@ import ResourceGridTableView from '@shared/components/tables/ResourceGridTableVi
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import type { SnapshotStats } from '@/core/refresh/client';
+import type { ClusterConfigSnapshotPayload } from '@/core/refresh/types';
 
 // Define the data structure for configuration resources
 interface ConfigData {
@@ -50,7 +50,7 @@ interface ConfigViewProps {
  * Displays Storage Classes, Ingress Classes, and Admission Control resources
  */
 const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
-  ({ data, stats = null, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
+  ({ data, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -138,24 +138,31 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       return baseColumns;
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
-    const isPartial = Boolean(stats?.truncated);
-    const { gridTableProps, favModal } = useClusterResourceGridTable<ConfigData>({
-      tableMode: isPartial ? 'Local Partial' : 'Local Complete',
+    const selectRows = useCallback(
+      (payload: ClusterConfigSnapshotPayload) => payload.resources ?? [],
+      []
+    );
+    const {
+      gridTableProps,
+      favModal,
+      loading: tableLoading,
+      loaded: tableLoaded,
+      rows,
+    } = useQueryBackedClusterResourceGridTable<ClusterConfigSnapshotPayload, ConfigData>({
+      enabled: true,
+      queryTableMode: 'Query Backed Static',
+      clusterId: selectedClusterId,
+      domain: 'cluster-config',
+      label: 'Cluster Configuration',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'cluster-config',
       columns,
-      data,
       keyExtractor,
       availableKinds: kindOptions,
       showKindDropdown: true,
-      filterOptionOverrides: isPartial
-        ? {
-            partialDataLabel: buildLocalPartialDataLabel({
-              stats,
-              fallback: 'Cluster Configuration is loaded as a bounded local snapshot.',
-              sourceLabel: 'Cluster Configuration',
-            }),
-          }
-        : undefined,
       diagnosticsLabel: 'Cluster Configuration',
     });
 
@@ -193,13 +200,13 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
+          boundaryLoading={tableLoading && rows.length === 0}
+          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading configuration resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster Configuration"
-          loading={loading}
+          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="gridtable-config"
           enableContextMenu={true}

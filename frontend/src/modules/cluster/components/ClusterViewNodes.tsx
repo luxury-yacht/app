@@ -28,8 +28,7 @@ import {
 } from '@/utils/resourceCalculations';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
-import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -37,6 +36,7 @@ import {
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { DrainIcon } from '@shared/components/icons/SharedIcons';
 import type { SnapshotStats } from '@/core/refresh/client';
+import type { ClusterNodeSnapshotPayload } from '@/core/refresh/types';
 
 // Define props for NodesViewGrid component
 interface NodesViewProps {
@@ -52,7 +52,7 @@ interface NodesViewProps {
  * Displays nodes with their status, resource usage, and other details
  */
 const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
-  ({ data, stats = null, loading = false, loaded = false, error }) => {
+  ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -71,13 +71,15 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       return nodesDomain.data?.metrics ?? null;
     }, [nodesDomain.data?.metrics, nodesDomain.data?.metricsByCluster, selectedClusterId]);
 
-    const watchClusterIds = useMemo(() => {
-      const set = new Set<string>();
-      for (const row of data) {
-        if (row.clusterId) set.add(row.clusterId);
-      }
-      return Array.from(set);
-    }, [data]);
+    const selectRows = useCallback(
+      (payload: ClusterNodeSnapshotPayload) => payload.nodes ?? [],
+      []
+    );
+
+    const watchClusterIds = useMemo(
+      () => (selectedClusterId ? [selectedClusterId] : []),
+      [selectedClusterId]
+    );
 
     const nodeMaintenance = useNodeMaintenanceActions({ watchClusterIds });
 
@@ -303,11 +305,23 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       [selectedClusterId]
     );
 
-    const isPartial = Boolean(stats?.truncated);
-    const { gridTableProps, favModal } = useClusterResourceGridTable<ClusterNodeRow>({
-      tableMode: isPartial ? 'Local Partial' : 'Local Complete',
+    const {
+      gridTableProps,
+      favModal,
+      rows: displayedNodes,
+      loading: tableLoading,
+      loaded: tableLoaded,
+    } = useQueryBackedClusterResourceGridTable<ClusterNodeSnapshotPayload, ClusterNodeRow>({
+      enabled: true,
+      queryTableMode: 'Query Backed Dynamic',
+      clusterId: selectedClusterId,
+      domain: 'nodes',
+      label: 'Cluster Nodes',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'cluster-nodes',
-      data,
       persistenceData: [],
       columns: tableColumns,
       keyExtractor,
@@ -321,16 +335,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       },
       diagnosticsLabel: 'Cluster Nodes',
       filterOptions: { isNamespaceScoped: false },
-      filterOptionOverrides: isPartial
-        ? {
-            partialDataLabel: buildLocalPartialDataLabel({
-              stats,
-              fallback: 'Cluster Nodes are loaded as a bounded local snapshot.',
-              sourceLabel: 'Cluster Nodes',
-              sourceVerb: 'are',
-            }),
-          }
-        : undefined,
     });
 
     // The maintenance hook owns the cordon and drain modals; pass its
@@ -395,14 +399,14 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading && false}
-          loaded={loaded}
+          boundaryLoading={tableLoading && displayedNodes.length === 0}
+          loaded={tableLoaded || displayedNodes.length > 0}
           spinnerMessage="Loading nodes..."
           favModal={favModal}
           columns={tableColumns}
           diagnosticsLabel="Cluster Nodes"
           diagnosticsMode="live"
-          loading={loading}
+          loading={tableLoading}
           onRowClick={handleNodeClick}
           tableClassName="gridtable-nodes"
           enableContextMenu={true}

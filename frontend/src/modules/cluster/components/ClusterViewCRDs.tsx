@@ -17,13 +17,13 @@ import ResourceGridTableView from '@shared/components/tables/ResourceGridTableVi
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import type { SnapshotStats } from '@/core/refresh/client';
+import type { ClusterCRDSnapshotPayload } from '@/core/refresh/types';
 
 const CLUSTER_CRD_KIND_OPTIONS = ['CustomResourceDefinition'];
 
@@ -75,7 +75,7 @@ interface CRDsViewProps {
  * GridTable component for cluster Custom Resource Definitions
  */
 const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
-  ({ data, stats = null, loading = false, loaded = false, error }) => {
+  ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -183,26 +183,32 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       return baseColumns;
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
-    const isPartial = Boolean(stats?.truncated);
-    const { gridTableProps, favModal } = useClusterResourceGridTable<CRDsData>({
-      tableMode: isPartial ? 'Local Partial' : 'Local Complete',
+    const selectRows = useCallback(
+      (payload: ClusterCRDSnapshotPayload) => payload.definitions ?? [],
+      []
+    );
+    const {
+      gridTableProps,
+      favModal,
+      loading: tableLoading,
+      loaded: tableLoaded,
+      rows,
+    } = useQueryBackedClusterResourceGridTable<ClusterCRDSnapshotPayload, CRDsData>({
+      enabled: true,
+      queryTableMode: 'Query Backed Static',
+      clusterId: selectedClusterId,
+      domain: 'cluster-crds',
+      label: 'Cluster CRDs',
+      localData: data,
+      localLoading: loading,
+      localLoaded: loaded,
+      selectRows,
       viewId: 'cluster-crds',
-      data,
       columns,
       keyExtractor,
       availableKinds: CLUSTER_CRD_KIND_OPTIONS,
       showKindDropdown: true,
       filterOptions: { isNamespaceScoped: false },
-      filterOptionOverrides: isPartial
-        ? {
-            partialDataLabel: buildLocalPartialDataLabel({
-              stats,
-              fallback: 'Cluster CRDs are loaded as a bounded local snapshot.',
-              sourceLabel: 'Cluster CRDs',
-              sourceVerb: 'are',
-            }),
-          }
-        : undefined,
     });
 
     const objectActions = useObjectActionController({
@@ -235,13 +241,13 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
+          boundaryLoading={tableLoading && rows.length === 0}
+          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading CRDs..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster CRDs"
-          loading={loading}
+          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="gridtable-crds"
           enableContextMenu={true}
