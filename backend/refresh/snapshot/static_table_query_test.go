@@ -192,6 +192,57 @@ func TestNodeTableQuerySortsAgeByTimestamp(t *testing.T) {
 	}
 }
 
+func TestNodeTableQueryPaginatesAgeSort(t *testing.T) {
+	query := typedTableQuery{
+		Enabled:   true,
+		BaseScope: "cluster",
+		Request: ResourceQueryRequest{
+			ClusterID:     "cluster-a",
+			Table:         "nodes",
+			SortField:     "age",
+			SortDirection: "asc",
+			Limit:         1,
+		},
+	}
+	rows := []NodeSummary{
+		{Kind: "Node", Name: "old-node", Age: "10d", AgeTimestamp: 1_700_000_000_000},
+		{Kind: "Node", Name: "middle-node", Age: "2d", AgeTimestamp: 1_700_691_200_000},
+		{Kind: "Node", Name: "young-node", Age: "2h", AgeTimestamp: 1_700_856_000_000},
+	}
+
+	page := applyTypedTableQuery(rows, query, nodeTableQueryAdapter())
+	requireNodePageNames(t, page, []string{"young-node"})
+	if page.Continue == "" {
+		t.Fatalf("first page Continue is empty, want cursor for middle-node")
+	}
+
+	query.Request.Continue = page.Continue
+	page = applyTypedTableQuery(rows, query, nodeTableQueryAdapter())
+	requireNodePageNames(t, page, []string{"middle-node"})
+	if page.Continue == "" {
+		t.Fatalf("second page Continue is empty, want cursor for old-node")
+	}
+
+	query.Request.Continue = page.Continue
+	page = applyTypedTableQuery(rows, query, nodeTableQueryAdapter())
+	requireNodePageNames(t, page, []string{"old-node"})
+	if page.Continue != "" {
+		t.Fatalf("third page Continue=%q, want empty", page.Continue)
+	}
+}
+
+func requireNodePageNames(t *testing.T, page typedTableQueryPage[NodeSummary], want []string) {
+	t.Helper()
+	if len(page.Rows) != len(want) {
+		t.Fatalf("len(page.Rows)=%d, want %d", len(page.Rows), len(want))
+	}
+	for i, row := range page.Rows {
+		if row.Name != want[i] {
+			t.Fatalf("page.Rows[%d].Name=%q, want %q", i, row.Name, want[i])
+		}
+	}
+}
+
 func BenchmarkMigratedStaticTableQueries(b *testing.B) {
 	query := migratedStaticQuery()
 	query.Request.Limit = 250

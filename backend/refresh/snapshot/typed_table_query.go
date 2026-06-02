@@ -397,9 +397,25 @@ func (q typedTableQuery) dynamicRef() *ResourceQueryDynamicRef {
 
 func typedTableComparableSortValue[T any](item T, field string, adapter typedTableQueryAdapter[T]) string {
 	if numeric, ok := adapter.NumericSort(item, field); ok {
-		return fmt.Sprintf("%020.6f", numeric)
+		return typedTableComparableNumericSortValue(numeric)
 	}
 	return strings.ToLower(adapter.SortValue(item, field))
+}
+
+func typedTableComparableNumericSortValue(numeric float64) string {
+	if numeric == 0 {
+		numeric = 0
+	}
+	if math.IsNaN(numeric) {
+		numeric = math.Inf(-1)
+	}
+	bits := math.Float64bits(numeric)
+	if bits&(1<<63) != 0 {
+		bits = ^bits
+	} else {
+		bits |= 1 << 63
+	}
+	return fmt.Sprintf("%016x", bits)
 }
 
 func typedTableSearchMatches(values []string, needle string) bool {
