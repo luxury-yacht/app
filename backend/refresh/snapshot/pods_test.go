@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -135,7 +136,7 @@ func TestPodBuilderNodeScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "node:node-1", snapshot.Scope)
-	require.Equal(t, uint64(collectedAt.UnixNano()), snapshot.Version)
+	require.Equal(t, snapshotVersionWithDynamicRevision(15, fmt.Sprint(collectedAt.UnixNano())), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
@@ -354,7 +355,7 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:team-a", snapshot.Scope)
-	require.Equal(t, uint64(now.UnixNano()), snapshot.Version)
+	require.Equal(t, snapshotVersionWithDynamicRevision(101, fmt.Sprint(now.UnixNano())), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
@@ -400,7 +401,7 @@ func TestPodBuilderAllNamespacesScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:all", snapshot.Scope)
-	require.Equal(t, uint64(now.UnixNano()), snapshot.Version)
+	require.Equal(t, snapshotVersionWithDynamicRevision(25, fmt.Sprint(now.UnixNano())), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)

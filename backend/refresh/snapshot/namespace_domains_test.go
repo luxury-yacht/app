@@ -1204,7 +1204,7 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	require.Equal(t, namespaceWorkloadsDomainName, snapshot.Domain)
-	require.Equal(t, uint64(collectedAt.UnixNano()), snapshot.Version)
+	require.Equal(t, snapshotVersionWithDynamicRevision(10, fmt.Sprint(collectedAt.UnixNano())), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.True(t, ok)

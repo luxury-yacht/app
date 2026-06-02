@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -257,7 +258,7 @@ func TestNodeBuilderBuild(t *testing.T) {
 	node.Annotations["example"] = "mutated"
 	require.Equal(t, "annotation", summary.Annotations["example"])
 
-	require.Equal(t, uint64(collectedAt.UnixNano()), snapshot.Version)
+	require.Equal(t, snapshotVersionWithDynamicRevision(42, fmt.Sprint(collectedAt.UnixNano())), snapshot.Version)
 }
 
 func TestNodeBuilderCapsLargeSnapshots(t *testing.T) {
