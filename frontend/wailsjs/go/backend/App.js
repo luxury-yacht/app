@@ -542,10 +542,6 @@ export function SetLinkColor(arg1, arg2) {
   return window['go']['backend']['App']['SetLinkColor'](arg1, arg2);
 }
 
-export function SetMaxTableRows(arg1) {
-  return window['go']['backend']['App']['SetMaxTableRows'](arg1);
-}
-
 export function SetObjPanelLogsAPITimestampFormat(arg1) {
   return window['go']['backend']['App']['SetObjPanelLogsAPITimestampFormat'](arg1);
 }

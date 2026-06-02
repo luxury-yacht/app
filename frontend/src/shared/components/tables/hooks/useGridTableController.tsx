@@ -9,10 +9,8 @@
  * Extracted from GridTable.tsx — no behavioral change, purely mechanical.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { ReactElement, ReactNode, RefObject } from 'react';
-import { eventBus } from '@/core/events';
-import { getMaxTableRows } from '@/core/settings/appPreferences';
 import {
   recordGridTablePerformanceSample,
   recordGridTablePerformanceSnapshot,
@@ -147,13 +145,11 @@ export function useGridTableController<T>({
   virtualization,
   loadingOverlay,
   filters,
-  disableMaxTableRowsLimit = false,
   diagnosticsLabel,
   diagnosticsMode = 'local',
   allowHorizontalOverflow = true,
   isKindColumnKey = defaultIsKindColumnKey,
 }: GridTableProps<T>): GridTableControllerResult<T> {
-  const [maxTableRows, setMaxTableRows] = useState<number>(() => getMaxTableRows());
   const totalDataCount = Array.isArray(inputData) ? inputData.length : 0;
   const sourceData = useMemo<T[]>(
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
@@ -168,12 +164,6 @@ export function useGridTableController<T>({
   const contextMenuActiveRef = useRef(false);
   const clusterKeyCheckRef = useRef(false);
   const keyExtractorRef = useRef(keyExtractor);
-
-  useEffect(() => {
-    return eventBus.on('settings:max-table-rows', (value) => {
-      setMaxTableRows(value);
-    });
-  }, []);
 
   const externalColumnWidths = useGridTableExternalWidths(controlledColumnWidths);
 
@@ -226,7 +216,6 @@ export function useGridTableController<T>({
   } = useGridTableFiltersWiring<T>({
     data: sourceData,
     totalDataCount,
-    maxDisplayRows: disableMaxTableRowsLimit ? undefined : maxTableRows,
     filters,
     diagnosticsLabel,
     columnsDropdown: columnsDropdownConfig ?? undefined,
@@ -234,10 +223,7 @@ export function useGridTableController<T>({
     getTextContent,
   });
 
-  const tableData = useMemo<T[]>(
-    () => (disableMaxTableRowsLimit ? filteredData : filteredData.slice(0, maxTableRows)),
-    [disableMaxTableRowsLimit, filteredData, maxTableRows]
-  );
+  const tableData = filteredData;
 
   useEffect(() => {
     if (!diagnosticsLabel) {
@@ -249,22 +235,12 @@ export function useGridTableController<T>({
     recordGridTablePerformanceSnapshot(diagnosticsLabel, {
       mode: diagnosticsMode,
       inputRows: totalDataCount,
-      sourceRows: disableMaxTableRowsLimit
-        ? totalDataCount
-        : Math.min(totalDataCount, maxTableRows),
+      sourceRows: totalDataCount,
       displayedRows: tableData.length,
       inputReferenceChanged,
     });
     previousInputDataRef.current = inputData;
-  }, [
-    diagnosticsLabel,
-    diagnosticsMode,
-    disableMaxTableRowsLimit,
-    inputData,
-    maxTableRows,
-    tableData.length,
-    totalDataCount,
-  ]);
+  }, [diagnosticsLabel, diagnosticsMode, inputData, tableData.length, totalDataCount]);
 
   // Whether any filter is actively narrowing results (search text, kind, or namespace selections).
   const hasActiveFilters = filteringEnabled && hasNarrowingGridTableFilters(activeFilters);

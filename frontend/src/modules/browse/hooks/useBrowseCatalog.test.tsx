@@ -63,10 +63,6 @@ vi.mock('@/core/events', () => ({
   },
 }));
 
-vi.mock('@/core/settings/appPreferences', () => ({
-  getMaxTableRows: () => 2,
-}));
-
 vi.mock('@/core/refresh/diagnostics/useCatalogDiagnostics', () => ({
   useCatalogDiagnostics: vi.fn(),
 }));
@@ -132,6 +128,7 @@ describe('useBrowseCatalog', () => {
       clusterId: 'cluster-1',
       pinnedNamespaces,
       customOnly,
+      initialPageLimit: 2,
       filters: { search, kinds, namespaces },
       diagnosticLabel: 'test browse',
     });

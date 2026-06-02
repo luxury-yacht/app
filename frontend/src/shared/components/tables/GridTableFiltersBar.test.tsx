@@ -320,6 +320,7 @@ describe('GridTableFiltersBar', () => {
       await Promise.resolve();
     });
     expect(document.body.textContent).toContain('Only the recent local window is loaded.');
+    expect(document.body.textContent).toContain('current local row window');
   });
 
   it('registers search shortcut and focuses the input when invoked', async () => {

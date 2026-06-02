@@ -177,8 +177,6 @@ export interface GridTableProps<T> {
     message?: string;
   };
   filters?: GridTableFilterConfig<T>;
-  /** Query-backed tables already receive a backend-sized page/window. */
-  disableMaxTableRowsLimit?: boolean;
   allowHorizontalOverflow?: boolean;
   /**
    * When true, show a passive vertical boundary at the end of the rendered

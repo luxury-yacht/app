@@ -22,10 +22,7 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
-} from '@/core/settings/appPreferences';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 import GridTable, {
   GridColumnDefinition,
@@ -129,7 +126,6 @@ type RenderOptions = Partial<{
   onColumnWidthsChange: (widths: Record<string, any>) => void;
   columnWidths: Record<string, any>;
   allowHorizontalOverflow: boolean;
-  disableMaxTableRowsLimit: boolean;
   keyExtractor: (item: SimpleRow, index: number) => string;
 }>;
 
@@ -222,26 +218,22 @@ describe('GridTable virtualization', () => {
     expect(renderedRows[0]?.textContent).toContain('Row 0');
   });
 
-  it('caps rendered rows using the max table rows setting', () => {
-    setAppPreferencesForTesting({ maxTableRows: 3 });
+  it('does not cap local rows through a user preference', () => {
     const { container, cleanup } = renderGridTable({
       data: createRows(8),
-      virtualization: { enabled: true, threshold: 1, overscan: 1, estimateRowHeight: 40 },
+      virtualization: { enabled: false },
     });
     cleanupRoot = cleanup;
 
     const renderedRows = container.querySelectorAll('.gridtable-row');
-    expect(renderedRows).toHaveLength(3);
+    expect(renderedRows).toHaveLength(8);
     expect(container.textContent).toContain('Row 0');
-    expect(container.textContent).toContain('Row 2');
-    expect(container.textContent).not.toContain('Row 3');
+    expect(container.textContent).toContain('Row 7');
   });
 
-  it('does not apply the max table rows setting to backend query windows', () => {
-    setAppPreferencesForTesting({ maxTableRows: 3 });
+  it('renders backend query windows without an extra client cap', () => {
     const { container, cleanup } = renderGridTable({
       data: createRows(8),
-      disableMaxTableRowsLimit: true,
       virtualization: { enabled: false },
       filters: {
         enabled: true,
@@ -1208,7 +1200,6 @@ function renderGridTable(options: RenderOptions = {}) {
     onColumnWidthsChange: options.onColumnWidthsChange,
     columnWidths: options.columnWidths ?? {},
     allowHorizontalOverflow: options.allowHorizontalOverflow ?? false,
-    disableMaxTableRowsLimit: options.disableMaxTableRowsLimit ?? false,
   };
 
   let currentProps = initialProps;
@@ -1957,8 +1948,7 @@ it('shows a filter-specific empty state when active filters exclude all rows', (
   cleanup();
 });
 
-it('shows displayed and total item counts when the table is capped', () => {
-  setAppPreferencesForTesting({ maxTableRows: 3 });
+it('shows the full local item count without a user-preference cap', () => {
   const { container, cleanup } = renderGridTable({
     data: createRows(8),
     virtualization: { enabled: false },
@@ -1973,14 +1963,13 @@ it('shows displayed and total item counts when the table is capped', () => {
   });
 
   const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-  expect(resultCount?.textContent).toBe('3 of 8 items');
-  expect(resultCount?.querySelector('.tooltip-trigger')).not.toBeNull();
+  expect(resultCount?.textContent).toBe('8 items');
+  expect(resultCount?.querySelector('.tooltip-trigger')).toBeNull();
 
   cleanup();
 });
 
-it('applies local search before the table cap so matches beyond the first page stay reachable', () => {
-  setAppPreferencesForTesting({ maxTableRows: 3 });
+it('applies local search across the full provided local dataset', () => {
   const { container, cleanup } = renderGridTable({
     data: createRows(8),
     virtualization: { enabled: false },

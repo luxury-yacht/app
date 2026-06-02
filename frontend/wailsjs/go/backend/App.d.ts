@@ -278,8 +278,6 @@ export function SetKubernetesClientQPS(arg1:number):Promise<void>;
 
 export function SetLinkColor(arg1:string,arg2:string):Promise<void>;
 
-export function SetMaxTableRows(arg1:number):Promise<void>;
-
 export function SetObjPanelLogsAPITimestampFormat(arg1:string):Promise<void>;
 
 export function SetObjPanelLogsAPITimestampUseLocalTimeZone(arg1:boolean):Promise<void>;

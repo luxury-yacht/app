@@ -14,14 +14,12 @@ const escapeCsvCell = (value: string): string => {
 
 interface UseGridTableCsvExportOptions<T> {
   data: T[];
-  maxDisplayRows?: number;
   columns?: GridColumnDefinition<T>[];
   getTextContent?: (node: ReactNode) => string;
 }
 
 export function useGridTableCsvExport<T>({
   data,
-  maxDisplayRows,
   columns,
   getTextContent,
 }: UseGridTableCsvExportOptions<T>): IconBarItem {
@@ -30,10 +28,7 @@ export function useGridTableCsvExport<T>({
 
   const canCopyToClipboard =
     typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function';
-  const visibleRowCount =
-    typeof maxDisplayRows === 'number' && maxDisplayRows > 0
-      ? Math.min(data.length, maxDisplayRows)
-      : data.length;
+  const visibleRowCount = data.length;
   const hasCopyableContent = visibleRowCount > 0 && Boolean(columns?.length);
 
   const scheduleCopyReset = useCallback(() => {
@@ -57,10 +52,7 @@ export function useGridTableCsvExport<T>({
     if (!columns?.length || !getTextContent) {
       return '';
     }
-    const rows =
-      typeof maxDisplayRows === 'number' && maxDisplayRows > 0
-        ? data.slice(0, maxDisplayRows)
-        : data;
+    const rows = data;
 
     const headerRow = columns.map((column) =>
       escapeCsvCell(getTextContent(column.header).trim() || column.key)
@@ -70,7 +62,7 @@ export function useGridTableCsvExport<T>({
     );
 
     return [headerRow, ...dataRows].map((row) => row.join(',')).join('\n');
-  }, [columns, data, getTextContent, maxDisplayRows]);
+  }, [columns, data, getTextContent]);
 
   const handleCopyCsv = useCallback(async () => {
     const csvText = buildCsvText();

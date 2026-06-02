@@ -26,7 +26,6 @@ export interface GridTableBindingProps<T> {
   onSort: (key: string, targetDirection?: SortDirection) => void;
   sortConfig: SortConfig;
   filters?: GridTableFilterConfig<T>;
-  disableMaxTableRowsLimit?: boolean;
   virtualization: GridTableVirtualizationOptions;
   columnWidths?: Record<string, ColumnWidthState> | null;
   onColumnWidthsChange?: (widths: Record<string, ColumnWidthState>) => void;

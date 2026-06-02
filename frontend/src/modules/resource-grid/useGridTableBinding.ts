@@ -76,7 +76,6 @@ export function useGridTableBinding<T>({
         keyExtractor,
         onSort: handleSort,
         sortConfig,
-        disableMaxTableRowsLimit: isQueryBackedResourceGridTableMode(tableMode),
         ...(filters ? { filters } : {}),
         virtualization,
         ...(persistence
@@ -90,15 +89,6 @@ export function useGridTableBinding<T>({
           : {}),
       },
     }),
-    [
-      filters,
-      handleSort,
-      keyExtractor,
-      persistence,
-      sortConfig,
-      sortedData,
-      tableMode,
-      virtualization,
-    ]
+    [filters, handleSort, keyExtractor, persistence, sortConfig, sortedData, virtualization]
   );
 }

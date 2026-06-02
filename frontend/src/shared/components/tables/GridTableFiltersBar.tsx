@@ -271,7 +271,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                         <p className="gridtable-filter-result-tooltip-paragraph">
                           {resolvedFilterOptions.searchBehavior === 'query'
                             ? 'This table is showing the current backend query page.'
-                            : 'The local row set exceeds the table safety cap. Use filters to narrow the visible set.'}
+                            : 'This table is showing the current local row window.'}
                         </p>
                         {resolvedFilterOptions.searchBehavior === 'query' && (
                           <p className="gridtable-filter-result-tooltip-paragraph">

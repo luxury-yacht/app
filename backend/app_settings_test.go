@@ -128,7 +128,6 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		AutoRefreshEnabled:                       false,
 		RefreshBackgroundClustersEnabled:         false,
 		MetricsRefreshIntervalMs:                 7000,
-		MaxTableRows:                             2500,
 		KubernetesClientQPS:                      250,
 		KubernetesClientBurst:                    500,
 		PermissionSSRRFetchConcurrency:           16,
@@ -156,6 +155,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(savedBytes), `"appearanceMode":"dark"`)
 	require.NotContains(t, string(savedBytes), `"theme":"dark"`)
+	require.NotContains(t, string(savedBytes), `"max`+"TableRows"+`"`)
 
 	app.appSettings = nil
 	require.NoError(t, app.loadAppSettings())
@@ -167,7 +167,6 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.False(t, app.appSettings.AutoRefreshEnabled)
 	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
 	require.Equal(t, 7000, app.appSettings.MetricsRefreshIntervalMs)
-	require.Equal(t, 2500, app.appSettings.MaxTableRows)
 	require.Equal(t, 250, app.appSettings.KubernetesClientQPS)
 	require.Equal(t, 500, app.appSettings.KubernetesClientBurst)
 	require.Equal(t, 16, app.appSettings.PermissionSSRRFetchConcurrency)
@@ -348,32 +347,18 @@ func TestAppSetObjPanelLogsBufferMaxSizePersistsAndClamps(t *testing.T) {
 	require.False(t, settings.ObjPanelLogsAPITimestampUseLocalTimeZone)
 }
 
-func TestAppSetMaxTableRowsPersistsAndClamps(t *testing.T) {
+func TestAppRetiredTableRowCapPreferenceIsRejected(t *testing.T) {
 	setTestConfigEnv(t)
 
 	app := newTestAppWithDefaults(t)
-	require.NoError(t, app.SetMaxTableRows(2500))
-	require.Equal(t, 2500, app.appSettings.MaxTableRows)
-
-	app.appSettings = nil
-	require.NoError(t, app.loadAppSettings())
-	require.Equal(t, 2500, app.appSettings.MaxTableRows)
-
-	entries := app.logger.GetEntries()
-	require.NotEmpty(t, entries)
-	require.Contains(t, entries[len(entries)-1].Message, "Max table rows changed to: 2500")
-
-	require.NoError(t, app.SetMaxTableRows(50))
-	require.Equal(t, minMaxTableRows, app.appSettings.MaxTableRows)
-
-	require.NoError(t, app.SetMaxTableRows(50000))
-	require.Equal(t, maxMaxTableRows, app.appSettings.MaxTableRows)
-
-	setTestConfigEnv(t)
-	freshApp := newTestAppWithDefaults(t)
-	settings, err := freshApp.GetAppSettings()
+	err := app.loadAppSettings()
 	require.NoError(t, err)
-	require.Equal(t, defaultMaxTableRows, settings.MaxTableRows)
+
+	_, err = app.UpdateAppPreferences(UpdateAppPreferencesRequest{
+		Changes: []AppPreferenceChange{{Key: "max" + "TableRows", Value: 2500}},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown preference key")
 }
 
 func TestAppSetKubernetesAPISettingsPersistAndClamp(t *testing.T) {

@@ -1502,7 +1502,6 @@ export namespace types {
 	    autoRefreshEnabled: boolean;
 	    refreshBackgroundClustersEnabled: boolean;
 	    metricsRefreshIntervalMs: number;
-	    maxTableRows: number;
 	    kubernetesClientQPS: number;
 	    kubernetesClientBurst: number;
 	    permissionSSRRFetchConcurrency: number;
@@ -1545,7 +1544,6 @@ export namespace types {
 	        this.autoRefreshEnabled = source["autoRefreshEnabled"];
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];
-	        this.maxTableRows = source["maxTableRows"];
 	        this.kubernetesClientQPS = source["kubernetesClientQPS"];
 	        this.kubernetesClientBurst = source["kubernetesClientBurst"];
 	        this.permissionSSRRFetchConcurrency = source["permissionSSRRFetchConcurrency"];
@@ -5950,4 +5948,3 @@ export namespace v1 {
 	}
 
 }
-

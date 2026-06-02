@@ -43,7 +43,6 @@ export interface AppPreferences {
   autoRefreshEnabled: boolean;
   refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
-  maxTableRows: number;
   kubernetesClientQPS: number;
   kubernetesClientBurst: number;
   permissionSSRRFetchConcurrency: number;
@@ -134,7 +133,6 @@ interface AppSettingsPayload {
   autoRefreshEnabled?: boolean;
   refreshBackgroundClustersEnabled?: boolean;
   metricsRefreshIntervalMs?: number;
-  maxTableRows?: number;
   kubernetesClientQPS?: number;
   kubernetesClientBurst?: number;
   permissionSSRRFetchConcurrency?: number;
@@ -185,9 +183,6 @@ const PALETTE_BRIGHTNESS_MAX = 50;
 export const OBJ_PANEL_LOGS_BUFFER_MIN_SIZE = 100;
 export const OBJ_PANEL_LOGS_BUFFER_MAX_SIZE = 10000;
 export const OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE = 1000;
-export const MAX_TABLE_ROWS_MIN = 100;
-export const MAX_TABLE_ROWS_MAX = 10000;
-export const MAX_TABLE_ROWS_DEFAULT = 1000;
 export const KUBERNETES_CLIENT_QPS_MIN = 1;
 export const KUBERNETES_CLIENT_QPS_MAX = 5000;
 export const KUBERNETES_CLIENT_QPS_DEFAULT = 200;
@@ -212,7 +207,6 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   autoRefreshEnabled: true,
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
-  maxTableRows: MAX_TABLE_ROWS_DEFAULT,
   kubernetesClientQPS: KUBERNETES_CLIENT_QPS_DEFAULT,
   kubernetesClientBurst: KUBERNETES_CLIENT_BURST_DEFAULT,
   permissionSSRRFetchConcurrency: PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT,
@@ -289,11 +283,6 @@ const FALLBACK_PREFERENCE_METADATA: {
   metricsRefreshIntervalMs: createPreferenceMetadata('metricsRefreshIntervalMs', 'integer', {
     min: 1,
     runtimeSideEffect: true,
-  }),
-  maxTableRows: createPreferenceMetadata('maxTableRows', 'integer', {
-    min: MAX_TABLE_ROWS_MIN,
-    max: MAX_TABLE_ROWS_MAX,
-    runtimeSideEffect: false,
   }),
   kubernetesClientQPS: createPreferenceMetadata('kubernetesClientQPS', 'integer', {
     min: KUBERNETES_CLIENT_QPS_MIN,
@@ -599,9 +588,6 @@ const normalizeMetricsIntervalMs = (value?: number): number =>
     defaultOnNonPositive: true,
   });
 
-const normalizeMaxTableRows = (value?: number): number =>
-  normalizeIntegerPreferenceValue('maxTableRows', value, { defaultOnNonPositive: true });
-
 const normalizeKubernetesClientQPS = (value?: number): number =>
   normalizeIntegerPreferenceValue('kubernetesClientQPS', value, {
     defaultOnNonPositive: true,
@@ -653,9 +639,6 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   }
   if (previous.metricsRefreshIntervalMs !== next.metricsRefreshIntervalMs) {
     eventBus.emit('settings:metrics-interval', next.metricsRefreshIntervalMs);
-  }
-  if (previous.maxTableRows !== next.maxTableRows) {
-    eventBus.emit('settings:max-table-rows', next.maxTableRows);
   }
   if (previous.kubernetesClientQPS !== next.kubernetesClientQPS) {
     eventBus.emit('settings:kubernetes-client-qps', next.kubernetesClientQPS);
@@ -953,7 +936,6 @@ export const hydrateAppPreferences = async (options?: {
       backendSettings?.refreshBackgroundClustersEnabled
     ),
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
-    maxTableRows: normalizeMaxTableRows(backendSettings?.maxTableRows),
     kubernetesClientQPS: normalizeKubernetesClientQPS(backendSettings?.kubernetesClientQPS),
     kubernetesClientBurst: normalizeKubernetesClientBurst(backendSettings?.kubernetesClientBurst),
     permissionSSRRFetchConcurrency: normalizePermissionSSRRFetchConcurrency(
@@ -1082,10 +1064,6 @@ export const getBackgroundRefreshEnabled = (): boolean => {
 
 export const getMetricsRefreshIntervalMs = (): number => {
   return preferenceCache.metricsRefreshIntervalMs;
-};
-
-export const getMaxTableRows = (): number => {
-  return preferenceCache.maxTableRows;
 };
 
 export const getKubernetesClientQPS = (): number => {
@@ -1260,14 +1238,6 @@ export const setObjPanelLogsBufferMaxSize = (size: number): void => {
   commitPreferenceMutation(
     'Failed to persist Object Panel Logs Tab buffer max size:',
     singlePreferenceMutation('objPanelLogsBufferMaxSize', normalized)
-  );
-};
-
-export const setMaxTableRows = (size: number): void => {
-  const normalized = normalizeMaxTableRows(size);
-  commitPreferenceMutation(
-    'Failed to persist max table rows:',
-    singlePreferenceMutation('maxTableRows', normalized)
   );
 };
 

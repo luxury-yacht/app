@@ -86,7 +86,6 @@ export interface AppEvents {
   'settings:exclusive-namespaces': boolean;
   'settings:appearance-mode': 'light' | 'dark' | 'system';
   'settings:metrics-interval': number;
-  'settings:max-table-rows': number;
   'settings:kubernetes-client-qps': number;
   'settings:kubernetes-client-burst': number;
   'settings:permission-ssrr-fetch-concurrency': number;

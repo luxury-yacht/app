@@ -8,8 +8,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState, useRefreshDomainHandle } from '@/core/data-access';
-import { eventBus } from '@/core/events';
-import { getMaxTableRows } from '@/core/settings/appPreferences';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -32,6 +30,7 @@ export type { BrowseFilterOptions, BrowseFilters } from './browseCatalogData';
 
 const BROWSE_SEARCH_DEBOUNCE_MS = 250;
 export const BROWSE_PAGE_LIMIT_OPTIONS = [100, 250, 500, 1000] as const;
+const DEFAULT_BROWSE_PAGE_LIMIT = BROWSE_PAGE_LIMIT_OPTIONS[2];
 export type BrowsePageLimit = (typeof BROWSE_PAGE_LIMIT_OPTIONS)[number];
 
 const browseCatalogSortDescriptor = (
@@ -47,16 +46,13 @@ const browseCatalogSortDescriptor = (
 
 const normalizeInitialPageLimit = (value: number): number => {
   if (!Number.isFinite(value)) {
-    return BROWSE_PAGE_LIMIT_OPTIONS[2];
+    return DEFAULT_BROWSE_PAGE_LIMIT;
   }
   return Math.max(
     1,
     Math.min(BROWSE_PAGE_LIMIT_OPTIONS[BROWSE_PAGE_LIMIT_OPTIONS.length - 1], value)
   );
 };
-
-const isBrowsePageLimit = (value: number): value is BrowsePageLimit =>
-  BROWSE_PAGE_LIMIT_OPTIONS.includes(value as BrowsePageLimit);
 
 /**
  * Options for the useBrowseCatalog hook.
@@ -157,24 +153,13 @@ export function useBrowseCatalog({
   const [totalCount, setTotalCount] = useState(0);
   const [totalIsExact, setTotalIsExact] = useState(true);
   const [pageLimit, setPageLimitState] = useState<number>(() =>
-    normalizeInitialPageLimit(initialPageLimit ?? getMaxTableRows())
+    normalizeInitialPageLimit(initialPageLimit ?? DEFAULT_BROWSE_PAGE_LIMIT)
   );
   const [debouncedSearch, setDebouncedSearch] = useState(filters.search ?? '');
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
   const collectionRef = useRef(emptyBrowseCatalogCollection());
   const hasLoadedOnceRef = useRef(false);
-
-  useEffect(() => {
-    return eventBus.on('settings:max-table-rows', (value) => {
-      setPageLimitState((current) => {
-        if (isBrowsePageLimit(current)) {
-          return current;
-        }
-        return normalizeInitialPageLimit(value);
-      });
-    });
-  }, []);
 
   useEffect(() => {
     const nextSearch = filters.search ?? '';

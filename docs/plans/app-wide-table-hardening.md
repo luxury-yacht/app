@@ -194,8 +194,8 @@ Acceptance:
 
 - Every Local Complete table has a documented measured bound or has been
   migrated.
-- No local table depends on `maxTableRows` or another user setting for
-  correctness.
+- No local table depends on a user-tunable table row cap or another user setting
+  for correctness.
 
 ## Phase 3: Expand Typed Query Coverage
 
@@ -314,8 +314,10 @@ Phase 3 migrated table leaves. `npm run typecheck --prefix frontend` also
 passed.
 
 Final validation on 2026-06-02: `mage qc:prerelease` passed with 368 frontend
-test files, 2,976 frontend tests passing, 1 skipped frontend test, knip clean,
-and Trivy reporting zero vulnerabilities.
+test files, 2,972 frontend tests passing, 1 skipped frontend test, knip clean,
+and Trivy reporting zero vulnerabilities. The legacy user-tunable table row cap
+preference, settings UI, backend schema field, Wails bindings, shared GridTable
+cap/opt-out path, and Browse/Custom page-size coupling have been retired.
 
 Acceptance:
 

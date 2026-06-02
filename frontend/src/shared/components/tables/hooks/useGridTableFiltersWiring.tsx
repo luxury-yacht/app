@@ -42,7 +42,6 @@ type SearchShortcutConfig = {
 type UseGridTableFiltersWiringOptions<T> = {
   data: T[];
   totalDataCount?: number;
-  maxDisplayRows?: number;
   filters: GridTableFilterConfig<T> | undefined;
   diagnosticsLabel?: string;
   columnsDropdown?: ColumnsDropdownConfig;
@@ -62,7 +61,6 @@ type UseGridTableFiltersWiringOptions<T> = {
 export function useGridTableFiltersWiring<T>({
   data,
   totalDataCount,
-  maxDisplayRows,
   filters,
   diagnosticsLabel,
   columnsDropdown,
@@ -168,7 +166,6 @@ export function useGridTableFiltersWiring<T>({
   const resolvedCustomActions = resolvedFilterOptions.customActions;
   const csvExportAction = useGridTableCsvExport({
     data: tableData,
-    maxDisplayRows,
     columns: exportColumns,
     getTextContent,
   });
@@ -191,19 +188,13 @@ export function useGridTableFiltersWiring<T>({
   const resultCount = useMemo(() => {
     if (!filteringEnabled || filters?.options?.showResultCount === false) return undefined;
     const total = filters?.options?.totalCount ?? totalDataCount ?? data.length;
-    const displayed =
-      typeof maxDisplayRows === 'number' && maxDisplayRows > 0
-        ? Math.min(tableData.length, maxDisplayRows)
-        : tableData.length;
+    const displayed = tableData.length;
     return {
       displayed,
       total,
       totalIsExact: filters?.options?.totalIsExact ?? true,
       partialDataLabel: filters?.options?.partialDataLabel,
-      capped:
-        Boolean(filters?.options?.partialDataLabel) ||
-        displayed < tableData.length ||
-        total > data.length,
+      capped: Boolean(filters?.options?.partialDataLabel) || total > data.length,
     };
   }, [
     filteringEnabled,
@@ -212,7 +203,6 @@ export function useGridTableFiltersWiring<T>({
     filters?.options?.totalIsExact,
     filters?.options?.partialDataLabel,
     totalDataCount,
-    maxDisplayRows,
     data.length,
     tableData.length,
   ]);
