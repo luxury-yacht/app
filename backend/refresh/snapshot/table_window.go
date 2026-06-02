@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 )
@@ -12,6 +13,14 @@ func truncateSnapshotWindow[T any](items []T, limit int) ([]T, int) {
 		return items[:limit], total
 	}
 	return items, total
+}
+
+func snapshotVersionWithDynamicRevision(version uint64, dynamicRevision string) uint64 {
+	dynamicVersion, err := strconv.ParseUint(dynamicRevision, 10, 64)
+	if err != nil || dynamicVersion <= version {
+		return version
+	}
+	return dynamicVersion
 }
 
 func snapshotWindowStats(itemCount, totalItems int, noun string) refresh.SnapshotStats {

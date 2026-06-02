@@ -258,7 +258,7 @@ describe('GridTable virtualization', () => {
     expect(renderedRows).toHaveLength(8);
     expect(container.textContent).toContain('Row 7');
     const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toBe('8 of 20 items');
+    expect(resultCount?.textContent).toBe('8 on this page of 20 items');
   });
 
   it('updates the rendered slice when scrolling', async () => {

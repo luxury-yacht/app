@@ -61,6 +61,29 @@ interface GridTableFiltersBarProps {
   };
 }
 
+function formatResultCountLabel(
+  resultCount: NonNullable<GridTableFiltersBarProps['resultCount']>,
+  searchBehavior: InternalFilterOptions['searchBehavior']
+): string {
+  if (resultCount.partialDataLabel) {
+    return `${resultCount.displayed} visible items`;
+  }
+
+  const approximatePrefix = resultCount.totalIsExact === false ? '~' : '';
+  if (
+    searchBehavior === 'query' &&
+    (resultCount.displayed !== resultCount.total || resultCount.totalIsExact === false)
+  ) {
+    return `${resultCount.displayed} on this page of ${approximatePrefix}${resultCount.total} items`;
+  }
+
+  if (resultCount.displayed === resultCount.total && resultCount.totalIsExact !== false) {
+    return `${resultCount.total} items`;
+  }
+
+  return `${resultCount.displayed} of ${approximatePrefix}${resultCount.total} items`;
+}
+
 const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   activeFilters,
   resolvedFilterOptions,
@@ -229,14 +252,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 className="gridtable-filter-result-count"
                 data-gridtable-filter-role="result-count"
               >
-                {resultCount.partialDataLabel
-                  ? `${resultCount.displayed} visible items`
-                  : resultCount.displayed === resultCount.total &&
-                      resultCount.totalIsExact !== false
-                    ? `${resultCount.total} items`
-                    : `${resultCount.displayed} of ${
-                        resultCount.totalIsExact === false ? '~' : ''
-                      }${resultCount.total} items`}
+                {formatResultCountLabel(resultCount, resolvedFilterOptions.searchBehavior)}
                 {resultCount.capped && (
                   <Tooltip
                     content={

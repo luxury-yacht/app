@@ -342,7 +342,9 @@ func buildNodeSnapshotFromUsage(
 	}
 
 	metricsInfo := NodeMetricsInfo{Stale: true}
+	dynamicRevision := ""
 	if !metricsMeta.CollectedAt.IsZero() {
+		dynamicRevision = strconv.FormatInt(metricsMeta.CollectedAt.UnixNano(), 10)
 		metricsInfo.CollectedAt = metricsMeta.CollectedAt.Unix()
 		metricsInfo.Stale = time.Since(metricsMeta.CollectedAt) > config.MetricsStaleThreshold
 	}
@@ -360,7 +362,7 @@ func buildNodeSnapshotFromUsage(
 	snap := &refresh.Snapshot{
 		Domain:  "nodes",
 		Scope:   "",
-		Version: version,
+		Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
 		Payload: NodeSnapshot{ClusterMeta: meta, Nodes: items, Metrics: metricsInfo},
 		Stats:   snapshotWindowStats(len(items), totalItems, "nodes"),
 	}

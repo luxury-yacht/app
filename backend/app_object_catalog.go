@@ -832,6 +832,9 @@ func (a *App) RunCatalogQueryBulkAction(req snapshot.QueryBulkActionRequest) (sn
 	if result.CursorInvalid {
 		return empty, fmt.Errorf("catalog query cursor is invalid")
 	}
+	if result.ContinueToken != "" && (len(result.Items) == 0 || result.ContinueToken == strings.TrimSpace(req.Continue)) {
+		return empty, fmt.Errorf("catalog query bulk action did not advance to the next result page")
+	}
 
 	response := snapshot.QueryBulkActionResult{
 		Processed: len(result.Items),

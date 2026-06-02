@@ -142,15 +142,16 @@ type Telemetry interface {
 
 // Options tunes catalog behaviour; zero values fall back to sensible defaults.
 type Options struct {
-	ResyncInterval             time.Duration // interval between resyncs
-	PageSize                   int           // number of items per page
-	ListWorkers                int           // number of workers for listing resources
-	NamespaceWorkers           int           // number of workers for processing namespaces
-	InformerPromotionThreshold int           // threshold for promoting informers
-	EvictionTTL                time.Duration // time-to-live for evicted items
-	StreamingBatchSize         int           // number of items per streaming batch
-	StreamingFlushInterval     time.Duration // interval between streaming flushes
-	EnableReactiveUpdates      bool          // enables informer-driven incremental updates (default true)
+	ResyncInterval             time.Duration     // interval between resyncs
+	PageSize                   int               // number of items per page
+	ListWorkers                int               // number of workers for listing resources
+	NamespaceWorkers           int               // number of workers for processing namespaces
+	InformerPromotionThreshold int               // threshold for promoting informers
+	EvictionTTL                time.Duration     // time-to-live for evicted items
+	StreamingBatchSize         int               // number of items per streaming batch
+	StreamingFlushInterval     time.Duration     // interval between streaming flushes
+	EnableReactiveUpdates      bool              // enables informer-driven incremental updates (default true)
+	QueryStore                 CatalogQueryStore // optional query execution backend; defaults to in-memory catalog index
 }
 
 // QueryOptions controls catalog queries executed against the in-memory cache.

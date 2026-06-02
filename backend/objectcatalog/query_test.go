@@ -26,7 +26,6 @@ func (store *fakeCatalogQueryStore) QueryCatalog(opts QueryOptions) (QueryResult
 }
 
 func TestServiceQueryUsesCatalogQueryStoreContract(t *testing.T) {
-	svc := NewService(Dependencies{}, nil)
 	store := &fakeCatalogQueryStore{
 		ok: true,
 		result: QueryResult{
@@ -43,7 +42,7 @@ func TestServiceQueryUsesCatalogQueryStoreContract(t *testing.T) {
 			FacetsExact:  true,
 		},
 	}
-	svc.queryStore = store
+	svc := NewService(Dependencies{}, &Options{QueryStore: store})
 
 	result := svc.Query(QueryOptions{Limit: 10, Search: "node"})
 

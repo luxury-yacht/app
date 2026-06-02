@@ -110,6 +110,7 @@ func TestPodBuilderNodeScope(t *testing.T) {
 		Spec: appsv1.ReplicaSetSpec{},
 	}
 
+	collectedAt := time.Now().Add(-10 * time.Second)
 	builder := &PodBuilder{
 		podLister: testsupport.NewPodLister(t, podA, podB),
 		rsLister:  testsupport.NewReplicaSetLister(t, rs),
@@ -121,7 +122,7 @@ func TestPodBuilderNodeScope(t *testing.T) {
 				},
 			},
 			metadata: metrics.Metadata{
-				CollectedAt:         time.Now().Add(-10 * time.Second),
+				CollectedAt:         collectedAt,
 				SuccessCount:        5,
 				FailureCount:        1,
 				LastError:           "",
@@ -134,7 +135,7 @@ func TestPodBuilderNodeScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "node:node-1", snapshot.Scope)
-	require.Equal(t, uint64(15), snapshot.Version)
+	require.Equal(t, uint64(collectedAt.UnixNano()), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
@@ -353,8 +354,7 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:team-a", snapshot.Scope)
-	// Highest resource version between pods (101)
-	require.Equal(t, uint64(101), snapshot.Version)
+	require.Equal(t, uint64(now.UnixNano()), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
@@ -400,7 +400,7 @@ func TestPodBuilderAllNamespacesScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:all", snapshot.Scope)
-	require.Equal(t, uint64(25), snapshot.Version)
+	require.Equal(t, uint64(now.UnixNano()), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)

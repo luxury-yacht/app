@@ -1183,10 +1183,12 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 		},
 	}
 
+	collectedAt := time.Unix(1000, 0)
 	provider := &workloadMetricsProvider{
 		pods: map[string]metrics.PodUsage{
 			"default/web-abc123": {CPUUsageMilli: 80, MemoryUsageBytes: 150 * 1024 * 1024},
 		},
+		metadata: metrics.Metadata{CollectedAt: collectedAt},
 	}
 
 	builder := &NamespaceWorkloadsBuilder{
@@ -1202,6 +1204,7 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	require.Equal(t, namespaceWorkloadsDomainName, snapshot.Domain)
+	require.Equal(t, uint64(collectedAt.UnixNano()), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.True(t, ok)
@@ -1222,6 +1225,38 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 	require.False(t, deploySummary.PortForwardAvailable)
 	require.NotEmpty(t, deploySummary.Age)
 
+}
+
+func TestNamespaceWorkloadsBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T) {
+	deployments := make([]*appsv1.Deployment, 0, config.SnapshotNamespaceWorkloadsEntryLimit+1)
+	for i := 0; i < config.SnapshotNamespaceWorkloadsEntryLimit+1; i++ {
+		deployments = append(deployments, &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            fmt.Sprintf("deploy-%04d", i),
+				Namespace:       "team-a",
+				ResourceVersion: "1",
+			},
+		})
+	}
+
+	builder := &NamespaceWorkloadsBuilder{
+		podLister:        testsupport.NewPodLister(t),
+		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
+		statefulLister:   testsupport.NewStatefulSetLister(t),
+		daemonLister:     testsupport.NewDaemonSetLister(t),
+		jobLister:        testsupport.NewJobLister(t),
+		cronJobLister:    testsupport.NewCronJobLister(t),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
+	require.Len(t, payload.Workloads, config.SnapshotNamespaceWorkloadsEntryLimit)
+	require.Equal(t, config.SnapshotNamespaceWorkloadsEntryLimit+1, payload.Total)
+	require.False(t, payload.TotalIsExact)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotNamespaceWorkloadsEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "workloads")
 }
 
 func TestNamespaceWorkloadsBuilderMarksHPAManagedByFullGVK(t *testing.T) {

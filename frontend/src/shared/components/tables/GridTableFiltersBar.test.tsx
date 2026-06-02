@@ -273,7 +273,7 @@ describe('GridTableFiltersBar', () => {
     });
 
     const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toContain('100 of ~100001 items');
+    expect(resultCount?.textContent).toContain('100 on this page of ~100001 items');
     const trigger = resultCount?.querySelector('.tooltip-trigger');
     expect(trigger).not.toBeNull();
     await act(async () => {
@@ -283,6 +283,20 @@ describe('GridTableFiltersBar', () => {
     });
     expect(document.body.textContent).toContain('The total count is approximate');
     expect(document.body.textContent).toContain('current backend query page');
+  });
+
+  it('labels query-backed page counts as current-page totals', async () => {
+    await renderFilters({
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [],
+        searchBehavior: 'query',
+      },
+      resultCount: { displayed: 250, total: 5000, totalIsExact: true, capped: true },
+    });
+
+    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+    expect(resultCount?.textContent).toContain('250 on this page of 5000 items');
   });
 
   it('marks partial local windows with visible copy', async () => {

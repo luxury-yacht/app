@@ -193,7 +193,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	snapshot := &refresh.Snapshot{
 		Domain:  podDomainName,
 		Scope:   refresh.JoinClusterScope(clusterID, trimmed),
-		Version: version,
+		Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
 		Payload: PodSnapshot{
 			ClusterMeta:   meta,
 			Pods:          page.Rows,

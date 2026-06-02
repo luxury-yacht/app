@@ -141,6 +141,9 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		if !opts.EnableReactiveUpdates {
 			serviceOpts.EnableReactiveUpdates = false
 		}
+		if opts.QueryStore != nil {
+			serviceOpts.QueryStore = opts.QueryStore
+		}
 	}
 
 	nowFn := deps.Now
@@ -161,7 +164,11 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		now:               nowFn,
 		streamSubscribers: make(map[int]chan StreamingUpdate),
 	}
-	service.queryStore = newInMemoryCatalogQueryStore(service)
+	if serviceOpts.QueryStore != nil {
+		service.queryStore = serviceOpts.QueryStore
+	} else {
+		service.queryStore = newInMemoryCatalogQueryStore(service)
+	}
 	return service
 }
 

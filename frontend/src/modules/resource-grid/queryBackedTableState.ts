@@ -114,6 +114,7 @@ export function queryBackedPaginationProps<TGridProps extends { data: unknown[] 
   query: QueryBackedPageController,
   paginationControls?: React.ReactNode
 ): TGridProps & {
+  autoLoadMore: boolean;
   hasMore: boolean;
   hasPrevious: boolean;
   onRequestMore: () => void;
@@ -127,6 +128,7 @@ export function queryBackedPaginationProps<TGridProps extends { data: unknown[] 
 } {
   return {
     ...gridTableProps,
+    autoLoadMore: false,
     hasMore: Boolean(query.continueToken),
     hasPrevious: query.hasPrevious,
     onRequestMore: () => query.loadMore(),

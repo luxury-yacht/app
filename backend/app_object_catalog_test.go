@@ -551,6 +551,46 @@ func TestRunCatalogQueryBulkActionRejectsInvalidCursor(t *testing.T) {
 	require.Zero(t, result.Succeeded)
 }
 
+type stalledCatalogQueryStore struct {
+	result objectcatalog.QueryResult
+}
+
+func (store stalledCatalogQueryStore) QueryCatalog(objectcatalog.QueryOptions) (objectcatalog.QueryResult, bool) {
+	return store.result, true
+}
+
+func TestRunCatalogQueryBulkActionRejectsStalledCursor(t *testing.T) {
+	app := NewApp()
+	svc := objectcatalog.NewService(
+		objectcatalog.Dependencies{},
+		&objectcatalog.Options{
+			QueryStore: stalledCatalogQueryStore{
+				result: objectcatalog.QueryResult{
+					ContinueToken: "same-page",
+					TotalItems:    10,
+					TotalIsExact:  true,
+					FacetsExact:   true,
+				},
+			},
+		},
+	)
+	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
+
+	result, err := app.RunCatalogQueryBulkAction(snapshot.QueryBulkActionRequest{
+		Selection: snapshot.QuerySelectionDescriptor{
+			ClusterID: "cluster-b",
+			Table:     "browse",
+		},
+		Action:    string(ObjectActionDelete),
+		DryRun:    true,
+		Limit:     10,
+		Confirmed: true,
+	})
+
+	require.ErrorContains(t, err, "did not advance")
+	require.Zero(t, result.Processed)
+}
+
 func TestWaitForFactorySyncHandlesNilFactory(t *testing.T) {
 	if !waitForFactorySync(context.Background(), nil) {
 		t.Fatal("nil factory should return true")

@@ -149,7 +149,8 @@ func RegisterNamespaceWorkloadsDomain(
 func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceWorkloadsDomainName, b.workloadsDynamicRevision())
+	dynamicRevision := b.workloadsDynamicRevision()
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceWorkloadsDomainName, dynamicRevision)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +208,12 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	// coverage is unavailable, leave ownership unknown instead of emitting false.
 	hpas, hpaErr := b.listHPAs(namespace)
 
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas, hpaErr == nil, issues)
+	snapshot, err := b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas, hpaErr == nil, issues)
+	if err != nil {
+		return nil, err
+	}
+	snapshot.Version = snapshotVersionWithDynamicRevision(snapshot.Version, dynamicRevision)
+	return snapshot, nil
 }
 func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	meta ClusterMeta,
@@ -362,9 +368,11 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 
 	sortWorkloadSummaries(items)
 
-	if len(items) > config.SnapshotNamespaceWorkloadsEntryLimit {
+	totalItems := len(items)
+	if totalItems > config.SnapshotNamespaceWorkloadsEntryLimit {
 		items = items[:config.SnapshotNamespaceWorkloadsEntryLimit]
 	}
+	stats := snapshotWindowStats(len(items), totalItems, "workloads")
 
 	return &refresh.Snapshot{
 		Domain:  namespaceWorkloadsDomainName,
@@ -374,13 +382,11 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 			ClusterMeta:  meta,
 			Workloads:    items,
 			Kinds:        snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }),
-			Total:        len(items),
-			TotalIsExact: true,
+			Total:        totalItems,
+			TotalIsExact: !stats.Truncated,
 			Issues:       issues,
 		},
-		Stats: refresh.SnapshotStats{
-			ItemCount: len(items),
-		},
+		Stats: stats,
 	}, nil
 }
 

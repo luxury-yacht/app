@@ -6,7 +6,7 @@ import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import { RunCatalogQueryBulkAction } from '@wailsjs/go/backend/App';
 import { snapshot } from '@wailsjs/go/models';
-import type { QueryBulkActionFailure } from '@core/refresh/types';
+import type { QueryBulkActionFailure, QueryBulkActionResult } from '@core/refresh/types';
 import {
   backendSelectionFromCatalogSelection,
   type CatalogQuerySelectionDescriptor,
@@ -25,11 +25,55 @@ interface UseCatalogQueryBulkDeleteActionOptions {
   onComplete?: () => void;
 }
 
-interface BulkDeleteSummary {
+export interface BulkDeleteSummary {
   processed: number;
   succeeded: number;
   failed: number;
   failures: QueryBulkActionFailure[];
+}
+
+type RunBulkDeletePage = (
+  continueToken: string | undefined
+) => Promise<QueryBulkActionResult | null | undefined>;
+
+const bulkDeletePageMadeProgress = (result: QueryBulkActionResult | null | undefined): boolean =>
+  (result?.processed ?? 0) > 0 ||
+  (result?.succeeded ?? 0) > 0 ||
+  (result?.failed ?? 0) > 0 ||
+  (result?.failures?.length ?? 0) > 0;
+
+export async function runCatalogQueryBulkDeletePages(
+  runPage: RunBulkDeletePage
+): Promise<BulkDeleteSummary> {
+  let continueToken: string | undefined;
+  const nextSummary: BulkDeleteSummary = {
+    processed: 0,
+    succeeded: 0,
+    failed: 0,
+    failures: [],
+  };
+
+  do {
+    const requestContinueToken = continueToken;
+    const result = await runPage(requestContinueToken);
+    nextSummary.processed += result?.processed ?? 0;
+    nextSummary.succeeded += result?.succeeded ?? 0;
+    nextSummary.failed += result?.failed ?? 0;
+    if (Array.isArray(result?.failures)) {
+      nextSummary.failures.push(...result.failures);
+    }
+
+    const nextContinueToken = result?.continue || undefined;
+    if (
+      nextContinueToken &&
+      (!bulkDeletePageMadeProgress(result) || nextContinueToken === requestContinueToken)
+    ) {
+      throw new Error('Catalog bulk delete did not advance to the next result page');
+    }
+    continueToken = nextContinueToken;
+  } while (continueToken);
+
+  return nextSummary;
 }
 
 const formatFailureRef = (failure: QueryBulkActionFailure): string => {
@@ -103,16 +147,9 @@ export function useCatalogQueryBulkDeleteAction({
       return;
     }
     try {
-      let continueToken: string | undefined;
-      const nextSummary: BulkDeleteSummary = {
-        processed: 0,
-        succeeded: 0,
-        failed: 0,
-        failures: [],
-      };
       setRunning(true);
-      do {
-        const result = await RunCatalogQueryBulkAction(
+      const nextSummary = await runCatalogQueryBulkDeletePages((continueToken) =>
+        RunCatalogQueryBulkAction(
           snapshot.QueryBulkActionRequest.createFrom({
             selection: backendSelectionFromCatalogSelection(query),
             action: 'delete',
@@ -120,15 +157,8 @@ export function useCatalogQueryBulkDeleteAction({
             limit: BULK_DELETE_PAGE_LIMIT,
             continue: continueToken,
           })
-        );
-        nextSummary.processed += result?.processed ?? 0;
-        nextSummary.succeeded += result?.succeeded ?? 0;
-        nextSummary.failed += result?.failed ?? 0;
-        if (Array.isArray(result?.failures)) {
-          nextSummary.failures.push(...result.failures);
-        }
-        continueToken = result?.continue || undefined;
-      } while (continueToken);
+        )
+      );
       setSummary(nextSummary);
       setFeedback(nextSummary.failed > 0 ? 'error' : 'success');
       onComplete?.();
