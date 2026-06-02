@@ -57,6 +57,8 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
   columns,
   keyExtractor,
   filterOptions,
+  pageSizeOptions,
+  persistenceOverride,
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   showNamespaceFilters = false,
@@ -65,7 +67,7 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
   const { selectedClusterId } = useKubeconfig();
   const defaultKeyExtractor = useDefaultResourceGridKey<T>(selectedClusterId);
   const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key ?? defaultKeyExtractor;
-  const persistence = useGridTablePersistence<T>({
+  const ownedPersistence = useGridTablePersistence<T>({
     viewId,
     clusterIdentity: selectedClusterId,
     namespace: null,
@@ -74,9 +76,12 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
     data: persistenceData ?? data,
     keyExtractor: resolvedKeyExtractor,
     filterOptions: { ...(filterOptions ?? {}), isNamespaceScoped: false },
+    pageSizeOptions,
+    enabled: !persistenceOverride,
   });
+  const persistence = persistenceOverride ?? ownedPersistence;
 
-  return useResourceGridTableCommon({
+  const table = useResourceGridTableCommon({
     ...common,
     tableMode,
     data,
@@ -89,6 +94,7 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
     namespace: showNamespaceFilters ? ALL_NAMESPACES_SCOPE : undefined,
     showNamespaceFilters,
   });
+  return { ...table, persistence };
 }
 
 export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
@@ -100,6 +106,8 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
   columns,
   keyExtractor,
   filterOptions,
+  pageSizeOptions,
+  persistenceOverride,
   defaultSort = { key: 'name', direction: 'asc' },
   showNamespaceFilters = false,
   ...common
@@ -107,7 +115,7 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
   const { selectedClusterId } = useKubeconfig();
   const defaultKeyExtractor = useDefaultResourceGridKey<T>(selectedClusterId);
   const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key ?? defaultKeyExtractor;
-  const persistence = useNamespaceGridTablePersistence<T>({
+  const ownedPersistence = useNamespaceGridTablePersistence<T>({
     viewId,
     namespace,
     columns,
@@ -118,23 +126,27 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
       ...(filterOptions ?? {}),
       isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
     },
+    pageSizeOptions,
+    enabled: !persistenceOverride,
   });
+  const persistence = persistenceOverride ?? {
+    ...ownedPersistence,
+    setSortConfig: ownedPersistence.onSortChange,
+  };
 
-  return useResourceGridTableCommon({
+  const table = useResourceGridTableCommon({
     ...common,
     tableMode,
     data,
     columns,
     keyExtractor: resolvedKeyExtractor,
     rowIdentity: common.rowIdentity ?? common.objectIdentity?.rowIdentity,
-    persistence: {
-      ...persistence,
-      setSortConfig: persistence.onSortChange,
-    },
+    persistence,
     defaultSortDirection: defaultSort.direction ?? 'asc',
     namespace,
     showNamespaceFilters,
   });
+  return { ...table, persistence };
 }
 
 export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>({
@@ -147,6 +159,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
   keyExtractor,
   filterAccessors,
   filterOptions,
+  pageSizeOptions,
   defaultSort = { key: 'name', direction: 'asc' },
   diagnosticsLabel,
   rowIdentity,
@@ -164,6 +177,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
     data,
     keyExtractor: resolvedKeyExtractor,
     filterOptions: { ...(filterOptions ?? {}), isNamespaceScoped: false },
+    pageSizeOptions,
   });
 
   const binding = useGridTableBinding({
@@ -206,6 +220,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
   return {
     gridTableProps,
     favModal: null,
+    persistence,
   };
 }
 
@@ -286,6 +301,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
   return {
     gridTableProps,
     favModal,
+    persistence,
   };
 }
 

@@ -26,12 +26,14 @@ import {
   type BrowseFilters,
 } from './browseCatalogData';
 import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
+import {
+  BROWSE_PAGE_LIMIT_OPTIONS,
+  DEFAULT_BROWSE_PAGE_LIMIT,
+  type BrowsePageLimit,
+} from '../pagination';
 export type { BrowseFilterOptions, BrowseFilters } from './browseCatalogData';
 
 const BROWSE_SEARCH_DEBOUNCE_MS = 250;
-export const BROWSE_PAGE_LIMIT_OPTIONS = [25, 50, 100, 250, 500, 1000] as const;
-const DEFAULT_BROWSE_PAGE_LIMIT = 50;
-export type BrowsePageLimit = (typeof BROWSE_PAGE_LIMIT_OPTIONS)[number];
 
 const browseCatalogSortDescriptor = (
   sort?: { key: string; direction: 'asc' | 'desc' | null } | null
@@ -58,6 +60,8 @@ const normalizeInitialPageLimit = (value: number): number => {
  * Options for the useBrowseCatalog hook.
  */
 export interface UseBrowseCatalogOptions {
+  /** Enables catalog scope lifecycle and startup refresh once owning state is ready. */
+  enabled?: boolean;
   /** Cluster ID to filter items by */
   clusterId: string | null | undefined;
   /** Namespaces to pin (empty for cluster scope, single item for namespace scope) */
@@ -72,6 +76,8 @@ export interface UseBrowseCatalogOptions {
   sort?: { key: string; direction: 'asc' | 'desc' | null } | null;
   /** Optional initial page size for catalog cursor pages */
   initialPageLimit?: number;
+  /** Persists accepted page-size changes through the owning table state. */
+  onPageLimitChange?: (value: BrowsePageLimit) => void;
   /** Diagnostic label for logging */
   diagnosticLabel: string;
 }
@@ -135,6 +141,7 @@ export interface BrowseCatalogQueryDescriptor {
  * Handles domain lifecycle, pagination, and scope synchronization.
  */
 export function useBrowseCatalog({
+  enabled = true,
   clusterId,
   pinnedNamespaces,
   clusterScopedOnly = false,
@@ -142,6 +149,7 @@ export function useBrowseCatalog({
   filters,
   sort,
   initialPageLimit,
+  onPageLimitChange,
   diagnosticLabel,
 }: UseBrowseCatalogOptions): UseBrowseCatalogResult {
   const [items, setItems] = useState<CatalogItem[]>([]);
@@ -152,9 +160,15 @@ export function useBrowseCatalog({
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [totalIsExact, setTotalIsExact] = useState(true);
-  const [pageLimit, setPageLimitState] = useState<number>(() =>
-    normalizeInitialPageLimit(initialPageLimit ?? DEFAULT_BROWSE_PAGE_LIMIT)
+  const initialPageLimitKey = initialPageLimit ?? null;
+  const normalizedInitialPageLimit = useMemo(
+    () => normalizeInitialPageLimit(initialPageLimit ?? DEFAULT_BROWSE_PAGE_LIMIT),
+    [initialPageLimit]
   );
+  const [pageLimit, setPageLimitState] = useState<number>(() => normalizedInitialPageLimit);
+  const lastInitialPageLimitRef = useRef(initialPageLimitKey);
+  const initialPageLimitChanged = lastInitialPageLimitRef.current !== initialPageLimitKey;
+  const activePageLimit = initialPageLimitChanged ? normalizedInitialPageLimit : pageLimit;
   const [debouncedSearch, setDebouncedSearch] = useState(filters.search ?? '');
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
@@ -182,9 +196,21 @@ export function useBrowseCatalog({
     [debouncedSearch, filters]
   );
 
-  const setPageLimit = useCallback((value: BrowsePageLimit) => {
-    setPageLimitState(value);
-  }, []);
+  useEffect(() => {
+    if (!initialPageLimitChanged) {
+      return;
+    }
+    lastInitialPageLimitRef.current = initialPageLimitKey;
+    setPageLimitState(normalizedInitialPageLimit);
+  }, [initialPageLimitChanged, initialPageLimitKey, normalizedInitialPageLimit]);
+
+  const setPageLimit = useCallback(
+    (value: BrowsePageLimit) => {
+      setPageLimitState(value);
+      onPageLimitChange?.(value);
+    },
+    [onPageLimitChange]
+  );
 
   // Track available namespaces from the catalog snapshot.
   // Used to query all namespaces when no filter is selected in all-namespaces mode.
@@ -199,16 +225,16 @@ export function useBrowseCatalog({
         filters: queryFilters,
         sort,
         availableNamespaces,
-        pageLimit,
+        pageLimit: activePageLimit,
       }),
     [
+      activePageLimit,
       availableNamespaces,
       clusterId,
       clusterScopedOnly,
       customOnly,
       queryFilters,
       sort,
-      pageLimit,
       pinnedNamespaces,
     ]
   );
@@ -242,20 +268,24 @@ export function useBrowseCatalog({
 
   // Read scoped state for the current catalog scope.
   const { state: domain, refresh: refreshCatalogScope } = useRefreshDomainHandle({
-    domain: 'catalog',
+    domain: enabled ? 'catalog' : null,
     scope: catalogScope,
-    enabled: true,
+    enabled,
   });
   const { state: metadataDomain, refresh: refreshMetadataScope } = useRefreshDomainHandle({
-    domain: metadataUsesActiveScope ? null : 'catalog',
+    domain: enabled && !metadataUsesActiveScope ? 'catalog' : null,
     scope: metadataUsesActiveScope ? null : metadataScope,
-    enabled: true,
+    enabled,
   });
   useCatalogDiagnostics(domain, diagnosticLabel);
 
   // Apply query scope and refresh page 0 when the query changes
   const previousScopeIdentityRef = useRef(plan.scopeIdentityKey);
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const scopeIdentityChanged = previousScopeIdentityRef.current !== plan.scopeIdentityKey;
     previousScopeIdentityRef.current = plan.scopeIdentityKey;
 
@@ -279,6 +309,7 @@ export function useBrowseCatalog({
     }
   }, [
     catalogScope,
+    enabled,
     metadataScope,
     metadataUsesActiveScope,
     plan.scopeIdentityKey,
@@ -341,7 +372,14 @@ export function useBrowseCatalog({
 
       const normalizedScope = buildBrowseCatalogPageScope(
         plan,
-        { clusterId, filters: queryFilters, sort, pageLimit, pinnedNamespaces, customOnly },
+        {
+          clusterId,
+          filters: queryFilters,
+          sort,
+          pageLimit: activePageLimit,
+          pinnedNamespaces,
+          customOnly,
+        },
         token
       );
       const baseScopeAtRequest = catalogScopeRef.current;
@@ -399,7 +437,7 @@ export function useBrowseCatalog({
     },
     [
       isRequestingMore,
-      pageLimit,
+      activePageLimit,
       queryFilters,
       sort,
       plan,
@@ -484,7 +522,7 @@ export function useBrowseCatalog({
     filterOptions,
     totalCount,
     totalIsExact,
-    pageLimit,
+    pageLimit: activePageLimit,
     pageLimitOptions: BROWSE_PAGE_LIMIT_OPTIONS,
     setPageLimit,
     refresh: refreshCurrentQuery,

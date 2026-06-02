@@ -81,6 +81,7 @@ describe('gridTablePersistence', () => {
           caseSensitive: false,
           includeMetadata: false,
         },
+        pageSize: 250,
       },
       {
         columns: sampleColumns,
@@ -91,6 +92,7 @@ describe('gridTablePersistence', () => {
           namespaces: ['team-a'],
           isNamespaceScoped: true,
         },
+        pageSizeOptions: [25, 50, 100, 250],
       }
     );
 
@@ -104,6 +106,24 @@ describe('gridTablePersistence', () => {
       caseSensitive: false,
       includeMetadata: false,
     });
+    expect(pruned?.pageSize).toBe(250);
+  });
+
+  it('drops persisted page sizes outside the current table options', () => {
+    const pruned = prunePersistedState(
+      {
+        version: 1,
+        pageSize: 2000,
+      },
+      {
+        columns: sampleColumns,
+        rows: sampleRows,
+        keyExtractor: (row) => row.id,
+        pageSizeOptions: [25, 50, 100, 250],
+      }
+    );
+
+    expect(pruned).toBeNull();
   });
 
   it('drops persisted sort keys that no longer map to a current sortable column', () => {
@@ -138,6 +158,8 @@ describe('gridTablePersistence', () => {
         includeMetadata: false,
       },
       filterOptions: { isNamespaceScoped: true },
+      pageSize: 100,
+      pageSizeOptions: [25, 50, 100, 250],
     });
 
     expect(state).toEqual({
@@ -152,6 +174,7 @@ describe('gridTablePersistence', () => {
         caseSensitive: false,
         includeMetadata: false,
       },
+      pageSize: 100,
     });
   });
 

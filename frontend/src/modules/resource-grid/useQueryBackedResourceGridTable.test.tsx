@@ -19,6 +19,8 @@ const {
   useTypedResourceQueryMock,
   useClusterResourceGridTableMock,
   useNamespaceResourceGridTableMock,
+  persistedPageSizeRef,
+  setPageSizeMock,
 } = vi.hoisted(() => ({
   liveDomainStateRef: {
     current: {
@@ -32,6 +34,8 @@ const {
   useTypedResourceQueryMock: vi.fn(),
   useClusterResourceGridTableMock: vi.fn(),
   useNamespaceResourceGridTableMock: vi.fn(),
+  persistedPageSizeRef: { current: null as number | null },
+  setPageSizeMock: vi.fn(),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -55,6 +59,24 @@ vi.mock('./useTypedResourceQuery', () => ({
 vi.mock('./useResourceGridTable', () => ({
   useClusterResourceGridTable: (params: any) => useClusterResourceGridTableMock(params),
   useNamespaceResourceGridTable: (params: any) => useNamespaceResourceGridTableMock(params),
+}));
+
+vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
+  useGridTablePersistence: () => ({
+    storageKey: 'gridtable:v1:cluster-a:cluster-nodes',
+    sortConfig: null,
+    setSortConfig: vi.fn(),
+    columnVisibility: null,
+    setColumnVisibility: vi.fn(),
+    columnWidths: null,
+    setColumnWidths: vi.fn(),
+    filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+    setFilters: vi.fn(),
+    pageSize: persistedPageSizeRef.current,
+    setPageSize: setPageSizeMock,
+    hydrated: true,
+    resetState: vi.fn(),
+  }),
 }));
 
 interface TestRow {
@@ -113,6 +135,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     scopedDomainCallsRef.current = [];
     lifecycleCallsRef.current = [];
     useTypedResourceQueryMock.mockReset();
+    persistedPageSizeRef.current = null;
+    setPageSizeMock.mockReset();
     useTypedResourceQueryMock.mockReturnValue({
       rows: [row],
       loading: false,
@@ -503,5 +527,70 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
     expect(result?.loading).toBe(false);
     expect(paginationLoading(result)).toBe(true);
+  });
+
+  it('uses persisted rows per page for the query and saves page size changes', async () => {
+    let result:
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const Probe: React.FC = () => {
+      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        localData: [],
+        selectRows,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    persistedPageSizeRef.current = 250;
+    useTypedResourceQueryMock.mockReturnValue({
+      rows: [row],
+      loading: false,
+      loaded: true,
+      error: null,
+      continueToken: null,
+      hasPrevious: false,
+      isRequestingMore: false,
+      loadMore: vi.fn(),
+      loadPrevious: vi.fn(),
+      pageIndex: 1,
+      pageSize: 250,
+      totalCount: 1,
+      totalIsExact: true,
+      filterOptions: {},
+      dynamic: null,
+    });
+    useClusterResourceGridTableMock.mockReturnValue({
+      gridTableProps: {
+        data: [row],
+      },
+      favModal: null,
+    });
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useClusterResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange(publishedTableState);
+      await Promise.resolve();
+    });
+
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pageLimit: 250 })
+    );
+
+    const paginationControls = (result?.gridTableProps as any)?.paginationControls;
+    paginationControls.props.onPageSizeChange(500);
+
+    expect(setPageSizeMock).toHaveBeenCalledWith(500);
   });
 });

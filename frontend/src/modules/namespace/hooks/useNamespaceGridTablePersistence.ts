@@ -28,6 +28,8 @@ export interface NamespaceGridTablePersistenceParams<T> {
   keyExtractor: (item: T, index: number) => string;
   defaultSort?: SortConfig;
   filterOptions?: GridTableFilterPersistenceOptions;
+  pageSizeOptions?: readonly number[];
+  enabled?: boolean;
 }
 
 export interface NamespaceGridTablePersistenceResult {
@@ -39,6 +41,8 @@ export interface NamespaceGridTablePersistenceResult {
   setColumnVisibility: (next: Record<string, boolean>) => void;
   filters: GridTableFilterState;
   setFilters: (next: GridTableFilterState) => void;
+  pageSize: number | null;
+  setPageSize: (next: number | null) => void;
   isNamespaceScoped: boolean;
   resetState: () => void;
   hydrated: boolean;
@@ -52,6 +56,8 @@ export function useNamespaceGridTablePersistence<T>({
   keyExtractor,
   defaultSort = { key: '', direction: null },
   filterOptions,
+  pageSizeOptions,
+  enabled = true,
 }: NamespaceGridTablePersistenceParams<T>): NamespaceGridTablePersistenceResult {
   const { selectedClusterId } = useKubeconfig();
   const isNamespaceScoped = namespace !== ALL_NAMESPACES_SCOPE;
@@ -66,6 +72,8 @@ export function useNamespaceGridTablePersistence<T>({
     setColumnVisibility,
     filters,
     setFilters,
+    pageSize,
+    setPageSize,
     resetState,
     hydrated,
   } = useGridTablePersistence<T>({
@@ -79,6 +87,8 @@ export function useNamespaceGridTablePersistence<T>({
     // isNamespaceScoped is passed as a top-level param; useGridTablePersistence
     // merges it into filterOptions internally, so we don't duplicate it here.
     filterOptions,
+    pageSizeOptions,
+    enabled,
   });
 
   const sortConfig = useMemo<SortConfig>(
@@ -111,6 +121,8 @@ export function useNamespaceGridTablePersistence<T>({
     setColumnVisibility,
     filters,
     setFilters,
+    pageSize,
+    setPageSize,
     isNamespaceScoped,
     resetState: handleReset,
     hydrated,

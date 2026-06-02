@@ -133,8 +133,17 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+    filters: {
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    },
     setFilters: vi.fn(),
+    pageSize: null,
+    setPageSize: vi.fn(),
+    hydrated: true,
     resetState: vi.fn(),
   }),
 }));
@@ -243,6 +252,7 @@ describe('ClusterViewNodes', () => {
       kinds: [],
       namespaces: [],
       caseSensitive: false,
+      includeMetadata: false,
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);

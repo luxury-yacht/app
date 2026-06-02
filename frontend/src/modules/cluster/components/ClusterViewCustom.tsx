@@ -22,6 +22,7 @@ import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGri
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import CatalogPaginationControls from '@modules/browse/components/CatalogPaginationControls';
 import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
+import { BROWSE_PAGE_LIMIT_OPTIONS } from '@modules/browse/pagination';
 import {
   customCatalogCRDReference,
   customCatalogObjectReference,
@@ -177,6 +178,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       keyExtractor,
       data: [],
       filterOptions: { isNamespaceScoped: false },
+      pageSizeOptions: BROWSE_PAGE_LIMIT_OPTIONS,
     });
 
     const {

@@ -32,6 +32,7 @@ import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNa
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
+import { BROWSE_PAGE_LIMIT_OPTIONS } from '@modules/browse/pagination';
 import {
   useBrowseColumns,
   toTableRows,
@@ -276,6 +277,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     data: [], // We'll populate this after we have catalog data
     keyExtractor,
     filterOptions: { kinds: [], namespaces: [], isNamespaceScoped: false },
+    pageSizeOptions: BROWSE_PAGE_LIMIT_OPTIONS,
     enabled: !isNamespaceScoped,
   });
 
@@ -287,6 +289,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     data: [], // We'll populate this after we have catalog data
     keyExtractor,
     filterOptions: { kinds: [], namespaces: [], isNamespaceScoped: true },
+    pageSizeOptions: BROWSE_PAGE_LIMIT_OPTIONS,
+    enabled: isNamespaceScoped,
   });
 
   // Select the appropriate persistence based on scope
@@ -300,6 +304,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         setColumnVisibility: namespacePersistence.setColumnVisibility,
         filters: namespacePersistence.filters,
         setFilters: namespacePersistence.setFilters,
+        pageSize: namespacePersistence.pageSize,
+        setPageSize: namespacePersistence.setPageSize,
         resetState: namespacePersistence.resetState,
         hydrated: namespacePersistence.hydrated,
       }
@@ -312,6 +318,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         setColumnVisibility: clusterPersistence.setColumnVisibility,
         filters: clusterPersistence.filters,
         setFilters: clusterPersistence.setFilters,
+        pageSize: clusterPersistence.pageSize,
+        setPageSize: clusterPersistence.setPageSize,
         resetState: clusterPersistence.resetState,
         hydrated: clusterPersistence.hydrated,
       };
@@ -337,6 +345,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     queryDescriptor,
     queryPending,
   } = useBrowseCatalog({
+    enabled: persistence.hydrated,
     clusterId: selectedClusterId,
     pinnedNamespaces,
     clusterScopedOnly,
@@ -346,6 +355,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       namespaces: persistence.filters.namespaces ?? [],
     },
     sort: persistence.sortConfig,
+    initialPageLimit: persistence.pageSize ?? undefined,
+    onPageLimitChange: persistence.setPageSize,
     diagnosticLabel: scope === 'namespace' ? 'Namespace Browse' : 'Browse',
   });
 

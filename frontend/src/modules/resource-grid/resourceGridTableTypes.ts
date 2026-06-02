@@ -66,6 +66,7 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   filterAccessors?: GridTableFilterConfig<T>['accessors'];
   leadingFilterActions?: IconBarItem[];
   filterOptions?: GridTableFilterPersistenceOptions;
+  pageSizeOptions?: readonly number[];
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
   kindDropdownBulkActions?: boolean;
   kindDropdownSearchable?: boolean;
@@ -74,6 +75,7 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
     filters: GridTableFilterState;
     sortConfig: SortConfig | null;
   }) => void;
+  persistenceOverride?: ResourceGridPersistence<T>;
   persistenceData?: T[];
   rowIdentity?: (item: T, index: number) => string;
   showKindDropdown?: boolean;
@@ -119,6 +121,8 @@ export interface ResourceGridPersistence<T extends ResourceGridTableRow> {
   setColumnVisibility: (next: Record<string, boolean>) => void;
   filters: GridTableFilterState;
   setFilters: NonNullable<GridTableFilterConfig<T>['onChange']>;
+  pageSize: number | null;
+  setPageSize: (next: number | null) => void;
   resetState: () => void;
   hydrated: boolean;
 }
@@ -138,6 +142,7 @@ export interface ResourceGridCommonParams<T extends ResourceGridTableRow> extend
 export interface ResourceGridTableResult<T extends ResourceGridTableRow> {
   gridTableProps: GridTableBindingProps<T>;
   favModal: React.ReactNode;
+  persistence?: ResourceGridPersistence<T>;
 }
 
 export interface ObjectPanelResourceGridTableSurfaceProps<T extends ResourceGridTableRow> {

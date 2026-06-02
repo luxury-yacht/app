@@ -4,6 +4,9 @@ import { useRefreshScopedDomain } from '@/core/refresh';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useClusterResourceGridTable, useNamespaceResourceGridTable } from './useResourceGridTable';
 import type {
   ClusterResourceGridTableParams,
@@ -25,6 +28,13 @@ import {
   useQueryBackedTableState,
 } from './queryBackedTableState';
 import type { QueryBackedTableState } from './queryBackedTableState';
+
+const DEFAULT_TYPED_QUERY_PAGE_LIMIT: TypedQueryPageLimit = 50;
+
+const typedQueryPageLimitOrDefault = (value: number | null | undefined): TypedQueryPageLimit =>
+  TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)
+    ? (value as TypedQueryPageLimit)
+    : DEFAULT_TYPED_QUERY_PAGE_LIMIT;
 
 const liveDomainVersion = (state: {
   version?: number | string;
@@ -94,7 +104,27 @@ export function useQueryBackedNamespaceResourceGridTable<
 }: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
-  const [pageLimit, setPageLimit] = useState<TypedQueryPageLimit>(50);
+  const defaultKeyExtractor = useCallback(
+    (item: TRow) => buildRequiredCanonicalObjectRowKey(item, { fallbackClusterId: clusterId }),
+    [clusterId]
+  );
+  const resolvedKeyExtractor =
+    tableParams.keyExtractor ?? tableParams.objectIdentity?.key ?? defaultKeyExtractor;
+  const persistence = useGridTablePersistence<TRow>({
+    viewId: tableParams.viewId,
+    clusterIdentity: clusterId ?? '',
+    namespace,
+    isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
+    columns: tableParams.columns,
+    data: tableParams.persistenceData ?? localData,
+    keyExtractor: resolvedKeyExtractor,
+    filterOptions: {
+      ...(tableParams.filterOptions ?? {}),
+      isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
+    },
+    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+  });
+  const pageLimit = typedQueryPageLimitOrDefault(persistence.pageSize);
   const liveScope = useMemo(
     () => (clusterId ? buildClusterScope(clusterId, baseScope ?? namespace) : ''),
     [baseScope, clusterId, namespace]
@@ -115,7 +145,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     },
     [handleTableStateChange]
   );
-  const queryEnabled = enabled && tableStateReady;
+  const queryEnabled = enabled && tableStateReady && persistence.hydrated;
 
   const query = useTypedResourceQuery<TPayload, TRow>({
     enabled: queryEnabled,
@@ -140,8 +170,11 @@ export function useQueryBackedNamespaceResourceGridTable<
 
   const table = useNamespaceResourceGridTable<TRow>({
     ...tableParams,
+    keyExtractor: resolvedKeyExtractor,
     namespace,
     defaultSort,
+    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+    persistenceOverride: persistence,
     tableMode: enabled ? queryTableMode : 'Local Complete',
     data,
     filterOptionOverrides: enabled
@@ -169,12 +202,12 @@ export function useQueryBackedNamespaceResourceGridTable<
       onNext: query.loadMore,
       onPageSizeChange: (value: number) => {
         if (TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)) {
-          setPageLimit(value as TypedQueryPageLimit);
+          persistence.setPageSize(value);
         }
       },
     });
     return queryBackedPaginationProps(table.gridTableProps, query, paginationControls);
-  }, [enabled, query, table.gridTableProps, tableParams.viewId]);
+  }, [enabled, persistence, query, table.gridTableProps, tableParams.viewId]);
 
   return {
     ...table,
@@ -235,7 +268,24 @@ export function useQueryBackedClusterResourceGridTable<
   );
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
-  const [pageLimit, setPageLimit] = useState<TypedQueryPageLimit>(50);
+  const defaultKeyExtractor = useCallback(
+    (item: TRow) => buildRequiredCanonicalObjectRowKey(item, { fallbackClusterId: clusterId }),
+    [clusterId]
+  );
+  const resolvedKeyExtractor =
+    tableParams.keyExtractor ?? tableParams.objectIdentity?.key ?? defaultKeyExtractor;
+  const persistence = useGridTablePersistence<TRow>({
+    viewId: tableParams.viewId,
+    clusterIdentity: clusterId ?? '',
+    namespace: null,
+    isNamespaceScoped: false,
+    columns: tableParams.columns,
+    data: tableParams.persistenceData ?? localData,
+    keyExtractor: resolvedKeyExtractor,
+    filterOptions: { ...(tableParams.filterOptions ?? {}), isNamespaceScoped: false },
+    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+  });
+  const pageLimit = typedQueryPageLimitOrDefault(persistence.pageSize);
   const liveScope = useMemo(
     () => (clusterId ? buildClusterScope(clusterId, baseScope) : ''),
     [baseScope, clusterId]
@@ -256,7 +306,7 @@ export function useQueryBackedClusterResourceGridTable<
     },
     [handleTableStateChange]
   );
-  const queryEnabled = enabled && tableStateReady;
+  const queryEnabled = enabled && tableStateReady && persistence.hydrated;
 
   const query = useTypedResourceQuery<TPayload, TRow>({
     enabled: queryEnabled,
@@ -281,8 +331,11 @@ export function useQueryBackedClusterResourceGridTable<
 
   const table = useClusterResourceGridTable<TRow>({
     ...tableParams,
+    keyExtractor: resolvedKeyExtractor,
     defaultSortKey,
     defaultSortDirection,
+    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+    persistenceOverride: persistence,
     tableMode: enabled ? queryTableMode : 'Local Complete',
     data,
     filterOptionOverrides: enabled
@@ -310,12 +363,12 @@ export function useQueryBackedClusterResourceGridTable<
       onNext: query.loadMore,
       onPageSizeChange: (value: number) => {
         if (TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)) {
-          setPageLimit(value as TypedQueryPageLimit);
+          persistence.setPageSize(value);
         }
       },
     });
     return queryBackedPaginationProps(table.gridTableProps, query, paginationControls);
-  }, [enabled, query, table.gridTableProps, tableParams.viewId]);
+  }, [enabled, persistence, query, table.gridTableProps, tableParams.viewId]);
 
   return {
     ...table,

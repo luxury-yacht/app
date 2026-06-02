@@ -23,6 +23,7 @@ export interface GridTablePersistedState {
   columnWidths?: Record<string, ColumnWidthState>;
   sort?: { key: string; direction: 'asc' | 'desc' | null };
   filters?: GridTableFilterState;
+  pageSize?: number;
 }
 
 export interface GridTablePersistenceKeyParts {
@@ -42,6 +43,7 @@ export interface GridTablePruneContext<T> {
   rows?: T[];
   keyExtractor?: (item: T, index: number) => string;
   filterOptions?: GridTableFilterPersistenceOptions;
+  pageSizeOptions?: readonly number[];
 }
 
 export interface GridTableSaveContext<T> extends GridTablePruneContext<T> {
@@ -49,6 +51,7 @@ export interface GridTableSaveContext<T> extends GridTablePruneContext<T> {
   columnWidths?: Record<string, ColumnWidthState> | null;
   sort?: { key: string; direction: 'asc' | 'desc' | null } | null;
   filters?: GridTableFilterState | null;
+  pageSize?: number | null;
 }
 
 const STORAGE_PREFIX = 'gridtable';
@@ -306,6 +309,13 @@ const intersectsAllowed = (values: string[], allowed?: string[]): string[] => {
   return values.filter((value) => allowedSet.has(value.toLowerCase()));
 };
 
+const isAllowedPageSize = (value: number, options?: readonly number[]): boolean => {
+  if (!Number.isInteger(value) || value <= 0) {
+    return false;
+  }
+  return !options || options.length === 0 || options.includes(value);
+};
+
 export const prunePersistedState = <T>(
   persisted: GridTablePersistedState | null | undefined,
   context: GridTablePruneContext<T>
@@ -380,7 +390,20 @@ export const prunePersistedState = <T>(
     }
   }
 
-  if (!pruned.columnVisibility && !pruned.columnWidths && !pruned.sort && !pruned.filters) {
+  if (
+    typeof persisted.pageSize === 'number' &&
+    isAllowedPageSize(persisted.pageSize, context.pageSizeOptions)
+  ) {
+    pruned.pageSize = persisted.pageSize;
+  }
+
+  if (
+    !pruned.columnVisibility &&
+    !pruned.columnWidths &&
+    !pruned.sort &&
+    !pruned.filters &&
+    pruned.pageSize == null
+  ) {
     return null;
   }
 
@@ -450,7 +473,20 @@ export const buildPersistedStateForSave = <T>(
     }
   }
 
-  if (!state.columnVisibility && !state.columnWidths && !state.sort && !state.filters) {
+  if (
+    typeof context.pageSize === 'number' &&
+    isAllowedPageSize(context.pageSize, context.pageSizeOptions)
+  ) {
+    state.pageSize = context.pageSize;
+  }
+
+  if (
+    !state.columnVisibility &&
+    !state.columnWidths &&
+    !state.sort &&
+    !state.filters &&
+    state.pageSize == null
+  ) {
     return null;
   }
 

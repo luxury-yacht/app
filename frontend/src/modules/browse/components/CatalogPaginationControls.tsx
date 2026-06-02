@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { BrowsePageLimit } from '@modules/browse/hooks/useBrowseCatalog';
+import type { BrowsePageLimit } from '@modules/browse/pagination';
 import QueryPaginationControls from '@modules/resource-grid/QueryPaginationControls';
 
 interface CatalogPaginationControlsProps {

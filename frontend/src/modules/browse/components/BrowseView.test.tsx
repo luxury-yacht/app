@@ -168,6 +168,8 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
       setColumnVisibility: vi.fn(),
       filters: persistenceFiltersRef.current,
       setFilters: vi.fn(),
+      pageSize: null,
+      setPageSize: vi.fn(),
       resetState: vi.fn(),
       hydrated: true,
       storageKey: 'gridtable:v1:test',
@@ -187,8 +189,11 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
       setColumnVisibility: vi.fn(),
       filters: persistenceFiltersRef.current,
       setFilters: vi.fn(),
+      pageSize: null,
+      setPageSize: vi.fn(),
       isNamespaceScoped: true,
       resetState: vi.fn(),
+      hydrated: true,
     };
   },
 }));
@@ -396,6 +401,16 @@ describe('BrowseView', () => {
 
       expect(persistenceArgsRef.cluster?.viewId).toBe('browse');
     });
+
+    it('enables only cluster persistence for cluster browse', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      expect(persistenceArgsRef.cluster?.enabled).toBe(true);
+      expect(persistenceArgsRef.namespace?.enabled).toBe(false);
+    });
   });
 
   describe('Namespace scope (namespace=specific)', () => {
@@ -465,6 +480,16 @@ describe('BrowseView', () => {
         true
       );
     });
+
+    it('enables only namespace persistence for namespace browse', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace="default" />);
+        await Promise.resolve();
+      });
+
+      expect(persistenceArgsRef.cluster?.enabled).toBe(false);
+      expect(persistenceArgsRef.namespace?.enabled).toBe(true);
+    });
   });
 
   describe('All Namespaces scope', () => {
@@ -507,6 +532,16 @@ describe('BrowseView', () => {
       });
 
       expect(persistenceArgsRef.cluster?.viewId).toBe('all-namespaces-browse');
+    });
+
+    it('enables only cluster persistence for all-namespaces browse', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
+        await Promise.resolve();
+      });
+
+      expect(persistenceArgsRef.cluster?.enabled).toBe(true);
+      expect(persistenceArgsRef.namespace?.enabled).toBe(false);
     });
 
     it('shows namespace column for all-namespaces scope', async () => {

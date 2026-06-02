@@ -21,6 +21,9 @@ workflow and that exception is documented.
 - Do not split pagination controls across unrelated parts of the view. For
   query-backed tables, the control group belongs with the table footer and must
   show page size, visible range, and honest total/page-count state.
+- Rows-per-page is persisted table state. Store it with the same
+  cluster/view/namespace persistence key as sort, filters, widths, and column
+  visibility, and validate it against the table's supported page-size options.
 
 ## Ownership
 

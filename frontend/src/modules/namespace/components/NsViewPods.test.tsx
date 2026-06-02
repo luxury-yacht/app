@@ -160,10 +160,51 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
       },
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
-      filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+      filters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
       setFilters: vi.fn(),
+      pageSize: null,
+      setPageSize: vi.fn(),
       isNamespaceScoped: true,
       resetState: vi.fn(),
+      hydrated: true,
+    }),
+  };
+});
+
+vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => {
+  const state = { columnWidths: {} as Record<string, any> };
+  return {
+    useGridTablePersistence: () => ({
+      storageKey: 'gridtable:v1:alpha:namespace-pods',
+      sortConfig: { key: 'name', direction: 'asc' },
+      setSortConfig: vi.fn(),
+      columnWidths: state.columnWidths,
+      setColumnWidths: (next: any) => {
+        state.columnWidths = next;
+        if (gridTablePropsRef.current) {
+          gridTablePropsRef.current = { ...gridTablePropsRef.current, columnWidths: next };
+        }
+      },
+      columnVisibility: null,
+      setColumnVisibility: vi.fn(),
+      filters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      setFilters: vi.fn(),
+      pageSize: null,
+      setPageSize: vi.fn(),
+      resetState: vi.fn(),
+      hydrated: true,
     }),
   };
 });

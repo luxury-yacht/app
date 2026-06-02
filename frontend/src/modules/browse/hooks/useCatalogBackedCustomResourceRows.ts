@@ -46,6 +46,7 @@ export function useCatalogBackedCustomResourceRows({
     handleLoadPrevious,
     setPageLimit,
   } = useBrowseCatalog({
+    enabled: persistence.hydrated,
     clusterId,
     pinnedNamespaces,
     clusterScopedOnly,
@@ -56,6 +57,8 @@ export function useCatalogBackedCustomResourceRows({
       namespaces: persistence.filters.namespaces ?? [],
     },
     sort: persistence.sortConfig,
+    initialPageLimit: persistence.pageSize ?? undefined,
+    onPageLimitChange: persistence.setPageSize,
     diagnosticLabel,
   });
 

@@ -118,17 +118,25 @@ describe('useBrowseCatalog', () => {
     kinds = [],
     namespaces = [],
     customOnly = false,
+    enabled = true,
+    initialPageLimit = 2,
+    onPageLimitChange,
   }: {
     search?: string;
     kinds?: string[];
     namespaces?: string[];
     customOnly?: boolean;
+    enabled?: boolean;
+    initialPageLimit?: number;
+    onPageLimitChange?: (value: 25 | 50 | 100 | 250 | 500 | 1000) => void;
   }) => {
     result = useBrowseCatalog({
+      enabled,
       clusterId: 'cluster-1',
       pinnedNamespaces,
       customOnly,
-      initialPageLimit: 2,
+      initialPageLimit,
+      onPageLimitChange,
       filters: { search, kinds, namespaces },
       diagnosticLabel: 'test browse',
     });
@@ -220,6 +228,80 @@ describe('useBrowseCatalog', () => {
     expect(result?.continueToken).toBeNull();
     expect(result?.isRequestingMore).toBe(false);
     expect(result?.pageIndex).toBe(2);
+  });
+
+  it('uses the persisted initial page size and publishes page size changes', async () => {
+    const onPageLimitChange = vi.fn();
+    const baseScope = 'cluster-1|limit=250&namespace=default';
+    const metadataScope = 'cluster-1|limit=1&namespace=default';
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === baseScope || scope === metadataScope) {
+        return {
+          status: 'ready',
+          data: makePayload({ items: [], total: 0, batchSize: 0 }),
+          scope,
+        };
+      }
+      return { status: 'idle', data: null, scope };
+    });
+
+    await act(async () => {
+      root.render(<Harness initialPageLimit={250} onPageLimitChange={onPageLimitChange} />);
+      await Promise.resolve();
+    });
+
+    expect(result?.pageLimit).toBe(250);
+
+    act(() => {
+      result?.setPageLimit(500);
+    });
+
+    expect(result?.pageLimit).toBe(500);
+    expect(onPageLimitChange).toHaveBeenCalledWith(500);
+  });
+
+  it('does not request catalog scopes before owning persisted table state is hydrated', async () => {
+    const defaultScope = 'cluster-1|limit=2&namespace=default';
+    const persistedScope = 'cluster-1|limit=250&namespace=default';
+    const metadataScope = 'cluster-1|limit=1&namespace=default';
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === persistedScope || scope === metadataScope) {
+        return {
+          status: 'ready',
+          data: makePayload({ items: [], total: 0, batchSize: 0 }),
+          scope,
+        };
+      }
+      return { status: 'idle', data: null, scope };
+    });
+
+    await act(async () => {
+      root.render(<Harness enabled={false} />);
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestRefreshDomain).not.toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: defaultScope,
+      reason: 'startup',
+    });
+
+    await act(async () => {
+      root.render(<Harness enabled initialPageLimit={250} />);
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: persistedScope,
+      reason: 'startup',
+    });
+    expect(mocks.requestRefreshDomain).not.toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: defaultScope,
+      reason: 'startup',
+    });
   });
 
   it('replaces the current row window with the previous cursor page', async () => {
