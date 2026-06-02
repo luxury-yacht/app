@@ -338,7 +338,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'namespace config',
       domain: 'namespace-config',
-      expectedScope: 'cluster-a|namespace:all?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'ConfigMap',
         name: 'local-config',
@@ -361,7 +361,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'namespace network',
       domain: 'namespace-network',
-      expectedScope: 'cluster-a|namespace:all?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'Ingress',
         name: 'local-network',
@@ -384,7 +384,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'namespace storage',
       domain: 'namespace-storage',
-      expectedScope: 'cluster-a|namespace:all?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'PersistentVolumeClaim',
         name: 'local-storage',
@@ -409,7 +409,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'namespace quotas',
       domain: 'namespace-quotas',
-      expectedScope: 'cluster-a|namespace:all?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'ResourceQuota',
         name: 'local-quota',
@@ -434,7 +434,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'namespace RBAC',
       domain: 'namespace-rbac',
-      expectedScope: 'cluster-a|namespace:all?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'Role',
         name: 'local-rbac',
@@ -457,7 +457,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'namespace events',
       domain: 'namespace-events',
-      expectedScope: 'cluster-a|namespace:all?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'Event',
         name: 'local-event',
@@ -540,7 +540,7 @@ describe('query-backed leaf first load', () => {
       },
       domain: 'namespace-autoscaling',
       expectedName: 'query-autoscaling',
-      expectedScope: 'cluster-a|namespace:all?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
     });
   });
 
@@ -581,7 +581,7 @@ describe('query-backed leaf first load', () => {
       },
       domain: 'namespace-helm',
       expectedName: 'query-release',
-      expectedScope: 'cluster-a|namespace:all?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
     });
   });
 
@@ -734,7 +734,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'cluster config',
       domain: 'cluster-config',
-      expectedScope: 'cluster-a|?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|?limit=50&sort=name&sortDirection=asc',
       local: { kind: 'StorageClass', name: 'local-config', clusterId: 'cluster-a', age: '1h' },
       query: { kind: 'StorageClass', name: 'query-config', clusterId: 'cluster-a', age: '2h' },
       payloadField: 'resources',
@@ -743,7 +743,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'cluster storage',
       domain: 'cluster-storage',
-      expectedScope: 'cluster-a|?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'PersistentVolume',
         name: 'local-volume',
@@ -766,7 +766,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'cluster RBAC',
       domain: 'cluster-rbac',
-      expectedScope: 'cluster-a|?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'ClusterRole',
         name: 'local-rbac',
@@ -787,7 +787,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'cluster CRDs',
       domain: 'cluster-crds',
-      expectedScope: 'cluster-a|?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'CustomResourceDefinition',
         name: 'locals.example.com',
@@ -859,7 +859,7 @@ describe('query-backed leaf first load', () => {
       },
       domain: 'cluster-events',
       expectedName: 'query-event',
-      expectedScope: 'cluster-a|cluster?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|cluster?limit=50&sort=name&sortDirection=asc',
     });
   });
 
@@ -873,7 +873,7 @@ describe('query-backed leaf first load', () => {
       },
       domain: 'nodes',
       expectedName: 'query-node',
-      expectedScope: 'cluster-a|?limit=250&sort=name&sortDirection=asc',
+      expectedScope: 'cluster-a|?limit=50&sort=name&sortDirection=asc',
     });
   });
 });

@@ -1323,7 +1323,7 @@ describe('refreshOrchestrator', () => {
     registerStreamingPodsDomain();
     const scope = buildClusterScope(
       'cluster-a',
-      'namespace:all?limit=250&sort=name&sortDirection=asc'
+      'namespace:all?limit=50&sort=name&sortDirection=asc'
     );
     refreshOrchestrator.updateContext({
       currentView: 'namespace',

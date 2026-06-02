@@ -29,8 +29,8 @@ import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 export type { BrowseFilterOptions, BrowseFilters } from './browseCatalogData';
 
 const BROWSE_SEARCH_DEBOUNCE_MS = 250;
-export const BROWSE_PAGE_LIMIT_OPTIONS = [100, 250, 500, 1000] as const;
-const DEFAULT_BROWSE_PAGE_LIMIT = BROWSE_PAGE_LIMIT_OPTIONS[2];
+export const BROWSE_PAGE_LIMIT_OPTIONS = [25, 50, 100, 250, 500, 1000] as const;
+const DEFAULT_BROWSE_PAGE_LIMIT = 50;
 export type BrowsePageLimit = (typeof BROWSE_PAGE_LIMIT_OPTIONS)[number];
 
 const browseCatalogSortDescriptor = (

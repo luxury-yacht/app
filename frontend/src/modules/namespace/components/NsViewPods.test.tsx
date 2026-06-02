@@ -397,7 +397,7 @@ describe('NsViewPods', () => {
     expect(gridTablePropsRef.current.data).toEqual([queryPod]);
     expect(gridTablePropsRef.current.paginationControls?.props).toMatchObject({
       pageIndex: 1,
-      pageSize: 250,
+      pageSize: 50,
       totalCount: 1,
       totalIsExact: true,
       hasPrevious: false,
@@ -406,7 +406,7 @@ describe('NsViewPods', () => {
     expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         domain: 'pods',
-        scope: 'alpha:ctx|namespace:all?limit=250&sort=name&sortDirection=asc',
+        scope: 'alpha:ctx|namespace:all?limit=50&sort=name&sortDirection=asc',
       })
     );
     expect(queryNamespacesPermissionsMock).toHaveBeenCalledWith(

@@ -45,8 +45,8 @@ export interface UseTypedResourceQueryResult<TRow> {
   dynamic: ResourceQueryDynamicRef | null;
 }
 
-const DEFAULT_PAGE_LIMIT = 250;
-export const TYPED_QUERY_PAGE_LIMIT_OPTIONS = [100, 250, 500, 1000] as const;
+const DEFAULT_PAGE_LIMIT = 50;
+export const TYPED_QUERY_PAGE_LIMIT_OPTIONS = [25, 50, 100, 250, 500, 1000] as const;
 export type TypedQueryPageLimit = (typeof TYPED_QUERY_PAGE_LIMIT_OPTIONS)[number];
 
 export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>({

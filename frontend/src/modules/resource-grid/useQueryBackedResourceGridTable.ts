@@ -76,7 +76,7 @@ export function useQueryBackedNamespaceResourceGridTable<
 }: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
-  const [pageLimit, setPageLimit] = useState<TypedQueryPageLimit>(250);
+  const [pageLimit, setPageLimit] = useState<TypedQueryPageLimit>(50);
   const handlePublishedTableState = useCallback(
     (next: QueryBackedTableState) => {
       setTableStateReady(true);
@@ -200,7 +200,7 @@ export function useQueryBackedClusterResourceGridTable<
   );
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
-  const [pageLimit, setPageLimit] = useState<TypedQueryPageLimit>(250);
+  const [pageLimit, setPageLimit] = useState<TypedQueryPageLimit>(50);
   const handlePublishedTableState = useCallback(
     (next: QueryBackedTableState) => {
       setTableStateReady(true);

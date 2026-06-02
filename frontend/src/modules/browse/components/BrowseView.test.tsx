@@ -296,7 +296,7 @@ describe('BrowseView', () => {
         scope: 'Cluster',
       });
       refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=500&namespace=cluster';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
       refreshMocks.catalogDomain.data = catalogPayload([node], {
         kinds: [
           { kind: 'Node', namespaced: false },
@@ -332,12 +332,12 @@ describe('BrowseView', () => {
 
       expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=500&namespace=cluster',
+        'cluster-1|limit=50&namespace=cluster',
         true
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=500&namespace=cluster',
+        'cluster-1|limit=50&namespace=cluster',
         expect.objectContaining({ isManual: false })
       );
     });
@@ -386,7 +386,7 @@ describe('BrowseView', () => {
   describe('Namespace scope (namespace=specific)', () => {
     it('renders the first namespace page directly from the catalog query payload', async () => {
       refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=500&namespace=team-a';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=team-a';
       refreshMocks.catalogDomain.data = catalogPayload([
         catalogItem({
           namespace: 'team-a',
@@ -446,7 +446,7 @@ describe('BrowseView', () => {
       // The scope should include the pinned namespace
       expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=500&namespace=kube-system',
+        'cluster-1|limit=50&namespace=kube-system',
         true
       );
     });
@@ -455,7 +455,7 @@ describe('BrowseView', () => {
   describe('All Namespaces scope', () => {
     it('renders the first all-namespaces page directly from the catalog query payload', async () => {
       refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=500';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50';
       refreshMocks.catalogDomain.data = catalogPayload([
         catalogItem({
           namespace: 'team-b',
@@ -522,14 +522,14 @@ describe('BrowseView', () => {
         namespaces: ['default'],
         caseSensitive: false,
       };
-      refreshMocks.scopedDomains.set('cluster-1|limit=500&search=api&kind=Pod&namespace=default', {
+      refreshMocks.scopedDomains.set('cluster-1|limit=50&search=api&kind=Pod&namespace=default', {
         status: 'ready',
         data: {
           items: [],
           kinds: [{ kind: 'Pod', namespaced: true }],
           namespaces: ['default'],
         },
-        scope: 'cluster-1|limit=500&search=api&kind=Pod&namespace=default',
+        scope: 'cluster-1|limit=50&search=api&kind=Pod&namespace=default',
       });
       refreshMocks.scopedDomains.set('cluster-1|limit=1', {
         status: 'ready',
@@ -559,7 +559,7 @@ describe('BrowseView', () => {
 
   describe('Row cap UI', () => {
     it('renders query pagination in the table footer and suppresses split top counts', async () => {
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=500&namespace=cluster';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [
           {
@@ -599,7 +599,7 @@ describe('BrowseView', () => {
       expect(gridTablePropsRef.current.filters.options.showResultCount).toBe(false);
       expect(gridTablePropsRef.current.paginationControls?.props).toMatchObject({
         pageIndex: 1,
-        pageSize: 500,
+        pageSize: 50,
         totalCount: 1200,
         totalIsExact: true,
         hasPrevious: false,
@@ -609,7 +609,7 @@ describe('BrowseView', () => {
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
         1,
         'catalog',
-        'cluster-1|limit=500&namespace=cluster',
+        'cluster-1|limit=50&namespace=cluster',
         expect.objectContaining({ isManual: false })
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
@@ -621,7 +621,7 @@ describe('BrowseView', () => {
     });
 
     it('surfaces catalog degraded reasons in table filter state', async () => {
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=500&namespace=cluster';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [],
         batchSize: 0,
@@ -651,7 +651,7 @@ describe('BrowseView', () => {
 
   describe('Action facts', () => {
     it('threads catalog action facts into shared context-menu actions', async () => {
-      refreshMocks.scopedDomains.set('cluster-1|limit=500&namespace=default', {
+      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
         status: 'ready',
         data: {
           items: [
@@ -690,7 +690,7 @@ describe('BrowseView', () => {
           ],
           namespaces: ['default'],
         },
-        scope: 'cluster-1|limit=500&namespace=default',
+        scope: 'cluster-1|limit=50&namespace=default',
       });
 
       await act(async () => {
@@ -726,7 +726,7 @@ describe('BrowseView', () => {
         namespaces: [],
         caseSensitive: false,
       };
-      refreshMocks.scopedDomains.set('cluster-1|limit=500&namespace=default', {
+      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
         status: 'ready',
         data: {
           items: [],
@@ -734,7 +734,7 @@ describe('BrowseView', () => {
           namespaces: ['default'],
           total: 1,
         },
-        scope: 'cluster-1|limit=500&namespace=default',
+        scope: 'cluster-1|limit=50&namespace=default',
       });
 
       await act(async () => {
@@ -752,7 +752,7 @@ describe('BrowseView', () => {
     });
 
     it('copies all backend-matching rows with the Browse query scope', async () => {
-      refreshMocks.scopedDomains.set('cluster-1|limit=500&namespace=default', {
+      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
         status: 'ready',
         data: {
           items: [
@@ -774,7 +774,7 @@ describe('BrowseView', () => {
           namespaces: ['default'],
           total: 1,
         },
-        scope: 'cluster-1|limit=500&namespace=default',
+        scope: 'cluster-1|limit=50&namespace=default',
       });
 
       await act(async () => {
@@ -807,7 +807,7 @@ describe('BrowseView', () => {
 
   describe('Query-wide bulk actions', () => {
     it('confirms and runs delete against the backend Browse query descriptor', async () => {
-      refreshMocks.scopedDomains.set('cluster-1|limit=500&namespace=default', {
+      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
         status: 'ready',
         data: {
           items: [
@@ -829,7 +829,7 @@ describe('BrowseView', () => {
           namespaces: ['default'],
           total: 1,
         },
-        scope: 'cluster-1|limit=500&namespace=default',
+        scope: 'cluster-1|limit=50&namespace=default',
       });
 
       await act(async () => {
@@ -897,7 +897,7 @@ describe('BrowseView', () => {
           },
         ],
       });
-      refreshMocks.scopedDomains.set('cluster-1|limit=500&namespace=default', {
+      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
         status: 'ready',
         data: {
           items: [
@@ -919,7 +919,7 @@ describe('BrowseView', () => {
           namespaces: ['default'],
           total: 1,
         },
-        scope: 'cluster-1|limit=500&namespace=default',
+        scope: 'cluster-1|limit=50&namespace=default',
       });
 
       await act(async () => {
