@@ -233,6 +233,27 @@ vi.mock('@/core/data-access', () => ({
   useScopedRefreshDomainLifecycle: vi.fn(),
 }));
 
+vi.mock('@/core/refresh', () => ({
+  useRefreshScopedDomain: (_domain: string, scope: string) =>
+    scope.includes('?')
+      ? {
+          status: 'idle',
+          data: null,
+          stats: null,
+          droppedAutoRefreshes: 0,
+        }
+      : {
+          status: 'ready',
+          data: { pods: [] },
+          stats: null,
+          version: 1,
+          checksum: '',
+          lastUpdated: 1,
+          droppedAutoRefreshes: 0,
+        },
+  refreshManager: { triggerManualRefresh: vi.fn() },
+}));
+
 vi.mock('@wailsjs/go/backend/App', () => ({
   RunObjectAction: (...args: unknown[]) => runObjectActionMock(...(args as [])),
 }));

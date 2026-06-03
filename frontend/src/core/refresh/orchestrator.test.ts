@@ -271,6 +271,21 @@ describe('refreshOrchestrator', () => {
     });
   };
 
+  const registerStreamingNodesDomain = () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'nodes',
+      refresherName: CLUSTER_REFRESHERS.nodes,
+      category: 'cluster',
+      streaming: {
+        start: (scope: string) => resourceStreamMocks.start(scope),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          resourceStreamMocks.stop(scope, options),
+        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
+        metricsOnly: true,
+      },
+    });
+  };
+
   const makePodRow = (overrides: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry => ({
     clusterId: 'cluster-a',
     namespace: 'default',
@@ -289,6 +304,47 @@ describe('refreshOrchestrator', () => {
     memLimit: '20Mi',
     memUsage: '20Mi',
     ...overrides,
+  });
+
+  it('does not let a metrics-only nodes refresh create the initial empty nodes payload', async () => {
+    registerStreamingNodesDomain();
+    const scope = buildClusterScope('cluster-a', '');
+    resetAllScopedDomainStates('nodes');
+    setRuntimeScopeEnabled('nodes', scope, true);
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'nodes',
+        scope,
+        version: 1,
+        checksum: 'etag-node-metrics',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          clusterId: 'cluster-a',
+          nodes: [],
+          metrics: { stale: false, successCount: 1, failureCount: 0 },
+        },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      etag: 'etag-node-metrics',
+      notModified: false,
+    });
+
+    await orchestratorInternals.performFetch('nodes', scope, {
+      isManual: false,
+      metricsOnly: true,
+    });
+
+    const state = getScopedDomainState('nodes', scope);
+    expect(state.status).toBe('idle');
+    expect(state.data).toBeNull();
+    expect(
+      orchestratorInternals
+        .getRuntimeForScope('nodes', scope)
+        .isMetricsRefreshFresh('nodes', scope, Number.POSITIVE_INFINITY)
+    ).toBe(false);
+
+    resetAllScopedDomainStates('nodes');
   });
 
   it('refreshes namespaces domain alongside context targets during manual refresh', async () => {

@@ -32,6 +32,7 @@ type Service struct {
 	group             singleflight.Group
 	sequence          uint64
 	cluster           ClusterMeta
+	informerHub       refresh.InformerHub
 	cacheMu           sync.RWMutex
 	cache             map[string]cacheEntry
 	cacheTTL          time.Duration
@@ -51,6 +52,8 @@ type BuildRequest struct {
 	Scope   string
 	Cluster ClusterMeta
 }
+
+const informerSyncPollInterval = 25 * time.Millisecond
 
 // NewService returns a Service for the provided registry.
 func NewService(reg *domain.Registry, recorder *telemetry.Recorder, meta ClusterMeta) *Service {
@@ -88,6 +91,17 @@ func newService(
 	}
 }
 
+// WithInformerHub makes snapshot builds wait until the refresh informer caches
+// are synced. Without this guard, early table requests can cache empty lister
+// results before the first authoritative Kubernetes list has completed.
+func (s *Service) WithInformerHub(hub refresh.InformerHub) *Service {
+	if s == nil {
+		return s
+	}
+	s.informerHub = hub
+	return s
+}
+
 // Build returns a snapshot for the requested domain/scope.
 func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh.Snapshot, error) {
 	return s.BuildRequest(BuildRequest{
@@ -109,6 +123,9 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 	var err error
 	ctx, permissionCacheKey, err = s.ensurePermissions(ctx, domainName, scope)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.waitForInformerSync(ctx); err != nil {
 		return nil, err
 	}
 	cacheKey := s.cacheKey(domainName, scope)
@@ -187,6 +204,24 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 		return nil, err
 	}
 	return value.(*refresh.Snapshot), nil
+}
+
+func (s *Service) waitForInformerSync(ctx context.Context) error {
+	if s == nil || s.informerHub == nil || s.informerHub.HasSynced(ctx) {
+		return nil
+	}
+	ticker := time.NewTicker(informerSyncPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("refresh informer caches not synced: %w", ctx.Err())
+		case <-ticker.C:
+			if s.informerHub.HasSynced(ctx) {
+				return nil
+			}
+		}
+	}
 }
 
 // ensurePermissions blocks snapshot builds when the current identity no longer has list access.

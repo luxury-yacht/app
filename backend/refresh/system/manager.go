@@ -215,7 +215,12 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		return nil, err
 	}
 
-	snapshotService := snapshot.NewServiceWithPermissions(registry, telemetryRecorder, clusterMeta, runtimePerms)
+	snapshotService := snapshot.NewServiceWithPermissions(
+		registry,
+		telemetryRecorder,
+		clusterMeta,
+		runtimePerms,
+	).WithInformerHub(informerFactory)
 	queue := refresh.NewInMemoryQueue()
 
 	manager := refresh.NewManager(registry, informerFactory, snapshotService, metricsPoller, queue)

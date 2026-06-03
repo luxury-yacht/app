@@ -735,6 +735,10 @@ export class ResourceStreamManager {
         subscription.preserveMetrics
       );
 
+      if (!previous.data && nextRows.length === 0) {
+        return previous;
+      }
+
       if (previous.data && nextRows === existingRows) {
         return previous;
       }

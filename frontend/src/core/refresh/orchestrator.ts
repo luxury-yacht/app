@@ -1032,6 +1032,7 @@ class RefreshOrchestrator {
         return;
       }
 
+      let metricsSnapshotApplied = false;
       if (metricsOnly) {
         const applied = applyMetricsSnapshot({
           domain,
@@ -1041,15 +1042,13 @@ class RefreshOrchestrator {
           scope: normalizedScope,
           clearRefreshError: this.clearRefreshError.bind(this),
         });
+        metricsSnapshotApplied = applied;
         if (!applied) {
-          this.applySnapshot(
-            domain,
-            snapshot,
-            etag,
-            options.isManual,
-            normalizedScope,
-            options.allowDisabledRetainedScope
-          );
+          setScopedDomainState(domain, normalizedScope, (prev) => ({
+            ...prev,
+            status: prev.data ? 'ready' : 'idle',
+            isManual: options.isManual,
+          }));
         }
       } else {
         this.applySnapshot(
@@ -1061,7 +1060,7 @@ class RefreshOrchestrator {
           options.allowDisabledRetainedScope
         );
       }
-      if (metricsOnly && !options.isManual) {
+      if (metricsOnly && metricsSnapshotApplied && !options.isManual) {
         runtime.recordMetricsRefresh(domain, normalizedScope);
       }
     } catch (error) {

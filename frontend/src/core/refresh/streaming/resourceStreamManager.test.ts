@@ -1953,6 +1953,33 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.nodes?.[0]?.name).toBe('node-a');
   });
 
+  test('does not create an initial empty nodes payload from pre-baseline stream updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', '');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('nodes', storeScope);
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'DELETED',
+        domain: 'nodes',
+        resourceVersion: '11',
+        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getScopedDomainState('nodes', storeScope);
+    expect(state.status).toBe('idle');
+    expect(state.data).toBeNull();
+  });
+
   test('accepts updates even when resource versions regress if sequences advance', async () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;

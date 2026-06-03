@@ -521,6 +521,149 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     );
   });
 
+  it('does not expose a loaded empty cluster table while the live base domain is still idle', async () => {
+    let result:
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const Probe: React.FC = () => {
+      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        localData: [],
+        localLoaded: true,
+        localLoading: false,
+        selectRows,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    liveDomainStateRef.current = {
+      status: 'idle',
+      data: null,
+      version: undefined,
+      checksum: undefined,
+      lastUpdated: undefined,
+    };
+    useTypedResourceQueryMock.mockReturnValue({
+      rows: [],
+      loading: false,
+      loaded: true,
+      error: null,
+      continueToken: null,
+      hasPrevious: false,
+      isRequestingMore: false,
+      loadMore: vi.fn(),
+      loadPrevious: vi.fn(),
+      pageIndex: 1,
+      pageSize: 50,
+      totalCount: 0,
+      totalIsExact: true,
+      filterOptions: {},
+      dynamic: null,
+    });
+    useClusterResourceGridTableMock.mockReturnValue({
+      gridTableProps: {
+        data: [],
+      },
+      favModal: null,
+    });
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useClusterResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange(publishedTableState);
+      await Promise.resolve();
+    });
+
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false })
+    );
+    expect(result?.loading).toBe(true);
+    expect(result?.loaded).toBe(false);
+    expect(result?.rows).toEqual([]);
+  });
+
+  it('does not expose a loaded empty namespace table while the live base domain is still idle', async () => {
+    let result:
+      | ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const Probe: React.FC = () => {
+      result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'namespace-config',
+        label: 'All Namespaces Config',
+        localData: [],
+        localLoaded: true,
+        localLoading: false,
+        selectRows,
+        viewId: 'namespace-config',
+        namespace: ALL_NAMESPACES_SCOPE,
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    liveDomainStateRef.current = {
+      status: 'idle',
+      data: null,
+      version: undefined,
+      checksum: undefined,
+      lastUpdated: undefined,
+    };
+    useTypedResourceQueryMock.mockReturnValue({
+      rows: [],
+      loading: false,
+      loaded: true,
+      error: null,
+      continueToken: null,
+      hasPrevious: false,
+      isRequestingMore: false,
+      loadMore: vi.fn(),
+      loadPrevious: vi.fn(),
+      pageIndex: 1,
+      pageSize: 50,
+      totalCount: 0,
+      totalIsExact: true,
+      filterOptions: {},
+      dynamic: null,
+    });
+    useNamespaceResourceGridTableMock.mockReturnValue({
+      gridTableProps: {
+        data: [],
+      },
+      favModal: null,
+    });
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useNamespaceResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange(publishedTableState);
+      await Promise.resolve();
+    });
+
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false })
+    );
+    expect(result?.loading).toBe(true);
+    expect(result?.loaded).toBe(false);
+    expect(result?.rows).toEqual([]);
+  });
+
   it('does not expose table loading during a query refresh that already has rows', async () => {
     let result:
       | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
