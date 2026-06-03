@@ -249,6 +249,74 @@ describe('GridTableFiltersBar', () => {
     ).toBeNull();
   });
 
+  it('keeps search input focused across controlled filter updates', async () => {
+    const setInputValue = (input: HTMLInputElement, value: string) => {
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+      descriptor?.set?.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    const Harness = () => {
+      const [search, setSearch] = React.useState('');
+      return (
+        <ZoomProvider>
+          <GridTableFiltersBar
+            activeFilters={{
+              search,
+              kinds: [],
+              namespaces: [],
+              caseSensitive: false,
+              includeMetadata: false,
+            }}
+            resolvedFilterOptions={{
+              searchBehavior: 'query',
+              kinds: [],
+              namespaces: [],
+            }}
+            kindDropdownId="kinds"
+            namespaceDropdownId="namespaces"
+            searchInputId="search"
+            onKindsChange={vi.fn()}
+            onNamespacesChange={vi.fn()}
+            onSearchChange={setSearch}
+            onReset={vi.fn()}
+            onToggleCaseSensitive={vi.fn()}
+            renderOption={(option) => option.label}
+            renderKindsValue={() => 'Kinds'}
+            renderNamespacesValue={() => 'Namespaces'}
+          />
+        </ZoomProvider>
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    const input = container.querySelector<HTMLInputElement>('#search');
+    expect(input).not.toBeNull();
+
+    await act(async () => {
+      input?.focus();
+      setInputValue(input!, 'p');
+      await Promise.resolve();
+    });
+
+    const updatedInput = container.querySelector<HTMLInputElement>('#search');
+    expect(document.activeElement).toBe(updatedInput);
+    expect(updatedInput?.value).toBe('p');
+
+    await act(async () => {
+      setInputValue(updatedInput!, 'po');
+      await Promise.resolve();
+    });
+
+    const finalInput = container.querySelector<HTMLInputElement>('#search');
+    expect(document.activeElement).toBe(finalInput);
+    expect(finalInput?.value).toBe('po');
+  });
+
   it('hides the case-sensitive toggle for query-backed search', async () => {
     await renderFilters({
       resolvedFilterOptions: {

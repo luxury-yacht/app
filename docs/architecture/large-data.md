@@ -174,29 +174,37 @@ legacy domains remain registered only for explicit resource-stream and
 diagnostic compatibility surfaces; any future surface that enables them pays the
 old full-CR-row fanout cost and must not be described as large-table-safe.
 
-Events: cluster, namespace, and object-panel events are recent/capped snapshot
-windows. They remain `Local Partial` until a real event query API exists.
+Events: cluster and namespace event tables use typed backend query pages over
+the current event set and are `Query Backed Static` for table search, filters,
+sort, counts, and cursor pagination. Object-panel events remain object-scoped
+recent/capped windows and are visibly `Local Partial`.
 
-Nodes: `backend/refresh/snapshot/nodes.go` is usually bounded by cluster node
-count, but CPU/memory are metric fields. Nodes remain local below threshold and
-move to `Query Backed Dynamic` only if measured node count crosses the table
-scale threshold.
+Nodes: `backend/refresh/snapshot/nodes.go` feeds a `Query Backed Dynamic`
+cluster table. Search, pagination, status filters, age sort, and CPU/memory
+metric sorts are backend-owned for the current resource and metric projection
+state.
 
-Config, RBAC, storage, network, quotas, autoscaling, and Helm: current snapshot
-producers are typed refresh domains. Single-namespace bounded views may remain
-local; all-namespaces or capped snapshot views either remain visibly `Local
-Partial` or migrate to `Query Backed Static` after measured fixtures justify it.
+Config, RBAC, storage, network, quotas, autoscaling, and Helm: these snapshot
+producers expose typed backend query pages for high-cardinality cluster or
+all-namespaces surfaces. Single-namespace bounded views may remain local only
+while producer stats prove they are complete; when producer stats report
+truncation they must render visibly `Local Partial` semantics.
 
-## App-Wide Remaining Work
+## App-Wide Table State
 
-The completed large-table slice covers Browse, Custom resource tables,
-all-namespaces Pods, all-namespaces Workloads, and shared table-mode
-enforcement. It does not make every production table globally query-backed.
+The app-wide hardening pass is complete as of
+[`docs/plans/app-wide-table-hardening.md`](../plans/app-wide-table-hardening.md):
+every production resource table is query-backed, proven owner/scope bounded, or
+visibly Local Partial with matching action limits. Completion does not mean
+every table is globally query-backed; it means no production table may present a
+capped, recent, buffered, degraded, or page-limited row set as complete global
+data.
 
-The active remaining plan is
-[`docs/plans/app-wide-table-hardening.md`](../plans/app-wide-table-hardening.md).
-Do not claim app-wide large-table completion until that plan's Definition of
-Done is satisfied.
+Future table work must preserve that contract. If measured fixtures show that a
+currently Local Complete table can exceed its scope budget, either migrate it to
+`Query Backed Static` / `Query Backed Dynamic` or make it visibly
+`Local Partial` with honest counts, filters, export, selection, and destructive
+action semantics.
 
 ## Current Browse Budget
 

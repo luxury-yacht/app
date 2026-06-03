@@ -24,6 +24,10 @@ workflow and that exception is documented.
 - Rows-per-page is persisted table state. Store it with the same
   cluster/view/namespace persistence key as sort, filters, widths, and column
   visibility, and validate it against the table's supported page-size options.
+- Filter inputs and pagination dropdowns are interaction contracts, not just
+  rendering details. Changes to them need tests proving controlled search keeps
+  focus across updates and rows-per-page menus open and dispatch supported
+  values.
 
 ## Ownership
 
@@ -94,6 +98,8 @@ When changing table behavior:
 4. Verify partial/degraded copy and action limits for Local Partial tables.
 5. Keep shared behavior in focused table hooks rather than feature components.
 6. Add tests with enough rows and columns to exercise the shared path.
+7. For filter or footer changes, add interaction tests for focus retention,
+   dropdown opening, and button disabled/loading behavior.
 
 ## Validation
 
