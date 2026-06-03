@@ -51,6 +51,7 @@ export function useTableSort<T>(
 ) {
   const controlledSort = options?.controlledSort;
   const onChange = options?.onChange;
+  const isControlled = controlledSort !== undefined || Boolean(onChange);
   const diagnosticsLabel = options?.diagnosticsLabel;
   const disableLocalSort = options?.disableLocalSort ?? false;
   const columns = options?.columns;
@@ -81,8 +82,8 @@ export function useTableSort<T>(
       return { key, direction: defaultDirection };
     };
 
-    if (controlledSort) {
-      const next = computeNext(controlledSort);
+    if (isControlled) {
+      const next = computeNext(controlledSort ?? sortConfig);
       onChange?.(next);
       return;
     }

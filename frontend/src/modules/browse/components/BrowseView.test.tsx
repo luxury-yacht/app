@@ -150,6 +150,12 @@ const refreshMocks = vi.hoisted(() => ({
   scopedDomains: new Map<string, any>(),
 }));
 
+const persistenceMocks = vi.hoisted(() => ({
+  clusterSortConfig: { current: { key: 'kind', direction: 'asc' } as any },
+  clusterSetSortConfig: vi.fn(),
+  namespaceOnSortChange: vi.fn(),
+}));
+
 vi.mock('@/core/refresh', () => ({
   refreshManager: refreshMocks.manager,
   refreshOrchestrator: refreshMocks.orchestrator,
@@ -160,8 +166,8 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
   useGridTablePersistence: (params: any) => {
     persistenceArgsRef.cluster = params;
     return {
-      sortConfig: { key: 'kind', direction: 'asc' },
-      setSortConfig: vi.fn(),
+      sortConfig: persistenceMocks.clusterSortConfig.current,
+      setSortConfig: persistenceMocks.clusterSetSortConfig,
       columnWidths: null,
       setColumnWidths: vi.fn(),
       columnVisibility: null,
@@ -182,7 +188,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
     persistenceArgsRef.namespace = params;
     return {
       sortConfig: { key: 'kind', direction: 'asc' },
-      onSortChange: vi.fn(),
+      onSortChange: persistenceMocks.namespaceOnSortChange,
       columnWidths: null,
       setColumnWidths: vi.fn(),
       columnVisibility: null,
@@ -278,6 +284,9 @@ describe('BrowseView', () => {
     });
     persistenceArgsRef.cluster = null;
     persistenceArgsRef.namespace = null;
+    persistenceMocks.clusterSortConfig.current = { key: 'kind', direction: 'asc' };
+    persistenceMocks.clusterSetSortConfig.mockReset();
+    persistenceMocks.namespaceOnSortChange.mockReset();
     persistenceFiltersRef.current = { search: '', kinds: [], namespaces: [], caseSensitive: false };
     exportCatalogQueryCSVFileMock
       .mockReset()
@@ -372,6 +381,24 @@ describe('BrowseView', () => {
       });
 
       expect(sortableKeys()).toEqual(['age', 'kind', 'name']);
+    });
+
+    it('publishes header sort changes to cluster browse persistence when no sort is hydrated', async () => {
+      persistenceMocks.clusterSortConfig.current = null;
+
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      act(() => {
+        gridTablePropsRef.current?.onSort?.('name');
+      });
+
+      expect(persistenceMocks.clusterSetSortConfig).toHaveBeenCalledWith({
+        key: 'name',
+        direction: 'asc',
+      });
     });
 
     it('hides namespace filtering for cluster scope (cluster-scoped objects only)', async () => {

@@ -21,6 +21,8 @@ rendered contract test in
   must not be published as table sort keys.
 - Persisted sort keys that no longer map to a current sortable column are
   pruned by table persistence.
+- Query-backed tables must publish sort changes through their controlled sort
+  callback even when the hydrated persisted sort value starts as `null`.
 - Hydrated post-page fields on catalog-backed custom-resource tables are not
   advertised as globally sortable query fields.
 - Durable GridTable sorting guidance is recorded in
@@ -57,3 +59,4 @@ rendered contract test in
 
 - ✅ `npm test --prefix frontend -- useGridTableHeaderRow useGridTableHeaderContextMenu gridTablePersistence useGridTableColumnMeasurer useTableSort GridTable`
 - ✅ `npm test --prefix frontend -- queryBackedLeafFirstLoad useQueryBackedResourceGridTable useResourceGridTable BrowseView ClusterViewCustom NsViewCustom JobsTab PodsTab`
+- ✅ `npm test --prefix frontend -- useTableSort BrowseView useBrowseCatalog browseCatalogData queryBackedLeafFirstLoad useQueryBackedResourceGridTable useResourceGridTable`
