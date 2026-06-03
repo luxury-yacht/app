@@ -142,6 +142,31 @@ describe('gridTablePersistence', () => {
     expect(pruned?.sort).toBeUndefined();
   });
 
+  it('keeps persisted sort keys for columns that are sortable by default', () => {
+    const pruned = prunePersistedState(
+      {
+        version: 1,
+        sort: { key: 'status', direction: 'desc' },
+      },
+      {
+        columns: sampleColumns,
+        rows: sampleRows,
+        keyExtractor: (row) => row.id,
+      }
+    );
+
+    expect(pruned?.sort).toEqual({ key: 'status', direction: 'desc' });
+
+    const state = buildPersistedStateForSave({
+      columns: sampleColumns,
+      rows: sampleRows,
+      keyExtractor: (row) => row.id,
+      sort: { key: 'status', direction: 'asc' },
+    });
+
+    expect(state?.sort).toEqual({ key: 'status', direction: 'asc' });
+  });
+
   it('builds a persisted state for saving with pruning and namespace filter stripping', () => {
     const state = buildPersistedStateForSave({
       columns: sampleColumns,

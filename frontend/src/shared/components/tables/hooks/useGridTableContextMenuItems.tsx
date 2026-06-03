@@ -9,6 +9,7 @@ import { useCallback } from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { SortAscIcon, SortDescIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
 // Builds context menu item lists for GridTable cells/headers/empty areas,
@@ -69,7 +70,7 @@ export function useGridTableContextMenuItems<T>({
 
       const column = columns.find((col) => col.key === columnKey);
 
-      if (column?.sortable && onSort) {
+      if (column && isSortableColumn(column) && onSort) {
         const lastItem = items[items.length - 1];
         if (items.length > 0 && !('divider' in lastItem && lastItem.divider)) {
           items.push({ divider: true });

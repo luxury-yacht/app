@@ -16,6 +16,7 @@ import {
   normalizeGridTableFilterArray,
   normalizeGridTableFilterState,
 } from '@shared/components/tables/gridTableFilterState';
+import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 
 export interface GridTablePersistedState {
   version: 1;
@@ -360,7 +361,7 @@ export const prunePersistedState = <T>(
 
   if (persisted.sort && persisted.sort.key) {
     const column = columnMap.get(persisted.sort.key);
-    if (column && column.sortable) {
+    if (isSortableColumn(column)) {
       pruned.sort = {
         key: persisted.sort.key,
         direction: persisted.sort.direction ?? null,
@@ -448,7 +449,7 @@ export const buildPersistedStateForSave = <T>(
 
   if (context.sort && context.sort.key && columnKeys.has(context.sort.key)) {
     const sortable = context.columns.find(
-      (column) => column.key === context.sort!.key && column.sortable
+      (column) => column.key === context.sort!.key && isSortableColumn(column)
     );
     if (sortable) {
       state.sort = {

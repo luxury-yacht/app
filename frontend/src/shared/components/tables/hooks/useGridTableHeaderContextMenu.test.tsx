@@ -77,12 +77,12 @@ const testRows: TestRow[] = [
 ];
 
 // Four columns covering all capability combinations:
-//   status    - sortable + hideable (not in locked set)
+//   status    - implicitly sortable + hideable (not in locked set)
 //   name      - sortable + locked   (non-hideable by default)
 //   kind      - non-sortable + locked (neither sortable nor hideable)
 //   namespace - non-sortable + hideable
 const testColumns: GridColumnDefinition<TestRow>[] = [
-  { key: 'status', header: 'Status', sortable: true, render: (row) => row.status },
+  { key: 'status', header: 'Status', render: (row) => row.status },
   { key: 'name', header: 'Name', sortable: true, render: (row) => row.name },
   { key: 'kind', header: 'Kind', sortable: false, render: (row) => row.kind },
   { key: 'namespace', header: 'Namespace', sortable: false, render: (row) => row.namespace },

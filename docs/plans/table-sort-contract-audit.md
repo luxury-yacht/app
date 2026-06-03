@@ -13,6 +13,9 @@ rendered contract test in
 
 - Query-backed tables publish only sortable column keys that the query backend
   supports for that table mode.
+- `GridTable` treats a column as sortable unless it is explicitly marked
+  `sortable: false`; header clicks, header/cell context menus, width
+  measurement, and persistence pruning must all use that same rule.
 - Default query sort keys must be visible `GridTable` column keys.
 - Hidden data fields such as `ageTimestamp` may be used as sort values, but
   must not be published as table sort keys.
@@ -52,5 +55,5 @@ rendered contract test in
 
 ## Validation Status
 
-Tests and app validation have not been run for this audit because test
-execution is currently paused by request.
+- ✅ `npm test --prefix frontend -- useGridTableHeaderRow useGridTableHeaderContextMenu gridTablePersistence useGridTableColumnMeasurer useTableSort GridTable`
+- ✅ `npm test --prefix frontend -- queryBackedLeafFirstLoad useQueryBackedResourceGridTable useResourceGridTable BrowseView ClusterViewCustom NsViewCustom JobsTab PodsTab`

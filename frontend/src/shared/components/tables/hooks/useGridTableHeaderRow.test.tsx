@@ -35,7 +35,6 @@ const columns: GridColumnDefinition<any>[] = [
   {
     key: 'role',
     header: 'Role',
-    sortable: true,
     className: 'col-role',
     render: (row: any) => row?.role ?? null,
   },

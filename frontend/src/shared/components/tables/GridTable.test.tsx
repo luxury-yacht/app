@@ -1765,7 +1765,7 @@ it('does not hide locked columns through visibility menu', async () => {
   const onColumnVisibilityChange = vi.fn();
   const columns: GridColumnDefinition<SimpleRow>[] = [
     { key: 'name', header: 'Name', render: (row) => row.name ?? row.id },
-    { key: 'extra', header: 'Extra', render: (row) => row.id },
+    { key: 'extra', header: 'Extra', sortable: false, render: (row) => row.id },
   ];
 
   const { container, cleanup } = renderGridTable({

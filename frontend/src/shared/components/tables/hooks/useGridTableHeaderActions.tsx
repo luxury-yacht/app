@@ -11,6 +11,7 @@ import ContextMenu from '@shared/components/ContextMenu';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { SortAscIcon, SortDescIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 
 type SortDirection = 'asc' | 'desc' | null;
 type SortConfig = { key: string; direction: SortDirection };
@@ -56,7 +57,7 @@ export function useGridTableHeaderActions<T>({
 
   const handleHeaderClick = useCallback(
     (column: GridColumnDefinition<T>) => {
-      if (column.sortable && onSort) {
+      if (isSortableColumn(column) && onSort) {
         onSort(column.key);
       }
     },
@@ -83,7 +84,7 @@ export function useGridTableHeaderActions<T>({
       return [];
     }
 
-    const isSortable = Boolean(column.sortable);
+    const isSortable = isSortableColumn(column);
     const isHideable = !lockedColumns.has(column.key);
 
     if (!isSortable && !isHideable) {
