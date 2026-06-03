@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { customCatalogObjectReference, customCatalogRowKey } from './customCatalogRowAdapter';
+import {
+  catalogItemToFallbackCustomRow,
+  customCatalogObjectReference,
+  customCatalogRowKey,
+} from './customCatalogRowAdapter';
 import type { CatalogBackedCustomResourceRow } from './customCatalogRowAdapter';
 
 const row = (group: string): CatalogBackedCustomResourceRow => ({
@@ -30,5 +34,24 @@ describe('customCatalogRowAdapter', () => {
       name: 'primary',
       resource: 'dbinstances',
     });
+  });
+
+  it('formats fallback catalog timestamps as Age values', () => {
+    const fallback = catalogItemToFallbackCustomRow({
+      clusterId: 'cluster-a',
+      kind: 'DBInstance',
+      group: 'rds.services.k8s.aws',
+      version: 'v1alpha1',
+      resource: 'dbinstances',
+      name: 'primary',
+      uid: 'primary-uid',
+      resourceVersion: '1',
+      creationTimestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      scope: 'Cluster',
+    });
+
+    expect(fallback.age).toBe('3h');
+    expect(fallback.age).not.toContain('T');
+    expect(fallback.ageTimestamp).toEqual(expect.any(Number));
   });
 });

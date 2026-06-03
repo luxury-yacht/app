@@ -10,6 +10,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
 import type { CatalogItem } from '@/core/refresh/types';
+import { catalogItemToFallbackCustomRow } from '@modules/browse/hooks/customCatalogRowAdapter';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -190,38 +191,29 @@ const catalogItemFromCustom = (
     status?: string;
   },
   overrides: Partial<CatalogItem> = {}
-): CatalogItem => ({
-  kind: resource.kind,
-  group: resource.apiGroup ?? '',
-  version: resource.apiVersion ?? '',
-  resource: 'widgets',
-  name: resource.name,
-  uid: `${resource.name}-uid`,
-  resourceVersion: '1',
-  creationTimestamp: resource.age ?? '',
-  scope: 'Cluster',
-  clusterId: resource.clusterId,
-  clusterName: resource.clusterName,
-  actionFacts: resource.status ? { status: resource.status } : undefined,
-  ...overrides,
-});
+): CatalogItem => {
+  const creationTimestamp =
+    resource.age === '1d'
+      ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      : (resource.age ?? '');
+  return {
+    kind: resource.kind,
+    group: resource.apiGroup ?? '',
+    version: resource.apiVersion ?? '',
+    resource: 'widgets',
+    name: resource.name,
+    uid: `${resource.name}-uid`,
+    resourceVersion: '1',
+    creationTimestamp,
+    scope: 'Cluster',
+    clusterId: resource.clusterId,
+    clusterName: resource.clusterName,
+    actionFacts: resource.status ? { status: resource.status } : undefined,
+    ...overrides,
+  };
+};
 
-const catalogItemToClusterCustomData = (item: CatalogItem) => ({
-  kind: item.kind,
-  kindAlias: item.kind,
-  name: item.name,
-  clusterId: item.clusterId,
-  clusterName: item.clusterName,
-  apiGroup: item.group,
-  apiVersion: item.version,
-  group: item.group,
-  version: item.version,
-  resource: item.resource,
-  crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
-  status: item.actionFacts?.status,
-  statusPresentation: item.actionFacts?.status,
-  age: item.creationTimestamp,
-});
+const catalogItemToClusterCustomData = (item: CatalogItem) => catalogItemToFallbackCustomRow(item);
 
 describe('ClusterViewCustom', () => {
   let container: HTMLDivElement;
@@ -272,8 +264,10 @@ describe('ClusterViewCustom', () => {
         apiGroup: 'example.com',
         apiVersion: 'v1',
         crdName: 'widgets.example.com',
+        age: '1d',
       }),
     ]);
+    expect(props.data[0].age).not.toContain('T');
 
     props.getCustomContextMenuItems(props.data[0], 'kind')[0].onClick();
     expect(openWithObjectMock).toHaveBeenCalledWith(

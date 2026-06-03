@@ -1,5 +1,6 @@
 import type { CatalogItem } from '@/core/refresh/types';
 import type { ResourceGridTableRow } from '@modules/resource-grid/resourceGridTableTypes';
+import { formatAge } from '@/utils/ageFormatter';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -30,6 +31,7 @@ export interface CatalogBackedCustomResourceRow extends ResourceGridTableRow {
     message?: string;
   }>;
   age?: string;
+  ageTimestamp?: number;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
 }
@@ -112,23 +114,28 @@ export const customCatalogCRDReference = (
 
 export const catalogItemToFallbackCustomRow = (
   item: CatalogItem
-): CatalogBackedCustomResourceRow => ({
-  kind: item.kind,
-  kindAlias: item.kind,
-  name: item.name,
-  namespace: item.namespace ?? '',
-  clusterId: item.clusterId,
-  clusterName: item.clusterName,
-  group: item.group,
-  version: item.version,
-  resource: item.resource,
-  apiGroup: item.group,
-  apiVersion: item.version,
-  crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
-  status: item.actionFacts?.status,
-  statusPresentation: item.actionFacts?.status,
-  age: item.creationTimestamp,
-});
+): CatalogBackedCustomResourceRow => {
+  const created = item.creationTimestamp ? new Date(item.creationTimestamp) : undefined;
+  const ageTimestamp = created && !Number.isNaN(created.getTime()) ? created.getTime() : undefined;
+  return {
+    kind: item.kind,
+    kindAlias: item.kind,
+    name: item.name,
+    namespace: item.namespace ?? '',
+    clusterId: item.clusterId,
+    clusterName: item.clusterName,
+    group: item.group,
+    version: item.version,
+    resource: item.resource,
+    apiGroup: item.group,
+    apiVersion: item.version,
+    crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
+    status: item.actionFacts?.status,
+    statusPresentation: item.actionFacts?.status,
+    age: ageTimestamp ? formatAge(created) : undefined,
+    ageTimestamp,
+  };
+};
 
 export const normalizeHydratedCustomRow = (row: any): CatalogBackedCustomResourceRow => {
   const group = row.group ?? row.apiGroup ?? '';
@@ -153,6 +160,7 @@ export const normalizeHydratedCustomRow = (row: any): CatalogBackedCustomResourc
     observedGeneration: row.observedGeneration,
     conditions: row.conditions,
     age: row.age,
+    ageTimestamp: row.ageTimestamp,
     labels: row.labels,
     annotations: row.annotations,
   };
