@@ -220,6 +220,8 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       gridTableProps,
       favModal,
       rows: displayedEvents,
+      loading: tableLoading,
+      loaded: tableLoaded,
     } = useQueryBackedNamespaceResourceGridTable<NamespaceEventsSnapshotPayload, EventData>({
       enabled: namespace === ALL_NAMESPACES_SCOPE,
       queryTableMode: 'Query Backed Static',
@@ -304,8 +306,8 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
+          boundaryLoading={tableLoading && displayedEvents.length === 0}
+          loaded={tableLoaded || displayedEvents.length > 0}
           spinnerMessage="Loading events..."
           favModal={favModal}
           columns={columns}
@@ -313,7 +315,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events'
           }
           diagnosticsMode="live"
-          loading={loading}
+          loading={tableLoading}
           onRowClick={handleEventClick}
           tableClassName="gridtable-ns-events"
           enableContextMenu={true}

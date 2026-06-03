@@ -196,10 +196,13 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       (payload: NamespaceQuotasSnapshotPayload) => payload.resources ?? [],
       []
     );
-    const { gridTableProps, favModal } = useQueryBackedNamespaceResourceGridTable<
-      NamespaceQuotasSnapshotPayload,
-      QuotaData
-    >({
+    const {
+      gridTableProps,
+      favModal,
+      loading: tableLoading,
+      loaded: tableLoaded,
+      rows,
+    } = useQueryBackedNamespaceResourceGridTable<NamespaceQuotasSnapshotPayload, QuotaData>({
       enabled: namespace === ALL_NAMESPACES_SCOPE,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
@@ -267,13 +270,13 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
+          boundaryLoading={tableLoading && rows.length === 0}
+          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading quotas..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
-          loading={loading}
+          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="ns-quotas-table"
           enableContextMenu={true}

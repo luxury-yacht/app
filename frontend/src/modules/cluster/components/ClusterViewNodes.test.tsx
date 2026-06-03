@@ -84,6 +84,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 }));
 
 const gridTablePropsRef: { current: any } = { current: null };
+const loadingBoundaryPropsRef: { current: any } = { current: null };
 const openWithObjectMock = vi.fn();
 const scopedDomainCallsRef: { current: Array<[string, string]> } = { current: [] };
 
@@ -118,7 +119,10 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  default: (props: { children: React.ReactNode }) => {
+    loadingBoundaryPropsRef.current = props;
+    return <>{props.children}</>;
+  },
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -212,6 +216,7 @@ describe('ClusterViewNodes', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    loadingBoundaryPropsRef.current = null;
     scopedDomainCallsRef.current = [];
     latestTableRowsRef.current = [];
     typedQueryRowsRef.current = [];
@@ -221,7 +226,22 @@ describe('ClusterViewNodes', () => {
       isManual: false,
     };
     openWithObjectMock.mockReset();
-    requestRefreshDomainStateMock.mockClear();
+    requestRefreshDomainStateMock.mockReset();
+    requestRefreshDomainStateMock.mockImplementation((_request?: unknown) =>
+      Promise.resolve({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            nodes: typedQueryRowsRef.current,
+            total: typedQueryRowsRef.current.length,
+            totalIsExact: true,
+            kinds: ['Node'],
+            facetsExact: true,
+          },
+        },
+      })
+    );
     useTableSortMock.mockClear();
   });
 
@@ -256,6 +276,25 @@ describe('ClusterViewNodes', () => {
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('keeps initial empty query-backed nodes behind the loading boundary', async () => {
+    requestRefreshDomainStateMock.mockImplementation(() => new Promise(() => {}));
+
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[] as any} loading={false} loaded={true} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadingBoundaryPropsRef.current).toEqual(
+      expect.objectContaining({
+        loading: true,
+        hasLoaded: false,
+        dataLength: 0,
+        spinnerMessage: 'Loading nodes...',
+      })
+    );
   });
 
   it('passes numeric CPU, memory, and age sort values into useTableSort', async () => {

@@ -1,4 +1,5 @@
 import React from 'react';
+import { flushSync } from 'react-dom';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,12 +9,37 @@ import type { SortConfig } from '@hooks/useTableSort';
 import { useTypedResourceQuery, type UseTypedResourceQueryResult } from './useTypedResourceQuery';
 import type { TypedQueryPayload } from './typedResourceQueryScope';
 
-const { requestRefreshDomainStateMock } = vi.hoisted(() => ({
-  requestRefreshDomainStateMock: vi.fn(),
-}));
+const { requestRefreshDomainStateMock, cachedQueryStateRef, scopedDomainCallsRef } = vi.hoisted(
+  () => ({
+    requestRefreshDomainStateMock: vi.fn(),
+    cachedQueryStateRef: {
+      current: {
+        status: 'idle',
+        data: null,
+        version: undefined as number | undefined,
+        checksum: undefined as string | undefined,
+        etag: undefined as string | undefined,
+      } as {
+        status: string;
+        data: unknown;
+        version?: number;
+        checksum?: string;
+        etag?: string;
+      },
+    },
+    scopedDomainCallsRef: { current: [] as Array<[string, string]> },
+  })
+);
 
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...(args as [])),
+}));
+
+vi.mock('@/core/refresh', () => ({
+  useRefreshScopedDomain: (domain: string, scope: string) => {
+    scopedDomainCallsRef.current.push([domain, scope]);
+    return cachedQueryStateRef.current;
+  },
 }));
 
 interface TestRow {
@@ -38,6 +64,14 @@ describe('useTypedResourceQuery', () => {
     root = ReactDOM.createRoot(container);
     result = undefined;
     requestRefreshDomainStateMock.mockReset();
+    scopedDomainCallsRef.current = [];
+    cachedQueryStateRef.current = {
+      status: 'idle',
+      data: null,
+      version: undefined,
+      checksum: undefined,
+      etag: undefined,
+    };
   });
 
   afterEach(() => {
@@ -122,8 +156,58 @@ describe('useTypedResourceQuery', () => {
     await renderQuery();
 
     expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'user' })
+      expect.objectContaining({ reason: 'user', preserveState: true })
     );
+  });
+
+  it('hydrates a matching cached query without requesting again on remount', async () => {
+    cachedQueryStateRef.current = {
+      status: 'ready',
+      data: {
+        rows: [{ name: 'pod-a' }],
+        total: 1,
+        totalIsExact: true,
+      },
+      version: 7,
+      checksum: 'same',
+      etag: undefined,
+    };
+
+    const Probe: React.FC = () => {
+      result = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        sortConfig,
+        liveDataVersion: '7:same:12345',
+        selectRows,
+      });
+      return null;
+    };
+
+    flushSync(() => {
+      root.render(<Probe />);
+    });
+
+    expect(result?.loading).toBe(false);
+    expect(result?.loaded).toBe(true);
+    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(scopedDomainCallsRef.current).toContainEqual([
+      'pods',
+      'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
+    ]);
+    expect(requestRefreshDomainStateMock).not.toHaveBeenCalled();
+    expect(result?.loading).toBe(false);
+    expect(result?.loaded).toBe(true);
+    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
   });
 
   it('reloads the current query when live refresh data changes', async () => {

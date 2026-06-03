@@ -190,10 +190,13 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       (payload: NamespaceNetworkSnapshotPayload) => payload.resources ?? [],
       []
     );
-    const { gridTableProps, favModal } = useQueryBackedNamespaceResourceGridTable<
-      NamespaceNetworkSnapshotPayload,
-      NetworkData
-    >({
+    const {
+      gridTableProps,
+      favModal,
+      loading: tableLoading,
+      loaded: tableLoaded,
+      rows,
+    } = useQueryBackedNamespaceResourceGridTable<NamespaceNetworkSnapshotPayload, NetworkData>({
       enabled: namespace === ALL_NAMESPACES_SCOPE,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
@@ -261,13 +264,13 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading}
-          loaded={loaded}
+          boundaryLoading={tableLoading && rows.length === 0}
+          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading network resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
-          loading={loading}
+          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="ns-network-table"
           enableContextMenu={true}

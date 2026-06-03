@@ -151,10 +151,13 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       (payload: NamespaceConfigSnapshotPayload) => payload.resources ?? [],
       []
     );
-    const { gridTableProps, favModal } = useQueryBackedNamespaceResourceGridTable<
-      NamespaceConfigSnapshotPayload,
-      ConfigData
-    >({
+    const {
+      gridTableProps,
+      favModal,
+      loading: tableLoading,
+      loaded: tableLoaded,
+      rows,
+    } = useQueryBackedNamespaceResourceGridTable<NamespaceConfigSnapshotPayload, ConfigData>({
       enabled: namespace === ALL_NAMESPACES_SCOPE,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
@@ -211,13 +214,13 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading}
-          loaded={loaded}
+          boundaryLoading={tableLoading && rows.length === 0}
+          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading configuration resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
-          loading={loading}
+          loading={tableLoading}
           onRowClick={openResource}
           tableClassName="ns-config-table"
           enableContextMenu={true}

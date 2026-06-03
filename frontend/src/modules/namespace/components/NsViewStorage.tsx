@@ -231,10 +231,13 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       (payload: NamespaceStorageSnapshotPayload) => payload.resources ?? [],
       []
     );
-    const { gridTableProps, favModal } = useQueryBackedNamespaceResourceGridTable<
-      NamespaceStorageSnapshotPayload,
-      StorageData
-    >({
+    const {
+      gridTableProps,
+      favModal,
+      loading: tableLoading,
+      loaded: tableLoaded,
+      rows,
+    } = useQueryBackedNamespaceResourceGridTable<NamespaceStorageSnapshotPayload, StorageData>({
       enabled: namespace === ALL_NAMESPACES_SCOPE,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
@@ -302,13 +305,13 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading}
-          loaded={loaded}
+          boundaryLoading={tableLoading && rows.length === 0}
+          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading storage resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
-          loading={loading}
+          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="ns-storage-table"
           enableContextMenu={true}

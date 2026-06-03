@@ -50,6 +50,24 @@ const liveDomainVersion = (state: {
     state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh ?? '',
   ].join(':');
 
+const shouldHoldInitialTypedQueryLoading = <TRow>({
+  enabled,
+  clusterId,
+  queryEnabled,
+  localData,
+  localError,
+}: {
+  enabled: boolean;
+  clusterId?: string | null;
+  queryEnabled: boolean;
+  localData: TRow[];
+  localError: string | null;
+}): boolean =>
+  enabled && Boolean(clusterId) && !queryEnabled && localData.length === 0 && !localError;
+
+const isLiveDomainInitialLoadPending = (state: { status?: string; data?: unknown }): boolean =>
+  !state.data && (state.status === 'initialising' || state.status === 'loading');
+
 export interface QueryBackedNamespaceGridResult<
   T extends ResourceGridTableRow,
 > extends ResourceGridTableResult<T> {
@@ -138,6 +156,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   });
   const liveDomain = useRefreshScopedDomain(domain, liveScope);
   const liveDataVersion = liveDomainVersion(liveDomain);
+  const liveDomainInitialLoadPending = enabled && isLiveDomainInitialLoadPending(liveDomain);
   const handlePublishedTableState = useCallback(
     (next: QueryBackedTableState) => {
       setTableStateReady(true);
@@ -145,7 +164,8 @@ export function useQueryBackedNamespaceResourceGridTable<
     },
     [handleTableStateChange]
   );
-  const queryEnabled = enabled && tableStateReady && persistence.hydrated;
+  const queryEnabled =
+    enabled && tableStateReady && persistence.hydrated && !liveDomainInitialLoadPending;
 
   const query = useTypedResourceQuery<TPayload, TRow>({
     enabled: queryEnabled,
@@ -162,10 +182,18 @@ export function useQueryBackedNamespaceResourceGridTable<
   });
 
   const data = queryEnabled ? query.rows : localData;
+  const waitingForInitialQuery = shouldHoldInitialTypedQueryLoading({
+    enabled,
+    clusterId,
+    queryEnabled,
+    localData,
+    localError,
+  });
+  const queryInitialLoading = query.rows.length === 0 && !query.loaded && !query.error;
   const loading = queryEnabled
-    ? query.loading && query.rows.length === 0 && !query.loaded
-    : localLoading;
-  const loaded = queryEnabled ? query.loaded : localLoaded;
+    ? query.rows.length === 0 && (query.loading || queryInitialLoading)
+    : waitingForInitialQuery || localLoading;
+  const loaded = queryEnabled ? query.loaded : waitingForInitialQuery ? false : localLoaded;
   const error = queryEnabled ? query.error : localError;
 
   const table = useNamespaceResourceGridTable<TRow>({
@@ -299,6 +327,7 @@ export function useQueryBackedClusterResourceGridTable<
   });
   const liveDomain = useRefreshScopedDomain(domain, liveScope);
   const liveDataVersion = liveDomainVersion(liveDomain);
+  const liveDomainInitialLoadPending = enabled && isLiveDomainInitialLoadPending(liveDomain);
   const handlePublishedTableState = useCallback(
     (next: QueryBackedTableState) => {
       setTableStateReady(true);
@@ -306,7 +335,8 @@ export function useQueryBackedClusterResourceGridTable<
     },
     [handleTableStateChange]
   );
-  const queryEnabled = enabled && tableStateReady && persistence.hydrated;
+  const queryEnabled =
+    enabled && tableStateReady && persistence.hydrated && !liveDomainInitialLoadPending;
 
   const query = useTypedResourceQuery<TPayload, TRow>({
     enabled: queryEnabled,
@@ -323,10 +353,18 @@ export function useQueryBackedClusterResourceGridTable<
   });
 
   const data = queryEnabled ? query.rows : localData;
+  const waitingForInitialQuery = shouldHoldInitialTypedQueryLoading({
+    enabled,
+    clusterId,
+    queryEnabled,
+    localData,
+    localError,
+  });
+  const queryInitialLoading = query.rows.length === 0 && !query.loaded && !query.error;
   const loading = queryEnabled
-    ? query.loading && query.rows.length === 0 && !query.loaded
-    : localLoading;
-  const loaded = queryEnabled ? query.loaded : localLoaded;
+    ? query.rows.length === 0 && (query.loading || queryInitialLoading)
+    : waitingForInitialQuery || localLoading;
+  const loaded = queryEnabled ? query.loaded : waitingForInitialQuery ? false : localLoaded;
   const error = queryEnabled ? query.error : localError;
 
   const table = useClusterResourceGridTable<TRow>({

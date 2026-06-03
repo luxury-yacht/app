@@ -24,9 +24,17 @@ const {
 } = vi.hoisted(() => ({
   liveDomainStateRef: {
     current: {
+      status: 'ready' as string,
+      data: {},
       version: 1,
       checksum: '',
       lastUpdated: 11,
+    } as {
+      status?: string;
+      data?: unknown;
+      version?: number;
+      checksum?: string;
+      lastUpdated?: number;
     },
   },
   lifecycleCallsRef: { current: [] as unknown[] },
@@ -128,6 +136,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     liveDomainStateRef.current = {
+      status: 'ready',
+      data: {},
       version: 1,
       checksum: '',
       lastUpdated: 11,
@@ -211,6 +221,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     );
 
     liveDomainStateRef.current = {
+      status: 'ready',
+      data: {},
       version: 2,
       checksum: 'fresh',
       lastUpdated: 22,
@@ -267,6 +279,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     );
 
     liveDomainStateRef.current = {
+      status: 'ready',
+      data: {},
       version: 3,
       checksum: '',
       lastUpdated: 33,
@@ -351,6 +365,158 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       expect.objectContaining({
         domain: 'namespace-events',
         sortConfig: { key: 'age', direction: 'desc' },
+      })
+    );
+  });
+
+  it('keeps cluster tables in initial loading until the typed query can run', () => {
+    let result:
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const Probe: React.FC = () => {
+      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        localData: [],
+        localLoaded: true,
+        localLoading: false,
+        selectRows,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    useClusterResourceGridTableMock.mockReturnValue({
+      gridTableProps: {
+        data: [],
+      },
+      favModal: null,
+    });
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false })
+    );
+    expect(result?.loading).toBe(true);
+    expect(result?.loaded).toBe(false);
+  });
+
+  it('keeps namespace tables in initial loading until the typed query can run', () => {
+    let result:
+      | ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const Probe: React.FC = () => {
+      result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        localData: [],
+        localLoaded: true,
+        localLoading: false,
+        selectRows,
+        viewId: 'namespace-pods',
+        namespace: ALL_NAMESPACES_SCOPE,
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    useNamespaceResourceGridTableMock.mockReturnValue({
+      gridTableProps: {
+        data: [],
+      },
+      favModal: null,
+    });
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false })
+    );
+    expect(result?.loading).toBe(true);
+    expect(result?.loaded).toBe(false);
+  });
+
+  it('does not run the first typed query while the live base domain is still initialising', async () => {
+    let result:
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const Probe: React.FC = () => {
+      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'cluster-config',
+        label: 'Cluster Configuration',
+        localData: [],
+        localLoaded: true,
+        localLoading: false,
+        selectRows,
+        viewId: 'cluster-config',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    liveDomainStateRef.current = {
+      status: 'initialising',
+      data: null,
+      version: 1,
+      checksum: '',
+      lastUpdated: 11,
+    };
+    useClusterResourceGridTableMock.mockReturnValue({
+      gridTableProps: {
+        data: [],
+      },
+      favModal: null,
+    });
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useClusterResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange(publishedTableState);
+      await Promise.resolve();
+    });
+
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false })
+    );
+    expect(result?.loading).toBe(true);
+    expect(result?.loaded).toBe(false);
+
+    liveDomainStateRef.current = {
+      status: 'ready',
+      data: { resources: [] },
+      version: 2,
+      checksum: 'ready',
+      lastUpdated: 22,
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        enabled: true,
+        domain: 'cluster-config',
+        liveDataVersion: '2:ready:22',
       })
     );
   });

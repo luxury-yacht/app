@@ -317,10 +317,13 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
         })),
       []
     );
-    const { gridTableProps, favModal } = useQueryBackedNamespaceResourceGridTable<
-      NamespaceHelmSnapshotPayload,
-      HelmData
-    >({
+    const {
+      gridTableProps,
+      favModal,
+      loading: tableLoading,
+      loaded: tableLoaded,
+      rows,
+    } = useQueryBackedNamespaceResourceGridTable<NamespaceHelmSnapshotPayload, HelmData>({
       enabled: isAllNamespaces,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
@@ -384,15 +387,15 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       <>
         <ResourceGridTableView
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
+          boundaryLoading={tableLoading && rows.length === 0}
+          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading Helm releases..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm'
           }
-          loading={loading}
+          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="ns-helm-table"
           enableContextMenu={true}

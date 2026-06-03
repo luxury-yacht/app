@@ -11,6 +11,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
+const requestRefreshDomainStateMock = vi.hoisted(() => vi.fn());
+
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
     favorites: [],
@@ -35,6 +37,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 }));
 
 const gridTablePropsRef: { current: any } = { current: null };
+const loadingBoundaryPropsRef: { current: any } = { current: null };
 const openWithObjectMock = vi.fn();
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -64,7 +67,10 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  default: (props: { children: React.ReactNode }) => {
+    loadingBoundaryPropsRef.current = props;
+    return <>{props.children}</>;
+  },
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -95,6 +101,14 @@ vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => false,
 }));
 
+vi.mock('@/core/data-access', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    requestRefreshDomainState: (request: unknown) => requestRefreshDomainStateMock(request),
+  };
+});
+
 vi.mock('@wailsjs/go/backend/App', () => ({
   RunObjectAction: vi.fn(),
 }));
@@ -124,7 +138,22 @@ describe('ClusterViewConfig', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    loadingBoundaryPropsRef.current = null;
     openWithObjectMock.mockReset();
+    requestRefreshDomainStateMock.mockReset();
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          resources: [],
+          total: 0,
+          totalIsExact: true,
+          kinds: [],
+          facetsExact: true,
+        },
+      },
+    });
   });
 
   afterEach(() => {
@@ -151,6 +180,25 @@ describe('ClusterViewConfig', () => {
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('keeps initial empty query-backed cluster config behind the loading boundary', async () => {
+    requestRefreshDomainStateMock.mockImplementation(() => new Promise(() => {}));
+
+    await act(async () => {
+      root.render(<ClusterViewConfig data={[]} loading={false} loaded={true} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadingBoundaryPropsRef.current).toEqual(
+      expect.objectContaining({
+        loading: true,
+        hasLoaded: false,
+        dataLength: 0,
+        spinnerMessage: 'Loading configuration resources...',
+      })
+    );
   });
 
   it('does not expose local partial copy for query-backed cluster config', async () => {
