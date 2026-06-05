@@ -342,7 +342,10 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 			}
 		},
 		NumericSort: func(row EventSummary, field string) (float64, bool) {
-			if strings.EqualFold(field, "age") || strings.EqualFold(field, "ageTimestamp") {
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
+			}
+			if strings.EqualFold(field, "ageTimestamp") {
 				return float64(row.AgeTimestamp), true
 			}
 			return 0, false
@@ -384,7 +387,10 @@ func clusterEventTableQueryAdapter() typedTableQueryAdapter[ClusterEventEntry] {
 			}
 		},
 		NumericSort: func(row ClusterEventEntry, field string) (float64, bool) {
-			if strings.EqualFold(field, "age") || strings.EqualFold(field, "ageTimestamp") {
+			if strings.EqualFold(field, "age") {
+				return numericAgeSortValue(row.AgeTimestamp)
+			}
+			if strings.EqualFold(field, "ageTimestamp") {
 				return float64(row.AgeTimestamp), true
 			}
 			return 0, false

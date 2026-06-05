@@ -463,6 +463,28 @@ func TestStaticTableQuerySortsAgeByTimestampAcrossAdapters(t *testing.T) {
 			return row.Name
 		})
 	})
+
+	t.Run("cluster events", func(t *testing.T) {
+		query.BaseScope = "cluster"
+		page := applyTypedTableQuery([]ClusterEventEntry{
+			{Name: "old-event", Age: "10d", AgeTimestamp: 1_700_000_000_000},
+			{Name: "young-event", Age: "2h", AgeTimestamp: 1_700_856_000_000},
+		}, query, clusterEventTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"young-event", "old-event"}, func(row ClusterEventEntry) string {
+			return row.Name
+		})
+	})
+
+	t.Run("namespace events", func(t *testing.T) {
+		query.BaseScope = "namespace:all"
+		page := applyTypedTableQuery([]EventSummary{
+			{Name: "old-event", Age: "10d", AgeTimestamp: 1_700_000_000_000},
+			{Name: "young-event", Age: "2h", AgeTimestamp: 1_700_856_000_000},
+		}, query, namespacedEventTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"young-event", "old-event"}, func(row EventSummary) string {
+			return row.Name
+		})
+	})
 }
 
 func requireNodePageNames(t *testing.T, page typedTableQueryPage[NodeSummary], want []string) {

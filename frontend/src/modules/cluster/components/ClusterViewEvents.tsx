@@ -146,12 +146,9 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
         ),
         cf.createTextColumn('reason', 'Reason', (event) => event.reason || '-'),
         cf.createTextColumn('message', 'Message', (event) => event.message || '-'),
-        {
-          ...cf.createAgeColumn<EventData>('age', 'Age', (event) =>
-            formatAge(event.ageTimestamp ?? event.age ?? null)
-          ),
-          sortValue: (event) => event.ageTimestamp ?? 0,
-        },
+        cf.createAgeColumn<EventData>('age', 'Age', (event) =>
+          formatAge(event.ageTimestamp ?? event.age ?? null)
+        ),
       ];
 
       const sizing: cf.ColumnSizingMap = {
@@ -194,7 +191,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       columns,
       keyExtractor,
       defaultSortKey: 'age',
-      defaultSortDirection: 'desc',
+      defaultSortDirection: 'asc',
       rowIdentity: sortRowIdentity,
       filterAccessors: { getSearchText },
       showKindDropdown: false,

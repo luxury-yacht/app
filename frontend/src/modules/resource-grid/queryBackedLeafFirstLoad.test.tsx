@@ -533,7 +533,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'namespace events',
       domain: 'namespace-events',
-      expectedScope: 'cluster-a|namespace:all?limit=50&sort=age&sortDirection=desc',
+      expectedScope: 'cluster-a|namespace:all?limit=50&sort=age&sortDirection=asc',
       local: {
         kind: 'Event',
         name: 'local-event',
@@ -1005,7 +1005,7 @@ describe('query-backed leaf first load', () => {
       },
       domain: 'cluster-events',
       expectedName: 'query-event',
-      expectedScope: 'cluster-a|cluster?limit=50&sort=age&sortDirection=desc',
+      expectedScope: 'cluster-a|cluster?limit=50&sort=age&sortDirection=asc',
     });
   });
 

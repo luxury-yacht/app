@@ -179,12 +179,9 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         ),
         cf.createTextColumn('reason', 'Reason', (event) => event.reason || '-'),
         cf.createTextColumn('message', 'Message', (event) => event.message || '-'),
-        {
-          ...cf.createAgeColumn<EventData>('age', 'Age', (event) =>
-            formatAge(event.ageTimestamp ?? event.age ?? null)
-          ),
-          sortValue: (event) => event.ageTimestamp ?? 0,
-        }
+        cf.createAgeColumn<EventData>('age', 'Age', (event) =>
+          formatAge(event.ageTimestamp ?? event.age ?? null)
+        )
       );
 
       const sizing: cf.ColumnSizingMap = {
@@ -211,6 +208,14 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     ]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
+    const defaultSort = useMemo(
+      () =>
+        ({
+          key: 'age',
+          direction: 'asc',
+        }) as const,
+      []
+    );
 
     const selectRows = useCallback(
       (payload: NamespaceEventsSnapshotPayload) => payload.events ?? [],
@@ -237,7 +242,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       namespace,
       columns,
       keyExtractor,
-      defaultSort: { key: 'age', direction: 'desc' },
+      defaultSort,
       rowIdentity: sortRowIdentity,
       filterAccessors: { getSearchText },
       showNamespaceFilters: showNamespaceFilter,

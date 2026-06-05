@@ -150,7 +150,7 @@ describe('ClusterViewEvents', () => {
     container.remove();
   });
 
-  it('passes the visible Age default sort to GridTable when no persisted sort exists', async () => {
+  it('passes the query-backed newest-first Age sort to GridTable when no persisted sort exists', async () => {
     await act(async () => {
       root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
       await Promise.resolve();
@@ -158,7 +158,7 @@ describe('ClusterViewEvents', () => {
 
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
-    expect(props.sortConfig).toEqual({ key: 'age', direction: 'desc' });
+    expect(props.sortConfig).toEqual({ key: 'age', direction: 'asc' });
     expect(props.columnVisibility).toBe(null);
     expect(props.filters?.value).toEqual({
       search: '',
@@ -170,6 +170,18 @@ describe('ClusterViewEvents', () => {
     const key = props.keyExtractor(baseEvent, 0);
     expect(key).toContain('team-a');
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('uses the shared newest-first Age sort value for local table fallback rows', async () => {
+    await act(async () => {
+      root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const ageColumn = gridTablePropsRef.current.columns.find((column: any) => column.key === 'age');
+
+    expect(ageColumn).toBeTruthy();
+    expect(ageColumn.sortValue(baseEvent)).toBe(-123);
   });
 
   it('opens the involved object with group/version when object name is clicked', async () => {

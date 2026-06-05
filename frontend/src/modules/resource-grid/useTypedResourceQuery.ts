@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState } from '@/core/data-access';
-import { useRefreshScopedDomain } from '@/core/refresh';
 import type {
   GridTableFilterState,
   GridTableFilterOptions,
@@ -50,35 +49,6 @@ export interface UseTypedResourceQueryResult<TRow> {
 const DEFAULT_PAGE_LIMIT = 50;
 export const TYPED_QUERY_PAGE_LIMIT_OPTIONS = [25, 50, 100, 250, 500, 1000] as const;
 export type TypedQueryPageLimit = (typeof TYPED_QUERY_PAGE_LIMIT_OPTIONS)[number];
-
-const refreshStateRevision = (state: {
-  version?: number | string;
-  checksum?: string;
-  etag?: string;
-}): string => [state.version ?? '', state.checksum ?? state.etag ?? ''].join(':');
-
-const liveDataRevision = (value?: string | null): string => {
-  if (!value) {
-    return '';
-  }
-  const [version = '', checksum = ''] = value.split(':');
-  if (!version && !checksum) {
-    return '';
-  }
-  return [version, checksum].join(':');
-};
-
-const cachedQueryMatchesLiveRevision = (
-  cachedRevision: string,
-  hasCachedData: boolean,
-  liveDataVersion?: string | null
-): boolean => {
-  if (!hasCachedData) {
-    return false;
-  }
-  const liveRevision = liveDataRevision(liveDataVersion);
-  return Boolean(liveRevision) && cachedRevision === liveRevision;
-};
 
 export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>({
   enabled,
@@ -218,30 +188,6 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     requestTokenForScope,
     sortConfig,
   ]);
-  const cachedQueryState = useRefreshScopedDomain(domain, scope ?? `__typed-query:${domain}`);
-  const cachedPayload = cachedQueryState.data as TPayload | null | undefined;
-  const cachedRevision = refreshStateRevision(cachedQueryState);
-  const matchedCachedPayload = useMemo(() => {
-    if (requestTokenForScope || !cachedPayload) {
-      return null;
-    }
-    return cachedQueryMatchesLiveRevision(cachedRevision, true, liveDataVersion)
-      ? cachedPayload
-      : null;
-  }, [cachedPayload, cachedRevision, liveDataVersion, requestTokenForScope]);
-  const matchedCachedResult = useMemo(() => {
-    if (!matchedCachedPayload) {
-      return null;
-    }
-    return {
-      rows: selectRows(matchedCachedPayload),
-      continueToken: matchedCachedPayload.continue ?? null,
-      totalCount: matchedCachedPayload.total ?? 0,
-      totalIsExact: matchedCachedPayload.totalIsExact !== false,
-      filterOptions: filterOptionsFromTypedPayload(matchedCachedPayload),
-      dynamic: matchedCachedPayload.dynamic ?? null,
-    };
-  }, [matchedCachedPayload, selectRows]);
 
   const applyPayload = useCallback(
     (payload: TPayload) => {
@@ -273,12 +219,6 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     }
     let cancelled = false;
     const identityAtRequest = queryIdentityRef.current;
-    if (matchedCachedPayload) {
-      setError(null);
-      setLoading(false);
-      applyPayload(matchedCachedPayload);
-      return;
-    }
 
     setLoading(true);
     setError(null);
@@ -290,7 +230,8 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           scope,
           reason: 'user',
           label,
-          preserveState: true,
+          cleanup: true,
+          preserveState: false,
         });
         if (cancelled || queryIdentityRef.current !== identityAtRequest) {
           return;
@@ -338,16 +279,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     return () => {
       cancelled = true;
     };
-  }, [
-    applyPayload,
-    domain,
-    enabled,
-    label,
-    matchedCachedPayload,
-    queryIdentity,
-    requestTokenForScope,
-    scope,
-  ]);
+  }, [applyPayload, domain, enabled, label, queryIdentity, requestTokenForScope, scope]);
 
   const loadMore = useCallback(() => {
     if (!continueToken || isRequestingMore) {
@@ -372,20 +304,20 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   }, [isRequestingMore, previousTokens]);
 
   return {
-    rows: matchedCachedResult?.rows ?? rows,
-    loading: matchedCachedResult ? false : loading,
-    loaded: matchedCachedResult ? true : loaded,
+    rows,
+    loading,
+    loaded,
     error,
-    continueToken: matchedCachedResult?.continueToken ?? continueToken,
+    continueToken,
     hasPrevious: previousTokens.length > 0,
     isRequestingMore,
     loadMore,
     loadPrevious,
     pageIndex,
     pageSize: pageLimit,
-    totalCount: matchedCachedResult?.totalCount ?? totalCount,
-    totalIsExact: matchedCachedResult?.totalIsExact ?? totalIsExact,
-    filterOptions: matchedCachedResult?.filterOptions ?? filterOptions,
-    dynamic: matchedCachedResult?.dynamic ?? dynamic,
+    totalCount,
+    totalIsExact,
+    filterOptions,
+    dynamic,
   };
 }

@@ -217,7 +217,7 @@ describe('NsViewEvents', () => {
 
     expect(ageColumn).toBeTruthy();
     expect(ageColumn.sortable).not.toBe(false);
-    expect(ageColumn.sortValue(event)).toBe(42);
+    expect(ageColumn.sortValue(event)).toBe(-42);
   });
 
   it('offers context menu navigation to related object', async () => {
