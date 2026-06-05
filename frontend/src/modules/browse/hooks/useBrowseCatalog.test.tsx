@@ -236,6 +236,169 @@ describe('useBrowseCatalog', () => {
     expect(result?.pageIndex).toBe(2);
   });
 
+  it('keeps the selected Cluster Browse cursor page when the base scope refreshes', async () => {
+    const baseScope = 'cluster-1|limit=2&namespace=cluster';
+    const metadataScope = 'cluster-1|limit=1&namespace=cluster';
+    const pageScope = 'cluster-1|limit=2&namespace=cluster&continue=page-2';
+    const first = makeItem({
+      kind: 'Node',
+      resource: 'nodes',
+      namespace: undefined,
+      uid: 'node-a',
+      name: 'node-a',
+      scope: 'Cluster',
+    });
+    const refreshedFirst = makeItem({
+      kind: 'Node',
+      resource: 'nodes',
+      namespace: undefined,
+      uid: 'node-a',
+      name: 'node-a-refreshed',
+      scope: 'Cluster',
+    });
+    const second = makeItem({
+      kind: 'Node',
+      resource: 'nodes',
+      namespace: undefined,
+      uid: 'node-b',
+      name: 'node-b',
+      scope: 'Cluster',
+    });
+    const refreshedSecond = makeItem({
+      kind: 'Node',
+      resource: 'nodes',
+      namespace: undefined,
+      uid: 'node-b',
+      name: 'node-b-refreshed',
+      scope: 'Cluster',
+    });
+    let basePayload = makePayload({
+      items: [first],
+      continue: 'page-2',
+      total: 3,
+      batchSize: 1,
+      kinds: [{ kind: 'Node', namespaced: false }],
+      namespaces: [],
+    });
+    const baseState = {
+      status: 'ready',
+      data: basePayload,
+      scope: baseScope,
+    };
+    const metadataState = {
+      status: 'ready',
+      data: makePayload({
+        items: [],
+        total: 3,
+        batchSize: 0,
+        kinds: [{ kind: 'Node', namespaced: false }],
+        namespaces: [],
+      }),
+      scope: metadataScope,
+    };
+    const pageState = {
+      status: 'ready',
+      data: makePayload({
+        items: [second],
+        previous: 'page-1',
+        continue: 'page-3',
+        total: 3,
+        batchSize: 1,
+        kinds: [{ kind: 'Node', namespaced: false }],
+        namespaces: [],
+      }),
+      scope: pageScope,
+    };
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === baseScope) {
+        return baseState;
+      }
+      if (scope === metadataScope) {
+        return metadataState;
+      }
+      return { status: 'idle', data: null, scope };
+    });
+    mocks.requestRefreshDomainState.mockResolvedValue({ status: 'executed', data: pageState });
+
+    await act(async () => {
+      root.render(<Harness pinnedNamespaces={[]} clusterScopedOnly />);
+      await Promise.resolve();
+    });
+
+    expect(result?.items.map((item) => item.name)).toEqual(['node-a']);
+    expect(result?.continueToken).toBe('page-2');
+    expect(result?.pageIndex).toBe(1);
+
+    await act(async () => {
+      result?.handleLoadMore();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(result?.items.map((item) => item.name)).toEqual(['node-b']);
+    expect(result?.previousToken).toBe('page-1');
+    expect(result?.continueToken).toBe('page-3');
+    expect(result?.pageIndex).toBe(2);
+
+    basePayload = makePayload({
+      items: [refreshedFirst],
+      continue: 'page-2-refreshed',
+      total: 4,
+      batchSize: 1,
+      kinds: [{ kind: 'Node', namespaced: false }],
+      namespaces: [],
+    });
+    baseState.data = basePayload;
+
+    await act(async () => {
+      root.render(<Harness pinnedNamespaces={[]} clusterScopedOnly />);
+      await Promise.resolve();
+    });
+
+    expect(result?.items.map((item) => item.name)).toEqual(['node-b']);
+    expect(result?.previousToken).toBe('page-1');
+    expect(result?.continueToken).toBe('page-3');
+    expect(result?.pageIndex).toBe(2);
+    expect(result?.totalCount).toBe(4);
+
+    pageState.data = makePayload({
+      items: [refreshedSecond],
+      previous: 'page-1',
+      continue: 'page-3',
+      total: 5,
+      batchSize: 1,
+      kinds: [{ kind: 'Node', namespaced: false }],
+      namespaces: [],
+    });
+    mocks.requestRefreshDomain.mockClear();
+    mocks.requestRefreshDomainState.mockClear();
+
+    await act(async () => {
+      result?.refresh();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(mocks.requestRefreshDomainState).toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: pageScope,
+      reason: 'user',
+    });
+    expect(mocks.requestRefreshDomain).not.toHaveBeenCalled();
+    expect(result?.items.map((item) => item.name)).toEqual(['node-b-refreshed']);
+    expect(result?.previousToken).toBe('page-1');
+    expect(result?.continueToken).toBe('page-3');
+    expect(result?.pageIndex).toBe(2);
+    expect(result?.totalCount).toBe(5);
+  });
+
   it('uses the persisted initial page size and publishes page size changes', async () => {
     const onPageLimitChange = vi.fn();
     const baseScope = 'cluster-1|limit=250&namespace=default';

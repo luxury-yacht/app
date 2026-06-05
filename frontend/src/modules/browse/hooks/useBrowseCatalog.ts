@@ -177,6 +177,9 @@ export function useBrowseCatalog({
 
   const collectionRef = useRef(emptyBrowseCatalogCollection());
   const hasLoadedOnceRef = useRef(false);
+  const pageIndexRef = useRef(1);
+  const currentPageTokenRef = useRef<string | null>(null);
+  pageIndexRef.current = pageIndex;
 
   useEffect(() => {
     const nextSearch = filters.search ?? '';
@@ -295,6 +298,8 @@ export function useBrowseCatalog({
     // Reset pagination state on query change.
     setIsRequestingMore(false);
     setPageIndex(1);
+    pageIndexRef.current = 1;
+    currentPageTokenRef.current = null;
     setContinueToken(null);
     setPreviousToken(null);
     // Preserve the current dataset while filter-only queries refresh so the
@@ -343,6 +348,17 @@ export function useBrowseCatalog({
     const payload = domain.data as CatalogSnapshotPayload;
     const currentLength = collectionRef.current.items.length;
     const next = applyCatalogBaseline(collectionRef.current, payload);
+    if (currentPageTokenRef.current) {
+      setTotalCount(next.totalCount);
+      setTotalIsExact(next.totalIsExact);
+      setIsRequestingMore(false);
+      if (!hasLoadedOnceRef.current && isRenderableCatalogPayload(payload)) {
+        hasLoadedOnceRef.current = true;
+        setHasLoadedOnce(true);
+      }
+      return;
+    }
+
     collectionRef.current = { items: next.items, indexByUid: next.indexByUid };
     if (next.changed || currentLength === 0) {
       setItems(next.items);
@@ -367,7 +383,7 @@ export function useBrowseCatalog({
   catalogScopeRef.current = catalogScope;
 
   const requestPage = useCallback(
-    (token: string | null, direction: 'next' | 'previous') => {
+    (token: string | null, direction: 'next' | 'previous' | 'current') => {
       if (!token || isRequestingMore) {
         return;
       }
@@ -410,6 +426,8 @@ export function useBrowseCatalog({
             setItems([]);
             setContinueToken(null);
             setPreviousToken(null);
+            currentPageTokenRef.current = null;
+            pageIndexRef.current = 1;
             setPageIndex(1);
             void refreshCatalogScope('user');
             return;
@@ -422,9 +440,15 @@ export function useBrowseCatalog({
           setPreviousToken(next.previousToken);
           setTotalCount(next.totalCount);
           setTotalIsExact(next.totalIsExact);
-          setPageIndex((current) =>
-            direction === 'next' ? current + 1 : Math.max(1, current - 1)
-          );
+          const nextPageIndex =
+            direction === 'next'
+              ? pageIndexRef.current + 1
+              : direction === 'previous'
+                ? Math.max(1, pageIndexRef.current - 1)
+                : pageIndexRef.current;
+          pageIndexRef.current = nextPageIndex;
+          currentPageTokenRef.current = nextPageIndex > 1 ? token : null;
+          setPageIndex(nextPageIndex);
           if (!hasLoadedOnceRef.current) {
             hasLoadedOnceRef.current = true;
             setHasLoadedOnce(true);
@@ -460,9 +484,13 @@ export function useBrowseCatalog({
   }, [previousToken, requestPage]);
 
   const refreshCurrentQuery = useCallback(() => {
-    setPageIndex(1);
+    const currentPageToken = currentPageTokenRef.current;
+    if (currentPageToken) {
+      requestPage(currentPageToken, 'current');
+      return;
+    }
     void refreshCatalogScope('user');
-  }, [refreshCatalogScope]);
+  }, [refreshCatalogScope, requestPage]);
 
   // Filter items by scope (cluster-scoped vs namespace-scoped)
   // Note: Cluster isolation is handled by the backend via the scope prefix (e.g., 'cluster-1|...'),
