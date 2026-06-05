@@ -66,7 +66,7 @@ func TestTypedTableQueryIncludesDynamicRef(t *testing.T) {
 	}
 }
 
-func TestTypedTableQueryInvalidatesCursorWhenDynamicRevisionChanges(t *testing.T) {
+func TestTypedTableQueryContinuesCursorWhenDynamicRevisionChanges(t *testing.T) {
 	query := typedTableQuery{
 		Enabled: true,
 		Request: ResourceQueryRequest{
@@ -90,16 +90,23 @@ func TestTypedTableQueryInvalidatesCursorWhenDynamicRevisionChanges(t *testing.T
 	query.Request.Continue = page.Continue
 	query.DynamicRevision = "metrics-rev-2"
 	nextPage := applyTypedTableQuery(rows, query, typedQueryTestAdapter())
-	if !nextPage.CursorInvalid {
-		t.Fatal("expected stale dynamic cursor to be invalid")
+	if nextPage.CursorInvalid {
+		t.Fatal("expected dynamic cursor to stay valid across metrics revision changes")
+	}
+	if len(nextPage.Rows) != 1 || nextPage.Rows[0].key != "default/b" {
+		t.Fatalf("expected second row after dynamic revision change, got %+v", nextPage.Rows)
 	}
 
 	collector := newTypedTableQueryCollector(query, typedQueryTestAdapter())
 	for _, row := range rows {
 		collector.Add(row)
 	}
-	if collectorPage := collector.Page(); !collectorPage.CursorInvalid {
-		t.Fatal("expected bounded collector to reject stale dynamic cursor")
+	collectorPage := collector.Page()
+	if collectorPage.CursorInvalid {
+		t.Fatal("expected bounded collector to keep dynamic cursor valid")
+	}
+	if len(collectorPage.Rows) != 1 || collectorPage.Rows[0].key != "default/b" {
+		t.Fatalf("expected bounded collector second row after dynamic revision change, got %+v", collectorPage.Rows)
 	}
 }
 

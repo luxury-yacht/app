@@ -62,11 +62,22 @@ const isAllNamespacesFilterSentinel = (value: string): boolean => {
 
 export function queryBackedNamespaceFilterOptions(
   explicitNamespaces: string[] | undefined,
-  queryFacetNamespaces: string[] | undefined
+  queryFacetNamespaces: string[] | undefined,
+  fallbackNamespaces: string[] | undefined = undefined
 ): string[] | undefined {
-  return explicitNamespaces && explicitNamespaces.length > 0
-    ? explicitNamespaces
-    : queryFacetNamespaces;
+  if (!explicitNamespaces || explicitNamespaces.length === 0) {
+    return queryFacetNamespaces;
+  }
+  if (!queryFacetNamespaces || queryFacetNamespaces.length === 0) {
+    return explicitNamespaces;
+  }
+  const explicit = normalizeOptionSet(explicitNamespaces);
+  const fallback = normalizeOptionSet(fallbackNamespaces);
+  const explicitHasMetadataBeyondFallback =
+    fallback.size === 0 ||
+    explicit.size > fallback.size ||
+    [...explicit].some((namespace) => !fallback.has(namespace));
+  return explicitHasMetadataBeyondFallback ? explicitNamespaces : queryFacetNamespaces;
 }
 
 export function normalizeQueryBackedNamespaceFilters(

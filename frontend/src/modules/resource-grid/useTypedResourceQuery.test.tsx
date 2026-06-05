@@ -439,6 +439,85 @@ describe('useTypedResourceQuery', () => {
     expect(result?.hasPrevious).toBe(false);
   });
 
+  it('refetches the current cursor page when live refresh data changes', async () => {
+    const Probe: React.FC<{ liveDataVersion: string }> = ({ liveDataVersion }) => {
+      result = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        sortConfig,
+        pageLimit: 2,
+        liveDataVersion,
+        selectRows,
+      });
+      return null;
+    };
+
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-a' }, { name: 'pod-b' }],
+            total: 4,
+            continue: 'cursor-page-2',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-c' }, { name: 'pod-d' }],
+            total: 4,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [{ name: 'pod-c-fresh' }, { name: 'pod-d-fresh' }],
+            total: 4,
+          },
+        },
+      });
+
+    await act(async () => {
+      root.render(<Probe liveDataVersion="version-1" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      result?.loadMore();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result?.pageIndex).toBe(2);
+    expect(result?.rows).toEqual([{ name: 'pod-c' }, { name: 'pod-d' }]);
+
+    await act(async () => {
+      root.render(<Probe liveDataVersion="version-2" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scope: expect.stringContaining('continue=cursor-page-2'),
+      })
+    );
+    expect(result?.pageIndex).toBe(2);
+    expect(result?.rows).toEqual([{ name: 'pod-c-fresh' }, { name: 'pod-d-fresh' }]);
+  });
+
   it('drops the current cursor before requesting a changed sort query', async () => {
     const Probe: React.FC<{ activeSort: SortConfig }> = ({ activeSort }) => {
       result = useTypedResourceQuery<TestPayload, TestRow>({

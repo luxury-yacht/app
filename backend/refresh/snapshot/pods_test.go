@@ -470,7 +470,7 @@ func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T)
 	require.Empty(t, nextPayload.Continue)
 }
 
-func TestPodBuilderAllNamespacesMetricCursorInvalidatesAcrossMetricsRefresh(t *testing.T) {
+func TestPodBuilderAllNamespacesMetricCursorContinuesAcrossMetricsRefresh(t *testing.T) {
 	now := time.Now()
 	pods := []*corev1.Pod{
 		{
@@ -521,10 +521,10 @@ func TestPodBuilderAllNamespacesMetricCursorInvalidatesAcrossMetricsRefresh(t *t
 	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=cpu&sortDirection=desc&limit=1&continue="+firstPayload.Continue)
 	require.NoError(t, err)
 	nextPayload := next.Payload.(PodSnapshot)
-	require.True(t, nextPayload.CursorInvalid)
+	require.False(t, nextPayload.CursorInvalid)
 	require.Len(t, nextPayload.Pods, 1)
-	require.Equal(t, "bravo", nextPayload.Pods[0].Name)
-	require.NotEmpty(t, nextPayload.Continue)
+	require.Equal(t, "charlie", nextPayload.Pods[0].Name)
+	require.Empty(t, nextPayload.Continue)
 }
 
 func boolPtr(v bool) *bool {

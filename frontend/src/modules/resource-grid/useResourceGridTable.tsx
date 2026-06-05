@@ -353,7 +353,8 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   const setPersistenceFilters = persistence.setFilters;
   const namespaceFilterOptions = queryBackedNamespaceFilterOptions(
     availableFilterNamespaces,
-    filterOptionOverrides?.namespaces
+    filterOptionOverrides?.namespaces,
+    fallbackNamespaces
   );
   const normalizeTableFilters = useCallback(
     (next: GridTableFilterState) =>

@@ -14,6 +14,18 @@ describe('queryBackedTableState', () => {
     ]);
   });
 
+  it('keeps explicit namespace metadata when it includes namespaces beyond the loaded row fallback', () => {
+    expect(queryBackedNamespaceFilterOptions(['team-a', 'team-b'], ['team-a'], ['team-a'])).toEqual(
+      ['team-a', 'team-b']
+    );
+  });
+
+  it('uses query facet namespaces when explicit options are only the loaded row fallback', () => {
+    expect(queryBackedNamespaceFilterOptions(['team-a'], ['team-a', 'team-b'], ['team-a'])).toEqual(
+      ['team-a', 'team-b']
+    );
+  });
+
   it('treats selecting every namespace as all namespaces for query scope state', () => {
     expect(
       normalizeQueryBackedNamespaceFilters(

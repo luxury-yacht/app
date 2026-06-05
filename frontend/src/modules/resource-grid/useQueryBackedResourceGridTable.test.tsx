@@ -552,7 +552,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     );
   });
 
-  it('does not expose a loaded empty cluster table while the live base domain is still idle', async () => {
+  it('allows the first cluster query when the live base domain is idle', async () => {
     let result:
       | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
       | undefined;
@@ -583,7 +583,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     useTypedResourceQueryMock.mockReturnValue({
       rows: [],
       loading: false,
-      loaded: true,
+      loaded: false,
       error: null,
       continueToken: null,
       hasPrevious: false,
@@ -616,14 +616,14 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     });
 
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: false })
+      expect.objectContaining({ enabled: true })
     );
     expect(result?.loading).toBe(true);
     expect(result?.loaded).toBe(false);
     expect(result?.rows).toEqual([]);
   });
 
-  it('does not expose a loaded empty namespace table while the live base domain is still idle', async () => {
+  it('allows the first namespace query when the live base domain is idle', async () => {
     let result:
       | ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>>
       | undefined;
@@ -655,7 +655,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     useTypedResourceQueryMock.mockReturnValue({
       rows: [],
       loading: false,
-      loaded: true,
+      loaded: false,
       error: null,
       continueToken: null,
       hasPrevious: false,
@@ -688,7 +688,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     });
 
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: false })
+      expect.objectContaining({ enabled: true })
     );
     expect(result?.loading).toBe(true);
     expect(result?.loaded).toBe(false);

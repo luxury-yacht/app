@@ -66,7 +66,7 @@ const shouldHoldInitialTypedQueryLoading = <TRow>({
   enabled && Boolean(clusterId) && !queryEnabled && localData.length === 0 && !localError;
 
 const isLiveDomainInitialLoadPending = (state: { status?: string; data?: unknown }): boolean =>
-  !state.data && state.status !== 'ready' && state.status !== 'error';
+  !state.data && (state.status === 'loading' || state.status === 'initialising');
 
 export interface QueryBackedNamespaceGridResult<
   T extends ResourceGridTableRow,
