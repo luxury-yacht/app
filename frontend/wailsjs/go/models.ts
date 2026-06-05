@@ -1205,38 +1205,6 @@ export namespace snapshot {
 	        this.memory = source["memory"];
 	    }
 	}
-	export class QueryBulkActionFailure {
-	    ref: ResourceQueryRow;
-	    message: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new QueryBulkActionFailure(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.ref = this.convertValues(source["ref"], ResourceQueryRow);
-	        this.message = source["message"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class ResourceQueryPredicate {
 	    field: string;
 	    op: string;
@@ -1299,46 +1267,6 @@ export namespace snapshot {
 		    return a;
 		}
 	}
-	export class QueryBulkActionRequest {
-	    selection: QuerySelectionDescriptor;
-	    action: string;
-	    dryRun?: boolean;
-	    confirmed?: boolean;
-	    limit?: number;
-	    continue?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new QueryBulkActionRequest(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.selection = this.convertValues(source["selection"], QuerySelectionDescriptor);
-	        this.action = source["action"];
-	        this.dryRun = source["dryRun"];
-	        this.confirmed = source["confirmed"];
-	        this.limit = source["limit"];
-	        this.continue = source["continue"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class ResourceQueryIssue {
 	    kind: string;
 	    message: string;
@@ -1352,48 +1280,6 @@ export namespace snapshot {
 	        this.kind = source["kind"];
 	        this.message = source["message"];
 	    }
-	}
-	export class QueryBulkActionResult {
-	    requiresConfirmation?: boolean;
-	    processed: number;
-	    succeeded: number;
-	    failed: number;
-	    continue?: string;
-	    failures?: QueryBulkActionFailure[];
-	    issues?: ResourceQueryIssue[];
-	
-	    static createFrom(source: any = {}) {
-	        return new QueryBulkActionResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.requiresConfirmation = source["requiresConfirmation"];
-	        this.processed = source["processed"];
-	        this.succeeded = source["succeeded"];
-	        this.failed = source["failed"];
-	        this.continue = source["continue"];
-	        this.failures = this.convertValues(source["failures"], QueryBulkActionFailure);
-	        this.issues = this.convertValues(source["issues"], ResourceQueryIssue);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	
 	
@@ -5948,4 +5834,3 @@ export namespace v1 {
 	}
 
 }
-

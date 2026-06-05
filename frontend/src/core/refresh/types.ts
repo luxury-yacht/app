@@ -664,30 +664,6 @@ export interface QuerySelectionDescriptor {
   customOnly?: boolean;
 }
 
-export interface QueryBulkActionRequest {
-  selection: QuerySelectionDescriptor;
-  action: string;
-  dryRun?: boolean;
-  confirmed?: boolean;
-  limit?: number;
-  continue?: string;
-}
-
-export interface QueryBulkActionResult {
-  requiresConfirmation?: boolean;
-  processed: number;
-  succeeded: number;
-  failed: number;
-  continue?: string;
-  failures?: QueryBulkActionFailure[];
-  issues?: ResourceQueryIssue[];
-}
-
-export interface QueryBulkActionFailure {
-  ref: ResourceQueryRow;
-  message: string;
-}
-
 // Indicates whether the catalog stream payload is a full replacement or a partial update.
 export type CatalogStreamSnapshotMode = 'full' | 'partial';
 

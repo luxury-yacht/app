@@ -14,7 +14,6 @@ import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 
 const exportCatalogQueryCSVFileMock = vi.hoisted(() => vi.fn());
-const runCatalogQueryBulkActionMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -98,7 +97,6 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   ExportCatalogSelectionCSVFile: (...args: unknown[]) => exportCatalogQueryCSVFileMock(...args),
-  RunCatalogQueryBulkAction: (...args: unknown[]) => runCatalogQueryBulkActionMock(...args),
 }));
 
 vi.mock('@/core/capabilities', () => ({
@@ -291,11 +289,6 @@ describe('BrowseView', () => {
     exportCatalogQueryCSVFileMock
       .mockReset()
       .mockResolvedValue({ path: '/tmp/catalog.csv', bytes: 29 });
-    runCatalogQueryBulkActionMock.mockReset().mockResolvedValue({
-      processed: 1,
-      succeeded: 1,
-      failed: 0,
-    });
   });
 
   afterEach(() => {
@@ -805,7 +798,7 @@ describe('BrowseView', () => {
   });
 
   describe('Query-wide CSV export', () => {
-    it('disables all-matching actions while search debounce is pending', async () => {
+    it('disables all-matching export while search debounce is pending', async () => {
       persistenceFiltersRef.current = {
         search: 'api',
         kinds: [],
@@ -832,9 +825,7 @@ describe('BrowseView', () => {
       expect(postActions.find((item: any) => item.id === 'copy-browse-query-csv')?.disabled).toBe(
         true
       );
-      expect(postActions.find((item: any) => item.id === 'delete-browse-query')?.disabled).toBe(
-        true
-      );
+      expect(postActions.some((item: any) => item.id === 'delete-browse-query')).toBe(false);
     });
 
     it('copies all backend-matching rows with the Browse query scope', async () => {
@@ -888,155 +879,6 @@ describe('BrowseView', () => {
         sortDirection: '',
         customOnly: false,
       });
-    });
-  });
-
-  describe('Query-wide bulk actions', () => {
-    it('confirms and runs delete against the backend Browse query descriptor', async () => {
-      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
-        status: 'ready',
-        data: {
-          items: [
-            {
-              uid: 'pod-1',
-              kind: 'Pod',
-              name: 'api',
-              namespace: 'default',
-              scope: 'Namespace',
-              resource: 'pods',
-              group: '',
-              version: 'v1',
-              resourceVersion: '1',
-              creationTimestamp: new Date().toISOString(),
-              clusterId: 'cluster-1',
-            },
-          ],
-          kinds: [{ kind: 'Pod', namespaced: true }],
-          namespaces: ['default'],
-          total: 1,
-        },
-        scope: 'cluster-1|limit=50&namespace=default',
-      });
-
-      await act(async () => {
-        root.render(<BrowseView namespace="default" />);
-        await Promise.resolve();
-      });
-
-      const deleteAllAction = gridTablePropsRef.current?.filters?.options?.postActions?.find(
-        (item: any) => item.id === 'delete-browse-query'
-      );
-      expect(deleteAllAction).toBeTruthy();
-
-      await act(async () => {
-        deleteAllAction.onClick();
-        await Promise.resolve();
-      });
-
-      expect(document.querySelector('.confirmation-modal')).not.toBeNull();
-      const confirm = document.querySelector<HTMLButtonElement>(
-        '.confirmation-modal-footer .button.danger'
-      );
-
-      await act(async () => {
-        confirm?.click();
-        await Promise.resolve();
-      });
-
-      expect(runCatalogQueryBulkActionMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          selection: expect.objectContaining({
-            clusterId: 'cluster-1',
-            table: 'browse',
-            namespaces: ['default'],
-            kinds: [],
-            search: '',
-            sortField: '',
-            sortDirection: '',
-            customOnly: false,
-          }),
-          action: 'delete',
-          confirmed: true,
-          limit: 100,
-          continue: undefined,
-        })
-      );
-    });
-
-    it('surfaces query-wide delete partial failures after completion', async () => {
-      runCatalogQueryBulkActionMock.mockResolvedValueOnce({
-        processed: 1,
-        succeeded: 0,
-        failed: 1,
-        failures: [
-          {
-            ref: {
-              clusterId: 'cluster-1',
-              group: '',
-              version: 'v1',
-              kind: 'Pod',
-              resource: 'pods',
-              namespace: 'default',
-              name: 'api',
-            },
-            message: 'pods "api" is forbidden',
-          },
-        ],
-      });
-      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
-        status: 'ready',
-        data: {
-          items: [
-            {
-              uid: 'pod-1',
-              kind: 'Pod',
-              name: 'api',
-              namespace: 'default',
-              scope: 'Namespace',
-              resource: 'pods',
-              group: '',
-              version: 'v1',
-              resourceVersion: '1',
-              creationTimestamp: new Date().toISOString(),
-              clusterId: 'cluster-1',
-            },
-          ],
-          kinds: [{ kind: 'Pod', namespaced: true }],
-          namespaces: ['default'],
-          total: 1,
-        },
-        scope: 'cluster-1|limit=50&namespace=default',
-      });
-
-      await act(async () => {
-        root.render(<BrowseView namespace="default" />);
-        await Promise.resolve();
-      });
-
-      const deleteAllAction = gridTablePropsRef.current?.filters?.options?.postActions?.find(
-        (item: any) => item.id === 'delete-browse-query'
-      );
-      expect(deleteAllAction).toBeTruthy();
-
-      await act(async () => {
-        deleteAllAction.onClick();
-        await Promise.resolve();
-      });
-
-      const confirm = document.querySelector<HTMLButtonElement>(
-        '.confirmation-modal-footer .button.danger'
-      );
-
-      await act(async () => {
-        confirm?.click();
-        await Promise.resolve();
-      });
-
-      expect(document.body.textContent).toContain('Delete completed with failures');
-      expect(document.body.textContent).toContain(
-        'Processed 1 matching objects. Deleted 0. Failed 1.'
-      );
-      expect(document.body.textContent).toContain('Pod default/api: pods "api" is forbidden');
     });
   });
 });

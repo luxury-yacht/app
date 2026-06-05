@@ -234,8 +234,6 @@ export function RetryAuth():Promise<void>;
 
 export function RetryClusterAuth(arg1:string):Promise<void>;
 
-export function RunCatalogQueryBulkAction(arg1:snapshot.QueryBulkActionRequest):Promise<snapshot.QueryBulkActionResult>;
-
 export function RunObjectAction(arg1:backend.ObjectActionRequest):Promise<backend.ObjectActionResponse>;
 
 export function SaveTheme(arg1:types.Theme):Promise<void>;

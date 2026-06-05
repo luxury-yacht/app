@@ -71,7 +71,7 @@ the final response.
 For app-wide large-table work, classification is not completion. A table is
 complete only when it is query-backed, proven Local Complete by a real bound, or
 visibly Local Partial with matching counts, filters, export, selection, and
-bulk-action limits.
+object-action limits.
 
 Inventory these entry points:
 
@@ -100,7 +100,7 @@ For each production usage, record:
   - `Local Partial`
   - `Query Backed Static`
   - `Query Backed Dynamic`
-- export, selection, select-all, context-menu, and bulk-action semantics
+- export, selection, select-all, context-menu, and object-action semantics
 
 Treat these cases as separate design problems:
 
@@ -125,8 +125,8 @@ Local sort/search/filter are allowed only over that window. UI, export, counts,
 facets, and select-all must not imply global behavior.
 
 `Query Backed Static`: backend owns global search, filter, sort, facets, totals,
-pagination/windowing, export-all, and query-wide selection for stable projected
-fields. Frontend renders only the current page/window.
+  pagination/windowing, export-all, and non-mutating query-wide selection for
+  stable projected fields. Frontend renders only the current page/window.
 
 `Query Backed Dynamic`: backend owns the same behavior as Query Backed Static,
 but sort/filter depends on changing computed state such as metrics. Cursor and
@@ -182,8 +182,10 @@ pagination, explicitly check:
 - select-all: visible rows only vs all matching rows
 - context menus and actions: full object refs with `clusterId`, GVK, namespace,
   and name
-- bulk actions: backend execution for query-wide operations; do not materialize
-  all rows in React
+- destructive actions: concrete visible refs only unless an explicit product
+  and security plan approves a query-wide mutation
+- non-mutating query-wide operations: backend execution; do not materialize all
+  rows in React
 
 ## Checklist
 
@@ -208,7 +210,7 @@ pagination, explicitly check:
       computed-state snapshot/revision.
 - [ ] Capped/recent/partial tables visibly communicate that local sort/filter
       only applies to the loaded window.
-- [ ] Export, selection, select-all, context-menu, and bulk-action semantics
+- [ ] Export, selection, select-all, context-menu, and object-action semantics
       match the table mode.
 - [ ] Table changes reuse `GridTable` and shared column factories.
 - [ ] Tests cover the changed refresh, catalog, table, or large-data behavior.

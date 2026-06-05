@@ -203,10 +203,10 @@ func resourceQueryPredicateMapToList(predicates map[string]string) []ResourceQue
 	return result
 }
 
-// QuerySelectionDescriptor is the durable selector used for query-wide export,
-// selection, and bulk-action flows. It intentionally carries the same scoped
-// query identity as ResourceQueryRequest so callers do not send thousands of
-// concrete frontend rows back to the backend.
+// QuerySelectionDescriptor is the durable selector used for query-wide export
+// flows. It intentionally carries the same scoped query identity as
+// ResourceQueryRequest so callers do not send thousands of concrete frontend
+// rows back to the backend.
 type QuerySelectionDescriptor struct {
 	ClusterID     string                   `json:"clusterId"`
 	Table         string                   `json:"table"`
@@ -217,28 +217,4 @@ type QuerySelectionDescriptor struct {
 	SortField     string                   `json:"sortField,omitempty"`
 	SortDirection string                   `json:"sortDirection,omitempty"`
 	CustomOnly    bool                     `json:"customOnly,omitempty"`
-}
-
-type QueryBulkActionRequest struct {
-	Selection QuerySelectionDescriptor `json:"selection"`
-	Action    string                   `json:"action"`
-	DryRun    bool                     `json:"dryRun,omitempty"`
-	Confirmed bool                     `json:"confirmed,omitempty"`
-	Limit     int                      `json:"limit,omitempty"`
-	Continue  string                   `json:"continue,omitempty"`
-}
-
-type QueryBulkActionResult struct {
-	RequiresConfirmation bool                     `json:"requiresConfirmation,omitempty"`
-	Processed            int                      `json:"processed"`
-	Succeeded            int                      `json:"succeeded"`
-	Failed               int                      `json:"failed"`
-	Continue             string                   `json:"continue,omitempty"`
-	Failures             []QueryBulkActionFailure `json:"failures,omitempty"`
-	Issues               []ResourceQueryIssue     `json:"issues,omitempty"`
-}
-
-type QueryBulkActionFailure struct {
-	Ref     ResourceQueryRow `json:"ref"`
-	Message string           `json:"message"`
 }

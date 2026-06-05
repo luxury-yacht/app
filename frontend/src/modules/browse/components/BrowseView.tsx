@@ -45,7 +45,6 @@ import {
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useCatalogQueryCsvAction } from '@modules/browse/hooks/useCatalogQueryCsvAction';
-import { useCatalogQueryBulkDeleteAction } from '@modules/browse/hooks/useCatalogQueryBulkDeleteAction';
 import { catalogSelectionFromBrowseQuery } from '@modules/browse/querySelection';
 import CatalogPaginationControls from './CatalogPaginationControls';
 
@@ -341,7 +340,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     pageLimit,
     pageLimitOptions,
     setPageLimit,
-    refresh: refreshBrowseCatalog,
     queryDescriptor,
     queryPending,
   } = useBrowseCatalog({
@@ -411,21 +409,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     id: 'copy-browse-query-csv',
   });
 
-  const querySelection = useMemo(
-    () => catalogSelectionFromBrowseQuery(queryDescriptor),
-    [queryDescriptor]
-  );
-
-  const { action: bulkDeleteAllMatchingAction, modal: bulkDeleteModal } =
-    useCatalogQueryBulkDeleteAction({
-      query: querySelection,
-      totalCount,
-      totalIsExact,
-      pending: queryPending,
-      disableWhenUnscoped: disableUnscopedQueryActions,
-      onComplete: refreshBrowseCatalog,
-    });
-
   const gridFilterOptions = useMemo(
     () => ({
       searchBehavior: 'query' as const,
@@ -441,10 +424,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       totalCount,
       totalIsExact,
       partialDataLabel: filterOptions.partialDataLabel,
-      postActions: [copyAllMatchingCsvAction, bulkDeleteAllMatchingAction],
+      postActions: [copyAllMatchingCsvAction],
     }),
     [
-      bulkDeleteAllMatchingAction,
       copyAllMatchingCsvAction,
       filterOptions.kinds,
       filterOptions.namespaces,
@@ -511,7 +493,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         showPaginationStatus={false}
       />
       {objectActions.modals}
-      {bulkDeleteModal}
     </>
   );
 };

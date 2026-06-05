@@ -79,8 +79,8 @@ cluster-scoped row keys.
 - `Local Complete` means the loaded rows are the complete bounded dataset for
   this table scope.
 - `Local Partial` means the loaded rows are only a recent, capped, buffered, or
-  degraded window. UI text, counts, filters, export, selection, and bulk actions
-  must be scoped to that window.
+  degraded window. UI text, counts, filters, export, selection, and object
+  actions must be scoped to that window.
 - `Query Backed Static` and `Query Backed Dynamic` mean the backend owns global
   search, filters, sort, counts, facets, and pagination. `GridTable` renders the
   current page/window and emits query changes.

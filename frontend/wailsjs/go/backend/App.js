@@ -454,10 +454,6 @@ export function RetryClusterAuth(arg1) {
   return window['go']['backend']['App']['RetryClusterAuth'](arg1);
 }
 
-export function RunCatalogQueryBulkAction(arg1) {
-  return window['go']['backend']['App']['RunCatalogQueryBulkAction'](arg1);
-}
-
 export function RunObjectAction(arg1) {
   return window['go']['backend']['App']['RunObjectAction'](arg1);
 }

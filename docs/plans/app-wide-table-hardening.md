@@ -64,7 +64,7 @@ covered: `<GridTable`, `<ResourceGridTableView`,
 `useClusterResourceGridTable`, `useNamespaceResourceGridTable`,
 `useObjectPanelResourceGridTable`, `useQueryResourceGridTable`,
 `useQueryBackedNamespaceResourceGridTable`, direct `useTableSort`, catalog
-query export hooks, and catalog query bulk-delete hooks.
+query export hooks, and destructive-action hooks.
 
 Shared action semantics unless noted: resource tables expose per-row context
 menus only for visible rows and build concrete refs with `clusterId`, GVK,
@@ -72,12 +72,12 @@ namespace when namespaced, and name. Shared GridTable CSV copies visible rows
 only. There is no table-wide row-selection model for these resource-grid
 tables; kind/namespace dropdown "select all" selects filter options, not
 objects. Browse and Custom add backend query-wide CSV for scoped catalog
-queries. Browse also adds backend query-wide bulk delete, disabled for
-unscoped all-namespace queries.
+queries. Resource table destructive object actions stay limited to concrete
+visible-row refs.
 
 | Surface                               | View id / owner                                                       | Producer and row type                                                                                                           | Scope                                                           | Completeness and current mode                                                                                                                               | Counts, facets, pagination                                                                                              | Export, selection, actions                                                                                                                    | Expected worst-case cardinality                                                    |
 | ------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Browse catalog                        | `browse`, `all-namespaces-browse`, `namespace-browse` in `BrowseView` | `backend/objectcatalog.Service.Query` through `backend/refresh/snapshot/catalog.go`; frontend `CatalogItem` -> `BrowseTableRow` | cluster, namespace, or all-namespaces within one `clusterId`    | Backend paged catalog query; `Query Backed Static`                                                                                                          | Backend total/exactness, kind and namespace facets, cursor previous/next, bounded page size                             | Visible-row CSV plus scoped backend query CSV; query-wide bulk delete disabled for unscoped all-namespace query; row actions use catalog refs | Catalog scale, measured to 250k objects per cluster in current budget              |
+| Browse catalog                        | `browse`, `all-namespaces-browse`, `namespace-browse` in `BrowseView` | `backend/objectcatalog.Service.Query` through `backend/refresh/snapshot/catalog.go`; frontend `CatalogItem` -> `BrowseTableRow` | cluster, namespace, or all-namespaces within one `clusterId`    | Backend paged catalog query; `Query Backed Static`                                                                                                          | Backend total/exactness, kind and namespace facets, cursor previous/next, bounded page size                             | Visible-row CSV plus scoped backend query CSV; no query-wide destructive object action; row actions use catalog refs | Catalog scale, measured to 250k objects per cluster in current budget              |
 | Cluster Custom resources              | `cluster-custom` in `ClusterViewCustom`                               | Catalog query with `customOnly=true`; current page hydrated by `HydrateCatalogCustomRows` into `ClusterCustomData`              | cluster-scoped custom resources for one cluster                 | Backend paged catalog query plus page hydration; `Query Backed Static`                                                                                      | Backend total/exactness, kind facets, cursor previous/next                                                              | Visible/current-page actions; backend query CSV for scoped query; no query-wide destructive action                                            | CRD fanout scale, bounded to current catalog page in React                         |
 | Namespace Custom resources            | `namespace-custom` in `NsViewCustom`                                  | Catalog query with `customOnly=true`; current page hydrated into `CustomResourceData`                                           | single namespace or all-namespaces for one cluster              | Backend paged catalog query plus page hydration; `Query Backed Static`                                                                                      | Backend total/exactness, kind and namespace facets, cursor previous/next                                                | Visible/current-page actions; backend query CSV for scoped query, disabled when all-namespaces is unscoped                                    | CRD fanout scale, bounded to current catalog page in React                         |
 | Namespace Pods, all namespaces        | `namespace-pods` in `NsViewPods`                                      | `backend/refresh/snapshot/pods.go` typed query `PodSnapshotPayload`; frontend `PodSnapshotEntry`                                | all namespaces for one cluster                                  | Backend search/filter/sort/page with metrics revision; `Query Backed Dynamic`                                                                               | Backend total/exactness, namespace facets, keyset next page                                                             | Visible-row CSV and row actions only; permission checks use visible namespace targets                                                         | Pod scale, bounded page in React                                                   |
@@ -120,8 +120,11 @@ partial-state copy.
   facets from the current page as if it were the full result set.
 - Local Partial tables must visibly state that they are recent, capped,
   buffered, degraded, or otherwise incomplete.
-- Local Partial export, selection, select-all, and destructive actions apply
-  only to the visible/windowed rows unless a backend query-wide operation exists.
+- Local Partial export, selection, and select-all apply only to the
+  visible/windowed rows unless a backend query-wide read/export operation
+  exists. Destructive object actions apply only to concrete visible-row refs
+  unless a separate product and security plan explicitly approves a query-wide
+  mutation.
 - Local Complete tables require a real bound. A user-tunable row cap is not a
   bound.
 - Pagination UI must be coherent: controls together, visible range, page size,
@@ -134,7 +137,7 @@ partial-state copy.
       hardening is complete.
 - [x] Re-run the production table inventory against current code:
       `GridTable`, `ResourceGridTableView`, resource-grid hooks, direct
-      `useTableSort`, export hooks, and bulk-action hooks.
+      `useTableSort`, export hooks, and object-action hooks.
 - [x] For every table, record producer, scope, completeness, current mode,
       counts/facets source, pagination model, export/selection semantics, and
       expected worst-case cardinality.
@@ -154,7 +157,7 @@ Acceptance:
 ## Phase 1: Make Partial Tables Honest
 
 - [x] For Events, display that results are recent/windowed and ensure counts,
-      empty states, filters, sort, CSV, selection, and bulk actions describe or
+      empty states, filters, sort, CSV, selection, and row actions describe or
       enforce the recent window.
 - [x] For namespace Config, Network, Storage, Quotas, Autoscaling, and Helm,
       surface capped/partial state from the backend producer instead of showing
@@ -331,7 +334,8 @@ Acceptance:
 - No table presents local transforms over a capped/windowed dataset as global
   search, filter, sort, counts, or facets.
 - No high-cardinality table requires loading all matching rows into React.
-- Export, select-all, and destructive bulk actions match the table mode.
+- Export and select-all match the table mode; destructive object actions stay
+  scoped to concrete visible-row refs.
 - Degraded, stale, permission-blocked, unavailable-metric, capped, approximate,
   and partial states are visible and reason-bearing.
 - Query-backed pagination is coherent, grouped, and honest about totals/page

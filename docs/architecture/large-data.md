@@ -35,12 +35,12 @@ without an explicit cap or pagination model.
   its backend exact-metadata budget and emits `totalIsExact: false` /
   `facetsExact: false`; the UI renders that count as approximate.
 - CSV/export actions should operate on visible/current-page rows unless a
-  backend query-wide operation exists for the same `clusterId` and query
-  signature.
-- Query-wide selection and bulk-action flows must use a
-  `QuerySelectionDescriptor`, require confirmation before execution, and return
-  compact partial-failure refs instead of loading every matching row into the
-  frontend.
+  backend query-wide read/export operation exists for the same `clusterId` and
+  query signature.
+- Query-wide selectors such as `QuerySelectionDescriptor` are for non-mutating
+  read/export flows unless a separate product and security plan explicitly
+  approves a query-wide mutation. Destructive object actions must operate on
+  concrete visible-row refs with full `clusterId`, GVK, namespace, and name.
 - Keep large text surfaces such as logs bounded, searchable, and copyable
   without forcing the full buffer into expensive React rendering.
 
@@ -89,9 +89,9 @@ cursor.
 Consumers: `BrowseView` renders a `Query Backed Static` resource-grid table.
 Favorites persist query-backed filter and sort state. Object actions receive
 concrete visible-row refs with `clusterId`, group, version, kind, namespace,
-and name. Query-wide CSV export and guarded query-wide bulk delete execute in
-the backend against a query descriptor; visible-row actions continue to use
-concrete refs.
+and name. Query-wide CSV export executes in the backend against a query
+descriptor; destructive object actions continue to use concrete visible-row
+refs.
 
 ## Table Modes
 
@@ -106,7 +106,8 @@ query-wide export/selection.
 Local Partial is a user-facing contract, not an internal excuse. The table must
 label the window source, such as recent, capped, degraded, or buffered; totals
 and facets must be scoped to that window; destructive and export actions must
-say or enforce that they apply only to visible/windowed rows.
+enforce visible/windowed-row scope unless the export action uses a backend
+query-wide read/export contract.
 
 `Query Backed Static` tables receive rows that are already searched, filtered,
 sorted, and paged by the backend. Shared table logic must not locally narrow or
