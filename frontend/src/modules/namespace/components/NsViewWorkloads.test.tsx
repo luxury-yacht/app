@@ -447,7 +447,7 @@ describe('NsViewWorkloads', () => {
     expect(options.rowIdentity(workload, 0)).toBe('alpha:ctx|apps/v1/Deployment/team-a/api');
   });
 
-  it('passes numeric CPU and memory sort values into useTableSort', async () => {
+  it('passes numeric Ready, CPU, and memory sort values into useTableSort', async () => {
     const workload = {
       kind: 'Deployment',
       name: 'api',
@@ -479,9 +479,11 @@ describe('NsViewWorkloads', () => {
       key: string;
       sortValue?: (item: typeof workload) => unknown;
     }>;
+    const readyColumn = columns.find((column) => column.key === 'ready');
     const cpuColumn = columns.find((column) => column.key === 'cpu');
     const memoryColumn = columns.find((column) => column.key === 'memory');
 
+    expect(readyColumn?.sortValue?.({ ...workload, ready: '2/10' })).toBe(2000010);
     expect(cpuColumn?.sortValue?.(workload)).toBe(10);
     expect(memoryColumn?.sortValue?.(workload)).toBe(20);
   });

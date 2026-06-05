@@ -1595,7 +1595,7 @@ func TestNamespaceWorkloadsBuilderAllNamespacesQuerySortsFiltersAndPagesByMetric
 	require.Empty(t, nextPayload.Continue)
 }
 
-func TestNamespaceWorkloadsBuilderMetricCursorContinuesAcrossMetricsRefresh(t *testing.T) {
+func TestNamespaceWorkloadsBuilderMetricCursorInvalidatesAcrossMetricsRefresh(t *testing.T) {
 	now := time.Now()
 	replicas := int32(1)
 	deployments := []*appsv1.Deployment{
@@ -1683,9 +1683,10 @@ func TestNamespaceWorkloadsBuilderMetricCursorContinuesAcrossMetricsRefresh(t *t
 	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=memory&sortDirection=desc&limit=1&continue="+firstPayload.Continue)
 	require.NoError(t, err)
 	nextPayload := next.Payload.(NamespaceWorkloadsSnapshot)
+	require.True(t, nextPayload.CursorInvalid)
 	require.Len(t, nextPayload.Workloads, 1)
-	require.Equal(t, "charlie", nextPayload.Workloads[0].Name)
-	require.Empty(t, nextPayload.Continue)
+	require.Equal(t, "bravo", nextPayload.Workloads[0].Name)
+	require.NotEmpty(t, nextPayload.Continue)
 }
 
 func TestNamespaceWorkloadsQueryMarksDeniedKindsPartial(t *testing.T) {

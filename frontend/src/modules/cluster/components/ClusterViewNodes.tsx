@@ -76,6 +76,19 @@ const parseNodeAgeToSeconds = (age?: string): number => {
   return total;
 };
 
+const parseNodePodsUsed = (pods?: string | number | null): number => {
+  if (typeof pods === 'number') {
+    return Number.isFinite(pods) ? pods : 0;
+  }
+  const raw = pods?.trim() ?? '';
+  if (!raw || raw === '—' || raw === '-') {
+    return 0;
+  }
+  const [used] = raw.split('/');
+  const parsed = Number.parseFloat(used.trim());
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 /*
  * GridTable component for cluster nodes
  * Displays nodes with their status, resource usage, and other details
@@ -235,7 +248,9 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
             );
           },
         },
-        cf.createTextColumn<ClusterNodeRow>('pods', 'Pods', (row) => row.pods || '—'),
+        cf.createTextColumn<ClusterNodeRow>('pods', 'Pods', (row) => row.pods || '—', {
+          sortValue: (row) => parseNodePodsUsed(row.pods),
+        }),
         (() => {
           const column = cf.createTextColumn<ClusterNodeRow>(
             'restarts',

@@ -35,6 +35,19 @@ func eventObjectNameForSort(object string) string {
 	return ""
 }
 
+func nodePodsUsedSortValue(pods string) (float64, bool) {
+	pods = strings.TrimSpace(pods)
+	if pods == "" || pods == "—" || pods == "-" {
+		return 0, false
+	}
+	used, _, _ := strings.Cut(pods, "/")
+	value, err := strconv.ParseFloat(strings.TrimSpace(used), 64)
+	if err != nil {
+		return 0, false
+	}
+	return value, true
+}
+
 func configTableQueryAdapter() typedTableQueryAdapter[ConfigSummary] {
 	return typedTableQueryAdapter[ConfigSummary]{
 		Key:       func(row ConfigSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
@@ -418,6 +431,8 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 				return parseFormattedCPUToMilli(row.CPUUsage)
 			case "memory", "memoryusage":
 				return parseFormattedMemoryToBytes(row.MemoryUsage)
+			case "pods":
+				return nodePodsUsedSortValue(row.Pods)
 			case "restarts":
 				return float64(row.Restarts), true
 			case "age":

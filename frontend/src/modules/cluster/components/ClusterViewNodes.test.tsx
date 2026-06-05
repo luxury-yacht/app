@@ -297,7 +297,7 @@ describe('ClusterViewNodes', () => {
     );
   });
 
-  it('passes numeric CPU, memory, and age sort values into useTableSort', async () => {
+  it('passes numeric Pods, CPU, memory, and age sort values into useTableSort', async () => {
     await renderNodes([baseNode]);
 
     expect(useTableSortMock).toHaveBeenCalled();
@@ -306,10 +306,12 @@ describe('ClusterViewNodes', () => {
       key: string;
       sortValue?: (item: typeof baseNode) => unknown;
     }>;
+    const podsColumn = columns.find((column) => column.key === 'pods');
     const cpuColumn = columns.find((column) => column.key === 'cpu');
     const memoryColumn = columns.find((column) => column.key === 'memory');
     const ageColumn = columns.find((column) => column.key === 'age');
 
+    expect(podsColumn?.sortValue?.({ ...baseNode, pods: '3/50' } as any)).toBe(3);
     expect(cpuColumn?.sortValue?.(baseNode)).toBe(1000);
     expect(memoryColumn?.sortValue?.(baseNode)).toBe(2048);
     expect(

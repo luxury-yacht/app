@@ -290,7 +290,8 @@ func (c typedTableQueryCursor) matches(query typedTableQuery) bool {
 		c.Signature == query.signature() &&
 		c.SortField == query.Request.SortField &&
 		c.SortDirection == query.Request.SortDirection &&
-		c.Limit == query.Request.Limit
+		c.Limit == query.Request.Limit &&
+		c.DynamicRevision == query.DynamicRevision
 }
 
 func (q typedTableQuery) signature() string {

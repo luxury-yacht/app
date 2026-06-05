@@ -11,6 +11,7 @@ type typedQueryTestRow struct {
 	name      string
 	namespace string
 	kind      string
+	cpu       float64
 }
 
 func TestTypedTableQueryReportsInvalidCursor(t *testing.T) {
@@ -62,6 +63,43 @@ func TestTypedTableQueryIncludesDynamicRef(t *testing.T) {
 	}
 	if page.Continue == "" {
 		t.Fatal("expected continue cursor")
+	}
+}
+
+func TestTypedTableQueryInvalidatesCursorWhenDynamicRevisionChanges(t *testing.T) {
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID:     "cluster-a",
+			Table:         "pods",
+			SortField:     "cpu",
+			SortDirection: "desc",
+			Limit:         1,
+		},
+		DynamicRevision: "metrics-rev-1",
+	}
+	rows := []typedQueryTestRow{
+		{key: "default/a", name: "a", namespace: "default", kind: "Pod", cpu: 100},
+		{key: "default/b", name: "b", namespace: "default", kind: "Pod", cpu: 50},
+	}
+	page := applyTypedTableQuery(rows, query, typedQueryTestAdapter())
+	if page.Continue == "" {
+		t.Fatal("expected continue cursor from first dynamic page")
+	}
+
+	query.Request.Continue = page.Continue
+	query.DynamicRevision = "metrics-rev-2"
+	nextPage := applyTypedTableQuery(rows, query, typedQueryTestAdapter())
+	if !nextPage.CursorInvalid {
+		t.Fatal("expected stale dynamic cursor to be invalid")
+	}
+
+	collector := newTypedTableQueryCollector(query, typedQueryTestAdapter())
+	for _, row := range rows {
+		collector.Add(row)
+	}
+	if collectorPage := collector.Page(); !collectorPage.CursorInvalid {
+		t.Fatal("expected bounded collector to reject stale dynamic cursor")
 	}
 }
 
@@ -141,12 +179,17 @@ func assertStringSlicesEqual(t *testing.T, want, got []string) {
 
 func typedQueryTestAdapter() typedTableQueryAdapter[typedQueryTestRow] {
 	return typedTableQueryAdapter[typedQueryTestRow]{
-		Key:         func(row typedQueryTestRow) string { return row.key },
-		Namespace:   func(row typedQueryTestRow) string { return row.namespace },
-		Kind:        func(row typedQueryTestRow) string { return row.kind },
-		SearchText:  func(row typedQueryTestRow) []string { return []string{row.name} },
-		Predicate:   func(typedQueryTestRow, string, string) bool { return true },
-		SortValue:   func(row typedQueryTestRow, _ string) string { return row.name },
-		NumericSort: func(typedQueryTestRow, string) (float64, bool) { return 0, false },
+		Key:        func(row typedQueryTestRow) string { return row.key },
+		Namespace:  func(row typedQueryTestRow) string { return row.namespace },
+		Kind:       func(row typedQueryTestRow) string { return row.kind },
+		SearchText: func(row typedQueryTestRow) []string { return []string{row.name} },
+		Predicate:  func(typedQueryTestRow, string, string) bool { return true },
+		SortValue:  func(row typedQueryTestRow, _ string) string { return row.name },
+		NumericSort: func(row typedQueryTestRow, field string) (float64, bool) {
+			if field == "cpu" {
+				return row.cpu, true
+			}
+			return 0, false
+		},
 	}
 }

@@ -285,6 +285,18 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 		})
 	})
 
+	t.Run("node pods column", func(t *testing.T) {
+		query.BaseScope = "cluster"
+		query.Request.SortField = "pods"
+		page := applyTypedTableQuery([]NodeSummary{
+			{Name: "busy-node", Pods: "10/110"},
+			{Name: "quiet-node", Pods: "2/110"},
+		}, query, nodeTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"quiet-node", "busy-node"}, func(row NodeSummary) string {
+			return row.Name
+		})
+	})
+
 	t.Run("namespace event object columns", func(t *testing.T) {
 		query.BaseScope = "namespace:all"
 		query.Request.SortField = "objectType"
