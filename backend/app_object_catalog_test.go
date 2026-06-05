@@ -308,6 +308,42 @@ func TestExportCatalogSelectionCSVFileUsesDurableQuerySelection(t *testing.T) {
 	)
 }
 
+type invalidCursorCatalogQueryStore struct{}
+
+func (invalidCursorCatalogQueryStore) QueryCatalog(objectcatalog.QueryOptions) (objectcatalog.QueryResult, bool) {
+	return objectcatalog.QueryResult{CursorInvalid: true}, true
+}
+
+func TestExportCatalogSelectionCSVFileDoesNotDeleteExistingFileOnFailure(t *testing.T) {
+	app := NewApp()
+	app.Ctx = context.Background()
+	svc := objectcatalog.NewService(
+		objectcatalog.Dependencies{},
+		&objectcatalog.Options{QueryStore: invalidCursorCatalogQueryStore{}},
+	)
+	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
+
+	exportPath := t.TempDir() + "/catalog.csv"
+	require.NoError(t, os.WriteFile(exportPath, []byte("original file"), 0o600))
+	origSaveFileDialog := runtimeSaveFileDialog
+	runtimeSaveFileDialog = func(context.Context, wailsruntime.SaveDialogOptions) (string, error) {
+		return exportPath, nil
+	}
+	t.Cleanup(func() {
+		runtimeSaveFileDialog = origSaveFileDialog
+	})
+
+	_, err := app.ExportCatalogSelectionCSVFile(snapshot.QuerySelectionDescriptor{
+		ClusterID: "cluster-b",
+		Table:     "browse",
+	})
+
+	require.ErrorContains(t, err, "catalog query cursor became invalid during export")
+	savedBytes, readErr := os.ReadFile(exportPath)
+	require.NoError(t, readErr)
+	require.Equal(t, "original file", string(savedBytes))
+}
+
 func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
 	clusterID := "cluster-b"
 	gvrObject := &unstructured.Unstructured{

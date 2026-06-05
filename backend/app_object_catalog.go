@@ -581,27 +581,31 @@ func (a *App) ExportCatalogSelectionCSVFile(selection snapshot.QuerySelectionDes
 		return empty, fmt.Errorf("catalog CSV export canceled")
 	}
 
-	file, err := os.Create(path)
+	tempFile, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
 	if err != nil {
 		return empty, fmt.Errorf("create catalog CSV export: %w", err)
 	}
+	tempPath := tempFile.Name()
 	cleanup := true
 	defer func() {
 		if cleanup {
-			_ = os.Remove(path)
+			_ = os.Remove(tempPath)
 		}
 	}()
 
-	if err := svc.WriteQueryCSV(file, catalogQueryOptionsFromSelection(selection, 0, "")); err != nil {
-		_ = file.Close()
+	if err := svc.WriteQueryCSV(tempFile, catalogQueryOptionsFromSelection(selection, 0, "")); err != nil {
+		_ = tempFile.Close()
 		return empty, err
 	}
-	if err := file.Close(); err != nil {
+	if err := tempFile.Close(); err != nil {
 		return empty, fmt.Errorf("close catalog CSV export: %w", err)
 	}
-	info, err := os.Stat(path)
+	info, err := os.Stat(tempPath)
 	if err != nil {
 		return empty, fmt.Errorf("stat catalog CSV export: %w", err)
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		return empty, fmt.Errorf("move catalog CSV export into place: %w", err)
 	}
 	cleanup = false
 	return CatalogQueryCSVExport{Path: path, Bytes: info.Size()}, nil
