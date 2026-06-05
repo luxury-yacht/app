@@ -490,4 +490,66 @@ describe('ClusterViewNodes', () => {
     expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
     expect(latestTableRowsRef.current).toEqual([updatedQueryNode]);
   });
+
+  it('keeps local node rows visible when a remount query temporarily returns empty', async () => {
+    const initialQueryNode = { ...baseNode, name: 'node-1' };
+
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            nodes: [initialQueryNode],
+            total: 1,
+            totalIsExact: true,
+            kinds: ['Node'],
+            facetsExact: true,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            nodes: [],
+            total: 0,
+            totalIsExact: true,
+            kinds: [],
+            facetsExact: true,
+          },
+        },
+      });
+
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[baseNode] as any} loading={false} loaded={true} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(latestTableRowsRef.current).toEqual([initialQueryNode]);
+
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
+
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[baseNode] as any} loading={false} loaded={true} />);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
+    expect(latestTableRowsRef.current).toEqual([baseNode]);
+    expect(loadingBoundaryPropsRef.current).toEqual(
+      expect.objectContaining({
+        loading: false,
+        hasLoaded: true,
+        dataLength: 1,
+      })
+    );
+  });
 });

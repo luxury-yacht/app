@@ -3,7 +3,10 @@ import type { RefreshDomain } from '@/core/refresh/types';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
-import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
+import type {
+  GridTableFilterOptions,
+  GridTableFilterState,
+} from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
@@ -21,6 +24,7 @@ import {
   useTypedResourceQuery,
   type TypedQueryPageLimit,
   type TypedQueryPayload,
+  type UseTypedResourceQueryResult,
 } from './useTypedResourceQuery';
 import {
   mergeQueryBackedFilterOptions,
@@ -68,6 +72,48 @@ const shouldHoldInitialTypedQueryLoading = <TRow>({
 const isLiveDomainInitialLoadPending = (state: { status?: string; data?: unknown }): boolean =>
   !state.data && (state.status === 'loading' || state.status === 'initialising');
 
+const hasActiveQueryFilters = (filters: GridTableFilterState): boolean =>
+  filters.search.trim().length > 0 || filters.kinds.length > 0 || filters.namespaces.length > 0;
+
+const hasActiveQueryPredicates = (
+  predicates: Record<string, string | null | undefined> | undefined
+): boolean =>
+  Object.values(predicates ?? {}).some(
+    (value) => value !== null && value !== undefined && value.trim() !== ''
+  );
+
+const shouldRetainLocalRowsForEmptyQuery = <TRow>({
+  allowRetainLocalRows,
+  queryEnabled,
+  query,
+  localData,
+  localError,
+  filters,
+  predicates,
+}: {
+  allowRetainLocalRows: boolean;
+  queryEnabled: boolean;
+  query: UseTypedResourceQueryResult<TRow>;
+  localData: TRow[];
+  localError: string | null;
+  filters: GridTableFilterState;
+  predicates?: Record<string, string | null | undefined>;
+}): boolean =>
+  allowRetainLocalRows &&
+  queryEnabled &&
+  localData.length > 0 &&
+  !localError &&
+  query.loaded &&
+  !query.loading &&
+  !query.error &&
+  query.rows.length === 0 &&
+  query.totalCount === 0 &&
+  query.pageIndex === 1 &&
+  !query.hasPrevious &&
+  !query.continueToken &&
+  !hasActiveQueryFilters(filters) &&
+  !hasActiveQueryPredicates(predicates);
+
 export interface QueryBackedNamespaceGridResult<
   T extends ResourceGridTableRow,
 > extends ResourceGridTableResult<T> {
@@ -98,6 +144,7 @@ export interface QueryBackedNamespaceGridParams<
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
+  retainLocalRowsForEmptyQuery?: boolean;
 }
 
 export function useQueryBackedNamespaceResourceGridTable<
@@ -118,6 +165,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   selectRows,
   predicates,
   filterOptionOverrides,
+  retainLocalRowsForEmptyQuery = false,
   defaultSort = { key: 'name', direction: 'asc' },
   namespace,
   ...tableParams
@@ -183,7 +231,16 @@ export function useQueryBackedNamespaceResourceGridTable<
     selectRows,
   });
 
-  const data = queryEnabled ? query.rows : localData;
+  const useLocalRowsForEmptyQuery = shouldRetainLocalRowsForEmptyQuery({
+    allowRetainLocalRows: retainLocalRowsForEmptyQuery,
+    queryEnabled,
+    query,
+    localData,
+    localError,
+    filters: tableState.filters,
+    predicates,
+  });
+  const data = queryEnabled ? (useLocalRowsForEmptyQuery ? localData : query.rows) : localData;
   const waitingForInitialQuery = shouldHoldInitialTypedQueryLoading({
     enabled,
     clusterId,
@@ -193,9 +250,13 @@ export function useQueryBackedNamespaceResourceGridTable<
   });
   const queryInitialLoading = query.rows.length === 0 && !query.loaded && !query.error;
   const loading = queryEnabled
-    ? query.rows.length === 0 && (query.loading || queryInitialLoading)
+    ? data.length === 0 && (query.loading || queryInitialLoading)
     : waitingForInitialQuery || localLoading;
-  const loaded = queryEnabled ? query.loaded : waitingForInitialQuery ? false : localLoaded;
+  const loaded = queryEnabled
+    ? useLocalRowsForEmptyQuery || query.loaded
+    : waitingForInitialQuery
+      ? false
+      : localLoaded;
   const error = queryEnabled ? query.error : localError;
 
   const table = useNamespaceResourceGridTable<TRow>({
@@ -221,27 +282,42 @@ export function useQueryBackedNamespaceResourceGridTable<
     if (!enabled) {
       return table.gridTableProps;
     }
+    const paginationQuery = useLocalRowsForEmptyQuery
+      ? {
+          ...query,
+          totalCount: Math.max(query.totalCount, data.length),
+          totalIsExact: false,
+        }
+      : query;
     const paginationControls = React.createElement(QueryPaginationControls, {
       idPrefix: tableParams.viewId,
-      pageIndex: query.pageIndex,
-      pageSize: query.pageSize,
-      visibleItemCount: query.rows.length,
+      pageIndex: paginationQuery.pageIndex,
+      pageSize: paginationQuery.pageSize,
+      visibleItemCount: data.length,
       pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
-      totalCount: query.totalCount,
-      totalIsExact: query.totalIsExact,
-      hasPrevious: query.hasPrevious,
-      hasNext: Boolean(query.continueToken),
-      loading: query.isRequestingMore,
-      onPrevious: query.loadPrevious,
-      onNext: query.loadMore,
+      totalCount: paginationQuery.totalCount,
+      totalIsExact: paginationQuery.totalIsExact,
+      hasPrevious: paginationQuery.hasPrevious,
+      hasNext: Boolean(paginationQuery.continueToken),
+      loading: paginationQuery.isRequestingMore,
+      onPrevious: paginationQuery.loadPrevious,
+      onNext: paginationQuery.loadMore,
       onPageSizeChange: (value: number) => {
         if (TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)) {
           persistence.setPageSize(value);
         }
       },
     });
-    return queryBackedPaginationProps(table.gridTableProps, query, paginationControls);
-  }, [enabled, persistence, query, table.gridTableProps, tableParams.viewId]);
+    return queryBackedPaginationProps(table.gridTableProps, paginationQuery, paginationControls);
+  }, [
+    data.length,
+    enabled,
+    persistence,
+    query,
+    useLocalRowsForEmptyQuery,
+    table.gridTableProps,
+    tableParams.viewId,
+  ]);
 
   return {
     ...table,
@@ -274,6 +350,7 @@ export interface QueryBackedClusterGridParams<
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
+  retainLocalRowsForEmptyQuery?: boolean;
 }
 
 export function useQueryBackedClusterResourceGridTable<
@@ -294,6 +371,7 @@ export function useQueryBackedClusterResourceGridTable<
   selectRows,
   predicates,
   filterOptionOverrides,
+  retainLocalRowsForEmptyQuery = false,
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   ...tableParams
@@ -360,7 +438,16 @@ export function useQueryBackedClusterResourceGridTable<
     selectRows,
   });
 
-  const data = queryEnabled ? query.rows : localData;
+  const useLocalRowsForEmptyQuery = shouldRetainLocalRowsForEmptyQuery({
+    allowRetainLocalRows: retainLocalRowsForEmptyQuery,
+    queryEnabled,
+    query,
+    localData,
+    localError,
+    filters: tableState.filters,
+    predicates,
+  });
+  const data = queryEnabled ? (useLocalRowsForEmptyQuery ? localData : query.rows) : localData;
   const waitingForInitialQuery = shouldHoldInitialTypedQueryLoading({
     enabled,
     clusterId,
@@ -370,9 +457,13 @@ export function useQueryBackedClusterResourceGridTable<
   });
   const queryInitialLoading = query.rows.length === 0 && !query.loaded && !query.error;
   const loading = queryEnabled
-    ? query.rows.length === 0 && (query.loading || queryInitialLoading)
+    ? data.length === 0 && (query.loading || queryInitialLoading)
     : waitingForInitialQuery || localLoading;
-  const loaded = queryEnabled ? query.loaded : waitingForInitialQuery ? false : localLoaded;
+  const loaded = queryEnabled
+    ? useLocalRowsForEmptyQuery || query.loaded
+    : waitingForInitialQuery
+      ? false
+      : localLoaded;
   const error = queryEnabled ? query.error : localError;
 
   const table = useClusterResourceGridTable<TRow>({
@@ -398,27 +489,42 @@ export function useQueryBackedClusterResourceGridTable<
     if (!enabled) {
       return table.gridTableProps;
     }
+    const paginationQuery = useLocalRowsForEmptyQuery
+      ? {
+          ...query,
+          totalCount: Math.max(query.totalCount, data.length),
+          totalIsExact: false,
+        }
+      : query;
     const paginationControls = React.createElement(QueryPaginationControls, {
       idPrefix: tableParams.viewId,
-      pageIndex: query.pageIndex,
-      pageSize: query.pageSize,
-      visibleItemCount: query.rows.length,
+      pageIndex: paginationQuery.pageIndex,
+      pageSize: paginationQuery.pageSize,
+      visibleItemCount: data.length,
       pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
-      totalCount: query.totalCount,
-      totalIsExact: query.totalIsExact,
-      hasPrevious: query.hasPrevious,
-      hasNext: Boolean(query.continueToken),
-      loading: query.isRequestingMore,
-      onPrevious: query.loadPrevious,
-      onNext: query.loadMore,
+      totalCount: paginationQuery.totalCount,
+      totalIsExact: paginationQuery.totalIsExact,
+      hasPrevious: paginationQuery.hasPrevious,
+      hasNext: Boolean(paginationQuery.continueToken),
+      loading: paginationQuery.isRequestingMore,
+      onPrevious: paginationQuery.loadPrevious,
+      onNext: paginationQuery.loadMore,
       onPageSizeChange: (value: number) => {
         if (TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)) {
           persistence.setPageSize(value);
         }
       },
     });
-    return queryBackedPaginationProps(table.gridTableProps, query, paginationControls);
-  }, [enabled, persistence, query, table.gridTableProps, tableParams.viewId]);
+    return queryBackedPaginationProps(table.gridTableProps, paginationQuery, paginationControls);
+  }, [
+    data.length,
+    enabled,
+    persistence,
+    query,
+    useLocalRowsForEmptyQuery,
+    table.gridTableProps,
+    tableParams.viewId,
+  ]);
 
   return {
     ...table,

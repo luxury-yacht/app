@@ -370,6 +370,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       localLoading: loading,
       localLoaded: loaded,
       selectRows,
+      retainLocalRowsForEmptyQuery: true,
       viewId: 'cluster-nodes',
       persistenceData: [],
       columns: tableColumns,

@@ -811,6 +811,202 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(paginationLoading(result)).toBe(false);
   });
 
+  it('retains local rows when an unfiltered first-page query returns an empty loaded result', async () => {
+    let result:
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const Probe: React.FC = () => {
+      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        localData: [row],
+        selectRows,
+        retainLocalRowsForEmptyQuery: true,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    useTypedResourceQueryMock.mockReturnValue({
+      rows: [],
+      loading: false,
+      loaded: true,
+      error: null,
+      continueToken: null,
+      hasPrevious: false,
+      isRequestingMore: false,
+      loadMore: vi.fn(),
+      loadPrevious: vi.fn(),
+      pageIndex: 1,
+      pageSize: 50,
+      totalCount: 0,
+      totalIsExact: true,
+      filterOptions: {},
+      dynamic: null,
+    });
+    useClusterResourceGridTableMock.mockImplementation((params) => ({
+      gridTableProps: {
+        data: params.data,
+      },
+      favModal: null,
+    }));
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useClusterResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange(publishedTableState);
+      await Promise.resolve();
+    });
+
+    expect(result?.rows).toEqual([row]);
+    expect(result?.loading).toBe(false);
+    expect(result?.loaded).toBe(true);
+    expect(useClusterResourceGridTableMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: [row] })
+    );
+    const paginationControls = (result?.gridTableProps as any)?.paginationControls;
+    expect(paginationControls.props.visibleItemCount).toBe(1);
+    expect(paginationControls.props.totalCount).toBe(1);
+    expect(paginationControls.props.totalIsExact).toBe(false);
+  });
+
+  it('uses empty query results by default when local rows exist', async () => {
+    let result:
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const Probe: React.FC = () => {
+      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        localData: [row],
+        selectRows,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    useTypedResourceQueryMock.mockReturnValue({
+      rows: [],
+      loading: false,
+      loaded: true,
+      error: null,
+      continueToken: null,
+      hasPrevious: false,
+      isRequestingMore: false,
+      loadMore: vi.fn(),
+      loadPrevious: vi.fn(),
+      pageIndex: 1,
+      pageSize: 50,
+      totalCount: 0,
+      totalIsExact: true,
+      filterOptions: {},
+      dynamic: null,
+    });
+    useClusterResourceGridTableMock.mockImplementation((params) => ({
+      gridTableProps: {
+        data: params.data,
+      },
+      favModal: null,
+    }));
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useClusterResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange(publishedTableState);
+      await Promise.resolve();
+    });
+
+    expect(result?.rows).toEqual([]);
+    expect(useClusterResourceGridTableMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: [] })
+    );
+  });
+
+  it('honors filtered empty query results instead of retaining local rows', async () => {
+    let result:
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const Probe: React.FC = () => {
+      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        localData: [row],
+        selectRows,
+        retainLocalRowsForEmptyQuery: true,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    useTypedResourceQueryMock.mockReturnValue({
+      rows: [],
+      loading: false,
+      loaded: true,
+      error: null,
+      continueToken: null,
+      hasPrevious: false,
+      isRequestingMore: false,
+      loadMore: vi.fn(),
+      loadPrevious: vi.fn(),
+      pageIndex: 1,
+      pageSize: 50,
+      totalCount: 0,
+      totalIsExact: true,
+      filterOptions: {},
+      dynamic: null,
+    });
+    useClusterResourceGridTableMock.mockImplementation((params) => ({
+      gridTableProps: {
+        data: params.data,
+      },
+      favModal: null,
+    }));
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useClusterResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange({
+        ...publishedTableState,
+        filters: {
+          ...publishedTableState.filters,
+          search: 'missing',
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(result?.rows).toEqual([]);
+    expect(result?.loading).toBe(false);
+    expect(result?.loaded).toBe(true);
+    expect(useClusterResourceGridTableMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: [] })
+    );
+  });
+
   it('exposes pagination loading only while a pagination request is in flight', async () => {
     let result:
       | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
