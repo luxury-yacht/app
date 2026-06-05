@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -127,6 +128,35 @@ func TestClusterConfigBuilderCapsLargeSnapshots(t *testing.T) {
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotClusterConfigEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "cluster configuration resources")
+}
+
+func TestClusterConfigBuilderQueryReportsPartialAllowedResources(t *testing.T) {
+	ingressClass := &networkingv1.IngressClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "public",
+			ResourceVersion:   "22",
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-12 * time.Hour)),
+		},
+		Spec: networkingv1.IngressClassSpec{Controller: "nginx.org/ingress-controller"},
+	}
+	builder := &ClusterConfigBuilder{
+		ingressClassLister: testsupport.NewIngressClassLister(t, ingressClass),
+		perms: ClusterConfigPermissions{
+			IncludeIngressClasses: true,
+		},
+	}
+	ctx := domainpermissions.WithAllowedResources(context.Background(), clusterConfigDomainName, domainpermissions.AllowedResources{
+		"networking.k8s.io/ingressclasses": false,
+	})
+
+	snapshot, err := builder.Build(ctx, "cluster-a|?limit=10&kinds=IngressClass")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(ClusterConfigSnapshot)
+	require.False(t, payload.TotalIsExact)
+	require.False(t, payload.FacetsExact)
+	require.Len(t, payload.Issues, 1)
+	require.Equal(t, "IngressClass", payload.Issues[0].Kind)
+	require.Empty(t, payload.Resources)
 }
 
 func TestClusterStorageBuilder(t *testing.T) {

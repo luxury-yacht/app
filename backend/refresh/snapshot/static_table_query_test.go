@@ -479,17 +479,154 @@ func requirePageNames[T any](t *testing.T, rows []T, want []string, getName func
 
 func BenchmarkMigratedStaticTableQueries(b *testing.B) {
 	query := migratedStaticQuery()
+	query.Request.Search = "bench"
+	query.Request.SortField = "name"
 	query.Request.Limit = 250
-	rows := make([]ConfigSummary, 10000)
-	for i := range rows {
-		namespace := "team-a"
-		if i%2 == 0 {
-			namespace = "team-b"
+
+	b.Run("config", func(b *testing.B) {
+		rows := make([]ConfigSummary, 10000)
+		for i := range rows {
+			namespace := benchmarkNamespace(i)
+			rows[i] = ConfigSummary{Kind: benchmarkKind(i, "ConfigMap", "Secret"), Namespace: namespace, Name: benchmarkName("config", i), Data: i % 16}
 		}
-		rows[i] = ConfigSummary{Kind: "ConfigMap", Namespace: namespace, Name: "config-" + strconv.Itoa(i)}
-	}
+		benchmarkTypedTableQuery(b, query, rows, configTableQueryAdapter())
+	})
+	b.Run("network", func(b *testing.B) {
+		kinds := []string{"Service", "EndpointSlice", "Ingress", "NetworkPolicy", "Gateway", "HTTPRoute"}
+		rows := make([]NetworkSummary, 10000)
+		for i := range rows {
+			rows[i] = NetworkSummary{Kind: kinds[i%len(kinds)], Namespace: benchmarkNamespace(i), Name: benchmarkName("network", i), Details: "bench route"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, networkTableQueryAdapter())
+	})
+	b.Run("storage", func(b *testing.B) {
+		rows := make([]StorageSummary, 10000)
+		for i := range rows {
+			rows[i] = StorageSummary{Kind: "PersistentVolumeClaim", Namespace: benchmarkNamespace(i), Name: benchmarkName("pvc", i), Capacity: "10Gi", Status: "Bound", StorageClass: "bench-fast"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, storageTableQueryAdapter())
+	})
+	b.Run("autoscaling", func(b *testing.B) {
+		rows := make([]AutoscalingSummary, 10000)
+		for i := range rows {
+			rows[i] = AutoscalingSummary{Kind: "HorizontalPodAutoscaler", Namespace: benchmarkNamespace(i), Name: benchmarkName("hpa", i), Target: "Deployment/bench-api", Min: 1, Max: 10, Current: int32(i % 10)}
+		}
+		benchmarkTypedTableQuery(b, query, rows, autoscalingTableQueryAdapter())
+	})
+	b.Run("quotas", func(b *testing.B) {
+		kinds := []string{"ResourceQuota", "LimitRange", "PodDisruptionBudget"}
+		rows := make([]QuotaSummary, 10000)
+		for i := range rows {
+			rows[i] = QuotaSummary{Kind: kinds[i%len(kinds)], Namespace: benchmarkNamespace(i), Name: benchmarkName("quota", i), Details: "bench limits"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, quotaTableQueryAdapter())
+	})
+	b.Run("rbac", func(b *testing.B) {
+		kinds := []string{"Role", "RoleBinding", "ServiceAccount"}
+		rows := make([]RBACSummary, 10000)
+		for i := range rows {
+			rows[i] = RBACSummary{Kind: kinds[i%len(kinds)], Namespace: benchmarkNamespace(i), Name: benchmarkName("rbac", i), Details: "bench access"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, rbacTableQueryAdapter())
+	})
+	b.Run("helm", func(b *testing.B) {
+		rows := make([]NamespaceHelmSummary, 10000)
+		for i := range rows {
+			rows[i] = NamespaceHelmSummary{Namespace: benchmarkNamespace(i), Name: benchmarkName("release", i), Chart: "bench-chart", AppVersion: "1.0.0", Status: "deployed", Revision: i % 9}
+		}
+		benchmarkTypedTableQuery(b, query, rows, helmTableQueryAdapter())
+	})
+	b.Run("namespace-events", func(b *testing.B) {
+		rows := make([]EventSummary, 10000)
+		for i := range rows {
+			rows[i] = EventSummary{Kind: "Event", Namespace: benchmarkNamespace(i), Name: benchmarkName("event", i), Type: "Normal", Source: "bench-controller", Reason: "Scheduled", Object: "Pod/" + benchmarkName("pod", i), Message: "bench event"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, namespacedEventTableQueryAdapter())
+	})
+	b.Run("pods", func(b *testing.B) {
+		rows := make([]PodSummary, 10000)
+		for i := range rows {
+			rows[i] = PodSummary{Namespace: benchmarkNamespace(i), Name: benchmarkName("pod", i), Node: "node-" + strconv.Itoa(i%100), Status: "Running", Ready: "1/1", OwnerKind: "Deployment", OwnerName: "bench-api", CPUUsage: "10m", MemUsage: "64Mi"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, podTableQueryAdapter())
+	})
+	b.Run("workloads", func(b *testing.B) {
+		kinds := []string{"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob", "Pod"}
+		rows := make([]WorkloadSummary, 10000)
+		for i := range rows {
+			rows[i] = WorkloadSummary{Kind: kinds[i%len(kinds)], Namespace: benchmarkNamespace(i), Name: benchmarkName("workload", i), Status: "Running", Ready: "1/1", CPUUsage: "10m", MemUsage: "64Mi"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, workloadTableQueryAdapter())
+	})
+	b.Run("cluster-events", func(b *testing.B) {
+		rows := make([]ClusterEventEntry, 10000)
+		for i := range rows {
+			rows[i] = ClusterEventEntry{Kind: "Event", Name: benchmarkName("cluster-event", i), Type: "Normal", Source: "bench-controller", Reason: "Scheduled", Object: "Node/" + benchmarkName("node", i), Message: "bench event"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, clusterEventTableQueryAdapter())
+	})
+	b.Run("nodes", func(b *testing.B) {
+		rows := make([]NodeSummary, 10000)
+		for i := range rows {
+			rows[i] = NodeSummary{Name: benchmarkName("node", i), Kind: "Node", Status: "Ready", Roles: "worker", Version: "v1.32.0", InternalIP: "10.0.0." + strconv.Itoa(i%255), CPUUsage: "100m", MemoryUsage: "1Gi", Pods: "20/110"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, nodeTableQueryAdapter())
+	})
+	b.Run("cluster-config", func(b *testing.B) {
+		kinds := []string{"StorageClass", "IngressClass", "GatewayClass", "ValidatingWebhookConfiguration", "MutatingWebhookConfiguration"}
+		rows := make([]ClusterConfigEntry, 10000)
+		for i := range rows {
+			rows[i] = ClusterConfigEntry{Kind: kinds[i%len(kinds)], Name: benchmarkName("cluster-config", i), Details: "bench controller"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, clusterConfigTableQueryAdapter())
+	})
+	b.Run("cluster-storage", func(b *testing.B) {
+		rows := make([]ClusterStorageEntry, 10000)
+		for i := range rows {
+			rows[i] = ClusterStorageEntry{Kind: "PersistentVolume", Name: benchmarkName("pv", i), StorageClass: "bench-fast", Capacity: "100Gi", AccessModes: "ReadWriteOnce", Status: "Available"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, clusterStorageTableQueryAdapter())
+	})
+	b.Run("cluster-rbac", func(b *testing.B) {
+		kinds := []string{"ClusterRole", "ClusterRoleBinding"}
+		rows := make([]ClusterRBACEntry, 10000)
+		for i := range rows {
+			rows[i] = ClusterRBACEntry{Kind: kinds[i%len(kinds)], Name: benchmarkName("cluster-rbac", i), Details: "bench access"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, clusterRBACTableQueryAdapter())
+	})
+	b.Run("cluster-crds", func(b *testing.B) {
+		rows := make([]ClusterCRDEntry, 10000)
+		for i := range rows {
+			rows[i] = ClusterCRDEntry{Kind: "CustomResourceDefinition", Name: benchmarkName("widgets", i) + ".bench.example.com", Group: "bench.example.com", Scope: "Namespaced", Details: "bench resources", StorageVersion: "v1"}
+		}
+		benchmarkTypedTableQuery(b, query, rows, clusterCRDTableQueryAdapter())
+	})
+}
+
+func benchmarkTypedTableQuery[T any](b *testing.B, query typedTableQuery, rows []T, adapter typedTableQueryAdapter[T]) {
+	b.Helper()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = applyTypedTableQuery(rows, query, configTableQueryAdapter())
+		_ = applyTypedTableQuery(rows, query, adapter)
 	}
+}
+
+func benchmarkNamespace(i int) string {
+	if i%2 == 0 {
+		return "team-b"
+	}
+	return "team-a"
+}
+
+func benchmarkName(prefix string, i int) string {
+	return "bench-" + prefix + "-" + strconv.Itoa(i)
+}
+
+func benchmarkKind(i int, first string, rest ...string) string {
+	if len(rest) == 0 {
+		return first
+	}
+	kinds := append([]string{first}, rest...)
+	return kinds[i%len(kinds)]
 }

@@ -90,6 +90,7 @@ export interface QueryBackedNamespaceGridParams<
   label: string;
   baseScope?: string;
   queryTableMode?: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
+  localTableMode?: Extract<ResourceGridTableMode, 'Local Complete' | 'Local Partial'>;
   localData: TRow[];
   localLoading?: boolean;
   localLoaded?: boolean;
@@ -109,6 +110,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   label,
   baseScope,
   queryTableMode = 'Query Backed Dynamic',
+  localTableMode = 'Local Complete',
   localData,
   localLoading = false,
   localLoaded = false,
@@ -203,7 +205,11 @@ export function useQueryBackedNamespaceResourceGridTable<
     defaultSort,
     pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
     persistenceOverride: persistence,
-    tableMode: enabled ? queryTableMode : 'Local Complete',
+    tableMode: enabled
+      ? queryTableMode
+      : localTableMode === 'Local Partial'
+        ? 'Local Partial'
+        : 'Local Complete',
     data,
     filterOptionOverrides: enabled
       ? mergeQueryBackedFilterOptions(filterOptionOverrides, query.filterOptions)
@@ -260,6 +266,7 @@ export interface QueryBackedClusterGridParams<
   label: string;
   baseScope?: string;
   queryTableMode?: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
+  localTableMode?: Extract<ResourceGridTableMode, 'Local Complete' | 'Local Partial'>;
   localData: TRow[];
   localLoading?: boolean;
   localLoaded?: boolean;
@@ -279,6 +286,7 @@ export function useQueryBackedClusterResourceGridTable<
   label,
   baseScope = '',
   queryTableMode = 'Query Backed Static',
+  localTableMode = 'Local Complete',
   localData,
   localLoading = false,
   localLoaded = false,
@@ -374,7 +382,11 @@ export function useQueryBackedClusterResourceGridTable<
     defaultSortDirection,
     pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
     persistenceOverride: persistence,
-    tableMode: enabled ? queryTableMode : 'Local Complete',
+    tableMode: enabled
+      ? queryTableMode
+      : localTableMode === 'Local Partial'
+        ? 'Local Partial'
+        : 'Local Complete',
     data,
     filterOptionOverrides: enabled
       ? mergeQueryBackedFilterOptions(filterOptionOverrides, query.filterOptions)

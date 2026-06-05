@@ -448,6 +448,37 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(result?.loaded).toBe(false);
   });
 
+  it('uses the explicit local fallback table mode when query backing is disabled', () => {
+    const Probe: React.FC = () => {
+      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        enabled: false,
+        clusterId: 'cluster-a',
+        domain: 'namespace-config',
+        label: 'Namespace Configuration',
+        localData: [row],
+        localLoaded: true,
+        localTableMode: 'Local Partial',
+        selectRows,
+        viewId: 'namespace-config',
+        namespace: 'team-a',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(useNamespaceResourceGridTableMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        tableMode: 'Local Partial',
+        data: [row],
+      })
+    );
+  });
+
   it('does not run the first typed query while the live base domain is still initialising', async () => {
     let result:
       | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>

@@ -21,6 +21,7 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
           <tr>
             <th>Domain</th>
             <th>Scope</th>
+            <th>Role</th>
             <th>Namespace</th>
             <th>Mode</th>
             <th>Health</th>
@@ -42,7 +43,7 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
         <tbody>
           {rows.length === 0 ? (
             <tr className="diagnostics-empty">
-              <td colSpan={18}>
+              <td colSpan={19}>
                 All refreshers are idle. Enable "Show idle" to view the full list.
               </td>
             </tr>
@@ -70,6 +71,7 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
                     row.scope
                   )}
                 </td>
+                <td title={row.roleTooltip ?? ''}>{row.role}</td>
                 <td>{row.namespace}</td>
                 <td title={row.modeTooltip ?? ''}>{row.mode}</td>
                 <td title={row.healthTooltip ?? ''}>{row.healthStatus}</td>

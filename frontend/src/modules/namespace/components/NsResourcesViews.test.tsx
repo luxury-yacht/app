@@ -142,6 +142,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'workloads' as const,
       props: {
         nsWorkloads: [{ name: 'deploy', namespace: 'team-a' }],
+        nsWorkloadsStats: tableStats,
         nsWorkloadsKinds: ['Deployment', 'StatefulSet'],
         nsWorkloadsLoading: true,
         nsWorkloadsLoaded: false,
@@ -150,6 +151,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'deploy', namespace: 'team-a' }],
+        stats: tableStats,
         availableKinds: ['Deployment', 'StatefulSet'],
         loading: true,
         loaded: false,

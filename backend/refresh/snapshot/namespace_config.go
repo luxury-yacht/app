@@ -44,6 +44,7 @@ type NamespaceConfigSnapshot struct {
 	TotalIsExact  bool                     `json:"totalIsExact"`
 	Namespaces    []string                 `json:"namespaces,omitempty"`
 	FacetsExact   bool                     `json:"facetsExact"`
+	Issues        []ResourceQueryIssue     `json:"issues,omitempty"`
 	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
@@ -96,23 +97,29 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, err
 	}
 
+	configMapsAvailable := b.configMaps != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "configmaps")
 	var configMaps []*corev1.ConfigMap
-	if b.configMaps != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "configmaps") {
+	if configMapsAvailable {
 		configMaps, err = b.listConfigMaps(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace config: failed to list configmaps: %w", err)
 		}
 	}
 
+	secretsAvailable := b.secrets != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "secrets")
 	var secrets []*corev1.Secret
-	if b.secrets != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "secrets") {
+	if secretsAvailable {
 		secrets, err = b.listSecrets(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace config: failed to list secrets: %w", err)
 		}
 	}
 
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, configMaps, secrets)
+	issues := typedTableQueryResourceIssues(ctx, namespaceConfigDomainName, query, []typedTableResourceSource{
+		{Kind: "ConfigMap", Group: "", Resource: "configmaps", Available: configMapsAvailable},
+		{Kind: "Secret", Group: "", Resource: "secrets", Available: secretsAvailable},
+	})
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, configMaps, secrets, issues)
 }
 
 func (b *NamespaceConfigBuilder) listConfigMaps(namespace string) ([]*corev1.ConfigMap, error) {
@@ -135,6 +142,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 	query typedTableQuery,
 	configMaps []*corev1.ConfigMap,
 	secrets []*corev1.Secret,
+	issues []ResourceQueryIssue,
 ) (*refresh.Snapshot, error) {
 	resources := make([]ConfigSummary, 0, len(configMaps)+len(secrets))
 	var version uint64
@@ -166,6 +174,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 
 	if query.Enabled {
 		page := applyTypedTableQuery(resources, query, configTableQueryAdapter())
+		exact := len(issues) == 0
 		return &refresh.Snapshot{
 			Domain:  namespaceConfigDomainName,
 			Scope:   scope,
@@ -177,9 +186,10 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 				Continue:      page.Continue,
 				CursorInvalid: page.CursorInvalid,
 				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
+				TotalIsExact:  page.TotalIsExact && exact,
 				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
+				FacetsExact:   page.FacetsExact && exact,
+				Issues:        issues,
 				Dynamic:       page.Dynamic,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},

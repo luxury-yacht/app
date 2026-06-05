@@ -21,7 +21,10 @@ import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import {
+  buildLocalPartialDataLabel,
+  localTableModeForStats,
+} from '@modules/resource-grid/tablePartialState';
 import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import type { SnapshotStats } from '@/core/refresh/client';
@@ -295,7 +298,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     ]);
 
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
-    const isPartial = isAllNamespaces || Boolean(stats?.truncated);
+    const localTableMode = localTableModeForStats(stats);
     const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Helm' : 'Namespace Helm';
 
     const selectRows = useCallback(
@@ -332,6 +335,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       localData: data,
       localLoading: loading,
       localLoaded: loaded,
+      localTableMode,
       selectRows,
       viewId: 'namespace-helm',
       namespace,
@@ -343,7 +347,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       showNamespaceFilters: showNamespaceColumn,
       filterOptions: { isNamespaceScoped: !isAllNamespaces },
       filterOptionOverrides:
-        isPartial && !isAllNamespaces
+        localTableMode === 'Local Partial' && !isAllNamespaces
           ? {
               partialDataLabel: buildLocalPartialDataLabel({
                 stats,

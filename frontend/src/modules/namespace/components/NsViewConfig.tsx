@@ -21,7 +21,10 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import {
+  buildLocalPartialDataLabel,
+  localTableModeForStats,
+} from '@modules/resource-grid/tablePartialState';
 import type { SnapshotStats } from '@/core/refresh/client';
 import type { NamespaceConfigSnapshotPayload } from '@/core/refresh/types';
 
@@ -146,6 +149,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       namespace === ALL_NAMESPACES_SCOPE
         ? 'All Namespaces Configuration'
         : 'Namespace Configuration';
+    const localTableMode = localTableModeForStats(stats);
 
     const selectRows = useCallback(
       (payload: NamespaceConfigSnapshotPayload) => payload.resources ?? [],
@@ -166,6 +170,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       localData: data,
       localLoading: loading,
       localLoaded: loaded,
+      localTableMode,
       selectRows,
       viewId: 'namespace-config',
       namespace,
@@ -176,7 +181,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       filterOptionOverrides:
-        namespace === ALL_NAMESPACES_SCOPE
+        namespace === ALL_NAMESPACES_SCOPE || localTableMode !== 'Local Partial'
           ? undefined
           : {
               partialDataLabel: buildLocalPartialDataLabel({

@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"context"
 	"net/url"
 	"testing"
 )
@@ -85,6 +86,36 @@ func TestResourceQueryRequestFromValuesAcceptsCatalogAndTypedListKeys(t *testing
 	}
 	if got := resourceQueryPredicatesToMap(request.Predicates)["health"]; got != "unhealthy" {
 		t.Fatalf("expected health predicate, got %q", got)
+	}
+}
+
+func TestTypedTableQueryResourceIssuesHonorRequestedKinds(t *testing.T) {
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			Kinds: []string{"Secret"},
+		},
+	}
+	issues := typedTableQueryResourceIssues(context.Background(), "namespace-config", query, []typedTableResourceSource{
+		{Kind: "ConfigMap", Group: "", Resource: "configmaps", Available: false},
+		{Kind: "Secret", Group: "", Resource: "secrets", Available: true},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("expected unavailable unrequested source to be ignored, got %+v", issues)
+	}
+
+	query.Request.Kinds = []string{"Deployment"}
+	issues = typedTableQueryResourceIssues(context.Background(), "namespace-workloads", query, []typedTableResourceSource{
+		{
+			Kind:       "Pod",
+			Group:      "",
+			Resource:   "pods",
+			Available:  false,
+			QueryKinds: []string{"Pod", "Deployment"},
+		},
+	})
+	if len(issues) != 1 || issues[0].Kind != "Pod" {
+		t.Fatalf("expected dependent pod source issue, got %+v", issues)
 	}
 }
 

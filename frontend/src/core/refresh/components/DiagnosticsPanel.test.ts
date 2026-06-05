@@ -839,7 +839,7 @@ describe('DiagnosticsPanel component', () => {
       const cells = row.querySelectorAll('td');
       return {
         scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-        count: cells[8]?.textContent?.trim() ?? '',
+        count: cells[9]?.textContent?.trim() ?? '',
       };
     });
     expect(namespaceSummaries).toEqual(
@@ -855,8 +855,8 @@ describe('DiagnosticsPanel component', () => {
       const cells = row.querySelectorAll('td');
       return {
         scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-        count: cells[8]?.textContent?.trim() ?? '',
-        metrics: cells[13]?.textContent?.trim() ?? '',
+        count: cells[9]?.textContent?.trim() ?? '',
+        metrics: cells[14]?.textContent?.trim() ?? '',
       };
     });
     expect(overviewSummaries).toEqual(
@@ -866,6 +866,97 @@ describe('DiagnosticsPanel component', () => {
       ])
     );
     expect(rendered.container.textContent).not.toContain('clusters=');
+
+    await rendered.unmount();
+  });
+
+  test('disambiguates query-backed refresh scopes and collapses cluster aliases', async () => {
+    mockKubeconfigState.selectedClusterId = 'cluster-a';
+
+    const catalogScope = buildClusterScope('cluster-a', 'limit=200&namespace=default');
+    const catalogMetadataScope = buildClusterScope('cluster-a', 'limit=1&namespace=default');
+    setScopedEntries('catalog', [
+      [
+        catalogScope,
+        {
+          ...createReadyState({
+            items: [{ kind: 'Pod', name: 'api', namespace: 'default' }],
+            total: 1,
+          }),
+          scope: catalogScope,
+        },
+      ],
+      [
+        catalogMetadataScope,
+        {
+          ...createReadyState({
+            items: [{ kind: 'Pod', name: 'api', namespace: 'default' }],
+            total: 1,
+          }),
+          scope: catalogMetadataScope,
+        },
+      ],
+    ]);
+
+    const nodesScope = buildClusterScope('cluster-a', '');
+    const nodesAliasScope = buildClusterScope('cluster-a', 'cluster');
+    const nodesQueryScope = buildClusterScope('cluster-a', '?limit=50&sort=name');
+    setScopedEntries('nodes', [
+      [
+        nodesScope,
+        {
+          ...createReadyState({ nodes: [{ name: 'node-a', clusterId: 'cluster-a' }] }),
+          scope: nodesScope,
+        },
+      ],
+      [
+        nodesAliasScope,
+        {
+          ...createReadyState({ nodes: [{ name: 'node-a', clusterId: 'cluster-a' }] }),
+          scope: nodesAliasScope,
+        },
+      ],
+      [
+        nodesQueryScope,
+        {
+          ...createReadyState({ nodes: [{ name: 'node-a', clusterId: 'cluster-a' }] }),
+          scope: nodesQueryScope,
+        },
+      ],
+    ]);
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
+
+    const rows = Array.from(
+      rendered.container.querySelectorAll<HTMLTableRowElement>('.diagnostics-table tbody tr')
+    ).map((row) => {
+      const cells = row.querySelectorAll<HTMLTableCellElement>('td');
+      return {
+        label: cells[0]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        role: cells[2]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+      };
+    });
+
+    const catalogRows = rows.filter((row) => row.label === 'Browse Catalog');
+    expect(catalogRows).toHaveLength(2);
+    expect(new Set(catalogRows.map((row) => row.scope)).size).toBe(2);
+    expect(catalogRows.map((row) => row.scope).join(' | ')).toContain('limit=200');
+    expect(catalogRows.map((row) => row.scope).join(' | ')).toContain('limit=1');
+    expect(catalogRows.map((row) => row.role)).toEqual(
+      expect.arrayContaining(['Metadata', 'Page Query'])
+    );
+
+    const nodeRows = rows.filter((row) => row.label === 'Nodes');
+    expect(nodeRows).toHaveLength(2);
+    expect(new Set(nodeRows.map((row) => row.scope)).size).toBe(2);
+    expect(nodeRows.some((row) => row.scope === 'cluster-a (active)')).toBe(true);
+    expect(nodeRows.some((row) => row.scope.includes('limit=50'))).toBe(true);
+    expect(nodeRows.map((row) => row.role)).toEqual(
+      expect.arrayContaining(['Live Scope', 'Table Query'])
+    );
 
     await rendered.unmount();
   });
@@ -1195,7 +1286,7 @@ describe('DiagnosticsPanel component', () => {
     expect(configRow).toBeDefined();
 
     const cells = configRow?.querySelectorAll('td') ?? [];
-    const telemetryCell = cells[11];
+    const telemetryCell = cells[12];
     expect(telemetryCell?.textContent).toContain('Stream unhealthy');
     expect(telemetryCell?.getAttribute('title')).toContain('Stream health: unhealthy');
     expect(telemetryCell?.getAttribute('title')).toContain('Stream reason: no-delivery');

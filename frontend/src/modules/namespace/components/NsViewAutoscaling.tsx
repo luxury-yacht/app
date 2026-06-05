@@ -20,7 +20,10 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import {
+  buildLocalPartialDataLabel,
+  localTableModeForStats,
+} from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -335,6 +338,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
 
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Autoscaling' : 'Namespace Autoscaling';
+    const localTableMode = localTableModeForStats(stats);
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 
     const selectRows = useCallback(
@@ -380,6 +384,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       localData: data,
       localLoading: loading,
       localLoaded: loaded,
+      localTableMode,
       selectRows,
       viewId: 'namespace-autoscaling',
       namespace,
@@ -393,7 +398,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       showNamespaceFilters: showNamespaceFilter,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
       filterOptionOverrides:
-        namespace === ALL_NAMESPACES_SCOPE
+        namespace === ALL_NAMESPACES_SCOPE || localTableMode !== 'Local Partial'
           ? undefined
           : {
               partialDataLabel: buildLocalPartialDataLabel({

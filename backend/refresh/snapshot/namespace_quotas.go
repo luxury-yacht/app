@@ -48,6 +48,7 @@ type NamespaceQuotasSnapshot struct {
 	TotalIsExact  bool                     `json:"totalIsExact"`
 	Namespaces    []string                 `json:"namespaces,omitempty"`
 	FacetsExact   bool                     `json:"facetsExact"`
+	Issues        []ResourceQueryIssue     `json:"issues,omitempty"`
 	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
@@ -113,29 +114,37 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, err
 	}
 
+	quotasAvailable := b.quotaLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "", "resourcequotas")
 	var quotas []*corev1.ResourceQuota
-	if b.quotaLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "", "resourcequotas") {
+	if quotasAvailable {
 		quotas, err = b.listResourceQuotas(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace quotas: failed to list resourcequotas: %w", err)
 		}
 	}
+	limitsAvailable := b.limitLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "", "limitranges")
 	var limits []*corev1.LimitRange
-	if b.limitLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "", "limitranges") {
+	if limitsAvailable {
 		limits, err = b.listLimitRanges(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace quotas: failed to list limitranges: %w", err)
 		}
 	}
+	pdbsAvailable := b.pdbLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "policy", "poddisruptionbudgets")
 	var pdbs []*policyv1.PodDisruptionBudget
-	if b.pdbLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "policy", "poddisruptionbudgets") {
+	if pdbsAvailable {
 		pdbs, err = b.listPodDisruptionBudgets(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace quotas: failed to list poddisruptionbudgets: %w", err)
 		}
 	}
 
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, quotas, limits, pdbs)
+	issues := typedTableQueryResourceIssues(ctx, namespaceQuotasDomainName, query, []typedTableResourceSource{
+		{Kind: "ResourceQuota", Group: "", Resource: "resourcequotas", Available: quotasAvailable},
+		{Kind: "LimitRange", Group: "", Resource: "limitranges", Available: limitsAvailable},
+		{Kind: "PodDisruptionBudget", Group: "policy", Resource: "poddisruptionbudgets", Available: pdbsAvailable},
+	})
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, quotas, limits, pdbs, issues)
 }
 
 func (b *NamespaceQuotasBuilder) listResourceQuotas(namespace string) ([]*corev1.ResourceQuota, error) {
@@ -166,6 +175,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 	quotas []*corev1.ResourceQuota,
 	limits []*corev1.LimitRange,
 	pdbs []*policyv1.PodDisruptionBudget,
+	issues []ResourceQueryIssue,
 ) (*refresh.Snapshot, error) {
 	resources := make([]QuotaSummary, 0, len(quotas)+len(limits)+len(pdbs))
 	var version uint64
@@ -213,6 +223,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 
 	if query.Enabled {
 		page := applyTypedTableQuery(resources, query, quotaTableQueryAdapter())
+		exact := len(issues) == 0
 		return &refresh.Snapshot{
 			Domain:  namespaceQuotasDomainName,
 			Scope:   namespace,
@@ -224,9 +235,10 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 				Continue:      page.Continue,
 				CursorInvalid: page.CursorInvalid,
 				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
+				TotalIsExact:  page.TotalIsExact && exact,
 				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
+				FacetsExact:   page.FacetsExact && exact,
+				Issues:        issues,
 				Dynamic:       page.Dynamic,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},

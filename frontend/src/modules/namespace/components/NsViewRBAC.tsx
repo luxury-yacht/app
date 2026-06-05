@@ -21,7 +21,10 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import {
+  buildLocalPartialDataLabel,
+  localTableModeForStats,
+} from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -196,7 +199,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
 
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces RBAC' : 'Namespace RBAC';
-    const isPartial = namespace === ALL_NAMESPACES_SCOPE || Boolean(stats?.truncated);
+    const localTableMode = localTableModeForStats(stats);
 
     const selectRows = useCallback(
       (payload: NamespaceRBACSnapshotPayload) => payload.resources ?? [],
@@ -217,6 +220,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       localData: data,
       localLoading: loading,
       localLoaded: loaded,
+      localTableMode,
       selectRows,
       viewId: 'namespace-rbac',
       namespace,
@@ -227,7 +231,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       filterOptionOverrides:
-        isPartial && namespace !== ALL_NAMESPACES_SCOPE
+        localTableMode === 'Local Partial' && namespace !== ALL_NAMESPACES_SCOPE
           ? {
               partialDataLabel: buildLocalPartialDataLabel({
                 stats,

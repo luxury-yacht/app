@@ -48,6 +48,8 @@ export interface DiagnosticsRow {
   // Scope/mode/health/polling describe how data is retrieved for this row.
   scope: string;
   scopeTooltip?: string;
+  role: string;
+  roleTooltip?: string;
   // Structured scope entries for multi-line display (Active/Background clusters).
   scopeEntries?: { label: 'Active' | 'Background'; clusterName: string }[];
   mode: string;

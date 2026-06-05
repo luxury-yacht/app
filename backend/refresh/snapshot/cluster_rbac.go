@@ -42,6 +42,7 @@ type ClusterRBACSnapshot struct {
 	TotalIsExact  bool                     `json:"totalIsExact"`
 	Namespaces    []string                 `json:"namespaces,omitempty"`
 	FacetsExact   bool                     `json:"facetsExact"`
+	Issues        []ResourceQueryIssue     `json:"issues,omitempty"`
 	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
@@ -88,15 +89,17 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 	if err != nil {
 		return nil, err
 	}
+	rolesAvailable := b.roleLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterroles")
 	var roles []*rbacv1.ClusterRole
-	if b.roleLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterroles") {
+	if rolesAvailable {
 		roles, err = b.roleLister.List(labels.Everything())
 		if err != nil {
 			return nil, fmt.Errorf("cluster rbac: failed to list clusterroles: %w", err)
 		}
 	}
+	bindingsAvailable := b.bindingLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterrolebindings")
 	var bindings []*rbacv1.ClusterRoleBinding
-	if b.bindingLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterrolebindings") {
+	if bindingsAvailable {
 		bindings, err = b.bindingLister.List(labels.Everything())
 		if err != nil {
 			return nil, fmt.Errorf("cluster rbac: failed to list clusterrolebindings: %w", err)
@@ -136,9 +139,14 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		}
 		return entries[i].Kind < entries[j].Kind
 	})
+	issues := typedTableQueryResourceIssues(ctx, clusterRBACDomainName, query, []typedTableResourceSource{
+		{Kind: "ClusterRole", Group: "rbac.authorization.k8s.io", Resource: "clusterroles", Available: rolesAvailable},
+		{Kind: "ClusterRoleBinding", Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings", Available: bindingsAvailable},
+	})
 
 	if query.Enabled {
 		page := applyTypedTableQuery(entries, query, clusterRBACTableQueryAdapter())
+		exact := len(issues) == 0
 		return &refresh.Snapshot{
 			Domain:  clusterRBACDomainName,
 			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
@@ -150,9 +158,10 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 				Continue:      page.Continue,
 				CursorInvalid: page.CursorInvalid,
 				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
+				TotalIsExact:  page.TotalIsExact && exact,
 				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
+				FacetsExact:   page.FacetsExact && exact,
+				Issues:        issues,
 				Dynamic:       page.Dynamic,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},

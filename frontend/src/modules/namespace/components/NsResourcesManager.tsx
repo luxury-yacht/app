@@ -267,6 +267,7 @@ export function NamespaceResourcesManager({
       nsPodsMetrics={podsMetrics}
       // Workloads data
       nsWorkloads={workloads?.data || []}
+      nsWorkloadsStats={(workloads?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       nsWorkloadsKinds={(workloads?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsWorkloadsLoading={workloads?.loading || false}
       nsWorkloadsError={workloads?.error?.message || null}

@@ -51,6 +51,7 @@ type ClusterConfigSnapshot struct {
 	TotalIsExact  bool                     `json:"totalIsExact"`
 	Namespaces    []string                 `json:"namespaces,omitempty"`
 	FacetsExact   bool                     `json:"facetsExact"`
+	Issues        []ResourceQueryIssue     `json:"issues,omitempty"`
 	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
@@ -128,8 +129,13 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 	meta := ClusterMetaFromContext(ctx)
 	var version uint64
 	entries := make([]ClusterConfigEntry, 0, 64)
+	storageClassesAvailable := b.storageClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "storage.k8s.io", "storageclasses")
+	ingressClassesAvailable := b.ingressClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "networking.k8s.io", "ingressclasses")
+	gatewayClassesAvailable := b.gatewayClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "gateway.networking.k8s.io", "gatewayclasses")
+	validatingWebhooksAvailable := b.validatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "validatingwebhookconfigurations")
+	mutatingWebhooksAvailable := b.mutatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "mutatingwebhookconfigurations")
 
-	if b.storageClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "storage.k8s.io", "storageclasses") {
+	if storageClassesAvailable {
 		storageClasses, err := b.storageClassLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -151,7 +157,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 		}
 	}
 
-	if b.ingressClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "networking.k8s.io", "ingressclasses") {
+	if ingressClassesAvailable {
 		ingressClasses, err := b.ingressClassLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -167,7 +173,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 		}
 	}
 
-	if b.gatewayClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "gateway.networking.k8s.io", "gatewayclasses") {
+	if gatewayClassesAvailable {
 		gatewayClasses, err := b.gatewayClassLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -183,7 +189,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 		}
 	}
 
-	if b.validatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "validatingwebhookconfigurations") {
+	if validatingWebhooksAvailable {
 		validatingWebhooks, err := b.validatingWebhookLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -199,7 +205,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 		}
 	}
 
-	if b.mutatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "mutatingwebhookconfigurations") {
+	if mutatingWebhooksAvailable {
 		mutatingWebhooks, err := b.mutatingWebhookLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -221,9 +227,17 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 		}
 		return entries[i].Kind < entries[j].Kind
 	})
+	issues := typedTableQueryResourceIssues(ctx, clusterConfigDomainName, query, []typedTableResourceSource{
+		{Kind: "StorageClass", Group: "storage.k8s.io", Resource: "storageclasses", Available: storageClassesAvailable},
+		{Kind: "IngressClass", Group: "networking.k8s.io", Resource: "ingressclasses", Available: ingressClassesAvailable},
+		{Kind: "GatewayClass", Group: "gateway.networking.k8s.io", Resource: "gatewayclasses", Available: gatewayClassesAvailable},
+		{Kind: "ValidatingWebhookConfiguration", Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Available: validatingWebhooksAvailable},
+		{Kind: "MutatingWebhookConfiguration", Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Available: mutatingWebhooksAvailable},
+	})
 
 	if query.Enabled {
 		page := applyTypedTableQuery(entries, query, clusterConfigTableQueryAdapter())
+		exact := len(issues) == 0
 		return &refresh.Snapshot{
 			Domain:  clusterConfigDomainName,
 			Scope:   scope,
@@ -235,9 +249,10 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 				Continue:      page.Continue,
 				CursorInvalid: page.CursorInvalid,
 				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
+				TotalIsExact:  page.TotalIsExact && exact,
 				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
+				FacetsExact:   page.FacetsExact && exact,
+				Issues:        issues,
 				Dynamic:       page.Dynamic,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},

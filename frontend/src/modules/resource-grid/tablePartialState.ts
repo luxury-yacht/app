@@ -1,4 +1,5 @@
 import type { SnapshotStats } from '@/core/refresh/client';
+import type { ResourceGridTableMode } from './resourceGridTableTypes';
 
 interface LocalPartialLabelOptions {
   stats?: SnapshotStats | null;
@@ -9,6 +10,14 @@ interface LocalPartialLabelOptions {
 
 const cleanWarnings = (stats?: SnapshotStats | null): string[] =>
   (stats?.warnings ?? []).map((warning) => warning.trim()).filter(Boolean);
+
+const isLocalSnapshotPartial = (stats?: SnapshotStats | null): boolean =>
+  Boolean(stats?.truncated || cleanWarnings(stats).length > 0);
+
+export const localTableModeForStats = (
+  stats?: SnapshotStats | null
+): Extract<ResourceGridTableMode, 'Local Complete' | 'Local Partial'> =>
+  isLocalSnapshotPartial(stats) ? 'Local Partial' : 'Local Complete';
 
 export const buildLocalPartialDataLabel = ({
   stats,

@@ -74,11 +74,16 @@ const normalizeResourceStreamScope = (
   selectedClusterId: string | undefined,
   allowEmpty: boolean
 ): string | undefined => {
+  const normalizeTail = (scope: string): string => {
+    const trimmed = scope.trim();
+    return trimmed.toLowerCase() === 'cluster' ? '' : trimmed;
+  };
+
   if (!value || !value.trim()) {
     if (!allowEmpty) {
       return undefined;
     }
-    return buildClusterScope(selectedClusterId, '') || undefined;
+    return buildClusterScope(selectedClusterId, normalizeTail('')) || undefined;
   }
 
   const trimmed = value.trim();
@@ -87,8 +92,8 @@ const normalizeResourceStreamScope = (
     throw new Error(`Resource stream domain "${domain}" requires a single cluster scope`);
   }
   if (parsed.clusterIds.length > 0) {
-    return buildClusterScope(parsed.clusterIds[0], parsed.scope);
+    return buildClusterScope(parsed.clusterIds[0], normalizeTail(parsed.scope));
   }
 
-  return buildClusterScope(selectedClusterId, parsed.scope || trimmed) || undefined;
+  return buildClusterScope(selectedClusterId, normalizeTail(parsed.scope || trimmed)) || undefined;
 };

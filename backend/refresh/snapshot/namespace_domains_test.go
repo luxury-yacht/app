@@ -106,6 +106,53 @@ func TestNamespaceConfigBuilderHonorsRuntimeAllowedResources(t *testing.T) {
 	require.Equal(t, []string{"Secret"}, payload.Kinds)
 }
 
+func TestNamespaceConfigBuilderQueryReportsPartialAllowedResources(t *testing.T) {
+	now := time.Now()
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "settings",
+			Namespace:         "default",
+			ResourceVersion:   "35",
+			CreationTimestamp: metav1.NewTime(now.Add(-45 * time.Minute)),
+		},
+		Data: map[string]string{"foo": "bar"},
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "creds",
+			Namespace:         "default",
+			ResourceVersion:   "36",
+			CreationTimestamp: metav1.NewTime(now.Add(-30 * time.Minute)),
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{"user": []byte("alice")},
+	}
+	builder := &NamespaceConfigBuilder{
+		configMaps: testsupport.NewConfigMapLister(t, configMap),
+		secrets:    testsupport.NewSecretLister(t, secret),
+	}
+	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceConfigDomainName, domainpermissions.AllowedResources{
+		"core/configmaps": false,
+		"core/secrets":    true,
+	})
+
+	snapshot, err := builder.Build(ctx, "cluster-a|namespace:default?limit=10")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceConfigSnapshot)
+	require.False(t, payload.TotalIsExact)
+	require.False(t, payload.FacetsExact)
+	require.Len(t, payload.Issues, 1)
+	require.Equal(t, "ConfigMap", payload.Issues[0].Kind)
+	require.Contains(t, payload.Issues[0].Message, "partial")
+
+	secretOnly, err := builder.Build(ctx, "cluster-a|namespace:default?limit=10&kinds=Secret")
+	require.NoError(t, err)
+	secretOnlyPayload := secretOnly.Payload.(NamespaceConfigSnapshot)
+	require.True(t, secretOnlyPayload.TotalIsExact)
+	require.True(t, secretOnlyPayload.FacetsExact)
+	require.Empty(t, secretOnlyPayload.Issues)
+}
+
 func TestNamespaceConfigBuilderAllNamespaces(t *testing.T) {
 	now := time.Now()
 	configMapDefault := &corev1.ConfigMap{

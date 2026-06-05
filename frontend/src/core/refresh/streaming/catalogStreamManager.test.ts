@@ -179,8 +179,28 @@ describe('catalogStreamManager', () => {
     expect(state.stats?.itemCount).toBe(1);
     expect(state.scope).toBe('limit=50');
     expect(state.error).toBeNull();
+    expect(manager.isHealthy('limit=50')).toBe(true);
+    expect(manager.isHealthy('limit=1')).toBe(false);
 
     cleanup();
+  });
+
+  it('does not carry stream health across catalog scopes', async () => {
+    vi.useFakeTimers();
+    const manager = await importManager();
+    await manager.start('limit=50');
+
+    MockEventSource.instances[0].onmessage?.({
+      data: JSON.stringify(createStreamEvent()),
+    } as MessageEvent);
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
+
+    expect(manager.isHealthy('limit=50')).toBe(true);
+
+    await manager.start('limit=1');
+
+    expect(manager.isHealthy('limit=50')).toBe(false);
+    expect(manager.isHealthy('limit=1')).toBe(false);
   });
 
   it('resets state and closes the stream when stopped with reset', async () => {

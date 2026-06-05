@@ -985,6 +985,71 @@ func TestQueryNamespaceClusterFiltering(t *testing.T) {
 	}
 }
 
+func TestQueryNamespaceClusterFilteringUsesCachedIndex(t *testing.T) {
+	clusterDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"},
+		Namespaced: false,
+		Kind:       "CustomResourceDefinition",
+		Group:      "apiextensions.k8s.io",
+		Version:    "v1",
+		Resource:   "customresourcedefinitions",
+		Scope:      ScopeCluster,
+	}
+	namespacedDesc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"},
+		Namespaced: true,
+		Kind:       "Service",
+		Group:      "",
+		Version:    "v1",
+		Resource:   "services",
+		Scope:      ScopeNamespace,
+	}
+	items := map[string]Summary{
+		catalogKey(clusterDesc, "", "crd.one"): {
+			Kind:     "CustomResourceDefinition",
+			Group:    "apiextensions.k8s.io",
+			Version:  "v1",
+			Resource: "customresourcedefinitions",
+			Name:     "crd.one",
+			Scope:    ScopeCluster,
+		},
+		catalogKey(namespacedDesc, "default", "svc-one"): {
+			Kind:      "Service",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "services",
+			Namespace: "default",
+			Name:      "svc-one",
+			Scope:     ScopeNamespace,
+		},
+	}
+
+	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
+	svc.mu.Lock()
+	svc.catalogIndex.rebuildCacheFromItems(items, []Descriptor{
+		exportDescriptor(clusterDesc),
+		exportDescriptor(namespacedDesc),
+	})
+	svc.mu.Unlock()
+
+	clusterOnly := svc.Query(QueryOptions{
+		Namespaces: []string{"cluster"},
+	})
+	if clusterOnly.TotalItems != 1 || len(clusterOnly.Items) != 1 || clusterOnly.Items[0].Scope != ScopeCluster {
+		t.Fatalf("expected cached index to return only cluster-scoped items, got %+v", clusterOnly)
+	}
+	if clusterOnly.Items[0].Namespace != "" {
+		t.Fatalf("expected cluster-scoped cached item to have empty namespace, got %+v", clusterOnly.Items[0])
+	}
+	expectedClusterKinds := []KindInfo{{Kind: "CustomResourceDefinition", Namespaced: false}}
+	if !reflect.DeepEqual(clusterOnly.Kinds, expectedClusterKinds) {
+		t.Fatalf("unexpected cached kinds for cluster query: %+v", clusterOnly.Kinds)
+	}
+	if !reflect.DeepEqual(clusterOnly.Namespaces, []string{"default"}) {
+		t.Fatalf("unexpected cached namespaces for cluster query: %+v", clusterOnly.Namespaces)
+	}
+}
+
 func TestQuerySearchFilter(t *testing.T) {
 	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
 	podDesc := resourceDescriptor{

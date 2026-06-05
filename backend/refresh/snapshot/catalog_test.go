@@ -112,6 +112,80 @@ func TestCatalogBuildUsesCatalogOnly(t *testing.T) {
 	}
 }
 
+func TestCatalogBuildClusterScopedNamespaceSentinel(t *testing.T) {
+	summaries := []objectcatalog.Summary{
+		{
+			ClusterID:       "cluster-a",
+			ClusterName:     "Cluster A",
+			Kind:            "CustomResourceDefinition",
+			Group:           "apiextensions.k8s.io",
+			Version:         "v1",
+			Resource:        "customresourcedefinitions",
+			Name:            "widgets.example.com",
+			UID:             "uid-crd",
+			ResourceVersion: "1",
+			Scope:           objectcatalog.ScopeCluster,
+		},
+		{
+			ClusterID:       "cluster-a",
+			ClusterName:     "Cluster A",
+			Kind:            "Service",
+			Group:           "",
+			Version:         "v1",
+			Resource:        "services",
+			Namespace:       "default",
+			Name:            "web",
+			UID:             "uid-service",
+			ResourceVersion: "2",
+			Scope:           objectcatalog.ScopeNamespace,
+		},
+	}
+	svc := seedCatalogService(t, summaries)
+	markCatalogCachesReady(t, svc, summaries)
+
+	builder := &catalogBuilder{
+		domain:         catalogDomain,
+		catalogService: func() *objectcatalog.Service { return svc },
+	}
+
+	snap, err := builder.Build(context.Background(), "cluster-a|limit=50&namespace=cluster")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	payload, ok := snap.Payload.(CatalogSnapshot)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", snap.Payload)
+	}
+
+	if payload.Total != 1 {
+		t.Fatalf("expected one cluster-scoped match, got total=%d payload=%+v", payload.Total, payload)
+	}
+	if len(payload.Items) != 1 {
+		t.Fatalf("expected one cluster-scoped row, got %+v", payload.Items)
+	}
+	item := payload.Items[0]
+	if item.Scope != objectcatalog.ScopeCluster {
+		t.Fatalf("expected cluster-scoped row, got %+v", item)
+	}
+	if item.Namespace != "" {
+		t.Fatalf("expected cluster-scoped row to have empty namespace, got %q", item.Namespace)
+	}
+	if item.Group != "apiextensions.k8s.io" || item.Version != "v1" ||
+		item.Kind != "CustomResourceDefinition" || item.Resource != "customresourcedefinitions" ||
+		item.Name != "widgets.example.com" || item.UID != "uid-crd" {
+		t.Fatalf("cluster-scoped identity was not preserved: %+v", item)
+	}
+	if !reflect.DeepEqual(payload.Kinds, []objectcatalog.KindInfo{
+		{Kind: "CustomResourceDefinition", Namespaced: false},
+	}) {
+		t.Fatalf("unexpected cluster-scoped kind facets: %+v", payload.Kinds)
+	}
+	if !reflect.DeepEqual(payload.Namespaces, []string{"default"}) {
+		t.Fatalf("expected namespace facets to exclude literal cluster sentinel, got %+v", payload.Namespaces)
+	}
+}
+
 func TestCatalogSnapshotMetadataUsesKeysetSemantics(t *testing.T) {
 	payload, _ := buildCatalogSnapshot(
 		objectcatalog.QueryResult{
@@ -156,6 +230,7 @@ func TestCatalogSnapshotIssuesDescribeApproximateAndDegradedResults(t *testing.T
 				Name:      "pod-a",
 			}},
 			ContinueToken: "next-keyset",
+			PreviousToken: "previous-keyset",
 			TotalItems:    200000,
 			TotalIsExact:  false,
 			FacetsExact:   false,
@@ -174,6 +249,9 @@ func TestCatalogSnapshotIssuesDescribeApproximateAndDegradedResults(t *testing.T
 
 	if payload.Continue != "" || payload.HasNext {
 		t.Fatalf("expected degraded catalog to disable pagination, continue=%q hasNext=%t", payload.Continue, payload.HasNext)
+	}
+	if payload.Previous != "" || payload.HasPrevious {
+		t.Fatalf("expected degraded catalog to disable previous pagination, previous=%q hasPrevious=%t", payload.Previous, payload.HasPrevious)
 	}
 	var messages []string
 	for _, issue := range payload.Issues {

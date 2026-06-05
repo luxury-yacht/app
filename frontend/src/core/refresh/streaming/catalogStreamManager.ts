@@ -134,6 +134,7 @@ class CatalogStreamManager {
     this.clearFlushTimer();
     this.lastAppliedSequence = 0;
     this.lastFallbackAt = 0;
+    this.lastEventAt = 0;
     const session = this.bumpSession();
     await this.openStream(session);
     return () => this.stop(false);
@@ -164,8 +165,12 @@ class CatalogStreamManager {
   }
 
   /** Reports whether the catalog stream has delivered data recently. */
-  isHealthy(): boolean {
-    if (!this.eventSource || this.closed) {
+  isHealthy(scope?: string): boolean {
+    const requestedScope = scope?.trim() ?? '';
+    if (!this.eventSource || this.closed || !this.scope) {
+      return false;
+    }
+    if (requestedScope && requestedScope !== this.scope) {
       return false;
     }
     // Consider healthy if we received an event within the last 90 seconds.
@@ -186,6 +191,7 @@ class CatalogStreamManager {
     this.mergeQueue.reset();
     this.clearFlushTimer();
     this.lastAppliedSequence = 0;
+    this.lastEventAt = 0;
     const session = this.bumpSession();
     await this.openStream(session);
   }

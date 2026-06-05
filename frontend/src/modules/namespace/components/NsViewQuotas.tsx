@@ -21,7 +21,10 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import {
+  buildLocalPartialDataLabel,
+  localTableModeForStats,
+} from '@modules/resource-grid/tablePartialState';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -191,6 +194,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
 
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Quotas' : 'Namespace Quotas';
+    const localTableMode = localTableModeForStats(stats);
 
     const selectRows = useCallback(
       (payload: NamespaceQuotasSnapshotPayload) => payload.resources ?? [],
@@ -211,6 +215,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       localData: data,
       localLoading: loading,
       localLoaded: loaded,
+      localTableMode,
       selectRows,
       viewId: 'namespace-quotas',
       namespace,
@@ -221,7 +226,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       filterOptionOverrides:
-        namespace === ALL_NAMESPACES_SCOPE
+        namespace === ALL_NAMESPACES_SCOPE || localTableMode !== 'Local Partial'
           ? undefined
           : {
               partialDataLabel: buildLocalPartialDataLabel({

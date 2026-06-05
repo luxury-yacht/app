@@ -46,6 +46,7 @@ type NamespaceRBACSnapshot struct {
 	TotalIsExact  bool                     `json:"totalIsExact"`
 	Namespaces    []string                 `json:"namespaces,omitempty"`
 	FacetsExact   bool                     `json:"facetsExact"`
+	Issues        []ResourceQueryIssue     `json:"issues,omitempty"`
 	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
@@ -108,40 +109,43 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 		bindings        []*rbacv1.RoleBinding
 		serviceAccounts []*corev1.ServiceAccount
 	)
+	rolesAvailable := b.roleLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "roles")
+	bindingsAvailable := b.bindingLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "rolebindings")
+	serviceAccountsAvailable := b.saLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "", "serviceaccounts")
 
 	if isAll {
-		if b.roleLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "roles") {
+		if rolesAvailable {
 			roles, err = b.roleLister.List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.bindingLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "rolebindings") {
+		if bindingsAvailable {
 			bindings, err = b.bindingLister.List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.saLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "", "serviceaccounts") {
+		if serviceAccountsAvailable {
 			serviceAccounts, err = b.saLister.List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
 	} else {
-		if b.roleLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "roles") {
+		if rolesAvailable {
 			roles, err = b.roleLister.Roles(namespace).List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.bindingLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "rolebindings") {
+		if bindingsAvailable {
 			bindings, err = b.bindingLister.RoleBindings(namespace).List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.saLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "", "serviceaccounts") {
+		if serviceAccountsAvailable {
 			serviceAccounts, err = b.saLister.ServiceAccounts(namespace).List(labels.Everything())
 			if err != nil {
 				return nil, err
@@ -149,7 +153,12 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 		}
 	}
 
-	return buildNamespaceRBACSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, roles, bindings, serviceAccounts)
+	issues := typedTableQueryResourceIssues(ctx, namespaceRBACDomainName, query, []typedTableResourceSource{
+		{Kind: "Role", Group: "rbac.authorization.k8s.io", Resource: "roles", Available: rolesAvailable},
+		{Kind: "RoleBinding", Group: "rbac.authorization.k8s.io", Resource: "rolebindings", Available: bindingsAvailable},
+		{Kind: "ServiceAccount", Group: "", Resource: "serviceaccounts", Available: serviceAccountsAvailable},
+	})
+	return buildNamespaceRBACSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, roles, bindings, serviceAccounts, issues)
 }
 
 func buildNamespaceRBACSnapshot(
@@ -159,6 +168,7 @@ func buildNamespaceRBACSnapshot(
 	roles []*rbacv1.Role,
 	bindings []*rbacv1.RoleBinding,
 	serviceAccounts []*corev1.ServiceAccount,
+	issues []ResourceQueryIssue,
 ) (*refresh.Snapshot, error) {
 	resources := make([]RBACSummary, 0, len(roles)+len(bindings)+len(serviceAccounts))
 	var version uint64
@@ -200,6 +210,7 @@ func buildNamespaceRBACSnapshot(
 	sortRBACSummaries(resources)
 	if query.Enabled {
 		page := applyTypedTableQuery(resources, query, rbacTableQueryAdapter())
+		exact := len(issues) == 0
 		return &refresh.Snapshot{
 			Domain:  namespaceRBACDomainName,
 			Scope:   scope,
@@ -211,9 +222,10 @@ func buildNamespaceRBACSnapshot(
 				Continue:      page.Continue,
 				CursorInvalid: page.CursorInvalid,
 				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
+				TotalIsExact:  page.TotalIsExact && exact,
 				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
+				FacetsExact:   page.FacetsExact && exact,
+				Issues:        issues,
 				Dynamic:       page.Dynamic,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},

@@ -52,6 +52,7 @@ interface NamespaceResourcesViewsProps {
 
   // Workloads data and loading states
   nsWorkloads?: any[];
+  nsWorkloadsStats?: SnapshotStats | null;
   nsWorkloadsKinds?: string[];
   nsWorkloadsLoading?: boolean;
   nsWorkloadsError?: string | null;
@@ -147,6 +148,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   nsPodsMetrics = null,
 
   nsWorkloads = [],
+  nsWorkloadsStats = null,
   nsWorkloadsKinds,
   nsWorkloadsLoading = false,
   nsWorkloadsLoaded = false,
@@ -246,6 +248,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewWorkloads
               namespace={namespace}
               data={nsWorkloads}
+              stats={nsWorkloadsStats}
               availableKinds={nsWorkloadsKinds}
               loading={nsWorkloadsLoading}
               loaded={nsWorkloadsLoaded}

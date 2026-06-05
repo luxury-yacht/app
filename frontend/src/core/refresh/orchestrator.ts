@@ -511,7 +511,7 @@ class RefreshOrchestrator {
     }
     // SSE-based streaming domains: check the stream manager directly.
     if (domain === 'catalog') {
-      return catalogStreamManager.isHealthy();
+      return catalogStreamManager.isHealthy(scope);
     }
     return false;
   }

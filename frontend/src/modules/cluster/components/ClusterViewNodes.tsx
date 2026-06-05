@@ -363,10 +363,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       filterAccessors: {
         getSearchText: (row) => [row.name, row.kind],
       },
-      metadataSearch: {
-        getDefaultValues: (row) => [row.name, row.kind],
-        getMetadataMaps: (row) => [row.labels, row.annotations],
-      },
       diagnosticsLabel: 'Cluster Nodes',
       filterOptions: { isNamespaceScoped: false },
     });

@@ -231,6 +231,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       localData: data,
       localLoading: loading,
       localLoaded: loaded,
+      localTableMode: 'Local Partial',
       selectRows,
       viewId: 'namespace-events',
       namespace,

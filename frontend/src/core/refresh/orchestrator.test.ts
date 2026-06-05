@@ -143,6 +143,11 @@ describe('refreshOrchestrator', () => {
     resourceStreamMocks.refreshOnce.mockReset();
     resourceStreamMocks.isHealthy.mockReset();
     resourceStreamMocks.isHealthy.mockReturnValue(false);
+    catalogStreamMocks.start.mockReset();
+    catalogStreamMocks.stop.mockReset();
+    catalogStreamMocks.refreshOnce.mockReset();
+    catalogStreamMocks.isHealthy.mockReset();
+    catalogStreamMocks.isHealthy.mockReturnValue(false);
     clientMocks.fetchSnapshotMock.mockReset();
     clientMocks.ensureRefreshBaseURLMock.mockClear();
     clientMocks.invalidateRefreshBaseURLMock.mockClear();
@@ -225,6 +230,22 @@ describe('refreshOrchestrator', () => {
       domain: 'catalog-diff',
       refresherName: CLUSTER_REFRESHERS.catalogDiff,
       category: 'cluster',
+    });
+  };
+
+  const registerCatalogDomain = () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'catalog',
+      refresherName: CLUSTER_REFRESHERS.browse,
+      category: 'cluster',
+
+      streaming: {
+        start: (scope: string) => catalogStreamMocks.start(scope),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          catalogStreamMocks.stop(scope, options?.reset ?? false),
+        refreshOnce: (scope: string) => catalogStreamMocks.refreshOnce(scope),
+        pauseRefresherWhenStreaming: true,
+      },
     });
   };
 
@@ -1211,18 +1232,7 @@ describe('refreshOrchestrator', () => {
     catalogStreamMocks.refreshOnce.mockClear();
     clientMocks.fetchSnapshotMock.mockClear();
 
-    refreshOrchestrator.registerDomain({
-      domain: 'catalog',
-      refresherName: CLUSTER_REFRESHERS.browse,
-      category: 'cluster',
-
-      streaming: {
-        start: (scope: string) => catalogStreamMocks.start(scope),
-        stop: (scope: string, options?: { reset?: boolean }) =>
-          catalogStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => catalogStreamMocks.refreshOnce(scope),
-      },
-    });
+    registerCatalogDomain();
 
     // Enable the scope and simulate an already-active stream by injecting cleanup directly.
     setRuntimeScopeEnabled('catalog', 'scope=all', true);
@@ -1242,6 +1252,45 @@ describe('refreshOrchestrator', () => {
 
     expect(catalogStreamMocks.refreshOnce).not.toHaveBeenCalled();
     expect(clientMocks.fetchSnapshotMock).toHaveBeenCalled();
+  });
+
+  it('does not let a healthy catalog stream for one scope skip another scope snapshot', async () => {
+    registerCatalogDomain();
+    const pageScope = buildClusterScope('cluster-a', 'limit=50&namespace=cluster');
+    const metadataScope = buildClusterScope('cluster-a', 'limit=1&namespace=cluster');
+    setRuntimeScopeEnabled('catalog', pageScope, true);
+    catalogStreamMocks.isHealthy.mockImplementation((scope?: string) => scope === metadataScope);
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'catalog',
+        scope: pageScope,
+        version: 1,
+        checksum: 'catalog-page',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          clusterId: 'cluster-a',
+          items: [],
+          total: 0,
+          resourceCount: 0,
+          batchIndex: 0,
+          batchSize: 0,
+          totalBatches: 1,
+          isFinal: true,
+        },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      etag: 'catalog-page',
+      notModified: false,
+    });
+
+    await refreshOrchestrator.fetchScopedDomain('catalog', pageScope, { isManual: false });
+
+    expect(catalogStreamMocks.isHealthy).toHaveBeenCalledWith(pageScope);
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
+      'catalog',
+      expect.objectContaining({ scope: pageScope })
+    );
   });
 
   it('keeps polling enabled when a resource stream is active but unhealthy', () => {

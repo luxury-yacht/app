@@ -407,66 +407,20 @@ func sortWorkloadSummaries(items []WorkloadSummary) {
 }
 
 func (b *NamespaceWorkloadsBuilder) queryIssues(ctx context.Context, query typedTableQuery) []ResourceQueryIssue {
-	if !query.Enabled {
-		return nil
-	}
-	sources := []struct {
-		kind     string
-		group    string
-		resource string
-		ok       bool
-	}{
-		{kind: "Pod", group: "", resource: "pods", ok: b.podLister != nil},
-		{kind: "Deployment", group: "apps", resource: "deployments", ok: b.deploymentLister != nil},
-		{kind: "StatefulSet", group: "apps", resource: "statefulsets", ok: b.statefulLister != nil},
-		{kind: "DaemonSet", group: "apps", resource: "daemonsets", ok: b.daemonLister != nil},
-		{kind: "Job", group: "batch", resource: "jobs", ok: b.jobLister != nil},
-		{kind: "CronJob", group: "batch", resource: "cronjobs", ok: b.cronJobLister != nil},
-	}
-	issues := make([]ResourceQueryIssue, 0)
-	for _, source := range sources {
-		needed := workloadQueryIncludesKind(query, source.kind)
-		if source.kind == "Pod" {
-			needed = workloadQueryNeedsPods(query)
-		}
-		if !needed {
-			continue
-		}
-		if source.ok && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, source.group, source.resource) {
-			continue
-		}
-		issues = append(issues, ResourceQueryIssue{
-			Kind:    source.kind,
-			Message: fmt.Sprintf("%s resources are unavailable; workload totals and facets are partial", source.kind),
-		})
-	}
-	return issues
-}
-
-func workloadQueryNeedsPods(query typedTableQuery) bool {
-	if len(query.Request.Kinds) == 0 {
-		return true
-	}
-	for _, requested := range query.Request.Kinds {
-		switch strings.ToLower(strings.TrimSpace(requested)) {
-		case "pod", "deployment", "statefulset", "daemonset", "job", "cronjob":
-			return true
-		}
-	}
-	return false
-}
-
-func workloadQueryIncludesKind(query typedTableQuery, kind string) bool {
-	if len(query.Request.Kinds) == 0 {
-		return true
-	}
-	normalized := strings.ToLower(strings.TrimSpace(kind))
-	for _, requested := range query.Request.Kinds {
-		if strings.ToLower(strings.TrimSpace(requested)) == normalized {
-			return true
-		}
-	}
-	return false
+	return typedTableQueryResourceIssues(ctx, namespaceWorkloadsDomainName, query, []typedTableResourceSource{
+		{
+			Kind:       "Pod",
+			Group:      "",
+			Resource:   "pods",
+			Available:  b.podLister != nil,
+			QueryKinds: []string{"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"},
+		},
+		{Kind: "Deployment", Group: "apps", Resource: "deployments", Available: b.deploymentLister != nil},
+		{Kind: "StatefulSet", Group: "apps", Resource: "statefulsets", Available: b.statefulLister != nil},
+		{Kind: "DaemonSet", Group: "apps", Resource: "daemonsets", Available: b.daemonLister != nil},
+		{Kind: "Job", Group: "batch", Resource: "jobs", Available: b.jobLister != nil},
+		{Kind: "CronJob", Group: "batch", Resource: "cronjobs", Available: b.cronJobLister != nil},
+	})
 }
 
 func (b *NamespaceWorkloadsBuilder) workloadsDynamicRevision() string {

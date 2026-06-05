@@ -56,6 +56,9 @@ const normalizeInitialPageLimit = (value: number): number => {
   );
 };
 
+const isRenderableCatalogPayload = (payload: CatalogSnapshotPayload): boolean =>
+  payload.isFinal !== false || (payload.items?.length ?? 0) > 0;
+
 /**
  * Options for the useBrowseCatalog hook.
  */
@@ -302,6 +305,10 @@ export function useBrowseCatalog({
       collectionRef.current = emptyBrowseCatalogCollection();
       setItems([]);
     }
+    if (scopeIdentityChanged) {
+      hasLoadedOnceRef.current = false;
+      setHasLoadedOnce(false);
+    }
 
     void refreshCatalogScope('startup');
     if (!metadataUsesActiveScope) {
@@ -346,16 +353,12 @@ export function useBrowseCatalog({
     setTotalCount(next.totalCount);
     setTotalIsExact(next.totalIsExact);
     setIsRequestingMore(false);
-  }, [domain.data, domain.scope, domain.status, catalogScope, pinnedNamespaces]);
 
-  // Handle first load
-  useEffect(() => {
-    if (hasLoadedOnce || !domain.data) {
-      return;
+    if (!hasLoadedOnceRef.current && isRenderableCatalogPayload(payload)) {
+      hasLoadedOnceRef.current = true;
+      setHasLoadedOnce(true);
     }
-    hasLoadedOnceRef.current = true;
-    setHasLoadedOnce(true);
-  }, [domain.data, hasLoadedOnce]);
+  }, [domain.data, domain.scope, domain.status, catalogScope, pinnedNamespaces]);
 
   // Cursor-page handler. Fetches a cursor page using a paginated scope and
   // replaces the current row window. The refresh store remains scoped by the
@@ -500,7 +503,7 @@ export function useBrowseCatalog({
   const loading =
     domain.status === 'loading' ||
     domain.status === 'initialising' ||
-    (items.length === 0 && !domain.data);
+    (items.length === 0 && !hasLoadedOnce);
   const passiveLoadingState = applyPassiveLoadingPolicy({
     loading,
     hasLoaded: hasLoadedOnce,

@@ -156,7 +156,9 @@ func buildCatalogSnapshot(
 	if streamingDisabled {
 		isFinal = true
 		result.ContinueToken = ""
+		result.PreviousToken = ""
 		hasNext = false
+		hasPrevious = false
 	}
 
 	if forceFinal {

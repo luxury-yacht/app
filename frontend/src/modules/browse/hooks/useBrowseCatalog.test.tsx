@@ -107,16 +107,19 @@ const makePayload = (overrides: Partial<CatalogSnapshotPayload>): CatalogSnapsho
   ...overrides,
 });
 
+const defaultPinnedNamespaces = ['default'];
+
 describe('useBrowseCatalog', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   let result: UseBrowseCatalogResult | null;
-  const pinnedNamespaces = ['default'];
 
   const Harness = ({
     search = '',
     kinds = [],
     namespaces = [],
+    pinnedNamespaces = defaultPinnedNamespaces,
+    clusterScopedOnly = false,
     customOnly = false,
     enabled = true,
     initialPageLimit = 2,
@@ -125,6 +128,8 @@ describe('useBrowseCatalog', () => {
     search?: string;
     kinds?: string[];
     namespaces?: string[];
+    pinnedNamespaces?: string[];
+    clusterScopedOnly?: boolean;
     customOnly?: boolean;
     enabled?: boolean;
     initialPageLimit?: number;
@@ -134,6 +139,7 @@ describe('useBrowseCatalog', () => {
       enabled,
       clusterId: 'cluster-1',
       pinnedNamespaces,
+      clusterScopedOnly,
       customOnly,
       initialPageLimit,
       onPageLimitChange,
@@ -302,6 +308,126 @@ describe('useBrowseCatalog', () => {
       scope: defaultScope,
       reason: 'startup',
     });
+  });
+
+  it('keeps Cluster Browse loading for empty non-final catalog snapshots', async () => {
+    const clusterScope = 'cluster-1|limit=2&namespace=cluster';
+    const metadataScope = 'cluster-1|limit=1&namespace=cluster';
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === clusterScope) {
+        return {
+          status: 'updating',
+          data: makePayload({ items: [], total: 826, batchSize: 0, isFinal: false }),
+          scope,
+        };
+      }
+      if (scope === metadataScope) {
+        return {
+          status: 'updating',
+          data: makePayload({ items: [], total: 826, batchSize: 0, isFinal: false }),
+          scope,
+        };
+      }
+      return { status: 'idle', data: null, scope };
+    });
+
+    await act(async () => {
+      root.render(<Harness pinnedNamespaces={[]} clusterScopedOnly />);
+      await Promise.resolve();
+    });
+
+    expect(result?.items).toEqual([]);
+    expect(result?.hasLoadedOnce).toBe(false);
+    expect(result?.loading).toBe(true);
+    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: clusterScope,
+      reason: 'startup',
+    });
+  });
+
+  it('resets loaded state when switching into Cluster Browse and then accepts cluster rows', async () => {
+    const namespaceScope = 'cluster-1|limit=2&namespace=default';
+    const namespaceMetadataScope = 'cluster-1|limit=1&namespace=default';
+    const clusterScope = 'cluster-1|limit=2&namespace=cluster';
+    const clusterMetadataScope = 'cluster-1|limit=1&namespace=cluster';
+    const pod = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const node = makeItem({
+      kind: 'Node',
+      resource: 'nodes',
+      namespace: undefined,
+      uid: 'node-a',
+      name: 'node-a',
+      scope: 'Cluster',
+    });
+    let clusterReady = false;
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === namespaceScope) {
+        return {
+          status: 'ready',
+          data: makePayload({ items: [pod], total: 1, batchSize: 1, isFinal: true }),
+          scope,
+        };
+      }
+      if (scope === namespaceMetadataScope) {
+        return {
+          status: 'ready',
+          data: makePayload({ items: [], total: 1, batchSize: 0, isFinal: true }),
+          scope,
+        };
+      }
+      if (scope === clusterScope) {
+        return clusterReady
+          ? {
+              status: 'ready',
+              data: makePayload({
+                items: [node],
+                total: 1,
+                batchSize: 1,
+                isFinal: true,
+                kinds: [{ kind: 'Node', namespaced: false }],
+              }),
+              scope,
+            }
+          : { status: 'idle', data: null, scope };
+      }
+      if (scope === clusterMetadataScope) {
+        return {
+          status: 'idle',
+          data: null,
+          scope,
+        };
+      }
+      return { status: 'idle', data: null, scope };
+    });
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
+    expect(result?.hasLoadedOnce).toBe(true);
+
+    await act(async () => {
+      root.render(<Harness pinnedNamespaces={[]} clusterScopedOnly />);
+      await Promise.resolve();
+    });
+
+    expect(result?.items).toEqual([]);
+    expect(result?.hasLoadedOnce).toBe(false);
+    expect(result?.loading).toBe(true);
+
+    clusterReady = true;
+    await act(async () => {
+      root.render(<Harness pinnedNamespaces={[]} clusterScopedOnly />);
+      await Promise.resolve();
+    });
+
+    expect(result?.items.map((item) => item.name)).toEqual(['node-a']);
+    expect(result?.hasLoadedOnce).toBe(true);
+    expect(result?.loading).toBe(false);
   });
 
   it('replaces the current row window with the previous cursor page', async () => {

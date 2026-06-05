@@ -70,6 +70,7 @@ type NamespaceNetworkSnapshot struct {
 	TotalIsExact  bool                     `json:"totalIsExact"`
 	Namespaces    []string                 `json:"namespaces,omitempty"`
 	FacetsExact   bool                     `json:"facetsExact"`
+	Issues        []ResourceQueryIssue     `json:"issues,omitempty"`
 	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
@@ -160,29 +161,33 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 		return nil, err
 	}
 
+	servicesAvailable := b.serviceLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "", "services")
 	var services []*corev1.Service
-	if b.serviceLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "", "services") {
+	if servicesAvailable {
 		services, err = b.listServices(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list services: %w", err)
 		}
 	}
+	endpointSlicesAvailable := b.endpointSliceLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "discovery.k8s.io", "endpointslices")
 	var slices []*discoveryv1.EndpointSlice
-	if b.endpointSliceLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "discovery.k8s.io", "endpointslices") {
+	if endpointSlicesAvailable {
 		slices, err = b.listEndpointSlices(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list endpoint slices: %w", err)
 		}
 	}
+	ingressesAvailable := b.ingressLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "networking.k8s.io", "ingresses")
 	var ingresses []*networkingv1.Ingress
-	if b.ingressLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "networking.k8s.io", "ingresses") {
+	if ingressesAvailable {
 		ingresses, err = b.listIngresses(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list ingresses: %w", err)
 		}
 	}
+	policiesAvailable := b.policyLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "networking.k8s.io", "networkpolicies")
 	var policies []*networkingv1.NetworkPolicy
-	if b.policyLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "networking.k8s.io", "networkpolicies") {
+	if policiesAvailable {
 		policies, err = b.listNetworkPolicies(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace network: failed to list network policies: %w", err)
@@ -195,7 +200,20 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 
 	slicesByService := groupEndpointSlicesByService(slices)
 
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, services, slices, slicesByService, ingresses, policies, gatewayItems)
+	issues := typedTableQueryResourceIssues(ctx, namespaceNetworkDomainName, query, []typedTableResourceSource{
+		{Kind: "Service", Group: "", Resource: "services", Available: servicesAvailable},
+		{Kind: "EndpointSlice", Group: "discovery.k8s.io", Resource: "endpointslices", Available: endpointSlicesAvailable, QueryKinds: []string{"EndpointSlice", "Service"}},
+		{Kind: "Ingress", Group: "networking.k8s.io", Resource: "ingresses", Available: ingressesAvailable},
+		{Kind: "NetworkPolicy", Group: "networking.k8s.io", Resource: "networkpolicies", Available: policiesAvailable},
+		{Kind: "Gateway", Group: "gateway.networking.k8s.io", Resource: "gateways", Available: b.gatewayLister != nil},
+		{Kind: "HTTPRoute", Group: "gateway.networking.k8s.io", Resource: "httproutes", Available: b.httpRouteLister != nil},
+		{Kind: "GRPCRoute", Group: "gateway.networking.k8s.io", Resource: "grpcroutes", Available: b.grpcRouteLister != nil},
+		{Kind: "TLSRoute", Group: "gateway.networking.k8s.io", Resource: "tlsroutes", Available: b.tlsRouteLister != nil},
+		{Kind: "ListenerSet", Group: "gateway.networking.k8s.io", Resource: "listenersets", Available: b.listenerSetLister != nil},
+		{Kind: "ReferenceGrant", Group: "gateway.networking.k8s.io", Resource: "referencegrants", Available: b.referenceGrantLister != nil},
+		{Kind: "BackendTLSPolicy", Group: "gateway.networking.k8s.io", Resource: "backendtlspolicies", Available: b.backendTLSPolicyLister != nil},
+	})
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, services, slices, slicesByService, ingresses, policies, gatewayItems, issues)
 }
 
 func (b *NamespaceNetworkBuilder) listServices(namespace string) ([]*corev1.Service, error) {
@@ -322,6 +340,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 	ingresses []*networkingv1.Ingress,
 	policies []*networkingv1.NetworkPolicy,
 	gatewayItems gatewayAPIResources,
+	issues []ResourceQueryIssue,
 ) (*refresh.Snapshot, error) {
 	resources := make([]NetworkSummary, 0, len(services)+len(slicesByService)+len(ingresses)+len(policies)+len(gatewayItems.gateways)+len(gatewayItems.httpRoutes)+len(gatewayItems.grpcRoutes)+len(gatewayItems.tlsRoutes)+len(gatewayItems.listenerSets)+len(gatewayItems.referenceGrants)+len(gatewayItems.backendTLSPolicies))
 	var version uint64
@@ -417,6 +436,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 
 	if query.Enabled {
 		page := applyTypedTableQuery(resources, query, networkTableQueryAdapter())
+		exact := len(issues) == 0
 		return &refresh.Snapshot{
 			Domain:  namespaceNetworkDomainName,
 			Scope:   scope,
@@ -428,9 +448,10 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 				Continue:      page.Continue,
 				CursorInvalid: page.CursorInvalid,
 				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
+				TotalIsExact:  page.TotalIsExact && exact,
 				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
+				FacetsExact:   page.FacetsExact && exact,
+				Issues:        issues,
 				Dynamic:       page.Dynamic,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},

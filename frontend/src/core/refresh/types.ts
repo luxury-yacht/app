@@ -348,6 +348,7 @@ export interface ClusterRBACSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
@@ -375,6 +376,7 @@ export interface ClusterStorageSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
@@ -396,6 +398,7 @@ export interface ClusterConfigSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
@@ -433,6 +436,7 @@ export interface ClusterCRDSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
@@ -497,6 +501,7 @@ export interface ClusterEventsSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
@@ -922,6 +927,7 @@ export interface NamespaceConfigSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
@@ -943,6 +949,7 @@ export interface NamespaceNetworkSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
@@ -964,6 +971,7 @@ export interface NamespaceRBACSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
@@ -990,6 +998,7 @@ export interface NamespaceStorageSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
@@ -1023,6 +1032,7 @@ export interface NamespaceAutoscalingSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
@@ -1052,6 +1062,7 @@ export interface NamespaceQuotasSnapshotPayload extends ClusterMeta {
   totalIsExact?: boolean;
   namespaces?: string[];
   facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
 }
 
