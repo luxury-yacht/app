@@ -784,21 +784,31 @@ Acceptance:
 
 ### Phase 2: Introduce The Resource Table Controller
 
-- [ ] Add `useResourceInventoryTable` and render-state types under
-      `frontend/src/modules/resource-grid`.
-- [ ] Add `ResourceInventoryTable` as the only resource-inventory wrapper
-      around `GridTable`.
-- [ ] Move loading boundary, empty-state eligibility, partial/degraded display,
-      pagination placement, and table-body loading into the controller output.
-- [ ] Keep `GridTable` as the rendering primitive; do not duplicate keyboard,
-      focus, virtualization, filtering UI, or context-menu behavior.
-- [ ] Add focused controller tests for:
-      initializing with no rows, ready with rows, refreshing with rows,
-      refreshing with no rows, settled empty, blocked, error, Local Partial,
-      exact total, approximate total, and cursor pagination.
-- [ ] Add `boundedRowsSource` controller tests for complete and partial bounded
-      rows, including exact local operations for complete data and visible
-      partial limits for capped/windowed data.
+- [x] Added `useResourceInventoryTable` + render-state types in
+      `frontend/src/modules/resource-grid/useResourceInventoryTable.ts`. The core
+      is the pure `deriveResourceInventoryRenderState(source)` — a lifecycle →
+      display projection (statuses: initializing/loading/refreshing/ready/empty/
+      blocked/error) with React-free unit tests. Empty is decided from the
+      lifecycle, never from a call-site `rows.length === 0`.
+- [x] Added `ResourceInventoryTable` (`ResourceInventoryTable.tsx`) as the one
+      resource-inventory wrapper around `GridTable`. Registered as a classified
+      `resource-grid-surface` exception in the direct-GridTable enforcement
+      contract test (it lives outside `shared/components/tables/`).
+- [x] Loading boundary, settled-empty gate, partial/degraded label, refresh
+      overlay, and pagination passthrough all live in the controller's render
+      state; the wrapper only maps them onto the boundary + GridTable.
+- [x] `GridTable` stays the rendering primitive — the wrapper adds no keyboard,
+      focus, virtualization, filtering-UI, or context-menu behavior.
+- [x] Controller lifecycle-matrix tests
+      (`useResourceInventoryTable.test.ts`, 15 cases): initializing, cold
+      loading, ready, refreshing-with-rows, refreshing-with-no-rows (the
+      false-empty guard), settled empty, blocked, error, error/blocked
+      precedence, Local Partial, complete-ignores-label, exact total,
+      approximate total, cursor pagination, bounded null pagination.
+- [x] `boundedRowsSource` + tests (`boundedRowsSource.test.ts`, 6 cases):
+      Local Complete (exact, no label/pagination), Local Partial (window label),
+      empty→settled-empty, still-filling→loading, blocked/error passthrough.
+      Full frontend suite green (3094).
 
 Acceptance:
 

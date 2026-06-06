@@ -23,6 +23,12 @@ const TABLE_MODES = [
 const TABLE_MODE_PATTERN = new RegExp(TABLE_MODES.join('|'));
 
 const DIRECT_GRIDTABLE_USAGE_EXCEPTIONS = {
+  'modules/resource-grid/ResourceInventoryTable.tsx': {
+    kind: 'resource-grid-surface',
+    mode: 'Inherited from ResourceInventorySourceState (boundedRowsSource / backendQuerySource)',
+    reason:
+      'The one resource-inventory wrapper. Callers pass a normalized source state plus gridTableProps, so completeness/table mode is owned by the source, not this shell; it adds only the loading boundary and render-state-driven display.',
+  },
   'modules/resource-grid/ObjectPanelResourceGridTableSurface.tsx': {
     kind: 'resource-grid-surface',
     mode: 'Inherited from useObjectPanelResourceGridTable',
