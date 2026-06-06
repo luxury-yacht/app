@@ -353,6 +353,89 @@ describe('NsViewWorkloads', () => {
     );
   });
 
+  it('renders a settled-empty query on remount without retaining stale rows (dynamic table)', async () => {
+    // The second dynamic query-backed table covered by the remount lifecycle
+    // regression (Nodes is the first). The controller trusts a settled query, so
+    // a definitive empty result on remount renders empty rather than resurrecting
+    // stale rows; the transient empty-while-loading protection lives in the
+    // controller (see useResourceInventoryTable / backendQuerySource tests).
+    const queryRow = {
+      kind: 'Deployment',
+      name: 'web',
+      namespace: 'team-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '1h',
+      clusterId: 'path:context',
+      clusterName: 'ctx',
+    };
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [queryRow],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace={ALL_NAMESPACES_SCOPE}
+          data={[]}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(gridTablePropsRef.current?.data).toHaveLength(1);
+
+    // Remount with the query now settling empty.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [],
+          total: 0,
+          totalIsExact: true,
+          namespaces: [],
+          kinds: [],
+          facetsExact: true,
+        },
+      },
+    });
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace={ALL_NAMESPACES_SCOPE}
+          data={[]}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(gridTablePropsRef.current?.data).toEqual([]);
+  });
+
   it('resolves node metrics from the active cluster scope only', async () => {
     await act(async () => {
       root.render(

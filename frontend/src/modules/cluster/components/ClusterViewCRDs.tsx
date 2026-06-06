@@ -13,7 +13,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -184,13 +184,10 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
     const selectRows = useCallback((payload: ClusterCRDSnapshotPayload) => payload.rows ?? [], []);
-    const {
-      gridTableProps,
-      favModal,
-      loading: tableLoading,
-      loaded: tableLoaded,
-      rows,
-    } = useQueryBackedClusterResourceGridTable<ClusterCRDSnapshotPayload, CRDsData>({
+    const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
+      ClusterCRDSnapshotPayload,
+      CRDsData
+    >({
       enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: selectedClusterId,
@@ -236,15 +233,13 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={tableLoading && rows.length === 0}
-          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading CRDs..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster CRDs"
-          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="gridtable-crds"
           enableContextMenu={true}

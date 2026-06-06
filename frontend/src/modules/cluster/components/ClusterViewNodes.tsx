@@ -16,7 +16,7 @@ import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useCallback, useMemo } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ClusterNodeRow } from '@modules/cluster/contexts/ClusterResourcesContext';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
@@ -351,13 +351,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       [selectedClusterId]
     );
 
-    const {
-      gridTableProps,
-      favModal,
-      rows: displayedNodes,
-      loading: tableLoading,
-      loaded: tableLoaded,
-    } = useQueryBackedClusterResourceGridTable<ClusterNodeSnapshotPayload, ClusterNodeRow>({
+    const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
+      ClusterNodeSnapshotPayload,
+      ClusterNodeRow
+    >({
       enabled: true,
       queryTableMode: 'Query Backed Dynamic',
       clusterId: selectedClusterId,
@@ -367,7 +364,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       localLoading: loading,
       localLoaded: loaded,
       selectRows,
-      retainLocalRowsForEmptyQuery: true,
       viewId: 'cluster-nodes',
       persistenceData: [],
       columns: tableColumns,
@@ -440,16 +436,14 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={tableLoading && displayedNodes.length === 0}
-          loaded={tableLoaded || displayedNodes.length > 0}
           spinnerMessage="Loading nodes..."
           favModal={favModal}
           columns={tableColumns}
           diagnosticsLabel="Cluster Nodes"
           diagnosticsMode="live"
-          loading={tableLoading}
           onRowClick={handleNodeClick}
           tableClassName="gridtable-nodes"
           enableContextMenu={true}

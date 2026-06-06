@@ -13,7 +13,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -142,13 +142,10 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       (payload: ClusterConfigSnapshotPayload) => payload.rows ?? [],
       []
     );
-    const {
-      gridTableProps,
-      favModal,
-      loading: tableLoading,
-      loaded: tableLoaded,
-      rows,
-    } = useQueryBackedClusterResourceGridTable<ClusterConfigSnapshotPayload, ConfigData>({
+    const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
+      ClusterConfigSnapshotPayload,
+      ConfigData
+    >({
       enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: selectedClusterId,
@@ -198,15 +195,13 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={tableLoading && rows.length === 0}
-          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading configuration resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster Configuration"
-          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="gridtable-config"
           enableContextMenu={true}

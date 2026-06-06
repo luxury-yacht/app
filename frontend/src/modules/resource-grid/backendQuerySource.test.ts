@@ -96,6 +96,18 @@ describe('backendQuerySource', () => {
     ).toBe(true);
   });
 
+  it('omits pagination when the provider renders its own footer (catalog)', () => {
+    const source = backendQuerySource<Row>({
+      enabled: true,
+      rows: [{ clusterId: 'c', name: 'a' }],
+      loading: false,
+      loaded: true,
+      error: null,
+    });
+    expect(source.pagination).toBeNull();
+    expect(source.blocked).toBe(false);
+  });
+
   it('treats a disabled query as blocked with no pagination', () => {
     const source = backendQuerySource(input({ enabled: false, loaded: true }));
     expect(source.blocked).toBe(true);

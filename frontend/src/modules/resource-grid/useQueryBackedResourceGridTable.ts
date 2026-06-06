@@ -3,10 +3,7 @@ import type { RefreshDomain } from '@/core/refresh/types';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
-import type {
-  GridTableFilterOptions,
-  GridTableFilterState,
-} from '@shared/components/tables/GridTable';
+import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
@@ -19,12 +16,12 @@ import type {
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
 import QueryPaginationControls from './QueryPaginationControls';
+import type { ResourceInventorySourceState } from './useResourceInventoryTable';
 import {
   TYPED_QUERY_PAGE_LIMIT_OPTIONS,
   useTypedResourceQuery,
   type TypedQueryPageLimit,
   type TypedQueryPayload,
-  type UseTypedResourceQueryResult,
 } from './useTypedResourceQuery';
 import {
   mergeQueryBackedFilterOptions,
@@ -72,57 +69,6 @@ const shouldHoldInitialTypedQueryLoading = <TRow>({
 const isLiveDomainInitialLoadPending = (state: { status?: string; data?: unknown }): boolean =>
   !state.data && (state.status === 'loading' || state.status === 'initialising');
 
-const hasActiveQueryFilters = (filters: GridTableFilterState): boolean =>
-  filters.search.trim().length > 0 || filters.kinds.length > 0 || filters.namespaces.length > 0;
-
-const hasActiveQueryPredicates = (
-  predicates: Record<string, string | null | undefined> | undefined
-): boolean =>
-  Object.values(predicates ?? {}).some(
-    (value) => value !== null && value !== undefined && value.trim() !== ''
-  );
-
-// TEMPORARY symptom patch for transient false-empty query-backed tables. The
-// owner-safe lease lifecycle fixes the concurrent-remount race, but a cold
-// sequential remount can still settle empty before rows arrive. Tracked by
-// docs/plans/resource-table-simplification.md — remove in Phase 3 once
-// backendQuerySource owns empty-state settlement. The clusterId guard prevents
-// masking a genuine empty by retaining another cluster's stale rows.
-const shouldRetainLocalRowsForEmptyQuery = <TRow extends ResourceGridTableRow>({
-  allowRetainLocalRows,
-  clusterId,
-  queryEnabled,
-  query,
-  localData,
-  localError,
-  filters,
-  predicates,
-}: {
-  allowRetainLocalRows: boolean;
-  clusterId?: string | null;
-  queryEnabled: boolean;
-  query: UseTypedResourceQueryResult<TRow>;
-  localData: TRow[];
-  localError: string | null;
-  filters: GridTableFilterState;
-  predicates?: Record<string, string | null | undefined>;
-}): boolean =>
-  allowRetainLocalRows &&
-  queryEnabled &&
-  localData.length > 0 &&
-  localData.every((row) => !row.clusterId || row.clusterId === clusterId) &&
-  !localError &&
-  query.loaded &&
-  !query.loading &&
-  !query.error &&
-  query.rows.length === 0 &&
-  query.totalCount === 0 &&
-  query.pageIndex === 1 &&
-  !query.hasPrevious &&
-  !query.continueToken &&
-  !hasActiveQueryFilters(filters) &&
-  !hasActiveQueryPredicates(predicates);
-
 export interface QueryBackedNamespaceGridResult<
   T extends ResourceGridTableRow,
 > extends ResourceGridTableResult<T> {
@@ -130,7 +76,39 @@ export interface QueryBackedNamespaceGridResult<
   loading: boolean;
   loaded: boolean;
   error: string | null;
+  /**
+   * Normalized source state for the resource-inventory controller. Views render
+   * `<ResourceInventoryTable source={source} gridTableProps={gridTableProps} />`
+   * and no longer derive `boundaryLoading`/`loaded`/empty-eligibility by hand.
+   * During the incremental migration the pagination footer and partial-data
+   * label stay on `gridTableProps`, so this source carries only the lifecycle
+   * (rows/loading/loaded/error/completeness) the controller needs for the
+   * loading boundary, refresh overlay, and settled-empty gate.
+   */
+  source: ResourceInventorySourceState<T>;
 }
+
+const buildQueryBackedSource = <T extends ResourceGridTableRow>({
+  rows,
+  loading,
+  loaded,
+  error,
+  mode,
+}: {
+  rows: T[];
+  loading: boolean;
+  loaded: boolean;
+  error: string | null;
+  mode: ResourceGridTableMode;
+}): ResourceInventorySourceState<T> => ({
+  rows,
+  loading,
+  loaded,
+  error,
+  completeness: mode === 'Local Partial' ? 'partial' : 'complete',
+  partialLabel: null,
+  pagination: null,
+});
 
 export interface QueryBackedNamespaceGridParams<
   TPayload extends TypedQueryPayload,
@@ -153,7 +131,6 @@ export interface QueryBackedNamespaceGridParams<
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
-  retainLocalRowsForEmptyQuery?: boolean;
 }
 
 export function useQueryBackedNamespaceResourceGridTable<
@@ -174,7 +151,6 @@ export function useQueryBackedNamespaceResourceGridTable<
   selectRows,
   predicates,
   filterOptionOverrides,
-  retainLocalRowsForEmptyQuery = false,
   defaultSort = { key: 'name', direction: 'asc' },
   namespace,
   ...tableParams
@@ -240,17 +216,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     selectRows,
   });
 
-  const useLocalRowsForEmptyQuery = shouldRetainLocalRowsForEmptyQuery({
-    allowRetainLocalRows: retainLocalRowsForEmptyQuery,
-    clusterId,
-    queryEnabled,
-    query,
-    localData,
-    localError,
-    filters: tableState.filters,
-    predicates,
-  });
-  const data = queryEnabled ? (useLocalRowsForEmptyQuery ? localData : query.rows) : localData;
+  const data = queryEnabled ? query.rows : localData;
   const waitingForInitialQuery = shouldHoldInitialTypedQueryLoading({
     enabled,
     clusterId,
@@ -262,11 +228,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   const loading = queryEnabled
     ? data.length === 0 && (query.loading || queryInitialLoading)
     : waitingForInitialQuery || localLoading;
-  const loaded = queryEnabled
-    ? useLocalRowsForEmptyQuery || query.loaded
-    : waitingForInitialQuery
-      ? false
-      : localLoaded;
+  const loaded = queryEnabled ? query.loaded : waitingForInitialQuery ? false : localLoaded;
   const error = queryEnabled ? query.error : localError;
 
   const table = useNamespaceResourceGridTable<TRow>({
@@ -292,13 +254,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     if (!enabled) {
       return table.gridTableProps;
     }
-    const paginationQuery = useLocalRowsForEmptyQuery
-      ? {
-          ...query,
-          totalCount: Math.max(query.totalCount, data.length),
-          totalIsExact: false,
-        }
-      : query;
+    const paginationQuery = query;
     const paginationControls = React.createElement(QueryPaginationControls, {
       idPrefix: tableParams.viewId,
       pageIndex: paginationQuery.pageIndex,
@@ -319,15 +275,7 @@ export function useQueryBackedNamespaceResourceGridTable<
       },
     });
     return queryBackedPaginationProps(table.gridTableProps, paginationQuery, paginationControls);
-  }, [
-    data.length,
-    enabled,
-    persistence,
-    query,
-    useLocalRowsForEmptyQuery,
-    table.gridTableProps,
-    tableParams.viewId,
-  ]);
+  }, [data.length, enabled, persistence, query, table.gridTableProps, tableParams.viewId]);
 
   return {
     ...table,
@@ -336,6 +284,17 @@ export function useQueryBackedNamespaceResourceGridTable<
     loading,
     loaded,
     error,
+    source: buildQueryBackedSource({
+      rows: gridTableProps.data,
+      loading,
+      loaded,
+      error,
+      mode: enabled
+        ? queryTableMode
+        : localTableMode === 'Local Partial'
+          ? 'Local Partial'
+          : 'Local Complete',
+    }),
   };
 }
 
@@ -360,7 +319,6 @@ export interface QueryBackedClusterGridParams<
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
-  retainLocalRowsForEmptyQuery?: boolean;
 }
 
 export function useQueryBackedClusterResourceGridTable<
@@ -381,7 +339,6 @@ export function useQueryBackedClusterResourceGridTable<
   selectRows,
   predicates,
   filterOptionOverrides,
-  retainLocalRowsForEmptyQuery = false,
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   ...tableParams
@@ -448,17 +405,7 @@ export function useQueryBackedClusterResourceGridTable<
     selectRows,
   });
 
-  const useLocalRowsForEmptyQuery = shouldRetainLocalRowsForEmptyQuery({
-    allowRetainLocalRows: retainLocalRowsForEmptyQuery,
-    clusterId,
-    queryEnabled,
-    query,
-    localData,
-    localError,
-    filters: tableState.filters,
-    predicates,
-  });
-  const data = queryEnabled ? (useLocalRowsForEmptyQuery ? localData : query.rows) : localData;
+  const data = queryEnabled ? query.rows : localData;
   const waitingForInitialQuery = shouldHoldInitialTypedQueryLoading({
     enabled,
     clusterId,
@@ -470,11 +417,7 @@ export function useQueryBackedClusterResourceGridTable<
   const loading = queryEnabled
     ? data.length === 0 && (query.loading || queryInitialLoading)
     : waitingForInitialQuery || localLoading;
-  const loaded = queryEnabled
-    ? useLocalRowsForEmptyQuery || query.loaded
-    : waitingForInitialQuery
-      ? false
-      : localLoaded;
+  const loaded = queryEnabled ? query.loaded : waitingForInitialQuery ? false : localLoaded;
   const error = queryEnabled ? query.error : localError;
 
   const table = useClusterResourceGridTable<TRow>({
@@ -500,13 +443,7 @@ export function useQueryBackedClusterResourceGridTable<
     if (!enabled) {
       return table.gridTableProps;
     }
-    const paginationQuery = useLocalRowsForEmptyQuery
-      ? {
-          ...query,
-          totalCount: Math.max(query.totalCount, data.length),
-          totalIsExact: false,
-        }
-      : query;
+    const paginationQuery = query;
     const paginationControls = React.createElement(QueryPaginationControls, {
       idPrefix: tableParams.viewId,
       pageIndex: paginationQuery.pageIndex,
@@ -527,15 +464,7 @@ export function useQueryBackedClusterResourceGridTable<
       },
     });
     return queryBackedPaginationProps(table.gridTableProps, paginationQuery, paginationControls);
-  }, [
-    data.length,
-    enabled,
-    persistence,
-    query,
-    useLocalRowsForEmptyQuery,
-    table.gridTableProps,
-    tableParams.viewId,
-  ]);
+  }, [data.length, enabled, persistence, query, table.gridTableProps, tableParams.viewId]);
 
   return {
     ...table,
@@ -544,5 +473,16 @@ export function useQueryBackedClusterResourceGridTable<
     loading,
     loaded,
     error,
+    source: buildQueryBackedSource({
+      rows: gridTableProps.data,
+      loading,
+      loaded,
+      error,
+      mode: enabled
+        ? queryTableMode
+        : localTableMode === 'Local Partial'
+          ? 'Local Partial'
+          : 'Local Complete',
+    }),
   };
 }

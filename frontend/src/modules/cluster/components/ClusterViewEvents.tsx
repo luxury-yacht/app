@@ -16,7 +16,7 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
@@ -170,13 +170,10 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       (payload: ClusterEventsSnapshotPayload) => payload.rows ?? [],
       []
     );
-    const {
-      gridTableProps,
-      favModal,
-      rows: displayedEvents,
-      loading: tableLoading,
-      loaded: tableLoaded,
-    } = useQueryBackedClusterResourceGridTable<ClusterEventsSnapshotPayload, EventData>({
+    const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
+      ClusterEventsSnapshotPayload,
+      EventData
+    >({
       enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: selectedClusterId,
@@ -202,7 +199,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       context: 'gridtable',
       useDefaultHandlers: false,
       onViewInvolvedObject: (object) => {
-        const event = displayedEvents.find(
+        const event = source.rows.find(
           (candidate) =>
             candidate.clusterId === object.clusterId &&
             candidate.namespace === object.namespace &&
@@ -241,16 +238,14 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={tableLoading && displayedEvents.length === 0}
-          loaded={tableLoaded || displayedEvents.length > 0}
           spinnerMessage="Loading events..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster Events"
           diagnosticsMode="live"
-          loading={tableLoading}
           onRowClick={handleEventClick}
           tableClassName="gridtable-cluster-events"
           enableContextMenu={true}

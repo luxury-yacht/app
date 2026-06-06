@@ -16,7 +16,7 @@ import { useShortNames } from '@/hooks/useShortNames';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import React, { useCallback, useMemo } from 'react';
 import type { SnapshotStats } from '@/core/refresh/client';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import type { NamespaceWorkloadSnapshotPayload, PodMetricsInfo } from '@/core/refresh/types';
@@ -194,10 +194,8 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const {
       gridTableProps: resolvedGridTableProps,
       favModal,
-      rows: sortedWorkloads,
-      loading: tableLoading,
-      loaded: tableLoaded,
       error: tableError,
+      source,
     } = useQueryBackedNamespaceResourceGridTable<NamespaceWorkloadSnapshotPayload, WorkloadData>({
       enabled: isAllNamespaces,
       queryTableMode: 'Query Backed Dynamic',
@@ -253,9 +251,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       [namespace]
     );
 
-    const boundaryLoading =
-      Boolean(tableLoading) || !(Boolean(tableLoaded) || sortedWorkloads.length > 0);
-
     return (
       <>
         {tableError && <div className="namespace-error-message">{tableError}</div>}
@@ -265,11 +260,11 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             {metricsBanner.message}
           </div>
         )}
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={resolvedGridTableProps}
-          boundaryLoading={boundaryLoading}
-          loaded={Boolean(tableLoaded) || sortedWorkloads.length > 0}
           spinnerMessage="Loading workloads..."
+          updatingMessage="Updating workloads…"
           allowPartial
           favModal={favModal}
           columns={tableColumns}
@@ -277,7 +272,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Workloads' : 'Namespace Workloads'
           }
           diagnosticsMode="live"
-          loading={tableLoading && sortedWorkloads.length === 0}
           onRowClick={handleWorkloadClick}
           tableClassName="gridtable-workloads"
           enableContextMenu={true}
@@ -285,10 +279,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           emptyMessage={emptyMessage}
           enableColumnVisibilityMenu
           allowHorizontalOverflow={true}
-          loadingOverlay={{
-            show: Boolean(tableLoading) && sortedWorkloads.length > 0,
-            message: 'Updating workloads…',
-          }}
         />
 
         {objectActions.modals}

@@ -493,9 +493,12 @@ describe('ClusterViewNodes', () => {
     expect(latestTableRowsRef.current).toEqual([updatedQueryNode]);
   });
 
-  it('keeps local node rows visible when a remount query temporarily returns empty', async () => {
-    // Local rows always carry the active cluster's id; the retain-on-empty
-    // guard refuses to surface another cluster's stale rows.
+  it('renders a settled-empty query on remount without retaining stale local rows', async () => {
+    // The retain-on-empty symptom patch is gone. The resource-inventory
+    // controller trusts a settled query: a definitive empty result renders the
+    // empty state rather than resurrecting stale local rows. The transient
+    // empty-while-loading protection (the actual false-empty guard) lives in the
+    // controller's refreshing→loading rule, covered by the controller unit tests.
     const localNode = { ...baseNode, clusterId: 'path:context' };
     const initialQueryNode = { ...localNode, name: 'node-1' };
 
@@ -548,12 +551,12 @@ describe('ClusterViewNodes', () => {
     });
 
     expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
-    expect(latestTableRowsRef.current).toEqual([localNode]);
+    expect(latestTableRowsRef.current).toEqual([]);
     expect(loadingBoundaryPropsRef.current).toEqual(
       expect.objectContaining({
         loading: false,
         hasLoaded: true,
-        dataLength: 1,
+        dataLength: 0,
       })
     );
   });

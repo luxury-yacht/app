@@ -15,7 +15,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
@@ -235,13 +235,10 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       (payload: NamespaceStorageSnapshotPayload) => payload.rows ?? [],
       []
     );
-    const {
-      gridTableProps,
-      favModal,
-      loading: tableLoading,
-      loaded: tableLoaded,
-      rows,
-    } = useQueryBackedNamespaceResourceGridTable<NamespaceStorageSnapshotPayload, StorageData>({
+    const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceStorageSnapshotPayload,
+      StorageData
+    >({
       enabled: namespace === ALL_NAMESPACES_SCOPE,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
@@ -308,15 +305,13 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={tableLoading && rows.length === 0}
-          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading storage resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
-          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="ns-storage-table"
           enableContextMenu={true}

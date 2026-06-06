@@ -13,7 +13,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -139,13 +139,10 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
     const selectRows = useCallback((payload: ClusterRBACSnapshotPayload) => payload.rows ?? [], []);
-    const {
-      gridTableProps,
-      favModal,
-      loading: tableLoading,
-      loaded: tableLoaded,
-      rows,
-    } = useQueryBackedClusterResourceGridTable<ClusterRBACSnapshotPayload, RBACData>({
+    const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
+      ClusterRBACSnapshotPayload,
+      RBACData
+    >({
       enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: selectedClusterId,
@@ -195,15 +192,13 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={tableLoading && rows.length === 0}
-          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading RBAC resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster RBAC"
-          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="gridtable-rbac"
           enableContextMenu={true}

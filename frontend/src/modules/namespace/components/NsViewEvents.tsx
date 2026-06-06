@@ -16,7 +16,7 @@ import { useShortNames } from '@/hooks/useShortNames';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
@@ -225,8 +225,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       gridTableProps,
       favModal,
       rows: displayedEvents,
-      loading: tableLoading,
-      loaded: tableLoaded,
+      source,
     } = useQueryBackedNamespaceResourceGridTable<NamespaceEventsSnapshotPayload, EventData>({
       enabled: namespace === ALL_NAMESPACES_SCOPE,
       queryTableMode: 'Query Backed Static',
@@ -310,10 +309,9 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={tableLoading && displayedEvents.length === 0}
-          loaded={tableLoaded || displayedEvents.length > 0}
           spinnerMessage="Loading events..."
           favModal={favModal}
           columns={columns}
@@ -321,7 +319,6 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events'
           }
           diagnosticsMode="live"
-          loading={tableLoading}
           onRowClick={handleEventClick}
           tableClassName="gridtable-ns-events"
           enableContextMenu={true}

@@ -836,31 +836,63 @@ Acceptance:
       partial/degraded banner on normal paginated browsing. Changed it to the
       typed providers' degraded-based meaning (`!streamingDisabled`), so partial
       means "windowed with no pagination recourse," not "has more pages."
-- [ ] **Remaining (the bulk of Phase 3):** a wiring hook that runs
-      `useTypedResourceQuery` / the catalog query hook and emits `source` +
-      `gridTableProps` binding; migrate the ~19 views one at a time to
-      `<ResourceInventoryTable source=… gridTableProps=… />`; delete
-      `retainLocalRowsForEmptyQuery`; reduce the old query wrappers to shims;
-      add the Nodes/other/catalog remount lifecycle regressions.
-- [ ] Make backend query source ownership safe across unmount/remount,
-      stale-request cleanup, query identity changes, catalog pagination, and
-      metrics-driven dynamic refreshes.
-- [ ] Implement owner/request identity before changing view display behavior;
-      do not add another per-view fallback to hide false empty rows.
-- [ ] Migrate views one at a time behind `ResourceInventoryTable`. The old
-      wrappers may coexist only as temporary compatibility shims until each
-      migrated view is removed from them and the enforcement test is tightened.
-- [ ] Migrate cluster query-backed views first:
-      Nodes, Config, Storage, RBAC, CRDs, and Events.
-- [ ] Migrate all-namespaces namespace query-backed views:
-      Pods, Workloads, Config, Network, Storage, RBAC, Quotas, Autoscaling,
-      Helm, and Events.
-- [ ] Migrate Browse, cluster Custom, and namespace Custom through
-      `backendQuerySource` using the catalog provider.
-- [ ] Delete `retainLocalRowsForEmptyQuery`.
-- [ ] Delete or reduce `useQueryBackedClusterResourceGridTable` and
-      `useQueryBackedNamespaceResourceGridTable` to thin compatibility shims
-      only while migration is in progress.
+- [x] Wiring: the query hooks emit `source` (typed via `buildQueryBackedSource`)
+      and the catalog views build `source` via `backendQuerySource`; all 19
+      views render `<ResourceInventoryTable source=… gridTableProps=… />`.
+- [x] Backend query source ownership safety is unchanged by the rendering
+      migration — it lives upstream in the scoped-refresh leases (Phase 0) +
+      `useTypedResourceQuery`'s query-identity resets + the catalog's keyset
+      pagination. The pure `backendQuerySource` adds no ownership of its own and,
+      crucially, no per-view fallback — the false-empty is handled structurally.
+- [x] Owner/request identity (leases) shipped in Phase 0 before any display
+      change; no per-view fallback was added to hide empty rows (the opposite —
+      `retainLocalRowsForEmptyQuery` was deleted).
+- [x] Migrated views one at a time behind `ResourceInventoryTable`; the
+      enforcement contracts now require the controller form for every typed view.
+- [x] Migrated cluster query-backed views: Nodes, Config, Storage, RBAC, CRDs,
+      Events. Approach (additive, low-risk): the existing query hooks now also
+      return a normalized `source` (lifecycle only — the rich pagination footer
+      and partial-data label stay on `gridTableProps` during migration), and
+      each view swapped `ResourceGridTableView` → `ResourceInventoryTable`,
+      dropping its hand-rolled `boundaryLoading`/`loaded`/`loading`. The two
+      enforcement contracts (`queryBackedViewLoadingContract`,
+      direct-GridTable) were widened to accept the controller form so migrated
+      and unmigrated views coexist.
+- [x] Migrated all namespace query-backed views: Pods, Workloads, Config,
+      Network, Storage, RBAC, Quotas, Autoscaling, Helm, Events. The 7 static
+      ones via an identical scripted edit; Pods/Workloads needed the new
+      `ResourceInventoryTable` `updatingMessage` prop (their "Updating …" refresh
+      overlay) and keep `error`/`displayedPods` for the error banner / permission
+      scan; Events keeps `rows` for its involved-object action handler.
+- [x] Migrated Browse, cluster Custom, and namespace Custom through
+      `backendQuerySource` (catalog provider). They build `source` from the
+      catalog lifecycle and keep their rich `CatalogPaginationControls` footer on
+      `gridTableProps` (so `backendQuerySource` is called with no pagination —
+      now an optional input). A view-level remount regression was added for
+      Workloads (the second dynamic table); catalog stale-owner is covered by the
+      domain-agnostic orchestrator leases + BrowseView pagination tests.
+- [x] Deleted `retainLocalRowsForEmptyQuery` entirely (param, the
+      `shouldRetainLocalRowsForEmptyQuery` helper + its `hasActiveQuery*`
+      helpers, the always-false `useLocalRowsForEmptyQuery` branches in both
+      hooks, and 3 obsolete hook tests). The symptom patch is gone; the
+      controller's `refreshing→loading` rule + the Phase 0 leases own the
+      false-empty now (asserted by the controller tests and the rewritten Nodes
+      remount test, which now expects a settled-empty query to render empty
+      rather than resurrect stale local rows).
+- [x] The old query wrappers are now pure source+binding producers (they emit
+      `source` + `gridTableProps`); their lifecycle-symptom code is gone. Fully
+      deleting/inlining the wrapper hooks is Phase 6 ("Delete old paths").
+      `ResourceGridTableView` itself was deleted now — once every view migrated it
+      had zero importers, so the knip gate (part of `mage qc:preRelease`) failed
+      on it; deleting it was the clean completion of "migrate all views off it"
+      rather than carrying dead code. (Also removed two now-unused lease
+      re-exports from `core/data-access/index.ts` that knip surfaced.)
+
+**Phase 3 complete — `mage qc:preRelease` passes (exit 0):** go vet, staticcheck,
+Go race tests, frontend suite (3101), knip, trivy (0 vulns), lint, gofmt,
+typecheck all green. All 19 query-backed views (6 cluster typed, 10 namespace
+typed, 3 catalog) render through `ResourceInventoryTable`; the false-empty is
+fixed structurally with no symptom patch remaining.
 
 Acceptance:
 

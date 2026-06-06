@@ -50,7 +50,13 @@ export interface BackendQuerySourceInput<T> {
    */
   completeness?: ResourceInventoryCompleteness;
   partialLabel?: string | null;
-  pagination: BackendQueryPaginationInput;
+  /**
+   * Cursor signals. Omit (or null) when the provider renders its own rich
+   * pagination footer on `gridTableProps` (e.g. the catalog's
+   * CatalogPaginationControls with a page-size selector) — the controller then
+   * leaves pagination to that footer.
+   */
+  pagination?: BackendQueryPaginationInput | null;
 }
 
 /**
@@ -84,16 +90,18 @@ export function backendQuerySource<T>(
     blocked: false,
     completeness,
     partialLabel: completeness === 'partial' ? (input.partialLabel ?? null) : null,
-    pagination: {
-      hasNext: Boolean(input.pagination.continueToken),
-      hasPrevious: input.pagination.hasPrevious,
-      pageIndex: input.pagination.pageIndex,
-      pageSize: input.pagination.pageSize,
-      totalCount: input.pagination.totalCount,
-      totalIsExact: input.pagination.totalIsExact,
-      isRequestingMore: input.pagination.isRequestingMore,
-      onNext: input.pagination.loadMore,
-      onPrevious: input.pagination.loadPrevious,
-    },
+    pagination: input.pagination
+      ? {
+          hasNext: Boolean(input.pagination.continueToken),
+          hasPrevious: input.pagination.hasPrevious,
+          pageIndex: input.pagination.pageIndex,
+          pageSize: input.pagination.pageSize,
+          totalCount: input.pagination.totalCount,
+          totalIsExact: input.pagination.totalIsExact,
+          isRequestingMore: input.pagination.isRequestingMore,
+          onNext: input.pagination.loadMore,
+          onPrevious: input.pagination.loadPrevious,
+        }
+      : null,
   };
 }

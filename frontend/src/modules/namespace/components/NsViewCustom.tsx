@@ -13,7 +13,8 @@ import { useShortNames } from '@/hooks/useShortNames';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
+import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
@@ -306,17 +307,25 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       [pagination, rows.length]
     );
 
+    // Catalog provider → the shared controller contract; the rich catalog
+    // pagination footer stays on gridTableProps below.
+    const source = backendQuerySource<CustomResourceData>({
+      enabled: true,
+      rows,
+      loading: catalogLoading || (loading ?? false),
+      loaded: catalogLoaded || loaded,
+      error: null,
+    });
+
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={catalogLoading || (loading ?? false)}
-          loaded={catalogLoaded || loaded}
           spinnerMessage="Loading custom resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
-          loading={catalogLoading || loading}
           onRowClick={handleResourceClick}
           tableClassName="ns-custom-table"
           enableContextMenu={true}

@@ -13,7 +13,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
@@ -320,13 +320,10 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
         })),
       []
     );
-    const {
-      gridTableProps,
-      favModal,
-      loading: tableLoading,
-      loaded: tableLoaded,
-      rows,
-    } = useQueryBackedNamespaceResourceGridTable<NamespaceHelmSnapshotPayload, HelmData>({
+    const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceHelmSnapshotPayload,
+      HelmData
+    >({
       enabled: isAllNamespaces,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
@@ -389,17 +386,15 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={tableLoading && rows.length === 0}
-          loaded={tableLoaded || rows.length > 0}
           spinnerMessage="Loading Helm releases..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm'
           }
-          loading={tableLoading}
           onRowClick={handleResourceClick}
           tableClassName="ns-helm-table"
           enableContextMenu={true}

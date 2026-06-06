@@ -15,7 +15,8 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
+import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
@@ -265,17 +266,26 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       [pagination, rows.length]
     );
 
+    // Catalog provider → the shared controller contract. The rich catalog
+    // pagination footer stays on gridTableProps (below), so the source carries
+    // only the lifecycle the controller needs for boundary/empty/overlay.
+    const source = backendQuerySource<ClusterCustomData>({
+      enabled: true,
+      rows,
+      loading: catalogLoading || (loading ?? false),
+      loaded: catalogLoaded || loaded,
+      error: error ?? null,
+    });
+
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={catalogLoading || (loading ?? false)}
-          loaded={catalogLoaded || loaded}
           spinnerMessage="Loading cluster custom resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster Custom"
-          loading={catalogLoading || loading}
           onRowClick={handleResourceClick}
           tableClassName="cluster-custom-table"
           enableContextMenu={true}

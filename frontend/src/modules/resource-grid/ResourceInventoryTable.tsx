@@ -24,7 +24,7 @@ import {
 
 interface ResourceInventoryTableProps<T> extends Omit<
   GridTableProps<T>,
-  'data' | 'keyExtractor' | 'loading' | 'emptyMessage'
+  'data' | 'keyExtractor' | 'loading' | 'emptyMessage' | 'loadingOverlay'
 > {
   /** Normalized source state from `boundedRowsSource` or `backendQuerySource`. */
   source: ResourceInventorySourceState<T>;
@@ -33,6 +33,12 @@ interface ResourceInventoryTableProps<T> extends Omit<
   spinnerMessage: string;
   /** Shown only when the render state reports a settled-empty result. */
   emptyMessage?: string;
+  /**
+   * Overlay message shown while refreshing with rows already visible (driven by
+   * the controller's refresh overlay). When omitted, the refresh shows a
+   * generic overlay.
+   */
+  updatingMessage?: string;
   favModal?: React.ReactNode;
   allowPartial?: boolean;
   suppressEmptyWarning?: boolean;
@@ -43,6 +49,7 @@ export default function ResourceInventoryTable<T>({
   gridTableProps,
   spinnerMessage,
   emptyMessage,
+  updatingMessage,
   favModal,
   allowPartial,
   suppressEmptyWarning,
@@ -89,7 +96,12 @@ export default function ResourceInventoryTable<T>({
           {...paginationProps}
           data={render.rows}
           filters={filters}
-          loading={render.showRefreshOverlay}
+          loading={updatingMessage ? false : render.showRefreshOverlay}
+          loadingOverlay={
+            updatingMessage
+              ? { show: render.showRefreshOverlay, message: updatingMessage }
+              : undefined
+          }
           emptyMessage={render.isEmpty ? emptyMessage : undefined}
         />
       </ResourceLoadingBoundary>

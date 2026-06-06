@@ -13,7 +13,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import * as cf from '@shared/components/tables/columnFactories';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
@@ -519,9 +519,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       gridTableProps: resolvedGridTableProps,
       favModal,
       rows: displayedPods,
-      loading: tableLoading,
-      loaded: tableLoaded,
       error: tableError,
+      source,
     } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
       enabled: isAllNamespaces,
       queryTableMode: 'Query Backed Dynamic',
@@ -669,27 +668,22 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             {metricsBanner.message}
           </div>
         )}
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={resolvedGridTableProps}
-          boundaryLoading={tableLoading}
-          loaded={tableLoaded}
           spinnerMessage="Loading pods..."
+          updatingMessage="Updating pods…"
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods'
           }
           diagnosticsMode="live"
-          loading={tableLoading && displayedPods.length === 0}
           onRowClick={handlePodOpen}
           tableClassName={`gridtable-pods${showNamespaceColumn ? ' gridtable-pods--namespaced' : ''}`}
           enableContextMenu
           getCustomContextMenuItems={getContextMenuItems}
           emptyMessage={emptyMessage}
-          loadingOverlay={{
-            show: Boolean(tableLoading) && displayedPods.length > 0,
-            message: 'Updating pods…',
-          }}
         />
 
         {objectActions.modals}

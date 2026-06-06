@@ -21,7 +21,8 @@ import React, { useCallback, useMemo } from 'react';
 import './BrowseView.css';
 import { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
+import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -450,6 +451,16 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     virtualization: virtualizationOptions,
   });
 
+  // Catalog provider → the shared controller contract; the catalog pagination
+  // footer stays on gridTableProps below.
+  const source = backendQuerySource<BrowseTableRow>({
+    enabled: true,
+    rows,
+    loading,
+    loaded: hasLoadedOnce,
+    error: null,
+  });
+
   // Resolve class names and messages
   const resolvedTableClassName =
     tableClassName ?? (isNamespaceScoped ? 'gridtable-namespace-browse' : 'gridtable-browse');
@@ -463,10 +474,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   return (
     <>
-      <ResourceGridTableView
+      <ResourceInventoryTable
+        source={source}
         gridTableProps={gridTableProps}
-        boundaryLoading={loading}
-        loaded={hasLoadedOnce}
         spinnerMessage={resolvedLoadingMessage}
         allowPartial
         suppressEmptyWarning
