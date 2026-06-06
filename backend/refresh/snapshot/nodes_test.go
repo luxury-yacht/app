@@ -192,9 +192,9 @@ func TestNodeBuilderBuild(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NodeSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Nodes, 1)
+	require.Len(t, payload.Rows, 1)
 
-	summary := payload.Nodes[0]
+	summary := payload.Rows[0]
 
 	require.Equal(t, "node-1", summary.Name)
 	require.Equal(t, "Ready (Cordoned)", summary.Status)
@@ -293,7 +293,7 @@ func TestNodeBuilderCapsLargeSnapshots(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
 	payload := snapshot.Payload.(NodeSnapshot)
-	require.Len(t, payload.Nodes, config.SnapshotClusterNodesEntryLimit)
+	require.Len(t, payload.Rows, config.SnapshotClusterNodesEntryLimit)
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotClusterNodesEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "nodes")

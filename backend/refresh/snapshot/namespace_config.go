@@ -33,19 +33,21 @@ type NamespaceConfigBuilder struct {
 	secrets    corelisters.SecretLister
 }
 
-// NamespaceConfigSnapshot payload returned to the frontend.
+// NamespaceConfigSnapshot payload returned to the frontend. It embeds the
+// canonical ResourceQueryEnvelope (flattened into top-level JSON) plus the
+// domain-typed rows.
 type NamespaceConfigSnapshot struct {
 	ClusterMeta
-	Resources     []ConfigSummary          `json:"resources"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total,omitempty"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Issues        []ResourceQueryIssue     `json:"issues,omitempty"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	ResourceQueryEnvelope
+	Rows []ConfigSummary `json:"rows"`
+}
+
+func namespaceConfigQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "namespace", "data", "age"},
+		[]string{"kinds", "namespaces"},
+		[]string{"kind", "typeAlias", "name", "namespace", "data"},
+	)
 }
 
 // ConfigSummary describes a ConfigMap or Secret entry.
@@ -180,17 +182,23 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 			Scope:   scope,
 			Version: version,
 			Payload: NamespaceConfigSnapshot{
-				ClusterMeta:   meta,
-				Resources:     page.Rows,
-				Kinds:         page.Kinds,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact && exact,
-				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact && exact,
-				Issues:        issues,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         namespaceConfigDomainName,
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact && exact,
+					Kinds:         page.Kinds,
+					Namespaces:    page.Namespaces,
+					FacetsExact:   page.FacetsExact && exact,
+					Completeness:  resourceQueryCompleteness(exact),
+					Issues:        issues,
+					Dynamic:       page.Dynamic,
+					Capabilities:  namespaceConfigQueryCapabilities(),
+				},
+				Rows: page.Rows,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}, nil
@@ -204,11 +212,18 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceConfigSnapshot{
-			ClusterMeta:  meta,
-			Resources:    resources,
-			Kinds:        snapshotSortedKinds(resources, func(resource ConfigSummary) string { return resource.Kind }),
-			Total:        totalItems,
-			TotalIsExact: totalItems == len(resources),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        namespaceConfigDomainName,
+				Total:        totalItems,
+				TotalIsExact: totalItems == len(resources),
+				Kinds:        snapshotSortedKinds(resources, func(resource ConfigSummary) string { return resource.Kind }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(totalItems == len(resources)),
+				Capabilities: namespaceConfigQueryCapabilities(),
+			},
+			Rows: resources,
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "config resources"),
 	}, nil

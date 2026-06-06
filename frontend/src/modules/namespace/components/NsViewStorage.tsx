@@ -232,7 +232,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     const localTableMode = localTableModeForStats(stats);
 
     const selectRows = useCallback(
-      (payload: NamespaceStorageSnapshotPayload) => payload.resources ?? [],
+      (payload: NamespaceStorageSnapshotPayload) => payload.rows ?? [],
       []
     );
     const {

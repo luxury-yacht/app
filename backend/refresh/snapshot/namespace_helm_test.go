@@ -99,9 +99,9 @@ func TestNamespaceHelmBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Releases, 1)
+	require.Len(t, payload.Rows, 1)
 
-	entry := payload.Releases[0]
+	entry := payload.Rows[0]
 	require.Equal(t, "app", entry.Name)
 	require.Equal(t, "nginx-1.2.3", entry.Chart)
 	require.Equal(t, "2.0.0", entry.AppVersion)
@@ -220,11 +220,11 @@ func TestNamespaceHelmBuilderAllNamespaces(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Releases, 2)
+	require.Len(t, payload.Rows, 2)
 
 	namespaces := make(map[string]struct{})
 	names := make(map[string]struct{})
-	for _, entry := range payload.Releases {
+	for _, entry := range payload.Rows {
 		require.NotEmpty(t, entry.Namespace)
 		require.NotEmpty(t, entry.Age)
 		namespaces[entry.Namespace] = struct{}{}
@@ -290,7 +290,7 @@ func TestNamespaceHelmBuilderAllNamespacesCapsRows(t *testing.T) {
 	require.NoError(t, err)
 	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Releases, config.SnapshotNamespaceHelmEntryLimit)
+	require.Len(t, payload.Rows, config.SnapshotNamespaceHelmEntryLimit)
 	require.Equal(t, config.SnapshotNamespaceHelmEntryLimit, snapshot.Stats.ItemCount)
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotNamespaceHelmEntryLimit+1, snapshot.Stats.TotalItems)
@@ -333,7 +333,7 @@ func TestNamespaceHelmBuilderSingleNamespaceCapsRows(t *testing.T) {
 	require.NoError(t, err)
 	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Releases, config.SnapshotNamespaceHelmEntryLimit)
+	require.Len(t, payload.Rows, config.SnapshotNamespaceHelmEntryLimit)
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotNamespaceHelmEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "Helm releases")

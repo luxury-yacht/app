@@ -212,7 +212,7 @@ describe('NsViewWorkloads', () => {
       data: {
         status: 'ready',
         data: {
-          workloads: [],
+          rows: [],
           total: 0,
           totalIsExact: true,
           namespaces: ['team-a', 'team-b'],
@@ -311,7 +311,7 @@ describe('NsViewWorkloads', () => {
       data: {
         status: 'ready',
         data: {
-          workloads: [queryWorkload],
+          rows: [queryWorkload],
           total: 1,
           totalIsExact: true,
           namespaces: ['team-a', 'team-b'],

@@ -311,6 +311,16 @@ class RefreshOrchestrator {
 
     const runtime = this.getRuntimeForScope(domain, normalizedScope);
 
+    // A mounted lifecycle consumer holds a lease on this scope. Ignore direct
+    // disables so an unrelated consumer (or an old instance mid-remount) cannot
+    // tear down a scope a newer/active lease owner still needs. The lease
+    // release path decrements to zero before calling here, so the final
+    // disable is not suppressed.
+    if (!enabled && runtime.hasScopedLease(domain, normalizedScope)) {
+      this.updateMetricsDemand();
+      return;
+    }
+
     const wasActive = this.hasEnabledScopedSources(domain);
     const { changed, staleScopes } = runtime.applyScopedDomainEnabled(
       domain,
@@ -376,6 +386,44 @@ class RefreshOrchestrator {
       }
     }
     this.updateMetricsDemand();
+  }
+
+  // Acquire a reference-counted lease that keeps (domain, scope) enabled while
+  // any mounted consumer holds it. The scope is enabled only on the first lease
+  // so concurrent and remounting consumers share one enable.
+  acquireScopedDomainLease(
+    domain: RefreshDomain,
+    scope: string,
+    options?: { preserveState?: boolean }
+  ): void {
+    const normalizedScope = this.normalizeDomainScope(domain, scope);
+    if (!normalizedScope) {
+      throw new Error(`Scoped domain "${domain}" requires a non-empty scope value`);
+    }
+    const runtime = this.getRuntimeForScope(domain, normalizedScope);
+    const { firstLease } = runtime.acquireScopedLease(domain, normalizedScope);
+    if (firstLease) {
+      this.setScopedDomainEnabled(domain, normalizedScope, true, options);
+    }
+  }
+
+  // Release a lease previously acquired via acquireScopedDomainLease. The scope
+  // is disabled only when the final lease is released, so an old consumer's
+  // unmount cannot disable a scope a newer consumer still leases.
+  releaseScopedDomainLease(
+    domain: RefreshDomain,
+    scope: string,
+    options?: { preserveState?: boolean }
+  ): void {
+    const normalizedScope = this.normalizeDomainScope(domain, scope);
+    if (!normalizedScope) {
+      return;
+    }
+    const runtime = this.getRuntimeForScope(domain, normalizedScope);
+    const { lastLease } = runtime.releaseScopedLease(domain, normalizedScope);
+    if (lastLease) {
+      this.setScopedDomainEnabled(domain, normalizedScope, false, options);
+    }
   }
 
   resetScopedDomain(domain: RefreshDomain, scope: string): void {

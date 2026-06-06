@@ -113,10 +113,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       return nodesDomain.data?.metrics ?? null;
     }, [nodesDomain.data?.metrics, nodesDomain.data?.metricsByCluster, selectedClusterId]);
 
-    const selectRows = useCallback(
-      (payload: ClusterNodeSnapshotPayload) => payload.nodes ?? [],
-      []
-    );
+    const selectRows = useCallback((payload: ClusterNodeSnapshotPayload) => payload.rows ?? [], []);
 
     const watchClusterIds = useMemo(
       () => (selectedClusterId ? [selectedClusterId] : []),

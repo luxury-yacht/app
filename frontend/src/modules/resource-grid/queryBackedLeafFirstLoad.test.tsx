@@ -65,7 +65,7 @@ vi.mock('@/core/data-access', async (importOriginal) => {
 
 vi.mock('@/core/refresh', () => ({
   useRefreshScopedDomain: () => ({
-    data: { metrics: null, nodes: [] },
+    data: { metrics: null, rows: [] },
     status: 'idle',
     isManual: false,
   }),
@@ -431,7 +431,7 @@ describe('query-backed leaf first load', () => {
         data: 2,
         age: '2h',
       },
-      payloadField: 'resources',
+      payloadField: 'rows',
       Component: NsViewConfig,
     },
     {
@@ -454,7 +454,7 @@ describe('query-backed leaf first load', () => {
         details: 'query',
         age: '2h',
       },
-      payloadField: 'resources',
+      payloadField: 'rows',
       Component: NsViewNetwork,
     },
     {
@@ -479,7 +479,7 @@ describe('query-backed leaf first load', () => {
         capacity: '2Gi',
         age: '2h',
       },
-      payloadField: 'resources',
+      payloadField: 'rows',
       Component: NsViewStorage,
     },
     {
@@ -504,7 +504,7 @@ describe('query-backed leaf first load', () => {
         used: { pods: '1' },
         age: '2h',
       },
-      payloadField: 'resources',
+      payloadField: 'rows',
       Component: NsViewQuotas,
     },
     {
@@ -527,7 +527,7 @@ describe('query-backed leaf first load', () => {
         rulesCount: 2,
         age: '2h',
       },
-      payloadField: 'resources',
+      payloadField: 'rows',
       Component: NsViewRBAC,
     },
     {
@@ -554,7 +554,7 @@ describe('query-backed leaf first load', () => {
         objectApiVersion: 'v1',
         ageTimestamp: 2,
       },
-      payloadField: 'events',
+      payloadField: 'rows',
       Component: NsViewEvents,
     },
   ])('uses the typed query result on first load for $label', async (testCase) => {
@@ -599,7 +599,7 @@ describe('query-backed leaf first load', () => {
         />
       ),
       payload: {
-        resources: [
+        rows: [
           {
             kind: 'HorizontalPodAutoscaler',
             name: 'query-autoscaling',
@@ -643,7 +643,7 @@ describe('query-backed leaf first load', () => {
         />
       ),
       payload: {
-        releases: [
+        rows: [
           {
             name: 'query-release',
             namespace: 'team-b',
@@ -673,7 +673,7 @@ describe('query-backed leaf first load', () => {
         />
       ),
       payload: {
-        pods: [podRow('query-pod', '2h')],
+        rows: [podRow('query-pod', '2h')],
       },
       domain: 'pods',
       expectedName: 'query-pod',
@@ -693,7 +693,7 @@ describe('query-backed leaf first load', () => {
         />
       ),
       payload: {
-        workloads: [workloadRow('query-workload', '2h')],
+        rows: [workloadRow('query-workload', '2h')],
       },
       domain: 'namespace-workloads',
       expectedName: 'query-workload',
@@ -883,7 +883,7 @@ describe('query-backed leaf first load', () => {
       expectedScope: 'cluster-a|?limit=50&sort=name&sortDirection=asc',
       local: { kind: 'StorageClass', name: 'local-config', clusterId: 'cluster-a', age: '1h' },
       query: { kind: 'StorageClass', name: 'query-config', clusterId: 'cluster-a', age: '2h' },
-      payloadField: 'resources',
+      payloadField: 'rows',
       Component: ClusterViewConfig,
     },
     {
@@ -906,7 +906,7 @@ describe('query-backed leaf first load', () => {
         status: 'Bound',
         age: '2h',
       },
-      payloadField: 'volumes',
+      payloadField: 'rows',
       Component: ClusterViewStorage,
     },
     {
@@ -927,7 +927,7 @@ describe('query-backed leaf first load', () => {
         rulesCount: 2,
         age: '2h',
       },
-      payloadField: 'resources',
+      payloadField: 'rows',
       Component: ClusterViewRBAC,
     },
     {
@@ -950,7 +950,7 @@ describe('query-backed leaf first load', () => {
         clusterId: 'cluster-a',
         age: '2h',
       },
-      payloadField: 'definitions',
+      payloadField: 'rows',
       Component: ClusterViewCRDs,
     },
   ])('uses the typed query result on first load for $label', async (testCase) => {
@@ -987,7 +987,7 @@ describe('query-backed leaf first load', () => {
         />
       ),
       payload: {
-        events: [
+        rows: [
           {
             kind: 'Event',
             name: 'query-event',
@@ -1015,7 +1015,7 @@ describe('query-backed leaf first load', () => {
         <ClusterViewNodes data={[nodeRow('local-node', '1h')]} loading={false} loaded={true} />
       ),
       payload: {
-        nodes: [nodeRow('query-node', '2h')],
+        rows: [nodeRow('query-node', '2h')],
       },
       domain: 'nodes',
       expectedName: 'query-node',
@@ -1255,7 +1255,7 @@ describe('query-backed leaf first load', () => {
           showNamespaceColumn={true}
         />
       ),
-      payload: { pods: [] },
+      payload: { rows: [] },
       expected: [
         'age',
         'cpu',
@@ -1280,7 +1280,7 @@ describe('query-backed leaf first load', () => {
           showNamespaceColumn={true}
         />
       ),
-      payload: { workloads: [] },
+      payload: { rows: [] },
       expected: [
         'age',
         'cpu',
@@ -1326,7 +1326,7 @@ describe('query-backed leaf first load', () => {
           loaded={true}
         />
       ),
-      payload: { volumes: [] },
+      payload: { rows: [] },
       expected: [
         'accessModes',
         'age',
@@ -1401,7 +1401,7 @@ describe('query-backed leaf first load', () => {
     {
       label: 'cluster nodes',
       element: <ClusterViewNodes data={[nodeRow('node-a', '1h')]} loading={false} loaded={true} />,
-      payload: { nodes: [] },
+      payload: { rows: [] },
       expected: ['age', 'cpu', 'kind', 'memory', 'name', 'pods', 'restarts', 'status', 'version'],
     },
   ])('publishes only query-supported sortable keys for $label', async (testCase) => {

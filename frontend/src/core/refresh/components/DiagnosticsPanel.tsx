@@ -1035,43 +1035,43 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             case 'cluster-overview':
               return data.overview?.totalNodes ?? 0;
             case 'nodes':
-              return Array.isArray(data.nodes) ? data.nodes.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'object-maintenance':
               return Array.isArray(data.drains) ? data.drains.length : 0;
             case 'cluster-rbac':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'cluster-storage':
-              return Array.isArray(data.volumes) ? data.volumes.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'cluster-config':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'cluster-crds':
-              return Array.isArray(data.definitions) ? data.definitions.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'cluster-custom':
               return Array.isArray(data.resources) ? data.resources.length : 0;
             case 'cluster-events':
-              return Array.isArray(data.events) ? data.events.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'catalog':
               return Array.isArray(data.items) ? data.items.length : 0;
             case 'namespace-workloads':
-              return Array.isArray(data.workloads) ? data.workloads.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-config':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-network':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-rbac':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-storage':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-autoscaling':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-quotas':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-events':
-              return Array.isArray(data.events) ? data.events.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-custom':
               return Array.isArray(data.resources) ? data.resources.length : 0;
             case 'namespace-helm':
-              return Array.isArray(data.releases) ? data.releases.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             default:
               return 0;
           }
@@ -1199,7 +1199,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         refresherName ? refreshManager.getRefresherInterval(refresherName) : null
       );
       const namespaceLabel = resolveDomainNamespace('pods', scope);
-      const count = payload?.pods?.length ?? 0;
+      const count = payload?.rows?.length ?? 0;
       const stats = state.stats;
       const truncated = Boolean(stats?.truncated);
       const totalItems = stats?.totalItems ?? (truncated ? count : undefined);

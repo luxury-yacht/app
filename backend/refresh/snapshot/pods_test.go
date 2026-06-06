@@ -140,9 +140,9 @@ func TestPodBuilderNodeScope(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Pods, 2)
+	require.Len(t, payload.Rows, 2)
 
-	first := payload.Pods[0]
+	first := payload.Rows[0]
 	require.Equal(t, "pod-a", first.Name)
 	require.Equal(t, "Deployment", first.OwnerKind)
 	require.Equal(t, "deploy-a", first.OwnerName)
@@ -204,11 +204,11 @@ func TestPodBuilderWorkloadScope(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Pods, 1)
-	require.Equal(t, "pod-workload", payload.Pods[0].Name)
-	require.Equal(t, "Deployment", payload.Pods[0].OwnerKind)
-	require.Equal(t, "orders", payload.Pods[0].OwnerName)
-	require.Equal(t, "apps/v1", payload.Pods[0].OwnerAPIVersion)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "pod-workload", payload.Rows[0].Name)
+	require.Equal(t, "Deployment", payload.Rows[0].OwnerKind)
+	require.Equal(t, "orders", payload.Rows[0].OwnerName)
+	require.Equal(t, "apps/v1", payload.Rows[0].OwnerAPIVersion)
 }
 
 // TestResolvePodOwnerThreadsCRDOwnerAPIVersion verifies that the snapshot
@@ -359,12 +359,12 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Pods, 2)
-	require.Equal(t, "team-a", payload.Pods[0].Namespace)
-	require.Equal(t, "team-a-pod-1", payload.Pods[0].Name)
-	require.Equal(t, "25m", payload.Pods[0].CPUUsage)
-	require.Equal(t, "32 MB", payload.Pods[0].MemUsage)
-	require.Equal(t, "team-a-pod-2", payload.Pods[1].Name)
+	require.Len(t, payload.Rows, 2)
+	require.Equal(t, "team-a", payload.Rows[0].Namespace)
+	require.Equal(t, "team-a-pod-1", payload.Rows[0].Name)
+	require.Equal(t, "25m", payload.Rows[0].CPUUsage)
+	require.Equal(t, "32 MB", payload.Rows[0].MemUsage)
+	require.Equal(t, "team-a-pod-2", payload.Rows[1].Name)
 }
 
 func TestPodBuilderAllNamespacesScope(t *testing.T) {
@@ -405,8 +405,8 @@ func TestPodBuilderAllNamespacesScope(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Pods, 2)
-	require.Equal(t, []string{"team-a", "team-b"}, []string{payload.Pods[0].Namespace, payload.Pods[1].Namespace})
+	require.Len(t, payload.Rows, 2)
+	require.Equal(t, []string{"team-a", "team-b"}, []string{payload.Rows[0].Namespace, payload.Rows[1].Namespace})
 }
 
 func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T) {
@@ -458,15 +458,15 @@ func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T)
 	require.True(t, payload.TotalIsExact)
 	require.Equal(t, []string{"team-b"}, payload.Namespaces)
 	require.Equal(t, []string{"Pod"}, payload.Kinds)
-	require.Len(t, payload.Pods, 1)
-	require.Equal(t, "bravo", payload.Pods[0].Name)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "bravo", payload.Rows[0].Name)
 	require.NotEmpty(t, payload.Continue)
 
 	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=cpu&sortDirection=desc&limit=1&continue="+payload.Continue)
 	require.NoError(t, err)
 	nextPayload := next.Payload.(PodSnapshot)
-	require.Len(t, nextPayload.Pods, 1)
-	require.Equal(t, "charlie", nextPayload.Pods[0].Name)
+	require.Len(t, nextPayload.Rows, 1)
+	require.Equal(t, "charlie", nextPayload.Rows[0].Name)
 	require.Empty(t, nextPayload.Continue)
 }
 
@@ -506,8 +506,8 @@ func TestPodBuilderAllNamespacesMetricCursorContinuesAcrossMetricsRefresh(t *tes
 	first, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=cpu&sortDirection=desc&limit=1")
 	require.NoError(t, err)
 	firstPayload := first.Payload.(PodSnapshot)
-	require.Len(t, firstPayload.Pods, 1)
-	require.Equal(t, "bravo", firstPayload.Pods[0].Name)
+	require.Len(t, firstPayload.Rows, 1)
+	require.Equal(t, "bravo", firstPayload.Rows[0].Name)
 	require.NotEmpty(t, firstPayload.Continue)
 
 	builder.metrics = fakePodMetricsProvider{
@@ -522,8 +522,8 @@ func TestPodBuilderAllNamespacesMetricCursorContinuesAcrossMetricsRefresh(t *tes
 	require.NoError(t, err)
 	nextPayload := next.Payload.(PodSnapshot)
 	require.False(t, nextPayload.CursorInvalid)
-	require.Len(t, nextPayload.Pods, 1)
-	require.Equal(t, "charlie", nextPayload.Pods[0].Name)
+	require.Len(t, nextPayload.Rows, 1)
+	require.Equal(t, "charlie", nextPayload.Rows[0].Name)
 	require.Empty(t, nextPayload.Continue)
 }
 

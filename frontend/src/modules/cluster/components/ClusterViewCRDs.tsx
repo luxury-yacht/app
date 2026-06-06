@@ -183,10 +183,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       return baseColumns;
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
-    const selectRows = useCallback(
-      (payload: ClusterCRDSnapshotPayload) => payload.definitions ?? [],
-      []
-    );
+    const selectRows = useCallback((payload: ClusterCRDSnapshotPayload) => payload.rows ?? [], []);
     const {
       gridTableProps,
       favModal,

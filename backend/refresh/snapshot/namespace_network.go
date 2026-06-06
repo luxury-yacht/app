@@ -62,16 +62,16 @@ type NamespaceNetworkBuilder struct {
 // NamespaceNetworkSnapshot payload for the network tab.
 type NamespaceNetworkSnapshot struct {
 	ClusterMeta
-	Resources     []NetworkSummary         `json:"resources"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total,omitempty"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Issues        []ResourceQueryIssue     `json:"issues,omitempty"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	ResourceQueryEnvelope
+	Rows []NetworkSummary `json:"rows"`
+}
+
+func namespaceNetworkQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "namespace", "details", "age"},
+		[]string{"kinds", "namespaces"},
+		[]string{"kind", "name", "namespace", "details"},
+	)
 }
 
 // NetworkSummary mirrors the UI requirements for namespace network resources.
@@ -442,17 +442,23 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 			Scope:   scope,
 			Version: version,
 			Payload: NamespaceNetworkSnapshot{
-				ClusterMeta:   meta,
-				Resources:     page.Rows,
-				Kinds:         page.Kinds,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact && exact,
-				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact && exact,
-				Issues:        issues,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         namespaceNetworkDomainName,
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact && exact,
+					Kinds:         page.Kinds,
+					Namespaces:    page.Namespaces,
+					FacetsExact:   page.FacetsExact && exact,
+					Completeness:  resourceQueryCompleteness(exact),
+					Issues:        issues,
+					Dynamic:       page.Dynamic,
+					Capabilities:  namespaceNetworkQueryCapabilities(),
+				},
+				Rows: page.Rows,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}, nil
@@ -466,11 +472,18 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceNetworkSnapshot{
-			ClusterMeta:  meta,
-			Resources:    resources,
-			Kinds:        snapshotSortedKinds(resources, func(resource NetworkSummary) string { return resource.Kind }),
-			Total:        totalItems,
-			TotalIsExact: totalItems == len(resources),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        namespaceNetworkDomainName,
+				Total:        totalItems,
+				TotalIsExact: totalItems == len(resources),
+				Kinds:        snapshotSortedKinds(resources, func(resource NetworkSummary) string { return resource.Kind }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(totalItems == len(resources)),
+				Capabilities: namespaceNetworkQueryCapabilities(),
+			},
+			Rows: resources,
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "network resources"),
 	}, nil

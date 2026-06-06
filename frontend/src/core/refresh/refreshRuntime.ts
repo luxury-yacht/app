@@ -78,6 +78,11 @@ export class ClusterRefreshRuntime {
   private readonly blockedStreaming = new Set<string>();
   private readonly lastMetricsRefreshAt = new Map<string, number>();
   private readonly scopedEnabledState = new Map<RefreshDomain, Map<string, boolean>>();
+  // Reference counts of mounted lifecycle consumers that need a (domain, scope)
+  // enabled. Leases let a newer consumer keep a scope alive across an old
+  // consumer's unmount so a late cleanup cannot disable a scope a newer owner
+  // still needs (the remount race behind transient false-empty tables).
+  private readonly scopedLeases = new Map<RefreshDomain, Map<string, number>>();
 
   constructor(readonly clusterId: string) {}
 
@@ -89,6 +94,7 @@ export class ClusterRefreshRuntime {
 
   deleteDomain(domain: RefreshDomain): void {
     this.scopedEnabledState.delete(domain);
+    this.scopedLeases.delete(domain);
   }
 
   getKnownScopes(domain: RefreshDomain): string[] {
@@ -175,6 +181,47 @@ export class ClusterRefreshRuntime {
     });
     staleScopes.forEach((scope) => scopedMap.set(scope, false));
     return staleScopes;
+  }
+
+  getScopedLeaseCount(domain: RefreshDomain, scope: string): number {
+    return this.scopedLeases.get(domain)?.get(scope) ?? 0;
+  }
+
+  hasScopedLease(domain: RefreshDomain, scope: string): boolean {
+    return this.getScopedLeaseCount(domain, scope) > 0;
+  }
+
+  // Add one lease holder for (domain, scope). `firstLease` is true when this is
+  // the only holder, signalling the caller to actually enable the scope.
+  acquireScopedLease(domain: RefreshDomain, scope: string): { count: number; firstLease: boolean } {
+    const leaseMap = this.scopedLeases.get(domain) ?? new Map<string, number>();
+    this.scopedLeases.set(domain, leaseMap);
+    const next = (leaseMap.get(scope) ?? 0) + 1;
+    leaseMap.set(scope, next);
+    return { count: next, firstLease: next === 1 };
+  }
+
+  // Remove one lease holder for (domain, scope). `lastLease` is true when the
+  // final holder released, signalling the caller to actually disable the scope.
+  releaseScopedLease(
+    domain: RefreshDomain,
+    scope: string
+  ): { count: number; lastLease: boolean; hadLease: boolean } {
+    const leaseMap = this.scopedLeases.get(domain);
+    const current = leaseMap?.get(scope) ?? 0;
+    if (!leaseMap || current <= 0) {
+      return { count: 0, lastLease: false, hadLease: false };
+    }
+    const next = current - 1;
+    if (next <= 0) {
+      leaseMap.delete(scope);
+      if (leaseMap.size === 0) {
+        this.scopedLeases.delete(domain);
+      }
+      return { count: 0, lastLease: true, hadLease: true };
+    }
+    leaseMap.set(scope, next);
+    return { count: next, lastLease: false, hadLease: true };
   }
 
   forEachEnabledScope(domain: RefreshDomain, callback: (scope: string) => void): void {
@@ -393,6 +440,7 @@ export class ClusterRefreshRuntime {
     this.inFlight.clear();
     this.streamingCleanup.clear();
     this.scopedEnabledState.clear();
+    this.scopedLeases.clear();
     this.resetTransientState();
   }
 

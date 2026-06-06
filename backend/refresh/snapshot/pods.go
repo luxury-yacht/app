@@ -35,16 +35,17 @@ type PodBuilder struct {
 // PodSnapshot is the payload for the pods domain.
 type PodSnapshot struct {
 	ClusterMeta
-	Pods          []PodSummary             `json:"pods"`
-	Metrics       PodMetricsInfo           `json:"metrics"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total,omitempty"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	ResourceQueryEnvelope
+	Rows    []PodSummary   `json:"rows"`
+	Metrics PodMetricsInfo `json:"metrics"`
+}
+
+func podQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "cpu", "memory", "age"},
+		[]string{"kinds", "namespaces", "statuses", "nodes"},
+		[]string{"name", "namespace", "status", "ready", "owner", "node"},
+	)
 }
 
 // PodSummary captures essential pod information for UI tables.
@@ -196,17 +197,23 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		Scope:   refresh.JoinClusterScope(clusterID, trimmed),
 		Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
 		Payload: PodSnapshot{
-			ClusterMeta:   meta,
-			Pods:          page.Rows,
-			Metrics:       metricsInfo,
-			Continue:      page.Continue,
-			CursorInvalid: page.CursorInvalid,
-			Total:         page.Total,
-			TotalIsExact:  page.TotalIsExact,
-			Namespaces:    page.Namespaces,
-			Kinds:         page.Kinds,
-			FacetsExact:   page.FacetsExact,
-			Dynamic:       page.Dynamic,
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:      ResourceQueryProviderTypedResource,
+				Table:         podDomainName,
+				Continue:      page.Continue,
+				CursorInvalid: page.CursorInvalid,
+				Total:         page.Total,
+				TotalIsExact:  page.TotalIsExact,
+				Kinds:         page.Kinds,
+				Namespaces:    page.Namespaces,
+				FacetsExact:   page.FacetsExact,
+				Completeness:  resourceQueryCompleteness(true),
+				Dynamic:       page.Dynamic,
+				Capabilities:  podQueryCapabilities(),
+			},
+			Rows:    page.Rows,
+			Metrics: metricsInfo,
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(page.Rows),

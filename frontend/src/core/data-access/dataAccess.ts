@@ -158,6 +158,42 @@ export const setRefreshDomainEnabled = ({
   refreshOrchestrator.setScopedDomainEnabled(domain, scope, enabled);
 };
 
+// Reference-counted lease that keeps a scoped refresh domain enabled while any
+// mounted consumer holds it. Use this instead of setRefreshDomainEnabled for
+// component lifecycles so a remounting/concurrent owner is not torn down by an
+// old owner's cleanup.
+export const acquireRefreshDomainLease = ({
+  domain,
+  scope,
+  preserveState = false,
+}: {
+  domain: RefreshDomain;
+  scope: string;
+  preserveState?: boolean;
+}): void => {
+  refreshOrchestrator.acquireScopedDomainLease(
+    domain,
+    scope,
+    preserveState ? { preserveState } : undefined
+  );
+};
+
+export const releaseRefreshDomainLease = ({
+  domain,
+  scope,
+  preserveState = false,
+}: {
+  domain: RefreshDomain;
+  scope: string;
+  preserveState?: boolean;
+}): void => {
+  refreshOrchestrator.releaseScopedDomainLease(
+    domain,
+    scope,
+    preserveState ? { preserveState } : undefined
+  );
+};
+
 export const resetRefreshDomain = (domain: RefreshDomain, scope: string): void => {
   refreshOrchestrator.resetScopedDomain(domain, scope);
 };

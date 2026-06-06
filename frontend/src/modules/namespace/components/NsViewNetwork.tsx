@@ -191,7 +191,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
     const localTableMode = localTableModeForStats(stats);
 
     const selectRows = useCallback(
-      (payload: NamespaceNetworkSnapshotPayload) => payload.resources ?? [],
+      (payload: NamespaceNetworkSnapshotPayload) => payload.rows ?? [],
       []
     );
     const {

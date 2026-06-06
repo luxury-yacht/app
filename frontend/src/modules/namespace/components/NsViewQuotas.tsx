@@ -197,7 +197,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
     const localTableMode = localTableModeForStats(stats);
 
     const selectRows = useCallback(
-      (payload: NamespaceQuotasSnapshotPayload) => payload.resources ?? [],
+      (payload: NamespaceQuotasSnapshotPayload) => payload.rows ?? [],
       []
     );
     const {

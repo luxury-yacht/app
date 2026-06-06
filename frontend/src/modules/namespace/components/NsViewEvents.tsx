@@ -218,7 +218,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     );
 
     const selectRows = useCallback(
-      (payload: NamespaceEventsSnapshotPayload) => payload.events ?? [],
+      (payload: NamespaceEventsSnapshotPayload) => payload.rows ?? [],
       []
     );
     const {

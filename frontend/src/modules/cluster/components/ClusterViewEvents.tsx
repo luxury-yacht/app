@@ -167,7 +167,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     }, [canOpenEventObject, handleEventAltClick, handleEventClick, useShortResourceNames]);
 
     const selectRows = useCallback(
-      (payload: ClusterEventsSnapshotPayload) => payload.events ?? [],
+      (payload: ClusterEventsSnapshotPayload) => payload.rows ?? [],
       []
     );
     const {

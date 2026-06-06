@@ -40,19 +40,21 @@ type ClusterConfigPermissions struct {
 	IncludeMutatingWebhooks   bool
 }
 
-// ClusterConfigSnapshot represents the payload exposed to the UI.
+// ClusterConfigSnapshot represents the payload exposed to the UI. It embeds the
+// canonical ResourceQueryEnvelope (flattened into top-level JSON) plus the
+// domain-typed rows.
 type ClusterConfigSnapshot struct {
 	ClusterMeta
-	Resources     []ClusterConfigEntry     `json:"resources"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total,omitempty"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Issues        []ResourceQueryIssue     `json:"issues,omitempty"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	ResourceQueryEnvelope
+	Rows []ClusterConfigEntry `json:"rows"`
+}
+
+func clusterConfigQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "details", "age"},
+		[]string{"kinds"},
+		[]string{"kind", "name", "details"},
+	)
 }
 
 // ClusterConfigEntry covers a storage class, ingress class, or webhook config.
@@ -243,17 +245,23 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 			Scope:   scope,
 			Version: version,
 			Payload: ClusterConfigSnapshot{
-				ClusterMeta:   meta,
-				Resources:     page.Rows,
-				Kinds:         page.Kinds,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact && exact,
-				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact && exact,
-				Issues:        issues,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         clusterConfigDomainName,
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact && exact,
+					Kinds:         page.Kinds,
+					Namespaces:    page.Namespaces,
+					FacetsExact:   page.FacetsExact && exact,
+					Completeness:  resourceQueryCompleteness(exact),
+					Issues:        issues,
+					Dynamic:       page.Dynamic,
+					Capabilities:  clusterConfigQueryCapabilities(),
+				},
+				Rows: page.Rows,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}, nil
@@ -266,11 +274,18 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 		Domain:  clusterConfigDomainName,
 		Version: version,
 		Payload: ClusterConfigSnapshot{
-			ClusterMeta:  meta,
-			Resources:    entries,
-			Kinds:        snapshotSortedKinds(entries, func(entry ClusterConfigEntry) string { return entry.Kind }),
-			Total:        totalItems,
-			TotalIsExact: totalItems == len(entries),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        clusterConfigDomainName,
+				Total:        totalItems,
+				TotalIsExact: totalItems == len(entries),
+				Kinds:        snapshotSortedKinds(entries, func(entry ClusterConfigEntry) string { return entry.Kind }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(totalItems == len(entries)),
+				Capabilities: clusterConfigQueryCapabilities(),
+			},
+			Rows: entries,
 		},
 		Stats: snapshotWindowStats(len(entries), totalItems, "cluster configuration resources"),
 	}, nil

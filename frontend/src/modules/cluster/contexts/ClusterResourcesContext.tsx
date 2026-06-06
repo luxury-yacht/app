@@ -454,7 +454,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   }, []);
 
   const nodes: ResourceDataReturn<ClusterNodeRow[]> = useMemo(() => {
-    const data = nodeSnapshot ? filterByClusterId(nodeSnapshot.nodes, selectedClusterId) : null;
+    const data = nodeSnapshot ? filterByClusterId(nodeSnapshot.rows, selectedClusterId) : null;
     const lastUpdated = nodeMetricsInfo?.collectedAt
       ? new Date(nodeMetricsInfo.collectedAt * 1000)
       : nodeLastUpdated

@@ -6,6 +6,8 @@
  */
 
 export {
+  acquireRefreshDomainLease,
+  releaseRefreshDomainLease,
   requestContextRefresh,
   requestData,
   requestRefreshDomain,

@@ -202,7 +202,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     const localTableMode = localTableModeForStats(stats);
 
     const selectRows = useCallback(
-      (payload: NamespaceRBACSnapshotPayload) => payload.resources ?? [],
+      (payload: NamespaceRBACSnapshotPayload) => payload.rows ?? [],
       []
     );
     const {

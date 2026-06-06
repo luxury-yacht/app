@@ -52,6 +52,8 @@ const {
       resetDomain: vi.fn(),
       resetScopedDomain: vi.fn(),
       setScopedDomainEnabled: vi.fn(),
+      acquireScopedDomainLease: vi.fn(),
+      releaseScopedDomainLease: vi.fn(),
     },
     scopedStates: scopedStateBag,
     permissionStates: permissionStateBag,
@@ -144,10 +146,9 @@ describe('ClusterResourcesProvider', () => {
     await render();
 
     expect(contextRef.current?.config.hasLoaded).toBe(false);
-    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+    expect(orchestrator.acquireScopedDomainLease).not.toHaveBeenCalledWith(
       'cluster-config',
       testClusterScope,
-      true,
       expect.anything()
     );
     expect(dataAccessMocks.requestRefreshDomain).not.toHaveBeenCalledWith({
@@ -168,7 +169,7 @@ describe('ClusterResourcesProvider', () => {
       status: 'ready',
       scope: testClusterScope,
       data: {
-        resources: [
+        rows: [
           {
             clusterId: testClusterId,
             kind: 'StorageClass',
@@ -229,16 +230,14 @@ describe('ClusterResourcesProvider', () => {
       await Promise.resolve();
     });
 
-    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+    expect(orchestrator.acquireScopedDomainLease).not.toHaveBeenCalledWith(
       'cluster-config',
       testClusterScope,
-      true,
       expect.anything()
     );
-    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+    expect(orchestrator.acquireScopedDomainLease).not.toHaveBeenCalledWith(
       'nodes',
       testClusterScope,
-      true,
       expect.anything()
     );
   });
@@ -275,10 +274,9 @@ describe('ClusterResourcesProvider', () => {
 
     await render();
 
-    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+    expect(orchestrator.acquireScopedDomainLease).not.toHaveBeenCalledWith(
       'cluster-config',
       testClusterScope,
-      true,
       expect.anything()
     );
     expect(dataAccessMocks.requestRefreshDomain).not.toHaveBeenCalledWith({
@@ -308,10 +306,9 @@ describe('ClusterResourcesProvider', () => {
 
     await render();
 
-    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+    expect(orchestrator.acquireScopedDomainLease).not.toHaveBeenCalledWith(
       'cluster-config',
       testClusterScope,
-      true,
       expect.anything()
     );
     expect(dataAccessMocks.requestRefreshDomain).not.toHaveBeenCalled();
@@ -331,10 +328,9 @@ describe('ClusterResourcesProvider', () => {
 
     expect(contextRef.current?.custom.data).toEqual([]);
     expect(contextRef.current?.custom.hasLoaded).toBe(false);
-    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+    expect(orchestrator.acquireScopedDomainLease).not.toHaveBeenCalledWith(
       'cluster-custom',
       testClusterScope,
-      true,
       expect.anything()
     );
     expect(dataAccessMocks.requestRefreshDomain).not.toHaveBeenCalledWith({

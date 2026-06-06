@@ -2,16 +2,23 @@
  * frontend/src/core/data-access/useScopedRefreshDomainLifecycle.ts
  *
  * Keeps a scoped refresh domain enabled while a component is mounted and
- * disables it on teardown without forcing callers to import the orchestrator.
+ * releases it on teardown without forcing callers to import the orchestrator.
+ *
+ * Enablement is reference-counted via scoped leases: a remounting or concurrent
+ * consumer of the same (domain, scope) keeps the scope alive, so an old
+ * instance's cleanup cannot disable a scope a newer instance still needs. That
+ * remount race was the source of transient false-empty query-backed tables.
  */
 
 import { useEffect, useRef } from 'react';
 
 import type { RefreshDomain } from '@/core/refresh/types';
-import { requestRefreshDomain, setRefreshDomainEnabled } from './dataAccess';
+import {
+  acquireRefreshDomainLease,
+  releaseRefreshDomainLease,
+  requestRefreshDomain,
+} from './dataAccess';
 import type { DataRequestReason } from './types';
-
-const PRESERVE_SCOPED_STATE = { preserveState: true } as const;
 
 interface ScopedRefreshDomainLifecycleOptions {
   domain: RefreshDomain | null | undefined;
@@ -22,25 +29,8 @@ interface ScopedRefreshDomainLifecycleOptions {
   onFetchError?: (error: unknown) => void;
 }
 
-interface ActiveScope {
-  domain: RefreshDomain;
-  scope: string;
-}
-
-const sameScope = (a: ActiveScope | null, b: ActiveScope | null): boolean =>
-  Boolean(a && b && a.domain === b.domain && a.scope === b.scope);
-
-const setScopeEnabled = (scope: ActiveScope, enabled: boolean, preserveState: boolean) => {
-  setRefreshDomainEnabled({
-    domain: scope.domain,
-    scope: scope.scope,
-    enabled,
-    ...(preserveState ? PRESERVE_SCOPED_STATE : {}),
-  });
-};
-
-// Owns the shared scoped-domain lifecycle: enable the current scope, disable
-// replaced scopes, and preserve cached data when the caller opts in.
+// Owns the shared scoped-domain lifecycle: hold a lease for the current scope
+// while mounted and enabled, and preserve cached data when the caller opts in.
 export function useScopedRefreshDomainLifecycle({
   domain,
   scope,
@@ -49,7 +39,6 @@ export function useScopedRefreshDomainLifecycle({
   fetchOnEnable = false,
   onFetchError,
 }: ScopedRefreshDomainLifecycleOptions): void {
-  const activeRef = useRef<ActiveScope | null>(null);
   const onFetchErrorRef = useRef(onFetchError);
 
   useEffect(() => {
@@ -57,24 +46,20 @@ export function useScopedRefreshDomainLifecycle({
   }, [onFetchError]);
 
   useEffect(() => {
-    const next = domain && scope ? { domain, scope } : null;
-    const previous = activeRef.current;
-
-    if (previous && !sameScope(previous, next)) {
-      setScopeEnabled(previous, false, preserveState);
-    }
-
-    activeRef.current = next;
-
-    if (!next) {
+    if (!domain || !scope || !enabled) {
       return undefined;
     }
 
-    setScopeEnabled(next, enabled, preserveState);
-    if (enabled && fetchOnEnable) {
+    // React runs the cleanup (release) before re-running on scope/enabled
+    // changes and on unmount, so acquire/release stay balanced per consumer.
+    // The runtime enables on the first lease and disables only after the last
+    // lease is released.
+    acquireRefreshDomainLease({ domain, scope, preserveState });
+
+    if (fetchOnEnable) {
       void requestRefreshDomain({
-        domain: next.domain,
-        scope: next.scope,
+        domain,
+        scope,
         reason: fetchOnEnable,
       }).catch((error) => {
         const handler = onFetchErrorRef.current;
@@ -82,18 +67,12 @@ export function useScopedRefreshDomainLifecycle({
           handler(error);
           return;
         }
-        console.error(
-          `Failed to fetch refresh domain ${next.domain} for scope ${next.scope}`,
-          error
-        );
+        console.error(`Failed to fetch refresh domain ${domain} for scope ${scope}`, error);
       });
     }
 
     return () => {
-      setScopeEnabled(next, false, preserveState);
-      if (sameScope(activeRef.current, next)) {
-        activeRef.current = null;
-      }
+      releaseRefreshDomainLease({ domain, scope, preserveState });
     };
   }, [domain, enabled, fetchOnEnable, preserveState, scope]);
 }

@@ -83,7 +83,7 @@ func TestClusterConfigBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(ClusterConfigSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 4)
+	require.Len(t, payload.Rows, 4)
 	require.Equal(t, []string{
 		"IngressClass",
 		"MutatingWebhookConfiguration",
@@ -92,7 +92,7 @@ func TestClusterConfigBuilder(t *testing.T) {
 	}, payload.Kinds)
 
 	resources := map[string]ClusterConfigEntry{}
-	for _, entry := range payload.Resources {
+	for _, entry := range payload.Rows {
 		resources[entry.Kind+"-"+entry.Name] = entry
 		require.NotEmpty(t, entry.Age)
 	}
@@ -124,7 +124,7 @@ func TestClusterConfigBuilderCapsLargeSnapshots(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
 	payload := snapshot.Payload.(ClusterConfigSnapshot)
-	require.Len(t, payload.Resources, config.SnapshotClusterConfigEntryLimit)
+	require.Len(t, payload.Rows, config.SnapshotClusterConfigEntryLimit)
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotClusterConfigEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "cluster configuration resources")
@@ -156,7 +156,7 @@ func TestClusterConfigBuilderQueryReportsPartialAllowedResources(t *testing.T) {
 	require.False(t, payload.FacetsExact)
 	require.Len(t, payload.Issues, 1)
 	require.Equal(t, "IngressClass", payload.Issues[0].Kind)
-	require.Empty(t, payload.Resources)
+	require.Empty(t, payload.Rows)
 }
 
 func TestClusterStorageBuilder(t *testing.T) {
@@ -194,9 +194,9 @@ func TestClusterStorageBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(ClusterStorageSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Volumes, 1)
+	require.Len(t, payload.Rows, 1)
 
-	entry := payload.Volumes[0]
+	entry := payload.Rows[0]
 	require.Equal(t, "PersistentVolume", entry.Kind)
 	require.Equal(t, pv.Name, entry.Name)
 	require.Equal(t, "fast", entry.StorageClass)
@@ -227,7 +227,7 @@ func TestClusterStorageBuilderCapsLargeSnapshots(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
 	payload := snapshot.Payload.(ClusterStorageSnapshot)
-	require.Len(t, payload.Volumes, config.SnapshotClusterStorageEntryLimit)
+	require.Len(t, payload.Rows, config.SnapshotClusterStorageEntryLimit)
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotClusterStorageEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "persistent volumes")
@@ -267,9 +267,9 @@ func TestClusterCRDBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(ClusterCRDSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Definitions, 1)
+	require.Len(t, payload.Rows, 1)
 
-	entry := payload.Definitions[0]
+	entry := payload.Rows[0]
 	require.Equal(t, "CustomResourceDefinition", entry.Kind)
 	require.Equal(t, crd.Name, entry.Name)
 	require.Equal(t, crd.Spec.Group, entry.Group)
@@ -311,7 +311,7 @@ func TestClusterCRDBuilderCapsLargeSnapshots(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
 	payload := snapshot.Payload.(ClusterCRDSnapshot)
-	require.Len(t, payload.Definitions, config.SnapshotClusterCRDEntryLimit)
+	require.Len(t, payload.Rows, config.SnapshotClusterCRDEntryLimit)
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotClusterCRDEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "CRDs")

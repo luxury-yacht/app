@@ -7,13 +7,47 @@ import (
 	"strings"
 )
 
-// ResourceQueryRequest is the shared contract for future query-backed typed
-// resource tables. It is deliberately separate from the catalog query because
-// typed rows include projected status, owner, storage, Helm, autoscaling, and
-// metric fields in addition to catalog identity.
+// ResourceQueryProvider identifies the backend producer family behind a
+// resource inventory query. The frontend controller is provider-agnostic once
+// the result envelope is normalized; the distinction exists only because the
+// producers differ.
+type ResourceQueryProvider string
+
+const (
+	// ResourceQueryProviderTypedResource owns known Kubernetes resource family
+	// rows (nodes, pods, workloads, config, rbac, storage, ...).
+	ResourceQueryProviderTypedResource ResourceQueryProvider = "typed-resource"
+	// ResourceQueryProviderCatalog owns Browse and generic Custom resource rows
+	// via the object catalog query path.
+	ResourceQueryProviderCatalog ResourceQueryProvider = "catalog"
+)
+
+// ResourceQueryScope identifies the breadth of a resource inventory query.
+type ResourceQueryScope string
+
+const (
+	ResourceQueryScopeCluster       ResourceQueryScope = "cluster"
+	ResourceQueryScopeNamespace     ResourceQueryScope = "namespace"
+	ResourceQueryScopeAllNamespaces ResourceQueryScope = "all-namespaces"
+)
+
+// ResourceQueryCompleteness is truthfulness metadata on a result: whether the
+// rows represent the complete matching set for the query, or only a truncated,
+// recent, degraded, or windowed view.
+type ResourceQueryCompleteness string
+
+const (
+	ResourceQueryComplete ResourceQueryCompleteness = "complete"
+	ResourceQueryPartial  ResourceQueryCompleteness = "partial"
+)
+
+// ResourceQueryRequest is the shared request contract for query-backed resource
+// inventory tables. Both the typed-resource and catalog providers accept it.
 type ResourceQueryRequest struct {
 	ClusterID     string                   `json:"clusterId"`
+	Provider      ResourceQueryProvider    `json:"provider,omitempty"`
 	Table         string                   `json:"table"`
+	Scope         ResourceQueryScope       `json:"scope,omitempty"`
 	Namespaces    []string                 `json:"namespaces,omitempty"`
 	Kinds         []string                 `json:"kinds,omitempty"`
 	Search        string                   `json:"search,omitempty"`
@@ -99,6 +133,69 @@ type ResourceQueryDynamicRef struct {
 	Source   string `json:"source"`
 	Revision string `json:"revision"`
 	Policy   string `json:"policy"`
+}
+
+// ResourceQueryCapabilities is the provider-published source of truth for what
+// table behavior is globally supported. The frontend must not infer global
+// capability from the visible row slice.
+type ResourceQueryCapabilities struct {
+	SortableFields   []string `json:"sortableFields,omitempty"`
+	FilterableFields []string `json:"filterableFields,omitempty"`
+	SearchableFields []string `json:"searchableFields,omitempty"`
+	VisibleRowExport bool     `json:"visibleRowExport"`
+	QueryWideExport  bool     `json:"queryWideExport"`
+}
+
+// ResourceQueryEnvelope is the one canonical metadata envelope shared by every
+// backend-query resource inventory result. Domain result structs embed it and
+// add a typed `Rows` slice; Go JSON inlining flattens these fields to the top
+// level, so the frontend sees a single uniform envelope plus provider-owned
+// projected rows. This is the "one backend query result envelope" target: one
+// envelope type, not one row DTO.
+//
+// Facet fields (kinds/namespaces/statuses/nodes/facetsExact) are flat to match
+// the existing typed payload wire format the frontend already reads, so a domain
+// migrates by embedding this envelope without any shared frontend helper change.
+type ResourceQueryEnvelope struct {
+	Provider      ResourceQueryProvider     `json:"provider"`
+	Table         string                    `json:"table"`
+	QueryIdentity string                    `json:"queryIdentity,omitempty"`
+	Continue      string                    `json:"continue,omitempty"`
+	Previous      string                    `json:"previous,omitempty"`
+	CursorInvalid bool                      `json:"cursorInvalid,omitempty"`
+	Total         int                       `json:"total"`
+	TotalIsExact  bool                      `json:"totalIsExact"`
+	Kinds         []string                  `json:"kinds,omitempty"`
+	Namespaces    []string                  `json:"namespaces,omitempty"`
+	Statuses      []string                  `json:"statuses,omitempty"`
+	Nodes         []string                  `json:"nodes,omitempty"`
+	FacetsExact   bool                      `json:"facetsExact"`
+	Completeness  ResourceQueryCompleteness `json:"completeness,omitempty"`
+	Issues        []ResourceQueryIssue      `json:"issues,omitempty"`
+	Dynamic       *ResourceQueryDynamicRef  `json:"dynamic,omitempty"`
+	Capabilities  ResourceQueryCapabilities `json:"capabilities"`
+}
+
+// newTypedResourceCapabilities builds capabilities for a typed-resource table.
+// Typed providers expose visible-row CSV/export only; query-wide export is a
+// catalog capability until a typed provider implements a backend export path.
+func newTypedResourceCapabilities(sortable, filterable, searchable []string) ResourceQueryCapabilities {
+	return ResourceQueryCapabilities{
+		SortableFields:   sortable,
+		FilterableFields: filterable,
+		SearchableFields: searchable,
+		VisibleRowExport: true,
+		QueryWideExport:  false,
+	}
+}
+
+// resourceQueryCompleteness maps a "is this the complete matching set" boolean
+// to the truthfulness enum carried on the envelope.
+func resourceQueryCompleteness(complete bool) ResourceQueryCompleteness {
+	if complete {
+		return ResourceQueryComplete
+	}
+	return ResourceQueryPartial
 }
 
 func resourceQueryRequestFromValues(clusterID, table string, values url.Values, defaults ResourceQueryRequest) ResourceQueryRequest {

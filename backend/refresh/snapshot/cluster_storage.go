@@ -23,18 +23,23 @@ type ClusterStorageBuilder struct {
 	pvLister corelisters.PersistentVolumeLister
 }
 
-// ClusterStorageSnapshot is the payload exposed to the frontend.
+// ClusterStorageSnapshot is the payload exposed to the frontend. It embeds the
+// canonical ResourceQueryEnvelope (flattened into the top-level JSON) and adds
+// the domain-typed rows, so every backend-query table presents one shape.
 type ClusterStorageSnapshot struct {
 	ClusterMeta
-	Volumes       []ClusterStorageEntry    `json:"volumes"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total,omitempty"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	ResourceQueryEnvelope
+	Rows []ClusterStorageEntry `json:"rows"`
+}
+
+// clusterStorageQueryCapabilities reports the backend-supported global table
+// behavior for the cluster storage table (matching clusterStorageTableQueryAdapter).
+func clusterStorageQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "storageClass", "capacity", "accessModes", "status", "claim", "age"},
+		[]string{"kinds"},
+		[]string{"kind", "name", "storageClass", "capacity", "accessModes", "status", "claim"},
+	)
 }
 
 // ClusterStorageEntry represents a persistent volume in the cluster view.
@@ -112,16 +117,22 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
 			Version: version,
 			Payload: ClusterStorageSnapshot{
-				ClusterMeta:   meta,
-				Volumes:       page.Rows,
-				Kinds:         page.Kinds,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
-				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         clusterStorageDomainName,
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact,
+					Kinds:         page.Kinds,
+					Namespaces:    page.Namespaces,
+					FacetsExact:   page.FacetsExact,
+					Completeness:  resourceQueryCompleteness(true),
+					Dynamic:       page.Dynamic,
+					Capabilities:  clusterStorageQueryCapabilities(),
+				},
+				Rows: page.Rows,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}, nil
@@ -134,11 +145,18 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 		Domain:  clusterStorageDomainName,
 		Version: version,
 		Payload: ClusterStorageSnapshot{
-			ClusterMeta:  meta,
-			Volumes:      entries,
-			Kinds:        snapshotSortedKinds(entries, func(entry ClusterStorageEntry) string { return entry.Kind }),
-			Total:        totalItems,
-			TotalIsExact: totalItems == len(entries),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        clusterStorageDomainName,
+				Total:        totalItems,
+				TotalIsExact: totalItems == len(entries),
+				Kinds:        snapshotSortedKinds(entries, func(entry ClusterStorageEntry) string { return entry.Kind }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(totalItems == len(entries)),
+				Capabilities: clusterStorageQueryCapabilities(),
+			},
+			Rows: entries,
 		},
 		Stats: snapshotWindowStats(len(entries), totalItems, "persistent volumes"),
 	}, nil

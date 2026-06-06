@@ -418,7 +418,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('pods', storeScope, () => ({
       status: 'ready',
-      data: { pods: [existing], clusterId: 'test-cluster' },
+      data: { rows: [existing], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -442,9 +442,9 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('pods', storeScope);
-    expect(state.data?.pods?.[0]?.cpuUsage).toBe('50m');
-    expect(state.data?.pods?.[0]?.memUsage).toBe('40Mi');
-    expect(state.data?.pods?.[0]?.status).toBe('Pending');
+    expect(state.data?.rows?.[0]?.cpuUsage).toBe('50m');
+    expect(state.data?.rows?.[0]?.memUsage).toBe('40Mi');
+    expect(state.data?.rows?.[0]?.status).toBe('Pending');
   });
 
   test('ignores unchanged workload update messages without replacing the workload list', async () => {
@@ -473,14 +473,14 @@ describe('ResourceStreamManager', () => {
       status: 'ready',
       data: {
         clusterId: 'cluster-a',
-        workloads: [existingWorkload],
+        rows: [existingWorkload],
       },
       scope: storeScope,
       error: null,
     }));
 
     const previousState = getScopedDomainState('namespace-workloads', storeScope);
-    const previousRows = previousState.data?.workloads;
+    const previousRows = previousState.data?.rows;
 
     vi.advanceTimersByTime(1100);
     manager.handleMessage(
@@ -507,8 +507,8 @@ describe('ResourceStreamManager', () => {
 
     const nextState = getScopedDomainState('namespace-workloads', storeScope);
     expect(nextState).toBe(previousState);
-    expect(nextState.data?.workloads).toBe(previousRows);
-    expect(nextState.data?.workloads?.[0]).toBe(existingWorkload);
+    expect(nextState.data?.rows).toBe(previousRows);
+    expect(nextState.data?.rows?.[0]).toBe(existingWorkload);
   });
 
   test('reuses workload rows when an identical workload snapshot is applied', () => {
@@ -530,13 +530,13 @@ describe('ResourceStreamManager', () => {
       status: 'ready',
       data: {
         clusterId: 'cluster-a',
-        workloads: [existingWorkload],
+        rows: [existingWorkload],
       },
       scope: storeScope,
       error: null,
     }));
 
-    const previousRows = getScopedDomainState('namespace-workloads', storeScope).data?.workloads;
+    const previousRows = getScopedDomainState('namespace-workloads', storeScope).data?.rows;
 
     (
       manager as unknown as {
@@ -557,15 +557,15 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag-identical',
         payload: {
           clusterId: 'cluster-a',
-          workloads: [{ ...existingWorkload }],
+          rows: [{ ...existingWorkload }],
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
       }
     );
 
     const nextState = getScopedDomainState('namespace-workloads', storeScope);
-    expect(nextState.data?.workloads).toBe(previousRows);
-    expect(nextState.data?.workloads?.[0]).toBe(existingWorkload);
+    expect(nextState.data?.rows).toBe(previousRows);
+    expect(nextState.data?.rows?.[0]).toBe(existingWorkload);
   });
 
   test('applies namespace config updates', () => {
@@ -580,7 +580,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -614,7 +614,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('namespace-config', storeScope);
-    expect(state.data?.resources?.[0]?.name).toBe('config-a');
+    expect(state.data?.rows?.[0]?.name).toBe('config-a');
   });
 
   test('applies updates when cluster id mismatches but scope is unique', () => {
@@ -629,7 +629,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -664,7 +664,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('namespace-config', storeScope);
-    expect(state.data?.resources?.[0]?.clusterId).toBe('cluster-a');
+    expect(state.data?.rows?.[0]?.clusterId).toBe('cluster-a');
   });
 
   test('applies updates when scope includes a cluster prefix', () => {
@@ -679,7 +679,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -713,7 +713,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('namespace-config', storeScope);
-    expect(state.data?.resources?.[0]?.name).toBe('config-a');
+    expect(state.data?.rows?.[0]?.name).toBe('config-a');
   });
 
   test('applies namespace network updates', () => {
@@ -728,7 +728,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-network', storeScope, () => ({
       status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -761,7 +761,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('namespace-network', storeScope);
-    expect(state.data?.resources?.[0]?.name).toBe('svc-a');
+    expect(state.data?.rows?.[0]?.name).toBe('svc-a');
   });
 
   test('applies namespace rbac updates', () => {
@@ -776,7 +776,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-rbac', storeScope, () => ({
       status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -814,7 +814,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('namespace-rbac', storeScope);
-    expect(state.data?.resources?.[0]?.name).toBe('role-a');
+    expect(state.data?.rows?.[0]?.name).toBe('role-a');
   });
 
   test('applies namespace custom updates', () => {
@@ -1121,7 +1121,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-helm', storeScope, () => ({
       status: 'ready',
-      data: { releases: [existingRow], clusterId: 'cluster-a' },
+      data: { rows: [existingRow], clusterId: 'cluster-a' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1136,7 +1136,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'helm-resync',
         generatedAt: Date.now(),
         payload: {
-          releases: [snapshotRow],
+          rows: [snapshotRow],
           clusterId: 'cluster-a',
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
@@ -1168,9 +1168,9 @@ describe('ResourceStreamManager', () => {
 
     const state = getScopedDomainState('namespace-helm', storeScope);
     expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
-    expect(state.data?.releases?.[0]?.status).toBe('superseded');
-    expect(state.data?.releases?.[0]?.revision).toBe(2);
-    expect(state.data?.releases?.[0]?.status).not.toBe('targeted-row-update');
+    expect(state.data?.rows?.[0]?.status).toBe('superseded');
+    expect(state.data?.rows?.[0]?.revision).toBe(2);
+    expect(state.data?.rows?.[0]?.status).not.toBe('targeted-row-update');
   });
 
   test('resyncs namespace helm COMPLETE messages as scope-level changes', async () => {
@@ -1204,7 +1204,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-helm', storeScope, () => ({
       status: 'ready',
-      data: { releases: [existingRow], clusterId: 'cluster-a' },
+      data: { rows: [existingRow], clusterId: 'cluster-a' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1219,7 +1219,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'helm-complete',
         generatedAt: Date.now(),
         payload: {
-          releases: [snapshotRow],
+          rows: [snapshotRow],
           clusterId: 'cluster-a',
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
@@ -1248,8 +1248,8 @@ describe('ResourceStreamManager', () => {
 
     const state = getScopedDomainState('namespace-helm', storeScope);
     expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
-    expect(state.data?.releases?.[0]?.status).toBe('failed');
-    expect(state.data?.releases?.[0]?.revision).toBe(4);
+    expect(state.data?.rows?.[0]?.status).toBe('failed');
+    expect(state.data?.rows?.[0]?.revision).toBe(4);
   });
 
   test('reuses namespace helm rows when an identical helm snapshot is applied', () => {
@@ -1274,13 +1274,13 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-helm', storeScope, () => ({
       status: 'ready',
-      data: { releases: [sharedRow], clusterId: 'cluster-a' },
+      data: { rows: [sharedRow], clusterId: 'cluster-a' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
       scope: storeScope,
     }));
-    const previousRows = getScopedDomainState('namespace-helm', storeScope).data?.releases;
+    const previousRows = getScopedDomainState('namespace-helm', storeScope).data?.rows;
 
     (
       manager as unknown as {
@@ -1300,7 +1300,7 @@ describe('ResourceStreamManager', () => {
         version: 7,
         checksum: 'helm-checksum',
         payload: {
-          releases: [{ ...sharedRow }],
+          rows: [{ ...sharedRow }],
           clusterId: 'cluster-a',
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
@@ -1308,8 +1308,8 @@ describe('ResourceStreamManager', () => {
     );
 
     const state = getScopedDomainState('namespace-helm', storeScope);
-    expect(state.data?.releases).toBe(previousRows);
-    expect(state.data?.releases?.[0]).toBe(sharedRow);
+    expect(state.data?.rows).toBe(previousRows);
+    expect(state.data?.rows?.[0]).toBe(sharedRow);
   });
 
   test('applies namespace autoscaling updates', () => {
@@ -1324,7 +1324,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-autoscaling', storeScope, () => ({
       status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1366,7 +1366,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('namespace-autoscaling', storeScope);
-    expect(state.data?.resources?.[0]?.name).toBe('hpa-a');
+    expect(state.data?.rows?.[0]?.name).toBe('hpa-a');
   });
 
   test('reuses namespace autoscaling rows when an unchanged update is applied', () => {
@@ -1394,13 +1394,13 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-autoscaling', storeScope, () => ({
       status: 'ready',
-      data: { resources: [sharedRow], clusterId: 'cluster-a' },
+      data: { rows: [sharedRow], clusterId: 'cluster-a' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
       scope: storeScope,
     }));
-    const previousRows = getScopedDomainState('namespace-autoscaling', storeScope).data?.resources;
+    const previousRows = getScopedDomainState('namespace-autoscaling', storeScope).data?.rows;
 
     manager.handleMessage(
       'cluster-a',
@@ -1426,10 +1426,10 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('namespace-autoscaling', storeScope);
-    expect(state.data?.resources).toBeDefined();
-    expect(state.data?.resources).toHaveLength(1);
-    expect(state.data?.resources).toBe(previousRows);
-    expect(state.data?.resources?.[0]).toBe(sharedRow);
+    expect(state.data?.rows).toBeDefined();
+    expect(state.data?.rows).toHaveLength(1);
+    expect(state.data?.rows).toBe(previousRows);
+    expect(state.data?.rows?.[0]).toBe(sharedRow);
   });
 
   test('reuses namespace autoscaling rows when an identical autoscaling snapshot is applied', async () => {
@@ -1455,7 +1455,7 @@ describe('ResourceStreamManager', () => {
     setScopedDomainState('namespace-autoscaling', storeScope, () => ({
       status: 'ready',
       data: {
-        resources: [sharedRow],
+        rows: [sharedRow],
         kinds: ['HorizontalPodAutoscaler'],
         clusterId: 'cluster-a',
       },
@@ -1465,7 +1465,7 @@ describe('ResourceStreamManager', () => {
       scope: storeScope,
     }));
 
-    const previousRows = getScopedDomainState('namespace-autoscaling', storeScope).data?.resources;
+    const previousRows = getScopedDomainState('namespace-autoscaling', storeScope).data?.rows;
 
     await (
       manager as unknown as {
@@ -1482,7 +1482,7 @@ describe('ResourceStreamManager', () => {
       },
       {
         payload: {
-          resources: [{ ...sharedRow }],
+          rows: [{ ...sharedRow }],
           kinds: ['HorizontalPodAutoscaler'],
           clusterId: 'cluster-a',
         },
@@ -1494,8 +1494,8 @@ describe('ResourceStreamManager', () => {
     );
 
     const state = getScopedDomainState('namespace-autoscaling', storeScope);
-    expect(state.data?.resources).toBe(previousRows);
-    expect(state.data?.resources?.[0]).toBe(sharedRow);
+    expect(state.data?.rows).toBe(previousRows);
+    expect(state.data?.rows?.[0]).toBe(sharedRow);
   });
 
   test('applies namespace quotas updates', () => {
@@ -1510,7 +1510,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-quotas', storeScope, () => ({
       status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1543,7 +1543,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('namespace-quotas', storeScope);
-    expect(state.data?.resources?.[0]?.name).toBe('quota-a');
+    expect(state.data?.rows?.[0]?.name).toBe('quota-a');
   });
 
   test('applies namespace storage updates', () => {
@@ -1558,7 +1558,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-storage', storeScope, () => ({
       status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1597,7 +1597,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('namespace-storage', storeScope);
-    expect(state.data?.resources?.[0]?.name).toBe('pvc-a');
+    expect(state.data?.rows?.[0]?.name).toBe('pvc-a');
   });
 
   test('applies cluster rbac updates', () => {
@@ -1612,7 +1612,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('cluster-rbac', storeScope, () => ({
       status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1648,7 +1648,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('cluster-rbac', storeScope);
-    expect(state.data?.resources?.[0]?.name).toBe('cluster-role');
+    expect(state.data?.rows?.[0]?.name).toBe('cluster-role');
   });
 
   test('preserves rows with missing clusterId when merging cluster rbac updates', () => {
@@ -1664,7 +1664,7 @@ describe('ResourceStreamManager', () => {
     setScopedDomainState('cluster-rbac', storeScope, () => ({
       status: 'ready',
       data: {
-        resources: [
+        rows: [
           {
             kind: 'ClusterRole',
             name: 'legacy-row',
@@ -1710,7 +1710,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('cluster-rbac', storeScope);
-    expect(state.data?.resources?.map((row) => row.name)).toEqual(['cluster-role', 'legacy-row']);
+    expect(state.data?.rows?.map((row) => row.name)).toEqual(['cluster-role', 'legacy-row']);
   });
 
   test('applies cluster storage updates', () => {
@@ -1725,7 +1725,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('cluster-storage', storeScope, () => ({
       status: 'ready',
-      data: { volumes: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1759,7 +1759,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('cluster-storage', storeScope);
-    expect(state.data?.volumes?.[0]?.name).toBe('pv-a');
+    expect(state.data?.rows?.[0]?.name).toBe('pv-a');
   });
 
   test('applies cluster config updates', () => {
@@ -1774,7 +1774,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('cluster-config', storeScope, () => ({
       status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1810,7 +1810,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('cluster-config', storeScope);
-    expect(state.data?.resources?.[0]?.name).toBe('standard');
+    expect(state.data?.rows?.[0]?.name).toBe('standard');
   });
 
   test('applies cluster crds updates', () => {
@@ -1825,7 +1825,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('cluster-crds', storeScope, () => ({
       status: 'ready',
-      data: { definitions: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1864,7 +1864,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('cluster-crds', storeScope);
-    expect(state.data?.definitions?.[0]?.name).toBe('widgets.example.com');
+    expect(state.data?.rows?.[0]?.name).toBe('widgets.example.com');
   });
 
   test('applies cluster custom updates', () => {
@@ -1929,7 +1929,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('nodes', storeScope, () => ({
       status: 'ready',
-      data: { nodes: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1950,7 +1950,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('nodes', storeScope);
-    expect(state.data?.nodes?.[0]?.name).toBe('node-a');
+    expect(state.data?.rows?.[0]?.name).toBe('node-a');
   });
 
   test('does not create an initial empty nodes payload from pre-baseline stream updates', () => {
@@ -2023,7 +2023,7 @@ describe('ResourceStreamManager', () => {
 
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
     const state = getScopedDomainState('nodes', storeScope);
-    expect(state.data?.nodes?.[0]?.status).toBe('NotReady');
+    expect(state.data?.rows?.[0]?.status).toBe('NotReady');
   });
 
   test('accepts updates when snapshot version exceeds safe integer limits', async () => {
@@ -2045,7 +2045,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { nodes: [] },
+        payload: { rows: [] },
         stats: { itemCount: 0, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2068,7 +2068,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('nodes', storeScope);
-    expect(state.data?.nodes?.[0]?.name).toBe('node-a');
+    expect(state.data?.rows?.[0]?.name).toBe('node-a');
   });
 
   test('resyncs on reset messages', async () => {
@@ -2086,7 +2086,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { workloads: [] },
+        payload: { rows: [] },
         stats: { itemCount: 0, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2121,7 +2121,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { pods: [] },
+        payload: { rows: [] },
         stats: { itemCount: 0, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2184,7 +2184,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { pods: [] },
+        payload: { rows: [] },
         stats: { itemCount: 0, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2197,7 +2197,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag-2',
         generatedAt: Date.now(),
         sequence: 2,
-        payload: { pods: [] },
+        payload: { rows: [] },
         stats: { itemCount: 0, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2242,7 +2242,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { pods: [] },
+        payload: { rows: [] },
         stats: { itemCount: 0, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2281,7 +2281,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { pods: [] },
+        payload: { rows: [] },
         stats: { itemCount: 0, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2331,7 +2331,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { pods: [] },
+        payload: { rows: [] },
         stats: { itemCount: 0, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2381,7 +2381,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { nodes: [] },
+        payload: { rows: [] },
         stats: { itemCount: 0, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2415,7 +2415,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { nodes: [{ name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' }] },
+        payload: { rows: [{ name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' }] },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2428,7 +2428,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag-2',
         generatedAt: Date.now(),
         sequence: 2,
-        payload: { nodes: [{ name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' }] },
+        payload: { rows: [{ name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' }] },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2471,7 +2471,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('nodes', storeScope);
-    expect(state.data?.nodes?.[0]?.status).toBe('Ready');
+    expect(state.data?.rows?.[0]?.status).toBe('Ready');
     expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
   });
 
@@ -2490,7 +2490,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { nodes: [] },
+        payload: { rows: [] },
         stats: { itemCount: 0, buildDurationMs: 0 },
       },
       notModified: false,
@@ -2528,7 +2528,7 @@ describe('ResourceStreamManager', () => {
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { nodes: [] },
+        payload: { rows: [] },
         stats: { itemCount: 0, buildDurationMs: 0 },
       },
       notModified: false,

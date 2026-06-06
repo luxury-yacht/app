@@ -27,18 +27,21 @@ type ClusterEventsBuilder struct {
 	eventLister corelisters.EventLister
 }
 
-// ClusterEventsSnapshot is the payload returned to the UI.
+// ClusterEventsSnapshot is the payload returned to the UI. It embeds the
+// canonical ResourceQueryEnvelope (flattened into top-level JSON) plus the
+// domain-typed rows.
 type ClusterEventsSnapshot struct {
 	ClusterMeta
-	Events        []ClusterEventEntry      `json:"events"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total,omitempty"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	ResourceQueryEnvelope
+	Rows []ClusterEventEntry `json:"rows"`
+}
+
+func clusterEventsQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "type", "source", "reason", "object", "objectType", "objectName", "message", "age"},
+		[]string{"kinds"},
+		[]string{"kind", "name", "type", "source", "reason", "object", "message"},
+	)
 }
 
 // ClusterEventEntry mirrors the fields consumed by the frontend grid.
@@ -142,16 +145,22 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
 			Version: version,
 			Payload: ClusterEventsSnapshot{
-				ClusterMeta:   meta,
-				Events:        page.Rows,
-				Kinds:         page.Kinds,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
-				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         clusterEventsDomainName,
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact,
+					Kinds:         page.Kinds,
+					Namespaces:    page.Namespaces,
+					FacetsExact:   page.FacetsExact,
+					Completeness:  resourceQueryCompleteness(true),
+					Dynamic:       page.Dynamic,
+					Capabilities:  clusterEventsQueryCapabilities(),
+				},
+				Rows: page.Rows,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}, nil
@@ -182,11 +191,18 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		Domain:  clusterEventsDomainName,
 		Version: version,
 		Payload: ClusterEventsSnapshot{
-			ClusterMeta:  meta,
-			Events:       entries,
-			Kinds:        snapshotSortedKinds(entries, func(event ClusterEventEntry) string { return event.Kind }),
-			Total:        originalCount,
-			TotalIsExact: originalCount == len(entries),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        clusterEventsDomainName,
+				Total:        originalCount,
+				TotalIsExact: originalCount == len(entries),
+				Kinds:        snapshotSortedKinds(entries, func(event ClusterEventEntry) string { return event.Kind }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(originalCount == len(entries)),
+				Capabilities: clusterEventsQueryCapabilities(),
+			},
+			Rows: entries,
 		},
 		Stats: stats,
 	}, nil

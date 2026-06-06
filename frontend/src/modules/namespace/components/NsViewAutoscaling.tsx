@@ -343,7 +343,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
 
     const selectRows = useCallback(
       (payload: NamespaceAutoscalingSnapshotPayload) =>
-        (payload.resources ?? []).map((item: NamespaceAutoscalingSummary) => {
+        (payload.rows ?? []).map((item: NamespaceAutoscalingSummary) => {
           const scaleTargetRef = parseAutoscalingTarget(item.target, item.targetApiVersion);
           return {
             kind: item.kind,

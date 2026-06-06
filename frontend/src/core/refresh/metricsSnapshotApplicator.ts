@@ -52,12 +52,12 @@ export function applyMetricsSnapshot<K extends RefreshDomain>({
     }
     const payload = snapshot.payload as PodSnapshotPayload;
     const incomingByKey = new Map(
-      payload.pods.map((pod) => [
+      payload.rows.map((pod) => [
         `${pod.clusterId ?? clusterId}::${pod.namespace}::${pod.name}`,
         pod,
       ])
     );
-    const existingPods = previous.data.pods ?? [];
+    const existingPods = previous.data.rows ?? [];
     const mappedPods = existingPods.map((existing) => {
       const key = `${existing.clusterId ?? clusterId}::${existing.namespace}::${existing.name}`;
       const incoming = incomingByKey.get(key);
@@ -101,7 +101,7 @@ export function applyMetricsSnapshot<K extends RefreshDomain>({
         ? previous.data
         : {
             ...previous.data,
-            pods: nextPods,
+            rows: nextPods,
             metrics: nextMetrics,
           };
     setScopedDomainState('pods', scope, (prev) => ({
@@ -132,18 +132,14 @@ export function applyMetricsSnapshot<K extends RefreshDomain>({
       return false;
     }
     const payload = snapshot.payload as NamespaceWorkloadSnapshotPayload;
-    const existingWorkloads = previous.data.workloads ?? [];
-    const nextWorkloads = mergeWorkloadMetricRows(
-      existingWorkloads,
-      payload.workloads ?? [],
-      clusterId
-    );
+    const existingWorkloads = previous.data.rows ?? [];
+    const nextWorkloads = mergeWorkloadMetricRows(existingWorkloads, payload.rows ?? [], clusterId);
     const nextPayload: NamespaceWorkloadSnapshotPayload =
       nextWorkloads === existingWorkloads
         ? previous.data
         : {
             ...previous.data,
-            workloads: nextWorkloads,
+            rows: nextWorkloads,
           };
     setScopedDomainState('namespace-workloads', scope, (prev) => ({
       ...prev,
@@ -174,9 +170,9 @@ export function applyMetricsSnapshot<K extends RefreshDomain>({
     }
     const payload = snapshot.payload as ClusterNodeSnapshotPayload;
     const incomingByKey = new Map(
-      payload.nodes.map((node) => [`${node.clusterId ?? clusterId}::${node.name}`, node])
+      payload.rows.map((node) => [`${node.clusterId ?? clusterId}::${node.name}`, node])
     );
-    const existingNodes = previous.data.nodes ?? [];
+    const existingNodes = previous.data.rows ?? [];
     const nextNodes = existingNodes.map((existing) => {
       const key = `${existing.clusterId ?? clusterId}::${existing.name}`;
       const incoming = incomingByKey.get(key);
@@ -192,7 +188,7 @@ export function applyMetricsSnapshot<K extends RefreshDomain>({
     });
     const nextPayload: ClusterNodeSnapshotPayload = {
       ...previous.data,
-      nodes: nextNodes,
+      rows: nextNodes,
       metrics: payload.metrics ?? previous.data.metrics,
       metricsByCluster: payload.metricsByCluster ?? previous.data.metricsByCluster,
     };

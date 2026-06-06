@@ -102,14 +102,14 @@ describe('EventStreamManager', () => {
 
     const state = getScopedDomainState('cluster-events', 'cluster');
     expect(state.status).toBe('ready');
-    expect(state.data?.events).toHaveLength(1);
-    expect(state.data?.events?.[0].message).toBe('Container started');
+    expect(state.data?.rows).toHaveLength(1);
+    expect(state.data?.rows?.[0].message).toBe('Container started');
     // Cluster metadata must be preserved so the cluster events view can filter correctly.
-    expect(state.data?.events?.[0].clusterId).toBe('cluster-a');
-    expect(state.data?.events?.[0].clusterName).toBe('alpha');
-    expect(state.data?.events?.[0].objectUid).toBe('pod-uid-1');
-    expect(state.data?.events?.[0].objectApiVersion).toBe('v1');
-    expect(state.data?.events?.[0].involvedObject).toEqual({
+    expect(state.data?.rows?.[0].clusterId).toBe('cluster-a');
+    expect(state.data?.rows?.[0].clusterName).toBe('alpha');
+    expect(state.data?.rows?.[0].objectUid).toBe('pod-uid-1');
+    expect(state.data?.rows?.[0].objectApiVersion).toBe('v1');
+    expect(state.data?.rows?.[0].involvedObject).toEqual({
       ref: {
         clusterId: 'cluster-a',
         group: '',
@@ -154,7 +154,7 @@ describe('EventStreamManager', () => {
     await flushTimers();
 
     const state = getScopedDomainState('cluster-events', 'cluster');
-    expect(state.data?.events?.[0].ageTimestamp).toBe(createdAt);
+    expect(state.data?.rows?.[0].ageTimestamp).toBe(createdAt);
   });
 
   test('reset payload replaces existing cluster events with the incoming snapshot', async () => {
@@ -220,7 +220,7 @@ describe('EventStreamManager', () => {
     await flushTimers();
 
     const state = getScopedDomainState('cluster-events', 'cluster');
-    expect(state.data?.events?.map((event) => event.name)).toEqual(['event-newer']);
+    expect(state.data?.rows?.map((event) => event.name)).toEqual(['event-newer']);
   });
 
   test('updates replace the existing row for the same event object name', async () => {
@@ -275,9 +275,9 @@ describe('EventStreamManager', () => {
     await flushTimers();
 
     const state = getScopedDomainState('cluster-events', 'cluster');
-    expect(state.data?.events).toHaveLength(1);
-    expect(state.data?.events?.[0].message).toBe('updated version');
-    expect(state.data?.events?.[0].ageTimestamp).toBe(updatedCreatedAt);
+    expect(state.data?.rows).toHaveLength(1);
+    expect(state.data?.rows?.[0].message).toBe('updated version');
+    expect(state.data?.rows?.[0].ageTimestamp).toBe(updatedCreatedAt);
   });
 
   test('orders event stream rows and dedupes by event UID before display identity', async () => {
@@ -349,13 +349,13 @@ describe('EventStreamManager', () => {
     await flushTimers();
 
     const state = getScopedDomainState('cluster-events', 'cluster-a|cluster');
-    expect(state.data?.events?.[0].clusterId).toBe('cluster-a');
-    expect(state.data?.events?.map((event) => event.uid)).toEqual(['event-uid-2', 'event-uid-1']);
-    expect(state.data?.events?.map((event) => event.message)).toEqual([
+    expect(state.data?.rows?.[0].clusterId).toBe('cluster-a');
+    expect(state.data?.rows?.map((event) => event.uid)).toEqual(['event-uid-2', 'event-uid-1']);
+    expect(state.data?.rows?.map((event) => event.message)).toEqual([
       'newer unrelated event',
       'updated event',
     ]);
-    expect(state.data?.events?.[1].resourceVersion).toBe('11');
+    expect(state.data?.rows?.[1].resourceVersion).toBe('11');
   });
 
   test('applyPayload updates namespace events state', async () => {
@@ -402,14 +402,14 @@ describe('EventStreamManager', () => {
 
     const state = getScopedDomainState('namespace-events', 'default');
     expect(state.status).toBe('ready');
-    expect(state.data?.events).toHaveLength(1);
-    expect(state.data?.events?.[0].reason).toBe('Backoff');
+    expect(state.data?.rows).toHaveLength(1);
+    expect(state.data?.rows?.[0].reason).toBe('Backoff');
     // Cluster metadata must be preserved so namespace events filter per-cluster selections.
-    expect(state.data?.events?.[0].clusterId).toBe('cluster-b');
-    expect(state.data?.events?.[0].objectUid).toBe('job-uid-1');
-    expect(state.data?.events?.[0].objectApiVersion).toBe('batch/v1');
-    expect(state.data?.events?.[0].clusterName).toBe('bravo');
-    expect(state.data?.events?.[0].involvedObject).toEqual({
+    expect(state.data?.rows?.[0].clusterId).toBe('cluster-b');
+    expect(state.data?.rows?.[0].objectUid).toBe('job-uid-1');
+    expect(state.data?.rows?.[0].objectApiVersion).toBe('batch/v1');
+    expect(state.data?.rows?.[0].clusterName).toBe('bravo');
+    expect(state.data?.rows?.[0].involvedObject).toEqual({
       ref: {
         clusterId: 'cluster-b',
         group: 'batch',
@@ -459,7 +459,7 @@ describe('EventStreamManager', () => {
     await vi.runOnlyPendingTimersAsync();
 
     const firstState = getScopedDomainState('namespace-events', 'namespace:default');
-    const firstEventsRef = firstState.data?.events;
+    const firstEventsRef = firstState.data?.rows;
     const firstRowRef = firstEventsRef?.[0];
 
     manager.applyPayload('namespace-events', 'namespace:default', {
@@ -489,8 +489,8 @@ describe('EventStreamManager', () => {
     await vi.runOnlyPendingTimersAsync();
 
     const secondState = getScopedDomainState('namespace-events', 'namespace:default');
-    expect(secondState.data?.events).toBe(firstEventsRef);
-    expect(secondState.data?.events?.[0]).toBe(firstRowRef);
+    expect(secondState.data?.rows).toBe(firstEventsRef);
+    expect(secondState.data?.rows?.[0]).toBe(firstRowRef);
   });
 
   test('reuses namespace event rows for an identical reconnect snapshot', async () => {
@@ -542,7 +542,7 @@ describe('EventStreamManager', () => {
     await vi.runOnlyPendingTimersAsync();
 
     const firstState = getScopedDomainState('namespace-events', 'namespace:default');
-    const firstEventsRef = firstState.data?.events;
+    const firstEventsRef = firstState.data?.rows;
     const firstRowRef = firstEventsRef?.[0];
 
     manager.applyPayload('namespace-events', 'namespace:default', {
@@ -574,8 +574,8 @@ describe('EventStreamManager', () => {
     await vi.runOnlyPendingTimersAsync();
 
     const secondState = getScopedDomainState('namespace-events', 'namespace:default');
-    expect(secondState.data?.events).toBe(firstEventsRef);
-    expect(secondState.data?.events?.[0]).toBe(firstRowRef);
+    expect(secondState.data?.rows).toBe(firstEventsRef);
+    expect(secondState.data?.rows?.[0]).toBe(firstRowRef);
   });
 
   test('applyPayload ignores empty updates when no reset or error', async () => {
@@ -695,7 +695,7 @@ describe('EventStreamManager', () => {
     expect(updateSpy).toHaveBeenCalledTimes(1);
 
     const state = getScopedDomainState('namespace-events', 'namespace:dev');
-    expect(state.data?.events?.[0].message).toBe('Updated');
+    expect(state.data?.rows?.[0].message).toBe('Updated');
 
     vi.useRealTimers();
   });

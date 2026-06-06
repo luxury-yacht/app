@@ -532,7 +532,7 @@ export class EventStreamManager {
       const generatedAt = Date.now();
       const payload: ClusterEventsSnapshotPayload = {
         clusterId,
-        events: this.clusterEvents,
+        rows: this.clusterEvents,
       };
       const stats = this.buildStats(
         this.clusterEvents.length,
@@ -559,7 +559,7 @@ export class EventStreamManager {
       const events = this.namespaceEvents.get(scope) ?? [];
       const payload: NamespaceEventsSnapshotPayload = {
         clusterId,
-        events,
+        rows: events,
       };
       const meta = this.namespaceEventMeta.get(scope) ?? { total: events.length, truncated: false };
       const stats = this.buildStats(events.length, meta.total, meta.truncated, 'events');
@@ -693,7 +693,7 @@ export class EventStreamManager {
     // rule; extract it from the active scope prefix.
     const payload: ClusterEventsSnapshotPayload = {
       clusterId: parseClusterScope(activeScope).clusterId,
-      events: this.clusterEvents,
+      rows: this.clusterEvents,
     };
     const stats = this.buildStats(this.clusterEvents.length, totalItems, truncated, 'events');
     setScopedDomainState(CLUSTER_DOMAIN, activeScope, (previous) => ({
@@ -726,7 +726,7 @@ export class EventStreamManager {
     // rule; extract it from the scope prefix.
     const payload: NamespaceEventsSnapshotPayload = {
       clusterId: parseClusterScope(scope).clusterId,
-      events,
+      rows: events,
     };
     const stats = this.buildStats(events.length, totalItems, truncated, 'events');
     setScopedDomainState(NAMESPACE_DOMAIN, scope, (previous) => ({

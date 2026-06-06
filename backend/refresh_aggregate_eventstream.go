@@ -497,8 +497,8 @@ func convertAggregateSnapshot(snap *refresh.Snapshot) []eventstream.Entry {
 	}
 	switch payload := snap.Payload.(type) {
 	case snapshot.ClusterEventsSnapshot:
-		entries := make([]eventstream.Entry, 0, len(payload.Events))
-		for _, evt := range payload.Events {
+		entries := make([]eventstream.Entry, 0, len(payload.Rows))
+		for _, evt := range payload.Rows {
 			entries = append(entries, eventstream.Entry{
 				ClusterID:        evt.ClusterID,
 				ClusterName:      evt.ClusterName,
@@ -522,8 +522,8 @@ func convertAggregateSnapshot(snap *refresh.Snapshot) []eventstream.Entry {
 		}
 		return entries
 	case snapshot.NamespaceEventsSnapshot:
-		entries := make([]eventstream.Entry, 0, len(payload.Events))
-		for _, evt := range payload.Events {
+		entries := make([]eventstream.Entry, 0, len(payload.Rows))
+		for _, evt := range payload.Rows {
 			entries = append(entries, eventstream.Entry{
 				ClusterID:        evt.ClusterID,
 				ClusterName:      evt.ClusterName,

@@ -472,7 +472,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       () => (activePodFilter ? { health: activePodFilter } : undefined),
       [activePodFilter]
     );
-    const selectPodRows = useCallback((payload: PodSnapshotPayload) => payload.pods ?? [], []);
+    const selectPodRows = useCallback((payload: PodSnapshotPayload) => payload.rows ?? [], []);
 
     const unhealthyCount = useMemo(() => data.filter((pod) => isPodUnhealthy(pod)).length, [data]);
 

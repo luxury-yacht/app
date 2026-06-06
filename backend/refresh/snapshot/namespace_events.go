@@ -27,15 +27,16 @@ type NamespaceEventsBuilder struct {
 // NamespaceEventsSnapshot payload for events tab.
 type NamespaceEventsSnapshot struct {
 	ClusterMeta
-	Events        []EventSummary           `json:"events"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total,omitempty"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	ResourceQueryEnvelope
+	Rows []EventSummary `json:"rows"`
+}
+
+func namespaceEventsQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "namespace", "type", "source", "reason", "object", "objectType", "objectName", "message", "age"},
+		[]string{"kinds", "namespaces"},
+		[]string{"kind", "name", "namespace", "type", "source", "reason", "object", "message"},
+	)
 }
 
 // EventSummary captures the essential event fields for display.
@@ -163,16 +164,22 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
 			Version: version,
 			Payload: NamespaceEventsSnapshot{
-				ClusterMeta:   meta,
-				Events:        page.Rows,
-				Kinds:         page.Kinds,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
-				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         namespaceEventsDomainName,
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact,
+					Kinds:         page.Kinds,
+					Namespaces:    page.Namespaces,
+					FacetsExact:   page.FacetsExact,
+					Completeness:  resourceQueryCompleteness(true),
+					Dynamic:       page.Dynamic,
+					Capabilities:  namespaceEventsQueryCapabilities(),
+				},
+				Rows: page.Rows,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}, nil
@@ -204,11 +211,18 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		Scope:   parsedScope.CanonicalScope,
 		Version: version,
 		Payload: NamespaceEventsSnapshot{
-			ClusterMeta:  meta,
-			Events:       summaries,
-			Kinds:        snapshotSortedKinds(summaries, func(event EventSummary) string { return event.Kind }),
-			Total:        originalCount,
-			TotalIsExact: originalCount == len(summaries),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        namespaceEventsDomainName,
+				Total:        originalCount,
+				TotalIsExact: originalCount == len(summaries),
+				Kinds:        snapshotSortedKinds(summaries, func(event EventSummary) string { return event.Kind }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(originalCount == len(summaries)),
+				Capabilities: namespaceEventsQueryCapabilities(),
+			},
+			Rows: summaries,
 		},
 		Stats: stats,
 	}, nil

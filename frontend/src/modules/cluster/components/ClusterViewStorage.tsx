@@ -264,7 +264,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     ]);
 
     const selectRows = useCallback(
-      (payload: ClusterStorageSnapshotPayload) => payload.volumes ?? [],
+      (payload: ClusterStorageSnapshotPayload) => payload.rows ?? [],
       []
     );
     const {

@@ -139,7 +139,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
     const selectRows = useCallback(
-      (payload: ClusterConfigSnapshotPayload) => payload.resources ?? [],
+      (payload: ClusterConfigSnapshotPayload) => payload.rows ?? [],
       []
     );
     const {

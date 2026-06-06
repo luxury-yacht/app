@@ -137,6 +137,8 @@ const refreshMocks = vi.hoisted(() => ({
   orchestrator: {
     setDomainEnabled: vi.fn(),
     setScopedDomainEnabled: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
   },
   useRefreshScopedDomain: vi.fn(),
@@ -269,6 +271,8 @@ describe('BrowseView', () => {
     gridTablePropsRef.current = null;
     refreshMocks.orchestrator.setDomainEnabled.mockReset();
     refreshMocks.orchestrator.setScopedDomainEnabled.mockReset();
+    refreshMocks.orchestrator.acquireScopedDomainLease.mockReset();
+    refreshMocks.orchestrator.releaseScopedDomainLease.mockReset();
     refreshMocks.orchestrator.fetchScopedDomain.mockReset().mockResolvedValue(undefined);
     refreshMocks.manager.disable.mockReset();
     refreshMocks.useRefreshScopedDomain.mockReset();
@@ -343,10 +347,10 @@ describe('BrowseView', () => {
         await Promise.resolve();
       });
 
-      expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      expect(refreshMocks.orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
         'catalog',
         'cluster-1|limit=50&namespace=cluster',
-        true
+        undefined
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
         'catalog',
@@ -494,10 +498,10 @@ describe('BrowseView', () => {
       });
 
       // The scope should include the pinned namespace
-      expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      expect(refreshMocks.orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
         'catalog',
         'cluster-1|limit=50&namespace=kube-system',
-        true
+        undefined
       );
     });
 

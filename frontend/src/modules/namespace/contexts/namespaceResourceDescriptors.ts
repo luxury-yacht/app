@@ -44,57 +44,55 @@ export const namespaceResourceDescriptors = {
     resourceKey: 'config',
     domain: 'namespace-config',
     fallback: [],
-    select: (payload, clusterId) => filterRowsForCluster(payload?.resources, clusterId),
+    select: (payload, clusterId) => filterRowsForCluster(payload?.rows, clusterId),
     meta: resourceKindsMeta,
   },
   network: {
     resourceKey: 'network',
     domain: 'namespace-network',
     fallback: [],
-    select: (payload, clusterId) => filterRowsForCluster(payload?.resources, clusterId),
+    select: (payload, clusterId) => filterRowsForCluster(payload?.rows, clusterId),
     meta: resourceKindsMeta,
   },
   rbac: {
     resourceKey: 'rbac',
     domain: 'namespace-rbac',
     fallback: [],
-    select: (payload, clusterId) => filterRowsForCluster(payload?.resources, clusterId),
+    select: (payload, clusterId) => filterRowsForCluster(payload?.rows, clusterId),
     meta: resourceKindsMeta,
   },
   storage: {
     resourceKey: 'storage',
     domain: 'namespace-storage',
     fallback: [],
-    select: (payload, clusterId) => filterRowsForCluster(payload?.resources, clusterId),
+    select: (payload, clusterId) => filterRowsForCluster(payload?.rows, clusterId),
   },
   autoscaling: {
     resourceKey: 'autoscaling',
     domain: 'namespace-autoscaling',
     fallback: [],
     select: (payload: NamespaceAutoscalingSnapshotPayload | undefined, clusterId) =>
-      filterRowsForCluster(payload?.resources, clusterId).map(
-        (item: NamespaceAutoscalingSummary) => {
-          const scaleTargetRef = parseAutoscalingTarget(item.target, item.targetApiVersion);
-          return {
-            kind: item.kind,
-            kindAlias: item.kind,
-            name: item.name,
-            namespace: item.namespace,
-            clusterId: item.clusterId,
-            clusterName: item.clusterName,
-            scaleTargetRef,
-            target: item.target,
-            min: item.min,
-            max: item.max,
-            current: item.current,
-            minReplicas: item.min,
-            maxReplicas: item.max,
-            currentReplicas: item.current,
-            age: item.age,
-            ageTimestamp: item.ageTimestamp,
-          };
-        }
-      ),
+      filterRowsForCluster(payload?.rows, clusterId).map((item: NamespaceAutoscalingSummary) => {
+        const scaleTargetRef = parseAutoscalingTarget(item.target, item.targetApiVersion);
+        return {
+          kind: item.kind,
+          kindAlias: item.kind,
+          name: item.name,
+          namespace: item.namespace,
+          clusterId: item.clusterId,
+          clusterName: item.clusterName,
+          scaleTargetRef,
+          target: item.target,
+          min: item.min,
+          max: item.max,
+          current: item.current,
+          minReplicas: item.min,
+          maxReplicas: item.max,
+          currentReplicas: item.current,
+          age: item.age,
+          ageTimestamp: item.ageTimestamp,
+        };
+      }),
     meta: resourceKindsMeta,
     rowIdentity: namespacedKindRowIdentity,
   },
@@ -102,14 +100,14 @@ export const namespaceResourceDescriptors = {
     resourceKey: 'quotas',
     domain: 'namespace-quotas',
     fallback: [],
-    select: (payload, clusterId) => filterRowsForCluster(payload?.resources, clusterId),
+    select: (payload, clusterId) => filterRowsForCluster(payload?.rows, clusterId),
     meta: resourceKindsMeta,
   },
   events: {
     resourceKey: 'events',
     domain: 'namespace-events',
     fallback: [],
-    select: (payload, clusterId) => filterRowsForCluster(payload?.events, clusterId),
+    select: (payload, clusterId) => filterRowsForCluster(payload?.rows, clusterId),
     rowIdentity: namespaceEventResourceRowIdentity,
   },
   helm: {
@@ -117,7 +115,7 @@ export const namespaceResourceDescriptors = {
     domain: 'namespace-helm',
     fallback: [],
     select: (payload: NamespaceHelmSnapshotPayload | undefined, clusterId) =>
-      filterRowsForCluster(payload?.releases, clusterId).map((release: NamespaceHelmSummary) => ({
+      filterRowsForCluster(payload?.rows, clusterId).map((release: NamespaceHelmSummary) => ({
         kind: 'HelmRelease',
         name: release.name,
         namespace: release.namespace,

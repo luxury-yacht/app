@@ -152,7 +152,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     const localTableMode = localTableModeForStats(stats);
 
     const selectRows = useCallback(
-      (payload: NamespaceConfigSnapshotPayload) => payload.resources ?? [],
+      (payload: NamespaceConfigSnapshotPayload) => payload.rows ?? [],
       []
     );
     const {

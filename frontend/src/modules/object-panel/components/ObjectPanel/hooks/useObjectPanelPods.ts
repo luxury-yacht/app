@@ -123,7 +123,7 @@ export function useObjectPanelPods({
   }, [podsScope?.scope, refreshScope, shouldEnable]);
 
   const payload = snapshot.data;
-  const pods = (payload?.pods ?? []) as PodSnapshotEntry[];
+  const pods = (payload?.rows ?? []) as PodSnapshotEntry[];
   const metrics = payload?.metrics ?? null;
 
   const initialising =

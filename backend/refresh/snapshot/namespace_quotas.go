@@ -40,16 +40,16 @@ type NamespaceQuotasBuilder struct {
 // NamespaceQuotasSnapshot payload for quotas tab.
 type NamespaceQuotasSnapshot struct {
 	ClusterMeta
-	Resources     []QuotaSummary           `json:"resources"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total,omitempty"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Issues        []ResourceQueryIssue     `json:"issues,omitempty"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	ResourceQueryEnvelope
+	Rows []QuotaSummary `json:"rows"`
+}
+
+func namespaceQuotasQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "namespace", "details", "age"},
+		[]string{"kinds", "namespaces"},
+		[]string{"kind", "name", "namespace", "details"},
+	)
 }
 
 // QuotaSummary captures quota/limit range/PDB info.
@@ -229,17 +229,23 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 			Scope:   namespace,
 			Version: version,
 			Payload: NamespaceQuotasSnapshot{
-				ClusterMeta:   meta,
-				Resources:     page.Rows,
-				Kinds:         page.Kinds,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact && exact,
-				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact && exact,
-				Issues:        issues,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         namespaceQuotasDomainName,
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact && exact,
+					Kinds:         page.Kinds,
+					Namespaces:    page.Namespaces,
+					FacetsExact:   page.FacetsExact && exact,
+					Completeness:  resourceQueryCompleteness(exact),
+					Issues:        issues,
+					Dynamic:       page.Dynamic,
+					Capabilities:  namespaceQuotasQueryCapabilities(),
+				},
+				Rows: page.Rows,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}, nil
@@ -253,11 +259,18 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		Scope:   namespace,
 		Version: version,
 		Payload: NamespaceQuotasSnapshot{
-			ClusterMeta:  meta,
-			Resources:    resources,
-			Kinds:        snapshotSortedKinds(resources, func(resource QuotaSummary) string { return resource.Kind }),
-			Total:        totalItems,
-			TotalIsExact: totalItems == len(resources),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        namespaceQuotasDomainName,
+				Total:        totalItems,
+				TotalIsExact: totalItems == len(resources),
+				Kinds:        snapshotSortedKinds(resources, func(resource QuotaSummary) string { return resource.Kind }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(totalItems == len(resources)),
+				Capabilities: namespaceQuotasQueryCapabilities(),
+			},
+			Rows: resources,
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "quota resources"),
 	}, nil

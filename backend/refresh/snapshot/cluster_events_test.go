@@ -89,11 +89,11 @@ func TestClusterEventsBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(ClusterEventsSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Events, 2)
+	require.Len(t, payload.Rows, 2)
 
 	// Events should be sorted newest first
-	first := payload.Events[0]
-	second := payload.Events[1]
+	first := payload.Rows[0]
+	second := payload.Rows[1]
 	require.Equal(t, "event-new", first.Name)
 	require.Equal(t, "Normal", first.Type)
 	require.Equal(t, "scheduler", first.Source)
@@ -155,7 +155,7 @@ func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(ClusterEventsSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Events, 2)
-	require.Equal(t, "event-high-rv", payload.Events[0].Name)
-	require.Equal(t, "event-low-rv", payload.Events[1].Name)
+	require.Len(t, payload.Rows, 2)
+	require.Equal(t, "event-high-rv", payload.Rows[0].Name)
+	require.Equal(t, "event-low-rv", payload.Rows[1].Name)
 }

@@ -202,11 +202,11 @@ const useNamespacePodsResource = (
   }, [resetPodsDomain, scope]);
 
   const data = useMemo<PodSnapshotEntry[]>(() => {
-    if (!domainState?.data?.pods) {
+    if (!domainState?.data?.rows) {
       return [];
     }
-    return domainState.data.pods;
-  }, [domainState?.data?.pods]);
+    return domainState.data.rows;
+  }, [domainState?.data?.rows]);
   const stableData = useStableKeyedArray(
     data,
     (pod) => `${pod.clusterId ?? clusterId ?? ''}::${pod.namespace}::${pod.name}`

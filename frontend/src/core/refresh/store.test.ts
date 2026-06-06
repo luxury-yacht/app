@@ -39,7 +39,7 @@ describe('refresh store helpers', () => {
     setDomainState('cluster-config', (previous) => ({
       ...previous,
       status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
     }));
 
     expect(listener).toHaveBeenCalled();
@@ -47,7 +47,7 @@ describe('refresh store helpers', () => {
 
     const state = getDomainState('cluster-config');
     expect(state.status).toBe('ready');
-    expect(state.data).toEqual({ resources: [], clusterId: 'test-cluster' });
+    expect(state.data).toEqual({ rows: [], clusterId: 'test-cluster' });
   });
 
   it('skips notifications when domain state updater returns the existing reference', () => {
@@ -66,13 +66,13 @@ describe('refresh store helpers', () => {
       ...previous,
       status: 'ready',
       scope: 'team-a',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
     }));
 
     const scopedState = getScopedDomainState('namespace-config', 'team-a');
     expect(scopedState.status).toBe('ready');
     expect(scopedState.scope).toBe('team-a');
-    expect(scopedState.data).toEqual({ resources: [], clusterId: 'test-cluster' });
+    expect(scopedState.data).toEqual({ rows: [], clusterId: 'test-cluster' });
 
     resetScopedDomainState('namespace-config', 'team-a');
     const resetState = getScopedDomainState('namespace-config', 'team-a');
@@ -85,13 +85,13 @@ describe('refresh store helpers', () => {
       ...previous,
       status: 'ready',
       scope: 'team-a',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
     }));
     setScopedDomainState('namespace-config', 'team-b', (previous) => ({
       ...previous,
       status: 'ready',
       scope: 'team-b',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
     }));
 
     const listener = vi.fn();
@@ -130,7 +130,7 @@ describe('refresh store helpers', () => {
       ...previous,
       status: 'ready',
       scope: 'team-a',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
     }));
 
     const entries = getScopedDomainEntries('namespace-config');
@@ -145,13 +145,13 @@ describe('refresh store helpers', () => {
       ...previous,
       status: 'ready',
       scope: 'team-a',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
     }));
     setScopedDomainState('namespace-config', 'team-b', (previous) => ({
       ...previous,
       status: 'ready',
       scope: 'team-b',
-      data: { resources: [], clusterId: 'test-cluster' },
+      data: { rows: [], clusterId: 'test-cluster' },
     }));
 
     resetAllScopedDomainStates('namespace-config');

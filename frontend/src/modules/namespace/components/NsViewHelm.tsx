@@ -303,7 +303,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
 
     const selectRows = useCallback(
       (payload: NamespaceHelmSnapshotPayload) =>
-        (payload.releases ?? []).map((release: NamespaceHelmSummary) => ({
+        (payload.rows ?? []).map((release: NamespaceHelmSummary) => ({
           kind: 'HelmRelease',
           name: release.name,
           namespace: release.namespace,

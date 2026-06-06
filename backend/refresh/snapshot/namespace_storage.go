@@ -29,15 +29,16 @@ type NamespaceStorageBuilder struct {
 // NamespaceStorageSnapshot payload for storage tab.
 type NamespaceStorageSnapshot struct {
 	ClusterMeta
-	Resources     []StorageSummary         `json:"resources"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total,omitempty"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	ResourceQueryEnvelope
+	Rows []StorageSummary `json:"rows"`
+}
+
+func namespaceStorageQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "namespace", "capacity", "status", "storageClass", "age"},
+		[]string{"kinds", "namespaces"},
+		[]string{"kind", "name", "namespace", "capacity", "status", "storageClass"},
+	)
 }
 
 // StorageSummary captures PVC info for UI consumption.
@@ -137,16 +138,22 @@ func (b *NamespaceStorageBuilder) buildSnapshot(
 			Scope:   namespace,
 			Version: version,
 			Payload: NamespaceStorageSnapshot{
-				ClusterMeta:   meta,
-				Resources:     page.Rows,
-				Kinds:         page.Kinds,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
-				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         namespaceStorageDomainName,
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact,
+					Kinds:         page.Kinds,
+					Namespaces:    page.Namespaces,
+					FacetsExact:   page.FacetsExact,
+					Completeness:  resourceQueryCompleteness(true),
+					Dynamic:       page.Dynamic,
+					Capabilities:  namespaceStorageQueryCapabilities(),
+				},
+				Rows: page.Rows,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}, nil
@@ -160,11 +167,18 @@ func (b *NamespaceStorageBuilder) buildSnapshot(
 		Scope:   namespace,
 		Version: version,
 		Payload: NamespaceStorageSnapshot{
-			ClusterMeta:  meta,
-			Resources:    resources,
-			Kinds:        snapshotSortedKinds(resources, func(resource StorageSummary) string { return resource.Kind }),
-			Total:        totalItems,
-			TotalIsExact: totalItems == len(resources),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        namespaceStorageDomainName,
+				Total:        totalItems,
+				TotalIsExact: totalItems == len(resources),
+				Kinds:        snapshotSortedKinds(resources, func(resource StorageSummary) string { return resource.Kind }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(totalItems == len(resources)),
+				Capabilities: namespaceStorageQueryCapabilities(),
+			},
+			Rows: resources,
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "storage resources"),
 	}, nil

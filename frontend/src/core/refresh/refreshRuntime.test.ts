@@ -163,4 +163,47 @@ describe('ClusterRefreshRuntime', () => {
     expect(runtime.isStreamingBlocked('cluster-config', 'cluster-a|')).toBe(false);
     expect(runtime.getEnabledScopes('cluster-config')).toEqual(['cluster-a|']);
   });
+
+  it('reference-counts scoped leases so concurrent holders share one enable', () => {
+    const runtime = new ClusterRefreshRuntime('cluster-a');
+
+    expect(runtime.hasScopedLease('nodes', 'cluster-a|')).toBe(false);
+    expect(runtime.getScopedLeaseCount('nodes', 'cluster-a|')).toBe(0);
+
+    // Old table instance acquires the first lease.
+    expect(runtime.acquireScopedLease('nodes', 'cluster-a|')).toEqual({
+      count: 1,
+      firstLease: true,
+    });
+    // New instance mounts before the old one unmounts: shares the lease.
+    expect(runtime.acquireScopedLease('nodes', 'cluster-a|')).toEqual({
+      count: 2,
+      firstLease: false,
+    });
+    expect(runtime.hasScopedLease('nodes', 'cluster-a|')).toBe(true);
+
+    // Old instance unmounts: a holder remains, so this is not the last lease.
+    expect(runtime.releaseScopedLease('nodes', 'cluster-a|')).toEqual({
+      count: 1,
+      lastLease: false,
+      hadLease: true,
+    });
+    expect(runtime.hasScopedLease('nodes', 'cluster-a|')).toBe(true);
+
+    // New instance unmounts: the final lease is gone.
+    expect(runtime.releaseScopedLease('nodes', 'cluster-a|')).toEqual({
+      count: 0,
+      lastLease: true,
+      hadLease: true,
+    });
+    expect(runtime.hasScopedLease('nodes', 'cluster-a|')).toBe(false);
+
+    // Over-release is a no-op and never produces a negative count.
+    expect(runtime.releaseScopedLease('nodes', 'cluster-a|')).toEqual({
+      count: 0,
+      lastLease: false,
+      hadLease: false,
+    });
+    expect(runtime.getScopedLeaseCount('nodes', 'cluster-a|')).toBe(0);
+  });
 });

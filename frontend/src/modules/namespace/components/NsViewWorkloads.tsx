@@ -181,7 +181,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Workloads' : 'Namespace Workloads';
     const localTableMode = localTableModeForStats(stats);
     const selectWorkloadRows = useCallback(
-      (payload: NamespaceWorkloadSnapshotPayload) => payload.workloads ?? [],
+      (payload: NamespaceWorkloadSnapshotPayload) => payload.rows ?? [],
       []
     );
 

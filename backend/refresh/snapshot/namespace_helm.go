@@ -30,15 +30,16 @@ type HelmActionFactory func(namespace string) (*action.Configuration, error)
 // NamespaceHelmSnapshot payload returned to the frontend.
 type NamespaceHelmSnapshot struct {
 	ClusterMeta
-	Releases      []NamespaceHelmSummary   `json:"releases"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total,omitempty"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	ResourceQueryEnvelope
+	Rows []NamespaceHelmSummary `json:"rows"`
+}
+
+func namespaceHelmQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "namespace", "chart", "appVersion", "status", "revision", "updated", "age"},
+		[]string{"kinds", "namespaces"},
+		[]string{"name", "namespace", "chart", "appVersion", "status", "description"},
+	)
 }
 
 // NamespaceHelmSummary captures the fields required by the Helm table.
@@ -126,16 +127,22 @@ func (b *NamespaceHelmBuilder) buildSingleNamespace(snapshotScope string, meta C
 			Scope:   snapshotScope,
 			Version: version,
 			Payload: NamespaceHelmSnapshot{
-				ClusterMeta:   meta,
-				Releases:      page.Rows,
-				Kinds:         page.Kinds,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
-				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         namespaceHelmDomainName,
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact,
+					Kinds:         page.Kinds,
+					Namespaces:    page.Namespaces,
+					FacetsExact:   page.FacetsExact,
+					Completeness:  resourceQueryCompleteness(true),
+					Dynamic:       page.Dynamic,
+					Capabilities:  namespaceHelmQueryCapabilities(),
+				},
+				Rows: page.Rows,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}, nil
@@ -149,11 +156,18 @@ func (b *NamespaceHelmBuilder) buildSingleNamespace(snapshotScope string, meta C
 		Scope:   snapshotScope,
 		Version: version,
 		Payload: NamespaceHelmSnapshot{
-			ClusterMeta:  meta,
-			Releases:     summaries,
-			Kinds:        snapshotSortedKinds(summaries, func(NamespaceHelmSummary) string { return "HelmRelease" }),
-			Total:        totalItems,
-			TotalIsExact: totalItems == len(summaries),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        namespaceHelmDomainName,
+				Total:        totalItems,
+				TotalIsExact: totalItems == len(summaries),
+				Kinds:        snapshotSortedKinds(summaries, func(NamespaceHelmSummary) string { return "HelmRelease" }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(totalItems == len(summaries)),
+				Capabilities: namespaceHelmQueryCapabilities(),
+			},
+			Rows: summaries,
 		},
 		Stats: snapshotWindowStats(len(summaries), totalItems, "Helm releases"),
 	}, nil
@@ -180,7 +194,7 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(
 			Domain:  namespaceHelmDomainName,
 			Scope:   snapshotScope,
 			Version: 0,
-			Payload: NamespaceHelmSnapshot{ClusterMeta: meta, Releases: []NamespaceHelmSummary{}, Kinds: []string{}, TotalIsExact: true, FacetsExact: true},
+			Payload: NamespaceHelmSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: ResourceQueryEnvelope{Provider: ResourceQueryProviderTypedResource, Table: namespaceHelmDomainName, Kinds: []string{}, TotalIsExact: true, FacetsExact: true, Completeness: resourceQueryCompleteness(true), Capabilities: namespaceHelmQueryCapabilities()}, Rows: []NamespaceHelmSummary{}},
 			Stats: refresh.SnapshotStats{
 				ItemCount: 0,
 			},
@@ -260,16 +274,22 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(
 			Scope:   snapshotScope,
 			Version: version,
 			Payload: NamespaceHelmSnapshot{
-				ClusterMeta:   meta,
-				Releases:      page.Rows,
-				Kinds:         page.Kinds,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
-				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         namespaceHelmDomainName,
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact,
+					Kinds:         page.Kinds,
+					Namespaces:    page.Namespaces,
+					FacetsExact:   page.FacetsExact,
+					Completeness:  resourceQueryCompleteness(true),
+					Dynamic:       page.Dynamic,
+					Capabilities:  namespaceHelmQueryCapabilities(),
+				},
+				Rows: page.Rows,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}, nil
@@ -283,11 +303,18 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(
 		Scope:   snapshotScope,
 		Version: version,
 		Payload: NamespaceHelmSnapshot{
-			ClusterMeta:  meta,
-			Releases:     summaries,
-			Kinds:        snapshotSortedKinds(summaries, func(NamespaceHelmSummary) string { return "HelmRelease" }),
-			Total:        totalItems,
-			TotalIsExact: totalItems == len(summaries),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        namespaceHelmDomainName,
+				Total:        totalItems,
+				TotalIsExact: totalItems == len(summaries),
+				Kinds:        snapshotSortedKinds(summaries, func(NamespaceHelmSummary) string { return "HelmRelease" }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(totalItems == len(summaries)),
+				Capabilities: namespaceHelmQueryCapabilities(),
+			},
+			Rows: summaries,
 		},
 		Stats: snapshotWindowStats(len(summaries), totalItems, "Helm releases"),
 	}, nil

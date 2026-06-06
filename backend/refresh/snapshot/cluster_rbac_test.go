@@ -55,11 +55,11 @@ func TestClusterRBACBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(ClusterRBACSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 2)
+	require.Len(t, payload.Rows, 2)
 	require.Equal(t, []string{"ClusterRole", "ClusterRoleBinding"}, payload.Kinds)
 
 	entries := map[string]ClusterRBACEntry{}
-	for _, entry := range payload.Resources {
+	for _, entry := range payload.Rows {
 		entries[entry.Kind+"-"+entry.Name] = entry
 		require.NotEmpty(t, entry.Age)
 	}
@@ -85,7 +85,7 @@ func TestClusterRBACBuilderEmpty(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(ClusterRBACSnapshot)
 	require.True(t, ok)
-	require.Empty(t, payload.Resources)
+	require.Empty(t, payload.Rows)
 	require.Empty(t, payload.Kinds)
 }
 
@@ -107,7 +107,7 @@ func TestClusterRBACBuilderCapsLargeSnapshots(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
 	payload := snapshot.Payload.(ClusterRBACSnapshot)
-	require.Len(t, payload.Resources, config.SnapshotClusterRBACEntryLimit)
+	require.Len(t, payload.Rows, config.SnapshotClusterRBACEntryLimit)
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotClusterRBACEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "cluster RBAC resources")

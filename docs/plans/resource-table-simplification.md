@@ -289,7 +289,7 @@ Keep this scoreboard current as phases land.
 | Backend query result envelopes for query-backed tables    | 17                        | 1                  | 17                         |
 | Backend query providers                                   | 2 implicit / 0 formalized | 2 formalized       | 2 implicit / 0 formalized  |
 | Migrated views with view-local display decisions          | 19                        | 0                  | 19                         |
-| Owner-safe backend query lifecycle tests                  | 0                         | 3+                 | 0                          |
+| Owner-safe backend query lifecycle tests                  | 0                         | 3+                 | 4                          |
 | Static enforcement for new controller boundary            | 0                         | 1                  | 0                          |
 
 Definitions:
@@ -584,36 +584,69 @@ classified non-resource-inventory exception:
 
 ### Phase 0: Lock The Evidence
 
-- [ ] Add a failing regression test for the current Nodes remount behavior:
-      render Nodes with rows, switch away, remount the same query-backed view,
-      complete any stale old request after the new mount, and assert the
-      "No nodes found" empty state is never shown while the new source is not
-      settled empty.
-- [ ] Add the same lifecycle regression shape for at least one other
-      query-backed typed table, preferably all-namespaces Pods or Workloads, so
-      the fix is not Nodes-specific.
-- [ ] Trace and document the typed query producer/consumer ordering in the
-      test file or plan notes: backend request, refresh runtime scope
-      enablement, hook cleanup, source rows, controller render state, empty
-      renderer.
-- [ ] Implement the lifecycle decision in the test design before Phase 1 work
-      starts: source-owned request tokens plus ref-counted refresh-runtime
-      scoped leases, with abort signals used only for request cancellation.
-- [ ] Prove that old query cleanup cannot disable, reset, or publish settlement
-      into a new owner of the same domain/scope/query identity, and prove this
-      does not create a view/source/token circular dependency.
-- [ ] Mark the existing `retainLocalRowsForEmptyQuery` behavior as temporary
-      and remove it once the source lifecycle contract replaces it.
-- [ ] If `retainLocalRowsForEmptyQuery` remains while tests are added, assert
-      that any retained local rows match the current query `clusterId`; the flag
-      must not mask a real same-cluster settled empty result.
-- [ ] Inventory backend resource inventory providers, result payload structs,
-      query scopes, export paths, stream/domain consumers, and persistence keys.
-- [ ] Classify every remaining local resource inventory table as
-      producer-proven bounded or requiring backend query migration. Record the
-      bound source for single-namespace and owner/object-scoped tables.
-- [ ] Fill in the scoreboard current values after the backend inventory, and
-      keep it updated as phases land.
+- [x] Add a deterministic regression for the remount false-empty class.
+      Implemented at the lifecycle layer (no visual timing): `orchestrator.test`
+      `keeps a leased scope enabled across an old instance unmount (remount
+      race)` proves an old instance's release cannot disable a scope a newer
+      instance still leases; `refreshRuntime.test`
+      `reference-counts scoped leases...` proves the counting; the existing
+      `ClusterViewNodes.test` `keeps local node rows visible when a remount
+      query temporarily returns empty` keeps the view-level retention path.
+- [x] Cover a second query-backed typed table at the lifecycle layer: the
+      orchestrator remount-race and `ignores a direct disable while a lease is
+      held` tests both use the `pods` (all-namespaces) domain, so the fix is not
+      Nodes-specific.
+- [x] Trace and document the typed query producer/consumer ordering: backend
+      request via `requestRefreshDomainState` (query scope, `preserveState:false`,
+      `cleanup:true`) → refresh runtime scope enablement (now lease-counted) →
+      `useScopedRefreshDomainLifecycle` lease acquire/release → `useTypedResourceQuery`
+      per-instance rows (guarded by `cancelled` + `queryIdentityRef`) → table
+      loading/loaded/empty derivation → `GridTableBody`. Root cause: last-writer-wins
+      `scopedEnabledState` let an old unmount disable the `liveScope` a newer
+      mount owned, starving the typed query of warm backend data.
+- [x] Implement the lifecycle decision: ref-counted refresh-runtime scoped
+      leases (`refreshRuntime` `acquire/releaseScopedLease`, orchestrator
+      `acquire/releaseScopedDomainLease`, data-access `acquire/releaseRefreshDomainLease`,
+      `useScopedRefreshDomainLifecycle` now leases). Source-owned request
+      identity already exists in `useTypedResourceQuery`; abort/`cancelled` is
+      used only for request cancellation, not ownership.
+- [x] Prove that old query cleanup cannot disable, reset, or publish settlement
+      into a new owner, and that there is no view/source/token cycle: a direct
+      disable is suppressed while any lease is held (`orchestrator.test`); the
+      lease/token lives below views in the runtime/data-access layer, so views
+      never create or interpret tokens.
+- [x] Mark the existing `retainLocalRowsForEmptyQuery` behavior as temporary.
+      It stays until Phase 3 — the lease fixes the **concurrent** remount race,
+      but a **cold sequential** remount can still settle empty before rows
+      arrive, which needs the controller settlement layer.
+- [x] Guard `retainLocalRowsForEmptyQuery` against cross-cluster staleness:
+      retained rows must match the current `clusterId`
+      (`useQueryBackedResourceGridTable.test` covers it).
+- [x] Backend inventory: 17 typed payload structs carry table-query metadata;
+      15 call `applyTypedTableQuery` (Namespace Workloads + Catalog have their
+      own execution paths). Typed-resource contract:
+      `ResourceQueryRequest`/`ResourceQueryResult`/`ResourceQueryRow`/`...Facets`/
+      `...Issue`/`...DynamicRef` in
+      `backend/refresh/snapshot/resource_query_contract.go`. Catalog contract:
+      `objectcatalog.QueryOptions`/`QueryResult` (`backend/objectcatalog/query.go`)
+      surfaced via `CatalogSnapshot` (`catalog.go`) + `HydrateCatalogCustomRows`
+      (`app_object_catalog.go`). Query-wide CSV export is catalog-only
+      (`ExportCatalogSelectionCSVFile` → `objectcatalog.WriteQueryCSV`, keyed by
+      `QuerySelectionDescriptor`); typed tables have per-row actions / visible-row
+      CSV only. `customOnly` gates catalog custom-only filtering. No formal
+      `provider` type exists yet (implicit: `applyTypedTableQuery` vs
+      `objectcatalog.Query`).
+- [x] Table classification (target adapter):
+      `backendQuerySource`/typed-resource — cluster Nodes, Config, Storage, RBAC,
+      CRDs, Events; all-namespaces Pods, Workloads, Config, Network, Storage,
+      RBAC, Quotas, Autoscaling, Helm, Events. `backendQuerySource`/catalog —
+      Browse, cluster Custom, namespace Custom. `boundedRowsSource` —
+      single-namespace Pods/Workloads (Local Complete) and single-namespace
+      bounded resource views (Local Complete/Partial by producer stats), plus
+      object-panel related Pods/Jobs (owner-scoped). Direct non-resource
+      exceptions stay classified: object-panel events, parsed logs.
+- [x] Fill in the scoreboard lifecycle-test row; remaining counts await the
+      backend inventory and per-phase migration.
 
 Acceptance:
 
@@ -627,8 +660,89 @@ Acceptance:
 
 ### Phase 1: Establish The Normalized Backend Query Contract
 
-- [ ] Define the normalized backend query request and result DTOs for
-      `backendQuerySource` resource inventory tables.
+Decision (2026-06-06): **B1 — real backend canonical envelope.** Wails v2.12's
+TS generator does not support Go generics, so the envelope is a concrete
+embedded struct `ResourceQueryEnvelope` (in `resource_query_contract.go`). Each
+per-domain result embeds it and adds a typed `Rows []DomainRow`; Go JSON
+inlining flattens the envelope to top-level keys, so the frontend sees one
+uniform shape plus provider-owned rows ("one envelope, not one row DTO").
+
+The envelope uses **flat** facet fields (`kinds/namespaces/statuses/nodes/
+facetsExact`) to match the existing typed payload wire, so the frontend reads
+metadata unchanged and only the row field is renamed.
+
+Per-domain migration recipe (proven on cluster-storage; mechanical for the rest):
+1. Backend struct: embed `ResourceQueryEnvelope`, rename rows field to `Rows`
+   (`json:"rows"`), drop its own `Continue/CursorInvalid/Total/TotalIsExact/
+   Kinds/Namespaces/FacetsExact/Dynamic` (now from the envelope).
+2. Builder (both query and truncated-window paths): populate `Provider`,
+   `Table`, `Completeness` (`resourceQueryCompleteness(...)`), `Capabilities`
+   (`newTypedResourceCapabilities(sortable, filterable, searchable)` matching the
+   domain's `typedTableQueryAdapter`).
+3. Update Go consumers/tests of the old row field (e.g. `cluster_domains_test.go`,
+   `parity_test.go`).
+4. Frontend payload interface: `extends ClusterMeta, ResourceQueryEnvelopeFields`
+   with `rows: DomainEntry[]` (in `core/refresh/types.ts`).
+5. Frontend row-field consumers (all renamed `<oldField>` → `rows`):
+   `core/refresh/streaming/resourceStreamDomains.ts` (getRows/withRows/
+   emptyPayload), the context selector (`clusterResourceDescriptors.ts` /
+   namespace equivalent), `DiagnosticsPanel.tsx` case, the view `selectRows`,
+   and test fixtures (`resourceStreamManager.test`, `resourceStreamDomains.test`,
+   `queryBackedLeafFirstLoad.test`).
+6. Regenerate Wails bindings only if a generated `wailsjs` type is imported
+   directly (refresh/table path uses the hand-mirror, so usually not needed).
+
+Risk finding: nodes/pods/workloads payloads are shared between the table and the
+streaming/metrics path, so their migration also touches the metrics applicator
+(data-correctness-critical). Static families first, streaming-metrics domains
+last, validating after each.
+
+- [x] Define the normalized backend query request and result DTOs. Landed:
+      `ResourceQueryEnvelope` (flat facets), `ResourceQueryCapabilities`,
+      `ResourceQueryProvider`/`Scope`/`Completeness`, `Provider`/`Scope` on
+      `ResourceQueryRequest`, helpers `newTypedResourceCapabilities` /
+      `resourceQueryCompleteness`, and conformance tests (`resource_query_contract_test.go`).
+      Frontend mirror: `ResourceQueryEnvelopeFields` + `ResourceQueryCapabilities`
+      in `core/refresh/types.ts`.
+- [x] Cluster typed domains migrated end-to-end to the envelope + `rows`:
+      **Storage, Config, RBAC, CRDs, Events** (5/17). Backend + frontend + all
+      test fixtures green (`go test ./backend/refresh/snapshot ./backend/refresh/eventstream`,
+      full frontend suite 3073 passing, typecheck, gofmt, prettier). Per-domain
+      consumer set confirmed: backend struct/builder/capabilities + Go tests
+      (cluster_domains_test, cluster_events_test, parity_test, eventstream
+      handler); frontend payload interface, resourceStreamDomains collection,
+      clusterResourceDescriptors select, DiagnosticsPanel case, view selectRows,
+      and stream-manager/store/orchestrator/queryBackedLeafFirstLoad fixtures.
+      Caution: shared stream-test files exercise both cluster and namespace
+      scopes with identical accessor strings — edit cluster lines only.
+- [x] All namespace typed domains migrated end-to-end (13/17): Config, Network,
+      Storage, RBAC, Quotas, Autoscaling, Helm (5 payload sites incl. an empty
+      one-liner and two build paths), Events. Backend + frontend + every fixture
+      green (full frontend suite 3073, snapshot/eventstream Go tests, typecheck,
+      gofmt, prettier, eslint). Note: the resource-stream test files build both
+      the store payload (`data: {rows}`) AND a `fetchSnapshot` backend payload —
+      both move to `rows`; the SSE/stream message format is separate and
+      unchanged. namespace-custom + namespace-workloads stay (not migrated).
+- [x] Metrics-coupled domains migrated — **17/17 typed domains complete**: Nodes,
+      Pods, Workloads. These keep their domain-specific `metrics`/
+      `metricsByCluster` fields alongside the embedded envelope + `rows`, and the
+      consumer set additionally includes `metricsSnapshotApplicator` (all reads
+      now `.rows`). **Name-collision hazard, now resolved:** the envelope's
+      `Nodes []string` facet field shadows the old `Nodes` row field, so a stale
+      `payload.nodes` consumer silently rebinds to the (empty) facet instead of
+      failing to compile — `streaming_helpers.go`, `parity_test.go`, and the
+      `DiagnosticsPanel`/orchestrator-test node reads each needed a manual
+      `.nodes → .rows` sweep that typecheck/compile could NOT surface. Pods and
+      workloads have no such facet, so their stale reads compile-error cleanly.
+      Also: bulk line-scoped `\b(pods|nodes|workloads)\b → rows` perl must
+      exclude domain string literals (`getScopedDomainState('pods', …)`) and the
+      hyphenated `'namespace-workloads'` (the `\bworkloads\b` boundary matches
+      after the hyphen) — both were corrupted and restored.
+- [x] All 17 typed domains green together: backend (snapshot/eventstream/backend
+      Go tests), full frontend suite (3073), gofmt, prettier, eslint.
+- [ ] Remaining in Phase 1: the catalog provider (ResourceQueryProviderCatalog,
+      `items` field, QueryWideExport:true — distinct from the typed providers'
+      VisibleRowExport). Then the catalog provider.
 - [ ] Add typed-resource provider conformance tests for at least Nodes, Pods,
       Workloads, and one static family.
 - [ ] Add catalog provider conformance tests for Browse and Custom.

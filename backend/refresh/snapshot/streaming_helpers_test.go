@@ -166,11 +166,11 @@ func TestBuildWorkloadSummaryMatchesSnapshotHPAContext(t *testing.T) {
 	snap, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	payload := snap.Payload.(NamespaceWorkloadsSnapshot)
-	require.Len(t, payload.Workloads, 1)
+	require.Len(t, payload.Rows, 1)
 
 	streamRow, err := BuildWorkloadSummary(ClusterMeta{}, deployment, nil, nil, hpa)
 	require.NoError(t, err)
-	require.Equal(t, payload.Workloads[0], streamRow)
+	require.Equal(t, payload.Rows[0], streamRow)
 	require.NotNil(t, streamRow.HPAManaged)
 	require.True(t, *streamRow.HPAManaged)
 }

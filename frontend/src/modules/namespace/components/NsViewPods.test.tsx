@@ -244,7 +244,7 @@ vi.mock('@/core/refresh', () => ({
         }
       : {
           status: 'ready',
-          data: { pods: [] },
+          data: { rows: [] },
           stats: null,
           version: 1,
           checksum: '',
@@ -347,7 +347,7 @@ describe('NsViewPods', () => {
       data: {
         status: 'ready',
         data: {
-          pods: [],
+          rows: [],
           total: 0,
           totalIsExact: true,
           namespaces: ['team-a', 'team-b'],
@@ -436,7 +436,7 @@ describe('NsViewPods', () => {
       data: {
         status: 'ready',
         data: {
-          pods: [queryPod],
+          rows: [queryPod],
           total: 1,
           totalIsExact: true,
           namespaces: ['team-a', 'team-b'],
@@ -844,7 +844,7 @@ describe('NsViewPods', () => {
         data: {
           status: 'ready',
           data: {
-            pods: scope.includes('predicate.health=unhealthy') ? [pods[1]] : [],
+            rows: scope.includes('predicate.health=unhealthy') ? [pods[1]] : [],
             total: scope.includes('predicate.health=unhealthy') ? 1 : 0,
             totalIsExact: true,
             namespaces: ['team-a', 'team-b'],

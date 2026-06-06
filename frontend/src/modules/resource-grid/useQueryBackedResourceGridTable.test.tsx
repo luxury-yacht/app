@@ -878,6 +878,70 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(paginationControls.props.totalIsExact).toBe(false);
   });
 
+  it('does not retain local rows from a different cluster when the query is empty', async () => {
+    let result:
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
+    const otherClusterRow: TestRow = { ...row, clusterId: 'cluster-b' };
+    const Probe: React.FC = () => {
+      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        localData: [otherClusterRow],
+        selectRows,
+        retainLocalRowsForEmptyQuery: true,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    useTypedResourceQueryMock.mockReturnValue({
+      rows: [],
+      loading: false,
+      loaded: true,
+      error: null,
+      continueToken: null,
+      hasPrevious: false,
+      isRequestingMore: false,
+      loadMore: vi.fn(),
+      loadPrevious: vi.fn(),
+      pageIndex: 1,
+      pageSize: 50,
+      totalCount: 0,
+      totalIsExact: true,
+      filterOptions: {},
+      dynamic: null,
+    });
+    useClusterResourceGridTableMock.mockImplementation((params) => ({
+      gridTableProps: {
+        data: params.data,
+      },
+      favModal: null,
+    }));
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useClusterResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange(publishedTableState);
+      await Promise.resolve();
+    });
+
+    // The empty query result wins: a stale row from another cluster must not be
+    // presented as the current cluster's data.
+    expect(result?.rows).toEqual([]);
+    expect(useClusterResourceGridTableMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: [] })
+    );
+  });
+
   it('uses empty query results by default when local rows exist', async () => {
     let result:
       | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>

@@ -56,21 +56,19 @@ const REPRESENTATIVE_DOMAIN_BY_SCOPE_KIND = {
 
 const samplePayloads: Record<ResourceDomain, unknown> = {
   pods: {
-    pods: [{ clusterId: 'cluster-a', namespace: 'default', name: 'pod-a' }],
+    rows: [{ clusterId: 'cluster-a', namespace: 'default', name: 'pod-a' }],
   },
   'namespace-workloads': {
-    workloads: [{ clusterId: 'cluster-a', namespace: 'default', kind: 'Deployment', name: 'web' }],
+    rows: [{ clusterId: 'cluster-a', namespace: 'default', kind: 'Deployment', name: 'web' }],
   },
   'namespace-config': {
-    resources: [
-      { clusterId: 'cluster-a', namespace: 'default', kind: 'ConfigMap', name: 'config-a' },
-    ],
+    rows: [{ clusterId: 'cluster-a', namespace: 'default', kind: 'ConfigMap', name: 'config-a' }],
   },
   'namespace-network': {
-    resources: [{ clusterId: 'cluster-a', namespace: 'default', kind: 'Service', name: 'svc-a' }],
+    rows: [{ clusterId: 'cluster-a', namespace: 'default', kind: 'Service', name: 'svc-a' }],
   },
   'namespace-rbac': {
-    resources: [{ clusterId: 'cluster-a', namespace: 'default', kind: 'Role', name: 'role-a' }],
+    rows: [{ clusterId: 'cluster-a', namespace: 'default', kind: 'Role', name: 'role-a' }],
   },
   'namespace-custom': {
     resources: [
@@ -85,10 +83,10 @@ const samplePayloads: Record<ResourceDomain, unknown> = {
     ],
   },
   'namespace-helm': {
-    releases: [{ clusterId: 'cluster-a', namespace: 'default', name: 'release-a' }],
+    rows: [{ clusterId: 'cluster-a', namespace: 'default', name: 'release-a' }],
   },
   'namespace-autoscaling': {
-    resources: [
+    rows: [
       {
         clusterId: 'cluster-a',
         namespace: 'default',
@@ -98,12 +96,12 @@ const samplePayloads: Record<ResourceDomain, unknown> = {
     ],
   },
   'namespace-quotas': {
-    resources: [
+    rows: [
       { clusterId: 'cluster-a', namespace: 'default', kind: 'ResourceQuota', name: 'quota-a' },
     ],
   },
   'namespace-storage': {
-    resources: [
+    rows: [
       {
         clusterId: 'cluster-a',
         namespace: 'default',
@@ -113,16 +111,16 @@ const samplePayloads: Record<ResourceDomain, unknown> = {
     ],
   },
   'cluster-rbac': {
-    resources: [{ clusterId: 'cluster-a', kind: 'ClusterRole', name: 'role-a' }],
+    rows: [{ clusterId: 'cluster-a', kind: 'ClusterRole', name: 'role-a' }],
   },
   'cluster-storage': {
-    volumes: [{ clusterId: 'cluster-a', name: 'pv-a' }],
+    rows: [{ clusterId: 'cluster-a', name: 'pv-a' }],
   },
   'cluster-config': {
-    resources: [{ clusterId: 'cluster-a', kind: 'StorageClass', name: 'standard' }],
+    rows: [{ clusterId: 'cluster-a', kind: 'StorageClass', name: 'standard' }],
   },
   'cluster-crds': {
-    definitions: [{ clusterId: 'cluster-a', name: 'widgets.example.com' }],
+    rows: [{ clusterId: 'cluster-a', name: 'widgets.example.com' }],
   },
   'cluster-custom': {
     resources: [
@@ -136,7 +134,7 @@ const samplePayloads: Record<ResourceDomain, unknown> = {
     ],
   },
   nodes: {
-    nodes: [{ clusterId: 'cluster-a', name: 'node-a' }],
+    rows: [{ clusterId: 'cluster-a', name: 'node-a' }],
   },
 };
 

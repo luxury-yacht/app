@@ -42,16 +42,18 @@ type NodeListBuilder struct {
 // NodeSnapshot is the payload for the nodes domain.
 type NodeSnapshot struct {
 	ClusterMeta
-	Nodes            []NodeSummary              `json:"nodes"`
+	ResourceQueryEnvelope
+	Rows             []NodeSummary              `json:"rows"`
 	Metrics          NodeMetricsInfo            `json:"metrics"`
 	MetricsByCluster map[string]NodeMetricsInfo `json:"metricsByCluster,omitempty"`
-	Continue         string                     `json:"continue,omitempty"`
-	CursorInvalid    bool                       `json:"cursorInvalid,omitempty"`
-	Total            int                        `json:"total,omitempty"`
-	TotalIsExact     bool                       `json:"totalIsExact"`
-	Kinds            []string                   `json:"kinds,omitempty"`
-	FacetsExact      bool                       `json:"facetsExact"`
-	Dynamic          *ResourceQueryDynamicRef   `json:"dynamic,omitempty"`
+}
+
+func nodeQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"},
+		nil,
+		[]string{"name", "status", "roles", "version", "internalIP", "externalIP"},
+	)
 }
 
 // NodeMetricsInfo captures metadata about metrics collection.
@@ -381,16 +383,22 @@ func buildNodeSnapshotFromUsage(
 			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
 			Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
 			Payload: NodeSnapshot{
-				ClusterMeta:   meta,
-				Nodes:         page.Rows,
-				Metrics:       metricsInfo,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
-				Kinds:         page.Kinds,
-				FacetsExact:   page.FacetsExact,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         "nodes",
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact,
+					Kinds:         page.Kinds,
+					FacetsExact:   page.FacetsExact,
+					Completeness:  resourceQueryCompleteness(true),
+					Dynamic:       page.Dynamic,
+					Capabilities:  nodeQueryCapabilities(),
+				},
+				Rows:    page.Rows,
+				Metrics: metricsInfo,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}
@@ -404,12 +412,19 @@ func buildNodeSnapshotFromUsage(
 		Scope:   "",
 		Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
 		Payload: NodeSnapshot{
-			ClusterMeta:  meta,
-			Nodes:        items,
-			Metrics:      metricsInfo,
-			Total:        totalItems,
-			TotalIsExact: totalItems == len(items),
-			Kinds:        snapshotSortedKinds(items, func(NodeSummary) string { return "Node" }),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        "nodes",
+				Total:        totalItems,
+				TotalIsExact: totalItems == len(items),
+				Kinds:        snapshotSortedKinds(items, func(NodeSummary) string { return "Node" }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(totalItems == len(items)),
+				Capabilities: nodeQueryCapabilities(),
+			},
+			Rows:    items,
+			Metrics: metricsInfo,
 		},
 		Stats: snapshotWindowStats(len(items), totalItems, "nodes"),
 	}

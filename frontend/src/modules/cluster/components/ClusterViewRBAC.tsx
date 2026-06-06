@@ -138,10 +138,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       return baseColumns;
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
-    const selectRows = useCallback(
-      (payload: ClusterRBACSnapshotPayload) => payload.resources ?? [],
-      []
-    );
+    const selectRows = useCallback((payload: ClusterRBACSnapshotPayload) => payload.rows ?? [], []);
     const {
       gridTableProps,
       favModal,

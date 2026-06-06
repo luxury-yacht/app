@@ -82,8 +82,15 @@ const hasActiveQueryPredicates = (
     (value) => value !== null && value !== undefined && value.trim() !== ''
   );
 
-const shouldRetainLocalRowsForEmptyQuery = <TRow>({
+// TEMPORARY symptom patch for transient false-empty query-backed tables. The
+// owner-safe lease lifecycle fixes the concurrent-remount race, but a cold
+// sequential remount can still settle empty before rows arrive. Tracked by
+// docs/plans/resource-table-simplification.md — remove in Phase 3 once
+// backendQuerySource owns empty-state settlement. The clusterId guard prevents
+// masking a genuine empty by retaining another cluster's stale rows.
+const shouldRetainLocalRowsForEmptyQuery = <TRow extends ResourceGridTableRow>({
   allowRetainLocalRows,
+  clusterId,
   queryEnabled,
   query,
   localData,
@@ -92,6 +99,7 @@ const shouldRetainLocalRowsForEmptyQuery = <TRow>({
   predicates,
 }: {
   allowRetainLocalRows: boolean;
+  clusterId?: string | null;
   queryEnabled: boolean;
   query: UseTypedResourceQueryResult<TRow>;
   localData: TRow[];
@@ -102,6 +110,7 @@ const shouldRetainLocalRowsForEmptyQuery = <TRow>({
   allowRetainLocalRows &&
   queryEnabled &&
   localData.length > 0 &&
+  localData.every((row) => !row.clusterId || row.clusterId === clusterId) &&
   !localError &&
   query.loaded &&
   !query.loading &&
@@ -233,6 +242,7 @@ export function useQueryBackedNamespaceResourceGridTable<
 
   const useLocalRowsForEmptyQuery = shouldRetainLocalRowsForEmptyQuery({
     allowRetainLocalRows: retainLocalRowsForEmptyQuery,
+    clusterId,
     queryEnabled,
     query,
     localData,
@@ -440,6 +450,7 @@ export function useQueryBackedClusterResourceGridTable<
 
   const useLocalRowsForEmptyQuery = shouldRetainLocalRowsForEmptyQuery({
     allowRetainLocalRows: retainLocalRowsForEmptyQuery,
+    clusterId,
     queryEnabled,
     query,
     localData,

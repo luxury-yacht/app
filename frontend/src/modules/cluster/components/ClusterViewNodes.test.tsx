@@ -22,7 +22,7 @@ const {
   const typedQueryRows: { current: unknown[] } = { current: [] };
   const scopedDomainState: { current: Record<string, unknown> } = {
     current: {
-      data: { metrics: null, nodes: [] },
+      data: { metrics: null, rows: [] },
       status: 'idle',
       isManual: false,
     },
@@ -38,7 +38,7 @@ const {
         data: {
           status: 'ready',
           data: {
-            nodes: typedQueryRows.current,
+            rows: typedQueryRows.current,
             total: typedQueryRows.current.length,
             totalIsExact: true,
             kinds: ['Node'],
@@ -160,6 +160,8 @@ vi.mock('@/core/refresh', () => ({
   refreshManager: { triggerManualRefresh: vi.fn() },
   refreshOrchestrator: {
     setScopedDomainEnabled: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
     resetScopedDomain: vi.fn(),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
   },
@@ -221,7 +223,7 @@ describe('ClusterViewNodes', () => {
     latestTableRowsRef.current = [];
     typedQueryRowsRef.current = [];
     scopedDomainStateRef.current = {
-      data: { metrics: null, nodes: [] },
+      data: { metrics: null, rows: [] },
       status: 'idle',
       isManual: false,
     };
@@ -233,7 +235,7 @@ describe('ClusterViewNodes', () => {
         data: {
           status: 'ready',
           data: {
-            nodes: typedQueryRowsRef.current,
+            rows: typedQueryRowsRef.current,
             total: typedQueryRowsRef.current.length,
             totalIsExact: true,
             kinds: ['Node'],
@@ -474,7 +476,7 @@ describe('ClusterViewNodes', () => {
 
     typedQueryRowsRef.current = [updatedQueryNode];
     scopedDomainStateRef.current = {
-      data: { metrics: null, nodes: [updatedQueryNode] },
+      data: { metrics: null, rows: [updatedQueryNode] },
       status: 'ready',
       isManual: false,
       lastUpdated: 2,
@@ -492,7 +494,10 @@ describe('ClusterViewNodes', () => {
   });
 
   it('keeps local node rows visible when a remount query temporarily returns empty', async () => {
-    const initialQueryNode = { ...baseNode, name: 'node-1' };
+    // Local rows always carry the active cluster's id; the retain-on-empty
+    // guard refuses to surface another cluster's stale rows.
+    const localNode = { ...baseNode, clusterId: 'path:context' };
+    const initialQueryNode = { ...localNode, name: 'node-1' };
 
     requestRefreshDomainStateMock
       .mockResolvedValueOnce({
@@ -500,7 +505,7 @@ describe('ClusterViewNodes', () => {
         data: {
           status: 'ready',
           data: {
-            nodes: [initialQueryNode],
+            rows: [initialQueryNode],
             total: 1,
             totalIsExact: true,
             kinds: ['Node'],
@@ -513,7 +518,7 @@ describe('ClusterViewNodes', () => {
         data: {
           status: 'ready',
           data: {
-            nodes: [],
+            rows: [],
             total: 0,
             totalIsExact: true,
             kinds: [],
@@ -523,7 +528,7 @@ describe('ClusterViewNodes', () => {
       });
 
     await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode] as any} loading={false} loaded={true} />);
+      root.render(<ClusterViewNodes data={[localNode] as any} loading={false} loaded={true} />);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -536,14 +541,14 @@ describe('ClusterViewNodes', () => {
     root = ReactDOM.createRoot(container);
 
     await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode] as any} loading={false} loaded={true} />);
+      root.render(<ClusterViewNodes data={[localNode] as any} loading={false} loaded={true} />);
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
     });
 
     expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
-    expect(latestTableRowsRef.current).toEqual([baseNode]);
+    expect(latestTableRowsRef.current).toEqual([localNode]);
     expect(loadingBoundaryPropsRef.current).toEqual(
       expect.objectContaining({
         loading: false,

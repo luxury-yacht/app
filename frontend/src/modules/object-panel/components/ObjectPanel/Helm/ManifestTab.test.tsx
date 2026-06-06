@@ -15,6 +15,8 @@ const searchShortcutMocks = vi.hoisted(() => ({
 
 const refreshMocks = vi.hoisted(() => ({
   setScopedDomainEnabled: vi.fn(),
+  acquireScopedDomainLease: vi.fn(),
+  releaseScopedDomainLease: vi.fn(),
   fetchScopedDomain: vi.fn(() => Promise.resolve()),
 }));
 
@@ -216,10 +218,9 @@ describe('ManifestTab', () => {
   it('enables the scoped domain and uses startup fetch intent on mount', async () => {
     const { unmount } = await renderManifestTab();
 
-    expect(refreshMocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(refreshMocks.acquireScopedDomainLease).toHaveBeenCalledWith(
       'object-helm-manifest',
       'ns:helmrelease:demo',
-      true,
       { preserveState: true }
     );
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(

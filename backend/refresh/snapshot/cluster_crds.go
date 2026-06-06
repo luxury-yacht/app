@@ -25,18 +25,21 @@ type ClusterCRDBuilder struct {
 	crdLister apiextlisters.CustomResourceDefinitionLister
 }
 
-// ClusterCRDSnapshot is returned to the frontend.
+// ClusterCRDSnapshot is returned to the frontend. It embeds the canonical
+// ResourceQueryEnvelope (flattened into top-level JSON) plus the domain-typed
+// rows.
 type ClusterCRDSnapshot struct {
 	ClusterMeta
-	Definitions   []ClusterCRDEntry        `json:"definitions"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total,omitempty"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	ResourceQueryEnvelope
+	Rows []ClusterCRDEntry `json:"rows"`
+}
+
+func clusterCRDQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "group", "scope", "details", "version", "age"},
+		[]string{"kinds"},
+		[]string{"kind", "typeAlias", "name", "group", "scope", "details", "storageVersion"},
+	)
 }
 
 // ClusterCRDEntry represents an individual CRD in the table.
@@ -119,16 +122,22 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
 			Version: version,
 			Payload: ClusterCRDSnapshot{
-				ClusterMeta:   meta,
-				Definitions:   page.Rows,
-				Kinds:         page.Kinds,
-				Continue:      page.Continue,
-				CursorInvalid: page.CursorInvalid,
-				Total:         page.Total,
-				TotalIsExact:  page.TotalIsExact,
-				Namespaces:    page.Namespaces,
-				FacetsExact:   page.FacetsExact,
-				Dynamic:       page.Dynamic,
+				ClusterMeta: meta,
+				ResourceQueryEnvelope: ResourceQueryEnvelope{
+					Provider:      ResourceQueryProviderTypedResource,
+					Table:         clusterCRDDomainName,
+					Continue:      page.Continue,
+					CursorInvalid: page.CursorInvalid,
+					Total:         page.Total,
+					TotalIsExact:  page.TotalIsExact,
+					Kinds:         page.Kinds,
+					Namespaces:    page.Namespaces,
+					FacetsExact:   page.FacetsExact,
+					Completeness:  resourceQueryCompleteness(true),
+					Dynamic:       page.Dynamic,
+					Capabilities:  clusterCRDQueryCapabilities(),
+				},
+				Rows: page.Rows,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}, nil
@@ -141,11 +150,18 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 		Domain:  clusterCRDDomainName,
 		Version: version,
 		Payload: ClusterCRDSnapshot{
-			ClusterMeta:  meta,
-			Definitions:  entries,
-			Kinds:        snapshotSortedKinds(entries, func(ClusterCRDEntry) string { return "CustomResourceDefinition" }),
-			Total:        totalItems,
-			TotalIsExact: totalItems == len(entries),
+			ClusterMeta: meta,
+			ResourceQueryEnvelope: ResourceQueryEnvelope{
+				Provider:     ResourceQueryProviderTypedResource,
+				Table:        clusterCRDDomainName,
+				Total:        totalItems,
+				TotalIsExact: totalItems == len(entries),
+				Kinds:        snapshotSortedKinds(entries, func(ClusterCRDEntry) string { return "CustomResourceDefinition" }),
+				FacetsExact:  true,
+				Completeness: resourceQueryCompleteness(totalItems == len(entries)),
+				Capabilities: clusterCRDQueryCapabilities(),
+			},
+			Rows: entries,
 		},
 		Stats: snapshotWindowStats(len(entries), totalItems, "CRDs"),
 	}, nil

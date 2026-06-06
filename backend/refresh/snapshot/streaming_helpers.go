@@ -852,10 +852,10 @@ func BuildNodeSummary(meta ClusterMeta, node *corev1.Node, pods []*corev1.Pod, n
 		return NodeSummary{}, errors.New("node snapshot unavailable")
 	}
 	payload, ok := snap.Payload.(NodeSnapshot)
-	if !ok || len(payload.Nodes) == 0 {
+	if !ok || len(payload.Rows) == 0 {
 		return NodeSummary{}, errors.New("node summary unavailable")
 	}
-	return payload.Nodes[0], nil
+	return payload.Rows[0], nil
 }
 
 // WorkloadOwnerKey returns the canonical key used for workload pod grouping.
