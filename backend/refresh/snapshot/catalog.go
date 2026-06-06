@@ -198,9 +198,15 @@ func buildCatalogSnapshot(
 
 	truncated := result.ContinueToken != "" || (result.TotalItems > 0 && len(result.Items) < result.TotalItems)
 
+	// Completeness mirrors the typed providers' degraded-based meaning, NOT
+	// "fits in one page": a healthy catalog that simply has more pages is
+	// `complete` (pagination is the recourse), and only a degraded catalog —
+	// where streaming/pagination is disabled, so what you see is all you get —
+	// is `partial`. This keeps the frontend controller's partial/degraded banner
+	// off normal paginated browsing.
 	payload := CatalogSnapshot{
 		Provider:      ResourceQueryProviderCatalog,
-		Completeness:  resourceQueryCompleteness(!truncated),
+		Completeness:  resourceQueryCompleteness(!streamingDisabled),
 		Capabilities:  newCatalogCapabilities(),
 		Items:         cloneSummaries(result.Items),
 		Continue:      result.ContinueToken,

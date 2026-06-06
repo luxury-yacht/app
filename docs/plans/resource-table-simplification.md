@@ -822,10 +822,26 @@ Acceptance:
 
 ### Phase 3: Replace Backend Query Resource Adapters
 
-- [ ] Build `backendQuerySource` from the existing typed query hook, catalog
-      query hook, and shared table state contracts.
-- [ ] Normalize typed-resource and catalog query providers into the same source
-      state shape before rendering.
+- [x] Built `backendQuerySource` (`backendQuerySource.ts`) as the pure mapper
+      from a typed/catalog query result → `ResourceInventorySourceState`, with 8
+      tests. Deliberately NO local-row fallback: it never reintroduces
+      `retainLocalRowsForEmptyQuery`; the false-empty is handled structurally
+      (upstream leases + the controller's refreshing-empty → loading rule), which
+      the tests assert end-to-end through `deriveResourceInventoryRenderState`.
+      A disabled query maps to `blocked` (no spinner, no empty); pagination is
+      derived from the cursor signals (`hasNext` from the continue token).
+- [x] Normalized both providers into the one source shape. Required a catalog
+      completeness alignment: the catalog had set `completeness=partial` on any
+      truncated (more-pages) result, which would wrongly fire the controller's
+      partial/degraded banner on normal paginated browsing. Changed it to the
+      typed providers' degraded-based meaning (`!streamingDisabled`), so partial
+      means "windowed with no pagination recourse," not "has more pages."
+- [ ] **Remaining (the bulk of Phase 3):** a wiring hook that runs
+      `useTypedResourceQuery` / the catalog query hook and emits `source` +
+      `gridTableProps` binding; migrate the ~19 views one at a time to
+      `<ResourceInventoryTable source=… gridTableProps=… />`; delete
+      `retainLocalRowsForEmptyQuery`; reduce the old query wrappers to shims;
+      add the Nodes/other/catalog remount lifecycle regressions.
 - [ ] Make backend query source ownership safe across unmount/remount,
       stale-request cleanup, query identity changes, catalog pagination, and
       metrics-driven dynamic refreshes.
