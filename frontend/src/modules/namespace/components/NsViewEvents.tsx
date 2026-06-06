@@ -221,12 +221,10 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       (payload: NamespaceEventsSnapshotPayload) => payload.rows ?? [],
       []
     );
-    const {
-      gridTableProps,
-      favModal,
-      rows: displayedEvents,
-      source,
-    } = useQueryBackedNamespaceResourceGridTable<NamespaceEventsSnapshotPayload, EventData>({
+    const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceEventsSnapshotPayload,
+      EventData
+    >({
       enabled: namespace === ALL_NAMESPACES_SCOPE,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
@@ -262,6 +260,9 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
               }),
             },
     });
+
+    // The involved-object action handler reads the single source of truth.
+    const displayedEvents = source.rows;
 
     const objectActions = useObjectActionController({
       context: 'gridtable',

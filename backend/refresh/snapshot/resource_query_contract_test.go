@@ -205,3 +205,40 @@ func TestResourceQueryRequestCarriesProviderAndScope(t *testing.T) {
 		t.Errorf("scope round-trip = %q, want %q", decoded.Scope, ResourceQueryScopeAllNamespaces)
 	}
 }
+
+// TestTypedResourceSnapshotsEmbedTheNormalizedEnvelope rejects a non-normalized
+// backend result shape (plan Phase 6): every typed-resource domain payload must
+// embed ResourceQueryEnvelope — so its JSON presents the one flattened query
+// shape the frontend's backendQuerySource/typed-query path consumes — and carry a
+// typed Rows slice. A new typed domain whose payload ships an ad-hoc shape
+// (forgetting the embed) fails here. This is the conformance gate; a newly added
+// typed domain must be added to the list (it mirrors
+// TestTypedResourceProvidersPublishVisibleRowExportOnly's 16-domain table).
+func TestTypedResourceSnapshotsEmbedTheNormalizedEnvelope(t *testing.T) {
+	typedPayloads := []any{
+		ClusterConfigSnapshot{}, ClusterStorageSnapshot{}, ClusterRBACSnapshot{},
+		ClusterCRDSnapshot{}, ClusterEventsSnapshot{},
+		NamespaceConfigSnapshot{}, NamespaceNetworkSnapshot{}, NamespaceStorageSnapshot{},
+		NamespaceRBACSnapshot{}, NamespaceQuotasSnapshot{}, NamespaceAutoscalingSnapshot{},
+		NamespaceHelmSnapshot{}, NamespaceEventsSnapshot{}, NamespaceWorkloadsSnapshot{},
+		NodeSnapshot{}, PodSnapshot{},
+	}
+	envelopeType := reflect.TypeOf(ResourceQueryEnvelope{})
+	for _, payload := range typedPayloads {
+		payloadType := reflect.TypeOf(payload)
+		embedded := false
+		for i := 0; i < payloadType.NumField(); i++ {
+			field := payloadType.Field(i)
+			if field.Anonymous && field.Type == envelopeType {
+				embedded = true
+				break
+			}
+		}
+		if !embedded {
+			t.Errorf("%s must embed ResourceQueryEnvelope (a non-normalized backend shape is rejected)", payloadType.Name())
+		}
+		if _, ok := payloadType.FieldByName("Rows"); !ok {
+			t.Errorf("%s must carry a typed Rows slice alongside the embedded envelope", payloadType.Name())
+		}
+	}
+}

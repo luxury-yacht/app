@@ -73,18 +73,15 @@ const isLiveDomainInitialLoadPending = (state: { status?: string; data?: unknown
 export interface QueryBackedNamespaceGridResult<
   T extends ResourceGridTableRow,
 > extends ResourceGridTableResult<T> {
-  rows: T[];
-  loading: boolean;
-  loaded: boolean;
-  error: string | null;
   /**
-   * Normalized source state for the resource-inventory controller. Views render
+   * Normalized source state for the resource-inventory controller — the single
+   * source of truth for the table's lifecycle. Views render
    * `<ResourceInventoryTable source={source} gridTableProps={gridTableProps} />`
-   * and no longer derive `boundaryLoading`/`loaded`/empty-eligibility by hand.
-   * During the incremental migration the pagination footer and partial-data
-   * label stay on `gridTableProps`, so this source carries only the lifecycle
-   * (rows/loading/loaded/error/completeness) the controller needs for the
-   * loading boundary, refresh overlay, and settled-empty gate.
+   * and read rows/loading/error from `source` (there are no separate
+   * wrapper-level rows/loading/loaded/error fields). The pagination footer and
+   * partial-data label ride on `gridTableProps`; this source carries the
+   * lifecycle (rows/loading/loaded/error/completeness) the controller needs for
+   * the loading boundary, refresh overlay, and settled-empty gate.
    */
   source: ResourceInventorySourceState<T>;
 }
@@ -281,15 +278,13 @@ export function useQueryBackedNamespaceResourceGridTable<
   return {
     ...table,
     gridTableProps,
-    rows: gridTableProps.data,
-    loading,
-    loaded,
-    error,
     // Query scope → typed query source; single-namespace / disabled scope →
-    // bounded local source. Both feed the one controller contract. The bounded
-    // path carries the partial label on the source so the controller's render
-    // state owns the partial/degraded display (it also stays on gridTableProps
-    // for the GridTable filter bar; the controller merge is idempotent).
+    // bounded local source. Both feed the one controller contract as the single
+    // source of truth (no separate wrapper-level rows/loading/loaded/error). The
+    // bounded path carries the partial label on the source so the controller's
+    // render state owns the partial/degraded display (it also stays on
+    // gridTableProps for the GridTable filter bar; the controller merge is
+    // idempotent).
     source: enabled
       ? buildQueryBackedSource({
           rows: gridTableProps.data,
@@ -480,15 +475,13 @@ export function useQueryBackedClusterResourceGridTable<
   return {
     ...table,
     gridTableProps,
-    rows: gridTableProps.data,
-    loading,
-    loaded,
-    error,
     // Query scope → typed query source; single-namespace / disabled scope →
-    // bounded local source. Both feed the one controller contract. The bounded
-    // path carries the partial label on the source so the controller's render
-    // state owns the partial/degraded display (it also stays on gridTableProps
-    // for the GridTable filter bar; the controller merge is idempotent).
+    // bounded local source. Both feed the one controller contract as the single
+    // source of truth (no separate wrapper-level rows/loading/loaded/error). The
+    // bounded path carries the partial label on the source so the controller's
+    // render state owns the partial/degraded display (it also stays on
+    // gridTableProps for the GridTable filter bar; the controller merge is
+    // idempotent).
     source: enabled
       ? buildQueryBackedSource({
           rows: gridTableProps.data,

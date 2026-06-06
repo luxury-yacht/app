@@ -68,6 +68,18 @@ const STATS_BACKED_LOCAL_PARTIAL_FILES = [
   'modules/namespace/components/NsViewStorage.tsx',
 ] as const;
 
+// The only modules allowed to PRODUCE a ResourceInventorySourceState — the source
+// that feeds ResourceInventoryTable. boundedRowsSource (bounded local) and
+// backendQuerySource (catalog/explicit query) are the two public adapters; the
+// typed-query wrapper builds its typed source inline (buildQueryBackedSource).
+// A new ad-hoc source shape outside this set is a bypass of the normalized source
+// contract and must be reviewed before being added here.
+const RESOURCE_INVENTORY_SOURCE_ADAPTERS = [
+  'modules/resource-grid/backendQuerySource.ts',
+  'modules/resource-grid/boundedRowsSource.ts',
+  'modules/resource-grid/useQueryBackedResourceGridTable.ts',
+] as const;
+
 /** Recursively find all .ts/.tsx files under `dir`. */
 function walkSourceFiles(dir: string): string[] {
   const results: string[] = [];
@@ -262,6 +274,22 @@ function findStaleDirectUsageExceptions(sourceRoot: string): string[] {
   return stale.sort();
 }
 
+// A "source producer" returns a ResourceInventorySourceState — either an arrow
+// whose body builds it (`...): ResourceInventorySourceState<T> => ({`) or an
+// annotated return type. These are the resource-inventory source adapters.
+function findResourceInventorySourceProducers(sourceRoot: string): string[] {
+  return walkSourceFiles(sourceRoot)
+    .map((filePath) => path.relative(sourceRoot, filePath).split(path.sep).join('/'))
+    .filter((relativePath) => !/\.test\.tsx?$/.test(relativePath))
+    .filter((relativePath) => {
+      const content = fs.readFileSync(path.join(sourceRoot, relativePath), 'utf-8');
+      return /ResourceInventorySourceState<[A-Za-z]+>\s*=>|\):\s*ResourceInventorySourceState/.test(
+        content
+      );
+    })
+    .sort();
+}
+
 function findStatsBackedLocalPartialViewsMissingCopy(sourceRoot: string): string[] {
   return STATS_BACKED_LOCAL_PARTIAL_FILES.filter((relativePath) => {
     const content = fs.readFileSync(path.join(sourceRoot, relativePath), 'utf-8');
@@ -371,6 +399,30 @@ describe('gridTableViewRegistry contract', () => {
           '\n\nRemove the stale exception so the allowlist stays exact — a stale entry silently ' +
           'pre-authorizes a future direct bypass in that file without review.'
       );
+    }
+  });
+
+  it('only the sanctioned adapters produce a resource-inventory source', () => {
+    const producers = findResourceInventorySourceProducers(srcRoot);
+    const sanctioned = new Set<string>(RESOURCE_INVENTORY_SOURCE_ADAPTERS);
+    const unexpected = producers.filter((file) => !sanctioned.has(file));
+    if (unexpected.length > 0) {
+      throw new Error(
+        `Found resource-inventory source producers outside the sanctioned adapters:\n` +
+          unexpected.map((file) => `  ${file}`).join('\n') +
+          '\n\nResource inventory tables must source from boundedRowsSource or backendQuerySource ' +
+          '(the typed-query wrapper builds its source inline via buildQueryBackedSource). ' +
+          'A new source shape must be reviewed and added to RESOURCE_INVENTORY_SOURCE_ADAPTERS deliberately.'
+      );
+    }
+    // The set must be exact in both directions — a sanctioned adapter that stops
+    // producing a source is a stale allowlist entry.
+    for (const file of RESOURCE_INVENTORY_SOURCE_ADAPTERS) {
+      if (!producers.includes(file)) {
+        throw new Error(
+          `Sanctioned source adapter no longer produces a ResourceInventorySourceState: ${file}`
+        );
+      }
     }
   });
 

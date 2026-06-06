@@ -518,8 +518,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const {
       gridTableProps: resolvedGridTableProps,
       favModal,
-      rows: displayedPods,
-      error: tableError,
       source,
     } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
       enabled: isAllNamespaces,
@@ -547,6 +545,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       transformSortedData: isAllNamespaces ? undefined : transformSortedPods,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
+
+    // Non-display reads come from the single source of truth (the controller
+    // source); the wrapper no longer re-exposes rows/error separately.
+    const displayedPods = source.rows;
+    const tableError = source.error;
 
     const visiblePermissionTargets = useMemo(() => {
       if (!isAllNamespaces) {

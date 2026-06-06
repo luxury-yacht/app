@@ -1027,27 +1027,40 @@ bypass. `npm run test -- gridTableViewRegistry.contract` green (10).
 
 ### Phase 6: Delete Old Paths And Enforce The New Boundary
 
-- [ ] Remove `ResourceGridTableView` from cluster, namespace, Browse, and
-      object-panel resource inventory consumers.
-- [ ] Remove view-local table display booleans from migrated views.
-- [ ] Collapse `useClusterResourceGridTable`,
-      `useNamespaceResourceGridTable`, `useObjectPanelResourceGridTable`,
-      `useQueryResourceGridTable`, and query-backed wrappers into source
-      adapters plus shared binding helpers.
-- [ ] Keep low-level reusable pieces such as persistence, sorting, filters,
-      virtualization, and column factories where they belong.
-- [ ] Add or update a static contract test that rejects new production
-      resource inventory tables unless they use the new controller.
-- [ ] Require direct `GridTable` exceptions to declare a reason and mode:
-      logs, diagnostics, settings, object-scoped events, or another explicit
-      non-resource-inventory category.
-- [ ] Add static/backend contract tests that fail if a production
-      `backendQuerySource` table exposes a non-normalized backend result shape.
-- [ ] Add static/frontend contract tests that allow only
-      `backendQuerySource` and `boundedRowsSource` as resource inventory source
-      adapters, both through `ResourceInventoryTable`.
-- [ ] Add persistence migration/pruning tests for stale sort/filter/page-size
-      state.
+- [x] `ResourceGridTableView` was deleted in Phase 3 (zero importers once every
+      view migrated), so there is nothing left to remove from any consumer.
+- [x] View-local table display booleans are gone — the migrations dropped each
+      view's hand-rolled `boundaryLoading`/`loaded`/`loading`; `queryBackedViewLoadingContract`
+      enforces the controller form for every query-backed view.
+- [x] The wrappers are now source-adapter + shared-binding-helper producers with
+      a single source of truth: they expose `{ source, gridTableProps, favModal }`
+      only. The redundant `rows`/`loading`/`loaded`/`error` return fields were
+      removed (the three views that still read them — NsViewPods, NsViewWorkloads,
+      NsViewEvents — now derive `displayedPods`/`tableError`/`displayedEvents` from
+      `source`). The hooks delegate binding to the shared `useResourceGridTableCommon`
+      / `useGridTableBinding` helpers. (Internal duplication between the cluster and
+      namespace *query* wrappers remains — a pure-DRY follow-up, not required by the
+      acceptance, and now safe to do later because the enforcement tests below lock
+      the contract regardless of internal structure.)
+- [x] Low-level pieces (persistence, sorting, filters, virtualization, column
+      factories) stayed where they belong — untouched.
+- [x] New resource tables cannot bypass the controller: `findProductionDirectGridTableUsages`
+      rejects any un-allowlisted direct `<GridTable>`, and `findResourceGridCallsMissingTableMode`
+      requires every resource-grid call to declare a table mode.
+- [x] Direct `GridTable` exceptions already declare a `kind` + `mode` + `reason`
+      (`findUnclassifiedDirectUsageExceptions`); the allowlist is also stale-proofed
+      (`findStaleDirectUsageExceptions`) so a dead entry can't pre-authorize a bypass.
+- [x] Backend non-normalized-shape rejection: `TestTypedResourceSnapshotsEmbedTheNormalizedEnvelope`
+      (reflection over all 16 typed payloads) fails if any typed-resource payload
+      omits the embedded `ResourceQueryEnvelope` or its `Rows` slice.
+- [x] Frontend source-adapter allowlist: `only the sanctioned adapters produce a
+      resource-inventory source` asserts the producers of `ResourceInventorySourceState`
+      are exactly boundedRowsSource + backendQuerySource + the inline typed-query
+      builder — a new ad-hoc source shape fails.
+- [x] Persistence pruning for stale sort/filter/page-size was already covered in
+      `gridTablePersistence.test.ts` (drops stale page-sizes, stale sort keys, prunes
+      stale columns/filters) plus `gridTablePersistenceGC.test.ts` (stale viewIds /
+      cluster hashes). No new test needed.
 
 Acceptance:
 
@@ -1056,6 +1069,16 @@ Acceptance:
   mode and display-state contract.
 - New backend-query resource inventory tables cannot bypass the normalized
   query result contract.
+
+**Phase 6 complete — `mage qc:preRelease` passes (exit 0; frontend 3107,
+snapshot suite incl. the new reflection test).** The one-display-path acceptance
+held from Phase 3; this phase removed the last redundant wrapper API surface (so
+the table lifecycle flows only through `source`) and made the boundary
+self-enforcing in both layers: a new resource table cannot ship a direct
+GridTable, a missing table mode, an ad-hoc frontend source shape, or a
+non-normalized backend payload without a contract test failing. The only
+deliberate non-goal is the internal cluster/namespace query-wrapper de-dup (pure
+refactor, no behavior/contract impact, now safe to defer).
 
 ### Phase 7: Update Durable Docs
 

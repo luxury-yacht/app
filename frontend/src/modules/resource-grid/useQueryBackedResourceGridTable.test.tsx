@@ -404,8 +404,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ enabled: false })
     );
-    expect(result?.loading).toBe(true);
-    expect(result?.loaded).toBe(false);
+    expect(result?.source.loading).toBe(true);
+    expect(result?.source.loaded).toBe(false);
   });
 
   it('keeps namespace tables in initial loading until the typed query can run', () => {
@@ -444,8 +444,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ enabled: false })
     );
-    expect(result?.loading).toBe(true);
-    expect(result?.loaded).toBe(false);
+    expect(result?.source.loading).toBe(true);
+    expect(result?.source.loaded).toBe(false);
   });
 
   it('uses the explicit local fallback table mode when query backing is disabled', () => {
@@ -528,8 +528,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ enabled: false })
     );
-    expect(result?.loading).toBe(true);
-    expect(result?.loaded).toBe(false);
+    expect(result?.source.loading).toBe(true);
+    expect(result?.source.loaded).toBe(false);
 
     liveDomainStateRef.current = {
       status: 'ready',
@@ -618,9 +618,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ enabled: true })
     );
-    expect(result?.loading).toBe(true);
-    expect(result?.loaded).toBe(false);
-    expect(result?.rows).toEqual([]);
+    expect(result?.source.loading).toBe(true);
+    expect(result?.source.loaded).toBe(false);
+    expect(result?.source.rows).toEqual([]);
   });
 
   it('allows the first namespace query when the live base domain is idle', async () => {
@@ -690,9 +690,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ enabled: true })
     );
-    expect(result?.loading).toBe(true);
-    expect(result?.loaded).toBe(false);
-    expect(result?.rows).toEqual([]);
+    expect(result?.source.loading).toBe(true);
+    expect(result?.source.loaded).toBe(false);
+    expect(result?.source.rows).toEqual([]);
   });
 
   it('does not expose table loading during a query refresh that already has rows', async () => {
@@ -749,7 +749,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       await Promise.resolve();
     });
 
-    expect(result?.loading).toBe(false);
+    expect(result?.source.loading).toBe(false);
     expect(paginationLoading(result)).toBe(false);
   });
 
@@ -807,7 +807,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       await Promise.resolve();
     });
 
-    expect(result?.loading).toBe(true);
+    expect(result?.source.loading).toBe(true);
     expect(paginationLoading(result)).toBe(false);
   });
 
@@ -865,7 +865,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       await Promise.resolve();
     });
 
-    expect(result?.rows).toEqual([]);
+    expect(result?.source.rows).toEqual([]);
     expect(useClusterResourceGridTableMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ data: [] })
     );
@@ -925,7 +925,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       await Promise.resolve();
     });
 
-    expect(result?.loading).toBe(false);
+    expect(result?.source.loading).toBe(false);
     expect(paginationLoading(result)).toBe(true);
   });
 

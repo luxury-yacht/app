@@ -194,7 +194,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const {
       gridTableProps: resolvedGridTableProps,
       favModal,
-      error: tableError,
       source,
     } = useQueryBackedNamespaceResourceGridTable<NamespaceWorkloadSnapshotPayload, WorkloadData>({
       enabled: isAllNamespaces,
@@ -234,6 +233,9 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             }
           : undefined,
     });
+
+    // Error banner reads the single source of truth (the controller source).
+    const tableError = source.error;
 
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {
