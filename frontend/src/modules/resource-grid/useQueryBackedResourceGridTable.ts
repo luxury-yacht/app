@@ -16,6 +16,7 @@ import type {
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
 import QueryPaginationControls from './QueryPaginationControls';
+import { boundedRowsSource } from './boundedRowsSource';
 import type { ResourceInventorySourceState } from './useResourceInventoryTable';
 import {
   TYPED_QUERY_PAGE_LIMIT_OPTIONS,
@@ -284,17 +285,27 @@ export function useQueryBackedNamespaceResourceGridTable<
     loading,
     loaded,
     error,
-    source: buildQueryBackedSource({
-      rows: gridTableProps.data,
-      loading,
-      loaded,
-      error,
-      mode: enabled
-        ? queryTableMode
-        : localTableMode === 'Local Partial'
-          ? 'Local Partial'
-          : 'Local Complete',
-    }),
+    // Query scope → typed query source; single-namespace / disabled scope →
+    // bounded local source. Both feed the one controller contract. The bounded
+    // path carries the partial label on the source so the controller's render
+    // state owns the partial/degraded display (it also stays on gridTableProps
+    // for the GridTable filter bar; the controller merge is idempotent).
+    source: enabled
+      ? buildQueryBackedSource({
+          rows: gridTableProps.data,
+          loading,
+          loaded,
+          error,
+          mode: queryTableMode,
+        })
+      : boundedRowsSource({
+          rows: gridTableProps.data,
+          loading,
+          loaded,
+          error,
+          mode: localTableMode === 'Local Partial' ? 'Local Partial' : 'Local Complete',
+          partialLabel: filterOptionOverrides?.partialDataLabel ?? null,
+        }),
   };
 }
 
@@ -473,16 +484,26 @@ export function useQueryBackedClusterResourceGridTable<
     loading,
     loaded,
     error,
-    source: buildQueryBackedSource({
-      rows: gridTableProps.data,
-      loading,
-      loaded,
-      error,
-      mode: enabled
-        ? queryTableMode
-        : localTableMode === 'Local Partial'
-          ? 'Local Partial'
-          : 'Local Complete',
-    }),
+    // Query scope → typed query source; single-namespace / disabled scope →
+    // bounded local source. Both feed the one controller contract. The bounded
+    // path carries the partial label on the source so the controller's render
+    // state owns the partial/degraded display (it also stays on gridTableProps
+    // for the GridTable filter bar; the controller merge is idempotent).
+    source: enabled
+      ? buildQueryBackedSource({
+          rows: gridTableProps.data,
+          loading,
+          loaded,
+          error,
+          mode: queryTableMode,
+        })
+      : boundedRowsSource({
+          rows: gridTableProps.data,
+          loading,
+          loaded,
+          error,
+          mode: localTableMode === 'Local Partial' ? 'Local Partial' : 'Local Complete',
+          partialLabel: filterOptionOverrides?.partialDataLabel ?? null,
+        }),
   };
 }

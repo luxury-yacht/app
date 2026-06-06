@@ -136,6 +136,56 @@ describe('PodsTab', () => {
     expect(params.clusterIdentity).not.toBe(SIDEBAR_CLUSTER_ID);
   });
 
+  it('renders owner-scoped pods as a bounded table with no pagination (bound-proof)', () => {
+    // Object-panel related pods are bounded local data (the parent's children).
+    // This guards against a regression where the table silently fans out to
+    // query-scale pagination instead of staying a fully-resident bounded set.
+    const pods = [
+      {
+        name: 'api-1',
+        namespace: 'team-a',
+        clusterId: PANEL_CLUSTER_ID,
+        clusterName: 'Panel Cluster A',
+        ownerKind: 'Deployment',
+        ownerName: 'api',
+        node: 'node-a',
+        status: 'Running',
+        ready: '1/1',
+        restarts: 0,
+        age: '1m',
+      },
+      {
+        name: 'api-2',
+        namespace: 'team-a',
+        clusterId: PANEL_CLUSTER_ID,
+        clusterName: 'Panel Cluster A',
+        ownerKind: 'Deployment',
+        ownerName: 'api',
+        node: 'node-b',
+        status: 'Running',
+        ready: '1/1',
+        restarts: 0,
+        age: '1m',
+      },
+    ] as any[];
+
+    act(() => {
+      root.render(
+        <PodsTab pods={pods} metrics={null} loading={false} error={null} isActive={true} />
+      );
+    });
+
+    const props = gridTablePropsRef.current;
+    // The full owner-scoped set is resident.
+    expect(props.data).toHaveLength(2);
+    // Bound-proof: no query-scale pagination escape hatch.
+    expect(props.hasMore).toBeFalsy();
+    expect(props.onRequestMore).toBeUndefined();
+    expect(props.paginationControls).toBeUndefined();
+    // Owner-scoped bounded data renders complete — no partial/degraded banner.
+    expect(props.filters?.options?.partialDataLabel).toBeFalsy();
+  });
+
   it('uses canonical pod row keys', () => {
     const pod = {
       name: 'api',

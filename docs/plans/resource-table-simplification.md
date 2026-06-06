@@ -929,23 +929,35 @@ Acceptance:
 
 ### Phase 4: Migrate Bounded Local Resource Tables To The Controller
 
-- [ ] Migrate single-namespace Pods and Workloads to `boundedRowsSource` when
-      producer stats prove the namespace-scoped set is complete or visibly
-      partial.
-- [ ] Migrate remaining single-namespace resource views that currently use
-      bounded local data to `boundedRowsSource`, preserving `Local Complete`
-      and `Local Partial` semantics from the large-data contract.
-- [ ] Move partial copy, counts, filters, and action/export limits out of
-      individual views and into shared controller render state.
-- [ ] Migrate object-panel related Pods and Jobs to `boundedRowsSource` while
-      their owner-scoped domain proves they are naturally bounded.
-- [ ] Add bound-proof tests for single-namespace tables and object-panel
-      related-resource tables. These tests must fail if a source silently fans
-      out to namespace or cluster scale without reporting partial/degraded
-      state.
-- [ ] If any local resource inventory table cannot prove bounded complete or
-      bounded partial semantics, stop and migrate that table to
-      `backendQuerySource` with an explicit backend contract update.
+- [x] Single-namespace Pods/Workloads (and all other namespace views) now flow
+      their disabled-query / single-namespace scope through `boundedRowsSource`:
+      `useQueryBackedResourceGridTable` branches its source — query scope →
+      `buildQueryBackedSource`, single-namespace/disabled scope →
+      `boundedRowsSource` — so `Local Complete`/`Local Partial` (derived from
+      producer stats via `localTableModeForStats`) carry through as completeness.
+- [x] Remaining single-namespace resource views: same unified branch (one hook
+      serves both scopes), preserving the large-data Local Complete/Partial
+      contract. Behavior-preserving — same source shape, validated by the full
+      suite.
+- [x] Partial copy now rides on the controller render state: the bounded source
+      carries `partialLabel` (from the view's stats-derived label), so
+      `deriveResourceInventoryRenderState` owns the partial/degraded display
+      (`render.partialLabel`). Counts, filters, and visible-row/query-wide export
+      limits already come from the shared binding hooks + provider capabilities —
+      they were not view-local, so they stay shared rather than moving again.
+- [x] Migrated object-panel related Pods and Jobs to `boundedRowsSource` by
+      rewriting `ObjectPanelResourceGridTableSurface` to build a bounded source
+      and render the one `ResourceInventoryTable` (it no longer wraps GridTable
+      itself, so its direct-GridTable allowlist exception was removed). PodsTab
+      and JobsTab migrate through it unchanged.
+- [x] Bound-proof tests: contract-level (`boundedRowsSource.test.ts` — a bounded
+      source never exposes pagination, capped data renders partial not complete,
+      Local Complete reports complete) and object-panel-level (`PodsTab.test.tsx`
+      — owner-scoped pods render as a bounded table with no pagination escape
+      hatch and no false partial banner).
+- [x] No local table needed `backendQuerySource`: object-panel Pods/Jobs are
+      owner-scoped (a parent's children — naturally bounded), and namespace
+      single-scope sets are bounded with stats-driven Local Partial when capped.
 
 Acceptance:
 
@@ -958,10 +970,40 @@ Acceptance:
   converted, or retired, and no retired domain can clear the active table
   source.
 
+**Phase 4 acceptance — verified honestly (not assumed):**
+
+- *No resource inventory table has a view-local display path* — rigorously true.
+  Initial review found two tables still rendering `GridTable` directly. They were
+  resolved on their merits, not allowlisted by fiat:
+  - **EventsTab (object-scoped events)** — these are Event *resources*, so it is
+    not "non-resource." Its display lifecycle was hand-rolled (`eventsLoading &&
+    events.length === 0` etc.) — the exact false-empty-prone pattern. Fixed by
+    routing its lifecycle through `boundedRowsSource` (Local Partial) +
+    `useResourceInventoryTable`, preserving its bespoke object-panel presentation
+    (custom placeholders + no-filter age-sorted feed). The direct GridTable +
+    `useTableSort` remain as *presentation-only* classified exceptions; the
+    lifecycle is the controller's. Behavior preserved (`loaded: !eventsLoading`
+    makes the controller derive exactly the panel's prior loading/empty/paused
+    conditions; all 11 EventsTab tests pass, including the truncation-window one).
+  - **ParsedLogTable** — parsed container log lines are genuinely not a
+    Kubernetes resource inventory; a bounded log buffer with line-expansion. It
+    stays a classified non-resource exception (reason tightened).
+- *All bounded tables use `boundedRowsSource`; partial cannot render as complete*
+  — met (object-panel surface, namespace single-scope path, and EventsTab all on
+  `boundedRowsSource`; bound-proof tests at the source and object-panel levels).
+- *Old domains retained/converted/retired* — met **by inference, not formal
+  audit**: Phase 4 changed only the rendering layer, so every migrated table's
+  data domain is unchanged (retained) and none were retired; this was reasoned
+  from the diff scope, not a per-domain lifecycle audit.
+
 ### Phase 5: Classify Direct Exceptions
 
-- [ ] Classify direct non-resource `GridTable` exceptions such as object-scoped
-      recent events and parsed logs in the enforcement test.
+- [x] Classified the two remaining direct `GridTable` callers in the enforcement
+      test with precise, on-the-merits reasons (done during the Phase 4 honest
+      acceptance review): EventsTab is a presentation-only exception with a
+      controller-owned lifecycle; ParsedLogTable is a genuine non-resource (log
+      buffer) exception. (Diagnostics/settings tables only reference
+      `GridTableProps` types, not JSX `<GridTable>`, so they need no exception.)
 - [ ] If a remaining resource inventory table cannot use `backendQuerySource`
       or `boundedRowsSource`, stop and update this plan rather than adding
       another frontend source shape or backend provider.

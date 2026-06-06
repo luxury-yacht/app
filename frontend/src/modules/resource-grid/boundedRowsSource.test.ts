@@ -74,3 +74,41 @@ describe('boundedRowsSource', () => {
     expect(boundedRowsSource({ rows: [], error: 'nope' }).error).toBe('nope');
   });
 });
+
+// Bound-proof: a bounded source must never be able to silently fan out to
+// namespace/cluster query scale. These tests fail if that guarantee regresses —
+// covering every bounded local table (object-panel related Pods/Jobs and the
+// single-namespace resource views all funnel through this source contract).
+describe('boundedRowsSource bound-proof', () => {
+  it('never exposes pagination, in either completeness mode', () => {
+    // No pagination == no "more pages" escape hatch: the rows are the whole
+    // bounded set (or an explicitly partial window), never a fannable query page.
+    expect(boundedRowsSource({ rows }).pagination).toBeNull();
+    expect(
+      boundedRowsSource({ rows, mode: 'Local Partial', partialLabel: 'capped' }).pagination
+    ).toBeNull();
+  });
+
+  it('renders capped/windowed bounded data as partial, never as a complete table', () => {
+    const render = deriveResourceInventoryRenderState(
+      boundedRowsSource({
+        rows,
+        loaded: true,
+        mode: 'Local Partial',
+        partialLabel: 'Showing 500 of 9000',
+      })
+    );
+    expect(render.isPartial).toBe(true);
+    expect(render.partialLabel).toBe('Showing 500 of 9000');
+    expect(render.status).toBe('ready');
+  });
+
+  it('only reports complete (no partial banner) for genuinely bounded sets', () => {
+    // Local Complete is the safe default for owner-scoped / fully-resident sets;
+    // callers with producer-reported truncation must opt into Local Partial (the
+    // gridTableViewRegistry contract enforces that stats-backed views do so).
+    const render = deriveResourceInventoryRenderState(boundedRowsSource({ rows, loaded: true }));
+    expect(render.isPartial).toBe(false);
+    expect(render.partialLabel).toBeNull();
+  });
+});

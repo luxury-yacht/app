@@ -29,20 +29,17 @@ const DIRECT_GRIDTABLE_USAGE_EXCEPTIONS = {
     reason:
       'The one resource-inventory wrapper. Callers pass a normalized source state plus gridTableProps, so completeness/table mode is owned by the source, not this shell; it adds only the loading boundary and render-state-driven display.',
   },
-  'modules/resource-grid/ObjectPanelResourceGridTableSurface.tsx': {
-    kind: 'resource-grid-surface',
-    mode: 'Inherited from useObjectPanelResourceGridTable',
-    reason: 'Adapter shell only; callers provide gridTableProps after declaring tableMode.',
-  },
   'modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx': {
     kind: 'classified-table',
     mode: 'Local Partial',
-    reason: 'Object events are a recent/capped object-scoped snapshot window.',
+    reason:
+      'Object-scoped recent-events feed (Event resources). Its display lifecycle is now controller-owned (boundedRowsSource Local Partial + useResourceInventoryTable, so empty/loading/partial cannot regress into a false-empty); the direct GridTable is presentation-only — a bespoke no-filter, age-sorted activity feed, not a browsable resource inventory.',
   },
   'modules/object-panel/components/ObjectPanel/Logs/ParsedLogTable.tsx': {
     kind: 'classified-table',
     mode: 'Local Partial',
-    reason: 'Parsed logs are derived from the bounded object-panel log buffer.',
+    reason:
+      'Parsed container log lines — NOT a Kubernetes resource inventory. A bounded log buffer with log-line expansion behavior; legitimately not a resource table, so it stays direct.',
   },
 } as const;
 
@@ -55,7 +52,8 @@ const DIRECT_USE_TABLE_SORT_EXCEPTIONS = {
   'modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx': {
     kind: 'classified-table',
     mode: 'Local Partial',
-    reason: 'Direct GridTable exception above owns the object-event local window.',
+    reason:
+      'Age-sorts the bespoke no-filter object-events feed (no filter bar / sort persistence). Lifecycle is controller-owned; this is presentation-only sort for the activity feed.',
   },
 } as const;
 

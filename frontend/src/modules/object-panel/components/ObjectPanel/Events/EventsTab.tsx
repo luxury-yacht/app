@@ -18,6 +18,8 @@ import { useTableSort } from '@hooks/useTableSort';
 import { formatAge, formatFullDate } from '@utils/ageFormatter';
 import { errorHandler } from '@/utils/errorHandler';
 import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import { boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
+import { useResourceInventoryTable } from '@modules/resource-grid/useResourceInventoryTable';
 import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
 import type { ObjectEventSummary } from '@/core/refresh/types';
 import { refreshManager } from '@/core/refresh';
@@ -457,7 +459,31 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     [eventsSnapshot.stats]
   );
 
-  if (eventsLoading && events.length === 0) {
+  // Object events are a bounded, always-partial (recent-window) Event-resource
+  // table. Its display lifecycle runs through the shared controller so the
+  // loading / settled-empty / partial decisions are centralized (no view-local
+  // display path) and a transiently-empty refresh can never flash "No events
+  // found". The bespoke object-panel presentation below is driven by this render
+  // state; the no-filter, age-sorted GridTable + useTableSort stay as a
+  // presentation-only direct exception — the lifecycle is the controller's.
+  const eventsRender = useResourceInventoryTable(
+    boundedRowsSource<EventDisplay>({
+      rows: sortedData,
+      loading: eventsLoading,
+      // The object-events domain retains data across refreshes and
+      // `eventsLoading` already means "no data AND actively loading", so "not
+      // loading" is the settled state. Using it as `loaded` makes the
+      // controller derive exactly the panel's existing loading/empty conditions
+      // (loading only while fetching; empty only once settled), keeping the
+      // paused/error ordering and appearance unchanged.
+      loaded: !eventsLoading,
+      error: eventsError,
+      mode: 'Local Partial',
+      partialLabel: partialDataLabel,
+    })
+  );
+
+  if (eventsRender.showLoadingBoundary) {
     return (
       <div className="object-panel-tab-content">
         <div className="object-panel-placeholder">
@@ -477,17 +503,17 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     );
   }
 
-  if (eventsError) {
+  if (eventsRender.error) {
     return (
       <div className="object-panel-tab-content">
         <div className="object-panel-placeholder error">
-          <p>Error loading events: {eventsError}</p>
+          <p>Error loading events: {eventsRender.error}</p>
         </div>
       </div>
     );
   }
 
-  if (events.length === 0) {
+  if (eventsRender.isEmpty) {
     return (
       <div className="object-panel-tab-content">
         <div className="object-panel-placeholder">
@@ -501,10 +527,10 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     <div className="object-panel-tab-content">
       <div className="events-display">
         <div className="events-display__partial-state" role="status">
-          {partialDataLabel}
+          {eventsRender.partialLabel}
         </div>
         <GridTable<EventDisplay>
-          data={sortedData}
+          data={eventsRender.rows}
           columns={columns}
           sortConfig={sortConfig}
           onSort={handleSort}
