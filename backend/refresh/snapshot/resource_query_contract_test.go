@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -142,6 +143,43 @@ func TestCatalogProviderAdvertisesQueryWideExport(t *testing.T) {
 	}
 	if len(caps.SortableFields) == 0 {
 		t.Error("catalog provider must publish sortable fields")
+	}
+}
+
+// Query-wide export (the catalog's `queryWideExport` capability) is driven by a
+// QuerySelectionDescriptor — the durable scoped query identity — NOT by sending
+// thousands of concrete frontend rows back to the backend. This locks the
+// descriptor's shape: it must carry everything needed to re-run the query
+// server-side (cluster, table, namespaces, kinds, search, predicates, sort,
+// customOnly) and round-trip on the wire, and it must NOT depend on row payloads.
+func TestQuerySelectionDescriptorCarriesScopedQueryIdentity(t *testing.T) {
+	selection := QuerySelectionDescriptor{
+		ClusterID:     "cluster-a",
+		Table:         "browse",
+		Namespaces:    []string{"team-a", "team-b"},
+		Kinds:         []string{"Pod", "Deployment"},
+		Search:        "nginx",
+		Predicates:    []ResourceQueryPredicate{{Field: "health", Op: "eq", Value: "unhealthy"}},
+		SortField:     "name",
+		SortDirection: "desc",
+		CustomOnly:    true,
+	}
+
+	raw, err := json.Marshal(selection)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var decoded QuerySelectionDescriptor
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !reflect.DeepEqual(selection, decoded) {
+		t.Fatalf("descriptor did not round-trip:\n got  %+v\n want %+v", decoded, selection)
+	}
+	// Cluster + table identity is mandatory for a server-side replay; without it
+	// the backend cannot reconstruct the query the export should cover.
+	if decoded.ClusterID == "" || decoded.Table == "" {
+		t.Fatal("descriptor must carry cluster + table identity")
 	}
 }
 

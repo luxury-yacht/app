@@ -36,28 +36,33 @@ type CatalogConfig struct {
 // controller can treat it as a conformant provider.
 type CatalogSnapshot struct {
 	ClusterMeta
-	Provider            ResourceQueryProvider     `json:"provider"`
-	Completeness        ResourceQueryCompleteness `json:"completeness,omitempty"`
-	Capabilities        ResourceQueryCapabilities `json:"capabilities"`
-	Items               []objectcatalog.Summary   `json:"items"`
-	Continue            string                    `json:"continue,omitempty"`
-	Previous            string                    `json:"previous,omitempty"`
-	CursorInvalid       bool                      `json:"cursorInvalid,omitempty"`
-	Total               int                       `json:"total"`
-	TotalIsExact        bool                      `json:"totalIsExact"`
-	ResourceCount       int                       `json:"resourceCount"`
-	Kinds               []objectcatalog.KindInfo  `json:"kinds,omitempty"`
-	Namespaces          []string                  `json:"namespaces,omitempty"`
-	FacetsExact         bool                      `json:"facetsExact"`
-	Issues              []ResourceQueryIssue      `json:"issues,omitempty"`
-	HasNext             bool                      `json:"hasNext"`
-	HasPrevious         bool                      `json:"hasPrevious"`
-	NamespaceGroups     []CatalogNamespaceGroup   `json:"namespaceGroups,omitempty"`
-	BatchIndex          int                       `json:"batchIndex"`
-	BatchSize           int                       `json:"batchSize"`
-	TotalBatches        int                       `json:"totalBatches"`
-	IsFinal             bool                      `json:"isFinal"`
-	FirstBatchLatencyMs int64                     `json:"firstBatchLatencyMs,omitempty"`
+	Provider        ResourceQueryProvider     `json:"provider"`
+	Completeness    ResourceQueryCompleteness `json:"completeness,omitempty"`
+	Capabilities    ResourceQueryCapabilities `json:"capabilities"`
+	Items           []objectcatalog.Summary   `json:"items"`
+	Continue        string                    `json:"continue,omitempty"`
+	Previous        string                    `json:"previous,omitempty"`
+	CursorInvalid   bool                      `json:"cursorInvalid,omitempty"`
+	Total           int                       `json:"total"`
+	TotalIsExact    bool                      `json:"totalIsExact"`
+	ResourceCount   int                       `json:"resourceCount"`
+	Kinds           []objectcatalog.KindInfo  `json:"kinds,omitempty"`
+	Namespaces      []string                  `json:"namespaces,omitempty"`
+	FacetsExact     bool                      `json:"facetsExact"`
+	Issues          []ResourceQueryIssue      `json:"issues,omitempty"`
+	HasNext         bool                      `json:"hasNext"`
+	HasPrevious     bool                      `json:"hasPrevious"`
+	NamespaceGroups []CatalogNamespaceGroup   `json:"namespaceGroups,omitempty"`
+	// Batch fields below are diagnostics / streaming-progress only — NOT page
+	// metadata. Pagination is the keyset Continue/Previous/HasNext/HasPrevious
+	// above; the resource-inventory controller must not treat these as page state
+	// (the "more pages" signal is the keyset token, not the batch counters). See
+	// TestCatalogPaginationIsKeysetNotBatch.
+	BatchIndex          int   `json:"batchIndex"`
+	BatchSize           int   `json:"batchSize"`
+	TotalBatches        int   `json:"totalBatches"`
+	IsFinal             bool  `json:"isFinal"`
+	FirstBatchLatencyMs int64 `json:"firstBatchLatencyMs,omitempty"`
 }
 
 // CatalogNamespaceGroup captures per-cluster namespace lists and selection.

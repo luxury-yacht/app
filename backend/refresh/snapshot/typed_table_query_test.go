@@ -110,6 +110,87 @@ func TestTypedTableQueryContinuesCursorWhenDynamicRevisionChanges(t *testing.T) 
 	}
 }
 
+func TestTypedTableQueryPagesForwardWithExactTotals(t *testing.T) {
+	rows := []typedQueryTestRow{
+		{key: "default/a", name: "a", namespace: "default", kind: "Pod"},
+		{key: "default/b", name: "b", namespace: "default", kind: "Pod"},
+		{key: "default/c", name: "c", namespace: "default", kind: "Pod"},
+	}
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID:     "cluster-a",
+			Table:         "pods",
+			SortField:     "name",
+			SortDirection: "asc",
+			Limit:         2,
+		},
+	}
+
+	first := applyTypedTableQuery(rows, query, typedQueryTestAdapter())
+	if len(first.Rows) != 2 {
+		t.Fatalf("expected the page size (2) to be honored, got %d rows", len(first.Rows))
+	}
+	if first.Total != 3 || !first.TotalIsExact {
+		t.Fatalf("typed totals must be the exact full match count; got total=%d exact=%v", first.Total, first.TotalIsExact)
+	}
+	if first.Continue == "" {
+		t.Fatal("expected a continue cursor while rows remain")
+	}
+	if first.Rows[0].key != "default/a" || first.Rows[1].key != "default/b" {
+		t.Fatalf("unexpected first-page order: %+v", first.Rows)
+	}
+
+	// Advance via the continue cursor: the next page returns the remaining row,
+	// reports no further cursor, and still carries the exact full total.
+	query.Request.Continue = first.Continue
+	next := applyTypedTableQuery(rows, query, typedQueryTestAdapter())
+	if next.CursorInvalid {
+		t.Fatal("the continue cursor from page one must stay valid")
+	}
+	if len(next.Rows) != 1 || next.Rows[0].key != "default/c" {
+		t.Fatalf("expected the final row on page two, got %+v", next.Rows)
+	}
+	if next.Continue != "" {
+		t.Fatal("expected no continue cursor on the last page")
+	}
+	if next.Total != 3 || !next.TotalIsExact {
+		t.Fatalf("expected exact total 3 on page two; got total=%d exact=%v", next.Total, next.TotalIsExact)
+	}
+}
+
+func TestTypedTableQueryInvalidatesCursorWhenPageSizeChanges(t *testing.T) {
+	rows := []typedQueryTestRow{
+		{key: "default/a", name: "a", namespace: "default", kind: "Pod"},
+		{key: "default/b", name: "b", namespace: "default", kind: "Pod"},
+		{key: "default/c", name: "c", namespace: "default", kind: "Pod"},
+	}
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID:     "cluster-a",
+			Table:         "pods",
+			SortField:     "name",
+			SortDirection: "asc",
+			Limit:         1,
+		},
+	}
+	first := applyTypedTableQuery(rows, query, typedQueryTestAdapter())
+	if first.Continue == "" {
+		t.Fatal("expected a continue cursor")
+	}
+
+	// The cursor encodes the page size, so replaying it with a different limit
+	// invalidates it — the frontend resets to a valid first page rather than
+	// serving a misaligned window.
+	query.Request.Continue = first.Continue
+	query.Request.Limit = 2
+	changed := applyTypedTableQuery(rows, query, typedQueryTestAdapter())
+	if !changed.CursorInvalid {
+		t.Fatal("expected a page-size change to invalidate the continue cursor")
+	}
+}
+
 func TestResourceQueryRequestFromValuesAcceptsCatalogAndTypedListKeys(t *testing.T) {
 	values := mapValues(
 		"kinds=Pod,Deployment&kind=StatefulSet&namespaces=apps,default&namespace=kube-system&sort=cpu&sortDirection=desc&limit=500&predicate.health=unhealthy",

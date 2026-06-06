@@ -752,25 +752,45 @@ last, validating after each.
       fields (can't extend `ResourceQueryEnvelopeFields` for the same `kinds`
       type reason). Sortable: name/kind/namespace/age/creationTimestamp;
       filterable: kinds/namespaces (from `normalizeCatalogQuerySortField`).
-- [ ] Add typed-resource provider conformance tests for at least Nodes, Pods,
-      Workloads, and one static family.
-- [ ] Add catalog provider conformance tests for Browse and Custom.
+- [x] Typed-resource provider conformance tests
+      (`provider_conformance_test.go`, `TestTypedProviderBuildersEmitTheEnvelope`):
+      drives the real builders for Nodes, Pods, namespace-workloads, and a static
+      family (cluster-storage) and asserts each built snapshot carries the
+      envelope (provider=typed-resource, table, completeness, visible-row-only
+      capabilities, rows) — catching a builder that forgets to wire them.
+- [x] Catalog provider conformance tests (`TestCatalogBuilderEmitsTheContract`):
+      Browse and Custom (customOnly) query modes both emit the contract fields
+      (provider=catalog, completeness, query-wide + visible-row export
+      capabilities); Browse additionally pages real seeded rows.
 - [x] Provider capability conformance tests added
       (`resource_query_contract_test.go`): a 16-entry typed-provider table asserts
       every typed domain publishes VisibleRowExport:true + QueryWideExport:false +
       non-empty sortable/searchable; the catalog asserts QueryWideExport:true.
       This table doubles as the conformance gate — a new typed domain must be
-      added to it. (Still open: full per-domain snapshot conformance that drives
-      the builders with fixtures, and action-semantics assertions.)
-- [ ] Add cursor tests covering next, previous, invalid cursor, page-size
-      changes, approximate totals, exact totals, and dynamic revision metadata.
-- [ ] Add catalog query-wide export contract tests.
-- [ ] Explicitly mark typed-resource query-wide export unsupported and
-      visible-row only unless a separate provider export implementation is
-      added with tests.
-- [ ] Normalize catalog page metadata while keeping catalog batch streaming
-      fields provider-internal or diagnostics-only unless the controller
-      explicitly consumes provider readiness.
+      added to it. Full per-domain snapshot conformance (driving the builders
+      with fixtures) now lives in `provider_conformance_test.go` above.
+- [x] Cursor tests. Typed path (`typed_table_query_test.go`): next-page
+      continuation + page-size honored + exact totals
+      (`TestTypedTableQueryPagesForwardWithExactTotals`), page-size-change cursor
+      invalidation (`TestTypedTableQueryInvalidatesCursorWhenPageSizeChanges`),
+      plus the existing invalid-cursor and dynamic-revision tests. Catalog keyset
+      path (`catalog_test.go`): previous/hasPrevious and approximate totals
+      (degraded) are already covered. (Typed providers are forward-keyset + always
+      exact; "previous"/"approximate" are catalog concerns, hence the split.)
+- [x] Catalog query-wide export contract test
+      (`TestQuerySelectionDescriptorCarriesScopedQueryIdentity`): the export is
+      driven by a `QuerySelectionDescriptor` (durable scoped query identity that
+      round-trips on the wire), NOT by shipping concrete rows back to the backend.
+- [x] Typed-resource query-wide export is explicitly marked unsupported and
+      visible-row-only, with tests
+      (`TestTypedResourceProvidersPublishVisibleRowExportOnly` asserts
+      `QueryWideExport:false` for every typed provider; the catalog asserts true).
+- [x] Catalog page metadata normalized: pagination is the keyset
+      Continue/Previous/HasNext/HasPrevious; the batch-streaming fields
+      (BatchIndex/BatchSize/TotalBatches/IsFinal/FirstBatchLatencyMs) are marked
+      diagnostics-only on the struct and locked by
+      `TestCatalogPaginationIsKeysetNotBatch` — the controller never consumes
+      provider-internal batch readiness as page metadata.
 
 Acceptance:
 
