@@ -1004,14 +1004,26 @@ Acceptance:
       controller-owned lifecycle; ParsedLogTable is a genuine non-resource (log
       buffer) exception. (Diagnostics/settings tables only reference
       `GridTableProps` types, not JSX `<GridTable>`, so they need no exception.)
-- [ ] If a remaining resource inventory table cannot use `backendQuerySource`
-      or `boundedRowsSource`, stop and update this plan rather than adding
-      another frontend source shape or backend provider.
+- [x] The guard never triggered: every resource inventory table reached either
+      `backendQuerySource` or `boundedRowsSource` through `ResourceInventoryTable`
+      (EventsTab is on `boundedRowsSource`; ParsedLogTable is non-resource), so no
+      new source shape or backend provider was added and no plan update for a
+      stuck table was needed.
 
 Acceptance:
 
 - Remaining direct `GridTable` callers are classified non-resource-inventory
   exceptions, not untracked bypasses.
+
+**Phase 5 complete — verified, not assumed.** A whole-file audit (the contract's
+own `/<GridTable(?:<[^>]+>)?[\s>]/` regex applied to file contents) confirms the
+ONLY production JSX `<GridTable>` callers are `ResourceInventoryTable` (the
+controller) + the two classified exceptions (EventsTab, ParsedLogTable); the only
+`useTableSort` callers are `useGridTableBinding` + EventsTab — all allowlisted.
+Enforcement is now two-sided: the contract test rejects an *un*-allowlisted direct
+usage AND (new) rejects a *stale* allowlist entry whose file no longer uses
+GridTable/useTableSort — so the allowlist can't rot into pre-authorizing a future
+bypass. `npm run test -- gridTableViewRegistry.contract` green (10).
 
 ### Phase 6: Delete Old Paths And Enforce The New Boundary
 

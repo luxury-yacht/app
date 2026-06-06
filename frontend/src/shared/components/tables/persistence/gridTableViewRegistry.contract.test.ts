@@ -235,6 +235,33 @@ function findUnclassifiedDirectUsageExceptions(): string[] {
     .sort();
 }
 
+// A stale exception — an allowlisted file that no longer uses what it was
+// allowlisted for — is dangerous: it silently pre-authorizes a future direct
+// GridTable/useTableSort re-introduction in that file without review. The
+// allowlist must stay exact, so every entry has to still earn its place.
+function findStaleDirectUsageExceptions(sourceRoot: string): string[] {
+  const stale: string[] = [];
+  const check = (files: string[], pattern: RegExp, label: string) => {
+    for (const file of files) {
+      const full = path.join(sourceRoot, file);
+      if (!fs.existsSync(full) || !pattern.test(fs.readFileSync(full, 'utf-8'))) {
+        stale.push(`${file} (${label})`);
+      }
+    }
+  };
+  check(
+    Object.keys(DIRECT_GRIDTABLE_USAGE_EXCEPTIONS),
+    /<GridTable(?:<[^>]+>)?[\s>]/,
+    'DIRECT_GRIDTABLE_USAGE_EXCEPTIONS'
+  );
+  check(
+    Object.keys(DIRECT_USE_TABLE_SORT_EXCEPTIONS),
+    /\buseTableSort\(/,
+    'DIRECT_USE_TABLE_SORT_EXCEPTIONS'
+  );
+  return stale.sort();
+}
+
 function findStatsBackedLocalPartialViewsMissingCopy(sourceRoot: string): string[] {
   return STATS_BACKED_LOCAL_PARTIAL_FILES.filter((relativePath) => {
     const content = fs.readFileSync(path.join(sourceRoot, relativePath), 'utf-8');
@@ -331,6 +358,18 @@ describe('gridTableViewRegistry contract', () => {
         `Found direct GridTable/useTableSort exceptions without mode and reason:\n` +
           unclassified.map((file) => `  ${file}`).join('\n') +
           '\n\nEvery direct bypass must document whether it is an adapter shell, Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic.'
+      );
+    }
+  });
+
+  it('direct table bypass exceptions are not stale (each file still uses what it is allowlisted for)', () => {
+    const stale = findStaleDirectUsageExceptions(srcRoot);
+    if (stale.length > 0) {
+      throw new Error(
+        `Found allowlisted direct-usage exceptions whose file no longer uses GridTable/useTableSort:\n` +
+          stale.map((file) => `  ${file}`).join('\n') +
+          '\n\nRemove the stale exception so the allowlist stays exact — a stale entry silently ' +
+          'pre-authorizes a future direct bypass in that file without review.'
       );
     }
   });
