@@ -493,7 +493,15 @@ export interface CatalogNamespaceGroup extends ClusterMeta {
   selectedNamespaces?: string[];
 }
 
+// The catalog is the ResourceQueryProviderCatalog member of the resource-query
+// contract. It cannot extend ResourceQueryEnvelopeFields because its `kinds`
+// facet is the richer KindInfo[] (not string[]) and it carries a keyset
+// pagination model; instead it surfaces the envelope's provider/completeness/
+// capabilities contract fields directly. See backend CatalogSnapshot.
 export interface CatalogSnapshotPayload extends ClusterMeta {
+  provider?: string;
+  completeness?: 'complete' | 'partial';
+  capabilities?: ResourceQueryCapabilities;
   items: CatalogItem[];
   continue?: string;
   previous?: string;

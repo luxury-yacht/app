@@ -740,14 +740,28 @@ last, validating after each.
       after the hyphen) — both were corrupted and restored.
 - [x] All 17 typed domains green together: backend (snapshot/eventstream/backend
       Go tests), full frontend suite (3073), gofmt, prettier, eslint.
-- [ ] Remaining in Phase 1: the catalog provider (ResourceQueryProviderCatalog,
-      `items` field, QueryWideExport:true — distinct from the typed providers'
-      VisibleRowExport). Then the catalog provider.
+- [x] Catalog provider migrated — **all 17 providers conformant (16 typed
+      domains + catalog)**. The catalog
+      does NOT embed `ResourceQueryEnvelope` (its `kinds` is the richer
+      `[]KindInfo`, plus `previous`/`hasNext`/`hasPrevious`/batch pagination that
+      collide on JSON keys), so it surfaces the new contract fields directly:
+      `Provider: catalog`, `Completeness`, `Capabilities` (QueryWideExport:true +
+      VisibleRowExport:true — the export distinction from typed providers). Its
+      `items` field stays (per plan intent). Backend build + catalog tests green;
+      frontend `CatalogSnapshotPayload` got the same three additive optional
+      fields (can't extend `ResourceQueryEnvelopeFields` for the same `kinds`
+      type reason). Sortable: name/kind/namespace/age/creationTimestamp;
+      filterable: kinds/namespaces (from `normalizeCatalogQuerySortField`).
 - [ ] Add typed-resource provider conformance tests for at least Nodes, Pods,
       Workloads, and one static family.
 - [ ] Add catalog provider conformance tests for Browse and Custom.
-- [ ] Add provider capability tests for sortable, filterable, searchable,
-      export, exactness, and action semantics.
+- [x] Provider capability conformance tests added
+      (`resource_query_contract_test.go`): a 16-entry typed-provider table asserts
+      every typed domain publishes VisibleRowExport:true + QueryWideExport:false +
+      non-empty sortable/searchable; the catalog asserts QueryWideExport:true.
+      This table doubles as the conformance gate — a new typed domain must be
+      added to it. (Still open: full per-domain snapshot conformance that drives
+      the builders with fixtures, and action-semantics assertions.)
 - [ ] Add cursor tests covering next, previous, invalid cursor, page-size
       changes, approximate totals, exact totals, and dynamic revision metadata.
 - [ ] Add catalog query-wide export contract tests.

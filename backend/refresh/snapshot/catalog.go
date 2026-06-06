@@ -26,27 +26,38 @@ type CatalogConfig struct {
 }
 
 // CatalogSnapshot captures the browse payload returned to clients.
+//
+// The catalog is the ResourceQueryProviderCatalog member of the resource-query
+// contract. It deliberately does NOT embed ResourceQueryEnvelope: its `kinds`
+// facet is the richer []objectcatalog.KindInfo (with per-kind counts), and it
+// carries a keyset pagination model (previous/hasNext/batches) the flat envelope
+// does not. Instead it surfaces the envelope's provider/completeness/capabilities
+// contract fields directly alongside its own projection so the frontend
+// controller can treat it as a conformant provider.
 type CatalogSnapshot struct {
 	ClusterMeta
-	Items               []objectcatalog.Summary  `json:"items"`
-	Continue            string                   `json:"continue,omitempty"`
-	Previous            string                   `json:"previous,omitempty"`
-	CursorInvalid       bool                     `json:"cursorInvalid,omitempty"`
-	Total               int                      `json:"total"`
-	TotalIsExact        bool                     `json:"totalIsExact"`
-	ResourceCount       int                      `json:"resourceCount"`
-	Kinds               []objectcatalog.KindInfo `json:"kinds,omitempty"`
-	Namespaces          []string                 `json:"namespaces,omitempty"`
-	FacetsExact         bool                     `json:"facetsExact"`
-	Issues              []ResourceQueryIssue     `json:"issues,omitempty"`
-	HasNext             bool                     `json:"hasNext"`
-	HasPrevious         bool                     `json:"hasPrevious"`
-	NamespaceGroups     []CatalogNamespaceGroup  `json:"namespaceGroups,omitempty"`
-	BatchIndex          int                      `json:"batchIndex"`
-	BatchSize           int                      `json:"batchSize"`
-	TotalBatches        int                      `json:"totalBatches"`
-	IsFinal             bool                     `json:"isFinal"`
-	FirstBatchLatencyMs int64                    `json:"firstBatchLatencyMs,omitempty"`
+	Provider            ResourceQueryProvider     `json:"provider"`
+	Completeness        ResourceQueryCompleteness `json:"completeness,omitempty"`
+	Capabilities        ResourceQueryCapabilities `json:"capabilities"`
+	Items               []objectcatalog.Summary   `json:"items"`
+	Continue            string                    `json:"continue,omitempty"`
+	Previous            string                    `json:"previous,omitempty"`
+	CursorInvalid       bool                      `json:"cursorInvalid,omitempty"`
+	Total               int                       `json:"total"`
+	TotalIsExact        bool                      `json:"totalIsExact"`
+	ResourceCount       int                       `json:"resourceCount"`
+	Kinds               []objectcatalog.KindInfo  `json:"kinds,omitempty"`
+	Namespaces          []string                  `json:"namespaces,omitempty"`
+	FacetsExact         bool                      `json:"facetsExact"`
+	Issues              []ResourceQueryIssue      `json:"issues,omitempty"`
+	HasNext             bool                      `json:"hasNext"`
+	HasPrevious         bool                      `json:"hasPrevious"`
+	NamespaceGroups     []CatalogNamespaceGroup   `json:"namespaceGroups,omitempty"`
+	BatchIndex          int                       `json:"batchIndex"`
+	BatchSize           int                       `json:"batchSize"`
+	TotalBatches        int                       `json:"totalBatches"`
+	IsFinal             bool                      `json:"isFinal"`
+	FirstBatchLatencyMs int64                     `json:"firstBatchLatencyMs,omitempty"`
 }
 
 // CatalogNamespaceGroup captures per-cluster namespace lists and selection.
@@ -126,6 +137,21 @@ func (b *catalogBuilder) Build(ctx context.Context, scope string) (*refresh.Snap
 	return adapter.BuildSnapshot(b.domain, scope, opts), nil
 }
 
+// newCatalogCapabilities builds capabilities for the catalog browse provider.
+// The catalog supports both visible-row export and a backend query-wide export
+// path (it owns the full match set behind a cursor), so both export flags are
+// true — this is the distinction from typed providers, which expose visible-row
+// export only.
+func newCatalogCapabilities() ResourceQueryCapabilities {
+	return ResourceQueryCapabilities{
+		SortableFields:   []string{"name", "kind", "namespace", "age", "creationTimestamp"},
+		FilterableFields: []string{"kinds", "namespaces"},
+		SearchableFields: []string{"name", "kind", "namespace"},
+		VisibleRowExport: true,
+		QueryWideExport:  true,
+	}
+}
+
 func buildCatalogSnapshot(
 	result objectcatalog.QueryResult,
 	opts browseQueryOptions,
@@ -170,7 +196,12 @@ func buildCatalogSnapshot(
 		isFinal = false
 	}
 
+	truncated := result.ContinueToken != "" || (result.TotalItems > 0 && len(result.Items) < result.TotalItems)
+
 	payload := CatalogSnapshot{
+		Provider:      ResourceQueryProviderCatalog,
+		Completeness:  resourceQueryCompleteness(!truncated),
+		Capabilities:  newCatalogCapabilities(),
 		Items:         cloneSummaries(result.Items),
 		Continue:      result.ContinueToken,
 		Previous:      result.PreviousToken,
@@ -189,8 +220,6 @@ func buildCatalogSnapshot(
 		TotalBatches:  totalBatches,
 		IsFinal:       isFinal,
 	}
-
-	truncated := result.ContinueToken != "" || (payload.Total > 0 && len(payload.Items) < payload.Total)
 
 	return payload, truncated
 }

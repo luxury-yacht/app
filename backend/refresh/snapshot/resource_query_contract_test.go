@@ -86,6 +86,65 @@ func TestResourceQueryCapabilitiesSerializeExplicitBooleans(t *testing.T) {
 	}
 }
 
+// Every typed-resource provider must publish capabilities that expose
+// visible-row export only. Query-wide export is a catalog-only capability until
+// a typed provider implements a backend export path (plan Phase 1). Capabilities
+// are the source of truth the frontend reads, so a domain that forgets to wire
+// them, or mis-advertises query-wide export, would silently regress export and
+// sort/search behavior. This table is also the conformance gate: a newly added
+// typed domain should be added here.
+func TestTypedResourceProvidersPublishVisibleRowExportOnly(t *testing.T) {
+	typedCapabilities := map[string]ResourceQueryCapabilities{
+		"cluster-config":        clusterConfigQueryCapabilities(),
+		"cluster-storage":       clusterStorageQueryCapabilities(),
+		"cluster-rbac":          clusterRBACQueryCapabilities(),
+		"cluster-crds":          clusterCRDQueryCapabilities(),
+		"cluster-events":        clusterEventsQueryCapabilities(),
+		"namespace-config":      namespaceConfigQueryCapabilities(),
+		"namespace-network":     namespaceNetworkQueryCapabilities(),
+		"namespace-storage":     namespaceStorageQueryCapabilities(),
+		"namespace-rbac":        namespaceRBACQueryCapabilities(),
+		"namespace-quotas":      namespaceQuotasQueryCapabilities(),
+		"namespace-autoscaling": namespaceAutoscalingQueryCapabilities(),
+		"namespace-helm":        namespaceHelmQueryCapabilities(),
+		"namespace-events":      namespaceEventsQueryCapabilities(),
+		"namespace-workloads":   namespaceWorkloadsQueryCapabilities(),
+		"nodes":                 nodeQueryCapabilities(),
+		"pods":                  podQueryCapabilities(),
+	}
+	for domain, caps := range typedCapabilities {
+		if !caps.VisibleRowExport {
+			t.Errorf("%s: typed provider must support visible-row export", domain)
+		}
+		if caps.QueryWideExport {
+			t.Errorf("%s: typed provider must NOT advertise query-wide export (catalog-only)", domain)
+		}
+		if len(caps.SortableFields) == 0 {
+			t.Errorf("%s: typed provider must publish at least one sortable field", domain)
+		}
+		if len(caps.SearchableFields) == 0 {
+			t.Errorf("%s: typed provider must publish at least one searchable field", domain)
+		}
+	}
+}
+
+// The catalog is the one provider that owns the full match set behind a cursor,
+// so it advertises query-wide export in addition to visible-row export — the
+// capability distinction that lets the frontend offer "export all matches" for
+// browse/custom but only "export visible" for typed tables.
+func TestCatalogProviderAdvertisesQueryWideExport(t *testing.T) {
+	caps := newCatalogCapabilities()
+	if !caps.QueryWideExport {
+		t.Error("catalog provider must advertise query-wide export")
+	}
+	if !caps.VisibleRowExport {
+		t.Error("catalog provider must also support visible-row export")
+	}
+	if len(caps.SortableFields) == 0 {
+		t.Error("catalog provider must publish sortable fields")
+	}
+}
+
 func TestResourceQueryRequestCarriesProviderAndScope(t *testing.T) {
 	req := ResourceQueryRequest{
 		ClusterID: "c1",
