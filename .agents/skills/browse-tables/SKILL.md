@@ -73,14 +73,22 @@ complete only when it is query-backed, proven Local Complete by a real bound, or
 visibly Local Partial with matching counts, filters, export, selection, and
 object-action limits.
 
+Resource inventory tables render through one controller — `ResourceInventoryTable`
+fed by `boundedRowsSource` (bounded local) or `backendQuerySource` (backend
+query). New resource tables start there; do not render `GridTable` directly and do
+not add a third source shape. See the Resource Inventory Tables section of
+`docs/frontend/gridtable.md`.
+
 Inventory these entry points:
 
-- `<GridTable` render sites
-- `<ResourceGridTableView` render sites
+- `<ResourceInventoryTable` render sites and the `source` each is given
+- `boundedRowsSource` / `backendQuerySource` callers
+- `useQueryBackedClusterResourceGridTable` / `useQueryBackedNamespaceResourceGridTable`
 - `useClusterResourceGridTable`
 - `useNamespaceResourceGridTable`
 - `useObjectPanelResourceGridTable`
 - `useQueryResourceGridTable`
+- `<GridTable` render sites (must be a classified non-resource exception)
 - direct `useTableSort`
 
 For each production usage, record:

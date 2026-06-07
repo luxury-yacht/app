@@ -87,6 +87,64 @@ cluster-scoped row keys.
 - A classified table is not automatically production-ready. The UI and actions
   must match the mode.
 
+## Resource Inventory Tables
+
+Every production resource inventory table — cluster, namespace, Browse/catalog,
+and object-panel related-resource lists — renders through one controller, never a
+bespoke display path:
+
+- `ResourceInventoryTable`
+  (`frontend/src/modules/resource-grid/ResourceInventoryTable.tsx`) is the single
+  wrapper. It takes a normalized `source` plus `gridTableProps` and owns the
+  loading boundary, refresh overlay, settled-empty state, and partial banner. It
+  is the only sanctioned direct `GridTable` consumer for resource data.
+- `useResourceInventoryTable` / `deriveResourceInventoryRenderState`
+  (`useResourceInventoryTable.ts`) is the pure controller: it projects a source's
+  lifecycle into a display status (`initializing`, `loading`, `refreshing`,
+  `ready`, `empty`, `blocked`, `error`). **Empty is decided from lifecycle, never
+  from raw `rows.length`.** A refresh that transiently reports zero rows resolves
+  to `loading`, not empty — this is the structural fix for the "No X found"
+  false-empty flash, and it must not be reintroduced by checking `rows.length` in
+  a view.
+
+### Source adapters
+
+A table's `source` (`ResourceInventorySourceState`) comes from exactly one of two
+adapters; there is no third shape:
+
+- `boundedRowsSource` — bounded local data (a fully-resident `Local Complete`
+  set, or an explicitly `Local Partial` window). It never paginates, so a bounded
+  table cannot silently fan out to query scale; it carries `completeness` and an
+  optional `partialLabel`.
+- `backendQuerySource` — catalog/explicit backend query results (Browse, Custom).
+  The typed-resource query wrappers build their source inline from the same
+  `ResourceInventorySourceState` shape.
+
+The wrapper hooks (`useQueryBackedClusterResourceGridTable` /
+`useQueryBackedNamespaceResourceGridTable`) return `{ source, gridTableProps,
+favModal }`. Read rows/loading/error from `source` — there are no separate
+wrapper-level lifecycle fields.
+
+### Building a new resource table
+
+1. Pick the source adapter: bounded local → `boundedRowsSource`; backend-owned
+   query → `backendQuerySource` or a typed-query wrapper. If neither fits, stop
+   and extend the backend contract rather than adding a new source shape.
+2. Render `<ResourceInventoryTable source={source} gridTableProps={gridTableProps} />`.
+   Do not hand-roll loading/empty/partial booleans, and do not call `GridTable`
+   directly.
+3. A producer-reported truncation must surface as `Local Partial` (completeness +
+   label) so it can never render as a complete table.
+
+### Enforcement
+
+`shared/components/tables/persistence/gridTableViewRegistry.contract.test.ts`
+rejects: any un-allowlisted direct `<GridTable>`, any resource-grid call missing a
+table mode, any `source` produced outside the sanctioned adapters, and any stale
+allowlist entry. The only classified non-resource exceptions are object-scoped
+events (`EventsTab`, whose display lifecycle is still controller-driven through
+`boundedRowsSource`) and parsed logs (`ParsedLogTable`).
+
 ## Change Checklist
 
 When changing table behavior:

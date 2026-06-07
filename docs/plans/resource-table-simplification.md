@@ -1038,10 +1038,28 @@ bypass. `npm run test -- gridTableViewRegistry.contract` green (10).
       removed (the three views that still read them — NsViewPods, NsViewWorkloads,
       NsViewEvents — now derive `displayedPods`/`tableError`/`displayedEvents` from
       `source`). The hooks delegate binding to the shared `useResourceGridTableCommon`
-      / `useGridTableBinding` helpers. (Internal duplication between the cluster and
-      namespace *query* wrappers remains — a pure-DRY follow-up, not required by the
-      acceptance, and now safe to do later because the enforcement tests below lock
-      the contract regardless of internal structure.)
+      / `useGridTableBinding` helpers.
+- [x] The cluster and namespace query wrappers were de-duplicated: their
+      identical query lifecycle (table-state gating, scoped refresh domain, typed
+      query, the `tableStateReady`/`queryEnabled`/false-empty-hold sequence) now
+      lives once in `useTypedQueryLifecycle`, and the pagination footer + source
+      build once in `useQueryBackedGridResult`. Each wrapper is reduced to its
+      scope-specific setup (persistence scoping, live scope, base hook, sort
+      defaults). **This is a single-source-of-truth win, NOT a line-count win:**
+      the file went 502 → 562 lines because the shared-hook type signatures and
+      param threading in TypeScript cost more than the duplicated bodies removed.
+      The honest takeaway is that the remaining hook duplication was cheaper to
+      leave than to abstract; it was collapsed for correctness (the intricate
+      gating logic can no longer drift between two copies), not for deletion.
+- [x] `useObjectPanelResourceGridTable` and `useQueryResourceGridTable` were left
+      as-is: they are already in the target shape (binding helpers feeding a source
+      adapter — the object-panel surface's `boundedRowsSource` and the catalog
+      `backendQuerySource` respectively), so there was nothing to collapse. The
+      base `useClusterResourceGridTable`/`useNamespaceResourceGridTable` retain an
+      owned-persistence default that is currently unreached (every caller passes
+      `persistenceOverride`); it is kept as a harmless capability rather than
+      removed via disproportionate param surgery, since this change did not touch
+      those hooks.
 - [x] Low-level pieces (persistence, sorting, filters, virtualization, column
       factories) stayed where they belong — untouched.
 - [x] New resource tables cannot bypass the controller: `findProductionDirectGridTableUsages`
@@ -1073,25 +1091,41 @@ Acceptance:
 **Phase 6 complete — `mage qc:preRelease` passes (exit 0; frontend 3107,
 snapshot suite incl. the new reflection test).** The one-display-path acceptance
 held from Phase 3; this phase removed the last redundant wrapper API surface (so
-the table lifecycle flows only through `source`) and made the boundary
-self-enforcing in both layers: a new resource table cannot ship a direct
-GridTable, a missing table mode, an ad-hoc frontend source shape, or a
-non-normalized backend payload without a contract test failing. The only
-deliberate non-goal is the internal cluster/namespace query-wrapper de-dup (pure
-refactor, no behavior/contract impact, now safe to defer).
+the table lifecycle flows only through `source`), de-duplicated the query
+wrappers' lifecycle into one place, and made the boundary self-enforcing in both
+layers: a new resource table cannot ship a direct GridTable, a missing table
+mode, an ad-hoc frontend source shape, or a non-normalized backend payload
+without a contract test failing.
+
+**Honest note on "deletion":** the headline goal — "collapse 8 display paths" —
+was delivered as one shared display path + enforcement, NOT as net line removal.
+The branch is strongly additive (new backend query infrastructure + the
+controller/sources layer + ~12.5k lines of tests); only `ResourceGridTableView`
+was deleted outright. The query-wrapper de-dup attempted here added ~60 lines
+rather than removing them, which is the real lesson: in TypeScript the table-hook
+duplication is cheaper to leave than to abstract, so the simplification's value is
+in the unified contract, the structural false-empty fix, and the enforcement —
+not in a smaller codebase.
 
 ### Phase 7: Update Durable Docs
 
-- [ ] Move the final resource inventory table contract into
-      `docs/frontend/gridtable.md`.
-- [ ] Update `docs/architecture/large-data.md` only for durable table-source
-      and lifecycle rules, not temporary migration detail.
-- [ ] Update `.agents/skills/browse-tables/SKILL.md` so future table work
-      starts from the new controller and source adapter model.
-- [ ] Update backend/refresh architecture docs so new resource inventory tables
-      start from the normalized backend query provider contract.
+- [x] Moved the resource inventory table contract into `docs/frontend/gridtable.md`
+      (new "Resource Inventory Tables" section: the controller, the two source
+      adapters, the lifecycle-derived display / false-empty rule, how to build a
+      new resource table, and the enforcement).
+- [x] Added durable source/lifecycle rules to `docs/architecture/large-data.md`
+      (new "Resource Inventory Source Model" section — the two adapters + the
+      lifecycle-derived display + the "partial can never render as complete" rule;
+      durable rules only, no migration detail).
+- [x] Updated `.agents/skills/browse-tables/SKILL.md` to start table work from the
+      controller + source-adapter model and dropped the deleted `ResourceGridTableView`
+      from the inventory list.
+- [x] Updated `docs/architecture/refresh-system.md` with a "Normalized Resource
+      Query Provider Contract" section (envelope embed, catalog's direct contract
+      fields, capabilities/export scope, keyset pagination, conformance tests).
 - [ ] Delete this plan after all phases land and durable docs contain the
-      permanent rules.
+      permanent rules. **Deferred at the user's request — the durable rules are now
+      in the docs above, but the plan is intentionally retained for now.**
 
 ## Validation Plan
 

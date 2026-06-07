@@ -82,6 +82,34 @@ Keep common lifecycle plumbing shared where behavior matches. Do not collapse
 domain-specific identity, merge, cache, or recovery semantics into a generic
 handler.
 
+## Normalized Resource Query Provider Contract
+
+Snapshot domains that back a resource inventory table expose one normalized query
+shape so the frontend consumes them uniformly (see
+[`docs/architecture/large-data.md`](large-data.md) and
+[`docs/frontend/gridtable.md`](../frontend/gridtable.md)):
+
+- Typed-resource domains embed `ResourceQueryEnvelope`
+  (`backend/refresh/snapshot/resource_query_contract.go`) in their payload — flat
+  facets (kinds/namespaces/statuses/nodes), `completeness`, `capabilities`, and
+  exactness flags — alongside a typed `Rows` slice. Go embedding flattens the
+  envelope to top-level JSON keys, so every typed payload presents the same shape.
+- The catalog provider (`catalog.go`) does not embed the envelope (its kinds facet
+  is the richer `[]KindInfo` and it owns keyset pagination) but surfaces the same
+  provider/completeness/capabilities contract fields directly.
+- Capabilities advertise export scope: typed providers are visible-row export
+  only; the catalog additionally advertises query-wide export, driven by a
+  `QuerySelectionDescriptor` (a durable scoped query identity), never by shipping
+  rows back to the backend.
+- Pagination is keyset (`continue`/`previous`). Any batch-streaming fields are
+  diagnostics only, never page metadata.
+
+Conformance is enforced in `backend/refresh/snapshot`:
+`TestTypedResourceSnapshotsEmbedTheNormalizedEnvelope` fails if a typed payload
+omits the envelope or its `Rows`, and the provider/capability conformance tests
+check provider, completeness, and export flags. A new typed domain must embed the
+envelope and be added to those tables.
+
 ## Change Checklist
 
 When adding or changing a domain:

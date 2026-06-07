@@ -120,6 +120,29 @@ and CPU/memory sort. Cursor continuity is keyset-based: the cursor carries the
 dynamic metrics revision for diagnostics and signature stability, but ordinary
 metrics refreshes do not reject the cursor or bounce the user back to page 1.
 
+## Resource Inventory Source Model
+
+Every resource inventory table renders through one controller
+(`ResourceInventoryTable`, see [`docs/frontend/gridtable.md`](../frontend/gridtable.md))
+fed by a normalized source state, not a per-view display path. The source comes
+from one of two adapters:
+
+- `boundedRowsSource` for bounded local data (`Local Complete` / `Local Partial`).
+  It never exposes pagination, so a bounded table cannot silently fan out to query
+  scale.
+- `backendQuerySource` for backend-owned query results (catalog Browse/Custom and
+  the typed-resource query wrappers).
+
+The controller derives the display state from the source lifecycle, not from the
+current row count: a refresh that momentarily holds zero rows renders as loading,
+and only a settled, loaded, empty result renders as empty. Truncation/partial is
+carried on the source (`completeness` plus a label) and owned by the controller,
+so a partial, recent, or degraded window can never be presented as a complete
+table. New resource tables must use one of the two adapters through the
+controller; if a table cannot prove bounded-complete, bounded-partial, or
+backend-owned semantics, stop and update the backend query contract rather than
+adding a new frontend source shape.
+
 ## Typed Resource Query Contract
 
 Typed resource queries use `ResourceQueryRequest` and `ResourceQueryResult` in
