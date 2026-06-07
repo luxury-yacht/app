@@ -216,6 +216,10 @@ pagination, explicitly check:
       facet generation.
 - [ ] Metric-backed global sorts are backend-owned and tied to a metrics or
       computed-state snapshot/revision.
+- [ ] New/changed typed sort fields keep the page sort and the keyset cursor
+      boundary on one comparable value, and numeric fields stay uniformly numeric
+      (missing values sort as `-Inf`, never a string fallback), so cursor paging
+      cannot skip or duplicate rows. See `docs/architecture/large-data.md`.
 - [ ] Capped/recent/partial tables visibly communicate that local sort/filter
       only applies to the loaded window.
 - [ ] Export, selection, select-all, context-menu, and object-action semantics

@@ -163,6 +163,28 @@ the metrics source and revision used for the result. Deep metric paging is
 allowed only within the chosen bounded snapshot/top-k policy; cursors must not
 restart merely because the live metrics stream refreshes.
 
+Keyset ordering must be self-consistent. The page sort and the cursor boundary
+must be derived from one comparable value per row, so the order rows are laid out
+in is exactly the order the cursor walks. Computing them from two different
+functions can skip or duplicate rows across pages. A numeric sort field must stay
+uniformly numeric: a row that is missing a value (no age timestamp, no metric
+sample, an unparseable cell) sorts as a `-Inf` sentinel with `ok=true`, never via
+a string fallback, so numeric and string comparable spaces never mix within one
+field. See `sortTypedTableRows` and `typedTableComparableSortValue` in
+`backend/refresh/snapshot/typed_table_query.go`; this invariant is what prevents
+silent dup/skip when a new sort field or adapter is added.
+
+The typed builders expose two paths: a backend-query page when the scope carries
+a query string (`query.Enabled`) and a bounded local window otherwise. The
+window path is the canonical refresh snapshot — it backs single-namespace tables,
+object panels, counts elsewhere, and the live-data version that drives query
+refetch — so it is not redundant with the query path and must not be deleted as a
+"path consolidation." All-namespaces and cluster scopes run both: the query page
+feeds the table while the window snapshot feeds liveness and other consumers.
+Degraded and unavailable-source reasons are computed and surfaced on both paths;
+a window missing a permission-blocked source is reported inexact and
+issue-bearing, never as a complete table.
+
 Object-panel related-resource tables stay local while their owner-scoped domain
 keeps them naturally bounded. They move to typed query-backed mode only if an
 object-panel table becomes namespace or cluster scale.
