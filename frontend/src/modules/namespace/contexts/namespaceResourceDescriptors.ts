@@ -36,7 +36,7 @@ export const namespaceResourceDescriptors = {
     resourceKey: 'workloads',
     domain: 'namespace-workloads',
     fallback: [],
-    select: (payload, clusterId) => filterRowsForCluster(payload?.workloads, clusterId),
+    select: (payload, clusterId) => filterRowsForCluster(payload?.rows, clusterId),
     meta: resourceKindsMeta,
     rowIdentity: namespacedKindRowIdentity,
   },
