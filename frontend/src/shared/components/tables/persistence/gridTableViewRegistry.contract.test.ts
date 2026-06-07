@@ -186,8 +186,16 @@ function findResourceGridCallsWithoutRecognizedTableMode(sourceRoot: string): st
 
   for (const filePath of files) {
     const relativePath = path.relative(sourceRoot, filePath);
+    const normalized = relativePath.split(path.sep).join('/');
+    // The resource-grid infra files build tableMode dynamically from
+    // type-constrained inputs (`queryTableMode`/`localTableMode` are typed unions),
+    // so their internal base-hook calls reference a variable, not a string
+    // literal. This check is a heuristic for catching unrecognized mode literals
+    // at view call sites; the infra files are validated by the type system and are
+    // also excluded from findResourceGridCallsMissingTableMode.
     if (
-      relativePath.split(path.sep).join('/') === 'modules/resource-grid/useResourceGridTable.tsx'
+      normalized === 'modules/resource-grid/useResourceGridTable.tsx' ||
+      normalized === 'modules/resource-grid/useQueryBackedResourceGridTable.ts'
     ) {
       continue;
     }

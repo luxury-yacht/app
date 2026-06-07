@@ -4,8 +4,10 @@ import { useRefreshScopedDomain } from '@/core/refresh';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
+import type { SortConfig } from '@/hooks/useTableSort';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import type { UseGridTablePersistenceResult } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useClusterResourceGridTable, useNamespaceResourceGridTable } from './useResourceGridTable';
 import type {
@@ -23,6 +25,7 @@ import {
   useTypedResourceQuery,
   type TypedQueryPageLimit,
   type TypedQueryPayload,
+  type UseTypedResourceQueryResult,
 } from './useTypedResourceQuery';
 import {
   mergeQueryBackedFilterOptions,
@@ -108,12 +111,12 @@ const buildQueryBackedSource = <T extends ResourceGridTableRow>({
   pagination: null,
 });
 
-export interface QueryBackedNamespaceGridParams<
+// Fields shared by the cluster and namespace query wrappers. Each wrapper adds
+// the scope-specific binding params (namespace vs cluster persistence + sort
+// defaults) from its base resource-grid params type.
+interface QueryBackedGridParamsCommon<
   TPayload extends TypedQueryPayload,
   TRow extends ResourceGridTableRow,
-> extends Omit<
-  NamespaceResourceGridTableParams<TRow>,
-  'data' | 'tableMode' | 'onTableStateChange' | 'filterOptionOverrides'
 > {
   enabled: boolean;
   clusterId?: string | null;
@@ -131,7 +134,24 @@ export interface QueryBackedNamespaceGridParams<
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
 }
 
-export function useQueryBackedNamespaceResourceGridTable<
+interface TypedQueryLifecycle<TRow extends ResourceGridTableRow> {
+  data: TRow[];
+  loading: boolean;
+  loaded: boolean;
+  error: string | null;
+  tableMode: ResourceGridTableMode;
+  effectiveFilterOptionOverrides?: Partial<GridTableFilterOptions>;
+  onTableStateChange?: (next: QueryBackedTableState) => void;
+  query: UseTypedResourceQueryResult<TRow>;
+}
+
+// The shared query lifecycle for both scopes: it owns table state, the scoped
+// refresh-domain lifecycle, the typed query, and the loading/empty derivation.
+// The caller supplies the scope-specific `persistence` and `liveScope`; this hook
+// produces the data + the binding inputs (tableMode, merged filter options,
+// onTableStateChange) the base resource-grid hook needs, plus the query handle
+// the pagination footer reads.
+function useTypedQueryLifecycle<
   TPayload extends TypedQueryPayload,
   TRow extends ResourceGridTableRow,
 >({
@@ -140,46 +160,40 @@ export function useQueryBackedNamespaceResourceGridTable<
   domain,
   label,
   baseScope,
-  queryTableMode = 'Query Backed Dynamic',
-  localTableMode = 'Local Complete',
+  queryTableMode,
+  localTableMode,
   localData,
-  localLoading = false,
-  localLoaded = false,
-  localError = null,
+  localLoading,
+  localLoaded,
+  localError,
   selectRows,
   predicates,
   filterOptionOverrides,
-  defaultSort = { key: 'name', direction: 'asc' },
-  namespace,
-  ...tableParams
-}: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow> {
+  defaultSort,
+  persistence,
+  liveScope,
+}: {
+  enabled: boolean;
+  clusterId?: string | null;
+  domain: RefreshDomain;
+  label: string;
+  baseScope?: string;
+  queryTableMode: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
+  localTableMode: Extract<ResourceGridTableMode, 'Local Complete' | 'Local Partial'>;
+  localData: TRow[];
+  localLoading: boolean;
+  localLoaded: boolean;
+  localError: string | null;
+  selectRows: (payload: TPayload) => TRow[];
+  predicates?: Record<string, string | null | undefined>;
+  filterOptionOverrides?: Partial<GridTableFilterOptions>;
+  defaultSort: SortConfig;
+  persistence: UseGridTablePersistenceResult;
+  liveScope: string;
+}): TypedQueryLifecycle<TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
-  const defaultKeyExtractor = useCallback(
-    (item: TRow) => buildRequiredCanonicalObjectRowKey(item, { fallbackClusterId: clusterId }),
-    [clusterId]
-  );
-  const resolvedKeyExtractor =
-    tableParams.keyExtractor ?? tableParams.objectIdentity?.key ?? defaultKeyExtractor;
-  const persistence = useGridTablePersistence<TRow>({
-    viewId: tableParams.viewId,
-    clusterIdentity: clusterId ?? '',
-    namespace,
-    isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
-    columns: tableParams.columns,
-    data: tableParams.persistenceData ?? localData,
-    keyExtractor: resolvedKeyExtractor,
-    filterOptions: {
-      ...(tableParams.filterOptions ?? {}),
-      isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
-    },
-    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
-  });
   const pageLimit = typedQueryPageLimitOrDefault(persistence.pageSize);
-  const liveScope = useMemo(
-    () => (clusterId ? buildClusterScope(clusterId, baseScope ?? namespace) : ''),
-    [baseScope, clusterId, namespace]
-  );
   useScopedRefreshDomainLifecycle({
     domain,
     scope: liveScope || null,
@@ -229,51 +243,79 @@ export function useQueryBackedNamespaceResourceGridTable<
   const loaded = queryEnabled ? query.loaded : waitingForInitialQuery ? false : localLoaded;
   const error = queryEnabled ? query.error : localError;
 
-  const table = useNamespaceResourceGridTable<TRow>({
-    ...tableParams,
-    keyExtractor: resolvedKeyExtractor,
-    namespace,
-    defaultSort,
-    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
-    persistenceOverride: persistence,
+  return {
+    data,
+    loading,
+    loaded,
+    error,
     tableMode: enabled
       ? queryTableMode
       : localTableMode === 'Local Partial'
         ? 'Local Partial'
         : 'Local Complete',
-    data,
-    filterOptionOverrides: enabled
+    effectiveFilterOptionOverrides: enabled
       ? mergeQueryBackedFilterOptions(filterOptionOverrides, query.filterOptions)
       : filterOptionOverrides,
     onTableStateChange: enabled ? handlePublishedTableState : undefined,
-  });
+    query,
+  };
+}
 
+// Builds the shared result for both scopes: the pagination footer (query scope
+// only) plus the normalized controller source (typed query source when enabled,
+// bounded local source otherwise).
+function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
+  enabled,
+  viewId,
+  table,
+  query,
+  persistence,
+  data,
+  loading,
+  loaded,
+  error,
+  queryTableMode,
+  localTableMode,
+  filterOptionOverrides,
+}: {
+  enabled: boolean;
+  viewId: string;
+  table: ResourceGridTableResult<TRow>;
+  query: UseTypedResourceQueryResult<TRow>;
+  persistence: UseGridTablePersistenceResult;
+  data: TRow[];
+  loading: boolean;
+  loaded: boolean;
+  error: string | null;
+  queryTableMode: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
+  localTableMode: Extract<ResourceGridTableMode, 'Local Complete' | 'Local Partial'>;
+  filterOptionOverrides?: Partial<GridTableFilterOptions>;
+}): QueryBackedNamespaceGridResult<TRow> {
   const gridTableProps = useMemo(() => {
     if (!enabled) {
       return table.gridTableProps;
     }
-    const paginationQuery = query;
     const paginationControls = React.createElement(QueryPaginationControls, {
-      idPrefix: tableParams.viewId,
-      pageIndex: paginationQuery.pageIndex,
-      pageSize: paginationQuery.pageSize,
+      idPrefix: viewId,
+      pageIndex: query.pageIndex,
+      pageSize: query.pageSize,
       visibleItemCount: data.length,
       pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
-      totalCount: paginationQuery.totalCount,
-      totalIsExact: paginationQuery.totalIsExact,
-      hasPrevious: paginationQuery.hasPrevious,
-      hasNext: Boolean(paginationQuery.continueToken),
-      loading: paginationQuery.isRequestingMore,
-      onPrevious: paginationQuery.loadPrevious,
-      onNext: paginationQuery.loadMore,
+      totalCount: query.totalCount,
+      totalIsExact: query.totalIsExact,
+      hasPrevious: query.hasPrevious,
+      hasNext: Boolean(query.continueToken),
+      loading: query.isRequestingMore,
+      onPrevious: query.loadPrevious,
+      onNext: query.loadMore,
       onPageSizeChange: (value: number) => {
         if (TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)) {
           persistence.setPageSize(value);
         }
       },
     });
-    return queryBackedPaginationProps(table.gridTableProps, paginationQuery, paginationControls);
-  }, [data.length, enabled, persistence, query, table.gridTableProps, tableParams.viewId]);
+    return queryBackedPaginationProps(table.gridTableProps, query, paginationControls);
+  }, [data.length, enabled, persistence, query, table.gridTableProps, viewId]);
 
   return {
     ...table,
@@ -304,28 +346,131 @@ export function useQueryBackedNamespaceResourceGridTable<
   };
 }
 
+const useResolvedQueryKeyExtractor = <TRow extends ResourceGridTableRow>(
+  keyExtractor: ((item: TRow, index: number) => string) | undefined,
+  objectIdentityKey: ((item: TRow, index: number) => string) | undefined,
+  clusterId: string | null | undefined
+): ((item: TRow, index: number) => string) => {
+  const defaultKeyExtractor = useCallback(
+    (item: TRow) => buildRequiredCanonicalObjectRowKey(item, { fallbackClusterId: clusterId }),
+    [clusterId]
+  );
+  return keyExtractor ?? objectIdentityKey ?? defaultKeyExtractor;
+};
+
+export interface QueryBackedNamespaceGridParams<
+  TPayload extends TypedQueryPayload,
+  TRow extends ResourceGridTableRow,
+>
+  extends
+    Omit<
+      NamespaceResourceGridTableParams<TRow>,
+      'data' | 'tableMode' | 'onTableStateChange' | 'filterOptionOverrides'
+    >,
+    QueryBackedGridParamsCommon<TPayload, TRow> {}
+
+export function useQueryBackedNamespaceResourceGridTable<
+  TPayload extends TypedQueryPayload,
+  TRow extends ResourceGridTableRow,
+>({
+  enabled,
+  clusterId,
+  domain,
+  label,
+  baseScope,
+  queryTableMode = 'Query Backed Dynamic',
+  localTableMode = 'Local Complete',
+  localData,
+  localLoading = false,
+  localLoaded = false,
+  localError = null,
+  selectRows,
+  predicates,
+  filterOptionOverrides,
+  defaultSort = { key: 'name', direction: 'asc' },
+  namespace,
+  ...tableParams
+}: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow> {
+  const resolvedKeyExtractor = useResolvedQueryKeyExtractor(
+    tableParams.keyExtractor,
+    tableParams.objectIdentity?.key,
+    clusterId
+  );
+  const persistence = useGridTablePersistence<TRow>({
+    viewId: tableParams.viewId,
+    clusterIdentity: clusterId ?? '',
+    namespace,
+    isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
+    columns: tableParams.columns,
+    data: tableParams.persistenceData ?? localData,
+    keyExtractor: resolvedKeyExtractor,
+    filterOptions: {
+      ...(tableParams.filterOptions ?? {}),
+      isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
+    },
+    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+  });
+  const liveScope = useMemo(
+    () => (clusterId ? buildClusterScope(clusterId, baseScope ?? namespace) : ''),
+    [baseScope, clusterId, namespace]
+  );
+  const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
+    enabled,
+    clusterId,
+    domain,
+    label,
+    baseScope,
+    queryTableMode,
+    localTableMode,
+    localData,
+    localLoading,
+    localLoaded,
+    localError,
+    selectRows,
+    predicates,
+    filterOptionOverrides,
+    defaultSort,
+    persistence,
+    liveScope,
+  });
+  const table = useNamespaceResourceGridTable<TRow>({
+    ...tableParams,
+    keyExtractor: resolvedKeyExtractor,
+    namespace,
+    defaultSort,
+    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+    persistenceOverride: persistence,
+    tableMode: lifecycle.tableMode,
+    data: lifecycle.data,
+    filterOptionOverrides: lifecycle.effectiveFilterOptionOverrides,
+    onTableStateChange: lifecycle.onTableStateChange,
+  });
+  return useQueryBackedGridResult<TRow>({
+    enabled,
+    viewId: tableParams.viewId,
+    table,
+    query: lifecycle.query,
+    persistence,
+    data: lifecycle.data,
+    loading: lifecycle.loading,
+    loaded: lifecycle.loaded,
+    error: lifecycle.error,
+    queryTableMode,
+    localTableMode,
+    filterOptionOverrides,
+  });
+}
+
 export interface QueryBackedClusterGridParams<
   TPayload extends TypedQueryPayload,
   TRow extends ResourceGridTableRow,
-> extends Omit<
-  ClusterResourceGridTableParams<TRow>,
-  'data' | 'tableMode' | 'onTableStateChange' | 'filterOptionOverrides'
-> {
-  enabled: boolean;
-  clusterId?: string | null;
-  domain: RefreshDomain;
-  label: string;
-  baseScope?: string;
-  queryTableMode?: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
-  localTableMode?: Extract<ResourceGridTableMode, 'Local Complete' | 'Local Partial'>;
-  localData: TRow[];
-  localLoading?: boolean;
-  localLoaded?: boolean;
-  localError?: string | null;
-  selectRows: (payload: TPayload) => TRow[];
-  predicates?: Record<string, string | null | undefined>;
-  filterOptionOverrides?: Partial<GridTableFilterOptions>;
-}
+>
+  extends
+    Omit<
+      ClusterResourceGridTableParams<TRow>,
+      'data' | 'tableMode' | 'onTableStateChange' | 'filterOptionOverrides'
+    >,
+    QueryBackedGridParamsCommon<TPayload, TRow> {}
 
 export function useQueryBackedClusterResourceGridTable<
   TPayload extends TypedQueryPayload,
@@ -353,14 +498,11 @@ export function useQueryBackedClusterResourceGridTable<
     () => ({ key: defaultSortKey, direction: defaultSortDirection }),
     [defaultSortDirection, defaultSortKey]
   );
-  const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
-  const [tableStateReady, setTableStateReady] = useState(false);
-  const defaultKeyExtractor = useCallback(
-    (item: TRow) => buildRequiredCanonicalObjectRowKey(item, { fallbackClusterId: clusterId }),
-    [clusterId]
+  const resolvedKeyExtractor = useResolvedQueryKeyExtractor(
+    tableParams.keyExtractor,
+    tableParams.objectIdentity?.key,
+    clusterId
   );
-  const resolvedKeyExtractor =
-    tableParams.keyExtractor ?? tableParams.objectIdentity?.key ?? defaultKeyExtractor;
   const persistence = useGridTablePersistence<TRow>({
     viewId: tableParams.viewId,
     clusterIdentity: clusterId ?? '',
@@ -372,60 +514,29 @@ export function useQueryBackedClusterResourceGridTable<
     filterOptions: { ...(tableParams.filterOptions ?? {}), isNamespaceScoped: false },
     pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
   });
-  const pageLimit = typedQueryPageLimitOrDefault(persistence.pageSize);
   const liveScope = useMemo(
     () => (clusterId ? buildClusterScope(clusterId, baseScope) : ''),
     [baseScope, clusterId]
   );
-  useScopedRefreshDomainLifecycle({
-    domain,
-    scope: liveScope || null,
+  const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
     enabled,
-    preserveState: true,
-    fetchOnEnable: false,
-  });
-  const liveDomain = useRefreshScopedDomain(domain, liveScope);
-  const liveDataVersion = liveDomainVersion(liveDomain);
-  const liveDomainInitialLoadPending = enabled && isLiveDomainInitialLoadPending(liveDomain);
-  const handlePublishedTableState = useCallback(
-    (next: QueryBackedTableState) => {
-      setTableStateReady(true);
-      handleTableStateChange(next);
-    },
-    [handleTableStateChange]
-  );
-  const queryEnabled =
-    enabled && tableStateReady && persistence.hydrated && !liveDomainInitialLoadPending;
-
-  const query = useTypedResourceQuery<TPayload, TRow>({
-    enabled: queryEnabled,
     clusterId,
     domain,
     label,
     baseScope,
-    filters: tableState.filters,
-    sortConfig: tableState.sortConfig,
-    pageLimit,
-    predicates,
-    liveDataVersion,
-    selectRows,
-  });
-
-  const data = queryEnabled ? query.rows : localData;
-  const waitingForInitialQuery = shouldHoldInitialTypedQueryLoading({
-    enabled,
-    clusterId,
-    queryEnabled,
+    queryTableMode,
+    localTableMode,
     localData,
+    localLoading,
+    localLoaded,
     localError,
+    selectRows,
+    predicates,
+    filterOptionOverrides,
+    defaultSort,
+    persistence,
+    liveScope,
   });
-  const queryInitialLoading = query.rows.length === 0 && !query.loaded && !query.error;
-  const loading = queryEnabled
-    ? data.length === 0 && (query.loading || queryInitialLoading)
-    : waitingForInitialQuery || localLoading;
-  const loaded = queryEnabled ? query.loaded : waitingForInitialQuery ? false : localLoaded;
-  const error = queryEnabled ? query.error : localError;
-
   const table = useClusterResourceGridTable<TRow>({
     ...tableParams,
     keyExtractor: resolvedKeyExtractor,
@@ -433,70 +544,23 @@ export function useQueryBackedClusterResourceGridTable<
     defaultSortDirection,
     pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
     persistenceOverride: persistence,
-    tableMode: enabled
-      ? queryTableMode
-      : localTableMode === 'Local Partial'
-        ? 'Local Partial'
-        : 'Local Complete',
-    data,
-    filterOptionOverrides: enabled
-      ? mergeQueryBackedFilterOptions(filterOptionOverrides, query.filterOptions)
-      : filterOptionOverrides,
-    onTableStateChange: enabled ? handlePublishedTableState : undefined,
+    tableMode: lifecycle.tableMode,
+    data: lifecycle.data,
+    filterOptionOverrides: lifecycle.effectiveFilterOptionOverrides,
+    onTableStateChange: lifecycle.onTableStateChange,
   });
-
-  const gridTableProps = useMemo(() => {
-    if (!enabled) {
-      return table.gridTableProps;
-    }
-    const paginationQuery = query;
-    const paginationControls = React.createElement(QueryPaginationControls, {
-      idPrefix: tableParams.viewId,
-      pageIndex: paginationQuery.pageIndex,
-      pageSize: paginationQuery.pageSize,
-      visibleItemCount: data.length,
-      pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
-      totalCount: paginationQuery.totalCount,
-      totalIsExact: paginationQuery.totalIsExact,
-      hasPrevious: paginationQuery.hasPrevious,
-      hasNext: Boolean(paginationQuery.continueToken),
-      loading: paginationQuery.isRequestingMore,
-      onPrevious: paginationQuery.loadPrevious,
-      onNext: paginationQuery.loadMore,
-      onPageSizeChange: (value: number) => {
-        if (TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)) {
-          persistence.setPageSize(value);
-        }
-      },
-    });
-    return queryBackedPaginationProps(table.gridTableProps, paginationQuery, paginationControls);
-  }, [data.length, enabled, persistence, query, table.gridTableProps, tableParams.viewId]);
-
-  return {
-    ...table,
-    gridTableProps,
-    // Query scope → typed query source; single-namespace / disabled scope →
-    // bounded local source. Both feed the one controller contract as the single
-    // source of truth (no separate wrapper-level rows/loading/loaded/error). The
-    // bounded path carries the partial label on the source so the controller's
-    // render state owns the partial/degraded display (it also stays on
-    // gridTableProps for the GridTable filter bar; the controller merge is
-    // idempotent).
-    source: enabled
-      ? buildQueryBackedSource({
-          rows: gridTableProps.data,
-          loading,
-          loaded,
-          error,
-          mode: queryTableMode,
-        })
-      : boundedRowsSource({
-          rows: gridTableProps.data,
-          loading,
-          loaded,
-          error,
-          mode: localTableMode === 'Local Partial' ? 'Local Partial' : 'Local Complete',
-          partialLabel: filterOptionOverrides?.partialDataLabel ?? null,
-        }),
-  };
+  return useQueryBackedGridResult<TRow>({
+    enabled,
+    viewId: tableParams.viewId,
+    table,
+    query: lifecycle.query,
+    persistence,
+    data: lifecycle.data,
+    loading: lifecycle.loading,
+    loaded: lifecycle.loaded,
+    error: lifecycle.error,
+    queryTableMode,
+    localTableMode,
+    filterOptionOverrides,
+  });
 }
