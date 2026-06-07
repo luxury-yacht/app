@@ -365,7 +365,7 @@ export interface QueryBackedNamespaceGridParams<
   extends
     Omit<
       NamespaceResourceGridTableParams<TRow>,
-      'data' | 'tableMode' | 'onTableStateChange' | 'filterOptionOverrides'
+      'data' | 'tableMode' | 'onTableStateChange' | 'filterOptionOverrides' | 'persistenceOverride'
     >,
     QueryBackedGridParamsCommon<TPayload, TRow> {}
 
@@ -468,7 +468,7 @@ export interface QueryBackedClusterGridParams<
   extends
     Omit<
       ClusterResourceGridTableParams<TRow>,
-      'data' | 'tableMode' | 'onTableStateChange' | 'filterOptionOverrides'
+      'data' | 'tableMode' | 'onTableStateChange' | 'filterOptionOverrides' | 'persistenceOverride'
     >,
     QueryBackedGridParamsCommon<TPayload, TRow> {}
 

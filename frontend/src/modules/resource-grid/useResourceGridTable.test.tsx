@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { NamespaceContext } from '@modules/namespace/contexts/NamespaceContext';
 import {
@@ -105,6 +106,18 @@ const renderNamespaceGrid = (
   const onTableStateChange = vi.fn();
 
   const Probe: React.FC = () => {
+    // Mirror production: the query-backed/bounded wrapper owns persistence and
+    // passes it as persistenceOverride. The base hook no longer owns a fallback.
+    const persistence = useGridTablePersistence<TestRow>({
+      viewId: 'namespace-pods',
+      clusterIdentity: 'alpha:ctx',
+      namespace: null,
+      isNamespaceScoped: false,
+      columns,
+      data: [row],
+      keyExtractor: (item) => item.name,
+      filterOptions: { isNamespaceScoped: false },
+    });
     result.current = useNamespaceResourceGridTable<TestRow>({
       viewId: 'namespace-pods',
       tableMode: 'Query Backed Dynamic',
@@ -113,11 +126,11 @@ const renderNamespaceGrid = (
       columns,
       keyExtractor: (item) => item.name,
       showNamespaceFilters: true,
-      filterOptions: { isNamespaceScoped: false },
       filterOptionOverrides: {
         namespaces: ['team-a'],
       },
       onTableStateChange,
+      persistenceOverride: persistence,
       ...overrides,
     });
     return null;

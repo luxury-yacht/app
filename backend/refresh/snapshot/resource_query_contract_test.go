@@ -95,25 +95,7 @@ func TestResourceQueryCapabilitiesSerializeExplicitBooleans(t *testing.T) {
 // sort/search behavior. This table is also the conformance gate: a newly added
 // typed domain should be added here.
 func TestTypedResourceProvidersPublishVisibleRowExportOnly(t *testing.T) {
-	typedCapabilities := map[string]ResourceQueryCapabilities{
-		"cluster-config":        clusterConfigQueryCapabilities(),
-		"cluster-storage":       clusterStorageQueryCapabilities(),
-		"cluster-rbac":          clusterRBACQueryCapabilities(),
-		"cluster-crds":          clusterCRDQueryCapabilities(),
-		"cluster-events":        clusterEventsQueryCapabilities(),
-		"namespace-config":      namespaceConfigQueryCapabilities(),
-		"namespace-network":     namespaceNetworkQueryCapabilities(),
-		"namespace-storage":     namespaceStorageQueryCapabilities(),
-		"namespace-rbac":        namespaceRBACQueryCapabilities(),
-		"namespace-quotas":      namespaceQuotasQueryCapabilities(),
-		"namespace-autoscaling": namespaceAutoscalingQueryCapabilities(),
-		"namespace-helm":        namespaceHelmQueryCapabilities(),
-		"namespace-events":      namespaceEventsQueryCapabilities(),
-		"namespace-workloads":   namespaceWorkloadsQueryCapabilities(),
-		"nodes":                 nodeQueryCapabilities(),
-		"pods":                  podQueryCapabilities(),
-	}
-	for domain, caps := range typedCapabilities {
+	for domain, caps := range typedCapabilityConformance {
 		if !caps.VisibleRowExport {
 			t.Errorf("%s: typed provider must support visible-row export", domain)
 		}
@@ -206,39 +188,7 @@ func TestResourceQueryRequestCarriesProviderAndScope(t *testing.T) {
 	}
 }
 
-// TestTypedResourceSnapshotsEmbedTheNormalizedEnvelope rejects a non-normalized
-// backend result shape (plan Phase 6): every typed-resource domain payload must
-// embed ResourceQueryEnvelope — so its JSON presents the one flattened query
-// shape the frontend's backendQuerySource/typed-query path consumes — and carry a
-// typed Rows slice. A new typed domain whose payload ships an ad-hoc shape
-// (forgetting the embed) fails here. This is the conformance gate; a newly added
-// typed domain must be added to the list (it mirrors
-// TestTypedResourceProvidersPublishVisibleRowExportOnly's 16-domain table).
-func TestTypedResourceSnapshotsEmbedTheNormalizedEnvelope(t *testing.T) {
-	typedPayloads := []any{
-		ClusterConfigSnapshot{}, ClusterStorageSnapshot{}, ClusterRBACSnapshot{},
-		ClusterCRDSnapshot{}, ClusterEventsSnapshot{},
-		NamespaceConfigSnapshot{}, NamespaceNetworkSnapshot{}, NamespaceStorageSnapshot{},
-		NamespaceRBACSnapshot{}, NamespaceQuotasSnapshot{}, NamespaceAutoscalingSnapshot{},
-		NamespaceHelmSnapshot{}, NamespaceEventsSnapshot{}, NamespaceWorkloadsSnapshot{},
-		NodeSnapshot{}, PodSnapshot{},
-	}
-	envelopeType := reflect.TypeOf(ResourceQueryEnvelope{})
-	for _, payload := range typedPayloads {
-		payloadType := reflect.TypeOf(payload)
-		embedded := false
-		for i := 0; i < payloadType.NumField(); i++ {
-			field := payloadType.Field(i)
-			if field.Anonymous && field.Type == envelopeType {
-				embedded = true
-				break
-			}
-		}
-		if !embedded {
-			t.Errorf("%s must embed ResourceQueryEnvelope (a non-normalized backend shape is rejected)", payloadType.Name())
-		}
-		if _, ok := payloadType.FieldByName("Rows"); !ok {
-			t.Errorf("%s must carry a typed Rows slice alongside the embedded envelope", payloadType.Name())
-		}
-	}
-}
+// The "every typed-resource payload embeds the normalized envelope" conformance
+// gate now lives in typed_provider_discovery_test.go
+// (TestEveryTypedResourceDomainEmbedsTheNormalizedEnvelope), driven by source
+// discovery instead of a hardcoded payload list.

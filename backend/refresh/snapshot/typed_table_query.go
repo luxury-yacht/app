@@ -96,6 +96,65 @@ func normalizeTypedTableSortField(value, fallback string) string {
 	return value
 }
 
+// typedQueryEnvelope assembles the canonical ResourceQueryEnvelope for the
+// backend-query page path of a typed-resource table. Every typed domain builder
+// uses this so the envelope wiring (provider, cursor, totals, facets,
+// completeness, dynamic ref) lives in one place instead of being re-spelled per
+// domain. It defaults to a complete, issue-free page; a partial/degraded build
+// layers `withDegraded` on top.
+func typedQueryEnvelope[T any](table string, page typedTableQueryPage[T], capabilities ResourceQueryCapabilities) ResourceQueryEnvelope {
+	return ResourceQueryEnvelope{
+		Provider:      ResourceQueryProviderTypedResource,
+		Table:         table,
+		Continue:      page.Continue,
+		CursorInvalid: page.CursorInvalid,
+		Total:         page.Total,
+		TotalIsExact:  page.TotalIsExact,
+		Kinds:         page.Kinds,
+		Namespaces:    page.Namespaces,
+		FacetsExact:   page.FacetsExact,
+		Completeness:  resourceQueryCompleteness(true),
+		Dynamic:       page.Dynamic,
+		Capabilities:  capabilities,
+	}
+}
+
+// typedWindowEnvelope assembles the envelope for the non-query truncated-window
+// path of a typed-resource table (no cursor or dynamic ref; facets describe the
+// local window). `exact` is whether the window holds the complete matching set.
+func typedWindowEnvelope(table string, total int, exact bool, kinds []string, capabilities ResourceQueryCapabilities) ResourceQueryEnvelope {
+	return ResourceQueryEnvelope{
+		Provider:     ResourceQueryProviderTypedResource,
+		Table:        table,
+		Total:        total,
+		TotalIsExact: exact,
+		Kinds:        kinds,
+		FacetsExact:  true,
+		Completeness: resourceQueryCompleteness(exact),
+		Capabilities: capabilities,
+	}
+}
+
+// withDegraded downgrades an envelope when a build could not prove a complete,
+// exact result (e.g. a partial namespace fanout). It folds the degraded signal
+// into totals/facets exactness and completeness, and attaches reason-bearing
+// issues, so a partial result can never present as a complete table.
+func (e ResourceQueryEnvelope) withDegraded(exact bool, issues []ResourceQueryIssue) ResourceQueryEnvelope {
+	e.TotalIsExact = e.TotalIsExact && exact
+	e.FacetsExact = e.FacetsExact && exact
+	e.Completeness = resourceQueryCompleteness(exact)
+	e.Issues = issues
+	return e
+}
+
+// withIssues attaches reason-bearing issues without touching exactness or
+// completeness. Used by the truncated-window path, where the window's facets are
+// still exact for what it holds even when the build reports issues.
+func (e ResourceQueryEnvelope) withIssues(issues []ResourceQueryIssue) ResourceQueryEnvelope {
+	e.Issues = issues
+	return e
+}
+
 func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typedTableQueryAdapter[T]) typedTableQueryPage[T] {
 	if !query.Enabled {
 		return typedTableQueryPage[T]{

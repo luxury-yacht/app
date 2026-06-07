@@ -8,7 +8,6 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
-import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridTableFilterConfig,
@@ -50,15 +49,11 @@ const useDefaultResourceGridKey = <T extends ResourceGridTableRow>(
   );
 
 export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
-  viewId,
   tableMode,
   data,
-  persistenceData,
   columns,
   keyExtractor,
-  filterOptions,
-  pageSizeOptions,
-  persistenceOverride,
+  persistenceOverride: persistence,
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   showNamespaceFilters = false,
@@ -67,19 +62,6 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
   const { selectedClusterId } = useKubeconfig();
   const defaultKeyExtractor = useDefaultResourceGridKey<T>(selectedClusterId);
   const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key ?? defaultKeyExtractor;
-  const ownedPersistence = useGridTablePersistence<T>({
-    viewId,
-    clusterIdentity: selectedClusterId,
-    namespace: null,
-    isNamespaceScoped: false,
-    columns,
-    data: persistenceData ?? data,
-    keyExtractor: resolvedKeyExtractor,
-    filterOptions: { ...(filterOptions ?? {}), isNamespaceScoped: false },
-    pageSizeOptions,
-    enabled: !persistenceOverride,
-  });
-  const persistence = persistenceOverride ?? ownedPersistence;
 
   const table = useResourceGridTableCommon({
     ...common,
@@ -98,16 +80,12 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
 }
 
 export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
-  viewId,
   tableMode,
   namespace,
   data,
-  persistenceData,
   columns,
   keyExtractor,
-  filterOptions,
-  pageSizeOptions,
-  persistenceOverride,
+  persistenceOverride: persistence,
   defaultSort = { key: 'name', direction: 'asc' },
   showNamespaceFilters = false,
   ...common
@@ -115,24 +93,6 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
   const { selectedClusterId } = useKubeconfig();
   const defaultKeyExtractor = useDefaultResourceGridKey<T>(selectedClusterId);
   const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key ?? defaultKeyExtractor;
-  const ownedPersistence = useNamespaceGridTablePersistence<T>({
-    viewId,
-    namespace,
-    columns,
-    data: persistenceData ?? data,
-    keyExtractor: resolvedKeyExtractor,
-    defaultSort,
-    filterOptions: {
-      ...(filterOptions ?? {}),
-      isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
-    },
-    pageSizeOptions,
-    enabled: !persistenceOverride,
-  });
-  const persistence = persistenceOverride ?? {
-    ...ownedPersistence,
-    setSortConfig: ownedPersistence.onSortChange,
-  };
 
   const table = useResourceGridTableCommon({
     ...common,
