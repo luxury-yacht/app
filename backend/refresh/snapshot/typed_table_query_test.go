@@ -110,6 +110,110 @@ func TestTypedTableQueryContinuesCursorWhenDynamicRevisionChanges(t *testing.T) 
 	}
 }
 
+// typedQueryMissingMetricRow models a numeric sort field that some rows are
+// missing. Its SortValue for a missing row sorts AFTER every numeric-encoded
+// value, which reproduces the historic bug where the page sort and the keyset
+// cursor computed order differently and dropped or duplicated rows across pages.
+type typedQueryMissingMetricRow struct {
+	key       string
+	metric    float64
+	hasMetric bool
+}
+
+func typedQueryMissingMetricAdapter() typedTableQueryAdapter[typedQueryMissingMetricRow] {
+	return typedTableQueryAdapter[typedQueryMissingMetricRow]{
+		Key:        func(row typedQueryMissingMetricRow) string { return row.key },
+		Namespace:  func(typedQueryMissingMetricRow) string { return "" },
+		Kind:       func(typedQueryMissingMetricRow) string { return "Pod" },
+		SearchText: func(typedQueryMissingMetricRow) []string { return nil },
+		Predicate:  func(typedQueryMissingMetricRow, string, string) bool { return true },
+		SortValue: func(row typedQueryMissingMetricRow, _ string) string {
+			if !row.hasMetric {
+				return "zzzz-missing"
+			}
+			return row.key
+		},
+		NumericSort: func(row typedQueryMissingMetricRow, _ string) (float64, bool) {
+			if !row.hasMetric {
+				return 0, false
+			}
+			return row.metric, true
+		},
+	}
+}
+
+// TestTypedTableQueryPaginationHasNoGapsWithMissingSortValues guards the keyset
+// contract: the page sort and the cursor boundary must use one comparable value,
+// so paging a field where some rows lack a value still visits every row exactly
+// once with no duplicates or gaps. Covers both the in-memory and streaming
+// collector paths, ascending and descending.
+func TestTypedTableQueryPaginationHasNoGapsWithMissingSortValues(t *testing.T) {
+	rows := []typedQueryMissingMetricRow{
+		{key: "a", metric: 30, hasMetric: true},
+		{key: "b", hasMetric: false},
+		{key: "c", metric: 10, hasMetric: true},
+		{key: "d", hasMetric: false},
+		{key: "e", metric: 20, hasMetric: true},
+	}
+
+	fetchers := map[string]func(typedTableQuery) typedTableQueryPage[typedQueryMissingMetricRow]{
+		"apply": func(query typedTableQuery) typedTableQueryPage[typedQueryMissingMetricRow] {
+			return applyTypedTableQuery(rows, query, typedQueryMissingMetricAdapter())
+		},
+		"collector": func(query typedTableQuery) typedTableQueryPage[typedQueryMissingMetricRow] {
+			collector := newTypedTableQueryCollector(query, typedQueryMissingMetricAdapter())
+			for _, row := range rows {
+				collector.Add(row)
+			}
+			return collector.Page()
+		},
+	}
+
+	for path, fetch := range fetchers {
+		for _, direction := range []string{"asc", "desc"} {
+			seen := map[string]int{}
+			continueToken := ""
+			pages := 0
+			for {
+				query := typedTableQuery{
+					Enabled: true,
+					Request: ResourceQueryRequest{
+						ClusterID:     "cluster-a",
+						Table:         "pods",
+						SortField:     "metric",
+						SortDirection: direction,
+						Limit:         2,
+						Continue:      continueToken,
+					},
+				}
+				page := fetch(query)
+				if page.CursorInvalid {
+					t.Fatalf("[%s/%s] unexpected cursor invalidation", path, direction)
+				}
+				for _, row := range page.Rows {
+					seen[row.key]++
+				}
+				pages++
+				if pages > 10 {
+					t.Fatalf("[%s/%s] pagination did not terminate", path, direction)
+				}
+				if page.Continue == "" {
+					break
+				}
+				continueToken = page.Continue
+			}
+			if len(seen) != len(rows) {
+				t.Fatalf("[%s/%s] expected %d unique rows, saw %d: %v", path, direction, len(rows), len(seen), seen)
+			}
+			for key, count := range seen {
+				if count != 1 {
+					t.Fatalf("[%s/%s] row %q appeared %d times (dup/skip)", path, direction, key, count)
+				}
+			}
+		}
+	}
+}
+
 func TestTypedTableQueryPagesForwardWithExactTotals(t *testing.T) {
 	rows := []typedQueryTestRow{
 		{key: "default/a", name: "a", namespace: "default", kind: "Pod"},

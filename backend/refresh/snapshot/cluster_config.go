@@ -261,7 +261,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 		Version: version,
 		Payload: ClusterConfigSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(clusterConfigDomainName, totalItems, totalItems == len(entries), snapshotSortedKinds(entries, func(entry ClusterConfigEntry) string { return entry.Kind }), clusterConfigQueryCapabilities()),
+			ResourceQueryEnvelope: typedWindowEnvelope(clusterConfigDomainName, totalItems, totalItems == len(entries) && len(issues) == 0, snapshotSortedKinds(entries, func(entry ClusterConfigEntry) string { return entry.Kind }), clusterConfigQueryCapabilities()).withIssues(issues),
 			Rows:                  entries,
 		},
 		Stats: snapshotWindowStats(len(entries), totalItems, "cluster configuration resources"),

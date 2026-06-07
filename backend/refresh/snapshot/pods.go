@@ -3,6 +3,7 @@ package snapshot
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -282,7 +283,12 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 				return float64(pod.Restarts), true
 			case "ready":
 				ready, total, ok := parseReadyPair(pod.Ready)
-				return float64(ready*1000000 + total), ok
+				if !ok {
+					// Keep "ready" uniformly numeric so the page sort and keyset
+					// cursor agree; an unparseable pair sorts first ascending.
+					return math.Inf(-1), true
+				}
+				return float64(ready*1000000 + total), true
 			case "age":
 				return numericAgeSortValue(pod.AgeTimestamp)
 			default:

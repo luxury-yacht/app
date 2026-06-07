@@ -170,7 +170,7 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		Version: version,
 		Payload: ClusterRBACSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(clusterRBACDomainName, totalItems, totalItems == len(entries), snapshotSortedKinds(entries, func(entry ClusterRBACEntry) string { return entry.Kind }), clusterRBACQueryCapabilities()),
+			ResourceQueryEnvelope: typedWindowEnvelope(clusterRBACDomainName, totalItems, totalItems == len(entries) && len(issues) == 0, snapshotSortedKinds(entries, func(entry ClusterRBACEntry) string { return entry.Kind }), clusterRBACQueryCapabilities()).withIssues(issues),
 			Rows:                  entries,
 		},
 		Stats: snapshotWindowStats(len(entries), totalItems, "cluster RBAC resources"),

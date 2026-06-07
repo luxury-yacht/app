@@ -80,6 +80,11 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     direction: 'next' | 'previous';
     previousPageToken?: string | null;
   } | null>(null);
+  // Hold selectRows in a ref so applyPayload (and therefore the fetch effect)
+  // stays stable even if a caller passes an unmemoized selector. Without this an
+  // inline selectRows would re-run the fetch every render.
+  const selectRowsRef = useRef(selectRows);
+  selectRowsRef.current = selectRows;
   const queryIdentity = useMemo(
     () =>
       typedResourceQueryLifecycleIdentity({
@@ -189,29 +194,31 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     sortConfig,
   ]);
 
-  const applyPayload = useCallback(
-    (payload: TPayload) => {
-      setRows(selectRows(payload));
-      setContinueToken(payload.continue ?? null);
-      setTotalCount(payload.total ?? 0);
-      setTotalIsExact(payload.totalIsExact !== false);
-      setFilterOptions(filterOptionsFromTypedPayload(payload));
-      setDynamic(payload.dynamic ?? null);
-      const pendingNavigation = pendingNavigationRef.current;
-      if (pendingNavigation) {
-        if (pendingNavigation.direction === 'next') {
-          setPreviousTokens((current) => [...current, pendingNavigation.previousPageToken ?? null]);
-          setPageIndex((current) => current + 1);
-        } else {
-          setPreviousTokens((current) => current.slice(0, -1));
-          setPageIndex((current) => Math.max(1, current - 1));
-        }
-        pendingNavigationRef.current = null;
+  const applyPayload = useCallback((payload: TPayload) => {
+    const nextRows = selectRowsRef.current(payload);
+    setRows(nextRows);
+    setContinueToken(payload.continue ?? null);
+    const hasTotal = typeof payload.total === 'number';
+    // A missing total must never render as an exact 0 while rows are visible.
+    // Fall back to the visible row count and mark the total approximate so the
+    // UI shows "≈N" / no "Page N of M" rather than a false "0 of 0".
+    setTotalCount(hasTotal ? (payload.total as number) : nextRows.length);
+    setTotalIsExact(hasTotal ? payload.totalIsExact !== false : false);
+    setFilterOptions(filterOptionsFromTypedPayload(payload));
+    setDynamic(payload.dynamic ?? null);
+    const pendingNavigation = pendingNavigationRef.current;
+    if (pendingNavigation) {
+      if (pendingNavigation.direction === 'next') {
+        setPreviousTokens((current) => [...current, pendingNavigation.previousPageToken ?? null]);
+        setPageIndex((current) => current + 1);
+      } else {
+        setPreviousTokens((current) => current.slice(0, -1));
+        setPageIndex((current) => Math.max(1, current - 1));
       }
-      setLoaded(true);
-    },
-    [selectRows]
-  );
+      pendingNavigationRef.current = null;
+    }
+    setLoaded(true);
+  }, []);
 
   useEffect(() => {
     if (!enabled || !scope) {

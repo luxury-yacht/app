@@ -233,7 +233,7 @@ func buildNamespaceRBACSnapshot(
 		Version: version,
 		Payload: NamespaceRBACSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceRBACDomainName, totalItems, totalItems == len(resources), snapshotSortedKinds(resources, func(resource RBACSummary) string { return resource.Kind }), namespaceRBACQueryCapabilities()),
+			ResourceQueryEnvelope: typedWindowEnvelope(namespaceRBACDomainName, totalItems, totalItems == len(resources) && len(issues) == 0, snapshotSortedKinds(resources, func(resource RBACSummary) string { return resource.Kind }), namespaceRBACQueryCapabilities()).withIssues(issues),
 			Rows:                  resources,
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "RBAC resources"),

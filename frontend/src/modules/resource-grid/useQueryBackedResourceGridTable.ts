@@ -211,8 +211,15 @@ function useTypedQueryLifecycle<
     },
     [handleTableStateChange]
   );
+  // clusterId is required: without it buildTypedResourceQueryScope returns null
+  // and no fetch is ever issued, so the query path could never settle. Gating
+  // here routes a missing cluster to the local branch, which settles correctly.
   const queryEnabled =
-    enabled && tableStateReady && persistence.hydrated && !liveDomainInitialLoadPending;
+    enabled &&
+    Boolean(clusterId) &&
+    tableStateReady &&
+    persistence.hydrated &&
+    !liveDomainInitialLoadPending;
 
   const query = useTypedResourceQuery<TPayload, TRow>({
     enabled: queryEnabled,

@@ -147,9 +147,10 @@ func (e ResourceQueryEnvelope) withDegraded(exact bool, issues []ResourceQueryIs
 	return e
 }
 
-// withIssues attaches reason-bearing issues without touching exactness or
-// completeness. Used by the truncated-window path, where the window's facets are
-// still exact for what it holds even when the build reports issues.
+// withIssues attaches reason-bearing issues without itself touching exactness or
+// completeness. The local-window path uses it after folding any unavailable
+// source into the envelope's `exact` argument, so a window missing a
+// permission-blocked source is reported as both inexact and issue-bearing.
 func (e ResourceQueryEnvelope) withIssues(issues []ResourceQueryIssue) ResourceQueryEnvelope {
 	e.Issues = issues
 	return e
@@ -344,6 +345,13 @@ func typedTableItemAfterCursor[T any](item T, cursor typedTableQueryCursor, quer
 }
 
 func (c typedTableQueryCursor) matches(query typedTableQuery) bool {
+	// DynamicRevision is deliberately NOT compared. Metric-backed sorts
+	// (cpu/memory) carry a metrics revision that advances every few seconds; the
+	// cursor is a value-based keyset (LastValue holds the comparable sort value,
+	// not an offset), so it keeps paging forward correctly across a metrics tick.
+	// Invalidating on every revision change would reset a metric-sorted table to
+	// page 1 constantly and make it impossible to page. See
+	// TestTypedTableQueryContinuesCursorWhenDynamicRevisionChanges.
 	return c.ClusterID == query.Request.ClusterID &&
 		c.Table == query.Request.Table &&
 		c.Signature == query.signature() &&
@@ -412,32 +420,21 @@ func typedTableCursorStart[T any](items []T, cursor typedTableQueryCursor, query
 	return len(items)
 }
 
+// sortTypedTableRows orders rows by the exact same comparable value that the
+// keyset cursor records and compares against (typedTableComparableSortValue),
+// with the stable row key as the final tiebreak. Driving the page sort and the
+// cursor boundary from one function is what guarantees a cursor can never skip
+// or duplicate a row: the order the page is laid out in is, by construction,
+// the order the boundary walks.
 func sortTypedTableRows[T any](items []T, query typedTableQuery, adapter typedTableQueryAdapter[T]) {
 	sort.SliceStable(items, func(i, j int) bool {
-		leftNumeric, leftOK := adapter.NumericSort(items[i], query.Request.SortField)
-		rightNumeric, rightOK := adapter.NumericSort(items[j], query.Request.SortField)
-		if leftOK || rightOK {
-			if !leftOK {
-				leftNumeric = math.Inf(-1)
+		left := typedTableComparableSortValue(items[i], query.Request.SortField, adapter)
+		right := typedTableComparableSortValue(items[j], query.Request.SortField, adapter)
+		if left != right {
+			if query.Request.SortDirection == "desc" {
+				return left > right
 			}
-			if !rightOK {
-				rightNumeric = math.Inf(-1)
-			}
-			if leftNumeric != rightNumeric {
-				if query.Request.SortDirection == "desc" {
-					return leftNumeric > rightNumeric
-				}
-				return leftNumeric < rightNumeric
-			}
-		} else {
-			left := strings.ToLower(adapter.SortValue(items[i], query.Request.SortField))
-			right := strings.ToLower(adapter.SortValue(items[j], query.Request.SortField))
-			if left != right {
-				if query.Request.SortDirection == "desc" {
-					return left > right
-				}
-				return left < right
-			}
+			return left < right
 		}
 		return adapter.Key(items[i]) < adapter.Key(items[j])
 	})
@@ -462,6 +459,8 @@ func typedTableComparableSortValue[T any](item T, field string, adapter typedTab
 }
 
 func typedTableComparableNumericSortValue(numeric float64) string {
+	// Normalize negative zero to positive zero so -0.0 and +0.0 encode to the
+	// same key (their raw float bits differ in the sign bit otherwise).
 	if numeric == 0 {
 		numeric = 0
 	}
@@ -525,23 +524,34 @@ func stringSet(values []string) map[string]struct{} {
 	return result
 }
 
+// parseFormattedCPUToMilli and parseFormattedMemoryToBytes are used for the
+// always-numeric CPU/memory metric columns. A missing or unparseable value
+// returns ok=true with a -Inf sentinel (sorts first ascending) rather than
+// ok=false, so the field stays uniformly numeric and the page sort and keyset
+// cursor cannot diverge on rows that lack a metric sample.
 func parseFormattedCPUToMilli(value string) (float64, bool) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" || trimmed == "-" {
-		return 0, false
+		return math.Inf(-1), true
 	}
 	if strings.HasSuffix(trimmed, "m") {
 		parsed, err := strconv.ParseFloat(strings.TrimSuffix(trimmed, "m"), 64)
-		return parsed, err == nil
+		if err != nil {
+			return math.Inf(-1), true
+		}
+		return parsed, true
 	}
 	parsed, err := strconv.ParseFloat(trimmed, 64)
-	return parsed * 1000, err == nil
+	if err != nil {
+		return math.Inf(-1), true
+	}
+	return parsed * 1000, true
 }
 
 func parseFormattedMemoryToBytes(value string) (float64, bool) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" || trimmed == "-" {
-		return 0, false
+		return math.Inf(-1), true
 	}
 	units := []struct {
 		suffix string
@@ -557,9 +567,15 @@ func parseFormattedMemoryToBytes(value string) (float64, bool) {
 	for _, unit := range units {
 		if strings.HasSuffix(trimmed, unit.suffix) {
 			parsed, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(trimmed, unit.suffix)), 64)
-			return parsed * unit.scale, err == nil
+			if err != nil {
+				return math.Inf(-1), true
+			}
+			return parsed * unit.scale, true
 		}
 	}
 	parsed, err := strconv.ParseFloat(trimmed, 64)
-	return parsed, err == nil
+	if err != nil {
+		return math.Inf(-1), true
+	}
+	return parsed, true
 }

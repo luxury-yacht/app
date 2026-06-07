@@ -2,13 +2,20 @@ package snapshot
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
 
+// numericAgeSortValue reports the numeric sort value for an age column. Age is
+// always a numeric field, so a missing/unknown timestamp returns ok=true with a
+// -Inf sentinel rather than ok=false. Keeping the whole field numeric (never a
+// mix of numeric and string sort values) is what lets the page sort and the
+// keyset cursor agree on ordering; -Inf preserves "unknown age sorts first
+// ascending", the prior behavior.
 func numericAgeSortValue(ageTimestamp int64) (float64, bool) {
 	if ageTimestamp <= 0 {
-		return 0, false
+		return math.Inf(-1), true
 	}
 	return -float64(ageTimestamp), true
 }
@@ -35,15 +42,18 @@ func eventObjectNameForSort(object string) string {
 	return ""
 }
 
+// nodePodsUsedSortValue is numeric for every node, so an unknown pod count
+// returns ok=true with a -Inf sentinel (sorts first ascending) rather than
+// ok=false, keeping the field uniformly numeric for keyset-consistent sorting.
 func nodePodsUsedSortValue(pods string) (float64, bool) {
 	pods = strings.TrimSpace(pods)
 	if pods == "" || pods == "—" || pods == "-" {
-		return 0, false
+		return math.Inf(-1), true
 	}
 	used, _, _ := strings.Cut(pods, "/")
 	value, err := strconv.ParseFloat(strings.TrimSpace(used), 64)
 	if err != nil {
-		return 0, false
+		return math.Inf(-1), true
 	}
 	return value, true
 }

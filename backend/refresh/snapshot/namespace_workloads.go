@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -373,7 +374,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		Version: version,
 		Payload: NamespaceWorkloadsSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceWorkloadsDomainName, totalItems, !stats.Truncated, snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }), namespaceWorkloadsQueryCapabilities()).withIssues(issues),
+			ResourceQueryEnvelope: typedWindowEnvelope(namespaceWorkloadsDomainName, totalItems, !stats.Truncated && len(issues) == 0, snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }), namespaceWorkloadsQueryCapabilities()).withIssues(issues),
 			Rows:                  items,
 		},
 		Stats: stats,
@@ -490,7 +491,12 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 				return float64(row.Restarts), true
 			case "ready":
 				ready, total, ok := parseReadyPair(row.Ready)
-				return float64(ready*1000000 + total), ok
+				if !ok {
+					// Keep "ready" uniformly numeric so the page sort and keyset
+					// cursor agree; an unparseable pair sorts first ascending.
+					return math.Inf(-1), true
+				}
+				return float64(ready*1000000 + total), true
 			case "age":
 				return numericAgeSortValue(row.AgeTimestamp)
 			default:

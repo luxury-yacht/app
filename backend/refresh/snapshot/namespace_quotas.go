@@ -246,7 +246,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		Version: version,
 		Payload: NamespaceQuotasSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceQuotasDomainName, totalItems, totalItems == len(resources), snapshotSortedKinds(resources, func(resource QuotaSummary) string { return resource.Kind }), namespaceQuotasQueryCapabilities()),
+			ResourceQueryEnvelope: typedWindowEnvelope(namespaceQuotasDomainName, totalItems, totalItems == len(resources) && len(issues) == 0, snapshotSortedKinds(resources, func(resource QuotaSummary) string { return resource.Kind }), namespaceQuotasQueryCapabilities()).withIssues(issues),
 			Rows:                  resources,
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "quota resources"),

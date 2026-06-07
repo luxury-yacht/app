@@ -459,7 +459,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		Version: version,
 		Payload: NamespaceNetworkSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceNetworkDomainName, totalItems, totalItems == len(resources), snapshotSortedKinds(resources, func(resource NetworkSummary) string { return resource.Kind }), namespaceNetworkQueryCapabilities()),
+			ResourceQueryEnvelope: typedWindowEnvelope(namespaceNetworkDomainName, totalItems, totalItems == len(resources) && len(issues) == 0, snapshotSortedKinds(resources, func(resource NetworkSummary) string { return resource.Kind }), namespaceNetworkQueryCapabilities()).withIssues(issues),
 			Rows:                  resources,
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "network resources"),

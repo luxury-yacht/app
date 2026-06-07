@@ -199,7 +199,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 		Version: version,
 		Payload: NamespaceConfigSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceConfigDomainName, totalItems, totalItems == len(resources), snapshotSortedKinds(resources, func(resource ConfigSummary) string { return resource.Kind }), namespaceConfigQueryCapabilities()),
+			ResourceQueryEnvelope: typedWindowEnvelope(namespaceConfigDomainName, totalItems, totalItems == len(resources) && len(issues) == 0, snapshotSortedKinds(resources, func(resource ConfigSummary) string { return resource.Kind }), namespaceConfigQueryCapabilities()).withIssues(issues),
 			Rows:                  resources,
 		},
 		Stats: snapshotWindowStats(len(resources), totalItems, "config resources"),

@@ -189,7 +189,23 @@ func compareSummariesForCatalogQueryWithOptions(left, right Summary, opts QueryO
 		if leftValue > rightValue {
 			return 1
 		}
+		// Explicit-field sorts break ties by the ascending identity chain
+		// regardless of direction, so the keyset stays deterministic.
+		return compareCatalogIdentity(left, right)
 	}
+	// The default sort IS the identity chain (kind/namespace/name/...), so a
+	// desc request reverses the whole composite order.
+	cmp := compareCatalogIdentity(left, right)
+	if direction == "desc" {
+		return -cmp
+	}
+	return cmp
+}
+
+// compareCatalogIdentity is the stable ascending total order over a summary's
+// kind/namespace/name and full GVK+UID identity. It is the catalog's default
+// ordering and the keyset tiebreak for every other sort field.
+func compareCatalogIdentity(left, right Summary) int {
 	for _, pair := range [][2]string{
 		{left.Kind, right.Kind},
 		{left.Namespace, right.Namespace},

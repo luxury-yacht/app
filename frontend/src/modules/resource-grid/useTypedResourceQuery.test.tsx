@@ -103,6 +103,21 @@ describe('useTypedResourceQuery', () => {
     expect(result?.error).toBe('All Namespaces Pods returned no data');
   });
 
+  it('treats a payload with rows but no total as approximate instead of an exact 0', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: { rows: [{ name: 'a' }, { name: 'b' }] } },
+    });
+
+    await renderQuery();
+
+    // total is absent on the payload: it must not render as a false exact 0
+    // while two rows are visible. Fall back to the visible count, marked
+    // approximate so the UI does not claim "Page N of M".
+    expect(result?.totalCount).toBe(2);
+    expect(result?.totalIsExact).toBe(false);
+  });
+
   it('marks failed query requests as loaded so the error can render instead of a spinner', async () => {
     requestRefreshDomainStateMock.mockRejectedValue(new Error('query failed'));
 

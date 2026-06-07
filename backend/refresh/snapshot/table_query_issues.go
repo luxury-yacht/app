@@ -14,10 +14,12 @@ type typedTableResourceSource struct {
 	QueryKinds []string
 }
 
+// typedTableQueryResourceIssues reports the sources that are unavailable or
+// permission-blocked for the current query. It is computed for both the
+// backend-query path and the local-window path: a blocked source silently
+// reduces the rows in either mode, so both must surface it rather than present a
+// partial table as complete.
 func typedTableQueryResourceIssues(ctx context.Context, domainName string, query typedTableQuery, sources []typedTableResourceSource) []ResourceQueryIssue {
-	if !query.Enabled {
-		return nil
-	}
 	issues := make([]ResourceQueryIssue, 0)
 	for _, source := range sources {
 		if !typedTableQueryNeedsSource(query, source) {
