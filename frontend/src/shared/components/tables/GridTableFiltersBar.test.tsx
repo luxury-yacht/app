@@ -332,6 +332,13 @@ describe('GridTableFiltersBar', () => {
   it('marks approximate backend totals with visible copy', async () => {
     vi.useFakeTimers();
     await renderFilters({
+      activeFilters: {
+        search: 'web',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
       resolvedFilterOptions: {
         kinds: [],
         namespaces: [],
@@ -355,6 +362,13 @@ describe('GridTableFiltersBar', () => {
 
   it('labels query-backed page counts as current-page totals', async () => {
     await renderFilters({
+      activeFilters: {
+        search: 'web',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
       resolvedFilterOptions: {
         kinds: [],
         namespaces: [],
@@ -367,9 +381,43 @@ describe('GridTableFiltersBar', () => {
     expect(resultCount?.textContent).toContain('250 on this page of 5000 items');
   });
 
+  it('hides the result count and tooltip when no narrowing filter is active', async () => {
+    // The filter-bar count is filter feedback, not pagination — pagination/total lives
+    // in the pagination footer. With no active filter, the count must not render.
+    await renderFilters({
+      resultCount: { displayed: 50, total: 100, capped: true },
+    });
+
+    expect(container.querySelector('[data-gridtable-filter-role="result-count"]')).toBeNull();
+  });
+
+  it('shows the result count once a narrowing filter is active', async () => {
+    await renderFilters({
+      activeFilters: {
+        search: 'web',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      resultCount: { displayed: 12, total: 100 },
+    });
+
+    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+    expect(resultCount).not.toBeNull();
+    expect(resultCount?.textContent).toContain('12 of 100 items');
+  });
+
   it('marks partial local windows with visible copy', async () => {
     vi.useFakeTimers();
     await renderFilters({
+      activeFilters: {
+        search: 'web',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
       resultCount: {
         displayed: 50,
         total: 500,

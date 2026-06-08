@@ -17,7 +17,10 @@ import type {
 import { useSearchShortcutTarget } from '@ui/shortcuts';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
-import { hasNonDefaultGridTableFilters } from '@shared/components/tables/gridTableFilterState';
+import {
+  hasNarrowingGridTableFilters,
+  hasNonDefaultGridTableFilters,
+} from '@shared/components/tables/gridTableFilterState';
 
 interface GridTableFiltersBarProps {
   activeFilters: GridTableFilterState;
@@ -116,6 +119,10 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const hasActiveFilters = hasNonDefaultGridTableFilters(activeFilters);
+  // The result count is filter feedback (how many rows match the active filter), not
+  // pagination/total info — that lives in the pagination footer. So it shows only when
+  // a narrowing filter (search/kind/namespace) is active.
+  const hasNarrowingFilters = hasNarrowingGridTableFilters(activeFilters);
   const showCaseSensitiveToggle = resolvedFilterOptions.searchBehavior !== 'query';
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -247,7 +254,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 {customActions}
               </div>
             )}
-            {resultCount && (
+            {resultCount && hasNarrowingFilters && (
               <span
                 className="gridtable-filter-result-count"
                 data-gridtable-filter-role="result-count"

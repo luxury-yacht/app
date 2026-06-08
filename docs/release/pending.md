@@ -2,6 +2,11 @@
 
 ### Changed
 
+- A table's filter bar now shows its result count (and the accompanying tooltip)
+  only while a filter is active — it reports how many rows match your filter. Total
+  and page counts continue to live in the pagination footer, so the filter bar no
+  longer duplicates that information.
+
 ### Fixed
 
 - Resource tables no longer flash a loading spinner or "no data available" when

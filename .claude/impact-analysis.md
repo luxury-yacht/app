@@ -19,6 +19,30 @@ current.
 
 ---
 
+## 2026-06-08 — FIX: filter-bar result count/tooltip should only show when a filter is active
+
+`GridTableFiltersBar` renders the `resultCount` count + tooltip whenever a count is
+passed. That duplicates pagination/total info that already lives in the pagination
+footer. Gate it on an ACTIVE narrowing filter.
+
+- `frontend/src/shared/components/tables/GridTableFiltersBar.tsx` — gate the
+  `{resultCount && ...}` block (lines ~250-286) additionally on
+  `hasNarrowingGridTableFilters(activeFilters)` (search/kinds/namespaces non-empty —
+  NOT caseSensitive/includeMetadata, which don't narrow). Add the import.
+  - Producer (VERIFIED): `useGridTableFiltersWiring.tsx` `resultCount` memo still
+    produces the count (gated only on `filteringEnabled`/`showResultCount`) and passes
+    it + `activeFilters` to the bar; the bar now hides it when no narrowing filter is
+    active. No producer change needed.
+  - Consumer/downstream (VERIFIED): the pagination footer is separate and unchanged;
+    it owns total/page info. Reset button still uses `hasNonDefaultGridTableFilters`
+    (unchanged — correct for reset).
+  - States: no filter → count hidden; search/kind/namespace active → count shown
+    (filtered "N of M"); case-sensitive-only → still hidden (not narrowing).
+- Tests: `GridTableFiltersBar.test.tsx` — 3 existing count tests (332/356/370) render a
+  count with default (empty) filters; add an active filter so they still show it. New
+  test: count hidden with no narrowing filter, shown with one. (235 checks the
+  search-hint tooltip, not the count — unaffected.)
+
 ## 2026-06-08 — FOLLOW-UP: same dead props in the Custom views (surfaced by review)
 
 - `NsViewCustom.tsx` — analogue of ClusterViewCustom (always query-backed, `enabled: true`,

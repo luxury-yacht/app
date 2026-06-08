@@ -237,6 +237,9 @@ describe('GridTable virtualization', () => {
       virtualization: { enabled: false },
       filters: {
         enabled: true,
+        // The result count only renders with an active filter; the search here matches
+        // the page and leaves the window (8 of a backend total of 20) unchanged.
+        initial: { search: 'Row' },
         options: {
           searchBehavior: 'query',
           totalCount: 20,
@@ -1954,6 +1957,9 @@ it('shows the full local item count without a user-preference cap', () => {
     virtualization: { enabled: false },
     filters: {
       enabled: true,
+      // The count only renders with an active filter; 'Row' matches all 8 local rows,
+      // so the displayed count is still the full, un-capped total.
+      initial: { search: 'Row' },
       accessors: {
         getKind: (row) => row.label,
         getNamespace: () => '',
@@ -1999,6 +2005,9 @@ it('does not show the capped-results tooltip when the table is not capped', () =
     virtualization: { enabled: false },
     filters: {
       enabled: true,
+      // The count only renders with an active filter; 'Row' matches all 3 rows, so the
+      // count is the full (un-capped) total and carries no capped-results tooltip.
+      initial: { search: 'Row' },
       accessors: {
         getKind: (row) => row.label,
         getNamespace: () => '',
