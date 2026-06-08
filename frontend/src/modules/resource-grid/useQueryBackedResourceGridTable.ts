@@ -41,19 +41,21 @@ const typedQueryPageLimitOrDefault = (value: number | null | undefined): TypedQu
     ? (value as TypedQueryPageLimit)
     : DEFAULT_TYPED_QUERY_PAGE_LIMIT;
 
-const liveDomainVersion = (state: {
+// The live-data identity the typed query watches to decide when to refetch. It
+// uses ONLY the data identity (version + checksum/etag) — deliberately NOT a
+// refresh timestamp. Including a timestamp made it change on every poll tick even
+// when the data was identical, so the query refetched continuously (~5×/sec while
+// idle on the view) and intermittently raced into a transient "returned no data"
+// that blanked the table. Keyed on data identity, it refetches only on real change.
+export const liveDomainVersion = (state: {
   version?: number | string;
   checksum?: string;
   etag?: string;
+  // Accepted from the scoped domain state but deliberately IGNORED below — see comment.
   lastUpdated?: number;
   lastAutoRefresh?: number;
   lastManualRefresh?: number;
-}): string =>
-  [
-    state.version ?? '',
-    state.checksum ?? state.etag ?? '',
-    state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh ?? '',
-  ].join(':');
+}): string => [state.version ?? '', state.checksum ?? state.etag ?? ''].join(':');
 
 const shouldHoldInitialTypedQueryLoading = <TRow>({
   enabled,
@@ -95,12 +97,14 @@ const buildQueryBackedSource = <T extends ResourceGridTableRow>({
   loaded,
   error,
   mode,
+  cacheKey,
 }: {
   rows: T[];
   loading: boolean;
   loaded: boolean;
   error: string | null;
   mode: ResourceGridTableMode;
+  cacheKey: string;
 }): ResourceInventorySourceState<T> => ({
   rows,
   loading,
@@ -109,6 +113,7 @@ const buildQueryBackedSource = <T extends ResourceGridTableRow>({
   completeness: mode === 'Local Partial' ? 'partial' : 'complete',
   partialLabel: null,
   pagination: null,
+  cacheKey,
 });
 
 // Fields shared by the cluster and namespace query wrappers. Each wrapper adds
@@ -274,6 +279,7 @@ function useTypedQueryLifecycle<
 function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
   enabled,
   viewId,
+  cacheKey,
   table,
   query,
   persistence,
@@ -287,6 +293,7 @@ function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
 }: {
   enabled: boolean;
   viewId: string;
+  cacheKey: string;
   table: ResourceGridTableResult<TRow>;
   query: UseTypedResourceQueryResult<TRow>;
   persistence: UseGridTablePersistenceResult;
@@ -341,6 +348,7 @@ function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
           loaded,
           error,
           mode: queryTableMode,
+          cacheKey,
         })
       : boundedRowsSource({
           rows: gridTableProps.data,
@@ -349,6 +357,7 @@ function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
           error,
           mode: localTableMode === 'Local Partial' ? 'Local Partial' : 'Local Complete',
           partialLabel: filterOptionOverrides?.partialDataLabel ?? null,
+          cacheKey,
         }),
   };
 }
@@ -455,6 +464,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   return useQueryBackedGridResult<TRow>({
     enabled,
     viewId: tableParams.viewId,
+    cacheKey: `${tableParams.viewId}|${liveScope}`,
     table,
     query: lifecycle.query,
     persistence,
@@ -559,6 +569,7 @@ export function useQueryBackedClusterResourceGridTable<
   return useQueryBackedGridResult<TRow>({
     enabled,
     viewId: tableParams.viewId,
+    cacheKey: `${tableParams.viewId}|${liveScope}`,
     table,
     query: lifecycle.query,
     persistence,

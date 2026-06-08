@@ -91,4 +91,5 @@ Applies to React/TypeScript code under `frontend/`.
 
 ## Testing Guidelines
 
+- Practice red/green/refactor TDD (see root `AGENTS.md` Critical Rules): write the failing `*.test.ts[x]` case first, run Vitest to watch it fail for the right reason, then write the minimum to make it pass, then refactor under green.
 - Frontend specs mirror their features (for example `DiagnosticsPanel.test.ts`) and run with Vitest; append `--watch` for interactive loops.

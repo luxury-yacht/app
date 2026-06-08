@@ -19,6 +19,17 @@
  */
 import * as React from 'react';
 
+// Module-level replay cache: the last non-empty rows per view identity. It must
+// survive unmount so a revisit can render the prior rows immediately instead of a
+// spinner. Keyed by `source.cacheKey` (view + cluster + namespace) so one view's
+// rows can never appear under another's.
+const lastRowsByCacheKey = new Map<string, unknown[]>();
+
+/** Test-only: clear the revisit replay cache so module state never leaks across specs. */
+export function resetResourceInventoryRowCache(): void {
+  lastRowsByCacheKey.clear();
+}
+
 /** Truthfulness of the row set, mirroring the backend query envelope. */
 export type ResourceInventoryCompleteness = 'complete' | 'partial';
 
@@ -78,6 +89,12 @@ export interface ResourceInventorySourceState<T> {
   /** Human copy describing why the rows are partial (truncation/window note). */
   partialLabel?: string | null;
   pagination?: ResourceInventoryPagination | null;
+  /**
+   * Stable per-view identity (view + cluster + namespace). When set, the
+   * controller caches this view's last non-empty rows and replays them on the
+   * next mount, so a revisit renders data immediately instead of a spinner.
+   */
+  cacheKey?: string;
 }
 
 /** The display decisions the wrapper and GridTable consume. */
@@ -158,19 +175,61 @@ export function deriveResourceInventoryRenderState<T>(
 export function useResourceInventoryTable<T>(
   source: ResourceInventorySourceState<T>
 ): ResourceInventoryRenderState<T> {
-  const { rows, loading, loaded, error, blocked, completeness, partialLabel, pagination } = source;
+  const {
+    rows,
+    loading,
+    loaded,
+    error,
+    blocked,
+    completeness,
+    partialLabel,
+    pagination,
+    cacheKey,
+  } = source;
+
+  // A table keeps its last rows only while the source is in a TRANSIENT empty —
+  // a refetch in flight (loading) or a transient error ("returned no data") on a
+  // background refresh. Those are the frames that flash a spinner / "no data" mid-
+  // session. A SETTLED empty (not loading, no error) is a real result — a genuine
+  // empty or a filter that matched nothing — and always shows through. (`loaded`
+  // is deliberately not used: bounded/local views report it inconsistently.)
+  const transientEmpty = rows.length === 0 && (loading || Boolean(error));
+
+  // Cache the last non-empty page; clear it on a settled empty so a view that is
+  // truly empty now does not resurrect stale rows on the next refresh.
+  React.useEffect(() => {
+    if (!cacheKey) {
+      return;
+    }
+    if (rows.length > 0) {
+      lastRowsByCacheKey.set(cacheKey, rows);
+    } else if (!loading && !error) {
+      lastRowsByCacheKey.delete(cacheKey);
+    }
+  }, [cacheKey, rows, loading, error]);
+
+  const cached =
+    cacheKey && transientEmpty ? (lastRowsByCacheKey.get(cacheKey) as T[] | undefined) : undefined;
+  const replayRows = cached && cached.length > 0 ? cached : null;
+
   return React.useMemo(
     () =>
-      deriveResourceInventoryRenderState({
-        rows,
-        loading,
-        loaded,
-        error,
-        blocked,
-        completeness,
-        partialLabel,
-        pagination,
-      }),
-    [rows, loading, loaded, error, blocked, completeness, partialLabel, pagination]
+      deriveResourceInventoryRenderState(
+        replayRows
+          ? {
+              // Show the cached page as a healthy, settled result: the live
+              // source's transient loading/error/blocked is bridged, not shown.
+              rows: replayRows,
+              loading: false,
+              loaded: true,
+              error: null,
+              blocked: false,
+              completeness,
+              partialLabel,
+              pagination,
+            }
+          : { rows, loading, loaded, error, blocked, completeness, partialLabel, pagination }
+      ),
+    [replayRows, rows, loading, loaded, error, blocked, completeness, partialLabel, pagination]
   );
 }

@@ -1,2 +1,4 @@
+- Missing permissions in Workloads Pods tab
+- Missing permissions in Object Details actions menu for pods
 - Ingress/service/gateway hostnames should be clickable links
 - Make Impossible States Impossible

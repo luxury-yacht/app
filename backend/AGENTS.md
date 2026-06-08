@@ -84,4 +84,5 @@ Applies to Go code under `backend/`.
 
 ## Testing Guidelines
 
+- Practice red/green/refactor TDD (see root `AGENTS.md` Critical Rules): write the failing `_test.go` case first, run `go test` to watch it fail for the right reason, then write the minimum to make it pass, then refactor under green.
 - Backend tests stay adjacent to their targets with `_test.go` suffixes and `TestXxx` functions.

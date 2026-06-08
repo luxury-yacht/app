@@ -459,6 +459,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     loading,
     loaded: hasLoadedOnce,
     error: null,
+    // Per-view identity so a revisit replays the last browse page instead of a spinner.
+    cacheKey: `${resolvedViewId}|${selectedClusterId ?? ''}|${namespace ?? ''}`,
   });
 
   // Resolve class names and messages

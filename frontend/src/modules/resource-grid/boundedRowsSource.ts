@@ -33,6 +33,8 @@ export interface BoundedRowsSourceInput<T> {
   mode?: BoundedRowsMode;
   /** Copy describing the cap/window; only used in `Local Partial`. */
   partialLabel?: string | null;
+  /** Per-view identity for the controller's revisit replay cache. */
+  cacheKey?: string;
 }
 
 /**
@@ -56,5 +58,6 @@ export function boundedRowsSource<T>(
     completeness,
     partialLabel: completeness === 'partial' ? (input.partialLabel ?? null) : null,
     pagination: null,
+    cacheKey: input.cacheKey,
   };
 }

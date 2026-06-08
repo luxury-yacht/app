@@ -57,6 +57,8 @@ export interface BackendQuerySourceInput<T> {
    * leaves pagination to that footer.
    */
   pagination?: BackendQueryPaginationInput | null;
+  /** Per-view identity for the controller's revisit replay cache. */
+  cacheKey?: string;
 }
 
 /**
@@ -79,6 +81,7 @@ export function backendQuerySource<T>(
       completeness,
       partialLabel: null,
       pagination: null,
+      cacheKey: input.cacheKey,
     };
   }
 
@@ -103,5 +106,6 @@ export function backendQuerySource<T>(
           onPrevious: input.pagination.loadPrevious,
         }
       : null,
+    cacheKey: input.cacheKey,
   };
 }
