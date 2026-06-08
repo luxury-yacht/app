@@ -192,6 +192,46 @@ func TestNodeTableQuerySortsAgeByTimestamp(t *testing.T) {
 	}
 }
 
+func TestNodeTableQueryMetadataSearch(t *testing.T) {
+	nodes := []NodeSummary{
+		{Kind: "Node", Name: "node-a", Labels: map[string]string{"team": "payments"}},
+		{Kind: "Node", Name: "node-b", Annotations: map[string]string{"owner": "search-team"}},
+	}
+	base := typedTableQuery{
+		Enabled:   true,
+		BaseScope: "cluster",
+		Request: ResourceQueryRequest{
+			ClusterID:     "cluster-a",
+			Table:         "nodes",
+			SortField:     "name",
+			SortDirection: "asc",
+			Limit:         10,
+			Search:        "payments",
+		},
+	}
+
+	// Without IncludeMetadata, a label value is not part of the searchable text.
+	page := applyTypedTableQuery(nodes, base, nodeTableQueryAdapter())
+	if len(page.Rows) != 0 {
+		t.Fatalf("without IncludeMetadata: matched %d rows, want 0", len(page.Rows))
+	}
+
+	// With IncludeMetadata, the search also matches labels.
+	withMeta := base
+	withMeta.Request.IncludeMetadata = true
+	page = applyTypedTableQuery(nodes, withMeta, nodeTableQueryAdapter())
+	if len(page.Rows) != 1 || page.Rows[0].Name != "node-a" {
+		t.Fatalf("label search with IncludeMetadata: got %d rows %v, want 1 (node-a)", len(page.Rows), page.Rows)
+	}
+
+	// Annotations are searchable too (key or value).
+	withMeta.Request.Search = "search-team"
+	page = applyTypedTableQuery(nodes, withMeta, nodeTableQueryAdapter())
+	if len(page.Rows) != 1 || page.Rows[0].Name != "node-b" {
+		t.Fatalf("annotation search with IncludeMetadata: got %d rows %v, want 1 (node-b)", len(page.Rows), page.Rows)
+	}
+}
+
 func TestNodeTableQueryPaginatesAgeSort(t *testing.T) {
 	query := typedTableQuery{
 		Enabled:   true,

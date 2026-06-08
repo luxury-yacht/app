@@ -44,18 +44,20 @@ const (
 // ResourceQueryRequest is the shared request contract for query-backed resource
 // inventory tables. Both the typed-resource and catalog providers accept it.
 type ResourceQueryRequest struct {
-	ClusterID     string                   `json:"clusterId"`
-	Provider      ResourceQueryProvider    `json:"provider,omitempty"`
-	Table         string                   `json:"table"`
-	Scope         ResourceQueryScope       `json:"scope,omitempty"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Search        string                   `json:"search,omitempty"`
-	Predicates    []ResourceQueryPredicate `json:"predicates,omitempty"`
-	SortField     string                   `json:"sortField,omitempty"`
-	SortDirection string                   `json:"sortDirection,omitempty"`
-	Limit         int                      `json:"limit,omitempty"`
-	Continue      string                   `json:"continue,omitempty"`
+	ClusterID  string                `json:"clusterId"`
+	Provider   ResourceQueryProvider `json:"provider,omitempty"`
+	Table      string                `json:"table"`
+	Scope      ResourceQueryScope    `json:"scope,omitempty"`
+	Namespaces []string              `json:"namespaces,omitempty"`
+	Kinds      []string              `json:"kinds,omitempty"`
+	Search     string                `json:"search,omitempty"`
+	// IncludeMetadata extends Search to also match each row's labels and annotations.
+	IncludeMetadata bool                     `json:"includeMetadata,omitempty"`
+	Predicates      []ResourceQueryPredicate `json:"predicates,omitempty"`
+	SortField       string                   `json:"sortField,omitempty"`
+	SortDirection   string                   `json:"sortDirection,omitempty"`
+	Limit           int                      `json:"limit,omitempty"`
+	Continue        string                   `json:"continue,omitempty"`
 }
 
 type ResourceQueryPredicate struct {
@@ -203,6 +205,7 @@ func resourceQueryRequestFromValues(clusterID, table string, values url.Values, 
 	request.ClusterID = clusterID
 	request.Table = table
 	request.Search = strings.TrimSpace(values.Get("search"))
+	request.IncludeMetadata = strings.TrimSpace(values.Get("includeMetadata")) == "true"
 	request.Namespaces = resourceQueryListValues(values, "namespaces", "namespace")
 	request.Kinds = resourceQueryListValues(values, "kinds", "kind")
 	request.SortField = strings.TrimSpace(values.Get("sort"))

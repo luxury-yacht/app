@@ -19,6 +19,39 @@ current.
 
 ---
 
+## 2026-06-08 — RESTORE: "Include metadata" search toggle dropped in the query-backed migration
+
+I removed this in commit 380b589a (Nodes → query-backed). It searched labels/annotations
+client-side; query-backed search is server-side, so it must be restored end-to-end.
+
+**Backend (server-side metadata search):**
+- `resource_query_contract.go` — add `IncludeMetadata bool` to `ResourceQueryRequest`;
+  parse `includeMetadata=true` in `resourceQueryRequestFromValues`. Consumers: every
+  typed table query (via `typedTableQueryMatches`). VERIFIED struct + parser site.
+- `typed_table_query.go` — add optional `MetadataText func(T) []string` to
+  `typedTableQueryAdapter[T]`; in `typedTableQueryMatches`, when the needle misses
+  `SearchText` AND `Request.IncludeMetadata` AND `MetadataText != nil`, also try
+  `MetadataText`. Backward compatible (nil MetadataText = today's behavior). VERIFIED
+  match site (line ~327).
+- `static_table_query.go` — `nodeTableQueryAdapter()` gains `MetadataText` over
+  `row.Labels`/`row.Annotations` (NodeSummary already carries both — VERIFIED nodes.go
+  101-102). Add a `metadataSearchText(maps ...map[string]string) []string` helper
+  emitting key, value, "key: value" (mirrors the client format).
+
+**Frontend (send the flag + re-expose the toggle):**
+- `typedResourceQueryScope.ts` — include `includeMetadata` in the scope query string +
+  identity (so toggling refetches). VERIFIED it handles search/caseSensitive/kinds/ns.
+- `useQueryBackedResourceGridTable.ts` — forward `metadataSearch` through to
+  `useResourceGridTable` (which renders the toggle + flips `filters.includeMetadata`).
+  VERIFY the wrapper's `filters` (with includeMetadata) reach `useTypedResourceQuery`'s
+  scope — confirm during impl.
+- `ClusterViewNodes.tsx` — re-add `metadataSearch: { getDefaultValues: (row) => [name,
+  kind], getMetadataMaps: (row) => [labels, annotations] }` (restores 380b589a's removal).
+
+**States:** toggle off → unchanged; on + search → matches name/kind/etc OR labels/
+annotations. **Tests:** backend node-adapter metadata match (TDD) + param parse; frontend
+scope param + toggle render + nodes wiring. **Verify:** `mage qc:prerelease`.
+
 ## 2026-06-08 — FIX: filter-bar result count/tooltip should only show when a filter is active
 
 `GridTableFiltersBar` renders the `resultCount` count + tooltip whenever a count is

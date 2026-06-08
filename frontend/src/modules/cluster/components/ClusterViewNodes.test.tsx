@@ -280,6 +280,13 @@ describe('ClusterViewNodes', () => {
     expect(props.columnWidths).toBe(null);
   });
 
+  it('wires the Include metadata search toggle for the query-backed nodes table', async () => {
+    await renderNodes([baseNode]);
+
+    const preActions = gridTablePropsRef.current?.filters?.options?.preActions ?? [];
+    expect(preActions.some((item: { id?: string }) => item?.id === 'include-metadata')).toBe(true);
+  });
+
   it('keeps initial empty query-backed nodes behind the loading boundary', async () => {
     requestRefreshDomainStateMock.mockImplementation(() => new Promise(() => {}));
 

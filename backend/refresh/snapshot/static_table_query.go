@@ -408,6 +408,20 @@ func clusterEventTableQueryAdapter() typedTableQueryAdapter[ClusterEventEntry] {
 	}
 }
 
+// metadataSearchText flattens label/annotation maps into searchable strings — the key,
+// the value, and "key: value" — mirroring the frontend metadata-search accessor so
+// server-side search (query-backed tables) matches the same text as the old client-side
+// "Include metadata" toggle did.
+func metadataSearchText(maps ...map[string]string) []string {
+	var out []string
+	for _, m := range maps {
+		for key, value := range m {
+			out = append(out, key, value, key+": "+value)
+		}
+	}
+	return out
+}
+
 func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 	return typedTableQueryAdapter[NodeSummary]{
 		Key:       func(row NodeSummary) string { return clusterTableKey("Node", row.Name) },
@@ -415,6 +429,9 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 		Kind:      func(NodeSummary) string { return "Node" },
 		SearchText: func(row NodeSummary) []string {
 			return []string{row.Name, row.Status, row.Roles, row.Version, row.InternalIP, row.ExternalIP}
+		},
+		MetadataText: func(row NodeSummary) []string {
+			return metadataSearchText(row.Labels, row.Annotations)
 		},
 		Predicate: func(NodeSummary, string, string) bool { return true },
 		SortValue: func(row NodeSummary, field string) string {

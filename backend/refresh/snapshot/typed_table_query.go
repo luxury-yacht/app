@@ -48,13 +48,16 @@ type typedTableQueryCursor struct {
 }
 
 type typedTableQueryAdapter[T any] struct {
-	Key         func(T) string
-	Namespace   func(T) string
-	Kind        func(T) string
-	SearchText  func(T) []string
-	Predicate   func(T, string, string) bool
-	SortValue   func(T, string) string
-	NumericSort func(T, string) (float64, bool)
+	Key        func(T) string
+	Namespace  func(T) string
+	Kind       func(T) string
+	SearchText func(T) []string
+	// MetadataText, when set, supplies extra searchable strings (e.g. labels and
+	// annotations) that are matched only when the request sets IncludeMetadata.
+	MetadataText func(T) []string
+	Predicate    func(T, string, string) bool
+	SortValue    func(T, string) string
+	NumericSort  func(T, string) (float64, bool)
 }
 
 func parseTypedTableQueryScope(clusterID, scope, table string, dynamicRevision string) (string, typedTableQuery, error) {
@@ -324,8 +327,14 @@ func typedTableQueryMatches[T any](item T, query typedTableQuery, adapter typedT
 			return false
 		}
 	}
-	if searchNeedle != "" && !typedTableSearchMatches(adapter.SearchText(item), searchNeedle) {
-		return false
+	if searchNeedle != "" {
+		matched := typedTableSearchMatches(adapter.SearchText(item), searchNeedle)
+		if !matched && query.Request.IncludeMetadata && adapter.MetadataText != nil {
+			matched = typedTableSearchMatches(adapter.MetadataText(item), searchNeedle)
+		}
+		if !matched {
+			return false
+		}
 	}
 	for field, value := range resourceQueryPredicatesToMap(query.Request.Predicates) {
 		if !adapter.Predicate(item, field, value) {

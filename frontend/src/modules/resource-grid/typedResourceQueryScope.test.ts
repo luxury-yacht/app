@@ -26,6 +26,29 @@ describe('typedResourceQueryScope', () => {
     );
   });
 
+  it('sends includeMetadata in the scope when metadata search is enabled', () => {
+    const scope = buildTypedResourceQueryScope('cluster-a', {
+      filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search: 'team', includeMetadata: true },
+      sortConfig: { key: 'name', direction: 'asc' },
+      pageLimit: 50,
+    });
+
+    expect(scope).toContain('includeMetadata=true');
+  });
+
+  it('changes the query identity when metadata search toggles', () => {
+    const filters = { ...DEFAULT_GRID_TABLE_FILTER_STATE, search: 'team' };
+    const sortConfig = { key: 'name', direction: 'asc' } as const;
+    const off = typedResourceQueryIdentity({ filters, sortConfig, predicates: {} });
+    const on = typedResourceQueryIdentity({
+      filters: { ...filters, includeMetadata: true },
+      sortConfig,
+      predicates: {},
+    });
+
+    expect(off).not.toBe(on);
+  });
+
   it('builds the same query identity for equivalent unordered filters', () => {
     const left = typedResourceQueryIdentity({
       filters: {

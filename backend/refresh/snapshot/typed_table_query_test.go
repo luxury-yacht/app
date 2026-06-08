@@ -297,7 +297,7 @@ func TestTypedTableQueryInvalidatesCursorWhenPageSizeChanges(t *testing.T) {
 
 func TestResourceQueryRequestFromValuesAcceptsCatalogAndTypedListKeys(t *testing.T) {
 	values := mapValues(
-		"kinds=Pod,Deployment&kind=StatefulSet&namespaces=apps,default&namespace=kube-system&sort=cpu&sortDirection=desc&limit=500&predicate.health=unhealthy",
+		"kinds=Pod,Deployment&kind=StatefulSet&namespaces=apps,default&namespace=kube-system&sort=cpu&sortDirection=desc&limit=500&predicate.health=unhealthy&includeMetadata=true",
 	)
 
 	request := resourceQueryRequestFromValues("cluster-a", "pods", values, ResourceQueryRequest{
@@ -316,6 +316,9 @@ func TestResourceQueryRequestFromValuesAcceptsCatalogAndTypedListKeys(t *testing
 	}
 	if got := resourceQueryPredicatesToMap(request.Predicates)["health"]; got != "unhealthy" {
 		t.Fatalf("expected health predicate, got %q", got)
+	}
+	if !request.IncludeMetadata {
+		t.Fatal("expected includeMetadata=true to parse into request.IncludeMetadata")
 	}
 }
 

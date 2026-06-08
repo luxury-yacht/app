@@ -48,6 +48,7 @@ export const typedResourceQueryIdentity = ({
   JSON.stringify({
     search: filters.search,
     caseSensitive: filters.caseSensitive,
+    includeMetadata: filters.includeMetadata,
     kinds: stableTypedQueryList(filters.kinds),
     namespaces: stableTypedQueryList(filters.namespaces),
     sort: sortConfig,
@@ -90,6 +91,11 @@ export function buildTypedResourceQueryScope(
   params.set('limit', String(descriptor.pageLimit));
   if (descriptor.filters.search.trim()) {
     params.set('search', descriptor.filters.search.trim());
+  }
+  // Tell the backend to also match labels/annotations. The server only applies this
+  // while searching; sending it without a search is a harmless no-op.
+  if (descriptor.filters.includeMetadata) {
+    params.set('includeMetadata', 'true');
   }
   const namespaces = stableTypedQueryList(descriptor.filters.namespaces);
   if (namespaces.length > 0) {
