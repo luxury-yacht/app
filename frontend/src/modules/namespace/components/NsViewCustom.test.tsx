@@ -264,7 +264,6 @@ describe('NsViewCustom', () => {
   const renderComponent = async (props: Partial<NsViewCustomProps> = {}) => {
     const mergedProps: NsViewCustomProps = {
       namespace: 'team-a',
-      data: [],
       loading: false,
       loaded: false,
       showNamespaceColumn: false,
@@ -288,7 +287,7 @@ describe('NsViewCustom', () => {
       browseCatalogResult([catalogItemFromResource(baseResource)])
     );
 
-    await renderComponent({ data: [baseResource], loaded: true, showNamespaceColumn: true });
+    await renderComponent({ loaded: true, showNamespaceColumn: true });
 
     expect(gridTableMock).toHaveBeenCalled();
 
@@ -325,12 +324,6 @@ describe('NsViewCustom', () => {
   });
 
   it('uses the catalog query current page on first render for a single namespace', async () => {
-    const staleLocalRow: CustomResourceData = {
-      ...baseResource,
-      name: 'stale-local-custom',
-      namespace: 'team-a',
-      clusterId: 'stale:ctx',
-    };
     const queryResource: CustomResourceData = {
       ...baseResource,
       name: 'query-custom',
@@ -343,7 +336,6 @@ describe('NsViewCustom', () => {
 
     await renderComponent({
       namespace: 'team-a',
-      data: [staleLocalRow],
       loaded: true,
       showNamespaceColumn: false,
     });
@@ -373,12 +365,6 @@ describe('NsViewCustom', () => {
   });
 
   it('uses the catalog query current page on first render for all namespaces', async () => {
-    const staleLocalRow: CustomResourceData = {
-      ...baseResource,
-      name: 'stale-local-custom',
-      namespace: 'team-a',
-      clusterId: 'stale:ctx',
-    };
     const queryResource: CustomResourceData = {
       ...baseResource,
       name: 'query-all-custom',
@@ -391,7 +377,6 @@ describe('NsViewCustom', () => {
 
     await renderComponent({
       namespace: ALL_NAMESPACES_SCOPE,
-      data: [staleLocalRow],
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -423,8 +408,6 @@ describe('NsViewCustom', () => {
   it('enables searchable kind dropdown bulk actions in all-namespaces custom view', async () => {
     await renderComponent({
       namespace: ALL_NAMESPACES_SCOPE,
-      data: [baseResource],
-      availableKinds: ['DBCluster', 'Widget'],
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -451,7 +434,6 @@ describe('NsViewCustom', () => {
     });
 
     await renderComponent({
-      data: [baseResource],
       loaded: true,
     });
 
@@ -474,7 +456,7 @@ describe('NsViewCustom', () => {
       },
     ]);
 
-    await renderComponent({ data: [], loaded: true });
+    await renderComponent({ loaded: true });
 
     const gridProps = getLastGridProps();
     expect(gridProps?.data?.[0]).toEqual(
@@ -488,11 +470,8 @@ describe('NsViewCustom', () => {
   });
 
   it('preserves the column definitions across rerenders with unchanged inputs', async () => {
-    const data = [baseResource];
-
     await renderComponent({
       namespace: 'team-a',
-      data,
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -501,7 +480,6 @@ describe('NsViewCustom', () => {
 
     await renderComponent({
       namespace: 'team-a',
-      data,
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -510,11 +488,8 @@ describe('NsViewCustom', () => {
   });
 
   it('preserves the filters config across rerenders with unchanged inputs', async () => {
-    const data = [baseResource];
-
     await renderComponent({
       namespace: 'team-a',
-      data,
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -523,7 +498,6 @@ describe('NsViewCustom', () => {
 
     await renderComponent({
       namespace: 'team-a',
-      data,
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -561,7 +535,7 @@ describe('NsViewCustom', () => {
       annotations: {},
     };
 
-    await renderComponent({ data: [dbInstance], loaded: true, showNamespaceColumn: true });
+    await renderComponent({ loaded: true, showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
@@ -603,7 +577,6 @@ describe('NsViewCustom', () => {
     };
 
     await renderComponent({
-      data: [resourceWithGVK],
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -659,7 +632,7 @@ describe('NsViewCustom', () => {
       annotations: {},
     };
 
-    await renderComponent({ data: [dbInstance], loaded: true, showNamespaceColumn: true });
+    await renderComponent({ loaded: true, showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
@@ -706,7 +679,7 @@ describe('NsViewCustom', () => {
       apiVersion: undefined,
     };
 
-    await renderComponent({ data: [missingGVK], loaded: true, showNamespaceColumn: true });
+    await renderComponent({ loaded: true, showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(missingGVK, 'kind');
@@ -742,7 +715,6 @@ describe('NsViewCustom', () => {
     };
 
     await renderComponent({
-      data: [resourceWithGVK],
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -787,13 +759,6 @@ describe('NsViewCustom', () => {
     useShortNamesMock.mockReturnValue(true);
 
     await renderComponent({
-      data: [
-        {
-          ...baseResource,
-          kind: undefined as unknown as string,
-          kindAlias: 'CR',
-        },
-      ],
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -834,7 +799,7 @@ describe('NsViewCustom', () => {
         crdName: 'dbinstances.rds.services.k8s.aws',
       };
 
-      await renderComponent({ data: [resource], loaded: true });
+      await renderComponent({ loaded: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
@@ -860,7 +825,7 @@ describe('NsViewCustom', () => {
         crdName: 'dbinstances.rds.services.k8s.aws',
       };
 
-      await renderComponent({ data: [resource], loaded: true });
+      await renderComponent({ loaded: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
@@ -898,7 +863,7 @@ describe('NsViewCustom', () => {
         crdName: 'dbinstances.rds.services.k8s.aws',
       };
 
-      await renderComponent({ data: [resource], loaded: true });
+      await renderComponent({ loaded: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
@@ -917,12 +882,7 @@ describe('NsViewCustom', () => {
     });
 
     it('publishes only catalog-backed sortable keys', async () => {
-      const resource: CustomResourceData = {
-        ...baseResource,
-        crdName: 'dbinstances.rds.services.k8s.aws',
-      };
-
-      await renderComponent({ data: [resource], loaded: true, showNamespaceColumn: true });
+      await renderComponent({ loaded: true, showNamespaceColumn: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const sortableKeys = gridProps.columns
@@ -947,7 +907,7 @@ describe('NsViewCustom', () => {
         // crdName intentionally omitted
       };
 
-      await renderComponent({ data: [resource], loaded: true });
+      await renderComponent({ loaded: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
@@ -969,7 +929,7 @@ describe('NsViewCustom', () => {
         statusPresentation: 'warning',
       };
 
-      await renderComponent({ data: [resource], loaded: true });
+      await renderComponent({ loaded: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const statusCol = findColumn(gridProps, 'status');

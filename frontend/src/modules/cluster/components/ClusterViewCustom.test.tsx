@@ -250,7 +250,7 @@ describe('ClusterViewCustom', () => {
     useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
 
     await act(async () => {
-      root.render(<ClusterViewCustom data={[baseCustom]} loaded={true} />);
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
@@ -282,12 +282,7 @@ describe('ClusterViewCustom', () => {
     );
   });
 
-  it('uses the catalog query current page on first render instead of legacy local props', async () => {
-    const staleLocalRow = {
-      ...baseCustom,
-      name: 'stale-local-widget',
-      clusterId: 'stale:ctx',
-    };
+  it('uses the catalog query current page on first render', async () => {
     const queryItem = catalogItemFromCustom({
       ...baseCustom,
       name: 'query-widget',
@@ -297,7 +292,7 @@ describe('ClusterViewCustom', () => {
     useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
 
     await act(async () => {
-      root.render(<ClusterViewCustom data={[staleLocalRow]} loaded={true} />);
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
@@ -319,13 +314,7 @@ describe('ClusterViewCustom', () => {
 
   it('enables searchable kind dropdown bulk actions for custom resources', async () => {
     await act(async () => {
-      root.render(
-        <ClusterViewCustom
-          data={[baseCustom]}
-          availableKinds={['DBCluster', 'Widget']}
-          loaded={true}
-        />
-      );
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
@@ -351,7 +340,7 @@ describe('ClusterViewCustom', () => {
     });
 
     await act(async () => {
-      root.render(<ClusterViewCustom data={[baseCustom]} loaded={true} />);
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
@@ -373,7 +362,7 @@ describe('ClusterViewCustom', () => {
     ]);
 
     await act(async () => {
-      root.render(<ClusterViewCustom data={[]} loaded={true} />);
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
@@ -408,7 +397,7 @@ describe('ClusterViewCustom', () => {
     };
 
     await act(async () => {
-      root.render(<ClusterViewCustom data={[clusterScopedCR]} loaded={true} />);
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
@@ -456,7 +445,7 @@ describe('ClusterViewCustom', () => {
     };
 
     await act(async () => {
-      root.render(<ClusterViewCustom data={[clusterScopedCR]} loaded={true} />);
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
@@ -509,8 +498,11 @@ describe('ClusterViewCustom', () => {
     };
 
     const renderWith = async (rows: any[]) => {
+      useBrowseCatalogMock.mockReturnValue(
+        browseCatalogResult(rows.map((row) => catalogItemFromCustom(row)))
+      );
       await act(async () => {
-        root.render(<ClusterViewCustom data={rows} loaded={true} />);
+        root.render(<ClusterViewCustom loaded={true} />);
         await Promise.resolve();
       });
     };

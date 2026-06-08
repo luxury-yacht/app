@@ -12,7 +12,6 @@ import { ClusterViewType } from '@ui/navigation/types';
 import { useUserPermission } from '@/core/capabilities';
 import type { PermissionStatus } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import type { SnapshotStats } from '@/core/refresh/client';
 
 interface ClusterResourceManagerProps {
   activeTab?: ClusterViewType | null;
@@ -34,12 +33,14 @@ export function ClusterResourcesManager({
   const { nodes, rbac, storage, config, crds, events, setActiveResourceType } =
     useClusterResources();
 
-  const { data: nodesData, loading: nodesLoading, error: nodesError } = nodes;
-  const { data: configData, loading: configLoading, error: configError } = config;
-  const { data: crdsData, loading: crdsLoading, error: crdsError } = crds;
-  const { data: eventsData, loading: eventsLoading, error: eventsError } = events;
-  const { data: rbacData, loading: rbacLoading, error: rbacError } = rbac;
-  const { data: storageData, loading: storageLoading, error: storageError } = storage;
+  // Only the per-view error is consumed downstream now (each view is query-backed and
+  // sources its own rows); the live domains stay subscribed for those errors + kinds.
+  const { error: nodesError } = nodes;
+  const { error: configError } = config;
+  const { error: crdsError } = crds;
+  const { error: eventsError } = events;
+  const { error: rbacError } = rbac;
+  const { error: storageError } = storage;
 
   const { selectedClusterId } = useKubeconfig();
   // Scope permission lookups to the active cluster to avoid cache collisions.
@@ -145,52 +146,22 @@ export function ClusterResourcesManager({
 
   return (
     <ClusterResourcesViews
-      // Tabs
       activeTab={activeTab}
       onTabChange={onTabChange}
-      // Nodes
-      nodes={nodesData || []}
-      nodesStats={(nodes?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
-      nodesLoading={nodesLoading || false}
+      // Each view is query-backed and sources its own rows; the manager supplies
+      // only the per-view error (+ kinds for filtered views) derived from the live
+      // domain and permissions. Custom is catalog-backed and takes loading/loaded.
       nodesError={nodesErrorMessage}
-      nodesLoaded={(nodes?.hasLoaded ?? false) || Boolean(nodesErrorMessage)}
-      // Config
-      config={configData || []}
-      configStats={(config?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       configKinds={(config?.meta as { kinds?: string[] } | undefined)?.kinds}
-      configLoading={configLoading || false}
       configError={configErrorMessage}
-      configLoaded={(config?.hasLoaded ?? false) || Boolean(configErrorMessage)}
-      // CRDs
-      crds={crdsData || []}
-      crdsStats={(crds?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
-      crdsLoading={crdsLoading || false}
       crdsError={crdsErrorMessage}
-      crdsLoaded={(crds?.hasLoaded ?? false) || Boolean(crdsErrorMessage)}
-      // Custom
       customLoading={false}
       customError={customErrorMessage}
       customLoaded={Boolean(customErrorMessage)}
-      // Events
-      events={eventsData || []}
-      eventsStats={(events?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
-      eventsLoading={eventsLoading || false}
       eventsError={eventsErrorMessage}
-      eventsLoaded={(events?.hasLoaded ?? false) || Boolean(eventsErrorMessage)}
-      // RBAC
-      rbac={rbacData || []}
-      rbacStats={(rbac?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
       rbacKinds={(rbac?.meta as { kinds?: string[] } | undefined)?.kinds}
-      rbacLoading={rbacLoading || false}
       rbacError={rbacErrorMessage}
-      rbacLoaded={(rbac?.hasLoaded ?? false) || Boolean(rbacErrorMessage)}
-      // Storage
-      storage={storageData || []}
-      storageStats={(storage?.meta as { tableStats?: SnapshotStats } | undefined)?.tableStats}
-      storageLoading={storageLoading || false}
       storageError={storageErrorMessage}
-      storageLoaded={(storage?.hasLoaded ?? false) || Boolean(storageErrorMessage)}
-      // Object panel
       objectPanel={objectPanel}
     />
   );

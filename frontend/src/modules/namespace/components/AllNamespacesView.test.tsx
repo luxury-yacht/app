@@ -465,8 +465,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).not.toHaveBeenCalledWith('custom');
-    expect(getLatestProps('custom-view')?.data).toEqual([]);
-    expect(getLatestProps('custom-view')?.availableKinds).toBeUndefined();
     expect(getLatestProps('custom-view')?.loading).toBe(false);
     expect(getLatestProps('custom-view')?.loaded).toBe(false);
   });

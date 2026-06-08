@@ -127,42 +127,30 @@ describe('ClusterResourcesManager', () => {
     });
   };
 
-  it('loads the active tab data and passes props downstream', async () => {
-    const tableStats = {
-      itemCount: 1,
-      totalItems: 2,
-      truncated: true,
-      buildDurationMs: 1,
-      warnings: ['Showing first 1 of 2 rows'],
-    };
-    clusterResourceStates.nodes.meta = { tableStats };
-    clusterResourceStates.storage.meta = { kinds: ['PersistentVolume'], tableStats };
+  it('sets the active resource type and forwards per-view error and kinds downstream', async () => {
     clusterResourceStates.config.meta = {
       kinds: ['IngressClass', 'MutatingWebhookConfiguration', 'StorageClass'],
-      tableStats,
     };
-    clusterResourceStates.crds.meta = { tableStats };
-    clusterResourceStates.rbac.meta = { kinds: ['ClusterRole', 'ClusterRoleBinding'], tableStats };
+    clusterResourceStates.rbac.meta = { kinds: ['ClusterRole', 'ClusterRoleBinding'] };
 
     await renderManager('storage');
 
     expect(setActiveResourceTypeMock).toHaveBeenCalledWith('storage');
 
     const props = viewPropsRef.current;
-    expect(props.storage).toEqual([]);
-    expect(props.storageLoaded).toBe(false);
-    expect(props.nodes).toEqual(['nodes-row']);
+    // Query-backed views source their own rows; the manager forwards only the per-view
+    // error and (for kind-filtered views) the available kinds — not live-snapshot
+    // rows/stats/loading/loaded.
     expect(props.configKinds).toEqual([
       'IngressClass',
       'MutatingWebhookConfiguration',
       'StorageClass',
     ]);
-    expect(props.nodesStats).toBe(tableStats);
-    expect(props.storageStats).toBe(tableStats);
-    expect(props.configStats).toBe(tableStats);
-    expect(props.crdsStats).toBe(tableStats);
-    expect(props.rbacStats).toBe(tableStats);
     expect(props.rbacKinds).toEqual(['ClusterRole', 'ClusterRoleBinding']);
+    expect(props.nodes).toBeUndefined();
+    expect(props.storage).toBeUndefined();
+    expect(props.nodesStats).toBeUndefined();
+    expect(props.storageLoaded).toBeUndefined();
   });
 
   it('respects permission denials and avoids loading', async () => {

@@ -22,7 +22,6 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import type { SnapshotStats } from '@/core/refresh/client';
 import type { ClusterRBACSnapshotPayload } from '@/core/refresh/types';
 
 // Define the data structure for RBAC resources
@@ -37,11 +36,7 @@ interface RBACData {
 
 // Define props for RBACViewGrid component
 interface RBACViewProps {
-  data: RBACData[];
-  stats?: SnapshotStats | null;
   availableKinds?: string[];
-  loading?: boolean;
-  loaded?: boolean;
   error?: string | null;
 }
 
@@ -50,7 +45,7 @@ interface RBACViewProps {
  * Shows ClusterRoles and ClusterRoleBindings in a single aggregated table
  */
 const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
-  ({ data, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
+  ({ availableKinds: kindOptions, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -148,9 +143,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       clusterId: selectedClusterId,
       domain: 'cluster-rbac',
       label: 'Cluster RBAC',
-      localData: data,
-      localLoading: loading,
-      localLoaded: loaded,
       selectRows,
       viewId: 'cluster-rbac',
       columns,

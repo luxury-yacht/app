@@ -14,51 +14,29 @@ import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
 import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
-import type { SnapshotStats } from '@/core/refresh/client';
 
 interface ClusterResourcesViewsProps {
-  // Resource data and loading states
-  nodes?: any[];
-  nodesStats?: SnapshotStats | null;
-  nodesLoading?: boolean;
+  // Each resource view is query-backed (sourced from its own typed query + replay
+  // cache), so it needs only the per-view error (for the empty-state text) and, for
+  // kind-filtered views, the available kinds. Custom is catalog-backed and also takes
+  // its loading/loaded.
   nodesError?: string | null;
-  nodesLoaded?: boolean;
 
-  config?: any[];
-  configStats?: SnapshotStats | null;
   configKinds?: string[];
-  configLoading?: boolean;
   configError?: string | null;
-  configLoaded?: boolean;
 
-  crds?: any[];
-  crdsStats?: SnapshotStats | null;
-  crdsLoading?: boolean;
   crdsError?: string | null;
-  crdsLoaded?: boolean;
 
   customLoading?: boolean;
   customError?: string | null;
   customLoaded?: boolean;
 
-  events?: any[];
-  eventsStats?: SnapshotStats | null;
-  eventsLoading?: boolean;
   eventsError?: string | null;
-  eventsLoaded?: boolean;
 
-  rbac?: any[];
-  rbacStats?: SnapshotStats | null;
   rbacKinds?: string[];
-  rbacLoading?: boolean;
   rbacError?: string | null;
-  rbacLoaded?: boolean;
 
-  storage?: any[];
-  storageStats?: SnapshotStats | null;
-  storageLoading?: boolean;
   storageError?: string | null;
-  storageLoaded?: boolean;
 
   // Tab control from parent
   activeTab?: ClusterViewType | null;
@@ -69,48 +47,17 @@ interface ClusterResourcesViewsProps {
 }
 
 function ClusterResourcesViews({
-  nodes = [],
-  nodesStats = null,
-  nodesLoading = false,
   nodesError = null,
-  nodesLoaded = false,
-
-  config = [],
-  configStats = null,
   configKinds,
-  configLoading = false,
   configError = null,
-  configLoaded = false,
-
-  crds = [],
-  crdsStats = null,
-  crdsLoading = false,
   crdsError = null,
-  crdsLoaded = false,
-
   customLoading = false,
   customError = null,
   customLoaded = false,
-
-  events = [],
-  eventsStats = null,
-  eventsLoading = false,
   eventsError = null,
-  eventsLoaded = false,
-
-  rbac = [],
-  rbacStats = null,
   rbacKinds,
-  rbacLoading = false,
   rbacError = null,
-  rbacLoaded = false,
-
-  storage = [],
-  storageStats = null,
-  storageLoading = false,
   storageError = null,
-  storageLoaded = false,
-
   activeTab: controlledActiveTab,
   onTabChange: _onTabChangeCallback,
   objectPanel,
@@ -125,71 +72,21 @@ function ClusterResourcesViews({
 
     switch (activeTab) {
       case 'nodes':
-        return (
-          <ClusterViewNodes
-            data={nodes}
-            stats={nodesStats}
-            loading={nodesLoading}
-            loaded={nodesLoaded}
-            error={nodesError}
-          />
-        );
+        return <ClusterViewNodes error={nodesError} />;
       case 'config':
-        return (
-          <ClusterViewConfig
-            data={config}
-            stats={configStats}
-            availableKinds={configKinds}
-            loading={configLoading}
-            loaded={configLoaded}
-            error={configError}
-          />
-        );
+        return <ClusterViewConfig availableKinds={configKinds} error={configError} />;
       case 'crds':
-        return (
-          <ClusterViewCRDs
-            data={crds}
-            stats={crdsStats}
-            loading={crdsLoading}
-            loaded={crdsLoaded}
-            error={crdsError}
-          />
-        );
+        return <ClusterViewCRDs error={crdsError} />;
       case 'custom':
         return (
           <ClusterViewCustom loading={customLoading} loaded={customLoaded} error={customError} />
         );
       case 'events':
-        return (
-          <ClusterViewEvents
-            data={events}
-            stats={eventsStats}
-            loading={eventsLoading}
-            loaded={eventsLoaded}
-            error={eventsError}
-          />
-        );
+        return <ClusterViewEvents error={eventsError} />;
       case 'rbac':
-        return (
-          <ClusterViewRBAC
-            data={rbac}
-            stats={rbacStats}
-            availableKinds={rbacKinds}
-            loading={rbacLoading}
-            loaded={rbacLoaded}
-            error={rbacError}
-          />
-        );
+        return <ClusterViewRBAC availableKinds={rbacKinds} error={rbacError} />;
       case 'storage':
-        return (
-          <ClusterViewStorage
-            data={storage}
-            stats={storageStats}
-            loading={storageLoading}
-            loaded={storageLoaded}
-            error={storageError}
-          />
-        );
+        return <ClusterViewStorage error={storageError} />;
       default:
         return null;
     }

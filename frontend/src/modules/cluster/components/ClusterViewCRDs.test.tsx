@@ -137,7 +137,7 @@ describe('ClusterViewCRDs', () => {
 
   it('passes persisted state to GridTable', async () => {
     await act(async () => {
-      root.render(<ClusterViewCRDs data={[baseCRD]} loaded={true} />);
+      root.render(<ClusterViewCRDs />);
       await Promise.resolve();
     });
 
@@ -156,7 +156,7 @@ describe('ClusterViewCRDs', () => {
 
   it('uses explicit kind metadata instead of deriving kinds from rows', async () => {
     await act(async () => {
-      root.render(<ClusterViewCRDs data={[]} loaded={true} />);
+      root.render(<ClusterViewCRDs />);
       await Promise.resolve();
     });
 
@@ -180,7 +180,7 @@ describe('ClusterViewCRDs', () => {
       };
 
       await act(async () => {
-        root.render(<ClusterViewCRDs data={[singleVersion]} loaded={true} />);
+        root.render(<ClusterViewCRDs />);
         await Promise.resolve();
       });
 
@@ -206,7 +206,7 @@ describe('ClusterViewCRDs', () => {
       };
 
       await act(async () => {
-        root.render(<ClusterViewCRDs data={[multiVersion]} loaded={true} />);
+        root.render(<ClusterViewCRDs />);
         await Promise.resolve();
       });
 
@@ -223,7 +223,7 @@ describe('ClusterViewCRDs', () => {
       const noVersion = { ...baseCRD };
 
       await act(async () => {
-        root.render(<ClusterViewCRDs data={[noVersion]} loaded={true} />);
+        root.render(<ClusterViewCRDs />);
         await Promise.resolve();
       });
 
@@ -245,7 +245,7 @@ describe('ClusterViewCRDs', () => {
       };
 
       await act(async () => {
-        root.render(<ClusterViewCRDs data={[multiVersion]} loaded={true} />);
+        root.render(<ClusterViewCRDs />);
         await Promise.resolve();
       });
 

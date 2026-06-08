@@ -152,7 +152,7 @@ describe('ClusterViewEvents', () => {
 
   it('passes the query-backed newest-first Age sort to GridTable when no persisted sort exists', async () => {
     await act(async () => {
-      root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
@@ -174,7 +174,7 @@ describe('ClusterViewEvents', () => {
 
   it('uses the shared newest-first Age sort value for local table fallback rows', async () => {
     await act(async () => {
-      root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
@@ -186,7 +186,7 @@ describe('ClusterViewEvents', () => {
 
   it('opens the involved object with group/version when object name is clicked', async () => {
     await act(async () => {
-      root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
@@ -214,7 +214,7 @@ describe('ClusterViewEvents', () => {
 
   it('passes stable event row identity into useTableSort', async () => {
     await act(async () => {
-      root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
@@ -243,7 +243,7 @@ describe('ClusterViewEvents', () => {
     };
 
     await act(async () => {
-      root.render(<ClusterViewEvents data={[event]} loaded={true} />);
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
@@ -278,7 +278,7 @@ describe('ClusterViewEvents', () => {
     };
 
     await act(async () => {
-      root.render(<ClusterViewEvents data={[event]} loaded={true} />);
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
@@ -296,19 +296,7 @@ describe('ClusterViewEvents', () => {
 
   it('does not expose recent-window copy for query-backed cluster events', async () => {
     await act(async () => {
-      root.render(
-        <ClusterViewEvents
-          data={[baseEvent]}
-          loaded={true}
-          stats={{
-            itemCount: 1,
-            buildDurationMs: 0,
-            truncated: true,
-            totalItems: 12,
-            warnings: ['Showing most recent 1 of 12 events'],
-          }}
-        />
-      );
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 

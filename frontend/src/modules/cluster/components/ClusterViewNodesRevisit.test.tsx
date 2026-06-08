@@ -188,7 +188,7 @@ describe('Nodes view revisit', () => {
     // First visit: the query resolves with a node.
     requestRefreshDomainStateMock.mockResolvedValue(nodePayload);
     await act(async () => {
-      root.render(<ClusterViewNodes data={[]} loading={false} loaded={false} error={undefined} />);
+      root.render(<ClusterViewNodes />);
     });
     await flush();
     expect(container.textContent).toContain('1 rows');
@@ -201,7 +201,7 @@ describe('Nodes view revisit', () => {
     // Revisit: the query is in flight (unresolved) on the way back in.
     requestRefreshDomainStateMock.mockReturnValue(new Promise(() => {}));
     await act(async () => {
-      root.render(<ClusterViewNodes data={[]} loading={false} loaded={false} error={undefined} />);
+      root.render(<ClusterViewNodes />);
     });
     await flush();
 

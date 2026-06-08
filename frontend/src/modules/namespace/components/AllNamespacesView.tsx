@@ -52,7 +52,6 @@ const AllNamespacesCustomView: React.FC = () => {
     <>
       <NsViewCustom
         namespace={ALL_NAMESPACES_SCOPE}
-        data={[]}
         loading={false}
         loaded={false}
         showNamespaceColumn

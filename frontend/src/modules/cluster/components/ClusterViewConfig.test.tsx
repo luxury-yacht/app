@@ -165,7 +165,7 @@ describe('ClusterViewConfig', () => {
 
   it('passes persisted state to GridTable', async () => {
     await act(async () => {
-      root.render(<ClusterViewConfig data={[baseConfig]} loaded={true} />);
+      root.render(<ClusterViewConfig />);
       await Promise.resolve();
     });
 
@@ -186,7 +186,7 @@ describe('ClusterViewConfig', () => {
     requestRefreshDomainStateMock.mockImplementation(() => new Promise(() => {}));
 
     await act(async () => {
-      root.render(<ClusterViewConfig data={[]} loading={false} loaded={true} />);
+      root.render(<ClusterViewConfig />);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -203,19 +203,7 @@ describe('ClusterViewConfig', () => {
 
   it('does not expose local partial copy for query-backed cluster config', async () => {
     await act(async () => {
-      root.render(
-        <ClusterViewConfig
-          data={[baseConfig]}
-          stats={{
-            itemCount: 1,
-            totalItems: 12,
-            truncated: true,
-            buildDurationMs: 1,
-            warnings: ['Showing first 1 of 12 cluster configuration resources'],
-          }}
-          loaded={true}
-        />
-      );
+      root.render(<ClusterViewConfig />);
       await Promise.resolve();
     });
 
@@ -224,7 +212,7 @@ describe('ClusterViewConfig', () => {
 
   it('opens a StorageClass directly to the map tab from the context menu', async () => {
     await act(async () => {
-      root.render(<ClusterViewConfig data={[baseConfig]} loaded={true} />);
+      root.render(<ClusterViewConfig />);
       await Promise.resolve();
     });
 
@@ -255,7 +243,7 @@ describe('ClusterViewConfig', () => {
     const ingressClass = { ...baseConfig, kind: 'IngressClass', name: 'public' };
 
     await act(async () => {
-      root.render(<ClusterViewConfig data={[ingressClass]} loaded={true} />);
+      root.render(<ClusterViewConfig />);
       await Promise.resolve();
     });
 
@@ -284,12 +272,7 @@ describe('ClusterViewConfig', () => {
 
   it('does not offer object map for unsupported cluster config rows', async () => {
     await act(async () => {
-      root.render(
-        <ClusterViewConfig
-          data={[{ ...baseConfig, kind: 'ValidatingWebhookConfiguration' }]}
-          loaded={true}
-        />
-      );
+      root.render(<ClusterViewConfig />);
       await Promise.resolve();
     });
 

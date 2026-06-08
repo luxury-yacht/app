@@ -57,20 +57,54 @@ export const liveDomainVersion = (state: {
   lastManualRefresh?: number;
 }): string => [state.version ?? '', state.checksum ?? state.etag ?? ''].join(':');
 
-const shouldHoldInitialTypedQueryLoading = <TRow>({
+// Derives the controller source state (data/loading/loaded/error) for a resource
+// grid. A query-backed table (`enabled`) is sourced ONLY from the typed query — it
+// never falls back to the live snapshot (`localData`), because that snapshot is the
+// wrong representation for a query-backed view (unsorted client-side, unpaginated).
+// While the query is gating or in flight, it reports empty+loading so the controller
+// bridges with the cached page (correctly sorted) or shows a first-load spinner. A
+// non-query (local) table is sourced from `localData` as before.
+export function deriveQueryBackedData<TRow>({
   enabled,
   clusterId,
   queryEnabled,
+  queryRows,
+  queryLoading,
+  queryLoaded,
+  queryError,
   localData,
+  localLoading,
+  localLoaded,
   localError,
 }: {
   enabled: boolean;
   clusterId?: string | null;
   queryEnabled: boolean;
+  queryRows: TRow[];
+  queryLoading: boolean;
+  queryLoaded: boolean;
+  queryError: string | null;
   localData: TRow[];
+  localLoading: boolean;
+  localLoaded: boolean;
   localError: string | null;
-}): boolean =>
-  enabled && Boolean(clusterId) && !queryEnabled && localData.length === 0 && !localError;
+}): { data: TRow[]; loading: boolean; loaded: boolean; error: string | null } {
+  if (!enabled) {
+    return { data: localData, loading: localLoading, loaded: localLoaded, error: localError };
+  }
+  if (!queryEnabled) {
+    // Gating (awaiting cluster/persistence/live-domain readiness): hold loading so the
+    // controller replays the cached page or shows a spinner — never the live snapshot.
+    return { data: [], loading: Boolean(clusterId), loaded: false, error: null };
+  }
+  const queryInitialLoading = queryRows.length === 0 && !queryLoaded && !queryError;
+  return {
+    data: queryRows,
+    loading: queryRows.length === 0 && (queryLoading || queryInitialLoading),
+    loaded: queryLoaded,
+    error: queryError,
+  };
+}
 
 const isLiveDomainInitialLoadPending = (state: { status?: string; data?: unknown }): boolean =>
   !state.data && (state.status === 'loading' || state.status === 'initialising');
@@ -130,7 +164,10 @@ interface QueryBackedGridParamsCommon<
   baseScope?: string;
   queryTableMode?: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
   localTableMode?: Extract<ResourceGridTableMode, 'Local Complete' | 'Local Partial'>;
-  localData: TRow[];
+  // Local-table fallback rows. Only consumed for non-query (single-namespace local)
+  // tables; query-backed tables are sourced from the typed query + replay cache and
+  // ignore this, so query-backed views need not pass it.
+  localData?: TRow[];
   localLoading?: boolean;
   localLoaded?: boolean;
   localError?: string | null;
@@ -240,20 +277,19 @@ function useTypedQueryLifecycle<
     selectRows,
   });
 
-  const data = queryEnabled ? query.rows : localData;
-  const waitingForInitialQuery = shouldHoldInitialTypedQueryLoading({
+  const { data, loading, loaded, error } = deriveQueryBackedData<TRow>({
     enabled,
     clusterId,
     queryEnabled,
+    queryRows: query.rows,
+    queryLoading: query.loading,
+    queryLoaded: query.loaded,
+    queryError: query.error,
     localData,
+    localLoading,
+    localLoaded,
     localError,
   });
-  const queryInitialLoading = query.rows.length === 0 && !query.loaded && !query.error;
-  const loading = queryEnabled
-    ? data.length === 0 && (query.loading || queryInitialLoading)
-    : waitingForInitialQuery || localLoading;
-  const loaded = queryEnabled ? query.loaded : waitingForInitialQuery ? false : localLoaded;
-  const error = queryEnabled ? query.error : localError;
 
   return {
     data,
@@ -396,7 +432,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   baseScope,
   queryTableMode = 'Query Backed Dynamic',
   localTableMode = 'Local Complete',
-  localData,
+  localData = [],
   localLoading = false,
   localLoaded = false,
   localError = null,
@@ -500,7 +536,7 @@ export function useQueryBackedClusterResourceGridTable<
   baseScope = '',
   queryTableMode = 'Query Backed Static',
   localTableMode = 'Local Complete',
-  localData,
+  localData = [],
   localLoading = false,
   localLoaded = false,
   localError = null,

@@ -22,7 +22,6 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import type { SnapshotStats } from '@/core/refresh/client';
 import type { ClusterConfigSnapshotPayload } from '@/core/refresh/types';
 
 // Define the data structure for configuration resources
@@ -37,11 +36,7 @@ interface ConfigData {
 
 // Define props for ConfigViewGrid component
 interface ConfigViewProps {
-  data: ConfigData[];
-  stats?: SnapshotStats | null;
   availableKinds?: string[];
-  loading?: boolean;
-  loaded?: boolean;
   error?: string | null;
 }
 
@@ -50,7 +45,7 @@ interface ConfigViewProps {
  * Displays Storage Classes, Ingress Classes, and Admission Control resources
  */
 const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
-  ({ data, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
+  ({ availableKinds: kindOptions, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -151,9 +146,6 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       clusterId: selectedClusterId,
       domain: 'cluster-config',
       label: 'Cluster Configuration',
-      localData: data,
-      localLoading: loading,
-      localLoaded: loaded,
       selectRows,
       viewId: 'cluster-config',
       columns,

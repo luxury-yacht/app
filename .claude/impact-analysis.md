@@ -19,6 +19,60 @@ current.
 
 ---
 
+## 2026-06-08 — FOLLOW-UP: same dead props in the Custom views (surfaced by review)
+
+- `NsViewCustom.tsx` — analogue of ClusterViewCustom (always query-backed, `enabled: true`,
+  catalog-backed). Remove the dead `data?` and `availableKinds?` props (neither destructured;
+  VERIFIED via grep — only a test passes them, no real parent does). Catalog provides rows.
+- `ClusterViewCustom.tsx` — remove the `availableKinds?` prop I left behind (dead: not
+  destructured; only a test passes it — VERIFIED). `data?` already removed.
+- `AllNamespacesView.tsx` — stop passing `data={[]}` to NsViewCustom (keep loading/loaded,
+  which NsViewCustom combines with catalog state). Only consumer of these props: NsViewCustom.
+- Tests (`NsViewCustom.test.tsx`, `ClusterViewCustom.test.tsx`) — drop the vestigial
+  `data`/`availableKinds` props; data already flows via the `useBrowseCatalog` mock.
+- Dual-mode namespace views (`enabled = all-namespaces`) KEEP `localData` — it is the live
+  source in single-namespace (local) mode, NOT dead.
+
+## 2026-06-08 — CLEANUP: remove the dead live-snapshot prop-drill from query-backed cluster views
+
+After `deriveQueryBackedData` made query-backed tables source only from the typed query
++ replay cache, the `localData`/`localLoading`/`localLoaded` they receive are ignored —
+dead. Remove the cascade.
+
+**Files & per-file analysis:**
+- `frontend/src/modules/resource-grid/useQueryBackedResourceGridTable.ts` — make
+  `localData` optional (default `[]`) in `QueryBackedGridParamsCommon` + both wrapper
+  destructures. Consumers: `deriveQueryBackedData` (uses it ONLY in the `!enabled`/local
+  branch — VERIFIED, I wrote it) and persistence `persistenceData ?? localData` (cluster
+  views pass `persistenceData: []`, so localData isn't used there — VERIFY per view).
+  Namespace single-namespace (local) tables still pass + use it. Edge: default `[]` only
+  applies to query-backed callers, where it's ignored. Downstream: none for query-backed.
+- `ClusterViewNodes.tsx`, `ClusterViewConfig.tsx`, `ClusterViewCRDs.tsx`,
+  `ClusterViewCustom.tsx`, `ClusterViewEvents.tsx`, `ClusterViewRBAC.tsx`,
+  `ClusterViewStorage.tsx`, `ClusterResourcesViews.tsx` — remove the dead
+  `localData`/`localLoading`/`localLoaded` args and the now-unused `data`/`loading`/`loaded`
+  props (destructure + props interface). KEEP `error` (feeds `resolveEmptyStateMessage`
+  empty text — VERIFIED for Nodes; verify per view before removing). KEEP the live
+  metrics subscription (`useRefreshScopedDomain`) — Nodes reads it for CPU/mem (VERIFIED).
+  All 7 pass `enabled: true` (always query-backed — VERIFIED via grep). Custom has no
+  `data` prop (builds rows internally) — only `loading`/`loaded` to remove.
+- `ClusterResourcesViews.tsx` — stop passing `data`/`loading`/`loaded` (keep `error`) to
+  the 7 views; then its own received props (`nodes`, `config`, …) may go unused.
+- `ClusterResourcesManager.tsx` (the grandparent) — RESOLVED (read it, VERIFIED): it
+  subscribes to the 6 live domains via `useClusterResources()` and still needs each for
+  the per-view **error** (`*ErrorMessage`) and `config`/`rbac` **kinds** — so ALL
+  subscriptions STAY (no overview-counts/metrics-demand risk; nothing is unsubscribed).
+  Only remove the dead `data`/`stats`/`loading`/`loaded` prop passes to ClusterResourcesViews,
+  the now-unused `data:`/`loading:` destructure aliases (keep `error:`), and the now-unused
+  `SnapshotStats` import. No data fetch is removed.
+
+**Tests:** 9 cluster-view test files render the views with the now-removed
+`data`/`loading`/`loaded`/`stats` props (~51 sites); strip those props (mechanical).
+
+**States/edge cases:** query-backed view first load (spinner), revisit (cache replay),
+local single-namespace (still uses localData) — all covered by existing tests; tsc flags
+any prop I miss. **Verification:** tsc after each layer + `mage qc:prerelease`.
+
 ## 2026-06-07 — ROOT CAUSE FIX: liveDataVersion churns on every poll tick
 
 **CONFIRMED via runtime log:** the Nodes typed query refetches every ~200ms while idle

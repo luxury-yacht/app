@@ -257,7 +257,7 @@ describe('ClusterViewNodes', () => {
   const renderNodes = async (nodes: Array<typeof baseNode | Record<string, unknown>>) => {
     typedQueryRowsRef.current = nodes;
     await act(async () => {
-      root.render(<ClusterViewNodes data={nodes as any} loaded={true} />);
+      root.render(<ClusterViewNodes />);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -284,7 +284,7 @@ describe('ClusterViewNodes', () => {
     requestRefreshDomainStateMock.mockImplementation(() => new Promise(() => {}));
 
     await act(async () => {
-      root.render(<ClusterViewNodes data={[] as any} loading={false} loaded={true} />);
+      root.render(<ClusterViewNodes />);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -460,13 +460,13 @@ describe('ClusterViewNodes', () => {
     ]);
   });
 
-  it('reloads the query-backed node rows when the live nodes domain updates', async () => {
+  it('loads fresh query rows on revisit after the live nodes domain advances', async () => {
     const initialQueryNode = { ...baseNode, name: 'query-node-1' };
     const updatedQueryNode = { ...baseNode, name: 'query-node-2' };
     typedQueryRowsRef.current = [initialQueryNode];
 
     await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode] as any} loaded={true} />);
+      root.render(<ClusterViewNodes />);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -475,15 +475,27 @@ describe('ClusterViewNodes', () => {
     expect(latestTableRowsRef.current).toEqual([initialQueryNode]);
 
     typedQueryRowsRef.current = [updatedQueryNode];
+    // The live nodes domain advances (new data → new version/checksum) and the view is
+    // revisited. That a version bump — not a timestamp tick — is what re-invalidates the
+    // typed query is asserted at the wrapper level (useQueryBackedResourceGridTable.test
+    // "passes cluster scoped live refresh revisions"); here we assert the revisited view
+    // issues a fresh query and renders the updated rows.
     scopedDomainStateRef.current = {
       data: { metrics: null, rows: [updatedQueryNode] },
       status: 'ready',
       isManual: false,
+      version: 2,
+      checksum: 'updated',
       lastUpdated: 2,
     };
 
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
+
     await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode] as any} loaded={true} />);
+      root.render(<ClusterViewNodes />);
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
@@ -531,7 +543,7 @@ describe('ClusterViewNodes', () => {
       });
 
     await act(async () => {
-      root.render(<ClusterViewNodes data={[localNode] as any} loading={false} loaded={true} />);
+      root.render(<ClusterViewNodes />);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -544,7 +556,7 @@ describe('ClusterViewNodes', () => {
     root = ReactDOM.createRoot(container);
 
     await act(async () => {
-      root.render(<ClusterViewNodes data={[localNode] as any} loading={false} loaded={true} />);
+      root.render(<ClusterViewNodes />);
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();

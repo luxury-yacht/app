@@ -955,7 +955,7 @@ describe('query-backed leaf first load', () => {
     },
   ])('uses the typed query result on first load for $label', async (testCase) => {
     await expectQueryFirstLoad({
-      element: <testCase.Component data={[testCase.local] as any} loading={false} loaded={true} />,
+      element: <testCase.Component />,
       payload: { [testCase.payloadField]: [testCase.query] },
       domain: testCase.domain,
       expectedName: testCase.query.name,
@@ -965,27 +965,7 @@ describe('query-backed leaf first load', () => {
 
   it('uses the typed query result on first load for cluster events', async () => {
     await expectQueryFirstLoad({
-      element: (
-        <ClusterViewEvents
-          data={[
-            {
-              kind: 'Event',
-              name: 'local-event',
-              namespace: 'team-a',
-              type: 'Warning',
-              source: 'kubelet',
-              reason: 'LocalReason',
-              message: 'local message',
-              clusterId: 'cluster-a',
-              object: 'Pod/local',
-              objectApiVersion: 'v1',
-              ageTimestamp: 1,
-            },
-          ]}
-          loading={false}
-          loaded={true}
-        />
-      ),
+      element: <ClusterViewEvents />,
       payload: {
         rows: [
           {
@@ -1011,9 +991,7 @@ describe('query-backed leaf first load', () => {
 
   it('uses the typed query result on first load for cluster nodes', async () => {
     await expectQueryFirstLoad({
-      element: (
-        <ClusterViewNodes data={[nodeRow('local-node', '1h')]} loading={false} loaded={true} />
-      ),
+      element: <ClusterViewNodes />,
       payload: {
         rows: [nodeRow('query-node', '2h')],
       },
@@ -1295,37 +1273,13 @@ describe('query-backed leaf first load', () => {
     },
     {
       label: 'cluster config',
-      element: (
-        <ClusterViewConfig
-          data={[{ kind: 'StorageClass', name: 'config', clusterId: 'cluster-a', age: '1h' }]}
-          loading={false}
-          loaded={true}
-        />
-      ),
+      element: <ClusterViewConfig />,
       payload: { resources: [] },
       expected: ['age', 'kind', 'name'],
     },
     {
       label: 'cluster storage',
-      element: (
-        <ClusterViewStorage
-          data={[
-            {
-              kind: 'PersistentVolume',
-              name: 'pv',
-              clusterId: 'cluster-a',
-              capacity: '1Gi',
-              accessModes: 'ReadWriteOnce',
-              status: 'Bound',
-              storageClass: 'fast',
-              claim: 'team-a/pvc',
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-        />
-      ),
+      element: <ClusterViewStorage />,
       payload: { rows: [] },
       expected: [
         'accessModes',
@@ -1340,67 +1294,25 @@ describe('query-backed leaf first load', () => {
     },
     {
       label: 'cluster RBAC',
-      element: (
-        <ClusterViewRBAC
-          data={[{ kind: 'ClusterRole', name: 'role', clusterId: 'cluster-a', age: '1h' }]}
-          loading={false}
-          loaded={true}
-        />
-      ),
+      element: <ClusterViewRBAC />,
       payload: { resources: [] },
       expected: ['age', 'kind', 'name'],
     },
     {
       label: 'cluster CRDs',
-      element: (
-        <ClusterViewCRDs
-          data={[
-            {
-              kind: 'CustomResourceDefinition',
-              name: 'widgets.example.com',
-              group: 'example.com',
-              storageVersion: 'v1',
-              scope: 'Namespaced',
-              clusterId: 'cluster-a',
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-        />
-      ),
+      element: <ClusterViewCRDs />,
       payload: { definitions: [] },
       expected: ['age', 'group', 'kind', 'name', 'scope', 'version'],
     },
     {
       label: 'cluster events',
-      element: (
-        <ClusterViewEvents
-          data={[
-            {
-              kind: 'Event',
-              name: 'event',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              object: 'Pod/api',
-              objectApiVersion: 'v1',
-              type: 'Normal',
-              reason: 'Created',
-              source: 'kubelet',
-              message: 'created',
-              ageTimestamp: 1,
-            },
-          ]}
-          loading={false}
-          loaded={true}
-        />
-      ),
+      element: <ClusterViewEvents />,
       payload: { events: [] },
       expected: ['age', 'kind', 'message', 'objectName', 'objectType', 'reason', 'source', 'type'],
     },
     {
       label: 'cluster nodes',
-      element: <ClusterViewNodes data={[nodeRow('node-a', '1h')]} loading={false} loaded={true} />,
+      element: <ClusterViewNodes />,
       payload: { rows: [] },
       expected: ['age', 'cpu', 'kind', 'memory', 'name', 'pods', 'restarts', 'status', 'version'],
     },

@@ -216,7 +216,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'nodes',
-        liveDataVersion: '1::11',
+        liveDataVersion: '1:',
       })
     );
 
@@ -235,7 +235,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'nodes',
-        liveDataVersion: '2:fresh:22',
+        liveDataVersion: '2:fresh',
       })
     );
   });
@@ -274,7 +274,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'pods',
-        liveDataVersion: '1::11',
+        liveDataVersion: '1:',
       })
     );
 
@@ -293,7 +293,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'pods',
-        liveDataVersion: '3::33',
+        liveDataVersion: '3:',
       })
     );
   });
@@ -547,7 +547,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       expect.objectContaining({
         enabled: true,
         domain: 'cluster-config',
-        liveDataVersion: '2:ready:22',
+        liveDataVersion: '2:ready',
       })
     );
   });

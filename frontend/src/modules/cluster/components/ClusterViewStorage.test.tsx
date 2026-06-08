@@ -138,7 +138,7 @@ describe('ClusterViewStorage', () => {
 
   it('passes persisted state to GridTable', async () => {
     await act(async () => {
-      root.render(<ClusterViewStorage data={[basePV]} loaded={true} />);
+      root.render(<ClusterViewStorage />);
       await Promise.resolve();
     });
 
@@ -157,9 +157,7 @@ describe('ClusterViewStorage', () => {
 
   it('uses canonical object identity for row keys', async () => {
     await act(async () => {
-      root.render(
-        <ClusterViewStorage data={[{ ...basePV, clusterId: 'alpha:ctx' }]} loaded={true} />
-      );
+      root.render(<ClusterViewStorage />);
       await Promise.resolve();
     });
 
@@ -171,7 +169,7 @@ describe('ClusterViewStorage', () => {
 
   it('uses explicit kind metadata instead of deriving kinds from rows', async () => {
     await act(async () => {
-      root.render(<ClusterViewStorage data={[]} loaded={true} />);
+      root.render(<ClusterViewStorage />);
       await Promise.resolve();
     });
 
@@ -181,19 +179,7 @@ describe('ClusterViewStorage', () => {
 
   it('uses backend statusPresentation for PersistentVolume status styling', async () => {
     await act(async () => {
-      root.render(
-        <ClusterViewStorage
-          data={[
-            {
-              ...basePV,
-              status: 'Released',
-              statusState: 'Released',
-              statusPresentation: 'warning',
-            },
-          ]}
-          loaded={true}
-        />
-      );
+      root.render(<ClusterViewStorage />);
       await Promise.resolve();
     });
 
@@ -211,7 +197,7 @@ describe('ClusterViewStorage', () => {
 
   it('opens the Map for PersistentVolume rows', async () => {
     await act(async () => {
-      root.render(<ClusterViewStorage data={[basePV]} loaded={true} />);
+      root.render(<ClusterViewStorage />);
       await Promise.resolve();
     });
 
