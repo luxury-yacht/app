@@ -239,7 +239,7 @@ describe('GridTableFiltersBar', () => {
         namespaces: [],
         searchBehavior: 'query',
       },
-      resultCount: { displayed: 1000, total: 4200, capped: true },
+      resultCount: { filtered: 1000, unfiltered: 4200, capped: true },
     });
 
     const input = container.querySelector('#search') as HTMLInputElement | null;
@@ -344,11 +344,11 @@ describe('GridTableFiltersBar', () => {
         namespaces: [],
         searchBehavior: 'query',
       },
-      resultCount: { displayed: 100, total: 100001, totalIsExact: false, capped: true },
+      resultCount: { filtered: 100, unfiltered: 100001, totalIsExact: false, capped: true },
     });
 
     const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toContain('100 on this page of ~100001 items');
+    expect(resultCount?.textContent).toContain('showing 100 of 100001+ items due to filters');
     const trigger = resultCount?.querySelector('.tooltip-trigger');
     expect(trigger).not.toBeNull();
     await act(async () => {
@@ -360,7 +360,7 @@ describe('GridTableFiltersBar', () => {
     expect(document.body.textContent).toContain('current backend query page');
   });
 
-  it('labels query-backed page counts as current-page totals', async () => {
+  it('shows filtered-of-unfiltered totals for query-backed tables', async () => {
     await renderFilters({
       activeFilters: {
         search: 'web',
@@ -374,18 +374,18 @@ describe('GridTableFiltersBar', () => {
         namespaces: [],
         searchBehavior: 'query',
       },
-      resultCount: { displayed: 250, total: 5000, totalIsExact: true, capped: true },
+      resultCount: { filtered: 250, unfiltered: 5000, totalIsExact: true, capped: true },
     });
 
     const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toContain('250 on this page of 5000 items');
+    expect(resultCount?.textContent).toContain('showing 250 of 5000 items due to filters');
   });
 
   it('hides the result count and tooltip when no narrowing filter is active', async () => {
     // The filter-bar count is filter feedback, not pagination — pagination/total lives
     // in the pagination footer. With no active filter, the count must not render.
     await renderFilters({
-      resultCount: { displayed: 50, total: 100, capped: true },
+      resultCount: { filtered: 50, unfiltered: 100, capped: true },
     });
 
     expect(container.querySelector('[data-gridtable-filter-role="result-count"]')).toBeNull();
@@ -400,15 +400,15 @@ describe('GridTableFiltersBar', () => {
         caseSensitive: false,
         includeMetadata: false,
       },
-      resultCount: { displayed: 12, total: 100 },
+      resultCount: { filtered: 12, unfiltered: 100 },
     });
 
     const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
     expect(resultCount).not.toBeNull();
-    expect(resultCount?.textContent).toContain('12 of 100 items');
+    expect(resultCount?.textContent).toContain('showing 12 of 100 items due to filters');
   });
 
-  it('marks partial local windows with visible copy', async () => {
+  it('surfaces the partial-window note in the result-count tooltip', async () => {
     vi.useFakeTimers();
     await renderFilters({
       activeFilters: {
@@ -419,15 +419,15 @@ describe('GridTableFiltersBar', () => {
         includeMetadata: false,
       },
       resultCount: {
-        displayed: 50,
-        total: 500,
+        filtered: 50,
+        unfiltered: 500,
         capped: true,
         partialDataLabel: 'Only the recent local window is loaded.',
       },
     });
 
     const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toContain('50 visible items');
+    expect(resultCount?.textContent).toContain('showing 50 of 500 items due to filters');
     const trigger = resultCount?.querySelector('.tooltip-trigger');
     expect(trigger).not.toBeNull();
     await act(async () => {

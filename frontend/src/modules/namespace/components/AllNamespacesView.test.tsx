@@ -234,7 +234,6 @@ describe('AllNamespacesView', () => {
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('workloads');
     expect(container.textContent).toContain('Failed to load workload resources: load failed');
-    expect(getLatestProps('workloads-view')?.data).toBe(workloadsData);
   });
 
   it('renders helm view using namespace resources provider', async () => {
@@ -273,7 +272,6 @@ describe('AllNamespacesView', () => {
 
     const helmCalls = viewRenderers['helm-view'].mock.calls;
     const props = helmCalls[helmCalls.length - 1][0];
-    expect(props.data).toBe(helmData);
     expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
     expect(props.showNamespaceColumn).toBe(true);
   });
@@ -303,8 +301,8 @@ describe('AllNamespacesView', () => {
     const calls = viewRenderers['config-view'].mock.calls;
     expect(calls.length).toBeGreaterThan(0);
     const props = calls[calls.length - 1][0];
-    expect(props.loaded).toBe(true);
-    expect(props.data).toBe(configData);
+    expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
+    expect(props.showNamespaceColumn).toBe(true);
   });
 
   it('renders autoscaling view using namespace resources provider and shows errors', async () => {
@@ -336,7 +334,6 @@ describe('AllNamespacesView', () => {
     expect(container.textContent).toContain('Failed to load autoscaling resources: load failed');
 
     const props = getLatestProps('autoscaling-view');
-    expect(props.data).toBe(autoscalingData);
     expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
     expect(props.showNamespaceColumn).toBe(true);
   });
@@ -365,7 +362,6 @@ describe('AllNamespacesView', () => {
     expect(container.textContent).toContain('Failed to load network resources: network down');
 
     const props = getLatestProps('network-view');
-    expect(props.data).toBe(networkData);
     expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
     expect(props.showNamespaceColumn).toBe(true);
   });
@@ -392,7 +388,6 @@ describe('AllNamespacesView', () => {
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('quotas');
     expect(container.textContent).toContain('Failed to load quota resources: quotas down');
-    expect(getLatestProps('quotas-view')?.data).toBe(quotasData);
   });
 
   it('renders RBAC view using namespace resources provider', async () => {
@@ -423,7 +418,6 @@ describe('AllNamespacesView', () => {
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('rbac');
     expect(container.textContent).toContain('Failed to load RBAC resources: rbac down');
-    expect(getLatestProps('rbac-view')?.data).toBe(rbacData);
   });
 
   it('renders storage view using namespace resources provider', async () => {
@@ -456,7 +450,6 @@ describe('AllNamespacesView', () => {
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('storage');
     expect(container.textContent).toContain('Failed to load storage resources: storage down');
-    expect(getLatestProps('storage-view')?.data).toBe(storageData);
   });
 
   it('renders custom view without subscribing to the namespace custom fanout', async () => {
@@ -504,7 +497,6 @@ describe('AllNamespacesView', () => {
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('events');
     expect(container.textContent).toContain('Failed to load events: events down');
-    expect(getLatestProps('events-view')?.data).toBe(eventsData);
   });
 
   it('renders placeholder message for unsupported views', async () => {

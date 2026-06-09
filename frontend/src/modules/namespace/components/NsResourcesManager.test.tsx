@@ -123,8 +123,7 @@ describe('NamespaceResourcesManager', () => {
   };
 
   it('passes resource data to view component and triggers manual load for active tab', async () => {
-    const tableStats = { itemCount: 1, totalItems: 9, truncated: true };
-    resourceStates.workloads.meta = { kinds: ['Deployment', 'StatefulSet'], tableStats };
+    resourceStates.workloads.meta = { kinds: ['Deployment', 'StatefulSet'] };
     resourceStates.config.meta = { kinds: ['ConfigMap', 'Secret'] };
     resourceStates.network.meta = { kinds: ['Ingress', 'Service'] };
     resourceStates.rbac.meta = { kinds: ['Role', 'RoleBinding', 'ServiceAccount'] };
@@ -140,11 +139,8 @@ describe('NamespaceResourcesManager', () => {
 
     const props = viewPropsRef.current;
     expect(props).toBeTruthy();
-    expect(props.nsNetwork).toEqual(['network-row']);
-    expect(props.nsNetworkLoaded).toBe(false);
     expect(props.nsPods).toEqual(['pods-row']);
     expect(props.nsPodsMetrics).toBe(resourceStates.pods.metrics);
-    expect(props.nsWorkloadsStats).toBe(tableStats);
     expect(props.nsWorkloadsKinds).toEqual(['Deployment', 'StatefulSet']);
     expect(props.nsConfigKinds).toEqual(['ConfigMap', 'Secret']);
     expect(props.nsNetworkKinds).toEqual(['Ingress', 'Service']);

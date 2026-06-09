@@ -232,15 +232,7 @@ describe('NsViewWorkloads', () => {
 
   it('passes persisted state to GridTable', async () => {
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={[]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
@@ -290,15 +282,7 @@ describe('NsViewWorkloads', () => {
     });
 
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={[workload as any]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -348,9 +332,6 @@ describe('NsViewWorkloads', () => {
       root.render(
         <NsViewWorkloads
           namespace={ALL_NAMESPACES_SCOPE}
-          data={[localWorkload as any]}
-          loading={false}
-          loaded={true}
           showNamespaceColumn={true}
           metrics={null}
         />
@@ -409,15 +390,7 @@ describe('NsViewWorkloads', () => {
     });
 
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} metrics={null} />);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -443,15 +416,7 @@ describe('NsViewWorkloads', () => {
     });
     root = ReactDOM.createRoot(container);
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} metrics={null} />);
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
@@ -461,15 +426,7 @@ describe('NsViewWorkloads', () => {
 
   it('resolves node metrics from the active cluster scope only', async () => {
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={[]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
@@ -481,46 +438,15 @@ describe('NsViewWorkloads', () => {
   });
 
   it('preserves the column definitions across rerenders with unchanged inputs', async () => {
-    const workload = {
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      status: 'Running',
-      ready: '1/1',
-      restarts: 0,
-      cpuUsage: '10m',
-      memUsage: '20Mi',
-      age: '5m',
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
-    };
-    const data = [workload];
-
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={data as any}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
     const firstColumnsRef = gridTablePropsRef.current?.columns;
 
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={data as any}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
@@ -536,15 +462,7 @@ describe('NsViewWorkloads', () => {
     } as any;
 
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={[workload]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
@@ -568,15 +486,7 @@ describe('NsViewWorkloads', () => {
     } as any;
 
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={[workload]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
@@ -626,15 +536,7 @@ describe('NsViewWorkloads', () => {
     });
 
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={[workload as any]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -690,15 +592,7 @@ describe('NsViewWorkloads', () => {
     });
 
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="default"
-          data={[workload as any]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="default" metrics={null} />);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -728,15 +622,7 @@ describe('NsViewWorkloads', () => {
 
     it('includes Trigger Now and Suspend items for CronJob', async () => {
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={[cronjob as any]}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 
@@ -754,15 +640,7 @@ describe('NsViewWorkloads', () => {
       const suspendedCronjob = { ...cronjob, status: 'Suspended' };
 
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={[suspendedCronjob as any]}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 
@@ -780,15 +658,7 @@ describe('NsViewWorkloads', () => {
       const suspendedCronjob = { ...cronjob, status: 'Suspended' };
 
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={[suspendedCronjob as any]}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 
@@ -813,15 +683,7 @@ describe('NsViewWorkloads', () => {
       };
 
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={[deployment as any]}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 
@@ -843,15 +705,7 @@ describe('NsViewWorkloads', () => {
       ];
 
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={workloads as any}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 
@@ -883,15 +737,7 @@ describe('NsViewWorkloads', () => {
       ];
 
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={workloads as any}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 

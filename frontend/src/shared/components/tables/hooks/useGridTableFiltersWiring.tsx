@@ -248,23 +248,36 @@ export function useGridTableFiltersWiring<T>({
     supportsAllScope,
   ]);
 
-  // Compute result count: displayed items vs total items.
-  // If the consumer provides a totalCount override (e.g. server-side paginated total), use it.
+  // Filter feedback for the bar: N (items matching the active filters) of M (items in scope before
+  // them). Both are TOTALS, never the current page. Server-paginated tables get them from the
+  // backend (totalCount = N, unfilteredTotal = M); local tables derive N from the client-filtered
+  // set and M from the full row set. The bar only renders this while a narrowing filter is active.
   const resultCount = useMemo(() => {
     if (!filteringEnabled || filters?.options?.showResultCount === false) return undefined;
-    const total = filters?.options?.totalCount ?? totalDataCount ?? data.length;
-    const displayed = tableData.length;
+    // Server-paginated tables (searchBehavior 'query') filter on the backend, so the displayed
+    // rows are just the current page — N/M come from the backend counts. Local tables filter
+    // client-side, so N is the filtered row set and M is the full provided dataset.
+    const isServerPaginated = filters?.options?.searchBehavior === 'query';
+    const filtered = isServerPaginated
+      ? (filters?.options?.totalCount ?? totalDataCount ?? data.length)
+      : tableData.length;
+    const unfiltered = isServerPaginated
+      ? (filters?.options?.unfilteredTotal ?? filtered)
+      : data.length;
     return {
-      displayed,
-      total,
+      filtered,
+      unfiltered,
       totalIsExact: filters?.options?.totalIsExact ?? true,
       partialDataLabel: filters?.options?.partialDataLabel,
-      capped: Boolean(filters?.options?.partialDataLabel) || total > data.length,
+      capped:
+        Boolean(filters?.options?.partialDataLabel) || filters?.options?.totalIsExact === false,
     };
   }, [
     filteringEnabled,
     filters?.options?.showResultCount,
+    filters?.options?.searchBehavior,
     filters?.options?.totalCount,
+    filters?.options?.unfilteredTotal,
     filters?.options?.totalIsExact,
     filters?.options?.partialDataLabel,
     totalDataCount,

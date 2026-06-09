@@ -276,20 +276,10 @@ describe('NsViewNetwork', () => {
   });
 
   const renderNetworkView = async (
-    rows: NetworkData[] = [baseNetwork()],
     overrides: Partial<React.ComponentProps<typeof NsViewNetwork>> = {}
   ) => {
     await act(async () => {
-      root.render(
-        <NsViewNetwork
-          namespace="team-a"
-          data={rows}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-          {...overrides}
-        />
-      );
+      root.render(<NsViewNetwork namespace="team-a" showNamespaceColumn={true} {...overrides} />);
       await Promise.resolve();
     });
     return gridTablePropsRef.current;
@@ -316,7 +306,7 @@ describe('NsViewNetwork', () => {
         },
       },
     });
-    const props = await renderNetworkView([entry]);
+    const props = await renderNetworkView();
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -350,7 +340,7 @@ describe('NsViewNetwork', () => {
       kindAlias: kind,
       name: `${kind.toLowerCase()}-object`,
     });
-    const props = await renderNetworkView([entry]);
+    const props = await renderNetworkView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
     const objectMapItem = menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
@@ -376,7 +366,7 @@ describe('NsViewNetwork', () => {
   it('gates delete option on permissions and confirms deletion', async () => {
     const entry = baseNetwork();
     permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
-    const props = await renderNetworkView([entry]);
+    const props = await renderNetworkView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
     const deleteItem = menu.find((item: any) => item.label === 'Delete');
@@ -407,7 +397,7 @@ describe('NsViewNetwork', () => {
   it('hides delete action while permission is pending', async () => {
     const entry = baseNetwork();
     permissionState.set('Ingress:delete:team-a', { allowed: true, pending: true });
-    const props = await renderNetworkView([entry]);
+    const props = await renderNetworkView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
     const deleteItem = menu.find((item: any) => item.label === 'Delete');
@@ -417,7 +407,7 @@ describe('NsViewNetwork', () => {
   it('omits delete option entirely when permission is denied', async () => {
     const entry = baseNetwork();
     // Simulate denied capability by not registering key
-    const props = await renderNetworkView([entry]);
+    const props = await renderNetworkView();
     const menu = props.getCustomContextMenuItems(entry, 'name');
     const deleteItem = menu.find((item: any) => item.label === 'Delete');
     expect(deleteItem).toBeUndefined();
@@ -426,7 +416,7 @@ describe('NsViewNetwork', () => {
   it('renders details column with styling when text present', async () => {
     permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
     const entry = baseNetwork({ details: 'Hosts: example.com' });
-    await renderNetworkView([entry]);
+    await renderNetworkView();
     const detailsColumn = getColumn('details');
     const rendered = detailsColumn.render(entry);
     expect(renderOutputToText(rendered)).toContain('Hosts: example.com');
@@ -437,7 +427,7 @@ describe('NsViewNetwork', () => {
     runObjectActionMock.mockRejectedValueOnce(new Error('boom'));
     permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
     const entry = baseNetwork();
-    const props = await renderNetworkView([entry]);
+    const props = await renderNetworkView();
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
       .find((item: any) => item.label === 'Delete');

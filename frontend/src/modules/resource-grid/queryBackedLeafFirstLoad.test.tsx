@@ -538,15 +538,7 @@ describe('query-backed leaf first load', () => {
     },
   ])('uses the typed query result on first load for $label', async (testCase) => {
     await expectQueryFirstLoad({
-      element: (
-        <testCase.Component
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[testCase.local] as any}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <testCase.Component namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { [testCase.payloadField]: [testCase.query] },
       domain: testCase.domain,
       expectedName: testCase.query.name,
@@ -556,27 +548,7 @@ describe('query-backed leaf first load', () => {
 
   it('uses the typed query result on first load for namespace autoscaling', async () => {
     await expectQueryFirstLoad({
-      element: (
-        <NsViewAutoscaling
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[
-            {
-              kind: 'HorizontalPodAutoscaler',
-              name: 'local-autoscaling',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              target: 'Deployment/local',
-              minReplicas: 1,
-              maxReplicas: 2,
-              currentReplicas: 1,
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewAutoscaling namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: {
         rows: [
           {
@@ -601,26 +573,7 @@ describe('query-backed leaf first load', () => {
 
   it('uses the typed query result on first load for namespace Helm', async () => {
     await expectQueryFirstLoad({
-      element: (
-        <NsViewHelm
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[
-            {
-              kind: 'HelmRelease',
-              name: 'local-release',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              chart: 'local-1.0.0',
-              status: 'deployed',
-              revision: 1,
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewHelm namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: {
         rows: [
           {
@@ -646,8 +599,6 @@ describe('query-backed leaf first load', () => {
         <NsViewPods
           namespace={ALL_NAMESPACES_SCOPE}
           data={[podRow('local-pod', '1h') as any]}
-          loading={false}
-          loaded={true}
           showNamespaceColumn={true}
         />
       ),
@@ -662,15 +613,7 @@ describe('query-backed leaf first load', () => {
 
   it('uses the typed query result on first load for namespace workloads', async () => {
     await expectQueryFirstLoad({
-      element: (
-        <NsViewWorkloads
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[workloadRow('local-workload', '1h') as any]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: {
         rows: [workloadRow('query-workload', '2h')],
       },
@@ -829,15 +772,7 @@ describe('query-backed leaf first load', () => {
     },
   ])('issues a namespace-scoped typed query on first load for $label', async (testCase) => {
     await expectQueryFirstLoad({
-      element: (
-        <testCase.Component
-          namespace="team-a"
-          data={[testCase.local] as any}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={false}
-        />
-      ),
+      element: <testCase.Component namespace="team-a" showNamespaceColumn={false} />,
       payload: { [testCase.payloadField]: [testCase.query] },
       domain: testCase.domain,
       expectedName: testCase.query.name,
@@ -847,27 +782,7 @@ describe('query-backed leaf first load', () => {
 
   it('issues a namespace-scoped typed query on first load for namespace autoscaling', async () => {
     await expectQueryFirstLoad({
-      element: (
-        <NsViewAutoscaling
-          namespace="team-a"
-          data={[
-            {
-              kind: 'HorizontalPodAutoscaler',
-              name: 'local-autoscaling',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              target: 'Deployment/local',
-              minReplicas: 1,
-              maxReplicas: 2,
-              currentReplicas: 1,
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={false}
-        />
-      ),
+      element: <NsViewAutoscaling namespace="team-a" showNamespaceColumn={false} />,
       payload: {
         rows: [
           {
@@ -892,26 +807,7 @@ describe('query-backed leaf first load', () => {
 
   it('issues a namespace-scoped typed query on first load for namespace Helm', async () => {
     await expectQueryFirstLoad({
-      element: (
-        <NsViewHelm
-          namespace="team-a"
-          data={[
-            {
-              kind: 'HelmRelease',
-              name: 'local-release',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              chart: 'local-1.0.0',
-              status: 'deployed',
-              revision: 1,
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={false}
-        />
-      ),
+      element: <NsViewHelm namespace="team-a" showNamespaceColumn={false} />,
       payload: {
         rows: [
           {
@@ -937,8 +833,6 @@ describe('query-backed leaf first load', () => {
         <NsViewPods
           namespace="team-a"
           data={[podRow('local-pod', '1h') as any]}
-          loading={false}
-          loaded={true}
           showNamespaceColumn={false}
         />
       ),
@@ -953,15 +847,7 @@ describe('query-backed leaf first load', () => {
 
   it('issues a namespace-scoped typed query on first load for namespace workloads', async () => {
     await expectQueryFirstLoad({
-      element: (
-        <NsViewWorkloads
-          namespace="team-a"
-          data={[workloadRow('local-workload', '1h') as any]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={false}
-        />
-      ),
+      element: <NsViewWorkloads namespace="team-a" showNamespaceColumn={false} />,
       payload: {
         rows: [workloadRow('query-workload', '2h')],
       },
@@ -1105,168 +991,43 @@ describe('query-backed leaf first load', () => {
   it.each([
     {
       label: 'namespace config',
-      element: (
-        <NsViewConfig
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[
-            {
-              kind: 'ConfigMap',
-              name: 'config',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              data: 1,
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewConfig namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { resources: [] },
       expected: ['age', 'data', 'kind', 'name', 'namespace'],
     },
     {
       label: 'namespace network',
-      element: (
-        <NsViewNetwork
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[
-            {
-              kind: 'Service',
-              name: 'service',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              details: 'ClusterIP',
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewNetwork namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { resources: [] },
       expected: ['age', 'kind', 'name', 'namespace'],
     },
     {
       label: 'namespace storage',
-      element: (
-        <NsViewStorage
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[
-            {
-              kind: 'PersistentVolumeClaim',
-              name: 'pvc',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              status: 'Bound',
-              capacity: '1Gi',
-              storageClass: 'fast',
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewStorage namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { resources: [] },
       expected: ['age', 'capacity', 'kind', 'name', 'namespace', 'status', 'storageClass'],
     },
     {
       label: 'namespace autoscaling',
-      element: (
-        <NsViewAutoscaling
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[
-            {
-              kind: 'HorizontalPodAutoscaler',
-              name: 'hpa',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              target: 'Deployment/api',
-              minReplicas: 1,
-              maxReplicas: 2,
-              currentReplicas: 1,
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewAutoscaling namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { resources: [] },
       expected: ['age', 'current', 'kind', 'name', 'namespace', 'replicas', 'scaleTarget'],
     },
     {
       label: 'namespace quotas',
-      element: (
-        <NsViewQuotas
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[
-            {
-              kind: 'ResourceQuota',
-              name: 'quota',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewQuotas namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { resources: [] },
       expected: ['age', 'kind', 'name', 'namespace'],
     },
     {
       label: 'namespace RBAC',
-      element: (
-        <NsViewRBAC
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[
-            {
-              kind: 'Role',
-              name: 'role',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewRBAC namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { resources: [] },
       expected: ['age', 'kind', 'name', 'namespace'],
     },
     {
       label: 'namespace Helm',
-      element: (
-        <NsViewHelm
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[
-            {
-              kind: 'HelmRelease',
-              name: 'release',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              chart: 'chart',
-              status: 'deployed',
-              revision: 1,
-              updated: '2026-06-02T10:00:00Z',
-              age: '1h',
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewHelm namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { releases: [] },
       expected: [
         'age',
@@ -1282,28 +1043,7 @@ describe('query-backed leaf first load', () => {
     },
     {
       label: 'namespace events',
-      element: (
-        <NsViewEvents
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[
-            {
-              kind: 'Event',
-              namespace: 'team-a',
-              clusterId: 'cluster-a',
-              object: 'Pod/api',
-              objectApiVersion: 'v1',
-              type: 'Normal',
-              reason: 'Created',
-              source: 'kubelet',
-              message: 'created',
-              ageTimestamp: 1,
-            },
-          ]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewEvents namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { events: [] },
       expected: [
         'age',
@@ -1323,8 +1063,6 @@ describe('query-backed leaf first load', () => {
         <NsViewPods
           namespace={ALL_NAMESPACES_SCOPE}
           data={[podRow('pod', '1h') as any]}
-          loading={false}
-          loaded={true}
           showNamespaceColumn={true}
         />
       ),
@@ -1344,15 +1082,7 @@ describe('query-backed leaf first load', () => {
     },
     {
       label: 'namespace workloads',
-      element: (
-        <NsViewWorkloads
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[workloadRow('workload', '1h') as any]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { rows: [] },
       expected: [
         'age',

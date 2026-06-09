@@ -21,13 +21,8 @@ import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import {
-  buildLocalPartialDataLabel,
-  localTableModeForStats,
-} from '@modules/resource-grid/tablePartialState';
 import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import type { SnapshotStats } from '@/core/refresh/client';
 import type { NamespaceHelmSnapshotPayload, NamespaceHelmSummary } from '@/core/refresh/types';
 
 // Data interface for Helm releases
@@ -66,10 +61,6 @@ export interface HelmData {
 
 interface HelmViewProps {
   namespace: string;
-  data: HelmData[];
-  stats?: SnapshotStats | null;
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
 
@@ -77,7 +68,7 @@ interface HelmViewProps {
  * GridTable component for namespace Helm releases
  */
 const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
-  ({ namespace, stats = null, showNamespaceColumn = false }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -291,7 +282,6 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     ]);
 
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
-    const localTableMode = localTableModeForStats(stats);
     const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Helm' : 'Namespace Helm';
 
     const selectRows = useCallback(
@@ -331,16 +321,6 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       showKindDropdown: true,
       showNamespaceFilters: showNamespaceColumn,
       filterOptions: { isNamespaceScoped: !isAllNamespaces },
-      filterOptionOverrides:
-        localTableMode === 'Local Partial' && !isAllNamespaces
-          ? {
-              partialDataLabel: buildLocalPartialDataLabel({
-                stats,
-                fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
-                sourceLabel: diagnosticsLabel,
-              }),
-            }
-          : undefined,
     });
 
     const getContextMenuItems = useCallback(

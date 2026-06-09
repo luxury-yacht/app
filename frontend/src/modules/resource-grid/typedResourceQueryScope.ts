@@ -10,6 +10,8 @@ export interface TypedQueryPayload {
   continue?: string;
   cursorInvalid?: boolean;
   total?: number;
+  // Items in scope before the request's filters — the "of M" in "showing N of M due to filters".
+  unfilteredTotal?: number;
   totalIsExact?: boolean;
   namespaces?: string[];
   kinds?: string[];
@@ -135,6 +137,7 @@ export function filterOptionsFromTypedPayload(
     kinds: payload.kinds,
     namespaces: payload.namespaces,
     totalCount: payload.total,
+    unfilteredTotal: payload.unfilteredTotal,
     totalIsExact: payload.totalIsExact,
     partialDataLabel: [issueLabel, facetsLabel].filter(Boolean).join('\n') || undefined,
   };

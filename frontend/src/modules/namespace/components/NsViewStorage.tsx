@@ -23,15 +23,10 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import {
-  buildLocalPartialDataLabel,
-  localTableModeForStats,
-} from '@modules/resource-grid/tablePartialState';
-import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import type { SnapshotStats } from '@/core/refresh/client';
 import type { NamespaceStorageSnapshotPayload } from '@/core/refresh/types';
 
 const NAMESPACE_STORAGE_KIND_OPTIONS = ['PersistentVolumeClaim'];
@@ -55,10 +50,6 @@ export interface StorageData {
 
 interface StorageViewProps {
   namespace: string;
-  data: StorageData[];
-  stats?: SnapshotStats | null;
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
 
@@ -67,7 +58,7 @@ interface StorageViewProps {
  * Aggregates PersistentVolumeClaims, VolumeAttachments, and related storage resources
  */
 const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
-  ({ namespace, stats = null, showNamespaceColumn = false }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -222,7 +213,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
 
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Storage' : 'Namespace Storage';
-    const localTableMode = localTableModeForStats(stats);
 
     const selectRows = useCallback(
       (payload: NamespaceStorageSnapshotPayload) => payload.rows ?? [],
@@ -245,16 +235,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       availableKinds: NAMESPACE_STORAGE_KIND_OPTIONS,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
-      filterOptionOverrides:
-        namespace === ALL_NAMESPACES_SCOPE || localTableMode !== 'Local Partial'
-          ? undefined
-          : {
-              partialDataLabel: buildLocalPartialDataLabel({
-                stats,
-                fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
-                sourceLabel: diagnosticsLabel,
-              }),
-            },
       diagnosticsLabel,
     });
 

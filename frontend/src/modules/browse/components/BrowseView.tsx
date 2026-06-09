@@ -335,6 +335,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     handleLoadPrevious,
     filterOptions,
     totalCount,
+    unfilteredTotal,
     totalIsExact,
     pageLimit,
     pageLimitOptions,
@@ -417,8 +418,11 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       kindDropdownBulkActions: true,
       namespaceDropdownSearchable: true,
       includeClusterScopedSyntheticNamespace: false,
-      showResultCount: false,
+      // Show the "showing N of M items due to filters" banner like every other view (the bar only
+      // renders it while a narrowing filter is active). totalCount is N; unfilteredTotal is M.
+      showResultCount: true,
       totalCount,
+      unfilteredTotal,
       totalIsExact,
       partialDataLabel: filterOptions.partialDataLabel,
     }),
@@ -428,6 +432,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       filterOptions.partialDataLabel,
       showNamespaceColumn,
       totalCount,
+      unfilteredTotal,
       totalIsExact,
     ]
   );

@@ -632,7 +632,7 @@ describe('BrowseView', () => {
   });
 
   describe('Row cap UI', () => {
-    it('renders query pagination in the table footer and suppresses split top counts', async () => {
+    it('renders query pagination in the table footer with the filter-feedback banner enabled', async () => {
       refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [
@@ -670,7 +670,10 @@ describe('BrowseView', () => {
       expect(gridTablePropsRef.current.showLoadMoreButton).toBe(false);
       expect(gridTablePropsRef.current.showPaginationStatus).toBe(false);
       expect(gridTablePropsRef.current.filters.options.customActions).toBeUndefined();
-      expect(gridTablePropsRef.current.filters.options.showResultCount).toBe(false);
+      // Pagination totals live in the footer; the filter bar's "showing N of M due to filters"
+      // banner is enabled and renders only while a narrowing filter is active (complementary, not
+      // a duplicate top count) — consistent with every other view.
+      expect(gridTablePropsRef.current.filters.options.showResultCount).toBe(true);
       expect(gridTablePropsRef.current.paginationControls?.props).toMatchObject({
         pageIndex: 1,
         pageSize: 50,

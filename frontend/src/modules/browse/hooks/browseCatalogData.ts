@@ -55,6 +55,7 @@ export interface BrowseCatalogApplyResult extends BrowseCatalogCollection {
   continueToken: string | null;
   previousToken: string | null;
   totalCount: number;
+  unfilteredTotal: number;
   totalIsExact: boolean;
 }
 
@@ -196,6 +197,7 @@ export const applyCatalogBaseline = (
     continueToken: parseContinueToken(payload.continue),
     previousToken: parseContinueToken(payload.previous),
     totalCount: payload.total ?? 0,
+    unfilteredTotal: payload.unfilteredTotal ?? payload.total ?? 0,
     totalIsExact: payload.totalIsExact !== false,
   };
 };
@@ -212,6 +214,7 @@ export const applyCatalogPage = (
     continueToken: parseContinueToken(payload.continue),
     previousToken: parseContinueToken(payload.previous),
     totalCount: payload.total ?? 0,
+    unfilteredTotal: payload.unfilteredTotal ?? payload.total ?? 0,
     totalIsExact: payload.totalIsExact !== false,
   };
 };

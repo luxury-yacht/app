@@ -174,16 +174,19 @@ type KindInfo struct {
 
 // QueryResult summarises the outcome of a catalog query.
 type QueryResult struct {
-	Items         []Summary  // items returned by the query
-	ContinueToken string     // token for continuing a paginated query
-	PreviousToken string     // token for fetching the previous page
-	CursorInvalid bool       // indicates the supplied cursor was malformed or incompatible
-	TotalItems    int        // total number of items matching the query
-	TotalIsExact  bool       // indicates TotalItems is exact for the query
-	ResourceCount int        // total number of resources matching the query
-	Kinds         []KindInfo // resource kinds included in the query
-	Namespaces    []string   // namespaces included in the query
-	FacetsExact   bool       // indicates Kinds and Namespaces describe the matching universe exactly
+	Items         []Summary // items returned by the query
+	ContinueToken string    // token for continuing a paginated query
+	PreviousToken string    // token for fetching the previous page
+	CursorInvalid bool      // indicates the supplied cursor was malformed or incompatible
+	TotalItems    int       // total number of items matching the query
+	// UnfilteredTotal is the in-scope item count before the query's filters (the "of M" in
+	// "showing N of M items due to filters"); equals TotalItems when no filter is active.
+	UnfilteredTotal int        // in-scope count before the query's filters
+	TotalIsExact    bool       // indicates TotalItems is exact for the query
+	ResourceCount   int        // total number of resources matching the query
+	Kinds           []KindInfo // resource kinds included in the query
+	Namespaces      []string   // namespaces included in the query
+	FacetsExact     bool       // indicates Kinds and Namespaces describe the matching universe exactly
 }
 
 // PartialSyncError reports that a sync completed with partial failures.

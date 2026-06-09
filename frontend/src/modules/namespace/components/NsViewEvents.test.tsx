@@ -250,7 +250,6 @@ describe('NsViewEvents', () => {
   });
 
   const renderEventsView = async (
-    rows: EventData[] = [baseEvent()],
     showNamespaceColumnOrOptions:
       | boolean
       | { namespace?: string; showNamespaceColumn?: boolean; stats?: any } = true
@@ -262,10 +261,6 @@ describe('NsViewEvents', () => {
     await act(async () => {
       root.render(
         <NsViewEvents
-          data={rows}
-          stats={options.stats}
-          loading={false}
-          loaded={true}
           namespace={options.namespace ?? 'team-a'}
           showNamespaceColumn={options.showNamespaceColumn ?? true}
         />
@@ -277,7 +272,7 @@ describe('NsViewEvents', () => {
 
   it('defines Age as the visible event timestamp sort column', async () => {
     const event = baseEvent({ ageTimestamp: 42 });
-    const props = await renderEventsView([event]);
+    const props = await renderEventsView();
     const ageColumn = props.columns.find((column: any) => column.key === 'age');
 
     expect(ageColumn).toBeTruthy();
@@ -303,7 +298,7 @@ describe('NsViewEvents', () => {
         },
       },
     });
-    await renderEventsView([event]);
+    await renderEventsView();
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -334,7 +329,7 @@ describe('NsViewEvents', () => {
 
   it('renders interactive object column that triggers navigation', async () => {
     const event = baseEvent();
-    const props = await renderEventsView([event]);
+    const props = await renderEventsView();
 
     const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
     expect(objectNameColumn).toBeTruthy();
@@ -375,7 +370,7 @@ describe('NsViewEvents', () => {
       objectUid: 'database-uid',
       objectApiVersion: undefined,
     });
-    const props = await renderEventsView([event]);
+    const props = await renderEventsView();
     const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
     const cell = objectNameColumn.render(event);
 
@@ -398,14 +393,14 @@ describe('NsViewEvents', () => {
 
   it('suppresses context actions when no related object provided', async () => {
     const event = baseEvent({ object: undefined });
-    const props = await renderEventsView([event]);
+    const props = await renderEventsView();
     const menu = props.getCustomContextMenuItems(event, 'objectName');
     expect(menu).toHaveLength(0);
   });
 
   it('passes stable event row identity into useTableSort', async () => {
     const event = baseEvent();
-    await renderEventsView([event]);
+    await renderEventsView();
 
     const options = useTableSortMock.mock.calls[0]?.[3];
     expect(options?.rowIdentity).toBeTypeOf('function');
@@ -416,7 +411,7 @@ describe('NsViewEvents', () => {
 
   it('formats age using timestamp when available and falls back to provided age', async () => {
     const eventWithTimestamp = baseEvent({ ageTimestamp: 99, age: undefined });
-    const props = await renderEventsView([eventWithTimestamp]);
+    const props = await renderEventsView();
     const ageColumn = props.columns.find((column: any) => column.key === 'age');
     const cell = ageColumn.render(eventWithTimestamp);
     expect(formatAgeMock).toHaveBeenCalledWith(99);
@@ -424,7 +419,7 @@ describe('NsViewEvents', () => {
 
     formatAgeMock.mockClear();
     const eventWithAge = baseEvent({ ageTimestamp: undefined, age: '5m' });
-    const fallbackProps = await renderEventsView([eventWithAge]);
+    const fallbackProps = await renderEventsView();
     const fallbackAgeColumn = fallbackProps.columns.find((column: any) => column.key === 'age');
     fallbackAgeColumn.render(eventWithAge);
     // Age is passed through formatAge for consistency with ClusterViewEvents
@@ -448,7 +443,7 @@ describe('NsViewEvents', () => {
         },
       },
     });
-    await renderEventsView([noNamespaceEvent]);
+    await renderEventsView();
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -476,12 +471,12 @@ describe('NsViewEvents', () => {
       age: '2m',
       ageTimestamp: undefined,
     });
-    const props = await renderEventsView([event]);
+    const props = await renderEventsView();
     const key = props.keyExtractor(event, 0);
     expect(key).toContain('ns-one');
     expect(key).toContain('2m');
 
-    const noNamespaceProps = await renderEventsView([event], false);
+    const noNamespaceProps = await renderEventsView(false);
     const namespaceColumn = noNamespaceProps.columns.find(
       (column: any) => column.key === 'namespace'
     );
@@ -490,7 +485,7 @@ describe('NsViewEvents', () => {
 
   it('respects short name preferences when sizing columns', async () => {
     shortNamesMock.mockReturnValue(true);
-    const props = await renderEventsView([baseEvent({ type: 'Normal' })]);
+    const props = await renderEventsView();
 
     const typeColumn = props.columns.find((column: any) => column.key === 'type');
     expect(typeColumn).toBeTruthy();
@@ -501,22 +496,5 @@ describe('NsViewEvents', () => {
     expect(cell.props.className).toContain('warning');
     expect(cell.props.className).not.toContain('kind-badge');
     expect(cell.props.className).not.toMatch(/hash-color-\d+/);
-  });
-
-  it('uses backend truncation stats for Local Partial table copy', async () => {
-    await renderEventsView([baseEvent({ reason: 'Backoff' })], {
-      stats: {
-        itemCount: 1,
-        buildDurationMs: 0,
-        truncated: true,
-        totalItems: 20,
-        warnings: ['Showing most recent 1 of 20 events'],
-      },
-    });
-
-    expect(gridTablePropsRef.current.filters.options.partialDataLabel).toContain(
-      'Showing most recent 1 of 20 events'
-    );
-    expect(gridTablePropsRef.current.filters.options.partialDataLabel).toContain('visible rows');
   });
 });

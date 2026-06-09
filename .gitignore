@@ -70,3 +70,6 @@ Thumbs.db
 debug.log
 *.pprof
 *.prof
+
+.claude/impact-analysis.md
+.claude/settings.local.json

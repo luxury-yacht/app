@@ -113,6 +113,8 @@ export interface UseBrowseCatalogResult {
   filterOptions: BrowseFilterOptions;
   /** Total count of items matching the current query (before pagination) */
   totalCount: number;
+  /** In-scope count before filters — the "of M" in "showing N of M items due to filters". */
+  unfilteredTotal: number;
   /** Whether totalCount is exact for the current backend query */
   totalIsExact: boolean;
   /** Current backend cursor page size */
@@ -164,6 +166,7 @@ export function useBrowseCatalog({
   const [pageIndex, setPageIndex] = useState(1);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+  const [unfilteredTotal, setUnfilteredTotal] = useState(0);
   const [totalIsExact, setTotalIsExact] = useState(true);
   const initialPageLimitKey = initialPageLimit ?? null;
   const normalizedInitialPageLimit = useMemo(
@@ -352,6 +355,7 @@ export function useBrowseCatalog({
     const next = applyCatalogBaseline(collectionRef.current, payload);
     if (currentPageTokenRef.current) {
       setTotalCount(next.totalCount);
+      setUnfilteredTotal(next.unfilteredTotal);
       setTotalIsExact(next.totalIsExact);
       setIsRequestingMore(false);
       if (!hasLoadedOnceRef.current && isRenderableCatalogPayload(payload)) {
@@ -369,6 +373,7 @@ export function useBrowseCatalog({
     setContinueToken(next.continueToken);
     setPreviousToken(next.previousToken);
     setTotalCount(next.totalCount);
+    setUnfilteredTotal(next.unfilteredTotal);
     setTotalIsExact(next.totalIsExact);
     setIsRequestingMore(false);
 
@@ -441,6 +446,7 @@ export function useBrowseCatalog({
           setContinueToken(next.continueToken);
           setPreviousToken(next.previousToken);
           setTotalCount(next.totalCount);
+          setUnfilteredTotal(next.unfilteredTotal);
           setTotalIsExact(next.totalIsExact);
           const nextPageIndex =
             direction === 'next'
@@ -606,6 +612,7 @@ export function useBrowseCatalog({
     handleLoadPrevious,
     filterOptions,
     totalCount,
+    unfilteredTotal,
     totalIsExact,
     pageLimit: activePageLimit,
     pageLimitOptions: BROWSE_PAGE_LIMIT_OPTIONS,

@@ -28,11 +28,15 @@ type typedTableQueryPage[T any] struct {
 	Continue      string
 	CursorInvalid bool
 	Total         int
-	TotalIsExact  bool
-	Namespaces    []string
-	Kinds         []string
-	FacetsExact   bool
-	Dynamic       *ResourceQueryDynamicRef
+	// UnfilteredTotal is the count of items in scope before the query's filters
+	// (search/kinds/namespaces/predicates). It is the "of M" in the table's
+	// "showing N of M items due to filters" banner; Total is the "N".
+	UnfilteredTotal int
+	TotalIsExact    bool
+	Namespaces      []string
+	Kinds           []string
+	FacetsExact     bool
+	Dynamic         *ResourceQueryDynamicRef
 }
 
 type typedTableQueryCursor struct {
@@ -107,18 +111,19 @@ func normalizeTypedTableSortField(value, fallback string) string {
 // layers `withDegraded` on top.
 func typedQueryEnvelope[T any](table string, page typedTableQueryPage[T], capabilities ResourceQueryCapabilities) ResourceQueryEnvelope {
 	return ResourceQueryEnvelope{
-		Provider:      ResourceQueryProviderTypedResource,
-		Table:         table,
-		Continue:      page.Continue,
-		CursorInvalid: page.CursorInvalid,
-		Total:         page.Total,
-		TotalIsExact:  page.TotalIsExact,
-		Kinds:         page.Kinds,
-		Namespaces:    page.Namespaces,
-		FacetsExact:   page.FacetsExact,
-		Completeness:  resourceQueryCompleteness(true),
-		Dynamic:       page.Dynamic,
-		Capabilities:  capabilities,
+		Provider:        ResourceQueryProviderTypedResource,
+		Table:           table,
+		Continue:        page.Continue,
+		CursorInvalid:   page.CursorInvalid,
+		Total:           page.Total,
+		UnfilteredTotal: page.UnfilteredTotal,
+		TotalIsExact:    page.TotalIsExact,
+		Kinds:           page.Kinds,
+		Namespaces:      page.Namespaces,
+		FacetsExact:     page.FacetsExact,
+		Completeness:    resourceQueryCompleteness(true),
+		Dynamic:         page.Dynamic,
+		Capabilities:    capabilities,
 	}
 }
 
@@ -127,14 +132,15 @@ func typedQueryEnvelope[T any](table string, page typedTableQueryPage[T], capabi
 // local window). `exact` is whether the window holds the complete matching set.
 func typedWindowEnvelope(table string, total int, exact bool, kinds []string, capabilities ResourceQueryCapabilities) ResourceQueryEnvelope {
 	return ResourceQueryEnvelope{
-		Provider:     ResourceQueryProviderTypedResource,
-		Table:        table,
-		Total:        total,
-		TotalIsExact: exact,
-		Kinds:        kinds,
-		FacetsExact:  true,
-		Completeness: resourceQueryCompleteness(exact),
-		Capabilities: capabilities,
+		Provider:        ResourceQueryProviderTypedResource,
+		Table:           table,
+		Total:           total,
+		UnfilteredTotal: total,
+		TotalIsExact:    exact,
+		Kinds:           kinds,
+		FacetsExact:     true,
+		Completeness:    resourceQueryCompleteness(exact),
+		Capabilities:    capabilities,
 	}
 }
 
@@ -162,13 +168,14 @@ func (e ResourceQueryEnvelope) withIssues(issues []ResourceQueryIssue) ResourceQ
 func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typedTableQueryAdapter[T]) typedTableQueryPage[T] {
 	if !query.Enabled {
 		return typedTableQueryPage[T]{
-			Rows:         items,
-			Total:        len(items),
-			TotalIsExact: true,
-			FacetsExact:  true,
-			Namespaces:   collectTypedTableFacet(items, adapter.Namespace),
-			Kinds:        collectTypedTableFacet(items, adapter.Kind),
-			Dynamic:      query.dynamicRef(),
+			Rows:            items,
+			Total:           len(items),
+			UnfilteredTotal: len(items),
+			TotalIsExact:    true,
+			FacetsExact:     true,
+			Namespaces:      collectTypedTableFacet(items, adapter.Namespace),
+			Kinds:           collectTypedTableFacet(items, adapter.Kind),
+			Dynamic:         query.dynamicRef(),
 		}
 	}
 
@@ -215,28 +222,30 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 	}
 
 	return typedTableQueryPage[T]{
-		Rows:          pageRows,
-		Continue:      continueToken,
-		CursorInvalid: cursorInvalid,
-		Total:         total,
-		TotalIsExact:  true,
-		FacetsExact:   true,
-		Namespaces:    collectTypedTableFacet(filtered, adapter.Namespace),
-		Kinds:         collectTypedTableFacet(filtered, adapter.Kind),
-		Dynamic:       query.dynamicRef(),
+		Rows:            pageRows,
+		Continue:        continueToken,
+		CursorInvalid:   cursorInvalid,
+		Total:           total,
+		UnfilteredTotal: len(items),
+		TotalIsExact:    true,
+		FacetsExact:     true,
+		Namespaces:      collectTypedTableFacet(filtered, adapter.Namespace),
+		Kinds:           collectTypedTableFacet(filtered, adapter.Kind),
+		Dynamic:         query.dynamicRef(),
 	}
 }
 
 type typedTableQueryCollector[T any] struct {
-	query       typedTableQuery
-	adapter     typedTableQueryAdapter[T]
-	cursor      typedTableQueryCursor
-	cursorValid bool
-	total       int
-	namespaces  map[string]string
-	kinds       map[string]string
-	candidates  []T
-	invalid     bool
+	query           typedTableQuery
+	adapter         typedTableQueryAdapter[T]
+	cursor          typedTableQueryCursor
+	cursorValid     bool
+	total           int
+	unfilteredTotal int
+	namespaces      map[string]string
+	kinds           map[string]string
+	candidates      []T
+	invalid         bool
 }
 
 func newTypedTableQueryCollector[T any](query typedTableQuery, adapter typedTableQueryAdapter[T]) *typedTableQueryCollector[T] {
@@ -261,6 +270,9 @@ func (c *typedTableQueryCollector[T]) Add(item T) {
 	if c == nil {
 		return
 	}
+	// Count every item fed in (the pre-filter scope total) before the match check,
+	// so Page can report UnfilteredTotal alongside the filtered Total.
+	c.unfilteredTotal++
 	if !typedTableQueryMatches(item, c.query, c.adapter) {
 		return
 	}
@@ -301,15 +313,16 @@ func (c *typedTableQueryCollector[T]) Page() typedTableQueryPage[T] {
 		})
 	}
 	return typedTableQueryPage[T]{
-		Rows:          pageRows,
-		Continue:      continueToken,
-		CursorInvalid: c.invalid,
-		Total:         c.total,
-		TotalIsExact:  true,
-		FacetsExact:   true,
-		Namespaces:    typedTableFacetMapValues(c.namespaces),
-		Kinds:         typedTableFacetMapValues(c.kinds),
-		Dynamic:       c.query.dynamicRef(),
+		Rows:            pageRows,
+		Continue:        continueToken,
+		CursorInvalid:   c.invalid,
+		Total:           c.total,
+		UnfilteredTotal: c.unfilteredTotal,
+		TotalIsExact:    true,
+		FacetsExact:     true,
+		Namespaces:      typedTableFacetMapValues(c.namespaces),
+		Kinds:           typedTableFacetMapValues(c.kinds),
+		Dynamic:         c.query.dynamicRef(),
 	}
 }
 

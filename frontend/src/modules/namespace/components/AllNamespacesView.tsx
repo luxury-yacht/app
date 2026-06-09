@@ -36,13 +36,7 @@ const AllNamespacesConfigView: React.FC = () => {
           Failed to load configuration resources: {errorMessage}
         </div>
       )}
-      <NsViewConfig
-        namespace={ALL_NAMESPACES_SCOPE}
-        data={configResource.data ?? []}
-        loading={configResource.loading}
-        loaded={configResource.hasLoaded}
-        showNamespaceColumn
-      />
+      <NsViewConfig namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />
     </>
   );
 };
@@ -69,13 +63,7 @@ const AllNamespacesEventsView: React.FC = () => {
       {errorMessage && (
         <div className="namespace-error-message">Failed to load events: {errorMessage}</div>
       )}
-      <NsViewEvents
-        namespace={ALL_NAMESPACES_SCOPE}
-        data={eventsResource.data ?? []}
-        loading={eventsResource.loading}
-        loaded={eventsResource.hasLoaded}
-        showNamespaceColumn
-      />
+      <NsViewEvents namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />
     </>
   );
 };
@@ -91,13 +79,7 @@ const AllNamespacesAutoscalingView: React.FC = () => {
           Failed to load autoscaling resources: {errorMessage}
         </div>
       )}
-      <NsViewAutoscaling
-        namespace={ALL_NAMESPACES_SCOPE}
-        data={autoscalingResource.data ?? []}
-        loading={autoscalingResource.loading}
-        loaded={autoscalingResource.hasLoaded}
-        showNamespaceColumn
-      />
+      <NsViewAutoscaling namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />
     </>
   );
 };
@@ -113,13 +95,7 @@ const AllNamespacesNetworkView: React.FC = () => {
           Failed to load network resources: {errorMessage}
         </div>
       )}
-      <NsViewNetwork
-        namespace={ALL_NAMESPACES_SCOPE}
-        data={networkResource.data ?? []}
-        loading={networkResource.loading}
-        loaded={networkResource.hasLoaded}
-        showNamespaceColumn
-      />
+      <NsViewNetwork namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />
     </>
   );
 };
@@ -135,13 +111,7 @@ const AllNamespacesQuotasView: React.FC = () => {
           Failed to load quota resources: {errorMessage}
         </div>
       )}
-      <NsViewQuotas
-        namespace={ALL_NAMESPACES_SCOPE}
-        data={quotasResource.data ?? []}
-        loading={quotasResource.loading}
-        loaded={quotasResource.hasLoaded}
-        showNamespaceColumn
-      />
+      <NsViewQuotas namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />
     </>
   );
 };
@@ -155,13 +125,7 @@ const AllNamespacesRBACView: React.FC = () => {
       {errorMessage && (
         <div className="namespace-error-message">Failed to load RBAC resources: {errorMessage}</div>
       )}
-      <NsViewRBAC
-        namespace={ALL_NAMESPACES_SCOPE}
-        data={rbacResource.data ?? []}
-        loading={rbacResource.loading}
-        loaded={rbacResource.hasLoaded}
-        showNamespaceColumn
-      />
+      <NsViewRBAC namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />
     </>
   );
 };
@@ -177,13 +141,7 @@ const AllNamespacesStorageView: React.FC = () => {
           Failed to load storage resources: {errorMessage}
         </div>
       )}
-      <NsViewStorage
-        namespace={ALL_NAMESPACES_SCOPE}
-        data={storageResource.data ?? []}
-        loading={storageResource.loading}
-        loaded={storageResource.hasLoaded}
-        showNamespaceColumn
-      />
+      <NsViewStorage namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />
     </>
   );
 };
@@ -197,13 +155,7 @@ const AllNamespacesHelmView: React.FC = () => {
       {errorMessage && (
         <div className="namespace-error-message">Failed to load Helm releases: {errorMessage}</div>
       )}
-      <NsViewHelm
-        namespace={ALL_NAMESPACES_SCOPE}
-        data={helmResource.data ?? []}
-        loading={helmResource.loading}
-        loaded={helmResource.hasLoaded}
-        showNamespaceColumn
-      />
+      <NsViewHelm namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />
     </>
   );
 };
@@ -215,10 +167,7 @@ const AllNamespacesPodsView: React.FC = () => {
     <NsViewPods
       namespace={ALL_NAMESPACES_SCOPE}
       data={podsResource.data ?? []}
-      loading={podsResource.loading}
-      loaded={podsResource.hasLoaded}
       showNamespaceColumn
-      error={podsResource.error ? podsResource.error.message : null}
       metrics={podsResource.metrics}
     />
   );
@@ -235,13 +184,7 @@ const AllNamespacesWorkloadsView: React.FC = () => {
           Failed to load workload resources: {errorMessage}
         </div>
       )}
-      <NsViewWorkloads
-        namespace={ALL_NAMESPACES_SCOPE}
-        data={workloadsResource.data ?? []}
-        loading={workloadsResource.loading}
-        loaded={workloadsResource.hasLoaded}
-        showNamespaceColumn
-      />
+      <NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />
     </>
   );
 };

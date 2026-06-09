@@ -21,15 +21,10 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import {
-  buildLocalPartialDataLabel,
-  localTableModeForStats,
-} from '@modules/resource-grid/tablePartialState';
-import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
-import type { SnapshotStats } from '@/core/refresh/client';
 import type {
   NamespaceAutoscalingSnapshotPayload,
   NamespaceAutoscalingSummary,
@@ -82,11 +77,7 @@ export interface AutoscalingData {
 
 interface AutoscalingViewProps {
   namespace: string;
-  data: AutoscalingData[];
-  stats?: SnapshotStats | null;
   availableKinds?: string[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
 
@@ -95,7 +86,7 @@ interface AutoscalingViewProps {
  * Aggregates HorizontalPodAutoscalers and VerticalPodAutoscalers
  */
 const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
-  ({ namespace, stats = null, availableKinds: kindOptions, showNamespaceColumn = false }) => {
+  ({ namespace, availableKinds: kindOptions, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -330,7 +321,6 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
 
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Autoscaling' : 'Namespace Autoscaling';
-    const localTableMode = localTableModeForStats(stats);
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 
     const selectRows = useCallback(
@@ -378,16 +368,6 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       showKindDropdown: true,
       showNamespaceFilters: showNamespaceFilter,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      filterOptionOverrides:
-        namespace === ALL_NAMESPACES_SCOPE || localTableMode !== 'Local Partial'
-          ? undefined
-          : {
-              partialDataLabel: buildLocalPartialDataLabel({
-                stats,
-                fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
-                sourceLabel: diagnosticsLabel,
-              }),
-            },
     });
 
     const objectActions = useObjectActionController({

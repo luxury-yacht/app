@@ -11,7 +11,6 @@
 import React from 'react';
 import { NamespaceViewType } from '@/types/navigation/views';
 import type { PodMetricsInfo } from '@/core/refresh/types';
-import type { SnapshotStats } from '@/core/refresh/client';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
 import NsViewConfig from '@modules/namespace/components/NsViewConfig';
 import NsViewCustom from '@modules/namespace/components/NsViewCustom';
@@ -42,91 +41,33 @@ interface NamespaceResourcesViewsProps {
   activeTab: NamespaceViewType;
   onTabChange?: (tab: NamespaceViewType) => void;
 
-  // Pods data and loading states
+  // Pods data
   nsPods?: any[];
-  nsPodsLoading?: boolean;
-  nsPodsError?: string | null;
-  loadPods?: () => Promise<void>;
-  nsPodsLoaded?: boolean;
   nsPodsMetrics?: PodMetricsInfo | null;
 
-  // Workloads data and loading states
-  nsWorkloads?: any[];
-  nsWorkloadsStats?: SnapshotStats | null;
+  // Workloads kind filter options
   nsWorkloadsKinds?: string[];
-  nsWorkloadsLoading?: boolean;
-  nsWorkloadsError?: string | null;
-  loadWorkloads?: () => Promise<void>;
-  nsWorkloadsLoaded?: boolean;
 
-  // Config data
-  nsConfig?: any[];
-  nsConfigStats?: SnapshotStats | null;
+  // Config kind filter options
   nsConfigKinds?: string[];
-  nsConfigLoading?: boolean;
-  nsConfigError?: string | null;
-  loadConfig?: () => Promise<void>;
-  nsConfigLoaded?: boolean;
 
-  // Network data
-  nsNetwork?: any[];
-  nsNetworkStats?: SnapshotStats | null;
+  // Network kind filter options
   nsNetworkKinds?: string[];
-  nsNetworkLoading?: boolean;
-  nsNetworkError?: string | null;
-  loadNetwork?: () => Promise<void>;
-  nsNetworkLoaded?: boolean;
 
-  // RBAC data
-  nsRBAC?: any[];
-  nsRBACStats?: SnapshotStats | null;
+  // RBAC kind filter options
   nsRBACKinds?: string[];
-  nsRBACLoading?: boolean;
-  nsRBACError?: string | null;
-  loadRBAC?: () => Promise<void>;
-  nsRBACLoaded?: boolean;
 
   // Storage data
-  nsStorage?: any[];
-  nsStorageStats?: SnapshotStats | null;
-  nsStorageLoading?: boolean;
-  nsStorageError?: string | null;
-  loadStorage?: () => Promise<void>;
-  nsStorageLoaded?: boolean;
 
-  // Autoscaling data
-  nsAutoscaling?: any[];
-  nsAutoscalingStats?: SnapshotStats | null;
+  // Autoscaling kind filter options
   nsAutoscalingKinds?: string[];
-  nsAutoscalingLoading?: boolean;
-  nsAutoscalingError?: string | null;
-  loadAutoscaling?: () => Promise<void>;
-  nsAutoscalingLoaded?: boolean;
 
-  // Quotas data
-  nsQuotas?: any[];
-  nsQuotasStats?: SnapshotStats | null;
+  // Quotas kind filter options
   nsQuotasKinds?: string[];
-  nsQuotasLoading?: boolean;
-  nsQuotasError?: string | null;
-  loadQuotas?: () => Promise<void>;
-  nsQuotasLoaded?: boolean;
 
   // Helm data
-  nsHelm?: any[];
-  nsHelmStats?: SnapshotStats | null;
-  nsHelmLoading?: boolean;
-  nsHelmError?: string | null;
-  loadHelm?: () => Promise<void>;
-  nsHelmLoaded?: boolean;
 
   // Events data
-  nsEvents?: any[];
-  nsEventsStats?: SnapshotStats | null;
-  nsEventsLoading?: boolean;
-  nsEventsError?: string | null;
-  loadEvents?: () => Promise<void>;
-  nsEventsLoaded?: boolean;
 
   // Object panel element to render
   objectPanel?: React.ReactNode;
@@ -142,61 +83,14 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   onTabChange: _onTabChange,
 
   nsPods = [],
-  nsPodsLoading = false,
-  nsPodsLoaded = false,
-  nsPodsError = null,
   nsPodsMetrics = null,
 
-  nsWorkloads = [],
-  nsWorkloadsStats = null,
   nsWorkloadsKinds,
-  nsWorkloadsLoading = false,
-  nsWorkloadsLoaded = false,
-
-  nsConfig = [],
-  nsConfigStats = null,
   nsConfigKinds,
-  nsConfigLoading = false,
-  nsConfigLoaded = false,
-
-  nsNetwork = [],
-  nsNetworkStats = null,
   nsNetworkKinds,
-  nsNetworkLoading = false,
-  nsNetworkLoaded = false,
-
-  nsRBAC = [],
-  nsRBACStats = null,
   nsRBACKinds,
-  nsRBACLoading = false,
-  nsRBACLoaded = false,
-
-  nsStorage = [],
-  nsStorageStats = null,
-  nsStorageLoading = false,
-  nsStorageLoaded = false,
-
-  nsAutoscaling = [],
-  nsAutoscalingStats = null,
   nsAutoscalingKinds,
-  nsAutoscalingLoading = false,
-  nsAutoscalingLoaded = false,
-
-  nsQuotas = [],
-  nsQuotasStats = null,
   nsQuotasKinds,
-  nsQuotasLoading = false,
-  nsQuotasLoaded = false,
-
-  nsHelm = [],
-  nsHelmStats = null,
-  nsHelmLoading = false,
-  nsHelmLoaded = false,
-
-  nsEvents = [],
-  nsEventsStats = null,
-  nsEventsLoading = false,
-  nsEventsLoaded = false,
   objectPanel,
 }) => {
   const renderTabContent = () => {
@@ -228,14 +122,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="Pods" reset={reset} />}
           >
-            <NsViewPods
-              namespace={namespace}
-              data={nsPods}
-              loading={nsPodsLoading}
-              loaded={nsPodsLoaded}
-              error={nsPodsError}
-              metrics={nsPodsMetrics}
-            />
+            <NsViewPods namespace={namespace} data={nsPods} metrics={nsPodsMetrics} />
           </ErrorBoundary>
         );
       case 'workloads':
@@ -247,11 +134,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
           >
             <NsViewWorkloads
               namespace={namespace}
-              data={nsWorkloads}
-              stats={nsWorkloadsStats}
               availableKinds={nsWorkloadsKinds}
-              loading={nsWorkloadsLoading}
-              loaded={nsWorkloadsLoaded}
               metrics={nsPodsMetrics}
             />
           </ErrorBoundary>
@@ -263,14 +146,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="Config" reset={reset} />}
           >
-            <NsViewConfig
-              namespace={namespace}
-              data={nsConfig}
-              stats={nsConfigStats}
-              availableKinds={nsConfigKinds}
-              loading={nsConfigLoading}
-              loaded={nsConfigLoaded}
-            />
+            <NsViewConfig namespace={namespace} availableKinds={nsConfigKinds} />
           </ErrorBoundary>
         );
       case 'network':
@@ -280,14 +156,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="Network" reset={reset} />}
           >
-            <NsViewNetwork
-              namespace={namespace}
-              data={nsNetwork}
-              stats={nsNetworkStats}
-              availableKinds={nsNetworkKinds}
-              loading={nsNetworkLoading}
-              loaded={nsNetworkLoaded}
-            />
+            <NsViewNetwork namespace={namespace} availableKinds={nsNetworkKinds} />
           </ErrorBoundary>
         );
       case 'rbac':
@@ -297,14 +166,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="RBAC" reset={reset} />}
           >
-            <NsViewRBAC
-              namespace={namespace}
-              data={nsRBAC}
-              stats={nsRBACStats}
-              availableKinds={nsRBACKinds}
-              loading={nsRBACLoading}
-              loaded={nsRBACLoaded}
-            />
+            <NsViewRBAC namespace={namespace} availableKinds={nsRBACKinds} />
           </ErrorBoundary>
         );
       case 'storage':
@@ -314,13 +176,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="Storage" reset={reset} />}
           >
-            <NsViewStorage
-              namespace={namespace}
-              data={nsStorage}
-              stats={nsStorageStats}
-              loading={nsStorageLoading}
-              loaded={nsStorageLoaded}
-            />
+            <NsViewStorage namespace={namespace} />
           </ErrorBoundary>
         );
       case 'autoscaling':
@@ -330,14 +186,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="Autoscaling" reset={reset} />}
           >
-            <NsViewAutoscaling
-              namespace={namespace}
-              data={nsAutoscaling}
-              stats={nsAutoscalingStats}
-              availableKinds={nsAutoscalingKinds}
-              loading={nsAutoscalingLoading}
-              loaded={nsAutoscalingLoaded}
-            />
+            <NsViewAutoscaling namespace={namespace} availableKinds={nsAutoscalingKinds} />
           </ErrorBoundary>
         );
       case 'quotas':
@@ -347,14 +196,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="Quotas" reset={reset} />}
           >
-            <NsViewQuotas
-              namespace={namespace}
-              data={nsQuotas}
-              stats={nsQuotasStats}
-              availableKinds={nsQuotasKinds}
-              loading={nsQuotasLoading}
-              loaded={nsQuotasLoaded}
-            />
+            <NsViewQuotas namespace={namespace} availableKinds={nsQuotasKinds} />
           </ErrorBoundary>
         );
       case 'custom':
@@ -374,13 +216,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="Helm" reset={reset} />}
           >
-            <NsViewHelm
-              namespace={namespace}
-              data={nsHelm}
-              stats={nsHelmStats}
-              loading={nsHelmLoading}
-              loaded={nsHelmLoaded}
-            />
+            <NsViewHelm namespace={namespace} />
           </ErrorBoundary>
         );
       case 'events':
@@ -390,13 +226,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="Events" reset={reset} />}
           >
-            <NsViewEvents
-              data={nsEvents}
-              stats={nsEventsStats}
-              loading={nsEventsLoading}
-              loaded={nsEventsLoaded}
-              namespace={namespace}
-            />
+            <NsViewEvents namespace={namespace} />
           </ErrorBoundary>
         );
       default:

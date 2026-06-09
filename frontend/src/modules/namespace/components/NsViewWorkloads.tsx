@@ -15,7 +15,6 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useShortNames } from '@/hooks/useShortNames';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import React, { useCallback, useMemo } from 'react';
-import type { SnapshotStats } from '@/core/refresh/client';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
@@ -33,18 +32,10 @@ import {
 } from '@shared/utils/objectIdentity';
 import { buildWorkloadActionReference } from './workloadActionReference';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import {
-  buildLocalPartialDataLabel,
-  localTableModeForStats,
-} from '@modules/resource-grid/tablePartialState';
 
 interface WorkloadsViewProps {
   namespace: string;
-  data: WorkloadData[];
-  stats?: SnapshotStats | null;
   availableKinds?: string[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
 }
@@ -53,13 +44,7 @@ interface WorkloadsViewProps {
  * GridTable component for namespace workloads without nested pod expansion
  */
 const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
-  ({
-    namespace,
-    stats = null,
-    availableKinds: kindOptions,
-    showNamespaceColumn = false,
-    metrics = null,
-  }) => {
+  ({ namespace, availableKinds: kindOptions, showNamespaceColumn = false, metrics = null }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
@@ -176,7 +161,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
     const showNamespaceFilter = isAllNamespaces;
     const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Workloads' : 'Namespace Workloads';
-    const localTableMode = localTableModeForStats(stats);
     const selectWorkloadRows = useCallback(
       (payload: NamespaceWorkloadSnapshotPayload) => payload.rows ?? [],
       []
@@ -214,16 +198,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       showNamespaceFilters: showNamespaceFilter,
       diagnosticsLabel,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      filterOptionOverrides:
-        localTableMode === 'Local Partial' && !isAllNamespaces
-          ? {
-              partialDataLabel: buildLocalPartialDataLabel({
-                stats,
-                fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
-                sourceLabel: diagnosticsLabel,
-              }),
-            }
-          : undefined,
     });
 
     // Error banner reads the single source of truth (the controller source).

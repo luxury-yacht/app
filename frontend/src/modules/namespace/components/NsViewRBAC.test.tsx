@@ -181,44 +181,19 @@ describe('NsViewRBAC', () => {
     ...overrides,
   });
 
-  const renderRBACView = async (
-    rows: RBACData[] = [baseRBAC()],
-    options: { stats?: any; namespace?: string } = {}
-  ) => {
+  const renderRBACView = async (options: { stats?: any; namespace?: string } = {}) => {
     await act(async () => {
       root.render(
-        <NsViewRBAC
-          namespace={options.namespace ?? 'team-a'}
-          data={rows}
-          stats={options.stats}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
+        <NsViewRBAC namespace={options.namespace ?? 'team-a'} showNamespaceColumn={true} />
       );
       await Promise.resolve();
     });
     return gridTablePropsRef.current;
   };
 
-  it('marks truncated single-namespace RBAC snapshots as Local Partial', async () => {
-    const props = await renderRBACView([baseRBAC()], {
-      stats: {
-        itemCount: 1,
-        totalItems: 9,
-        truncated: true,
-        buildDurationMs: 1,
-        warnings: ['Showing first 1 of 9 RBAC resources'],
-      },
-    });
-
-    expect(props.filters.options.partialDataLabel).toContain('Showing first 1 of 9 RBAC resources');
-    expect(props.filters.options.partialDataLabel).toContain('visible rows');
-  });
-
   it('provides open action for RBAC rows', async () => {
     const entry = baseRBAC();
-    const props = await renderRBACView([entry]);
+    const props = await renderRBACView();
     const openItem = props
       .getCustomContextMenuItems(entry, 'name')
       .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
@@ -239,7 +214,7 @@ describe('NsViewRBAC', () => {
 
   it('deletes RBAC entries on confirmation', async () => {
     const entry = baseRBAC();
-    const props = await renderRBACView([entry]);
+    const props = await renderRBACView();
 
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
@@ -270,7 +245,7 @@ describe('NsViewRBAC', () => {
 
   it('opens the Map for ServiceAccount rows', async () => {
     const entry = baseRBAC({ kind: 'ServiceAccount', name: 'builder' });
-    const props = await renderRBACView([entry]);
+    const props = await renderRBACView();
     const objectMapItem = props
       .getCustomContextMenuItems(entry, 'name')
       .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);

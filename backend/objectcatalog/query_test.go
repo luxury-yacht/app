@@ -113,6 +113,38 @@ func TestServiceQueryStreamsWithoutFullCache(t *testing.T) {
 	}
 }
 
+func TestQueryReportsUnfilteredScopeTotal(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+	chunk := &summaryChunk{
+		items: []Summary{
+			{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "alpha", UID: "uid-1", Scope: ScopeNamespace},
+			{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "beta", UID: "uid-2", Scope: ScopeNamespace},
+			{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "kube-system", Name: "gamma", UID: "uid-3", Scope: ScopeNamespace},
+		},
+	}
+	kindSet := map[string]bool{"Pod": true}
+	namespaceSet := map[string]struct{}{"default": {}, "kube-system": {}}
+	descriptors := []Descriptor{
+		{Group: "", Version: "v1", Resource: "pods", Kind: "Pod", Scope: ScopeNamespace, Namespaced: true},
+	}
+	svc.publishStreamingState([]*summaryChunk{chunk}, kindSet, namespaceSet, descriptors, false)
+
+	// A search narrows to 1 row, but the unfiltered scope total is all 3 ("of M").
+	filtered := svc.Query(QueryOptions{Limit: 10, Search: "alpha"})
+	if filtered.TotalItems != 1 {
+		t.Fatalf("filtered total should be the search match count; got %d, want 1", filtered.TotalItems)
+	}
+	if filtered.UnfilteredTotal != 3 {
+		t.Fatalf("unfiltered total should be the in-scope count before filters; got %d, want 3", filtered.UnfilteredTotal)
+	}
+
+	// With no filter, N and M are the same full count.
+	all := svc.Query(QueryOptions{Limit: 10})
+	if all.TotalItems != 3 || all.UnfilteredTotal != 3 {
+		t.Fatalf("with no filter N==M==full count; got total=%d unfiltered=%d", all.TotalItems, all.UnfilteredTotal)
+	}
+}
+
 func TestQueryFiltersAndPagination(t *testing.T) {
 	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
 

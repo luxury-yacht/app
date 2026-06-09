@@ -57,17 +57,6 @@ const DIRECT_USE_TABLE_SORT_EXCEPTIONS = {
   },
 } as const;
 
-const STATS_BACKED_LOCAL_PARTIAL_FILES = [
-  'modules/namespace/components/NsViewAutoscaling.tsx',
-  'modules/namespace/components/NsViewConfig.tsx',
-  'modules/namespace/components/NsViewEvents.tsx',
-  'modules/namespace/components/NsViewHelm.tsx',
-  'modules/namespace/components/NsViewNetwork.tsx',
-  'modules/namespace/components/NsViewQuotas.tsx',
-  'modules/namespace/components/NsViewRBAC.tsx',
-  'modules/namespace/components/NsViewStorage.tsx',
-] as const;
-
 // The only modules allowed to PRODUCE a ResourceInventorySourceState — the source
 // that feeds ResourceInventoryTable. boundedRowsSource (bounded local) and
 // backendQuerySource (catalog/explicit query) are the two public adapters; the
@@ -298,17 +287,6 @@ function findResourceInventorySourceProducers(sourceRoot: string): string[] {
     .sort();
 }
 
-function findStatsBackedLocalPartialViewsMissingCopy(sourceRoot: string): string[] {
-  return STATS_BACKED_LOCAL_PARTIAL_FILES.filter((relativePath) => {
-    const content = fs.readFileSync(path.join(sourceRoot, relativePath), 'utf-8');
-    return (
-      !/stats\?\s*:\s*SnapshotStats\s*\|\s*null/.test(content) ||
-      !/\bbuildLocalPartialDataLabel\b/.test(content) ||
-      !/\bpartialDataLabel\s*:/.test(content)
-    );
-  }).sort();
-}
-
 describe('gridTableViewRegistry contract', () => {
   const srcRoot = path.resolve(__dirname, '../../../../');
   const registered = new Set(listRegisteredGridTableViews());
@@ -431,17 +409,6 @@ describe('gridTableViewRegistry contract', () => {
           `Sanctioned source adapter no longer produces a ResourceInventorySourceState: ${file}`
         );
       }
-    }
-  });
-
-  it('stats-backed Local Partial resource tables surface producer truncation copy', () => {
-    const missing = findStatsBackedLocalPartialViewsMissingCopy(srcRoot);
-    if (missing.length > 0) {
-      throw new Error(
-        `Found stats-backed Local Partial tables without SnapshotStats partial-state copy:\n` +
-          missing.map((file) => `  ${file}`).join('\n') +
-          '\n\nPass producer SnapshotStats into buildLocalPartialDataLabel and expose it as GridTable partialDataLabel.'
-      );
     }
   });
 });

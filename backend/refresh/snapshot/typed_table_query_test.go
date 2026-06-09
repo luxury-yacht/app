@@ -263,6 +263,59 @@ func TestTypedTableQueryPagesForwardWithExactTotals(t *testing.T) {
 	}
 }
 
+func TestTypedTableQueryReportsUnfilteredTotalSeparateFromFiltered(t *testing.T) {
+	rows := []typedQueryTestRow{
+		{key: "default/a", name: "a", namespace: "default", kind: "Pod"},
+		{key: "default/b", name: "b", namespace: "default", kind: "Pod"},
+		{key: "default/c", name: "c", namespace: "default", kind: "Pod"},
+	}
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID:     "cluster-a",
+			Table:         "pods",
+			Search:        "a",
+			SortField:     "name",
+			SortDirection: "asc",
+			Limit:         50,
+		},
+	}
+
+	page := applyTypedTableQuery(rows, query, typedQueryTestAdapter())
+	if page.Total != 1 || !page.TotalIsExact {
+		t.Fatalf("filtered total should be the search match count; got total=%d exact=%v", page.Total, page.TotalIsExact)
+	}
+	if page.UnfilteredTotal != 3 {
+		t.Fatalf("unfiltered total should be the pre-filter row count; got %d, want 3", page.UnfilteredTotal)
+	}
+}
+
+func TestTypedTableQueryCollectorReportsUnfilteredTotal(t *testing.T) {
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID:     "cluster-a",
+			Table:         "workloads",
+			Search:        "a",
+			SortField:     "name",
+			SortDirection: "asc",
+			Limit:         50,
+		},
+	}
+	collector := newTypedTableQueryCollector(query, typedQueryTestAdapter())
+	collector.Add(typedQueryTestRow{key: "default/a", name: "a", namespace: "default", kind: "Deployment"})
+	collector.Add(typedQueryTestRow{key: "default/b", name: "b", namespace: "default", kind: "Deployment"})
+	collector.Add(typedQueryTestRow{key: "default/c", name: "c", namespace: "default", kind: "Deployment"})
+
+	page := collector.Page()
+	if page.Total != 1 {
+		t.Fatalf("filtered total should be the search match count; got %d, want 1", page.Total)
+	}
+	if page.UnfilteredTotal != 3 {
+		t.Fatalf("unfiltered total should count every item added before filtering; got %d, want 3", page.UnfilteredTotal)
+	}
+}
+
 func TestTypedTableQueryInvalidatesCursorWhenPageSizeChanges(t *testing.T) {
 	rows := []typedQueryTestRow{
 		{key: "default/a", name: "a", namespace: "default", kind: "Pod"},

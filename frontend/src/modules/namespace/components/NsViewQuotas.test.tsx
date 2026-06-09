@@ -202,20 +202,10 @@ describe('NsViewQuotas', () => {
   });
 
   const renderQuotaView = async (
-    rows: QuotaData[] = [baseQuota()],
     overrides: Partial<React.ComponentProps<typeof NsViewQuotas>> = {}
   ) => {
     await act(async () => {
-      root.render(
-        <NsViewQuotas
-          namespace="team-a"
-          data={rows}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-          {...overrides}
-        />
-      );
+      root.render(<NsViewQuotas namespace="team-a" showNamespaceColumn={true} {...overrides} />);
       await Promise.resolve();
     });
     return gridTablePropsRef.current;
@@ -227,7 +217,7 @@ describe('NsViewQuotas', () => {
   it('opens quota resources through context menu', async () => {
     permissionState.set('ResourceQuota:delete:team-a', { allowed: true, pending: false });
     const entry = baseQuota();
-    const props = await renderQuotaView([entry]);
+    const props = await renderQuotaView();
 
     const items = props.getCustomContextMenuItems(entry, 'name');
     const openItem = items.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
@@ -250,13 +240,13 @@ describe('NsViewQuotas', () => {
 
   it('uses canonical object identity for row keys', async () => {
     const entry = baseQuota();
-    const props = await renderQuotaView([entry]);
+    const props = await renderQuotaView();
 
     expect(props.keyExtractor(entry)).toBe('alpha:ctx|/v1/ResourceQuota/team-a/rq-default');
   });
 
   it('omits Resources, Status, and Scope columns', async () => {
-    await renderQuotaView([baseQuota()]);
+    await renderQuotaView();
     expect(getColumn('resources')).toBeUndefined();
     expect(getColumn('status')).toBeUndefined();
     expect(getColumn('scope')).toBeUndefined();
@@ -265,7 +255,7 @@ describe('NsViewQuotas', () => {
   it('shows delete option, confirms and handles backend success', async () => {
     permissionState.set('ResourceQuota:delete:team-a', { allowed: true, pending: false });
     const entry = baseQuota();
-    const props = await renderQuotaView([entry]);
+    const props = await renderQuotaView();
 
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
@@ -298,7 +288,7 @@ describe('NsViewQuotas', () => {
     permissionState.set('ResourceQuota:delete:team-a', { allowed: true, pending: false });
 
     const entry = baseQuota();
-    const props = await renderQuotaView([entry]);
+    const props = await renderQuotaView();
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
       .find((item: any) => item.label === 'Delete');
@@ -335,7 +325,7 @@ describe('NsViewQuotas', () => {
   });
 
   it('includes a namespace column when enabled', async () => {
-    await renderQuotaView(undefined, { showNamespaceColumn: true });
+    await renderQuotaView({ showNamespaceColumn: true });
     expect(getColumn('namespace')).toBeTruthy();
   });
 });

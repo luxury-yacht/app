@@ -15,10 +15,13 @@
   cluster, and Browse/Custom views — previously they loaded a whole namespace at once with no
   pagination controls. Pagination is now consistent across every resource view, and large
   single namespaces no longer load everything in one shot.
-- A table's filter bar now shows its result count (and the accompanying tooltip)
-  only while a filter is active — it reports how many rows match your filter. Total
-  and page counts continue to live in the pagination footer, so the filter bar no
-  longer duplicates that information.
+- When a filter is active, every resource table (cluster, namespace, Browse, Custom, events —
+  no exceptions) now shows a single consistent banner: **"showing N of M items due to filters,"**
+  where N is how many rows match your filter and M is how many are in scope without it — both
+  real totals, not the current page. With no filter active there is no banner. The old
+  "bounded local snapshot" / "applies only to the visible rows" note is gone (it no longer
+  applies now that filtering and sorting run server-side across the whole dataset); pagination
+  position still lives in the footer.
 
 ### Fixed
 

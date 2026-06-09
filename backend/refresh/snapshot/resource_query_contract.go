@@ -67,15 +67,18 @@ type ResourceQueryPredicate struct {
 }
 
 type ResourceQueryResult struct {
-	Rows          []ResourceQueryRow       `json:"rows"`
-	Continue      string                   `json:"continue,omitempty"`
-	CursorInvalid bool                     `json:"cursorInvalid,omitempty"`
-	Total         int                      `json:"total"`
-	TotalIsExact  bool                     `json:"totalIsExact"`
-	Facets        ResourceQueryFacets      `json:"facets"`
-	FacetsExact   bool                     `json:"facetsExact"`
-	Partial       []ResourceQueryIssue     `json:"partial,omitempty"`
-	Dynamic       *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
+	Rows          []ResourceQueryRow `json:"rows"`
+	Continue      string             `json:"continue,omitempty"`
+	CursorInvalid bool               `json:"cursorInvalid,omitempty"`
+	Total         int                `json:"total"`
+	// UnfilteredTotal is the in-scope item count before the request's filters, for the
+	// "showing {Total} of {UnfilteredTotal} items due to filters" banner.
+	UnfilteredTotal int                      `json:"unfilteredTotal"`
+	TotalIsExact    bool                     `json:"totalIsExact"`
+	Facets          ResourceQueryFacets      `json:"facets"`
+	FacetsExact     bool                     `json:"facetsExact"`
+	Partial         []ResourceQueryIssue     `json:"partial,omitempty"`
+	Dynamic         *ResourceQueryDynamicRef `json:"dynamic,omitempty"`
 }
 
 type ResourceQueryRow struct {
@@ -159,23 +162,26 @@ type ResourceQueryCapabilities struct {
 // the existing typed payload wire format the frontend already reads, so a domain
 // migrates by embedding this envelope without any shared frontend helper change.
 type ResourceQueryEnvelope struct {
-	Provider      ResourceQueryProvider     `json:"provider"`
-	Table         string                    `json:"table"`
-	QueryIdentity string                    `json:"queryIdentity,omitempty"`
-	Continue      string                    `json:"continue,omitempty"`
-	Previous      string                    `json:"previous,omitempty"`
-	CursorInvalid bool                      `json:"cursorInvalid,omitempty"`
-	Total         int                       `json:"total"`
-	TotalIsExact  bool                      `json:"totalIsExact"`
-	Kinds         []string                  `json:"kinds,omitempty"`
-	Namespaces    []string                  `json:"namespaces,omitempty"`
-	Statuses      []string                  `json:"statuses,omitempty"`
-	Nodes         []string                  `json:"nodes,omitempty"`
-	FacetsExact   bool                      `json:"facetsExact"`
-	Completeness  ResourceQueryCompleteness `json:"completeness,omitempty"`
-	Issues        []ResourceQueryIssue      `json:"issues,omitempty"`
-	Dynamic       *ResourceQueryDynamicRef  `json:"dynamic,omitempty"`
-	Capabilities  ResourceQueryCapabilities `json:"capabilities"`
+	Provider      ResourceQueryProvider `json:"provider"`
+	Table         string                `json:"table"`
+	QueryIdentity string                `json:"queryIdentity,omitempty"`
+	Continue      string                `json:"continue,omitempty"`
+	Previous      string                `json:"previous,omitempty"`
+	CursorInvalid bool                  `json:"cursorInvalid,omitempty"`
+	Total         int                   `json:"total"`
+	// UnfilteredTotal is the in-scope item count before the request's filters, so the
+	// frontend can render "showing {Total} of {UnfilteredTotal} items due to filters".
+	UnfilteredTotal int                       `json:"unfilteredTotal"`
+	TotalIsExact    bool                      `json:"totalIsExact"`
+	Kinds           []string                  `json:"kinds,omitempty"`
+	Namespaces      []string                  `json:"namespaces,omitempty"`
+	Statuses        []string                  `json:"statuses,omitempty"`
+	Nodes           []string                  `json:"nodes,omitempty"`
+	FacetsExact     bool                      `json:"facetsExact"`
+	Completeness    ResourceQueryCompleteness `json:"completeness,omitempty"`
+	Issues          []ResourceQueryIssue      `json:"issues,omitempty"`
+	Dynamic         *ResourceQueryDynamicRef  `json:"dynamic,omitempty"`
+	Capabilities    ResourceQueryCapabilities `json:"capabilities"`
 }
 
 // newTypedResourceCapabilities builds capabilities for a typed-resource table.

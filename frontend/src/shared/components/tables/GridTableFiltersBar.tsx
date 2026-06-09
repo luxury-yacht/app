@@ -54,10 +54,12 @@ interface GridTableFiltersBarProps {
   postActions?: IconBarItem[];
   /** Arbitrary content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
-  /** Displayed vs total item count shown to the right of actions. */
+  /** Filter feedback shown to the right of actions: N matching of M in scope, due to filters. */
   resultCount?: {
-    displayed: number;
-    total: number;
+    /** N — items matching the active filters (a total, not the current page). */
+    filtered: number;
+    /** M — items in scope before the active filters. */
+    unfiltered: number;
     totalIsExact?: boolean;
     partialDataLabel?: string;
     capped?: boolean;
@@ -65,26 +67,12 @@ interface GridTableFiltersBarProps {
 }
 
 function formatResultCountLabel(
-  resultCount: NonNullable<GridTableFiltersBarProps['resultCount']>,
-  searchBehavior: InternalFilterOptions['searchBehavior']
+  resultCount: NonNullable<GridTableFiltersBarProps['resultCount']>
 ): string {
-  if (resultCount.partialDataLabel) {
-    return `${resultCount.displayed} visible items`;
-  }
-
-  const approximatePrefix = resultCount.totalIsExact === false ? '~' : '';
-  if (
-    searchBehavior === 'query' &&
-    (resultCount.displayed !== resultCount.total || resultCount.totalIsExact === false)
-  ) {
-    return `${resultCount.displayed} on this page of ${approximatePrefix}${resultCount.total} items`;
-  }
-
-  if (resultCount.displayed === resultCount.total && resultCount.totalIsExact !== false) {
-    return `${resultCount.total} items`;
-  }
-
-  return `${resultCount.displayed} of ${approximatePrefix}${resultCount.total} items`;
+  // Only rendered while a narrowing filter is active, so this is always the filtered view.
+  // `+` marks an approximate total (a capped/inexact backend count).
+  const approximate = resultCount.totalIsExact === false ? '+' : '';
+  return `showing ${resultCount.filtered} of ${resultCount.unfiltered}${approximate} items due to filters`;
 }
 
 const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
@@ -259,7 +247,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 className="gridtable-filter-result-count"
                 data-gridtable-filter-role="result-count"
               >
-                {formatResultCountLabel(resultCount, resolvedFilterOptions.searchBehavior)}
+                {formatResultCountLabel(resultCount)}
                 {resultCount.capped && (
                   <Tooltip
                     content={

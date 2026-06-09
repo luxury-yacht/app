@@ -98,6 +98,11 @@ export interface GridTableFilterOptions {
   showResultCount?: boolean;
   /** Override the total item count shown in the filter bar (e.g. server-side total for paginated views). */
   totalCount?: number;
+  /**
+   * Items in scope before the active filters (the "of M" in "showing N of M items due to filters").
+   * Server-paginated views supply it from the backend; local tables derive it from their row count.
+   */
+  unfilteredTotal?: number;
   /** Indicates whether totalCount is exact; false renders an approximate count. */
   totalIsExact?: boolean;
   /** Marks local rows as a bounded/recent/capped window rather than a global dataset. */

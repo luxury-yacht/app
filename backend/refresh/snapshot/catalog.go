@@ -44,6 +44,7 @@ type CatalogSnapshot struct {
 	Previous        string                    `json:"previous,omitempty"`
 	CursorInvalid   bool                      `json:"cursorInvalid,omitempty"`
 	Total           int                       `json:"total"`
+	UnfilteredTotal int                       `json:"unfilteredTotal"`
 	TotalIsExact    bool                      `json:"totalIsExact"`
 	ResourceCount   int                       `json:"resourceCount"`
 	Kinds           []objectcatalog.KindInfo  `json:"kinds,omitempty"`
@@ -210,26 +211,27 @@ func buildCatalogSnapshot(
 	// is `partial`. This keeps the frontend controller's partial/degraded banner
 	// off normal paginated browsing.
 	payload := CatalogSnapshot{
-		Provider:      ResourceQueryProviderCatalog,
-		Completeness:  resourceQueryCompleteness(!streamingDisabled),
-		Capabilities:  newCatalogCapabilities(),
-		Items:         cloneSummaries(result.Items),
-		Continue:      result.ContinueToken,
-		Previous:      result.PreviousToken,
-		CursorInvalid: result.CursorInvalid,
-		Total:         result.TotalItems,
-		TotalIsExact:  result.TotalIsExact,
-		ResourceCount: result.ResourceCount,
-		Kinds:         cloneKindInfos(result.Kinds),
-		Namespaces:    cloneStrings(result.Namespaces),
-		FacetsExact:   result.FacetsExact,
-		Issues:        issues,
-		HasNext:       hasNext,
-		HasPrevious:   hasPrevious,
-		BatchIndex:    batchIndex,
-		BatchSize:     len(result.Items),
-		TotalBatches:  totalBatches,
-		IsFinal:       isFinal,
+		Provider:        ResourceQueryProviderCatalog,
+		Completeness:    resourceQueryCompleteness(!streamingDisabled),
+		Capabilities:    newCatalogCapabilities(),
+		Items:           cloneSummaries(result.Items),
+		Continue:        result.ContinueToken,
+		Previous:        result.PreviousToken,
+		CursorInvalid:   result.CursorInvalid,
+		Total:           result.TotalItems,
+		UnfilteredTotal: result.UnfilteredTotal,
+		TotalIsExact:    result.TotalIsExact,
+		ResourceCount:   result.ResourceCount,
+		Kinds:           cloneKindInfos(result.Kinds),
+		Namespaces:      cloneStrings(result.Namespaces),
+		FacetsExact:     result.FacetsExact,
+		Issues:          issues,
+		HasNext:         hasNext,
+		HasPrevious:     hasPrevious,
+		BatchIndex:      batchIndex,
+		BatchSize:       len(result.Items),
+		TotalBatches:    totalBatches,
+		IsFinal:         isFinal,
 	}
 
 	return payload, truncated

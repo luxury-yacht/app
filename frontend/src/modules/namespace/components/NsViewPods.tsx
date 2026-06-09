@@ -48,11 +48,8 @@ import type { PodSnapshotPayload } from '@/core/refresh/types';
 interface PodsViewProps {
   namespace: string;
   data: PodSnapshotEntry[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
-  error?: string | null;
 }
 
 const UNHEALTHY_POD_PRESENTATIONS = new Set(['warning', 'error', 'not-ready', 'terminating']);

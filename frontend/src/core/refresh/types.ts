@@ -507,6 +507,8 @@ export interface CatalogSnapshotPayload extends ClusterMeta {
   previous?: string;
   cursorInvalid?: boolean;
   total: number;
+  /** In-scope item count before filters — the "of M" in "showing N of M items due to filters". */
+  unfilteredTotal?: number;
   totalIsExact?: boolean;
   resourceCount: number;
   kinds?: KindInfo[];

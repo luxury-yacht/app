@@ -127,19 +127,48 @@ func (e catalogQueryExecutor) executeCached() QueryResult {
 		metadata.observe(item, e.customMatcher)
 	})
 	resolvedMetadata := metadata.resolve()
+	unfilteredTotal, unfilteredExact := e.unfilteredScopeTotal(resolvedMetadata.totalMatches)
 
 	return QueryResult{
-		Items:         page.items,
-		ContinueToken: page.continueToken,
-		PreviousToken: page.previousToken,
-		CursorInvalid: page.cursorInvalid,
-		TotalItems:    resolvedMetadata.totalMatches,
-		TotalIsExact:  resolvedMetadata.metadataExact,
-		ResourceCount: resolvedMetadata.resourceCount,
-		Kinds:         resolvedMetadata.kinds,
-		Namespaces:    resolvedMetadata.namespaces,
-		FacetsExact:   resolvedMetadata.metadataExact,
+		Items:           page.items,
+		ContinueToken:   page.continueToken,
+		PreviousToken:   page.previousToken,
+		CursorInvalid:   page.cursorInvalid,
+		TotalItems:      resolvedMetadata.totalMatches,
+		UnfilteredTotal: unfilteredTotal,
+		TotalIsExact:    resolvedMetadata.metadataExact && unfilteredExact,
+		ResourceCount:   resolvedMetadata.resourceCount,
+		Kinds:           resolvedMetadata.kinds,
+		Namespaces:      resolvedMetadata.namespaces,
+		FacetsExact:     resolvedMetadata.metadataExact,
 	}
+}
+
+// unfilteredScopeTotal counts the items in scope (custom-only honored) before the query's
+// kind/namespace/search filters — the "of M" in "showing N of M items due to filters". With no
+// user filter active, M equals the already-computed filtered total, so no second scan is needed.
+// Otherwise it scans the scope (clearing the kind/namespace filters bypasses the query index, so
+// this is a full chunk scan) and reuses the same exact-count threshold the filtered total uses.
+func (e catalogQueryExecutor) unfilteredScopeTotal(filteredTotal int) (int, bool) {
+	if len(e.opts.Kinds) == 0 && len(e.opts.Namespaces) == 0 && e.opts.Search == "" {
+		return filteredTotal, true
+	}
+	scopeOpts := e.opts
+	scopeOpts.Kinds = nil
+	scopeOpts.Namespaces = nil
+	scopeOpts.Search = ""
+	count := 0
+	exact := true
+	e.state.forEachCatalogQueryCandidate(scopeOpts, func(item Summary) {
+		if !e.customMatcher(item) {
+			return
+		}
+		count++
+		if count > catalogQueryExactMetadataThreshold {
+			exact = false
+		}
+	})
+	return count, exact
 }
 
 func (state catalogCachedQueryState) queryMetadata(

@@ -255,7 +255,7 @@ describe('GridTable virtualization', () => {
     expect(renderedRows).toHaveLength(8);
     expect(container.textContent).toContain('Row 7');
     const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toBe('8 on this page of 20 items');
+    expect(resultCount?.textContent).toBe('showing 20 of 20 items due to filters');
   });
 
   const SCOPE_TOGGLE_LABEL =
@@ -2044,7 +2044,7 @@ it('shows the full local item count without a user-preference cap', () => {
   });
 
   const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-  expect(resultCount?.textContent).toBe('8 items');
+  expect(resultCount?.textContent).toBe('showing 8 of 8 items due to filters');
   expect(resultCount?.querySelector('.tooltip-trigger')).toBeNull();
 
   cleanup();
@@ -2069,7 +2069,7 @@ it('applies local search across the full provided local dataset', () => {
   expect(container.textContent).not.toContain('Row 0');
 
   const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-  expect(resultCount?.textContent).toBe('1 of 8 items');
+  expect(resultCount?.textContent).toBe('showing 1 of 8 items due to filters');
 
   cleanup();
 });
@@ -2092,7 +2092,7 @@ it('does not show the capped-results tooltip when the table is not capped', () =
   });
 
   const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-  expect(resultCount?.textContent).toBe('3 items');
+  expect(resultCount?.textContent).toBe('showing 3 of 3 items due to filters');
   expect(resultCount?.querySelector('.tooltip-trigger')).toBeNull();
 
   cleanup();

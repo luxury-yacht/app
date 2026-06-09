@@ -101,7 +101,7 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
       columnOptions={COLUMNS}
       columnValue={['kind', 'name', 'namespace', 'age']}
       onColumnsChange={noOp}
-      resultCount={{ displayed: ROWS.length, total: ROWS.length }}
+      resultCount={{ filtered: ROWS.length, unfiltered: ROWS.length }}
       preActions={[favoriteAction]}
     />
   );

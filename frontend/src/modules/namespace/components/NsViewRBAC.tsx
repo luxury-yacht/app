@@ -22,14 +22,9 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import {
-  buildLocalPartialDataLabel,
-  localTableModeForStats,
-} from '@modules/resource-grid/tablePartialState';
-import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import type { SnapshotStats } from '@/core/refresh/client';
 import type { NamespaceRBACSnapshotPayload } from '@/core/refresh/types';
 
 // Data interface for RBAC resources
@@ -67,11 +62,7 @@ export interface RBACData {
 
 interface RBACViewProps {
   namespace: string;
-  data: RBACData[];
-  stats?: SnapshotStats | null;
   availableKinds?: string[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
 
@@ -80,7 +71,7 @@ interface RBACViewProps {
  * Aggregates Roles, RoleBindings, and ServiceAccounts
  */
 const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
-  ({ namespace, stats = null, availableKinds: kindOptions, showNamespaceColumn = false }) => {
+  ({ namespace, availableKinds: kindOptions, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -191,7 +182,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
 
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces RBAC' : 'Namespace RBAC';
-    const localTableMode = localTableModeForStats(stats);
 
     const selectRows = useCallback(
       (payload: NamespaceRBACSnapshotPayload) => payload.rows ?? [],
@@ -214,16 +204,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
-      filterOptionOverrides:
-        localTableMode === 'Local Partial' && namespace !== ALL_NAMESPACES_SCOPE
-          ? {
-              partialDataLabel: buildLocalPartialDataLabel({
-                stats,
-                fallback: `${diagnosticsLabel} is loaded as a bounded local snapshot.`,
-                sourceLabel: diagnosticsLabel,
-              }),
-            }
-          : undefined,
       diagnosticsLabel,
     });
 
