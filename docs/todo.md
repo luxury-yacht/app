@@ -1,3 +1,7 @@
+- Select text in light mode sucks
+- cmd+c does not work in yaml editor
+- Look into reconnect errors
+- Filters lose focus
 - Missing permissions in Workloads Pods tab
 - Missing permissions in Object Details actions menu for pods
 - Ingress/service/gateway hostnames should be clickable links
