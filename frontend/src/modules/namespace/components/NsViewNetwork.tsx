@@ -59,15 +59,7 @@ interface NetworkViewProps {
  * Aggregates Services, Ingresses, NetworkPolicies, etc.
  */
 const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    stats = null,
-    availableKinds: kindOptions,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-  }) => {
+  ({ namespace, stats = null, availableKinds: kindOptions, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -198,15 +190,10 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       NamespaceNetworkSnapshotPayload,
       NetworkData
     >({
-      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-network',
       label: 'All Namespaces Network',
-      localData: data,
-      localLoading: loading,
-      localLoaded: loaded,
-      localTableMode,
       selectRows,
       viewId: 'namespace-network',
       namespace,

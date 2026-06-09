@@ -74,15 +74,7 @@ interface QuotasViewProps {
  * Aggregates ResourceQuotas, LimitRanges, and PodDisruptionBudgets
  */
 const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    stats = null,
-    availableKinds: kindOptions,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-  }) => {
+  ({ namespace, stats = null, availableKinds: kindOptions, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -204,15 +196,10 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       NamespaceQuotasSnapshotPayload,
       QuotaData
     >({
-      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-quotas',
       label: 'All Namespaces Quotas',
-      localData: data,
-      localLoading: loading,
-      localLoaded: loaded,
-      localTableMode,
       selectRows,
       viewId: 'namespace-quotas',
       namespace,

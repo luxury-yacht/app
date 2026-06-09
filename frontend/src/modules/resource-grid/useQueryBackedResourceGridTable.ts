@@ -18,7 +18,6 @@ import type {
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
 import QueryPaginationControls from './QueryPaginationControls';
-import { boundedRowsSource } from './boundedRowsSource';
 import type { ResourceInventorySourceState } from './useResourceInventoryTable';
 import {
   TYPED_QUERY_PAGE_LIMIT_OPTIONS,
@@ -63,41 +62,26 @@ export const liveDomainVersion = (state: {
   lastManualRefresh?: number;
 }): string => [state.version ?? '', state.checksum ?? state.etag ?? ''].join(':');
 
-// Derives the controller source state (data/loading/loaded/error) for a resource
-// grid. A query-backed table (`enabled`) is sourced ONLY from the typed query — it
-// never falls back to the live snapshot (`localData`), because that snapshot is the
-// wrong representation for a query-backed view (unsorted client-side, unpaginated).
-// While the query is gating or in flight, it reports empty+loading so the controller
-// bridges with the cached page (correctly sorted) or shows a first-load spinner. A
-// non-query (local) table is sourced from `localData` as before.
+// Derives the controller source state (data/loading/loaded/error) for a query-backed
+// resource grid. Sourced ONLY from the typed query — never the live snapshot, which is the
+// wrong representation for a query-backed view (unsorted client-side, unpaginated). While the
+// query is gating or in flight, it reports empty+loading so the controller bridges with the
+// cached page (correctly sorted) or shows a first-load spinner.
 export function deriveQueryBackedData<TRow>({
-  enabled,
   clusterId,
   queryEnabled,
   queryRows,
   queryLoading,
   queryLoaded,
   queryError,
-  localData,
-  localLoading,
-  localLoaded,
-  localError,
 }: {
-  enabled: boolean;
   clusterId?: string | null;
   queryEnabled: boolean;
   queryRows: TRow[];
   queryLoading: boolean;
   queryLoaded: boolean;
   queryError: string | null;
-  localData: TRow[];
-  localLoading: boolean;
-  localLoaded: boolean;
-  localError: string | null;
 }): { data: TRow[]; loading: boolean; loaded: boolean; error: string | null } {
-  if (!enabled) {
-    return { data: localData, loading: localLoading, loaded: localLoaded, error: localError };
-  }
   if (!queryEnabled) {
     // Gating (awaiting cluster/persistence/live-domain readiness): hold loading so the
     // controller replays the cached page or shows a spinner — never the live snapshot.
@@ -163,20 +147,11 @@ interface QueryBackedGridParamsCommon<
   TPayload extends TypedQueryPayload,
   TRow extends ResourceGridTableRow,
 > {
-  enabled: boolean;
   clusterId?: string | null;
   domain: RefreshDomain;
   label: string;
   baseScope?: string;
   queryTableMode?: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
-  localTableMode?: Extract<ResourceGridTableMode, 'Local Complete' | 'Local Partial'>;
-  // Local-table fallback rows. Only consumed for non-query (single-namespace local)
-  // tables; query-backed tables are sourced from the typed query + replay cache and
-  // ignore this, so query-backed views need not pass it.
-  localData?: TRow[];
-  localLoading?: boolean;
-  localLoaded?: boolean;
-  localError?: string | null;
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
@@ -203,17 +178,11 @@ function useTypedQueryLifecycle<
   TPayload extends TypedQueryPayload,
   TRow extends ResourceGridTableRow,
 >({
-  enabled,
   clusterId,
   domain,
   label,
   baseScope,
   queryTableMode,
-  localTableMode,
-  localData,
-  localLoading,
-  localLoaded,
-  localError,
   selectRows,
   predicates,
   filterOptionOverrides,
@@ -221,17 +190,11 @@ function useTypedQueryLifecycle<
   persistence,
   liveScope,
 }: {
-  enabled: boolean;
   clusterId?: string | null;
   domain: RefreshDomain;
   label: string;
   baseScope?: string;
   queryTableMode: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
-  localTableMode: Extract<ResourceGridTableMode, 'Local Complete' | 'Local Partial'>;
-  localData: TRow[];
-  localLoading: boolean;
-  localLoaded: boolean;
-  localError: string | null;
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
@@ -245,13 +208,13 @@ function useTypedQueryLifecycle<
   useScopedRefreshDomainLifecycle({
     domain,
     scope: liveScope || null,
-    enabled,
+    enabled: true,
     preserveState: true,
     fetchOnEnable: false,
   });
   const liveDomain = useRefreshScopedDomain(domain, liveScope);
   const liveDataVersion = liveDomainVersion(liveDomain);
-  const liveDomainInitialLoadPending = enabled && isLiveDomainInitialLoadPending(liveDomain);
+  const liveDomainInitialLoadPending = isLiveDomainInitialLoadPending(liveDomain);
   const handlePublishedTableState = useCallback(
     (next: QueryBackedTableState) => {
       setTableStateReady(true);
@@ -259,15 +222,11 @@ function useTypedQueryLifecycle<
     },
     [handleTableStateChange]
   );
-  // clusterId is required: without it buildTypedResourceQueryScope returns null
-  // and no fetch is ever issued, so the query path could never settle. Gating
-  // here routes a missing cluster to the local branch, which settles correctly.
+  // clusterId is required: without it buildTypedResourceQueryScope returns null and no fetch is
+  // ever issued, so the query path could never settle. Gating here holds the table in its gating
+  // (empty + loading) state until a cluster and persistence are ready.
   const queryEnabled =
-    enabled &&
-    Boolean(clusterId) &&
-    tableStateReady &&
-    persistence.hydrated &&
-    !liveDomainInitialLoadPending;
+    Boolean(clusterId) && tableStateReady && persistence.hydrated && !liveDomainInitialLoadPending;
 
   const query = useTypedResourceQuery<TPayload, TRow>({
     enabled: queryEnabled,
@@ -284,17 +243,12 @@ function useTypedQueryLifecycle<
   });
 
   const { data, loading, loaded, error } = deriveQueryBackedData<TRow>({
-    enabled,
     clusterId,
     queryEnabled,
     queryRows: query.rows,
     queryLoading: query.loading,
     queryLoaded: query.loaded,
     queryError: query.error,
-    localData,
-    localLoading,
-    localLoaded,
-    localError,
   });
 
   return {
@@ -302,15 +256,12 @@ function useTypedQueryLifecycle<
     loading,
     loaded,
     error,
-    tableMode: enabled
-      ? queryTableMode
-      : localTableMode === 'Local Partial'
-        ? 'Local Partial'
-        : 'Local Complete',
-    effectiveFilterOptionOverrides: enabled
-      ? mergeQueryBackedFilterOptions(filterOptionOverrides, query.filterOptions)
-      : filterOptionOverrides,
-    onTableStateChange: enabled ? handlePublishedTableState : undefined,
+    tableMode: queryTableMode,
+    effectiveFilterOptionOverrides: mergeQueryBackedFilterOptions(
+      filterOptionOverrides,
+      query.filterOptions
+    ),
+    onTableStateChange: handlePublishedTableState,
     query,
   };
 }
@@ -319,7 +270,6 @@ function useTypedQueryLifecycle<
 // only) plus the normalized controller source (typed query source when enabled,
 // bounded local source otherwise).
 function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
-  enabled,
   viewId,
   cacheKey,
   table,
@@ -330,10 +280,7 @@ function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
   loaded,
   error,
   queryTableMode,
-  localTableMode,
-  filterOptionOverrides,
 }: {
-  enabled: boolean;
   viewId: string;
   cacheKey: string;
   table: ResourceGridTableResult<TRow>;
@@ -344,74 +291,52 @@ function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
   loaded: boolean;
   error: string | null;
   queryTableMode: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
-  localTableMode: Extract<ResourceGridTableMode, 'Local Complete' | 'Local Partial'>;
-  filterOptionOverrides?: Partial<GridTableFilterOptions>;
 }): QueryBackedNamespaceGridResult<TRow> {
-  // Full-result fetcher for the Copy/Export "all matching rows" scope: query → all pages;
-  // local → the loaded rows. Threaded onto gridTableProps so the GridTable filter bar wires
-  // the scope toggle + Copy + Export cluster itself (no per-view export action here).
-  const fetchAllRows = useCallback(
-    (): Promise<TRow[]> => (enabled ? query.fetchAllRows() : Promise.resolve(data)),
-    [data, enabled, query]
-  );
+  // Full-result fetcher for the Copy/Export "all matching rows" scope: walks the query's pages.
+  // Threaded onto gridTableProps so the GridTable filter bar wires the scope toggle + Copy +
+  // Export cluster itself (no per-view export action here).
+  const fetchAllRows = useCallback((): Promise<TRow[]> => query.fetchAllRows(), [query]);
 
   const gridTableProps = useMemo(() => {
-    const base = !enabled
-      ? table.gridTableProps
-      : queryBackedPaginationProps(
-          table.gridTableProps,
-          query,
-          React.createElement(QueryPaginationControls, {
-            idPrefix: viewId,
-            pageIndex: query.pageIndex,
-            pageSize: query.pageSize,
-            visibleItemCount: data.length,
-            pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
-            totalCount: query.totalCount,
-            totalIsExact: query.totalIsExact,
-            hasPrevious: query.hasPrevious,
-            hasNext: Boolean(query.continueToken),
-            loading: query.isRequestingMore,
-            onPrevious: query.loadPrevious,
-            onNext: query.loadMore,
-            onPageSizeChange: (value: number) => {
-              if (TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)) {
-                persistence.setPageSize(value);
-              }
-            },
-          })
-        );
+    const base = queryBackedPaginationProps(
+      table.gridTableProps,
+      query,
+      React.createElement(QueryPaginationControls, {
+        idPrefix: viewId,
+        pageIndex: query.pageIndex,
+        pageSize: query.pageSize,
+        visibleItemCount: data.length,
+        pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+        totalCount: query.totalCount,
+        totalIsExact: query.totalIsExact,
+        hasPrevious: query.hasPrevious,
+        hasNext: Boolean(query.continueToken),
+        loading: query.isRequestingMore,
+        onPrevious: query.loadPrevious,
+        onNext: query.loadMore,
+        onPageSizeChange: (value: number) => {
+          if (TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)) {
+            persistence.setPageSize(value);
+          }
+        },
+      })
+    );
     return { ...base, fetchAllRows, exportFilename: viewId };
-  }, [data.length, enabled, fetchAllRows, persistence, query, table.gridTableProps, viewId]);
+  }, [data.length, fetchAllRows, persistence, query, table.gridTableProps, viewId]);
 
   return {
     ...table,
     gridTableProps,
-    // Query scope → typed query source; single-namespace / disabled scope →
-    // bounded local source. Both feed the one controller contract as the single
-    // source of truth (no separate wrapper-level rows/loading/loaded/error). The
-    // bounded path carries the partial label on the source so the controller's
-    // render state owns the partial/degraded display (it also stays on
-    // gridTableProps for the GridTable filter bar; the controller merge is
-    // idempotent).
-    source: enabled
-      ? buildQueryBackedSource({
-          rows: gridTableProps.data,
-          loading,
-          loaded,
-          error,
-          mode: queryTableMode,
-          cacheKey,
-        })
-      : boundedRowsSource({
-          rows: gridTableProps.data,
-          loading,
-          loaded,
-          error,
-          mode: localTableMode === 'Local Partial' ? 'Local Partial' : 'Local Complete',
-          partialLabel: filterOptionOverrides?.partialDataLabel ?? null,
-          cacheKey,
-        }),
+    // The typed query source feeds the one controller contract as the single source of truth
+    // (no separate wrapper-level rows/loading/loaded/error).
+    source: buildQueryBackedSource({
+      rows: gridTableProps.data,
+      loading,
+      loaded,
+      error,
+      mode: queryTableMode,
+      cacheKey,
+    }),
   };
 }
 
@@ -442,17 +367,11 @@ export function useQueryBackedNamespaceResourceGridTable<
   TPayload extends TypedQueryPayload,
   TRow extends ResourceGridTableRow,
 >({
-  enabled,
   clusterId,
   domain,
   label,
   baseScope,
   queryTableMode = 'Query Backed Dynamic',
-  localTableMode = 'Local Complete',
-  localData = [],
-  localLoading = false,
-  localLoaded = false,
-  localError = null,
   selectRows,
   predicates,
   filterOptionOverrides,
@@ -471,7 +390,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     namespace,
     isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
     columns: tableParams.columns,
-    data: tableParams.persistenceData ?? localData,
+    data: tableParams.persistenceData ?? [],
     keyExtractor: resolvedKeyExtractor,
     filterOptions: {
       ...(tableParams.filterOptions ?? {}),
@@ -485,21 +404,14 @@ export function useQueryBackedNamespaceResourceGridTable<
     [baseScope, clusterId, namespace]
   );
   const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
-    enabled,
     clusterId,
     domain,
     label,
-    // Scope the typed query to the selected namespace (single-namespace = paginated query, not a
-    // local-complete fallback), reusing the exact base the live subscription above already uses.
-    // namespaceScopeKey normalizes the raw namespace name to the backend scope key
-    // `namespace:<name>`; all-namespaces stays `namespace:all` (cluster-wide), unchanged.
+    // Scope the typed query to the selected namespace, reusing the exact base the live
+    // subscription above already uses. namespaceScopeKey normalizes the raw namespace name to the
+    // backend scope key `namespace:<name>`; all-namespaces stays `namespace:all` (cluster-wide).
     baseScope: baseScope ?? namespaceScopeKey(namespace),
     queryTableMode,
-    localTableMode,
-    localData,
-    localLoading,
-    localLoaded,
-    localError,
     selectRows,
     predicates,
     filterOptionOverrides,
@@ -520,7 +432,6 @@ export function useQueryBackedNamespaceResourceGridTable<
     onTableStateChange: lifecycle.onTableStateChange,
   });
   return useQueryBackedGridResult<TRow>({
-    enabled,
     viewId: tableParams.viewId,
     cacheKey: `${tableParams.viewId}|${liveScope}`,
     table,
@@ -531,8 +442,6 @@ export function useQueryBackedNamespaceResourceGridTable<
     loaded: lifecycle.loaded,
     error: lifecycle.error,
     queryTableMode,
-    localTableMode,
-    filterOptionOverrides,
   });
 }
 
@@ -551,17 +460,11 @@ export function useQueryBackedClusterResourceGridTable<
   TPayload extends TypedQueryPayload,
   TRow extends ResourceGridTableRow,
 >({
-  enabled,
   clusterId,
   domain,
   label,
   baseScope = '',
   queryTableMode = 'Query Backed Static',
-  localTableMode = 'Local Complete',
-  localData = [],
-  localLoading = false,
-  localLoaded = false,
-  localError = null,
   selectRows,
   predicates,
   filterOptionOverrides,
@@ -584,7 +487,7 @@ export function useQueryBackedClusterResourceGridTable<
     namespace: null,
     isNamespaceScoped: false,
     columns: tableParams.columns,
-    data: tableParams.persistenceData ?? localData,
+    data: tableParams.persistenceData ?? [],
     keyExtractor: resolvedKeyExtractor,
     filterOptions: { ...(tableParams.filterOptions ?? {}), isNamespaceScoped: false },
     pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
@@ -594,17 +497,11 @@ export function useQueryBackedClusterResourceGridTable<
     [baseScope, clusterId]
   );
   const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
-    enabled,
     clusterId,
     domain,
     label,
     baseScope,
     queryTableMode,
-    localTableMode,
-    localData,
-    localLoading,
-    localLoaded,
-    localError,
     selectRows,
     predicates,
     filterOptionOverrides,
@@ -625,7 +522,6 @@ export function useQueryBackedClusterResourceGridTable<
     onTableStateChange: lifecycle.onTableStateChange,
   });
   return useQueryBackedGridResult<TRow>({
-    enabled,
     viewId: tableParams.viewId,
     cacheKey: `${tableParams.viewId}|${liveScope}`,
     table,
@@ -636,7 +532,5 @@ export function useQueryBackedClusterResourceGridTable<
     loaded: lifecycle.loaded,
     error: lifecycle.error,
     queryTableMode,
-    localTableMode,
-    filterOptionOverrides,
   });
 }

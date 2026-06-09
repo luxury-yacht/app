@@ -116,15 +116,7 @@ export const matchesPodsFilter = (filter: PodsFilterMode, pod: PodSnapshotEntry)
  * GridTable component for namespace Pods
  */
 const NsViewPods: React.FC<PodsViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-    metrics,
-    error = null,
-  }) => {
+  ({ namespace, data, showNamespaceColumn = false, metrics }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const namespaceColumnLink = useNamespaceColumnLink<PodSnapshotEntry>('pods');
@@ -514,15 +506,10 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       favModal,
       source,
     } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
-      enabled: true,
       queryTableMode: 'Query Backed Dynamic',
       clusterId: queryClusterId,
       domain: 'pods',
       label: 'All Namespaces Pods',
-      localData: data,
-      localLoading: loading,
-      localLoaded: loaded,
-      localError: error,
       predicates: podQueryPredicates,
       selectRows: selectPodRows,
       viewId: 'namespace-pods',

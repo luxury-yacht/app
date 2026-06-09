@@ -1,10 +1,10 @@
 /**
  * `deriveQueryBackedData` decides what a resource grid shows. The contract that
  * matters for the revisit sort bug: a query-backed table is NEVER sourced from the
- * live snapshot (`localData`) — that snapshot is unsorted client-side and
- * unpaginated, so showing it during the reload window made a revisit appear
- * unsorted until the server-sorted query reloaded. While the query is gating or in
- * flight it reports empty+loading so the controller bridges with the cached page.
+ * live snapshot — that snapshot is unsorted client-side and unpaginated, so showing
+ * it during the reload window made a revisit appear unsorted until the server-sorted
+ * query reloaded. While the query is gating or in flight it reports empty+loading so
+ * the controller bridges with the cached page.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -14,21 +14,15 @@ interface Row {
   name: string;
 }
 
-const local: Row[] = [{ name: 'live-snapshot-row' }];
 const queryPage: Row[] = [{ name: 'q1' }, { name: 'q2' }];
 
 const base = {
-  enabled: true,
   clusterId: 'c1',
   queryEnabled: false,
   queryRows: [] as Row[],
   queryLoading: false,
   queryLoaded: false,
   queryError: null as string | null,
-  localData: local,
-  localLoading: false,
-  localLoaded: true,
-  localError: null as string | null,
 };
 
 describe('deriveQueryBackedData', () => {
@@ -73,17 +67,5 @@ describe('deriveQueryBackedData', () => {
     });
     expect(r.data).toEqual([]);
     expect(r.error).toBe('returned no data');
-  });
-
-  it('sources a non-query (local) table from localData unchanged', () => {
-    const r = deriveQueryBackedData<Row>({
-      ...base,
-      enabled: false,
-      localData: local,
-      localLoading: false,
-      localLoaded: true,
-    });
-    expect(r.data).toBe(local);
-    expect(r.loaded).toBe(true);
   });
 });

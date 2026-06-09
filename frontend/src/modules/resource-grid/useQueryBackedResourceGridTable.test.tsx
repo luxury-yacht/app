@@ -186,11 +186,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
   it('passes cluster scoped live refresh revisions into typed queries', () => {
     const Probe: React.FC = () => {
       useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'nodes',
         label: 'Cluster Nodes',
-        localData: [row],
         selectRows,
         viewId: 'cluster-nodes',
         columns,
@@ -208,7 +206,6 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       expect.objectContaining({
         domain: 'nodes',
         scope: 'cluster-a|',
-        enabled: true,
         preserveState: true,
         fetchOnEnable: false,
       })
@@ -243,11 +240,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
   it('passes namespace scoped live refresh revisions into typed queries', () => {
     const Probe: React.FC = () => {
       useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
         label: 'All Namespaces Pods',
-        localData: [row],
         selectRows,
         viewId: 'namespace-pods',
         namespace: ALL_NAMESPACES_SCOPE,
@@ -266,7 +261,6 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       expect.objectContaining({
         domain: 'pods',
         scope: 'cluster-a|namespace:all',
-        enabled: true,
         preserveState: true,
         fetchOnEnable: false,
       })
@@ -301,11 +295,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
   it('seeds cluster query state from the configured default sort before persistence publishes', () => {
     const Probe: React.FC = () => {
       useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'cluster-events',
         label: 'Cluster Events',
-        localData: [row],
         selectRows,
         viewId: 'cluster-events',
         columns,
@@ -337,11 +329,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
   it('seeds namespace query state from the configured default sort before persistence publishes', () => {
     const Probe: React.FC = () => {
       useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'namespace-events',
         label: 'All Namespaces Events',
-        localData: [row],
         selectRows,
         viewId: 'namespace-events',
         namespace: ALL_NAMESPACES_SCOPE,
@@ -375,13 +365,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'nodes',
         label: 'Cluster Nodes',
-        localData: [],
-        localLoaded: true,
-        localLoading: false,
         selectRows,
         viewId: 'cluster-nodes',
         columns,
@@ -414,13 +400,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
         label: 'All Namespaces Pods',
-        localData: [],
-        localLoaded: true,
-        localLoading: false,
         selectRows,
         viewId: 'namespace-pods',
         namespace: ALL_NAMESPACES_SCOPE,
@@ -448,50 +430,15 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(result?.source.loaded).toBe(false);
   });
 
-  it('uses the explicit local fallback table mode when query backing is disabled', () => {
-    const Probe: React.FC = () => {
-      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        enabled: false,
-        clusterId: 'cluster-a',
-        domain: 'namespace-config',
-        label: 'Namespace Configuration',
-        localData: [row],
-        localLoaded: true,
-        localTableMode: 'Local Partial',
-        selectRows,
-        viewId: 'namespace-config',
-        namespace: 'team-a',
-        columns,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useNamespaceResourceGridTableMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        tableMode: 'Local Partial',
-        data: [row],
-      })
-    );
-  });
-
   it('does not run the first typed query while the live base domain is still initialising', async () => {
     let result:
       | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
       | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'cluster-config',
         label: 'Cluster Configuration',
-        localData: [],
-        localLoaded: true,
-        localLoading: false,
         selectRows,
         viewId: 'cluster-config',
         columns,
@@ -545,7 +492,6 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        enabled: true,
         domain: 'cluster-config',
         liveDataVersion: '2:ready',
       })
@@ -558,13 +504,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'nodes',
         label: 'Cluster Nodes',
-        localData: [],
-        localLoaded: true,
-        localLoading: false,
         selectRows,
         viewId: 'cluster-nodes',
         columns,
@@ -629,13 +571,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'namespace-config',
         label: 'All Namespaces Config',
-        localData: [],
-        localLoaded: true,
-        localLoading: false,
         selectRows,
         viewId: 'namespace-config',
         namespace: ALL_NAMESPACES_SCOPE,
@@ -701,11 +639,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'nodes',
         label: 'Cluster Nodes',
-        localData: [],
         selectRows,
         viewId: 'cluster-nodes',
         columns,
@@ -759,11 +695,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'nodes',
         label: 'Cluster Nodes',
-        localData: [],
         selectRows,
         viewId: 'cluster-nodes',
         columns,
@@ -817,11 +751,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'nodes',
         label: 'Cluster Nodes',
-        localData: [row],
         selectRows,
         viewId: 'cluster-nodes',
         columns,
@@ -877,11 +809,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'nodes',
         label: 'Cluster Nodes',
-        localData: [],
         selectRows,
         viewId: 'cluster-nodes',
         columns,
@@ -935,11 +865,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        enabled: true,
         clusterId: 'cluster-a',
         domain: 'nodes',
         label: 'Cluster Nodes',
-        localData: [],
         selectRows,
         viewId: 'cluster-nodes',
         columns,

@@ -265,7 +265,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(({ error }) => {
     ClusterStorageSnapshotPayload,
     StorageData
   >({
-    enabled: true,
     queryTableMode: 'Query Backed Static',
     clusterId: selectedClusterId,
     domain: 'cluster-storage',

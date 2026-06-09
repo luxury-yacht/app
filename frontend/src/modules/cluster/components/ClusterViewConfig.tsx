@@ -141,7 +141,6 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       ClusterConfigSnapshotPayload,
       ConfigData
     >({
-      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: selectedClusterId,
       domain: 'cluster-config',

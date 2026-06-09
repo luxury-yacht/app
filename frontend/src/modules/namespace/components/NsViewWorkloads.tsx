@@ -55,11 +55,8 @@ interface WorkloadsViewProps {
 const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
   ({
     namespace,
-    data,
     stats = null,
     availableKinds: kindOptions,
-    loading = false,
-    loaded = false,
     showNamespaceColumn = false,
     metrics = null,
   }) => {
@@ -196,15 +193,10 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       favModal,
       source,
     } = useQueryBackedNamespaceResourceGridTable<NamespaceWorkloadSnapshotPayload, WorkloadData>({
-      enabled: true,
       queryTableMode: 'Query Backed Dynamic',
       clusterId: selectedClusterId,
       domain: 'namespace-workloads',
       label: 'All Namespaces Workloads',
-      localData: data,
-      localLoading: loading,
-      localLoaded: loaded,
-      localTableMode,
       selectRows: selectWorkloadRows,
       viewId: 'namespace-workloads',
       namespace,

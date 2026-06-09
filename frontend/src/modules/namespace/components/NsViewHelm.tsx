@@ -77,14 +77,7 @@ interface HelmViewProps {
  * GridTable component for namespace Helm releases
  */
 const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    stats = null,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-  }) => {
+  ({ namespace, stats = null, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -324,15 +317,10 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       NamespaceHelmSnapshotPayload,
       HelmData
     >({
-      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-helm',
       label: 'All Namespaces Helm',
-      localData: data,
-      localLoading: loading,
-      localLoaded: loaded,
-      localTableMode,
       selectRows,
       viewId: 'namespace-helm',
       namespace,

@@ -19,6 +19,30 @@ current.
 
 ---
 
+## 2026-06-08 — TIER 1 SIMPLIFY: delete the query wrapper's dead local fallback
+
+After Track A, NO table passes `enabled:false` to the query wrapper (VERIFIED: only NsViewMap, the
+object-map domain, not the wrapper). So the wrapper's local path is dead: collapse it to query-only.
+
+- `frontend/src/modules/resource-grid/useQueryBackedResourceGridTable.ts` — remove `enabled` +
+  `localData`/`localLoading`/`localLoaded`/`localError`/`localTableMode` from
+  `QueryBackedGridParamsCommon`, `useTypedQueryLifecycle`, `useQueryBackedGridResult`, and
+  `deriveQueryBackedData` (drop its `!enabled` branch); `useQueryBackedGridResult` always
+  `buildQueryBackedSource` (remove the `boundedRowsSource` branch + import — boundedRowsSource stays
+  for object-panel). `tableMode`/`onTableStateChange`/`effectiveFilterOptionOverrides` lose their
+  `enabled ? … : …` ternaries (always the query side). Live-subscription `enabled` becomes always-on.
+- Call sites drop `enabled`/`localData`/`localLoading`/`localLoaded`/`localError`/`localTableMode`:
+  `NsViewPods.tsx`, `NsViewWorkloads.tsx`, `NsViewConfig.tsx`, `NsViewNetwork.tsx`, `NsViewRBAC.tsx`,
+  `NsViewStorage.tsx`, `NsViewEvents.tsx`, `NsViewAutoscaling.tsx`, `NsViewQuotas.tsx`,
+  `NsViewHelm.tsx` (all namespace/components/), and the cluster views `ClusterViewConfig.tsx`,
+  `ClusterViewCRDs.tsx`, `ClusterViewCustom.tsx`, `ClusterViewEvents.tsx`, `ClusterViewNodes.tsx`,
+  `ClusterViewRBAC.tsx`, `ClusterViewStorage.tsx` (drop `enabled: true` only). Remove resulting
+  unused `data`/`loading`/`loaded`/`error` destructures (KEEP `data` where still used, e.g. Pods'
+  unhealthy count). The `data`/loading PROPS + parent live subscription stay (Tier 1.5 follow-up).
+- Tests: `deriveQueryBackedData` unit tests lose the `!enabled` cases; view/leaf-load tests already
+  feed the query. **NOT deleted:** the backend window snapshot (contract: feeds liveDataVersion +
+  counts). **Verify:** tsc catches every call site; then `mage qc:prerelease`.
+
 ## 2026-06-08 — BUGFIX: single-namespace query scope must be `namespace:<name>`, not raw name
 
 Runtime error (real app): `invalid pods scope: argocd` / `unsupported pods scope argocd`. The Track

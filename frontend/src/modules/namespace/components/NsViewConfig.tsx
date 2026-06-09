@@ -55,15 +55,7 @@ interface ConfigViewProps {
  * Aggregates ConfigMaps and Secrets
  */
 const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    stats = null,
-    availableKinds: kindOptions,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-  }) => {
+  ({ namespace, stats = null, availableKinds: kindOptions, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -159,15 +151,10 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       NamespaceConfigSnapshotPayload,
       ConfigData
     >({
-      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-config',
       label: 'All Namespaces Configuration',
-      localData: data,
-      localLoading: loading,
-      localLoaded: loaded,
-      localTableMode,
       selectRows,
       viewId: 'namespace-config',
       namespace,

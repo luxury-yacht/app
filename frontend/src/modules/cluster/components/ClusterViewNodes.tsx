@@ -350,7 +350,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
     ClusterNodeSnapshotPayload,
     ClusterNodeRow
   >({
-    enabled: true,
     queryTableMode: 'Query Backed Dynamic',
     clusterId: selectedClusterId,
     domain: 'nodes',

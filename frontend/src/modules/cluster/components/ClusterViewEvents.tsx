@@ -162,7 +162,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(({ error }) => {
     ClusterEventsSnapshotPayload,
     EventData
   >({
-    enabled: true,
     queryTableMode: 'Query Backed Static',
     clusterId: selectedClusterId,
     domain: 'cluster-events',

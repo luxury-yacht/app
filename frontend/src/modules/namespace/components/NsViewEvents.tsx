@@ -69,7 +69,7 @@ interface EventViewProps {
  * GridTable component for namespace Events
  */
 const NsEventsTable: React.FC<EventViewProps> = React.memo(
-  ({ namespace, data, stats, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({ namespace, stats, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -225,15 +225,10 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       NamespaceEventsSnapshotPayload,
       EventData
     >({
-      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-events',
       label: 'All Namespaces Events',
-      localData: data,
-      localLoading: loading,
-      localLoaded: loaded,
-      localTableMode: 'Local Partial',
       selectRows,
       viewId: 'namespace-events',
       namespace,

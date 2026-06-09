@@ -67,14 +67,7 @@ interface StorageViewProps {
  * Aggregates PersistentVolumeClaims, VolumeAttachments, and related storage resources
  */
 const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    stats = null,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-  }) => {
+  ({ namespace, stats = null, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -239,15 +232,10 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       NamespaceStorageSnapshotPayload,
       StorageData
     >({
-      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-storage',
       label: 'All Namespaces Storage',
-      localData: data,
-      localLoading: loading,
-      localLoaded: loaded,
-      localTableMode,
       selectRows,
       viewId: 'namespace-storage',
       namespace,

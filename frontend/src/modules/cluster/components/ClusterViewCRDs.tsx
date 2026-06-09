@@ -182,7 +182,6 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(({ error }) => {
     ClusterCRDSnapshotPayload,
     CRDsData
   >({
-    enabled: true,
     queryTableMode: 'Query Backed Static',
     clusterId: selectedClusterId,
     domain: 'cluster-crds',

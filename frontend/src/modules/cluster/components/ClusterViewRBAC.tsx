@@ -138,7 +138,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       ClusterRBACSnapshotPayload,
       RBACData
     >({
-      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: selectedClusterId,
       domain: 'cluster-rbac',

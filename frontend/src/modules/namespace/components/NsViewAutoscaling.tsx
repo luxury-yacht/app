@@ -95,15 +95,7 @@ interface AutoscalingViewProps {
  * Aggregates HorizontalPodAutoscalers and VerticalPodAutoscalers
  */
 const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    stats = null,
-    availableKinds: kindOptions,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-  }) => {
+  ({ namespace, stats = null, availableKinds: kindOptions, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -370,15 +362,10 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       NamespaceAutoscalingSnapshotPayload,
       AutoscalingData
     >({
-      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-autoscaling',
       label: 'All Namespaces Autoscaling',
-      localData: data,
-      localLoading: loading,
-      localLoaded: loaded,
-      localTableMode,
       selectRows,
       viewId: 'namespace-autoscaling',
       namespace,
