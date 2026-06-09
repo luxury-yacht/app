@@ -13,8 +13,6 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 
-const exportCatalogQueryCSVFileMock = vi.hoisted(() => vi.fn());
-
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
     favorites: [],
@@ -93,10 +91,6 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-vi.mock('@wailsjs/go/backend/App', () => ({
-  ExportCatalogSelectionCSVFile: (...args: unknown[]) => exportCatalogQueryCSVFileMock(...args),
 }));
 
 vi.mock('@/core/capabilities', () => ({
@@ -290,9 +284,6 @@ describe('BrowseView', () => {
     persistenceMocks.clusterSetSortConfig.mockReset();
     persistenceMocks.namespaceOnSortChange.mockReset();
     persistenceFiltersRef.current = { search: '', kinds: [], namespaces: [], caseSensitive: false };
-    exportCatalogQueryCSVFileMock
-      .mockReset()
-      .mockResolvedValue({ path: '/tmp/catalog.csv', bytes: 29 });
   });
 
   afterEach(() => {
@@ -801,14 +792,8 @@ describe('BrowseView', () => {
     });
   });
 
-  describe('Query-wide CSV export', () => {
-    it('disables all-matching export while search debounce is pending', async () => {
-      persistenceFiltersRef.current = {
-        search: 'api',
-        kinds: [],
-        namespaces: [],
-        caseSensitive: false,
-      };
+  describe('All-matching export', () => {
+    it('threads fetchAllRows so the table offers the all-matching-rows scope', async () => {
       refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
         status: 'ready',
         data: {
@@ -825,64 +810,11 @@ describe('BrowseView', () => {
         await Promise.resolve();
       });
 
+      // Export is now the unified frontend Copy/Export cluster (wired by the GridTable filter
+      // bar from this fetcher), not a server-side per-action catalog export.
+      expect(typeof gridTablePropsRef.current?.fetchAllRows).toBe('function');
       const postActions = gridTablePropsRef.current?.filters?.options?.postActions ?? [];
-      expect(postActions.find((item: any) => item.id === 'copy-browse-query-csv')?.disabled).toBe(
-        true
-      );
-      expect(postActions.some((item: any) => item.id === 'delete-browse-query')).toBe(false);
-    });
-
-    it('copies all backend-matching rows with the Browse query scope', async () => {
-      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
-        status: 'ready',
-        data: {
-          items: [
-            {
-              uid: 'pod-1',
-              kind: 'Pod',
-              name: 'api',
-              namespace: 'default',
-              scope: 'Namespace',
-              resource: 'pods',
-              group: '',
-              version: 'v1',
-              resourceVersion: '1',
-              creationTimestamp: new Date().toISOString(),
-              clusterId: 'cluster-1',
-            },
-          ],
-          kinds: [{ kind: 'Pod', namespaced: true }],
-          namespaces: ['default'],
-          total: 1,
-        },
-        scope: 'cluster-1|limit=50&namespace=default',
-      });
-
-      await act(async () => {
-        root.render(<BrowseView namespace="default" />);
-        await Promise.resolve();
-      });
-
-      const copyAllAction = gridTablePropsRef.current?.filters?.options?.postActions?.find(
-        (item: any) => item.id === 'copy-browse-query-csv'
-      );
-      expect(copyAllAction).toBeTruthy();
-
-      await act(async () => {
-        copyAllAction.onClick();
-        await Promise.resolve();
-      });
-
-      expect(exportCatalogQueryCSVFileMock).toHaveBeenCalledWith({
-        clusterId: 'cluster-1',
-        table: 'browse',
-        namespaces: ['default'],
-        kinds: [],
-        search: '',
-        sortField: '',
-        sortDirection: '',
-        customOnly: false,
-      });
+      expect(postActions.some((item: any) => item.id === 'copy-browse-query-csv')).toBe(false);
     });
   });
 });

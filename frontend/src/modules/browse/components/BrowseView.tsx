@@ -45,8 +45,6 @@ import {
 } from '@shared/utils/objectIdentity';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import { useCatalogQueryCsvAction } from '@modules/browse/hooks/useCatalogQueryCsvAction';
-import { catalogSelectionFromBrowseQuery } from '@modules/browse/querySelection';
 import CatalogPaginationControls from './CatalogPaginationControls';
 
 const VIRTUALIZATION_THRESHOLD = 80;
@@ -341,8 +339,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     pageLimit,
     pageLimitOptions,
     setPageLimit,
-    queryDescriptor,
     queryPending,
+    fetchAllRows: fetchAllCatalogItems,
   } = useBrowseCatalog({
     enabled: persistence.hydrated,
     clusterId: selectedClusterId,
@@ -363,6 +361,13 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   const rows = useMemo(
     () => toTableRows(items, useShortResourceNames),
     [items, useShortResourceNames]
+  );
+
+  // Export source: every matching catalog item (all pages) mapped to table rows, so the
+  // Copy/Export "all matching rows" scope produces the same columns shown on screen.
+  const fetchAllTableRows = useCallback(
+    async () => toTableRows(await fetchAllCatalogItems(), useShortResourceNames),
+    [fetchAllCatalogItems, useShortResourceNames]
   );
 
   const paginationControls = useMemo(
@@ -401,15 +406,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     ]
   );
 
-  const disableUnscopedQueryActions = !clusterScopedOnly && !isNamespaceScoped;
-  const copyAllMatchingCsvAction = useCatalogQueryCsvAction({
-    query: catalogSelectionFromBrowseQuery(queryDescriptor),
-    totalCount,
-    pending: queryPending,
-    disableWhenUnscoped: disableUnscopedQueryActions,
-    id: 'copy-browse-query-csv',
-  });
-
   const gridFilterOptions = useMemo(
     () => ({
       searchBehavior: 'query' as const,
@@ -425,10 +421,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       totalCount,
       totalIsExact,
       partialDataLabel: filterOptions.partialDataLabel,
-      postActions: [copyAllMatchingCsvAction],
     }),
     [
-      copyAllMatchingCsvAction,
       filterOptions.kinds,
       filterOptions.namespaces,
       filterOptions.partialDataLabel,
@@ -478,7 +472,11 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     <>
       <ResourceInventoryTable
         source={source}
-        gridTableProps={gridTableProps}
+        gridTableProps={{
+          ...gridTableProps,
+          fetchAllRows: fetchAllTableRows,
+          exportFilename: 'browse',
+        }}
         spinnerMessage={resolvedLoadingMessage}
         allowPartial
         suppressEmptyWarning

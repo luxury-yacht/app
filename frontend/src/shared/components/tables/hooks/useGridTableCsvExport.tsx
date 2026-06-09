@@ -12,15 +12,23 @@ interface UseGridTableCsvExportOptions<T> {
   data: T[];
   columns?: GridColumnDefinition<T>[];
   getTextContent?: (node: ReactNode) => string;
+  /** Fetch every matching row (all pages); used when scope is 'all'. */
+  fetchAllRows?: () => Promise<T[]>;
+  /** 'page' copies the visible page; 'all' copies every matching row. */
+  scope?: 'page' | 'all';
 }
 
 export function useGridTableCsvExport<T>({
   data,
   columns,
   getTextContent,
+  fetchAllRows,
+  scope = 'page',
 }: UseGridTableCsvExportOptions<T>): IconBarItem {
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<'success' | 'error' | null>(null);
+  const [copying, setCopying] = useState(false);
+  const allScope = scope === 'all' && Boolean(fetchAllRows);
 
   const canCopyToClipboard =
     typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function';
@@ -44,31 +52,45 @@ export function useGridTableCsvExport<T>({
     };
   }, []);
 
-  const buildCsvText = useCallback((): string => {
-    if (!columns?.length || !getTextContent) {
-      return '';
-    }
-    return buildGridTableCsv(data, columns, getTextContent);
-  }, [columns, data, getTextContent]);
-
   const handleCopyCsv = useCallback(async () => {
-    const csvText = buildCsvText();
-    if (!canCopyToClipboard || !csvText) {
+    if (!canCopyToClipboard || !columns?.length || !getTextContent) {
       setCopyFeedback('error');
       scheduleCopyReset();
       return;
     }
-
+    setCopying(true);
     try {
+      // 'all' scope pulls every matching row; 'page' copies the rows already on screen.
+      const rows = allScope && fetchAllRows ? await fetchAllRows() : data;
+      const csvText = buildGridTableCsv(rows, columns, getTextContent);
+      if (!csvText) {
+        setCopyFeedback('error');
+        return;
+      }
       await navigator.clipboard.writeText(csvText);
       setCopyFeedback('success');
-      scheduleCopyReset();
     } catch (error) {
       console.error('Failed to copy GridTable CSV', error);
       setCopyFeedback('error');
+    } finally {
+      setCopying(false);
       scheduleCopyReset();
     }
-  }, [buildCsvText, canCopyToClipboard, scheduleCopyReset]);
+  }, [
+    allScope,
+    canCopyToClipboard,
+    columns,
+    data,
+    fetchAllRows,
+    getTextContent,
+    scheduleCopyReset,
+  ]);
+
+  const title = !fetchAllRows
+    ? 'Copy visible rows as CSV'
+    : allScope
+      ? 'Copy all matching rows to clipboard'
+      : 'Copy current page to clipboard';
 
   return useMemo<IconBarItem>(
     () => ({
@@ -78,11 +100,11 @@ export function useGridTableCsvExport<T>({
       onClick: () => {
         void handleCopyCsv();
       },
-      title: 'Copy visible rows as CSV',
-      ariaLabel: 'Copy visible rows as CSV',
-      disabled: !canCopyToClipboard || !hasCopyableContent,
+      title,
+      ariaLabel: title,
+      disabled: !canCopyToClipboard || !hasCopyableContent || copying,
       feedback: copyFeedback,
     }),
-    [canCopyToClipboard, copyFeedback, handleCopyCsv, hasCopyableContent]
+    [canCopyToClipboard, copyFeedback, copying, handleCopyCsv, hasCopyableContent, title]
   );
 }

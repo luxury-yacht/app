@@ -416,11 +416,13 @@ describe('NsViewCustom', () => {
     expect(gridProps.filters.options.showKindDropdown).toBe(true);
     expect(gridProps.filters.options.kindDropdownSearchable).toBe(true);
     expect(gridProps.filters.options.kindDropdownBulkActions).toBe(true);
+    // Export is now the unified frontend fetcher, not a server-side per-action catalog export.
+    expect(typeof gridProps.fetchAllRows).toBe('function');
     expect(
-      gridProps.filters.options.postActions?.some(
+      (gridProps.filters.options.postActions ?? []).some(
         (item: any) => item.id === 'copy-namespace-custom-query-csv'
       )
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('uses catalog facet metadata instead of deriving kinds from loaded rows', async () => {

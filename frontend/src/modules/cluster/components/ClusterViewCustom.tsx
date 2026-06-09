@@ -187,14 +187,13 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       filterOptions: catalogFilterOptions,
       totalCount,
       totalIsExact,
-      csvAction: copyAllMatchingCsvAction,
+      fetchAllRows,
       pagination,
     } = useCatalogBackedCustomResourceRows({
       clusterId: selectedClusterId,
       clusterScopedOnly: true,
       persistence,
       diagnosticLabel: 'Cluster Custom',
-      csvActionId: 'copy-cluster-custom-query-csv',
     });
 
     const { gridTableProps, favModal } = useQueryResourceGridTable<ClusterCustomData>({
@@ -216,7 +215,6 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         totalCount,
         totalIsExact,
         partialDataLabel: catalogFilterOptions.partialDataLabel,
-        postActions: [copyAllMatchingCsvAction],
       },
     });
 
@@ -279,7 +277,11 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       <>
         <ResourceInventoryTable
           source={source}
-          gridTableProps={gridTableProps}
+          gridTableProps={{
+            ...gridTableProps,
+            fetchAllRows,
+            exportFilename: 'cluster-custom-resources',
+          }}
           spinnerMessage="Loading cluster custom resources..."
           favModal={favModal}
           columns={columns}

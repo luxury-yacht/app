@@ -221,7 +221,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       filterOptions: catalogFilterOptions,
       totalCount,
       totalIsExact,
-      csvAction: copyAllMatchingCsvAction,
+      fetchAllRows,
       pagination,
     } = useCatalogBackedCustomResourceRows({
       clusterId: selectedClusterId,
@@ -229,8 +229,6 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       allNamespaces: namespace === ALL_NAMESPACES_SCOPE,
       persistence,
       diagnosticLabel: diagnosticsLabel,
-      disableCsvWhenUnscoped: namespace === ALL_NAMESPACES_SCOPE,
-      csvActionId: 'copy-namespace-custom-query-csv',
     });
 
     const { gridTableProps, favModal } = useQueryResourceGridTable<CustomResourceData>({
@@ -255,7 +253,6 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         totalCount,
         totalIsExact,
         partialDataLabel: catalogFilterOptions.partialDataLabel,
-        postActions: [copyAllMatchingCsvAction],
       },
     });
 
@@ -319,7 +316,11 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       <>
         <ResourceInventoryTable
           source={source}
-          gridTableProps={gridTableProps}
+          gridTableProps={{
+            ...gridTableProps,
+            fetchAllRows,
+            exportFilename: 'custom-resources',
+          }}
           spinnerMessage="Loading custom resources..."
           favModal={favModal}
           columns={columns}

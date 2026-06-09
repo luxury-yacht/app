@@ -145,6 +145,8 @@ export function useGridTableController<T>({
   virtualization,
   loadingOverlay,
   filters,
+  fetchAllRows,
+  exportFilename,
   diagnosticsLabel,
   diagnosticsMode = 'local',
   allowHorizontalOverflow = true,
@@ -221,6 +223,8 @@ export function useGridTableController<T>({
     columnsDropdown: columnsDropdownConfig ?? undefined,
     exportColumns: renderedColumns,
     getTextContent,
+    fetchAllRows,
+    exportFilename,
   });
 
   const tableData = filteredData;

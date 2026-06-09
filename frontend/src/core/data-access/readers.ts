@@ -8,7 +8,6 @@
 
 import {
   DiscoverNodeLogs,
-  ExportCatalogSelectionCSVFile,
   SaveCsvFile,
   FetchContainerLogs,
   FetchNodeLogs,
@@ -22,7 +21,7 @@ import {
   HydrateCatalogCustomRows,
   IsWorkloadHPAManaged,
 } from '@wailsjs/go/backend/App';
-import type { snapshot, types } from '@wailsjs/go/models';
+import type { types } from '@wailsjs/go/models';
 
 export interface ObjectReadTarget {
   clusterId: string;
@@ -115,9 +114,6 @@ export interface CatalogQueryCSVExport {
   path: string;
   bytes: number;
 }
-
-export const readCatalogQueryCSVFile = (selection: snapshot.QuerySelectionDescriptor) =>
-  ExportCatalogSelectionCSVFile(selection) as Promise<CatalogQueryCSVExport>;
 
 /** Save a frontend-built CSV string to a user-selected file (returns the chosen path). */
 export const saveCsvFile = (defaultFilename: string, content: string) =>

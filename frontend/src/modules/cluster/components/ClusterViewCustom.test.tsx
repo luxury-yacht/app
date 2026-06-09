@@ -322,11 +322,14 @@ describe('ClusterViewCustom', () => {
     expect(props?.filters?.options?.showKindDropdown).toBe(true);
     expect(props?.filters?.options?.kindDropdownSearchable).toBe(true);
     expect(props?.filters?.options?.kindDropdownBulkActions).toBe(true);
+    // Export is now the unified frontend fetcher (the GridTable filter bar wires the Copy/Export
+    // cluster from it), not a server-side per-action catalog export.
+    expect(typeof props?.fetchAllRows).toBe('function');
     expect(
-      props?.filters?.options?.postActions?.some(
+      (props?.filters?.options?.postActions ?? []).some(
         (item: any) => item.id === 'copy-cluster-custom-query-csv'
       )
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('uses catalog facet metadata instead of deriving kinds from loaded rows', async () => {

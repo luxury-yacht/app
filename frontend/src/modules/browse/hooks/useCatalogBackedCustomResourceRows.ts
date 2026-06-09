@@ -1,8 +1,11 @@
-import { useCatalogQueryCsvAction } from './useCatalogQueryCsvAction';
+import { useCallback } from 'react';
+
 import { useBrowseCatalog } from './useBrowseCatalog';
-import { useHydratedCustomCatalogRows } from './useHydratedCustomCatalogRows';
+import {
+  hydrateCustomCatalogRows,
+  useHydratedCustomCatalogRows,
+} from './useHydratedCustomCatalogRows';
 import type { ResourceGridPersistence } from '@modules/resource-grid/resourceGridTableTypes';
-import { catalogSelectionFromBrowseQuery } from '@modules/browse/querySelection';
 import type { CatalogBackedCustomResourceRow } from './customCatalogRowAdapter';
 
 export interface UseCatalogBackedCustomResourceRowsOptions {
@@ -12,8 +15,6 @@ export interface UseCatalogBackedCustomResourceRowsOptions {
   clusterScopedOnly?: boolean;
   persistence: ResourceGridPersistence<CatalogBackedCustomResourceRow>;
   diagnosticLabel: string;
-  csvActionId: string;
-  disableCsvWhenUnscoped?: boolean;
 }
 
 export function useCatalogBackedCustomResourceRows({
@@ -23,8 +24,6 @@ export function useCatalogBackedCustomResourceRows({
   clusterScopedOnly = false,
   persistence,
   diagnosticLabel,
-  csvActionId,
-  disableCsvWhenUnscoped = false,
 }: UseCatalogBackedCustomResourceRowsOptions) {
   const pinnedNamespaces = !clusterScopedOnly && namespace && !allNamespaces ? [namespace] : [];
   const {
@@ -34,7 +33,6 @@ export function useCatalogBackedCustomResourceRows({
     filterOptions,
     totalCount,
     totalIsExact,
-    queryDescriptor,
     queryPending,
     continueToken,
     previousToken,
@@ -45,6 +43,7 @@ export function useCatalogBackedCustomResourceRows({
     handleLoadMore,
     handleLoadPrevious,
     setPageLimit,
+    fetchAllRows: fetchAllCatalogItems,
   } = useBrowseCatalog({
     enabled: persistence.hydrated,
     clusterId,
@@ -63,13 +62,13 @@ export function useCatalogBackedCustomResourceRows({
   });
 
   const rows = useHydratedCustomCatalogRows(clusterId, catalogItems);
-  const csvAction = useCatalogQueryCsvAction({
-    query: catalogSelectionFromBrowseQuery(queryDescriptor),
-    totalCount,
-    pending: queryPending,
-    disableWhenUnscoped: disableCsvWhenUnscoped,
-    id: csvActionId,
-  });
+
+  // Export source for the Copy/Export "all matching rows" scope: every matching catalog item
+  // (all pages) hydrated into rows, so the CSV matches the columns shown on screen.
+  const fetchAllRows = useCallback(
+    () => fetchAllCatalogItems().then((items) => hydrateCustomCatalogRows(clusterId, items)),
+    [clusterId, fetchAllCatalogItems]
+  );
 
   return {
     rows,
@@ -78,7 +77,7 @@ export function useCatalogBackedCustomResourceRows({
     filterOptions,
     totalCount,
     totalIsExact,
-    csvAction,
+    fetchAllRows,
     pagination: {
       pageIndex,
       pageLimit,

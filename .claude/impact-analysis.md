@@ -19,6 +19,72 @@ current.
 
 ---
 
+## 2026-06-08 — REDESIGN: Mode · Copy · Export trio (one scope toggle drives both copy & export)
+
+User-decided UX: replace the page-scoped Copy + all-scoped Export split with THREE grouped
+buttons — a **scope toggle** (off=current page [default], on=all matching rows), **Copy**
+(→clipboard), **Export** (→file). Both Copy and Export honor the toggle; both ALWAYS respect
+filters. Identical on every resource view. Save (favorite) moves OUT of the export group back to
+the filter (pre-)actions. Catalog views (Browse/Custom) unify onto this same frontend mechanism,
+so the server-side catalog CSV export is deleted.
+
+- `frontend/.../hooks/useGridTableCsvExport.tsx` — Copy action; add `fetchAllRows?` + `scope`
+  ('page'|'all'). scope==='all' → await fetchAllRows() else use `data` (page). Title reflects
+  scope. Consumer: the wiring. VERIFIED current impl builds from `data` only.
+- `frontend/.../hooks/useGridTableCsvFileExportAction.tsx` — Export action; add `data` (page) +
+  `scope`. scope==='all' → fetchAllRows() else `data`. Title reflects scope. Drop the standalone
+  id rename. Consumer: the wiring.
+- `frontend/.../hooks/useGridTableFiltersWiring.tsx` — add `fetchAllRows`/`exportFilename` params;
+  add `scope` state + a mode-toggle IconBarItem; build scope-aware Copy + Export; post-group =
+  `[modeToggle, copy, export, ...postActions]` WHEN fetchAllRows present, else `[copy, ...]`.
+  REMOVE `resolvedFilterOptions.saveAction` from the post-group. VERIFIED post-group memo
+  (lines 173-195) + that csvExportAction is created here (167).
+- `frontend/.../tables/GridTable.types.ts` — GridTableProps += `fetchAllRows?`, `exportFilename?`;
+  REMOVE `saveAction` from GridTableFilterOptions + InternalFilterOptions (save no longer grouped).
+- `frontend/.../tables/GridTable.tsx` — pass fetchAllRows/exportFilename to the controller.
+- `frontend/.../hooks/useGridTableController.tsx` — accept + forward fetchAllRows/exportFilename to
+  the wiring (alongside exportColumns/getTextContent at lines 216-224). VERIFIED the wiring call.
+- `frontend/.../tables/gridTableFilterEngine.ts` — REMOVE the `saveAction` mapping (added earlier).
+- `frontend/.../resource-grid/useResourceGridTable.tsx` — favToggle back into filterPreActions /
+  preActions (left); REMOVE `saveAction: favToggle`. Both `useResourceGridTableCommon` +
+  `useQueryResourceGridTable`.
+- `frontend/.../resource-grid/useQueryBackedResourceGridTable.ts` — REMOVE the export IconBarItem I
+  added in the wrapper; instead set `gridTableProps.fetchAllRows` (enabled→query.fetchAllRows;
+  local→()=>data) + `gridTableProps.exportFilename = viewId`.
+- `frontend/.../browse/hooks/useBrowseCatalog.ts` — add `fetchAllRows`: loop
+  `requestRefreshDomainState({domain:'catalog'})` over `buildBrowseCatalogPageScope` following the
+  cursor (empty token = first page; backend caps the limit so it MUST loop), accumulate
+  `applyCatalogPage` items, return `filterBrowseCatalogItems(all, clusterScopedOnly)`. VERIFIED
+  the page scope builder + cursor model (requestPage, lines 385-439) + the client filter.
+- `frontend/.../browse/components/BrowseView.tsx` — thread `fetchAllRows`/`exportFilename` onto the
+  GridTable; REMOVE `useCatalogQueryCsvAction` from postActions.
+- `frontend/.../browse/hooks/useHydratedCustomCatalogRows.ts` — extract `mergeHydratedRows`
+  (shared) + export an imperative `hydrateCustomCatalogRows(clusterId, items)` (ONE batched
+  `readHydratedCustomCatalogRows`, fallback on failure). The page hook keeps its requestKey
+  optimization; only the merge is shared. VERIFIED the hook's fetch+merge (lines 80-137).
+- `frontend/.../browse/hooks/useCatalogBackedCustomResourceRows.ts` — build a hydrating
+  `fetchAllRows`: catalog `fetchAllRows` → `hydrateCustomCatalogRows` → rows. Expose it; REMOVE
+  `useCatalogQueryCsvAction` + its return field `csvAction`.
+- `frontend/.../cluster/components/ClusterViewCustom.tsx` + `namespace/.../NsViewCustom.tsx` — pass
+  the custom `fetchAllRows` + exportFilename onto the GridTable.
+- DELETE `frontend/.../browse/hooks/useCatalogQueryCsvAction.tsx` (0 consumers) +
+  `frontend/.../browse/querySelection.ts` + its test (all 3 exports — CatalogQuerySelectionDescriptor,
+  catalogSelectionFromBrowseQuery, backendSelectionFromCatalogSelection — were CSV-path only, VERIFIED).
+- `core/data-access/readers.ts` — remove `readCatalogQueryCSVFile` + the `ExportCatalogSelectionCSVFile`
+  import (keep `saveCsvFile`/`SaveCsvFile` + the `CatalogQueryCSVExport` interface, still used by SaveCsvFile).
+- `wailsjs/.../App.js` + `App.d.ts` — drop the `ExportCatalogSelectionCSVFile` binding (keep SaveCsvFile).
+- `frontend/.../browse/components/BrowseView.test.tsx` — drop the `ExportCatalogSelectionCSVFile` mock.
+- `backend/app_object_catalog.go` — remove `ExportCatalogSelectionCSVFile` + now-dead privates
+  `catalogQueryOptionsFromSelection`, `catalogSelectionCSVFilename`, `validateCatalogQuerySelection`
+  (KEEP the `CatalogQueryCSVExport` type — SaveCsvFile returns it). Remove the
+  `validateCatalogQuerySelection` test in `app_object_catalog_test.go`.
+- DELETE `backend/objectcatalog/export.go` (`ExportQueryCSV` + `WriteQueryCSV` — only tests use them) +
+  the `TestExportQueryCSV*` tests in `backend/objectcatalog/query_test.go`. VERIFIED via grep.
+- Tests: `ClusterViewNodes.test` (favorite back in preActions; mode/copy/export present),
+  `GridTable.test` (drop the save-grouped-before-export test; add mode-toggle behavior),
+  `BrowseView.test` (catalog export path). **Keep** `backend/app_csv_export.go` (SaveCsvFile) — it
+  is the unified file-write. **Verify:** `mage qc:prerelease`.
+
 ## 2026-06-08 — FEATURE: full-query CSV export on every resource table ("Export all matching rows")
 
 Only catalog views (Browse/Custom) have an "export all" button; typed resource tables only

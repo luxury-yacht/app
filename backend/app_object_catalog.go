@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -17,7 +15,6 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -543,112 +540,6 @@ func (a *App) FindCatalogObjectByUID(clusterID, uid string) (*objectcatalog.Summ
 	}
 
 	return &match, nil
-}
-
-// ExportCatalogSelectionCSVFile exports every catalog object matching a durable
-// query selection to a user-selected file. Query-wide export stays file-backed
-// so Wails does not have to marshal an unbounded CSV string into the frontend.
-func (a *App) ExportCatalogSelectionCSVFile(selection snapshot.QuerySelectionDescriptor) (CatalogQueryCSVExport, error) {
-	var empty CatalogQueryCSVExport
-	if a == nil {
-		return empty, fmt.Errorf("app is not initialised")
-	}
-	if a.Ctx == nil {
-		return empty, fmt.Errorf("application context is not available")
-	}
-	clusterID, err := validateCatalogQuerySelection(selection)
-	if err != nil {
-		return empty, err
-	}
-	svc := a.objectCatalogServiceForCluster(clusterID)
-	if svc == nil {
-		return empty, fmt.Errorf("object catalog service unavailable for cluster %q", clusterID)
-	}
-
-	path, err := runtimeSaveFileDialog(a.Ctx, wailsruntime.SaveDialogOptions{
-		Title:           "Export catalog query CSV",
-		DefaultFilename: catalogSelectionCSVFilename(selection),
-		Filters: []wailsruntime.FileFilter{
-			{DisplayName: "CSV files (*.csv)", Pattern: "*.csv"},
-		},
-		CanCreateDirectories: true,
-	})
-	if err != nil {
-		return empty, fmt.Errorf("select catalog CSV export file: %w", err)
-	}
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return empty, fmt.Errorf("catalog CSV export canceled")
-	}
-
-	tempFile, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return empty, fmt.Errorf("create catalog CSV export: %w", err)
-	}
-	tempPath := tempFile.Name()
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = os.Remove(tempPath)
-		}
-	}()
-
-	if err := svc.WriteQueryCSV(tempFile, catalogQueryOptionsFromSelection(selection, 0, "")); err != nil {
-		_ = tempFile.Close()
-		return empty, err
-	}
-	if err := tempFile.Close(); err != nil {
-		return empty, fmt.Errorf("close catalog CSV export: %w", err)
-	}
-	info, err := os.Stat(tempPath)
-	if err != nil {
-		return empty, fmt.Errorf("stat catalog CSV export: %w", err)
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return empty, fmt.Errorf("move catalog CSV export into place: %w", err)
-	}
-	cleanup = false
-	return CatalogQueryCSVExport{Path: path, Bytes: info.Size()}, nil
-}
-
-func catalogSelectionCSVFilename(selection snapshot.QuerySelectionDescriptor) string {
-	table := strings.TrimSpace(selection.Table)
-	if table == "" {
-		table = "catalog"
-	}
-	clusterID := strings.TrimSpace(selection.ClusterID)
-	if clusterID == "" {
-		clusterID = "cluster"
-	}
-	replacer := strings.NewReplacer("/", "-", "\\", "-", ":", "-", " ", "-")
-	return filepath.Base(replacer.Replace(clusterID + "-" + table + ".csv"))
-}
-
-func validateCatalogQuerySelection(selection snapshot.QuerySelectionDescriptor) (string, error) {
-	if selection.Table != "catalog" && selection.Table != "browse" {
-		return "", fmt.Errorf("catalog query selection is unsupported for table %q", selection.Table)
-	}
-	clusterID := strings.TrimSpace(selection.ClusterID)
-	if clusterID == "" {
-		return "", fmt.Errorf("cluster ID is required")
-	}
-	if len(selection.Predicates) > 0 {
-		return "", fmt.Errorf("catalog query selection predicates are unsupported")
-	}
-	return clusterID, nil
-}
-
-func catalogQueryOptionsFromSelection(selection snapshot.QuerySelectionDescriptor, limit int, continueToken string) objectcatalog.QueryOptions {
-	return objectcatalog.QueryOptions{
-		Kinds:         selection.Kinds,
-		Namespaces:    selection.Namespaces,
-		Search:        selection.Search,
-		SortField:     selection.SortField,
-		SortDirection: selection.SortDirection,
-		CustomOnly:    selection.CustomOnly,
-		Limit:         limit,
-		Continue:      continueToken,
-	}
 }
 
 const catalogCustomHydrationConcurrency = 16

@@ -3,7 +3,6 @@ package backend
 import (
 	"context"
 	"errors"
-	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -249,101 +247,6 @@ func TestFindCatalogObjectByUIDUsesCatalogIdentity(t *testing.T) {
 	require.Nil(t, noMatch)
 }
 
-func TestExportCatalogSelectionCSVFileUsesDurableQuerySelection(t *testing.T) {
-	app := NewApp()
-	app.Ctx = context.Background()
-	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
-	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
-		"example.com/v1, Resource=widgets/apps/alpha": {
-			ClusterID: "cluster-b",
-			Kind:      "Widget",
-			Group:     "example.com",
-			Version:   "v1",
-			Resource:  "widgets",
-			Namespace: "apps",
-			Name:      "alpha",
-			UID:       "alpha-uid",
-			Scope:     objectcatalog.ScopeNamespace,
-		},
-		"v1, Resource=pods/apps/alpha-pod": {
-			ClusterID: "cluster-b",
-			Kind:      "Pod",
-			Group:     "",
-			Version:   "v1",
-			Resource:  "pods",
-			Namespace: "apps",
-			Name:      "alpha-pod",
-			UID:       "pod-uid",
-			Scope:     objectcatalog.ScopeNamespace,
-		},
-	})
-	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
-	exportPath := t.TempDir() + "/catalog.csv"
-	origSaveFileDialog := runtimeSaveFileDialog
-	runtimeSaveFileDialog = func(context.Context, wailsruntime.SaveDialogOptions) (string, error) {
-		return exportPath, nil
-	}
-	t.Cleanup(func() {
-		runtimeSaveFileDialog = origSaveFileDialog
-	})
-
-	export, err := app.ExportCatalogSelectionCSVFile(snapshot.QuerySelectionDescriptor{
-		ClusterID:  "cluster-b",
-		Table:      "browse",
-		Namespaces: []string{"apps"},
-		CustomOnly: true,
-		SortField:  "name",
-	})
-	require.NoError(t, err)
-	require.Equal(t, exportPath, export.Path)
-
-	csvBytes, err := os.ReadFile(export.Path)
-	require.NoError(t, err)
-	require.Equal(t, int64(len(csvBytes)), export.Bytes)
-	require.Equal(
-		t,
-		"clusterId,kind,namespace,name,group,version,resource,uid\n"+
-			"cluster-b,Widget,apps,alpha,example.com,v1,widgets,alpha-uid\n",
-		string(csvBytes),
-	)
-}
-
-type invalidCursorCatalogQueryStore struct{}
-
-func (invalidCursorCatalogQueryStore) QueryCatalog(objectcatalog.QueryOptions) (objectcatalog.QueryResult, bool) {
-	return objectcatalog.QueryResult{CursorInvalid: true}, true
-}
-
-func TestExportCatalogSelectionCSVFileDoesNotDeleteExistingFileOnFailure(t *testing.T) {
-	app := NewApp()
-	app.Ctx = context.Background()
-	svc := objectcatalog.NewService(
-		objectcatalog.Dependencies{},
-		&objectcatalog.Options{QueryStore: invalidCursorCatalogQueryStore{}},
-	)
-	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
-
-	exportPath := t.TempDir() + "/catalog.csv"
-	require.NoError(t, os.WriteFile(exportPath, []byte("original file"), 0o600))
-	origSaveFileDialog := runtimeSaveFileDialog
-	runtimeSaveFileDialog = func(context.Context, wailsruntime.SaveDialogOptions) (string, error) {
-		return exportPath, nil
-	}
-	t.Cleanup(func() {
-		runtimeSaveFileDialog = origSaveFileDialog
-	})
-
-	_, err := app.ExportCatalogSelectionCSVFile(snapshot.QuerySelectionDescriptor{
-		ClusterID: "cluster-b",
-		Table:     "browse",
-	})
-
-	require.ErrorContains(t, err, "catalog query cursor became invalid during export")
-	savedBytes, readErr := os.ReadFile(exportPath)
-	require.NoError(t, readErr)
-	require.Equal(t, "original file", string(savedBytes))
-}
-
 func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
 	clusterID := "cluster-b"
 	gvrObject := &unstructured.Unstructured{
@@ -480,19 +383,6 @@ func TestHydrateCatalogCustomRowsKeepsPageOnRowFailure(t *testing.T) {
 	require.Equal(t, "warning", byName["beta"].StatusState)
 	require.Equal(t, "warning", byName["beta"].StatusPresentation)
 	require.Equal(t, "widgets.example.com", byName["beta"].CRDName)
-}
-
-func TestValidateCatalogQuerySelectionRejectsUnsupportedPredicates(t *testing.T) {
-	_, err := validateCatalogQuerySelection(snapshot.QuerySelectionDescriptor{
-		ClusterID: "cluster-b",
-		Table:     "browse",
-		Predicates: []snapshot.ResourceQueryPredicate{
-			{Field: "health", Op: "eq", Value: "unhealthy"},
-		},
-	})
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "predicates are unsupported")
 }
 
 func TestWaitForFactorySyncHandlesNilFactory(t *testing.T) {

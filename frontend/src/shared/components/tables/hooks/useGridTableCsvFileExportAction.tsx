@@ -18,8 +18,12 @@ import { buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
 const FEEDBACK_RESET_MS = 750;
 
 interface UseGridTableCsvFileExportActionOptions<T> {
-  /** Fetch every matching row (all pages), not just the visible page. */
+  /** Visible page rows; exported when scope is 'page'. */
+  data: T[];
+  /** Fetch every matching row (all pages); exported when scope is 'all'. */
   fetchAllRows: () => Promise<T[]>;
+  /** 'page' exports the visible page; 'all' exports every matching row. */
+  scope?: 'page' | 'all';
   columns?: GridColumnDefinition<T>[];
   getTextContent?: (node: ReactNode) => string;
   /** Default file name offered in the save dialog. */
@@ -29,7 +33,9 @@ interface UseGridTableCsvFileExportActionOptions<T> {
 }
 
 export function useGridTableCsvFileExportAction<T>({
+  data,
   fetchAllRows,
+  scope = 'page',
   columns,
   getTextContent,
   defaultFilename,
@@ -62,20 +68,24 @@ export function useGridTableCsvFileExportAction<T>({
     }
     setExporting(true);
     try {
-      const rows = await fetchAllRows();
+      // 'all' scope pulls every matching row; 'page' exports the rows already on screen.
+      const rows = scope === 'all' ? await fetchAllRows() : data;
       const csv = buildGridTableCsv(rows, columns, getTextContent);
       const result = await saveCsvFile(defaultFilename, csv);
       setFeedback(result?.path ? 'success' : 'error');
     } catch (error) {
       // The backend rejects on a canceled save dialog too; surface a brief error
       // rather than crashing.
-      console.error('Failed to export all matching rows as CSV', error);
+      console.error('Failed to export rows as CSV', error);
       setFeedback('error');
     } finally {
       setExporting(false);
       scheduleReset();
     }
-  }, [columns, defaultFilename, fetchAllRows, getTextContent, scheduleReset]);
+  }, [columns, data, defaultFilename, fetchAllRows, getTextContent, scope, scheduleReset]);
+
+  const title =
+    scope === 'all' ? 'Export all matching rows to file' : 'Export current page to file';
 
   return useMemo<IconBarItem>(
     () => ({
@@ -85,11 +95,11 @@ export function useGridTableCsvFileExportAction<T>({
       onClick: () => {
         void handleExport();
       },
-      title: 'Export all matching rows as CSV',
-      ariaLabel: 'Export all matching rows as CSV',
+      title,
+      ariaLabel: title,
       disabled: disabled || exporting || !columns?.length,
       feedback,
     }),
-    [columns?.length, disabled, exporting, feedback, handleExport]
+    [columns?.length, disabled, exporting, feedback, handleExport, title]
   );
 }

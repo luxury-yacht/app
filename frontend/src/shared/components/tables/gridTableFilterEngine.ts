@@ -52,7 +52,6 @@ export function buildGridTableFilterOptions<T>({
     namespaceDropdownBulkActions: options?.namespaceDropdownBulkActions ?? false,
     preActions: options?.preActions,
     postActions: options?.postActions,
-    saveAction: options?.saveAction,
     customActions: options?.customActions,
     totalIsExact: options?.totalIsExact ?? true,
     partialDataLabel: options?.partialDataLabel,

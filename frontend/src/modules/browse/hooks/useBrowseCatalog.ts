@@ -91,6 +91,8 @@ export interface UseBrowseCatalogOptions {
 export interface UseBrowseCatalogResult {
   /** The filtered and deduplicated catalog items */
   items: CatalogItem[];
+  /** Fetch EVERY matching catalog item (all pages) for the current query — used by export. */
+  fetchAllRows: () => Promise<CatalogItem[]>;
   /** Whether the catalog is currently loading */
   loading: boolean;
   /** Whether the catalog has loaded at least once */
@@ -540,8 +542,60 @@ export function useBrowseCatalog({
     isManualRefreshActive,
   });
 
+  const fetchAllRows = useCallback(async (): Promise<CatalogItem[]> => {
+    if (!enabled || !clusterId) {
+      return [];
+    }
+    // Request the backend's max page size; it caps the value anyway, so a single request
+    // can't return everything and we follow the cursor below.
+    const exportPageLimit = 1000;
+    const collected: CatalogItem[] = [];
+    let cursor = '';
+    // Page through the full result set following the backend cursor. Each page is a clean
+    // one-off catalog query for the current filters/sort; the guard bounds a stuck cursor.
+    for (let page = 0; page < 100000; page += 1) {
+      const scope = buildBrowseCatalogPageScope(
+        plan,
+        {
+          clusterId,
+          filters: queryFilters,
+          sort,
+          pageLimit: exportPageLimit,
+          pinnedNamespaces,
+          customOnly,
+        },
+        cursor
+      );
+      const result = await requestRefreshDomainState({ domain: 'catalog', scope, reason: 'user' });
+      if (result.status !== 'executed') {
+        break;
+      }
+      const payload = result.data?.data as CatalogSnapshotPayload | null;
+      if (!payload) {
+        break;
+      }
+      const applied = applyCatalogPage(emptyBrowseCatalogCollection(), payload);
+      collected.push(...applied.items);
+      if (!applied.continueToken) {
+        break;
+      }
+      cursor = applied.continueToken;
+    }
+    return filterBrowseCatalogItems(collected, clusterScopedOnly);
+  }, [
+    clusterId,
+    clusterScopedOnly,
+    customOnly,
+    enabled,
+    pinnedNamespaces,
+    plan,
+    queryFilters,
+    sort,
+  ]);
+
   return {
     items: stableFilteredItems,
+    fetchAllRows,
     loading: passiveLoadingState.loading,
     hasLoadedOnce,
     continueToken,

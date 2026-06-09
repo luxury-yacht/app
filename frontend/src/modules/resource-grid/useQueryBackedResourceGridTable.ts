@@ -3,18 +3,13 @@ import type { RefreshDomain } from '@/core/refresh/types';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
-import type {
-  GridColumnDefinition,
-  GridTableFilterOptions,
-} from '@shared/components/tables/GridTable';
+import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
 import type { SortConfig } from '@/hooks/useTableSort';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import type { UseGridTablePersistenceResult } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useClusterResourceGridTable, useNamespaceResourceGridTable } from './useResourceGridTable';
-import { useGridTableCsvFileExportAction } from '@shared/components/tables/hooks/useGridTableCsvFileExportAction';
-import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import type {
   ClusterResourceGridTableParams,
   NamespaceResourceGridTableParams,
@@ -322,7 +317,6 @@ function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
   viewId,
   cacheKey,
   table,
-  columns,
   query,
   persistence,
   data,
@@ -337,7 +331,6 @@ function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
   viewId: string;
   cacheKey: string;
   table: ResourceGridTableResult<TRow>;
-  columns: GridColumnDefinition<TRow>[];
   query: UseTypedResourceQueryResult<TRow>;
   persistence: UseGridTablePersistenceResult;
   data: TRow[];
@@ -348,20 +341,13 @@ function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
   localTableMode: Extract<ResourceGridTableMode, 'Local Complete' | 'Local Partial'>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
 }): QueryBackedNamespaceGridResult<TRow> {
-  // Export-all: pull every matching row (query → all pages; local → the loaded rows),
-  // build the CSV from the displayed columns, and save to a file. Wired here so every
-  // query-backed and local resource table offers the same Export button.
-  const exportAllRows = useCallback(
+  // Full-result fetcher for the Copy/Export "all matching rows" scope: query → all pages;
+  // local → the loaded rows. Threaded onto gridTableProps so the GridTable filter bar wires
+  // the scope toggle + Copy + Export cluster itself (no per-view export action here).
+  const fetchAllRows = useCallback(
     (): Promise<TRow[]> => (enabled ? query.fetchAllRows() : Promise.resolve(data)),
     [data, enabled, query]
   );
-  const exportAction = useGridTableCsvFileExportAction<TRow>({
-    fetchAllRows: exportAllRows,
-    columns,
-    getTextContent,
-    defaultFilename: viewId,
-    disabled: (enabled ? query.totalCount : data.length) === 0,
-  });
 
   const gridTableProps = useMemo(() => {
     const base = !enabled
@@ -389,20 +375,8 @@ function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
             },
           })
         );
-    if (!base.filters) {
-      return base;
-    }
-    return {
-      ...base,
-      filters: {
-        ...base.filters,
-        options: {
-          ...base.filters.options,
-          postActions: [...(base.filters.options?.postActions ?? []), exportAction],
-        },
-      },
-    };
-  }, [data.length, enabled, exportAction, persistence, query, table.gridTableProps, viewId]);
+    return { ...base, fetchAllRows, exportFilename: viewId };
+  }, [data.length, enabled, fetchAllRows, persistence, query, table.gridTableProps, viewId]);
 
   return {
     ...table,
@@ -539,7 +513,6 @@ export function useQueryBackedNamespaceResourceGridTable<
     viewId: tableParams.viewId,
     cacheKey: `${tableParams.viewId}|${liveScope}`,
     table,
-    columns: tableParams.columns,
     query: lifecycle.query,
     persistence,
     data: lifecycle.data,
@@ -645,7 +618,6 @@ export function useQueryBackedClusterResourceGridTable<
     viewId: tableParams.viewId,
     cacheKey: `${tableParams.viewId}|${liveScope}`,
     table,
-    columns: tableParams.columns,
     query: lifecycle.query,
     persistence,
     data: lifecycle.data,

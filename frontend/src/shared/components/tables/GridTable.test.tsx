@@ -91,6 +91,8 @@ const defaultColumns: GridColumnDefinition<SimpleRow>[] = [
 type RenderOptions = Partial<{
   data: SimpleRow[];
   columns: GridColumnDefinition<SimpleRow>[];
+  fetchAllRows: () => Promise<SimpleRow[]>;
+  exportFilename: string;
   virtualization: {
     enabled?: boolean;
     threshold?: number;
@@ -256,22 +258,17 @@ describe('GridTable virtualization', () => {
     expect(resultCount?.textContent).toBe('8 on this page of 20 items');
   });
 
-  it('renders the save action grouped immediately before the CSV export', () => {
+  const SCOPE_TOGGLE_LABEL =
+    'Toggle copy and export scope between current page and all matching rows';
+
+  it('renders the scope toggle · Copy · Export cluster when fetchAllRows is provided', () => {
     const { container, cleanup } = renderGridTable({
       data: createRows(3),
       virtualization: { enabled: false },
+      fetchAllRows: () => Promise.resolve(createRows(9)),
+      exportFilename: 'rows',
       filters: {
         enabled: true,
-        options: {
-          saveAction: {
-            type: 'action',
-            id: 'test-save',
-            icon: <span />,
-            onClick: () => {},
-            title: 'Save view',
-            ariaLabel: 'Save view',
-          },
-        },
         accessors: {
           getKind: (row) => row.label,
           getNamespace: () => '',
@@ -281,14 +278,53 @@ describe('GridTable virtualization', () => {
     });
     cleanupRoot = cleanup;
 
-    const save = container.querySelector('[aria-label="Save view"]');
-    const exportBtn = container.querySelector('[aria-label="Copy visible rows as CSV"]');
-    expect(save).toBeTruthy();
+    const scopeToggle = container.querySelector(`[aria-label="${SCOPE_TOGGLE_LABEL}"]`);
+    const copy = container.querySelector('[aria-label="Copy current page to clipboard"]');
+    const exportBtn = container.querySelector('[aria-label="Export current page to file"]');
+    expect(scopeToggle).toBeTruthy();
+    expect(copy).toBeTruthy();
     expect(exportBtn).toBeTruthy();
-    // Save sits immediately before export in the post-action group.
+    // Order: scope toggle · Copy · Export.
     expect(
-      Boolean(save!.compareDocumentPosition(exportBtn!) & Node.DOCUMENT_POSITION_FOLLOWING)
+      Boolean(scopeToggle!.compareDocumentPosition(copy!) & Node.DOCUMENT_POSITION_FOLLOWING)
     ).toBe(true);
+    expect(
+      Boolean(copy!.compareDocumentPosition(exportBtn!) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ).toBe(true);
+
+    cleanup();
+  });
+
+  it('the scope toggle switches Copy/Export between current page and all matching rows', () => {
+    const { container, cleanup } = renderGridTable({
+      data: createRows(3),
+      virtualization: { enabled: false },
+      fetchAllRows: () => Promise.resolve(createRows(9)),
+      filters: {
+        enabled: true,
+        accessors: {
+          getKind: (row) => row.label,
+          getNamespace: () => '',
+          getSearchText: (row) => [row.label],
+        },
+      },
+    });
+    cleanupRoot = cleanup;
+
+    // Default scope is the current page.
+    expect(container.querySelector('[aria-label="Copy current page to clipboard"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Export current page to file"]')).toBeTruthy();
+
+    const toggle = container.querySelector(`[aria-label="${SCOPE_TOGGLE_LABEL}"]`) as HTMLElement;
+    act(() => {
+      toggle.click();
+    });
+
+    // After toggling, both act on all matching rows.
+    expect(
+      container.querySelector('[aria-label="Copy all matching rows to clipboard"]')
+    ).toBeTruthy();
+    expect(container.querySelector('[aria-label="Export all matching rows to file"]')).toBeTruthy();
 
     cleanup();
   });
@@ -1229,6 +1265,8 @@ function renderGridTable(options: RenderOptions = {}) {
     hideHeader: options.hideHeader ?? false,
     onRowClick: options.onRowClick,
     onSort: options.onSortOverride ?? options.onSort,
+    fetchAllRows: options.fetchAllRows,
+    exportFilename: options.exportFilename,
     filters: options.filters,
     enableContextMenu: options.enableContextMenu ?? false,
     enableColumnVisibilityMenu: options.enableColumnVisibilityMenu ?? false,

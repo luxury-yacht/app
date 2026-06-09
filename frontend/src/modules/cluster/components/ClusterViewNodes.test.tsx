@@ -291,22 +291,20 @@ describe('ClusterViewNodes', () => {
     expect(preActions.some((item: { id?: string }) => item?.id === 'include-metadata')).toBe(true);
   });
 
-  it('exposes the favorite as the grouped save action, not a filter pre-action', async () => {
+  it('places the favorite with the filter pre-actions (left), not the export cluster', async () => {
     await renderNodes([baseNode]);
 
     const options = gridTablePropsRef.current?.filters?.options;
-    expect(options?.saveAction?.id).toBe('favorite');
     const preActions = options?.preActions ?? [];
-    expect(preActions.some((item: { id?: string }) => item?.id === 'favorite')).toBe(false);
+    expect(preActions.some((item: { id?: string }) => item?.id === 'favorite')).toBe(true);
+    const postActions = options?.postActions ?? [];
+    expect(postActions.some((item: { id?: string }) => item?.id === 'favorite')).toBe(false);
   });
 
-  it('wires the Export-all action into the view-actions group', async () => {
+  it('threads fetchAllRows so the table can offer the all-matching-rows scope', async () => {
     await renderNodes([baseNode]);
 
-    const postActions = gridTablePropsRef.current?.filters?.options?.postActions ?? [];
-    expect(postActions.some((item: { id?: string }) => item?.id === 'export-gridtable-csv')).toBe(
-      true
-    );
+    expect(typeof gridTablePropsRef.current?.fetchAllRows).toBe('function');
   });
 
   it('keeps initial empty query-backed nodes behind the loading boundary', async () => {

@@ -47,6 +47,65 @@ const catalogItemToHydrationQueryRow = (item: CatalogItem): HydrationQueryRow =>
   uid: item.uid,
 });
 
+// Merge backend-hydrated rows onto the fallback rows by identity, preserving the adapter's
+// group/version/resource fields. Shared by the page hook and the imperative export path.
+const mergeHydratedRows = (
+  fallbackRows: CatalogBackedCustomResourceRow[],
+  hydratedRaw: readonly unknown[] | null | undefined
+): CatalogBackedCustomResourceRow[] => {
+  const hydratedByKey = new Map<string, CatalogBackedCustomResourceRow>();
+  for (const rawRow of hydratedRaw ?? []) {
+    const hydrated = normalizeHydratedCustomRow(rawRow);
+    hydratedByKey.set(customRowKey(hydrated), hydrated);
+  }
+  return fallbackRows.map((row) => {
+    const hydrated = hydratedByKey.get(customRowKey(row));
+    return {
+      ...row,
+      ...(hydrated ?? {}),
+      group: row.group,
+      version: row.version,
+      resource: row.resource,
+      apiGroup: row.group,
+      apiVersion: row.version,
+      age: hydrated?.age || row.age,
+      ageTimestamp: hydrated?.ageTimestamp ?? row.ageTimestamp,
+    };
+  });
+};
+
+// Imperatively hydrate catalog items into custom-resource rows via ONE batched backend read,
+// falling back to the un-hydrated rows on any failure. Used by the export "all matching rows"
+// path, which can't go through the page hook.
+export async function hydrateCustomCatalogRows(
+  clusterId: string | null | undefined,
+  catalogItems: CatalogItem[]
+): Promise<CatalogBackedCustomResourceRow[]> {
+  const fallbackRows = catalogItems.map(catalogItemToFallbackCustomRow);
+  const resolvedClusterId = clusterId?.trim();
+  if (!resolvedClusterId || catalogItems.length === 0) {
+    return fallbackRows;
+  }
+  const requestRows = catalogItems.map(catalogItemToHydrationQueryRow);
+  try {
+    const result = await requestData({
+      resource: 'custom-catalog-hydration',
+      adapter: 'rpc-read',
+      reason: 'user',
+      label: 'Custom catalog export hydration',
+      scope: `${resolvedClusterId}|export-rows=${requestRows.length}`,
+      read: () => readHydratedCustomCatalogRows(resolvedClusterId, requestRows),
+    });
+    if (result.status !== 'executed') {
+      return fallbackRows;
+    }
+    return mergeHydratedRows(fallbackRows, result.data);
+  } catch (error) {
+    console.error('Failed to hydrate custom catalog export rows', error);
+    return fallbackRows;
+  }
+}
+
 export function useHydratedCustomCatalogRows(
   clusterId: string | null | undefined,
   catalogItems: CatalogItem[]
@@ -101,28 +160,7 @@ export function useHydratedCustomCatalogRows(
           setRows(fallbackRows);
           return;
         }
-        const hydratedRows = result.data;
-        const hydratedByKey = new Map<string, CatalogBackedCustomResourceRow>();
-        for (const rawRow of hydratedRows ?? []) {
-          const hydrated = normalizeHydratedCustomRow(rawRow);
-          hydratedByKey.set(customRowKey(hydrated), hydrated);
-        }
-        setRows(
-          fallbackRows.map((row) => {
-            const hydrated = hydratedByKey.get(customRowKey(row));
-            return {
-              ...row,
-              ...(hydrated ?? {}),
-              group: row.group,
-              version: row.version,
-              resource: row.resource,
-              apiGroup: row.group,
-              apiVersion: row.version,
-              age: hydrated?.age || row.age,
-              ageTimestamp: hydrated?.ageTimestamp ?? row.ageTimestamp,
-            };
-          })
-        );
+        setRows(mergeHydratedRows(fallbackRows, result.data));
       })
       .catch((error) => {
         console.error('Failed to hydrate custom catalog rows', error);
