@@ -196,7 +196,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       favModal,
       source,
     } = useQueryBackedNamespaceResourceGridTable<NamespaceWorkloadSnapshotPayload, WorkloadData>({
-      enabled: isAllNamespaces,
+      enabled: true,
       queryTableMode: 'Query Backed Dynamic',
       clusterId: selectedClusterId,
       domain: 'namespace-workloads',

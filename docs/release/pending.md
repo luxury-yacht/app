@@ -10,6 +10,11 @@
 
 ### Changed
 
+- Single-namespace resource views (Pods, Workloads, Config, Network, RBAC, Storage, Events,
+  Autoscaling, Quotas, Helm) now paginate and load server-side, just like the all-namespaces,
+  cluster, and Browse/Custom views — previously they loaded a whole namespace at once with no
+  pagination controls. Pagination is now consistent across every resource view, and large
+  single namespaces no longer load everything in one shot.
 - A table's filter bar now shows its result count (and the accompanying tooltip)
   only while a filter is active — it reports how many rows match your filter. Total
   and page counts continue to live in the pagination footer, so the filter bar no

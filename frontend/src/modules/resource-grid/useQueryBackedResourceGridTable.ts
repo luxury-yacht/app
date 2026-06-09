@@ -36,6 +36,12 @@ import type { QueryBackedTableState } from './queryBackedTableState';
 
 const DEFAULT_TYPED_QUERY_PAGE_LIMIT: TypedQueryPageLimit = 50;
 
+// The namespace prop is the raw name for a single namespace but the `namespace:all` sentinel for
+// all-namespaces; the backend scope key is always `namespace:<value>` (see pods.go collectPods,
+// which splits the scope on ':' and rejects a bare name). Normalize before building any scope.
+const namespaceScopeKey = (namespace: string): string =>
+  namespace.startsWith('namespace:') ? namespace : `namespace:${namespace}`;
+
 const typedQueryPageLimitOrDefault = (value: number | null | undefined): TypedQueryPageLimit =>
   TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)
     ? (value as TypedQueryPageLimit)
@@ -474,7 +480,8 @@ export function useQueryBackedNamespaceResourceGridTable<
     pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
   });
   const liveScope = useMemo(
-    () => (clusterId ? buildClusterScope(clusterId, baseScope ?? namespace) : ''),
+    () =>
+      clusterId ? buildClusterScope(clusterId, baseScope ?? namespaceScopeKey(namespace)) : '',
     [baseScope, clusterId, namespace]
   );
   const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
@@ -482,7 +489,11 @@ export function useQueryBackedNamespaceResourceGridTable<
     clusterId,
     domain,
     label,
-    baseScope,
+    // Scope the typed query to the selected namespace (single-namespace = paginated query, not a
+    // local-complete fallback), reusing the exact base the live subscription above already uses.
+    // namespaceScopeKey normalizes the raw namespace name to the backend scope key
+    // `namespace:<name>`; all-namespaces stays `namespace:all` (cluster-wide), unchanged.
+    baseScope: baseScope ?? namespaceScopeKey(namespace),
     queryTableMode,
     localTableMode,
     localData,

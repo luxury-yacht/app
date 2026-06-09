@@ -258,7 +258,7 @@ describe('NsViewWorkloads', () => {
     expect(props.columnWidths).toBe(null);
   });
 
-  it('uses local provider rows for a single namespace without issuing a typed query', async () => {
+  it('issues a namespace-scoped typed query for a single namespace and renders the query rows', async () => {
     const workload = {
       kind: 'Deployment',
       name: 'api',
@@ -270,6 +270,24 @@ describe('NsViewWorkloads', () => {
       clusterId: 'alpha:ctx',
       clusterName: 'alpha',
     };
+
+    // Single-namespace workload tables are query-backed now (not local-complete): the table
+    // renders the typed query rows scoped to the namespace, not the local `data` prop. Feed the
+    // query the same rows so the table shows them.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [workload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
 
     await act(async () => {
       root.render(
@@ -286,7 +304,12 @@ describe('NsViewWorkloads', () => {
     });
 
     expect(gridTablePropsRef.current?.data).toEqual([workload]);
-    expect(requestRefreshDomainStateMock).not.toHaveBeenCalled();
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: 'namespace-workloads',
+        scope: 'path:context|namespace:team-a?limit=50&sort=name&sortDirection=asc',
+      })
+    );
   });
 
   it('uses the typed query result for all-namespaces workloads on first render', async () => {
@@ -586,6 +609,22 @@ describe('NsViewWorkloads', () => {
       clusterName: 'alpha',
     };
 
+    // Query-backed single-namespace table: feed the typed query the row so it renders in the table.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [workload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
     await act(async () => {
       root.render(
         <NsViewWorkloads
@@ -596,6 +635,7 @@ describe('NsViewWorkloads', () => {
           metrics={null}
         />
       );
+      await Promise.resolve();
       await Promise.resolve();
     });
 
@@ -633,6 +673,22 @@ describe('NsViewWorkloads', () => {
       clusterName: 'test',
     };
 
+    // Query-backed single-namespace table: feed the typed query the row so it renders in the table.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [workload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['default'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
     await act(async () => {
       root.render(
         <NsViewWorkloads
@@ -643,6 +699,7 @@ describe('NsViewWorkloads', () => {
           metrics={null}
         />
       );
+      await Promise.resolve();
       await Promise.resolve();
     });
 

@@ -159,7 +159,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       NamespaceConfigSnapshotPayload,
       ConfigData
     >({
-      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-config',

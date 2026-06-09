@@ -239,7 +239,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       NamespaceStorageSnapshotPayload,
       StorageData
     >({
-      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-storage',

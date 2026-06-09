@@ -198,7 +198,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       NamespaceNetworkSnapshotPayload,
       NetworkData
     >({
-      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-network',

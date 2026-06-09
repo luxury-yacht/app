@@ -209,7 +209,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       NamespaceRBACSnapshotPayload,
       RBACData
     >({
-      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-rbac',

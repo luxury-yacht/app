@@ -204,7 +204,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       NamespaceQuotasSnapshotPayload,
       QuotaData
     >({
-      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-quotas',

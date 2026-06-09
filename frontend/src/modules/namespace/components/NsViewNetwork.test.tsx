@@ -32,6 +32,7 @@ const {
   runObjectActionMock,
   permissionState,
   errorHandlerMock,
+  requestRefreshDomainStateMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   confirmationPropsRef: { current: null as any },
@@ -39,6 +40,7 @@ const {
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   permissionState: new Map<string, { allowed: boolean; pending: boolean }>(),
   errorHandlerMock: { handle: vi.fn() },
+  requestRefreshDomainStateMock: vi.fn(),
 }));
 
 const renderOutputToText = (output: any): string => {
@@ -131,6 +133,50 @@ vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => false,
 }));
 
+// Single-namespace network tables are query-backed now, so the table renders the typed query rows.
+// Mock the typed-query data path (and its readiness gates) so the query can settle in tests.
+vi.mock('@/core/data-access', () => ({
+  requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...args),
+  useScopedRefreshDomainLifecycle: vi.fn(),
+}));
+
+vi.mock('@/core/refresh', () => ({
+  useRefreshScopedDomain: () => ({
+    status: 'ready',
+    data: { rows: [] },
+    stats: null,
+    version: 1,
+    checksum: '',
+    lastUpdated: 1,
+    droppedAutoRefreshes: 0,
+  }),
+  refreshManager: { triggerManualRefresh: vi.fn() },
+}));
+
+vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
+  useGridTablePersistence: () => ({
+    storageKey: 'gridtable:v1:cluster-a:namespace-network',
+    sortConfig: { key: 'name', direction: 'asc' },
+    setSortConfig: vi.fn(),
+    columnWidths: null,
+    setColumnWidths: vi.fn(),
+    columnVisibility: null,
+    setColumnVisibility: vi.fn(),
+    filters: {
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    },
+    setFilters: vi.fn(),
+    pageSize: null,
+    setPageSize: vi.fn(),
+    resetState: vi.fn(),
+    hydrated: true,
+  }),
+}));
+
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   default: ({ children }: any) => children,
 }));
@@ -194,6 +240,21 @@ describe('NsViewNetwork', () => {
     runObjectActionMock.mockResolvedValue(undefined);
     permissionState.clear();
     errorHandlerMock.handle.mockClear();
+    requestRefreshDomainStateMock.mockReset();
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [],
+          total: 0,
+          totalIsExact: true,
+          namespaces: ['team-a', 'team-b'],
+          kinds: ['Ingress'],
+          facetsExact: true,
+        },
+      },
+    });
   });
 
   afterEach(() => {
@@ -240,9 +301,28 @@ describe('NsViewNetwork', () => {
   it('opens object panel through context menu', async () => {
     permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
     const entry = baseNetwork();
+    // Query-backed single-namespace table: feed the typed query the row so it renders in the table.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [entry],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Ingress'],
+          facetsExact: true,
+        },
+      },
+    });
     const props = await renderNetworkView([entry]);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
-    expect(props.data).toHaveLength(1);
+    expect(gridTablePropsRef.current.data).toHaveLength(1);
     const menu = props.getCustomContextMenuItems(entry, 'name');
     const openItem = menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();

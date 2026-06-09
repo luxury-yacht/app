@@ -281,7 +281,7 @@ vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
 }));
 
-import NsViewPods from '@modules/namespace/components/NsViewPods';
+import NsViewPods, { matchesPodsFilter } from '@modules/namespace/components/NsViewPods';
 
 const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry => ({
   name: 'pod-default',
@@ -366,7 +366,10 @@ describe('NsViewPods', () => {
     window.sessionStorage.clear();
   });
 
-  const renderPods = async (props: Partial<React.ComponentProps<typeof NsViewPods>> = {}) => {
+  const renderPods = async (
+    props: Partial<React.ComponentProps<typeof NsViewPods>> = {},
+    { skipDefaultQueryMock = false }: { skipDefaultQueryMock?: boolean } = {}
+  ) => {
     // Include cluster metadata so GridTable key extraction stays cluster-scoped.
     const defaultPods: PodSnapshotEntry[] = [
       createPod({
@@ -396,13 +399,45 @@ describe('NsViewPods', () => {
       failureCount: 0,
     };
 
+    // Single-namespace pod tables are query-backed now (not local-complete), so the table renders
+    // the typed query rows. Feed the query whatever rows the test supplies as `data` so existing
+    // single-namespace assertions still see their pods. All-namespaces tests set their own mock.
+    const effectiveNamespace = (props.namespace as string | undefined) ?? 'team-a';
+    const effectiveData = (props.data as PodSnapshotEntry[] | undefined) ?? defaultPods;
+    if (effectiveNamespace !== ALL_NAMESPACES_SCOPE && !skipDefaultQueryMock) {
+      requestRefreshDomainStateMock.mockImplementation((args: { scope?: string }) => {
+        // Mirror the backend: apply the health predicate carried in the query scope, so the
+        // unhealthy/restarts/not-ready toggle (a server-side predicate now) yields filtered rows.
+        const healthMatch = /predicate\.health=([^&]+)/.exec(args?.scope ?? '');
+        const rows = healthMatch
+          ? effectiveData.filter((pod) =>
+              matchesPodsFilter(healthMatch[1] as Parameters<typeof matchesPodsFilter>[0], pod)
+            )
+          : effectiveData;
+        return Promise.resolve({
+          status: 'executed',
+          data: {
+            status: 'ready',
+            data: {
+              rows,
+              total: rows.length,
+              totalIsExact: true,
+              namespaces: [effectiveNamespace],
+              kinds: ['Pod'],
+              facetsExact: true,
+            },
+          },
+        });
+      });
+    }
+
     await act(async () => {
       root.render(
         <NsViewPods namespace="team-a" data={defaultPods} metrics={metrics} {...props} />
       );
       await Promise.resolve();
     });
-    return defaultPods;
+    return effectiveData;
   };
 
   const openDeleteConfirmation = () => {
@@ -425,7 +460,8 @@ describe('NsViewPods', () => {
     expect(gridProps.columns.map((col: any) => col.key)).toEqual(
       expect.arrayContaining(['name', 'status', 'cpu', 'memory'])
     );
-    expect(requestRefreshDomainStateMock).not.toHaveBeenCalled();
+    // Single-namespace pod tables are query-backed now, so they issue a typed query.
+    expect(requestRefreshDomainStateMock).toHaveBeenCalled();
   });
 
   it('uses the typed query result for all-namespaces pods on first render', async () => {
@@ -538,19 +574,31 @@ describe('NsViewPods', () => {
   });
 
   it('renders namespace error and metrics banners when provided', async () => {
-    await renderPods({
-      error: 'pods unavailable',
-      metrics: {
-        stale: true,
-        lastError: '',
-        collectedAt: 1700000000,
-        successCount: 0,
-        failureCount: 1,
+    // Query-backed: the table error banner reflects the typed query's error, not a local prop.
+    // A null query payload surfaces as "<label> returned no data".
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: null },
+    });
+    await renderPods(
+      {
+        metrics: {
+          stale: true,
+          lastError: '',
+          collectedAt: 1700000000,
+          successCount: 0,
+          failureCount: 1,
+        },
       },
+      { skipDefaultQueryMock: true }
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(container.querySelector('.namespace-error-message')?.textContent).toContain(
-      'pods unavailable'
+      'returned no data'
     );
     expect(container.querySelector('.metrics-warning-banner')?.textContent).toContain(
       'Awaiting metrics data...'
@@ -611,12 +659,11 @@ describe('NsViewPods', () => {
     expect(gridTablePropsRef.current.columnWidths).toEqual(nextWidths);
   });
 
-  it('shows loading overlay when updating existing rows', async () => {
-    await renderPods({ loading: true });
-    expect(gridTablePropsRef.current.loadingOverlay).toMatchObject({
-      show: true,
-      message: 'Updating pods…',
-    });
+  it('wires the "updating pods" loading message for the query-backed table', async () => {
+    // The view owns the updating message; whether the overlay is shown (re-fetch in flight over
+    // existing rows) is the controller's behavior, covered by ResourceInventoryTable's own tests.
+    await renderPods();
+    expect(gridTablePropsRef.current.loadingOverlay?.message).toBe('Updating pods…');
   });
 
   it('omits delete context action when permission data is unavailable', async () => {
@@ -819,9 +866,12 @@ describe('NsViewPods', () => {
 
     await renderPods({ data: pods });
 
-    act(() => {
+    await act(async () => {
       // Event must include clusterId to match the current cluster context.
       eventBus.emit('pods:show-unhealthy', { clusterId: 'alpha:ctx', scope: 'team-a' });
+      // The filter is a backend predicate now → re-query; let it resolve.
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
@@ -901,12 +951,14 @@ describe('NsViewPods', () => {
 
     await renderPods({ data: pods });
 
-    act(() => {
+    await act(async () => {
       eventBus.emit('pods:show-unhealthy', {
         clusterId: 'alpha:ctx',
         scope: 'team-a',
         filter: 'restarts',
       });
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
@@ -935,12 +987,14 @@ describe('NsViewPods', () => {
 
     await renderPods({ data: pods });
 
-    act(() => {
+    await act(async () => {
       eventBus.emit('pods:show-unhealthy', {
         clusterId: 'alpha:ctx',
         scope: 'team-a',
         filter: 'not-ready',
       });
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(gridTablePropsRef.current.data).toEqual([pods[1], pods[3]]);
@@ -1026,7 +1080,8 @@ describe('NsViewPods', () => {
       ],
     });
 
-    expect(gridTablePropsRef.current.data).toEqual([]);
+    // The toggle stays active and visible even though the live snapshot now has no unhealthy
+    // pods — its count comes from the live snapshot, while the filtered table is query-backed.
     const activeToggle = container.querySelector<HTMLButtonElement>(
       'button[title="Show all pods"]'
     );

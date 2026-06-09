@@ -28,6 +28,7 @@ const {
   formatAgeMock,
   findCatalogObjectByUIDMock,
   useTableSortMock,
+  requestRefreshDomainStateMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
@@ -35,6 +36,7 @@ const {
   shortNamesMock: vi.fn(() => false),
   formatAgeMock: vi.fn((timestamp: number) => `${timestamp}s`),
   findCatalogObjectByUIDMock: vi.fn(),
+  requestRefreshDomainStateMock: vi.fn(),
   useTableSortMock: vi.fn((data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => {
     const fallbackSort = defaultKey
       ? { key: defaultKey, direction: defaultDir ?? 'asc' }
@@ -117,6 +119,60 @@ vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => shortNamesMock(),
 }));
 
+// Single-namespace event tables are query-backed now, so the displayed rows come from the typed
+// query. Override only the typed-query data path and its readiness gates; keep the rest of these
+// modules real so the involved-object catalog lookup (requestData/readCatalogObjectByUID) still
+// resolves through the mocked Wails layer.
+vi.mock('@/core/data-access', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/core/data-access')>();
+  return {
+    ...actual,
+    requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...args),
+    useScopedRefreshDomainLifecycle: vi.fn(),
+  };
+});
+
+vi.mock('@/core/refresh', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/core/refresh')>();
+  return {
+    ...actual,
+    // A settled live domain so the typed query's readiness gate opens in tests.
+    useRefreshScopedDomain: () => ({
+      status: 'ready',
+      data: { rows: [] },
+      stats: null,
+      version: 1,
+      checksum: '',
+      lastUpdated: 1,
+      droppedAutoRefreshes: 0,
+    }),
+  };
+});
+
+vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
+  useGridTablePersistence: () => ({
+    storageKey: 'gridtable:v1:cluster-a:namespace-events',
+    sortConfig: { key: 'age', direction: 'asc' },
+    setSortConfig: vi.fn(),
+    columnWidths: null,
+    setColumnWidths: vi.fn(),
+    columnVisibility: null,
+    setColumnVisibility: vi.fn(),
+    filters: {
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    },
+    setFilters: vi.fn(),
+    pageSize: null,
+    setPageSize: vi.fn(),
+    resetState: vi.fn(),
+    hydrated: true,
+  }),
+}));
+
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   default: ({ children }: any) => children,
 }));
@@ -159,6 +215,15 @@ describe('NsViewEvents', () => {
     useTableSortMock.mockClear();
     shortNamesMock.mockReturnValue(false);
     formatAgeMock.mockClear();
+    requestRefreshDomainStateMock.mockReset();
+    // Default: the typed query settles with no payload (no rows). Tests that assert on rendered
+    // rows / the involved-object action override this with their own row(s). A null payload leaves
+    // the query's facet filter options untouched, so the local truncation/partial label is
+    // preserved for the single-namespace partial-data copy test.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: null },
+    });
   });
 
   afterEach(() => {
@@ -222,7 +287,28 @@ describe('NsViewEvents', () => {
 
   it('offers context menu navigation to related object', async () => {
     const event = baseEvent();
-    const props = await renderEventsView([event]);
+    // Single-namespace events are query-backed now; the involved-object action resolves the clicked
+    // event against the rendered query rows, so feed the query the same row.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [event],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Event'],
+          facetsExact: true,
+        },
+      },
+    });
+    await renderEventsView([event]);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const props = gridTablePropsRef.current;
 
     const menu = props.getCustomContextMenuItems(event, 'objectName');
     const labels = menu.map((item: any) => item.label);
@@ -347,7 +433,27 @@ describe('NsViewEvents', () => {
 
   it('derives namespace from objectNamespace, event namespace, or component namespace', async () => {
     const noNamespaceEvent = baseEvent({ objectNamespace: undefined, namespace: undefined });
-    const props = await renderEventsView([noNamespaceEvent]);
+    // Query-backed: feed the query the row so the involved-object action can resolve it.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [noNamespaceEvent],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Event'],
+          facetsExact: true,
+        },
+      },
+    });
+    await renderEventsView([noNamespaceEvent]);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const props = gridTablePropsRef.current;
     const menu = props.getCustomContextMenuItems(noNamespaceEvent, 'objectName');
     await act(async () => {
       menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewInvolvedObject)?.onClick?.();

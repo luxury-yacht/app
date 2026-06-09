@@ -389,27 +389,6 @@ describe('query-backed leaf first load', () => {
     );
   };
 
-  const expectSingleNamespaceLocalFirstLoad = async ({
-    element,
-    expectedName,
-  }: {
-    element: React.ReactElement;
-    expectedName: string;
-  }) => {
-    requestRefreshDomainStateMock.mockResolvedValue(typedQueryPayload({ resources: [] }));
-    await act(async () => {
-      root.render(element);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current.data).toHaveLength(1);
-    expect(gridTablePropsRef.current.data[0]).toEqual(
-      expect.objectContaining({ name: expectedName })
-    );
-    expect(requestRefreshDomainStateMock).not.toHaveBeenCalled();
-  };
-
   it.each([
     {
       label: 'namespace config',
@@ -704,6 +683,8 @@ describe('query-backed leaf first load', () => {
   it.each([
     {
       label: 'namespace config',
+      domain: 'namespace-config',
+      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'ConfigMap',
         name: 'local-config',
@@ -712,10 +693,21 @@ describe('query-backed leaf first load', () => {
         data: 1,
         age: '1h',
       },
+      query: {
+        kind: 'ConfigMap',
+        name: 'query-config',
+        namespace: 'team-b',
+        clusterId: 'cluster-a',
+        data: 2,
+        age: '2h',
+      },
+      payloadField: 'rows',
       Component: NsViewConfig,
     },
     {
       label: 'namespace network',
+      domain: 'namespace-network',
+      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'Ingress',
         name: 'local-network',
@@ -724,10 +716,21 @@ describe('query-backed leaf first load', () => {
         details: 'local',
         age: '1h',
       },
+      query: {
+        kind: 'Ingress',
+        name: 'query-network',
+        namespace: 'team-b',
+        clusterId: 'cluster-a',
+        details: 'query',
+        age: '2h',
+      },
+      payloadField: 'rows',
       Component: NsViewNetwork,
     },
     {
       label: 'namespace storage',
+      domain: 'namespace-storage',
+      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'PersistentVolumeClaim',
         name: 'local-storage',
@@ -737,10 +740,22 @@ describe('query-backed leaf first load', () => {
         capacity: '1Gi',
         age: '1h',
       },
+      query: {
+        kind: 'PersistentVolumeClaim',
+        name: 'query-storage',
+        namespace: 'team-b',
+        clusterId: 'cluster-a',
+        status: 'Bound',
+        capacity: '2Gi',
+        age: '2h',
+      },
+      payloadField: 'rows',
       Component: NsViewStorage,
     },
     {
       label: 'namespace quotas',
+      domain: 'namespace-quotas',
+      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'ResourceQuota',
         name: 'local-quota',
@@ -750,10 +765,22 @@ describe('query-backed leaf first load', () => {
         used: { pods: '0' },
         age: '1h',
       },
+      query: {
+        kind: 'ResourceQuota',
+        name: 'query-quota',
+        namespace: 'team-b',
+        clusterId: 'cluster-a',
+        hard: { pods: '2' },
+        used: { pods: '1' },
+        age: '2h',
+      },
+      payloadField: 'rows',
       Component: NsViewQuotas,
     },
     {
       label: 'namespace RBAC',
+      domain: 'namespace-rbac',
+      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
       local: {
         kind: 'Role',
         name: 'local-rbac',
@@ -762,10 +789,21 @@ describe('query-backed leaf first load', () => {
         rulesCount: 1,
         age: '1h',
       },
+      query: {
+        kind: 'Role',
+        name: 'query-rbac',
+        namespace: 'team-b',
+        clusterId: 'cluster-a',
+        rulesCount: 2,
+        age: '2h',
+      },
+      payloadField: 'rows',
       Component: NsViewRBAC,
     },
     {
       label: 'namespace events',
+      domain: 'namespace-events',
+      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=age&sortDirection=asc',
       local: {
         kind: 'Event',
         name: 'local-event',
@@ -776,10 +814,21 @@ describe('query-backed leaf first load', () => {
         objectApiVersion: 'v1',
         ageTimestamp: 1,
       },
+      query: {
+        kind: 'Event',
+        name: 'query-event',
+        reason: 'QueryReason',
+        namespace: 'team-b',
+        clusterId: 'cluster-a',
+        object: 'Pod/query',
+        objectApiVersion: 'v1',
+        ageTimestamp: 2,
+      },
+      payloadField: 'rows',
       Component: NsViewEvents,
     },
-  ])('uses local rows without a typed query on first load for $label', async (testCase) => {
-    await expectSingleNamespaceLocalFirstLoad({
+  ])('issues a namespace-scoped typed query on first load for $label', async (testCase) => {
+    await expectQueryFirstLoad({
       element: (
         <testCase.Component
           namespace="team-a"
@@ -789,12 +838,15 @@ describe('query-backed leaf first load', () => {
           showNamespaceColumn={false}
         />
       ),
-      expectedName: testCase.local.name,
+      payload: { [testCase.payloadField]: [testCase.query] },
+      domain: testCase.domain,
+      expectedName: testCase.query.name,
+      expectedScope: testCase.expectedScope,
     });
   });
 
-  it('uses local rows without a typed query on first load for namespace autoscaling', async () => {
-    await expectSingleNamespaceLocalFirstLoad({
+  it('issues a namespace-scoped typed query on first load for namespace autoscaling', async () => {
+    await expectQueryFirstLoad({
       element: (
         <NsViewAutoscaling
           namespace="team-a"
@@ -816,12 +868,30 @@ describe('query-backed leaf first load', () => {
           showNamespaceColumn={false}
         />
       ),
-      expectedName: 'local-autoscaling',
+      payload: {
+        rows: [
+          {
+            kind: 'HorizontalPodAutoscaler',
+            name: 'query-autoscaling',
+            namespace: 'team-b',
+            clusterId: 'cluster-a',
+            target: 'Deployment/query',
+            targetApiVersion: 'apps/v1',
+            min: 1,
+            max: 3,
+            current: 2,
+            age: '2h',
+          },
+        ],
+      },
+      domain: 'namespace-autoscaling',
+      expectedName: 'query-autoscaling',
+      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
     });
   });
 
-  it('uses local rows without a typed query on first load for namespace Helm', async () => {
-    await expectSingleNamespaceLocalFirstLoad({
+  it('issues a namespace-scoped typed query on first load for namespace Helm', async () => {
+    await expectQueryFirstLoad({
       element: (
         <NsViewHelm
           namespace="team-a"
@@ -842,12 +912,27 @@ describe('query-backed leaf first load', () => {
           showNamespaceColumn={false}
         />
       ),
-      expectedName: 'local-release',
+      payload: {
+        rows: [
+          {
+            name: 'query-release',
+            namespace: 'team-b',
+            clusterId: 'cluster-a',
+            chart: 'query-1.0.0',
+            status: 'deployed',
+            revision: 2,
+            age: '2h',
+          },
+        ],
+      },
+      domain: 'namespace-helm',
+      expectedName: 'query-release',
+      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
     });
   });
 
-  it('uses local rows without a typed query on first load for namespace pods', async () => {
-    await expectSingleNamespaceLocalFirstLoad({
+  it('issues a namespace-scoped typed query on first load for namespace pods', async () => {
+    await expectQueryFirstLoad({
       element: (
         <NsViewPods
           namespace="team-a"
@@ -857,12 +942,17 @@ describe('query-backed leaf first load', () => {
           showNamespaceColumn={false}
         />
       ),
-      expectedName: 'local-pod',
+      payload: {
+        rows: [podRow('query-pod', '2h')],
+      },
+      domain: 'pods',
+      expectedName: 'query-pod',
+      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
     });
   });
 
-  it('uses local rows without a typed query on first load for namespace workloads', async () => {
-    await expectSingleNamespaceLocalFirstLoad({
+  it('issues a namespace-scoped typed query on first load for namespace workloads', async () => {
+    await expectQueryFirstLoad({
       element: (
         <NsViewWorkloads
           namespace="team-a"
@@ -872,7 +962,12 @@ describe('query-backed leaf first load', () => {
           showNamespaceColumn={false}
         />
       ),
-      expectedName: 'local-workload',
+      payload: {
+        rows: [workloadRow('query-workload', '2h')],
+      },
+      domain: 'namespace-workloads',
+      expectedName: 'query-workload',
+      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
     });
   });
 

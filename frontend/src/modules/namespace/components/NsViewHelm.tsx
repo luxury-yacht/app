@@ -324,7 +324,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       NamespaceHelmSnapshotPayload,
       HelmData
     >({
-      enabled: isAllNamespaces,
+      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-helm',

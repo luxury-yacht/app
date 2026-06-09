@@ -176,11 +176,16 @@ silent dup/skip when a new sort field or adapter is added.
 
 The typed builders expose two paths: a backend-query page when the scope carries
 a query string (`query.Enabled`) and a bounded local window otherwise. The
-window path is the canonical refresh snapshot — it backs single-namespace tables,
-object panels, counts elsewhere, and the live-data version that drives query
-refetch — so it is not redundant with the query path and must not be deleted as a
-"path consolidation." All-namespaces and cluster scopes run both: the query page
-feeds the table while the window snapshot feeds liveness and other consumers.
+window path is the canonical refresh snapshot — it backs object panels, counts
+elsewhere, and the live-data version that drives query refetch — so it is not
+redundant with the query path and must not be deleted as a "path consolidation."
+Single-namespace, all-namespaces, and cluster scopes all run both: the query page
+feeds the table (with backend keyset pagination) while the window snapshot feeds
+liveness and the other consumers above. Single-namespace resource tables are
+query-backed too — the frontend passes the selected namespace as the query
+`baseScope` (`namespace:<name>`) so the page is scoped to that namespace — so
+pagination and table semantics are uniform across every scope, not just
+all-namespaces and cluster.
 Degraded and unavailable-source reasons are computed and surfaced on both paths;
 a window missing a permission-blocked source is reported inexact and
 issue-bearing, never as a complete table.
@@ -202,11 +207,11 @@ matching rows feed a bounded keyset candidate buffer plus exact facet/total
 accounting.
 
 Workloads: `backend/refresh/snapshot/namespace_workloads.go` feeds namespace
-workload tables. Single-namespace workloads remain `Local Complete`.
-All-namespaces Workloads are `Query Backed Dynamic`: kind and namespace filters,
-search, pagination, and CPU/memory aggregate sorts are backend-owned for the
-current metrics snapshot. Like Pods, this is a bounded projected-row query path,
-not a persistent secondary index for workload summaries.
+workload tables. Both single-namespace and all-namespaces workload tables are
+`Query Backed Dynamic` (single-namespace runs a namespace-scoped query page):
+kind and namespace filters, search, pagination, and CPU/memory aggregate sorts
+are backend-owned for the current metrics snapshot. Like Pods, this is a bounded
+projected-row query path, not a persistent secondary index for workload summaries.
 
 Custom resources: cluster and namespace custom table row universes come from
 the object catalog query path with `customOnly=true`. Search, kind filters,
@@ -231,10 +236,10 @@ metric sorts are backend-owned for the current resource and metric projection
 state.
 
 Config, RBAC, storage, network, quotas, autoscaling, and Helm: these snapshot
-producers expose typed backend query pages for high-cardinality cluster or
-all-namespaces surfaces. Single-namespace bounded views may remain local only
-while producer stats prove they are complete; when producer stats report
-truncation they must render visibly `Local Partial` semantics.
+producers expose typed backend query pages for cluster, all-namespaces, and
+single-namespace surfaces alike. Single-namespace tables run a namespace-scoped
+query page (`baseScope = namespace:<name>`) rather than a local-complete window,
+so pagination and table semantics match every other scope.
 
 ## App-Wide Table State
 

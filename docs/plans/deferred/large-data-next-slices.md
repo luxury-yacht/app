@@ -1,16 +1,24 @@
 # Large-Data Hardening: Next Slices
 
-Status: Deferred — evidence-triggered. Not started, and not worth starting at
-current scale. This plan captures the two remaining "unrealized gains"
-identified during the `large-table-optimization` review, **and the concrete
-object-count thresholds at which each one becomes worth building.** The largest
-cluster tested to date is under 10k objects, which is far below every trigger
-below, so the correct action today is to keep the existing seam/contracts and do
-nothing else. See [When To Implement](#when-to-implement--trigger-thresholds).
+Status: **Track A done (2026-06-08); Track B still deferred.** Track A was
+implemented ahead of its object-count trigger because the local/query split was a
+visible, illogical UX inconsistency — some single-namespace tables had pagination
+controls and others didn't, on a distinction (single vs. all namespaces) the user
+can't see. Uniform pagination across every scope was the deciding factor, not the
+cardinality threshold; the "net-neutral-at-small-scale" trade the table below
+flags was accepted for consistency. Track B remains evidence-triggered (the
+largest cluster tested to date is under 10k objects, far below its trigger), so
+keep the existing catalog store/seam and do nothing on Track B.
+See [When To Implement](#when-to-implement--trigger-thresholds).
 
-- **Track A** — migrate high-cardinality _single-namespace_ resource tables to
-  backend-owned query pages, closing the last "Local Complete by assumption"
-  cardinality risk.
+- **Track A** ✅ DONE — single-namespace typed resource tables (Pods, Workloads,
+  Config, Network, RBAC, Storage, Events, Autoscaling, Quotas, Helm) are now
+  query-backed (`enabled: true`, `baseScope = namespace:<name>`), matching
+  all-namespaces/cluster/Browse/Custom. The backend window path is retained (it
+  still feeds liveness + counts); only the table display moved to the query page.
+- **Track B** — add a _persistent (SQLite) catalog query store_ behind the
+  existing `CatalogQueryStore` seam, so catalog queries survive beyond the
+  in-memory index's working-set limit.
 - **Track B** — add a _persistent (SQLite) catalog query store_ behind the
   existing `CatalogQueryStore` seam, so catalog queries survive beyond the
   in-memory index's working-set limit.
@@ -60,8 +68,11 @@ Reference points in code:
 
 Note: Track A's value is primarily **uniform table semantics**, not scale or
 complexity reduction — the `!query.Enabled` window path is the canonical refresh
-snapshot and is not removed by this migration. Do not undertake Track A for
-"consistency/cleanup" alone unless a family is also crossing the 1,000-row cap.
+snapshot and was not removed by this migration. This note originally said not to
+undertake Track A for consistency alone below the 1,000-row cap; that is exactly
+the call that was revisited and reversed (2026-06-08): the local/query split was
+shipping a visible, illogical pagination inconsistency, so uniform semantics won.
+The trade this table describes (net-neutral at small scale) was accepted knowingly.
 
 ### Track B (persistent SQLite store) trigger
 

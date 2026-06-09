@@ -97,7 +97,9 @@ const isPodNotReady = (pod: PodSnapshotEntry): boolean => {
   return !isCompletedPod(pod) && counts !== null && counts.total > 0 && counts.ready < counts.total;
 };
 
-const matchesPodsFilter = (filter: PodsFilterMode, pod: PodSnapshotEntry): boolean => {
+// Exported so the namespace-pods test can mirror the backend health predicate when it mocks the
+// typed query (the unhealthy/restarts/not-ready filter is server-side now, not a client filter).
+export const matchesPodsFilter = (filter: PodsFilterMode, pod: PodSnapshotEntry): boolean => {
   switch (filter) {
     case 'restarts':
       return isPodRestarted(pod);
@@ -502,14 +504,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       };
     }, [activePodFilter, data.length, handleToggleUnhealthy, isAllNamespaces, unhealthyCount]);
 
-    const transformSortedPods = useCallback(
-      (sortedPods: PodSnapshotEntry[]) =>
-        activePodFilter
-          ? sortedPods.filter((pod) => matchesPodsFilter(activePodFilter, pod))
-          : sortedPods,
-      [activePodFilter]
-    );
-
     const getTrailingFilterActions = useCallback(
       () => (unhealthyToggle ? [unhealthyToggle] : []),
       [unhealthyToggle]
@@ -520,7 +514,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       favModal,
       source,
     } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
-      enabled: isAllNamespaces,
+      enabled: true,
       queryTableMode: 'Query Backed Dynamic',
       clusterId: queryClusterId,
       domain: 'pods',
@@ -542,7 +536,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       showKindDropdown: false,
       showNamespaceFilters: showNamespaceFilter,
       getTrailingFilterActions,
-      transformSortedData: isAllNamespaces ? undefined : transformSortedPods,
+      // The unhealthy filter is a backend predicate (podQueryPredicates) in query mode, which
+      // now backs single namespaces too — no client-side re-filter of the page.
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
 

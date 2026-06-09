@@ -370,7 +370,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       NamespaceAutoscalingSnapshotPayload,
       AutoscalingData
     >({
-      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-autoscaling',

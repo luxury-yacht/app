@@ -225,7 +225,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       NamespaceEventsSnapshotPayload,
       EventData
     >({
-      enabled: namespace === ALL_NAMESPACES_SCOPE,
+      enabled: true,
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-events',

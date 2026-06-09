@@ -19,6 +19,55 @@ current.
 
 ---
 
+## 2026-06-08 — BUGFIX: single-namespace query scope must be `namespace:<name>`, not raw name
+
+Runtime error (real app): `invalid pods scope: argocd` / `unsupported pods scope argocd`. The Track
+A change reused the `namespace` prop as the scope base. VERIFIED via `backend/refresh/snapshot/pods.go`
+`collectPods` (lines 314-353): it `SplitN(scope, ":", 2)` and requires `namespace:<name>` /
+`namespace:all` — a bare `argocd` (no `:`) is rejected. The `namespace` prop is the RAW name for a
+single namespace but the `namespace:all` sentinel for all-namespaces (ALL_NAMESPACES_SCOPE), so the
+base must be normalized.
+
+- `frontend/src/modules/resource-grid/useQueryBackedResourceGridTable.ts` — add
+  `namespaceScopeKey(ns) = ns.startsWith('namespace:') ? ns : 'namespace:'+ns`; apply it to BOTH the
+  `liveScope` (the window-path subscription, now active for single namespaces under `enabled:true`)
+  and the typed-query `baseScope`. All-namespaces (`namespace:all`) is unchanged (already prefixed).
+  Consumers: every NsView* via the namespace wrapper; cluster wrapper untouched. Frontend
+  `resourceStreamDomains.ts` AND backend both validate the format — VERIFIED both rejected `argocd`.
+- Tests asserting the WRONG single-namespace scope (`clusterId|team-a?...` → must become
+  `clusterId|namespace:team-a?...`): `NsViewWorkloads.test.tsx` and
+  `queryBackedLeafFirstLoad.test.tsx` (and any single-ns scope assertions in NsView*). **Verify:**
+  `mage qc:prerelease` + the real app loads a single namespace.
+
+## 2026-06-08 — TRACK A: single-namespace typed views become query-backed + paginated
+
+Per `docs/architecture/large-data.md` (this work realizes "Track A" from
+`docs/plans/deferred/large-data-next-slices.md`): every single-namespace typed resource view is
+inconsistent with all-namespaces/cluster/Browse/Custom because it falls to the local-complete
+path (`enabled: isAllNamespaces`) → no pagination. Migrate them to the query path so pagination
+is uniform. The backend window path is NOT deleted — it still feeds liveDataVersion + counts.
+
+- `frontend/src/modules/resource-grid/useQueryBackedResourceGridTable.ts` —
+  `useQueryBackedNamespaceResourceGridTable`: pass the typed query `baseScope = baseScope ??
+  namespace` (line ~485) so a single namespace scopes the QUERY to that namespace, reusing the
+  exact base the `liveScope` subscription already uses (proven correct). All-namespaces is
+  unchanged (`namespace === 'namespace:all'` → cluster-wide). VERIFIED: backend
+  `namespace_scope.go` parses `namespace:<name>`; query path = scope-with-params, window path =
+  same base no-params (both run, like all-namespaces today).
+- `NsViewPods.tsx`, `NsViewWorkloads.tsx`, `NsViewConfig.tsx`, `NsViewNetwork.tsx`,
+  `NsViewRBAC.tsx`, `NsViewStorage.tsx`, `NsViewEvents.tsx`, `NsViewAutoscaling.tsx`,
+  `NsViewQuotas.tsx`, `NsViewHelm.tsx` (all under frontend/src/modules/namespace/components/) —
+  `enabled: <isAllNamespaces>` → `enabled: true`. VERIFIED audit:
+  only Pods carries local-snapshot logic — its `transformSortedData` client health filter is
+  replaced by the existing backend `predicates: { health }` (drop `transformSortedData` +
+  now-dead `transformSortedPods`/`matchesPodsFilter`). Others are pure flips (the
+  `isAllNamespaces` label/`showNamespaceFilter` bits stay — they're all-vs-single display, not
+  local-vs-query).
+- Tests: each `NsView*.test.tsx` that asserts local/no-pagination for a single namespace updates
+  to the query-backed contract. **Docs:** update `large-data.md` (single-namespace tables now
+  query-backed; window path still backs liveness) + flip Track A in `large-data-next-slices.md`
+  to done. **Verify:** `mage qc:prerelease` + a single-namespace view scopes to just that ns.
+
 ## 2026-06-08 — REDESIGN: Mode · Copy · Export trio (one scope toggle drives both copy & export)
 
 User-decided UX: replace the page-scoped Copy + all-scoped Export split with THREE grouped
