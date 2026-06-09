@@ -239,7 +239,8 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
           ? 'query'
           : (filterOptions.searchBehavior ?? 'local'),
         partialDataLabel: filterOptions.partialDataLabel ?? resourceGridPartialDataLabel(tableMode),
-        preActions: [...(filterOptions.preActions ?? []), favToggle],
+        preActions: filterOptions.preActions ?? [],
+        saveAction: favToggle,
       },
     }),
     [
@@ -397,14 +398,15 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     () => getTrailingFilterActions?.(sortedData) ?? [],
     [getTrailingFilterActions, sortedData]
   );
+  // Filter-related actions stay on the left; the favorite (save) action moves to the
+  // right view-actions group (filters.options.saveAction) next to the CSV export.
   const filterPreActions = useMemo(
     () => [
       ...(metadataToggle ? [metadataToggle] : []),
       ...leadingFilterActions,
-      favToggle,
       ...trailingFilterActions,
     ],
-    [favToggle, leadingFilterActions, metadataToggle, trailingFilterActions]
+    [leadingFilterActions, metadataToggle, trailingFilterActions]
   );
   const displayData = useMemo(
     () => (transformSortedData ? transformSortedData(sortedData) : sortedData),
@@ -432,12 +434,14 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
         partialDataLabel:
           filterOptionOverrides?.partialDataLabel ?? resourceGridPartialDataLabel(tableMode),
         preActions: filterPreActions,
+        saveAction: favToggle,
       },
     }),
     [
       availableKinds,
       effectiveFilterAccessors,
       filterValue,
+      favToggle,
       handleFiltersChange,
       filterOptionOverrides,
       filterPreActions,

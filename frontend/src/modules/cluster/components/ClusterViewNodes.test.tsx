@@ -73,13 +73,17 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
 }));
 
 vi.mock('@ui/favorites/FavToggle', () => ({
+  // Matches the real hook's shape: { item, modal }.
   useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => {},
-    title: 'Save as favorite',
+    item: {
+      type: 'toggle',
+      id: 'favorite',
+      icon: null,
+      active: false,
+      onClick: () => {},
+      title: 'Save as favorite',
+    },
+    modal: null,
   }),
 }));
 
@@ -285,6 +289,24 @@ describe('ClusterViewNodes', () => {
 
     const preActions = gridTablePropsRef.current?.filters?.options?.preActions ?? [];
     expect(preActions.some((item: { id?: string }) => item?.id === 'include-metadata')).toBe(true);
+  });
+
+  it('exposes the favorite as the grouped save action, not a filter pre-action', async () => {
+    await renderNodes([baseNode]);
+
+    const options = gridTablePropsRef.current?.filters?.options;
+    expect(options?.saveAction?.id).toBe('favorite');
+    const preActions = options?.preActions ?? [];
+    expect(preActions.some((item: { id?: string }) => item?.id === 'favorite')).toBe(false);
+  });
+
+  it('wires the Export-all action into the view-actions group', async () => {
+    await renderNodes([baseNode]);
+
+    const postActions = gridTablePropsRef.current?.filters?.options?.postActions ?? [];
+    expect(postActions.some((item: { id?: string }) => item?.id === 'export-gridtable-csv')).toBe(
+      true
+    );
   });
 
   it('keeps initial empty query-backed nodes behind the loading boundary', async () => {

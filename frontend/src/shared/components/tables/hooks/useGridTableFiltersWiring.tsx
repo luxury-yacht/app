@@ -171,7 +171,13 @@ export function useGridTableFiltersWiring<T>({
   });
 
   const resolvedPostActions = useMemo<IconBarItem[]>(() => {
-    const items: IconBarItem[] = [csvExportAction];
+    // The save (favorite) action leads the post-action group, immediately before the CSV
+    // export, so save + export read as one consistent cluster across every view.
+    const items: IconBarItem[] = [];
+    if (resolvedFilterOptions.saveAction) {
+      items.push(resolvedFilterOptions.saveAction);
+    }
+    items.push(csvExportAction);
 
     if (resolvedFilterOptions.postActions?.length) {
       items.push(...resolvedFilterOptions.postActions);
@@ -181,7 +187,12 @@ export function useGridTableFiltersWiring<T>({
     }
 
     return items;
-  }, [csvExportAction, postActions, resolvedFilterOptions.postActions]);
+  }, [
+    csvExportAction,
+    postActions,
+    resolvedFilterOptions.postActions,
+    resolvedFilterOptions.saveAction,
+  ]);
 
   // Compute result count: displayed items vs total items.
   // If the consumer provides a totalCount override (e.g. server-side paginated total), use it.

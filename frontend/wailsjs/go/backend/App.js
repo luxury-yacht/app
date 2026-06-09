@@ -78,6 +78,10 @@ export function ExportCatalogSelectionCSVFile(arg1) {
   return window['go']['backend']['App']['ExportCatalogSelectionCSVFile'](arg1);
 }
 
+export function SaveCsvFile(arg1, arg2) {
+  return window['go']['backend']['App']['SaveCsvFile'](arg1, arg2);
+}
+
 export function FetchContainerLogs(arg1, arg2) {
   return window['go']['backend']['App']['FetchContainerLogs'](arg1, arg2);
 }

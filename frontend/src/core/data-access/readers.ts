@@ -9,6 +9,7 @@
 import {
   DiscoverNodeLogs,
   ExportCatalogSelectionCSVFile,
+  SaveCsvFile,
   FetchContainerLogs,
   FetchNodeLogs,
   FindCatalogObjectByUID,
@@ -117,6 +118,10 @@ export interface CatalogQueryCSVExport {
 
 export const readCatalogQueryCSVFile = (selection: snapshot.QuerySelectionDescriptor) =>
   ExportCatalogSelectionCSVFile(selection) as Promise<CatalogQueryCSVExport>;
+
+/** Save a frontend-built CSV string to a user-selected file (returns the chosen path). */
+export const saveCsvFile = (defaultFilename: string, content: string) =>
+  SaveCsvFile(defaultFilename, content) as Promise<CatalogQueryCSVExport>;
 
 export interface CustomCatalogHydrationRow {
   clusterId: string;

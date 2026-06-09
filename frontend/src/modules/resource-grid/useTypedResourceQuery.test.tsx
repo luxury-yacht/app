@@ -103,6 +103,37 @@ describe('useTypedResourceQuery', () => {
     expect(result?.error).toBe('All Namespaces Pods returned no data');
   });
 
+  it('fetchAllRows pages through the full result set following the cursor', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: { rows: [] } },
+    });
+    await renderQuery();
+    expect(result).toBeDefined();
+
+    requestRefreshDomainStateMock.mockReset();
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: { rows: [{ name: 'a' }, { name: 'b' }], continue: 'cursor-1' },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: { status: 'ready', data: { rows: [{ name: 'c' }] } },
+      });
+
+    let all: TestRow[] = [];
+    await act(async () => {
+      all = await result!.fetchAllRows();
+    });
+
+    expect(all.map((row) => row.name)).toEqual(['a', 'b', 'c']);
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
+  });
+
   it('treats a payload with rows but no total as approximate instead of an exact 0', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',

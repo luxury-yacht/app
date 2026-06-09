@@ -19,6 +19,79 @@ current.
 
 ---
 
+## 2026-06-08 — FEATURE: full-query CSV export on every resource table ("Export all matching rows")
+
+Only catalog views (Browse/Custom) have an "export all" button; typed resource tables only
+copy the visible page (typed query caps a single call at maxTypedTableQueryLimit=1000). Add a
+unified full-query export to every table. Approach (user-chosen): frontend pulls all rows
+(following the page cursor), builds CSV from the displayed columns, saves via a generic backend
+RPC; unify Custom/Browse onto it too.
+
+- `backend/app_csv_export.go` (NEW) — `App.SaveCsvFile(defaultFilename, content string)
+  (CsvFileExport, error)`: save dialog → temp file → write content → rename. Mirrors
+  `ExportCatalogSelectionCSVFile`'s file handling (VERIFIED, app_object_catalog.go 568-611) but
+  generic (takes content). Consumer: frontend export action. Pure helper `sanitizeCsvFilename`
+  is unit-tested; the dialog/file IO is integration (matches the catalog one's test posture).
+- `frontend/wailsjs/go/backend/App.js` + `App.d.ts` — hand-add the `SaveCsvFile` binding
+  (bindings are committed; no mage regen — `wails dev/build` regenerates them from the Go
+  method on the user's side). Returns `backend.CatalogQueryCSVExport` (reused). VERIFIED format.
+- `frontend/src/core/data-access/readers.ts` — expose `saveCsvFile(name, content)` over the
+  new binding.
+- `frontend/src/shared/components/tables/gridTableCsv.ts` (NEW) — extract
+  `buildGridTableCsv(rows, columns, getTextContent)` from `useGridTableCsvExport` (the existing
+  buildCsvText) so copy-visible and export-all share one builder. Unit-tested.
+  `useGridTableCsvExport.tsx` refactored to call `buildGridTableCsv` (no behavior change; the
+  copy-visible action + its tests are unaffected — VERIFIED identical output).
+- `frontend/src/shared/components/tables/hooks/useGridTableCsvFileExportAction.tsx` (NEW) — the
+  Export IconBarItem: on click `fetchAllRows()` → buildGridTableCsv → saveCsvFile; distinct
+  id/icon from copy-visible; disabled while fetching / when empty.
+- `frontend/src/modules/resource-grid/useQueryBackedResourceGridTable.ts` — build `fetchAllRows`
+  by looping `requestRefreshDomainState` over the query scope following `continue` until
+  exhausted (each page ≤1000), passing the Export action as a postAction (joins the Save·Copy·
+  Export group). Distinct scopes per page → no interference with the visible query (VERIFIED
+  scope carries continue). 
+- `BrowseView.tsx`, `ClusterViewCustom.tsx`, `NsViewCustom.tsx` — replace `useCatalogQueryCsvAction`
+  with the unified export (fetchAllRows over the catalog query). `useCatalogQueryCsvAction` +
+  the catalog server-side export become removable once unified (confirm no other consumers).
+
+**Caveat:** unifying Browse onto frontend-fetch-all pulls the whole catalog through the app;
+note in the report. **States:** empty table → Export disabled; fetch error → feedback.
+**Verify:** `mage qc:prerelease`.
+
+## 2026-06-08 — CONSISTENCY: group the save (favorite) + CSV export into one view-actions cluster
+
+Favorite (useFavToggle) is wired into the LEFT filter pre-actions, and its position drifts
+between hooks (useResourceGridTableCommon puts it mid-list; useQueryResourceGridTable appends
+it last). Export (copy-visible CSV) is auto-added to the RIGHT post-actions. Group them.
+
+- `frontend/src/shared/components/tables/GridTable.types.ts` — add `saveAction?: IconBarItem`
+  to `GridTableFilterOptions` and `InternalFilterOptions`. Optional → no behavior change for
+  callers that don't set it (object-panel/events/logs unaffected). VERIFIED both interfaces.
+- `frontend/src/shared/components/tables/hooks/useGridTableFiltersWiring.tsx` — in
+  `resolvedPostActions`, prepend `resolvedFilterOptions.saveAction` (if set) before
+  `csvExportAction`, so the right-side group reads `[save, copy-visible-CSV, ...postActions
+  (e.g. export-all)]`. Consumer: GridTableFiltersBar renders postActions after the separator.
+  VERIFIED the post-actions memo (lines 173-184). Edge: saveAction undefined → identical to today.
+- `frontend/src/shared/components/tables/gridTableFilterEngine.ts` — `buildGridTableFilterOptions`
+  maps `GridTableFilterOptions` → `InternalFilterOptions` (the `resolvedFilterOptions` the wiring
+  reads). It maps preActions/postActions/customActions explicitly, so it must ALSO carry
+  `saveAction` through (else it's dropped before the wiring sees it). VERIFIED the mapping (lines
+  53-55) and that `useGridTableFilters` builds resolvedFilterOptions from it.
+- `frontend/src/modules/resource-grid/useResourceGridTable.tsx` — two sites:
+  `useResourceGridTableCommon` (favToggle at ~382; used by useClusterResourceGridTable +
+  useNamespaceResourceGridTable) and `useQueryResourceGridTable` (favToggle at ~216; used by
+  Browse + ClusterViewCustom + NsViewCustom). In BOTH: remove favToggle from preActions, set
+  `filters.options.saveAction = favToggle`. `useObjectPanelResourceGridTable` has no favToggle
+  and does NOT use the common hook (VERIFIED) → object-panel tables stay unchanged (in scope:
+  standard cluster/namespace resource views only). Query-backed wrapper delegates to the
+  cluster/namespace hooks, so all query-backed views inherit the grouped layout.
+
+**States:** views with favorite → save+export grouped on the right; Custom/Browse keep the
+extra export-all in the same group (after copy-visible). object-panel/events/logs unchanged.
+**Tests (TDD):** GridTable integration (saveAction renders immediately before the CSV export);
+ClusterViewNodes (gridTableProps.filters.options.saveAction is the favorite; preActions no
+longer contains it). **Verify:** `mage qc:prerelease`.
+
 ## 2026-06-08 — RESTORE: "Include metadata" search toggle dropped in the query-backed migration
 
 I removed this in commit 380b589a (Nodes → query-backed). It searched labels/annotations

@@ -44,9 +44,13 @@ export interface UseTypedResourceQueryResult<TRow> {
   totalIsExact: boolean;
   filterOptions: Partial<GridTableFilterOptions>;
   dynamic: ResourceQueryDynamicRef | null;
+  /** Fetch every matching row (all pages) for the current filters/sort — used by export. */
+  fetchAllRows: () => Promise<TRow[]>;
 }
 
 const DEFAULT_PAGE_LIMIT = 50;
+// Each export page requests the backend's max page size to minimise round-trips.
+const EXPORT_PAGE_LIMIT = 1000;
 export const TYPED_QUERY_PAGE_LIMIT_OPTIONS = [25, 50, 100, 250, 500, 1000] as const;
 export type TypedQueryPageLimit = (typeof TYPED_QUERY_PAGE_LIMIT_OPTIONS)[number];
 
@@ -310,6 +314,50 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setRequestToken(previousToken);
   }, [isRequestingMore, previousTokens]);
 
+  const fetchAllRows = useCallback(async (): Promise<TRow[]> => {
+    if (!enabled || !clusterId) {
+      return [];
+    }
+    const all: TRow[] = [];
+    let cursor: string | null = null;
+    // Page through the full result set following the backend cursor. Each page uses the
+    // export max page size; the loop guard bounds a pathological non-advancing cursor.
+    for (let page = 0; page < 100000; page += 1) {
+      const exportScope = buildTypedResourceQueryScope(clusterId, {
+        baseScope,
+        filters,
+        sortConfig,
+        pageLimit: EXPORT_PAGE_LIMIT,
+        predicates,
+        continueToken: cursor,
+      });
+      if (!exportScope) {
+        break;
+      }
+      const result = await requestRefreshDomainState({
+        domain,
+        scope: exportScope,
+        reason: 'user',
+        label,
+        cleanup: true,
+        preserveState: false,
+      });
+      if (result.status !== 'executed') {
+        break;
+      }
+      const payload = result.data?.data as TPayload | null | undefined;
+      if (!payload) {
+        break;
+      }
+      all.push(...selectRowsRef.current(payload));
+      cursor = payload.continue ?? null;
+      if (!cursor) {
+        break;
+      }
+    }
+    return all;
+  }, [baseScope, clusterId, domain, enabled, filters, label, predicates, sortConfig]);
+
   return {
     rows,
     loading,
@@ -326,5 +374,6 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     totalIsExact,
     filterOptions,
     dynamic,
+    fetchAllRows,
   };
 }

@@ -4,13 +4,9 @@ import type { ReactNode } from 'react';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
 
 const COPY_FEEDBACK_RESET_MS = 750;
-
-const escapeCsvCell = (value: string): string => {
-  const normalized = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  return /[",\n]/.test(normalized) ? `"${normalized.replace(/"/g, '""')}"` : normalized;
-};
 
 interface UseGridTableCsvExportOptions<T> {
   data: T[];
@@ -52,16 +48,7 @@ export function useGridTableCsvExport<T>({
     if (!columns?.length || !getTextContent) {
       return '';
     }
-    const rows = data;
-
-    const headerRow = columns.map((column) =>
-      escapeCsvCell(getTextContent(column.header).trim() || column.key)
-    );
-    const dataRows = rows.map((item) =>
-      columns.map((column) => escapeCsvCell(getTextContent(column.render(item)).trim()))
-    );
-
-    return [headerRow, ...dataRows].map((row) => row.join(',')).join('\n');
+    return buildGridTableCsv(data, columns, getTextContent);
   }, [columns, data, getTextContent]);
 
   const handleCopyCsv = useCallback(async () => {

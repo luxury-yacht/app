@@ -92,6 +92,12 @@ export interface GridTableFilterOptions {
   preActions?: IconBarItem[];
   /** IconBar items rendered after a separator following Reset (e.g. Load More). */
   postActions?: IconBarItem[];
+  /**
+   * The view's "save" action (the favorite toggle). Rendered as the first item of the
+   * post-action group — immediately before the CSV export — so save + export read as one
+   * consistent cluster across every view.
+   */
+  saveAction?: IconBarItem;
   /** Arbitrary ReactNode content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
   /** Controls whether the filter bar renders the displayed/total row count. */
@@ -198,6 +204,8 @@ export interface InternalFilterOptions {
   namespaceDropdownBulkActions?: boolean;
   preActions?: IconBarItem[];
   postActions?: IconBarItem[];
+  /** The view's save (favorite) action, grouped immediately before the CSV export. */
+  saveAction?: IconBarItem;
   customActions?: React.ReactNode;
   totalIsExact?: boolean;
   partialDataLabel?: string;

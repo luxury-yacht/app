@@ -256,6 +256,43 @@ describe('GridTable virtualization', () => {
     expect(resultCount?.textContent).toBe('8 on this page of 20 items');
   });
 
+  it('renders the save action grouped immediately before the CSV export', () => {
+    const { container, cleanup } = renderGridTable({
+      data: createRows(3),
+      virtualization: { enabled: false },
+      filters: {
+        enabled: true,
+        options: {
+          saveAction: {
+            type: 'action',
+            id: 'test-save',
+            icon: <span />,
+            onClick: () => {},
+            title: 'Save view',
+            ariaLabel: 'Save view',
+          },
+        },
+        accessors: {
+          getKind: (row) => row.label,
+          getNamespace: () => '',
+          getSearchText: (row) => [row.label],
+        },
+      },
+    });
+    cleanupRoot = cleanup;
+
+    const save = container.querySelector('[aria-label="Save view"]');
+    const exportBtn = container.querySelector('[aria-label="Copy visible rows as CSV"]');
+    expect(save).toBeTruthy();
+    expect(exportBtn).toBeTruthy();
+    // Save sits immediately before export in the post-action group.
+    expect(
+      Boolean(save!.compareDocumentPosition(exportBtn!) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ).toBe(true);
+
+    cleanup();
+  });
+
   it('updates the rendered slice when scrolling', async () => {
     const { container, cleanup, scrollWrapper } = renderGridTable({
       data: createRows(120),

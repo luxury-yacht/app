@@ -46,6 +46,8 @@ export function DiscoverNodeLogs(arg1:string,arg2:string):Promise<types.NodeLogD
 
 export function ExportCatalogSelectionCSVFile(arg1:snapshot.QuerySelectionDescriptor):Promise<backend.CatalogQueryCSVExport>;
 
+export function SaveCsvFile(arg1:string,arg2:string):Promise<backend.CatalogQueryCSVExport>;
+
 export function FetchContainerLogs(arg1:string,arg2:types.ContainerLogsFetchRequest):Promise<types.ContainerLogsFetchResponse>;
 
 export function FetchNodeLogs(arg1:string,arg2:string,arg3:types.NodeLogFetchRequest):Promise<types.NodeLogFetchResponse>;
