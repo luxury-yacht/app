@@ -19,7 +19,6 @@ import ShellTab from '@modules/object-panel/components/ObjectPanel/Shell/ShellTa
 import NodeLogsTab from '@modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab';
 import { PodsTab } from '@modules/object-panel/components/ObjectPanel/Pods/PodsTab';
 import { JobsTab } from '@modules/object-panel/components/ObjectPanel/Jobs/JobsTab';
-import type { ObjectPanelPodsState } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods';
 import {
   useObjectPanelScopedDomainCleanups,
   type ObjectPanelScopedDomainRef,
@@ -80,7 +79,6 @@ interface ObjectPanelContentProps {
   deletedResourceName: string;
   onClosePanel?: () => void;
   onRefreshDetails?: () => void;
-  podsState: ObjectPanelPodsState;
   /**
    * Stable identifier for the owning ObjectPanel. Threaded down to
    * LogViewer so it can key its prefs cache by panel — see
@@ -108,7 +106,6 @@ export function ObjectPanelContent({
   resourceDeleted,
   deletedResourceName,
   onClosePanel,
-  podsState,
   panelId,
 }: ObjectPanelContentProps) {
   const showDetails = activeTab === 'details' && detailTabProps;
@@ -246,13 +243,7 @@ export function ObjectPanelContent({
           resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
           fallback={(_, reset) => <TabErrorFallback tabName="Pods" reset={reset} />}
         >
-          <PodsTab
-            pods={podsState.pods}
-            metrics={podsState.metrics}
-            loading={podsState.loading}
-            error={podsState.error}
-            isActive={isPanelOpen && activeTab === 'pods'}
-          />
+          <PodsTab isActive={isPanelOpen && activeTab === 'pods'} />
         </ErrorBoundary>
       )}
 

@@ -15,6 +15,9 @@
   cluster, and Browse/Custom views — previously they loaded a whole namespace at once with no
   pagination controls. Pagination is now consistent across every resource view, and large
   single namespaces no longer load everything in one shot.
+- The object panel's Pods tab (a workload's or node's pods) now paginates and loads server-side
+  too, with backend-side search/sort/filter — so opening the Pods tab on a Deployment, DaemonSet,
+  or Node that owns thousands of pods no longer loads them all at once.
 - When a filter is active, every resource table (cluster, namespace, Browse, Custom, events —
   no exceptions) now shows a single consistent banner: **"showing N of M items due to filters,"**
   where N is how many rows match your filter and M is how many are in scope without it — both

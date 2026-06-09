@@ -152,13 +152,6 @@ describe('ObjectPanelContent', () => {
     deletedResourceName: '',
     onClosePanel: vi.fn(),
     onRefreshDetails: vi.fn(),
-    podsState: {
-      pods: [],
-      metrics: null,
-      loading: false,
-      error: null,
-      scope: null,
-    },
     panelId: 'obj:test:deployment:team-a:api',
   };
 
@@ -294,8 +287,6 @@ describe('ObjectPanelContent', () => {
   it('renders pods tab when active', () => {
     renderContent({ activeTab: 'pods' });
     expect(hoistedRefs.podsTabProps.current).toMatchObject({
-      pods: [],
-      loading: false,
       isActive: true,
     });
   });
