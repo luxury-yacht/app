@@ -434,35 +434,27 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 
 	sortNetworkSummaries(resources)
 
-	if query.Enabled {
-		page := applyTypedTableQuery(resources, query, networkTableQueryAdapter())
-		exact := len(issues) == 0
-		return &refresh.Snapshot{
-			Domain:  namespaceNetworkDomainName,
-			Scope:   scope,
-			Version: version,
-			Payload: NamespaceNetworkSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(namespaceNetworkDomainName, page, namespaceNetworkQueryCapabilities()).withDegraded(exact, issues),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
-	}
-
-	var totalItems int
-	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceNetworkEntryLimit)
-
+	resolved := resolveTypedSnapshotPage(
+		namespaceNetworkDomainName,
+		resources,
+		query,
+		networkTableQueryAdapter(),
+		namespaceNetworkQueryCapabilities(),
+		config.SnapshotNamespaceNetworkEntryLimit,
+		"network resources",
+		func(resource NetworkSummary) string { return resource.Kind },
+		issues,
+	)
 	return &refresh.Snapshot{
 		Domain:  namespaceNetworkDomainName,
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceNetworkSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceNetworkDomainName, totalItems, totalItems == len(resources) && len(issues) == 0, snapshotSortedKinds(resources, func(resource NetworkSummary) string { return resource.Kind }), namespaceNetworkQueryCapabilities()).withIssues(issues),
-			Rows:                  resources,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: snapshotWindowStats(len(resources), totalItems, "network resources"),
+		Stats: resolved.Stats,
 	}, nil
 }
 

@@ -18,6 +18,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -133,10 +134,6 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       return baseColumns;
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
-    const selectRows = useCallback(
-      (payload: ClusterConfigSnapshotPayload) => payload.rows ?? [],
-      []
-    );
     const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
       ClusterConfigSnapshotPayload,
       ConfigData
@@ -145,7 +142,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       clusterId: selectedClusterId,
       domain: 'cluster-config',
       label: 'Cluster Configuration',
-      selectRows,
+      selectRows: selectPayloadRows,
       viewId: 'cluster-config',
       columns,
       keyExtractor,

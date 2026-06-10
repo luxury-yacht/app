@@ -18,6 +18,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -177,7 +178,6 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(({ error }) => {
     return baseColumns;
   }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
-  const selectRows = useCallback((payload: ClusterCRDSnapshotPayload) => payload.rows ?? [], []);
   const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
     ClusterCRDSnapshotPayload,
     CRDsData
@@ -186,7 +186,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(({ error }) => {
     clusterId: selectedClusterId,
     domain: 'cluster-crds',
     label: 'Cluster CRDs',
-    selectRows,
+    selectRows: selectPayloadRows,
     viewId: 'cluster-crds',
     columns,
     keyExtractor,

@@ -2,7 +2,6 @@ package snapshot
 
 import (
 	"encoding/json"
-	"reflect"
 	"testing"
 )
 
@@ -33,8 +32,7 @@ func TestResourceQueryEnvelopeFlattensWhenEmbedded(t *testing.T) {
 			FacetsExact:  true,
 			Completeness: ResourceQueryComplete,
 			Capabilities: ResourceQueryCapabilities{
-				SortableFields:   []string{"name", "cpu"},
-				VisibleRowExport: true,
+				SortableFields: []string{"name", "cpu"},
 			},
 		},
 		Rows: []sampleQueryRow{{ClusterID: "c1", Name: "node-1", CPU: "100m"}},
@@ -69,39 +67,12 @@ func TestResourceQueryEnvelopeFlattensWhenEmbedded(t *testing.T) {
 	}
 }
 
-// Export capability booleans must always be present; false is meaningful (the
-// frontend must not treat a missing flag as "allowed").
-func TestResourceQueryCapabilitiesSerializeExplicitBooleans(t *testing.T) {
-	raw, err := json.Marshal(ResourceQueryCapabilities{})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &m); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	for _, key := range []string{"visibleRowExport", "queryWideExport"} {
-		if _, ok := m[key]; !ok {
-			t.Errorf("capabilities JSON must always include %q; got %s", key, raw)
-		}
-	}
-}
-
-// Every typed-resource provider must publish capabilities that expose
-// visible-row export only. Query-wide export is a catalog-only capability until
-// a typed provider implements a backend export path (plan Phase 1). Capabilities
-// are the source of truth the frontend reads, so a domain that forgets to wire
-// them, or mis-advertises query-wide export, would silently regress export and
-// sort/search behavior. This table is also the conformance gate: a newly added
-// typed domain should be added here.
-func TestTypedResourceProvidersPublishVisibleRowExportOnly(t *testing.T) {
+// Every typed-resource provider must publish sortable and searchable fields —
+// capabilities are the source of truth the frontend reads, so a domain that
+// forgets to wire them silently regresses sort/search behavior. This table is
+// also the conformance gate: a newly added typed domain should be added here.
+func TestTypedResourceProvidersPublishQueryCapabilities(t *testing.T) {
 	for domain, caps := range typedCapabilityConformance {
-		if !caps.VisibleRowExport {
-			t.Errorf("%s: typed provider must support visible-row export", domain)
-		}
-		if caps.QueryWideExport {
-			t.Errorf("%s: typed provider must NOT advertise query-wide export (catalog-only)", domain)
-		}
 		if len(caps.SortableFields) == 0 {
 			t.Errorf("%s: typed provider must publish at least one sortable field", domain)
 		}
@@ -111,57 +82,15 @@ func TestTypedResourceProvidersPublishVisibleRowExportOnly(t *testing.T) {
 	}
 }
 
-// The catalog is the one provider that owns the full match set behind a cursor,
-// so it advertises query-wide export in addition to visible-row export — the
-// capability distinction that lets the frontend offer "export all matches" for
-// browse/custom but only "export visible" for typed tables.
-func TestCatalogProviderAdvertisesQueryWideExport(t *testing.T) {
+// The catalog publishes the same query-surface capabilities as the typed
+// providers (exports are client-driven cursor walks for every provider).
+func TestCatalogProviderPublishesQueryCapabilities(t *testing.T) {
 	caps := newCatalogCapabilities()
-	if !caps.QueryWideExport {
-		t.Error("catalog provider must advertise query-wide export")
-	}
-	if !caps.VisibleRowExport {
-		t.Error("catalog provider must also support visible-row export")
-	}
 	if len(caps.SortableFields) == 0 {
 		t.Error("catalog provider must publish sortable fields")
 	}
-}
-
-// Query-wide export (the catalog's `queryWideExport` capability) is driven by a
-// QuerySelectionDescriptor — the durable scoped query identity — NOT by sending
-// thousands of concrete frontend rows back to the backend. This locks the
-// descriptor's shape: it must carry everything needed to re-run the query
-// server-side (cluster, table, namespaces, kinds, search, predicates, sort,
-// customOnly) and round-trip on the wire, and it must NOT depend on row payloads.
-func TestQuerySelectionDescriptorCarriesScopedQueryIdentity(t *testing.T) {
-	selection := QuerySelectionDescriptor{
-		ClusterID:     "cluster-a",
-		Table:         "browse",
-		Namespaces:    []string{"team-a", "team-b"},
-		Kinds:         []string{"Pod", "Deployment"},
-		Search:        "nginx",
-		Predicates:    []ResourceQueryPredicate{{Field: "health", Op: "eq", Value: "unhealthy"}},
-		SortField:     "name",
-		SortDirection: "desc",
-		CustomOnly:    true,
-	}
-
-	raw, err := json.Marshal(selection)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var decoded QuerySelectionDescriptor
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if !reflect.DeepEqual(selection, decoded) {
-		t.Fatalf("descriptor did not round-trip:\n got  %+v\n want %+v", decoded, selection)
-	}
-	// Cluster + table identity is mandatory for a server-side replay; without it
-	// the backend cannot reconstruct the query the export should cover.
-	if decoded.ClusterID == "" || decoded.Table == "" {
-		t.Fatal("descriptor must carry cluster + table identity")
+	if len(caps.SearchableFields) == 0 {
+		t.Error("catalog provider must publish searchable fields")
 	}
 }
 

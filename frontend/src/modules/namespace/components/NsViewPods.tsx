@@ -29,6 +29,7 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import {
   POD_PERMISSIONS,
@@ -464,7 +465,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       () => (activePodFilter ? { health: activePodFilter } : undefined),
       [activePodFilter]
     );
-    const selectPodRows = useCallback((payload: PodSnapshotPayload) => payload.rows ?? [], []);
 
     const unhealthyCount = useMemo(() => data.filter((pod) => isPodUnhealthy(pod)).length, [data]);
 
@@ -509,7 +509,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       domain: 'pods',
       label: diagnosticsLabel,
       predicates: podQueryPredicates,
-      selectRows: selectPodRows,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-pods',
       namespace,
       columns,

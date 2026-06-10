@@ -5,10 +5,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { QuerySelectionDescriptor, ResourceQueryRequest, ResourceQueryResult } from './types';
+import type { ResourceQueryRequest, ResourceQueryResult } from './types';
 
 describe('resource query contract types', () => {
-  it('keeps query and query-wide export descriptors importable', () => {
+  it('keeps the query request/result contract importable', () => {
     const request: ResourceQueryRequest = {
       clusterId: 'cluster-a',
       table: 'pods',
@@ -22,14 +22,8 @@ describe('resource query contract types', () => {
       facets: {},
       facetsExact: true,
     };
-    const selection: QuerySelectionDescriptor = {
-      clusterId: request.clusterId,
-      table: request.table,
-      customOnly: true,
-    };
 
+    expect(request.clusterId).toBe('cluster-a');
     expect(result.rows).toHaveLength(0);
-    expect(selection.clusterId).toBe('cluster-a');
-    expect(selection.customOnly).toBe(true);
   });
 });

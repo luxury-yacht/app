@@ -208,35 +208,27 @@ func buildNamespaceRBACSnapshot(
 	}
 
 	sortRBACSummaries(resources)
-	if query.Enabled {
-		page := applyTypedTableQuery(resources, query, rbacTableQueryAdapter())
-		exact := len(issues) == 0
-		return &refresh.Snapshot{
-			Domain:  namespaceRBACDomainName,
-			Scope:   scope,
-			Version: version,
-			Payload: NamespaceRBACSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(namespaceRBACDomainName, page, namespaceRBACQueryCapabilities()).withDegraded(exact, issues),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
-	}
-
-	var totalItems int
-	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceRBACEntryLimit)
-
+	resolved := resolveTypedSnapshotPage(
+		namespaceRBACDomainName,
+		resources,
+		query,
+		rbacTableQueryAdapter(),
+		namespaceRBACQueryCapabilities(),
+		config.SnapshotNamespaceRBACEntryLimit,
+		"RBAC resources",
+		func(resource RBACSummary) string { return resource.Kind },
+		issues,
+	)
 	return &refresh.Snapshot{
 		Domain:  namespaceRBACDomainName,
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceRBACSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceRBACDomainName, totalItems, totalItems == len(resources) && len(issues) == 0, snapshotSortedKinds(resources, func(resource RBACSummary) string { return resource.Kind }), namespaceRBACQueryCapabilities()).withIssues(issues),
-			Rows:                  resources,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: snapshotWindowStats(len(resources), totalItems, "RBAC resources"),
+		Stats: resolved.Stats,
 	}, nil
 }
 

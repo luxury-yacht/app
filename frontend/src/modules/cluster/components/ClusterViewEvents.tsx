@@ -21,6 +21,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
 import {
   clusterEventRowIdentity,
@@ -157,7 +158,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(({ error }) => {
     return baseColumns;
   }, [canOpenEventObject, handleEventAltClick, handleEventClick, useShortResourceNames]);
 
-  const selectRows = useCallback((payload: ClusterEventsSnapshotPayload) => payload.rows ?? [], []);
   const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
     ClusterEventsSnapshotPayload,
     EventData
@@ -167,7 +167,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(({ error }) => {
     domain: 'cluster-events',
     label: 'Cluster Events',
     baseScope: 'cluster',
-    selectRows,
+    selectRows: selectPayloadRows,
     viewId: 'cluster-events',
     columns,
     keyExtractor,

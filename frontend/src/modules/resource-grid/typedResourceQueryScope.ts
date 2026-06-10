@@ -123,6 +123,13 @@ export function buildTypedResourceQueryScope(
   return buildClusterScope(clusterId, `${baseScope}?${params.toString()}`);
 }
 
+/**
+ * The standard page selector for typed payloads that carry their page as
+ * `rows` — shared by every view so the mapping exists once (module-level, so
+ * its identity is stable across renders).
+ */
+export const selectPayloadRows = <TRow>(payload: { rows?: TRow[] }): TRow[] => payload.rows ?? [];
+
 export function filterOptionsFromTypedPayload(
   payload: TypedQueryPayload
 ): Partial<GridTableFilterOptions> {

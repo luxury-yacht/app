@@ -316,6 +316,35 @@ func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
 	require.Equal(t, "Ready", rows[0].Conditions[0].Type)
 }
 
+// A canceled context must surface as an error, never as a silently partial
+// (or empty) "complete" result.
+func TestHydrateCatalogCustomRowsReportsCanceledContext(t *testing.T) {
+	clusterID := "cluster-b"
+	app := NewApp()
+	app.clusterClients[clusterID] = &clusterClients{
+		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
+		dynamicClient: fake.NewSimpleDynamicClient(runtime.NewScheme()),
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	app.Ctx = canceled
+
+	_, err := app.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
+		{
+			ClusterID: clusterID,
+			Group:     "example.com",
+			Version:   "v1",
+			Kind:      "Widget",
+			Resource:  "widgets",
+			Namespace: "apps",
+			Name:      "alpha",
+			UID:       "alpha-uid",
+		},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 func TestHydrateCatalogCustomRowsKeepsPageOnRowFailure(t *testing.T) {
 	clusterID := "cluster-b"
 	gvrObject := &unstructured.Unstructured{

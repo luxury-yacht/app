@@ -106,20 +106,6 @@ export type ResourceInventoryStatus =
   | 'blocked'
   | 'error';
 
-/** Pagination signals, present only for paginated (backend query) sources. */
-export interface ResourceInventoryPagination {
-  hasNext: boolean;
-  hasPrevious: boolean;
-  pageIndex: number;
-  pageSize: number;
-  totalCount: number;
-  /** false when the backend reports an approximate total (over its budget). */
-  totalIsExact: boolean;
-  isRequestingMore: boolean;
-  onNext: () => void;
-  onPrevious: () => void;
-}
-
 /**
  * The normalized input every source produces. `boundedRowsSource` and
  * `backendQuerySource` both emit this exact shape so the controller never has to
@@ -137,7 +123,6 @@ export interface ResourceInventorySourceState<T> {
   completeness: ResourceInventoryCompleteness;
   /** Human copy describing why the rows are partial (truncation/window note). */
   partialLabel?: string | null;
-  pagination?: ResourceInventoryPagination | null;
   /**
    * Stable per-view identity (view + cluster + namespace). When set, the
    * controller caches this view's last non-empty rows and replays them on the
@@ -163,7 +148,6 @@ export interface ResourceInventoryRenderState<T> {
   partialLabel: string | null;
   error: string | null;
   blocked: boolean;
-  pagination: ResourceInventoryPagination | null;
 }
 
 function deriveStatus<T>(source: ResourceInventorySourceState<T>): ResourceInventoryStatus {
@@ -214,7 +198,6 @@ export function deriveResourceInventoryRenderState<T>(
     partialLabel: isPartial ? (source.partialLabel ?? null) : null,
     error: source.error,
     blocked: status === 'blocked',
-    pagination: source.pagination ?? null,
   };
 }
 
@@ -225,17 +208,7 @@ export function deriveResourceInventoryRenderState<T>(
 export function useResourceInventoryTable<T>(
   source: ResourceInventorySourceState<T>
 ): ResourceInventoryRenderState<T> {
-  const {
-    rows,
-    loading,
-    loaded,
-    error,
-    blocked,
-    completeness,
-    partialLabel,
-    pagination,
-    cacheKey,
-  } = source;
+  const { rows, loading, loaded, error, blocked, completeness, partialLabel, cacheKey } = source;
 
   // A table keeps its last rows only while the source is in a TRANSIENT empty —
   // a refetch in flight (loading) or a transient error ("returned no data") on a
@@ -299,7 +272,6 @@ export function useResourceInventoryTable<T>(
               blocked: false,
               completeness,
               partialLabel,
-              pagination,
             }
           : {
               rows,
@@ -309,19 +281,8 @@ export function useResourceInventoryTable<T>(
               blocked,
               completeness,
               partialLabel,
-              pagination,
             }
       ),
-    [
-      replayRows,
-      rows,
-      loading,
-      loaded,
-      surfacedError,
-      blocked,
-      completeness,
-      partialLabel,
-      pagination,
-    ]
+    [replayRows, rows, loading, loaded, surfacedError, blocked, completeness, partialLabel]
   );
 }

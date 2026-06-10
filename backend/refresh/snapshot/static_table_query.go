@@ -469,7 +469,7 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 			case "restarts":
 				return float64(row.Restarts), true
 			case "age":
-				return -float64(row.AgeTimestamp), true
+				return numericAgeSortValue(row.AgeTimestamp)
 			case "agetimestamp":
 				return float64(row.AgeTimestamp), true
 			default:

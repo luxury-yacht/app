@@ -147,8 +147,6 @@ type ResourceQueryCapabilities struct {
 	SortableFields   []string `json:"sortableFields,omitempty"`
 	FilterableFields []string `json:"filterableFields,omitempty"`
 	SearchableFields []string `json:"searchableFields,omitempty"`
-	VisibleRowExport bool     `json:"visibleRowExport"`
-	QueryWideExport  bool     `json:"queryWideExport"`
 }
 
 // ResourceQueryEnvelope is the one canonical metadata envelope shared by every
@@ -184,16 +182,13 @@ type ResourceQueryEnvelope struct {
 	Capabilities    ResourceQueryCapabilities `json:"capabilities"`
 }
 
-// newTypedResourceCapabilities builds capabilities for a typed-resource table.
-// Typed providers expose visible-row CSV/export only; query-wide export is a
-// catalog capability until a typed provider implements a backend export path.
+// newTypedResourceCapabilities builds capabilities for a typed-resource table:
+// the query surface (sortable/filterable/searchable fields) the frontend reads.
 func newTypedResourceCapabilities(sortable, filterable, searchable []string) ResourceQueryCapabilities {
 	return ResourceQueryCapabilities{
 		SortableFields:   sortable,
 		FilterableFields: filterable,
 		SearchableFields: searchable,
-		VisibleRowExport: true,
-		QueryWideExport:  false,
 	}
 }
 
@@ -309,18 +304,3 @@ func resourceQueryPredicateMapToList(predicates map[string]string) []ResourceQue
 	return result
 }
 
-// QuerySelectionDescriptor is the durable selector used for query-wide export
-// flows. It intentionally carries the same scoped query identity as
-// ResourceQueryRequest so callers do not send thousands of concrete frontend
-// rows back to the backend.
-type QuerySelectionDescriptor struct {
-	ClusterID     string                   `json:"clusterId"`
-	Table         string                   `json:"table"`
-	Namespaces    []string                 `json:"namespaces,omitempty"`
-	Kinds         []string                 `json:"kinds,omitempty"`
-	Search        string                   `json:"search,omitempty"`
-	Predicates    []ResourceQueryPredicate `json:"predicates,omitempty"`
-	SortField     string                   `json:"sortField,omitempty"`
-	SortDirection string                   `json:"sortDirection,omitempty"`
-	CustomOnly    bool                     `json:"customOnly,omitempty"`
-}

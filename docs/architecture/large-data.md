@@ -34,13 +34,12 @@ without an explicit cap or pagination model.
   backend budgets. The catalog query path stops exact total/facet metadata above
   its backend exact-metadata budget and emits `totalIsExact: false` /
   `facetsExact: false`; the UI renders that count as approximate.
-- CSV/export actions should operate on visible/current-page rows unless a
-  backend query-wide read/export operation exists for the same `clusterId` and
-  query signature.
-- Query-wide selectors such as `QuerySelectionDescriptor` are for non-mutating
-  read/export flows unless a separate product and security plan explicitly
-  approves a query-wide mutation. Destructive object actions must operate on
-  concrete visible-row refs with full `clusterId`, GVK, namespace, and name.
+- CSV/copy actions operate on the current page by default; the "all matching
+  rows" scope is a client-driven walk over the query cursor (the same bounded
+  query path the table uses), and it fails loudly on a failed page rather than
+  saving a partial result. Destructive object actions must operate on concrete
+  visible-row refs with full `clusterId`, GVK, namespace, and name — never on a
+  query-wide selector.
 - Keep large text surfaces such as logs bounded, searchable, and copyable
   without forcing the full buffer into expensive React rendering.
 
@@ -89,9 +88,9 @@ cursor.
 Consumers: `BrowseView` renders a `Query Backed Static` resource-grid table.
 Favorites persist query-backed filter and sort state. Object actions receive
 concrete visible-row refs with `clusterId`, group, version, kind, namespace,
-and name. Query-wide CSV export executes in the backend against a query
-descriptor; destructive object actions continue to use concrete visible-row
-refs.
+and name. CSV export/copy in the "all matching rows" scope walks the query
+cursor client-side; destructive object actions continue to use concrete
+visible-row refs.
 
 ## Table Modes
 
@@ -101,13 +100,12 @@ table scope.
 
 `Local Partial` tables may run local transforms only over the visible bounded
 window. They must not imply global totals, global facets, global sorting, or
-query-wide export/selection.
+export beyond the window.
 
 Local Partial is a user-facing contract, not an internal excuse. The table must
 label the window source, such as recent, capped, degraded, or buffered; totals
 and facets must be scoped to that window; destructive and export actions must
-enforce visible/windowed-row scope unless the export action uses a backend
-query-wide read/export contract.
+enforce visible/windowed-row scope.
 
 `Query Backed Static` tables receive rows that are already searched, filtered,
 sorted, and paged by the backend. Shared table logic must not locally narrow or

@@ -45,7 +45,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import CatalogPaginationControls from './CatalogPaginationControls';
+import CatalogPaginationFooter from './CatalogPaginationFooter';
 
 const VIRTUALIZATION_THRESHOLD = 80;
 
@@ -291,36 +291,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     enabled: isNamespaceScoped,
   });
 
-  // Select the appropriate persistence based on scope
-  const persistence = isNamespaceScoped
-    ? {
-        sortConfig: namespacePersistence.sortConfig,
-        setSortConfig: namespacePersistence.onSortChange,
-        columnWidths: namespacePersistence.columnWidths,
-        setColumnWidths: namespacePersistence.setColumnWidths,
-        columnVisibility: namespacePersistence.columnVisibility,
-        setColumnVisibility: namespacePersistence.setColumnVisibility,
-        filters: namespacePersistence.filters,
-        setFilters: namespacePersistence.setFilters,
-        pageSize: namespacePersistence.pageSize,
-        setPageSize: namespacePersistence.setPageSize,
-        resetState: namespacePersistence.resetState,
-        hydrated: namespacePersistence.hydrated,
-      }
-    : {
-        sortConfig: clusterPersistence.sortConfig,
-        setSortConfig: clusterPersistence.setSortConfig,
-        columnWidths: clusterPersistence.columnWidths,
-        setColumnWidths: clusterPersistence.setColumnWidths,
-        columnVisibility: clusterPersistence.columnVisibility,
-        setColumnVisibility: clusterPersistence.setColumnVisibility,
-        filters: clusterPersistence.filters,
-        setFilters: clusterPersistence.setFilters,
-        pageSize: clusterPersistence.pageSize,
-        setPageSize: clusterPersistence.setPageSize,
-        resetState: clusterPersistence.resetState,
-        hydrated: clusterPersistence.hydrated,
-      };
+  // Select the appropriate persistence based on scope. The cluster hook already
+  // returns the standard shape; the namespace hook exposes it as `persistence`.
+  const persistence = isNamespaceScoped ? namespacePersistence.persistence : clusterPersistence;
 
   // Get catalog data
   const {
@@ -328,20 +301,11 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     loading,
     hasLoadedOnce,
     error: catalogError,
-    continueToken,
-    previousToken,
-    isRequestingMore,
-    pageIndex,
-    handleLoadMore,
-    handleLoadPrevious,
     filterOptions,
     totalCount,
     unfilteredTotal,
     totalIsExact,
-    pageLimit,
-    pageLimitOptions,
-    setPageLimit,
-    queryPending,
+    pagination,
     fetchAllRows: fetchAllCatalogItems,
   } = useBrowseCatalog({
     enabled: persistence.hydrated,
@@ -354,7 +318,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       namespaces: persistence.filters.namespaces ?? [],
     },
     sort: persistence.sortConfig,
-    initialPageLimit: persistence.pageSize ?? undefined,
+    pageLimit: persistence.pageSize ?? undefined,
     onPageLimitChange: persistence.setPageSize,
     diagnosticLabel: scope === 'namespace' ? 'Namespace Browse' : 'Browse',
   });
@@ -374,38 +338,13 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   const paginationControls = useMemo(
     () => (
-      <CatalogPaginationControls
+      <CatalogPaginationFooter
         idPrefix={resolvedViewId}
-        pageIndex={pageIndex}
-        pageSize={pageLimit}
         visibleItemCount={rows.length}
-        pageSizeOptions={pageLimitOptions}
-        totalCount={totalCount}
-        totalIsExact={totalIsExact}
-        hasPrevious={Boolean(previousToken)}
-        hasNext={Boolean(continueToken)}
-        loading={isRequestingMore || queryPending}
-        onPrevious={handleLoadPrevious}
-        onNext={handleLoadMore}
-        onPageSizeChange={setPageLimit}
+        pagination={pagination}
       />
     ),
-    [
-      continueToken,
-      handleLoadMore,
-      handleLoadPrevious,
-      isRequestingMore,
-      pageIndex,
-      pageLimit,
-      pageLimitOptions,
-      previousToken,
-      queryPending,
-      resolvedViewId,
-      rows.length,
-      setPageLimit,
-      totalCount,
-      totalIsExact,
-    ]
+    [pagination, resolvedViewId, rows.length]
   );
 
   const gridFilterOptions = useMemo(
@@ -421,7 +360,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       includeClusterScopedSyntheticNamespace: false,
       // Show the "showing N of M items due to filters" banner like every other view (the bar only
       // renders it while a narrowing filter is active). totalCount is N; unfilteredTotal is M.
-      showResultCount: true,
       totalCount,
       unfilteredTotal,
       totalIsExact,
@@ -496,14 +434,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         enableContextMenu
         getCustomContextMenuItems={getContextMenuItems}
         emptyMessage={resolvedEmptyMessage}
-        hasMore={Boolean(continueToken)}
-        hasPrevious={Boolean(previousToken)}
-        isRequestingMore={isRequestingMore}
-        autoLoadMore={false}
-        onRequestMore={handleLoadMore}
-        onRequestPrevious={handleLoadPrevious}
-        loadMoreLabel="Next page"
-        previousPageLabel="Previous page"
+        {...pagination}
         paginationControls={paginationControls}
         showLoadMoreButton={false}
         showPaginationStatus={false}

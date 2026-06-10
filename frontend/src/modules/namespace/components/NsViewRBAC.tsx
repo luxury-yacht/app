@@ -21,6 +21,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -183,10 +184,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces RBAC' : 'Namespace RBAC';
 
-    const selectRows = useCallback(
-      (payload: NamespaceRBACSnapshotPayload) => payload.rows ?? [],
-      []
-    );
     const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
       NamespaceRBACSnapshotPayload,
       RBACData
@@ -195,7 +192,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       clusterId: queryClusterId,
       domain: 'namespace-rbac',
       label: diagnosticsLabel,
-      selectRows,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-rbac',
       namespace,
       columns,

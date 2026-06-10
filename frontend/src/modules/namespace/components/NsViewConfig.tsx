@@ -21,6 +21,7 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import type { NamespaceConfigSnapshotPayload } from '@/core/refresh/types';
 
 // Data interface for configuration resources (ConfigMaps, Secrets)
@@ -133,10 +134,6 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         ? 'All Namespaces Configuration'
         : 'Namespace Configuration';
 
-    const selectRows = useCallback(
-      (payload: NamespaceConfigSnapshotPayload) => payload.rows ?? [],
-      []
-    );
     const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
       NamespaceConfigSnapshotPayload,
       ConfigData
@@ -145,7 +142,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       clusterId: queryClusterId,
       domain: 'namespace-config',
       label: diagnosticsLabel,
-      selectRows,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-config',
       namespace,
       columns,

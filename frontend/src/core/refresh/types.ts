@@ -561,8 +561,6 @@ export interface ResourceQueryCapabilities {
   sortableFields?: string[];
   filterableFields?: string[];
   searchableFields?: string[];
-  visibleRowExport?: boolean;
-  queryWideExport?: boolean;
 }
 
 /**
@@ -641,18 +639,6 @@ export interface ResourceQueryDynamicRef {
   source: string;
   revision: string;
   policy: string;
-}
-
-export interface QuerySelectionDescriptor {
-  clusterId: string;
-  table: string;
-  namespaces?: string[];
-  kinds?: string[];
-  search?: string;
-  predicates?: ResourceQueryPredicate[];
-  sortField?: string;
-  sortDirection?: string;
-  customOnly?: boolean;
 }
 
 // Indicates whether the catalog stream payload is a full replacement or a partial update.

@@ -110,33 +110,33 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 		return entries[i].Name < entries[j].Name
 	})
 
+	resolved := resolveTypedSnapshotPage(
+		clusterStorageDomainName,
+		entries,
+		query,
+		clusterStorageTableQueryAdapter(),
+		clusterStorageQueryCapabilities(),
+		config.SnapshotClusterStorageEntryLimit,
+		"persistent volumes",
+		func(entry ClusterStorageEntry) string { return entry.Kind },
+		nil,
+	)
+	// The window snapshot is the canonical unscoped refresh payload; only the
+	// query page publishes the request scope.
+	snapshotScope := ""
 	if query.Enabled {
-		page := applyTypedTableQuery(entries, query, clusterStorageTableQueryAdapter())
-		return &refresh.Snapshot{
-			Domain:  clusterStorageDomainName,
-			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
-			Version: version,
-			Payload: ClusterStorageSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(clusterStorageDomainName, page, clusterStorageQueryCapabilities()),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
+		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
 	}
-
-	var totalItems int
-	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterStorageEntryLimit)
-
 	return &refresh.Snapshot{
 		Domain:  clusterStorageDomainName,
+		Scope:   snapshotScope,
 		Version: version,
 		Payload: ClusterStorageSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(clusterStorageDomainName, totalItems, totalItems == len(entries), snapshotSortedKinds(entries, func(entry ClusterStorageEntry) string { return entry.Kind }), clusterStorageQueryCapabilities()),
-			Rows:                  entries,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: snapshotWindowStats(len(entries), totalItems, "persistent volumes"),
+		Stats: resolved.Stats,
 	}, nil
 }
 

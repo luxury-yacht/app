@@ -622,6 +622,11 @@ func (a *App) HydrateCatalogCustomRows(clusterID string, rows []snapshot.Resourc
 		}()
 	}
 	wg.Wait()
+	// A canceled request leaves rows un-hydrated; report the cancellation
+	// instead of returning a silently partial "complete" result.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	compacted := make([]snapshot.CustomResourceSummary, 0, len(result))
 	for index, summary := range result {
 		if included[index] {

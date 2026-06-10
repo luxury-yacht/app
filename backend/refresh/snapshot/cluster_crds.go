@@ -115,33 +115,33 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 		return entries[i].Name < entries[j].Name
 	})
 
+	resolved := resolveTypedSnapshotPage(
+		clusterCRDDomainName,
+		entries,
+		query,
+		clusterCRDTableQueryAdapter(),
+		clusterCRDQueryCapabilities(),
+		config.SnapshotClusterCRDEntryLimit,
+		"CRDs",
+		func(ClusterCRDEntry) string { return "CustomResourceDefinition" },
+		nil,
+	)
+	// The window snapshot is the canonical unscoped refresh payload; only the
+	// query page publishes the request scope.
+	snapshotScope := ""
 	if query.Enabled {
-		page := applyTypedTableQuery(entries, query, clusterCRDTableQueryAdapter())
-		return &refresh.Snapshot{
-			Domain:  clusterCRDDomainName,
-			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
-			Version: version,
-			Payload: ClusterCRDSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(clusterCRDDomainName, page, clusterCRDQueryCapabilities()),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
+		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
 	}
-
-	var totalItems int
-	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterCRDEntryLimit)
-
 	return &refresh.Snapshot{
 		Domain:  clusterCRDDomainName,
+		Scope:   snapshotScope,
 		Version: version,
 		Payload: ClusterCRDSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(clusterCRDDomainName, totalItems, totalItems == len(entries), snapshotSortedKinds(entries, func(ClusterCRDEntry) string { return "CustomResourceDefinition" }), clusterCRDQueryCapabilities()),
-			Rows:                  entries,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: snapshotWindowStats(len(entries), totalItems, "CRDs"),
+		Stats: resolved.Stats,
 	}, nil
 }
 

@@ -180,9 +180,9 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
   useNamespaceGridTablePersistence: (params: any) => {
     persistenceArgsRef.namespace = params;
-    return {
+    const persistence = {
       sortConfig: { key: 'kind', direction: 'asc' },
-      onSortChange: persistenceMocks.namespaceOnSortChange,
+      setSortConfig: persistenceMocks.namespaceOnSortChange,
       columnWidths: null,
       setColumnWidths: vi.fn(),
       columnVisibility: null,
@@ -191,9 +191,14 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
       setFilters: vi.fn(),
       pageSize: null,
       setPageSize: vi.fn(),
-      isNamespaceScoped: true,
       resetState: vi.fn(),
       hydrated: true,
+    };
+    return {
+      ...persistence,
+      onSortChange: persistenceMocks.namespaceOnSortChange,
+      isNamespaceScoped: true,
+      persistence,
     };
   },
 }));
@@ -671,16 +676,17 @@ describe('BrowseView', () => {
       expect(gridTablePropsRef.current.showPaginationStatus).toBe(false);
       expect(gridTablePropsRef.current.filters.options.customActions).toBeUndefined();
       // Pagination totals live in the footer; the filter bar's "showing N of M due to filters"
-      // banner is enabled and renders only while a narrowing filter is active (complementary, not
+      // banner renders only while a narrowing filter is active (complementary, not
       // a duplicate top count) — consistent with every other view.
-      expect(gridTablePropsRef.current.filters.options.showResultCount).toBe(true);
       expect(gridTablePropsRef.current.paginationControls?.props).toMatchObject({
-        pageIndex: 1,
-        pageSize: 50,
-        totalCount: 1200,
-        totalIsExact: true,
-        hasPrevious: false,
-        hasNext: true,
+        pagination: {
+          pageIndex: 1,
+          pageLimit: 50,
+          totalCount: 1200,
+          totalIsExact: true,
+          hasPrevious: false,
+          hasMore: true,
+        },
       });
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledTimes(2);
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(

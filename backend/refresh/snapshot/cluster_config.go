@@ -237,34 +237,33 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 		{Kind: "MutatingWebhookConfiguration", Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Available: mutatingWebhooksAvailable},
 	})
 
+	resolved := resolveTypedSnapshotPage(
+		clusterConfigDomainName,
+		entries,
+		query,
+		clusterConfigTableQueryAdapter(),
+		clusterConfigQueryCapabilities(),
+		config.SnapshotClusterConfigEntryLimit,
+		"cluster configuration resources",
+		func(entry ClusterConfigEntry) string { return entry.Kind },
+		issues,
+	)
+	// The window snapshot is the canonical unscoped refresh payload; only the
+	// query page publishes the request scope.
+	snapshotScope := ""
 	if query.Enabled {
-		page := applyTypedTableQuery(entries, query, clusterConfigTableQueryAdapter())
-		exact := len(issues) == 0
-		return &refresh.Snapshot{
-			Domain:  clusterConfigDomainName,
-			Scope:   scope,
-			Version: version,
-			Payload: ClusterConfigSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(clusterConfigDomainName, page, clusterConfigQueryCapabilities()).withDegraded(exact, issues),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
+		snapshotScope = scope
 	}
-
-	var totalItems int
-	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterConfigEntryLimit)
-
 	return &refresh.Snapshot{
 		Domain:  clusterConfigDomainName,
+		Scope:   snapshotScope,
 		Version: version,
 		Payload: ClusterConfigSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(clusterConfigDomainName, totalItems, totalItems == len(entries) && len(issues) == 0, snapshotSortedKinds(entries, func(entry ClusterConfigEntry) string { return entry.Kind }), clusterConfigQueryCapabilities()).withIssues(issues),
-			Rows:                  entries,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: snapshotWindowStats(len(entries), totalItems, "cluster configuration resources"),
+		Stats: resolved.Stats,
 	}, nil
 }
 

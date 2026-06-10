@@ -29,6 +29,7 @@ import {
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -107,8 +108,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
     }
     return nodesDomain.data?.metrics ?? null;
   }, [nodesDomain.data?.metrics, nodesDomain.data?.metricsByCluster, selectedClusterId]);
-
-  const selectRows = useCallback((payload: ClusterNodeSnapshotPayload) => payload.rows ?? [], []);
 
   const watchClusterIds = useMemo(
     () => (selectedClusterId ? [selectedClusterId] : []),
@@ -354,7 +353,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
     clusterId: selectedClusterId,
     domain: 'nodes',
     label: 'Cluster Nodes',
-    selectRows,
+    selectRows: selectPayloadRows,
     viewId: 'cluster-nodes',
     persistenceData: [],
     columns: tableColumns,

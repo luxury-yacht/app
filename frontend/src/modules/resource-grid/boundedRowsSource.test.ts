@@ -3,7 +3,7 @@
  *
  * Verifies the bounded source normalizes local row arrays into the shared
  * controller contract: complete bounded data is exact (no partial label, no
- * pagination), and capped/windowed data is partial with an explaining label.
+ * and capped/windowed data is partial with an explaining label.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -21,11 +21,10 @@ const rows: Row[] = [
 ];
 
 describe('boundedRowsSource', () => {
-  it('treats Local Complete as the complete matching set with no pagination', () => {
+  it('treats Local Complete as the complete matching set', () => {
     const source = boundedRowsSource({ rows, mode: 'Local Complete' });
     expect(source.completeness).toBe('complete');
     expect(source.partialLabel).toBeNull();
-    expect(source.pagination).toBeNull();
     expect(source.loaded).toBe(true);
     expect(source.loading).toBe(false);
 
@@ -46,7 +45,6 @@ describe('boundedRowsSource', () => {
     });
     expect(source.completeness).toBe('partial');
     expect(source.partialLabel).toBe('Bounded local snapshot (most recent 200)');
-    expect(source.pagination).toBeNull();
 
     const render = deriveResourceInventoryRenderState(source);
     expect(render.isPartial).toBe(true);
@@ -80,15 +78,6 @@ describe('boundedRowsSource', () => {
 // covering every bounded local table (object-panel related Pods/Jobs and the
 // single-namespace resource views all funnel through this source contract).
 describe('boundedRowsSource bound-proof', () => {
-  it('never exposes pagination, in either completeness mode', () => {
-    // No pagination == no "more pages" escape hatch: the rows are the whole
-    // bounded set (or an explicitly partial window), never a fannable query page.
-    expect(boundedRowsSource({ rows }).pagination).toBeNull();
-    expect(
-      boundedRowsSource({ rows, mode: 'Local Partial', partialLabel: 'capped' }).pagination
-    ).toBeNull();
-  });
-
   it('renders capped/windowed bounded data as partial, never as a complete table', () => {
     const render = deriveResourceInventoryRenderState(
       boundedRowsSource({

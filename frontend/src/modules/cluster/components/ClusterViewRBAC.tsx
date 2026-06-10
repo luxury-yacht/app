@@ -18,6 +18,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -133,7 +134,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       return baseColumns;
     }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
-    const selectRows = useCallback((payload: ClusterRBACSnapshotPayload) => payload.rows ?? [], []);
     const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
       ClusterRBACSnapshotPayload,
       RBACData
@@ -142,7 +142,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       clusterId: selectedClusterId,
       domain: 'cluster-rbac',
       label: 'Cluster RBAC',
-      selectRows,
+      selectRows: selectPayloadRows,
       viewId: 'cluster-rbac',
       columns,
       keyExtractor,

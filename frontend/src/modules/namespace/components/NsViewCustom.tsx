@@ -22,7 +22,7 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
-import CatalogPaginationControls from '@modules/browse/components/CatalogPaginationControls';
+import CatalogPaginationFooter from '@modules/browse/components/CatalogPaginationFooter';
 import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
 import { BROWSE_PAGE_LIMIT_OPTIONS } from '@modules/browse/pagination';
 import {
@@ -196,23 +196,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
       pageSizeOptions: BROWSE_PAGE_LIMIT_OPTIONS,
     });
-    const persistence = useMemo(
-      () => ({
-        sortConfig: persistenceState.sortConfig,
-        setSortConfig: persistenceState.onSortChange,
-        columnWidths: persistenceState.columnWidths,
-        setColumnWidths: persistenceState.setColumnWidths,
-        columnVisibility: persistenceState.columnVisibility,
-        setColumnVisibility: persistenceState.setColumnVisibility,
-        filters: persistenceState.filters,
-        setFilters: persistenceState.setFilters,
-        pageSize: persistenceState.pageSize,
-        setPageSize: persistenceState.setPageSize,
-        resetState: persistenceState.resetState,
-        hydrated: persistenceState.hydrated,
-      }),
-      [persistenceState]
-    );
+    const persistence = persistenceState.persistence;
 
     const {
       rows,
@@ -286,20 +270,10 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     );
     const paginationControls = useMemo(
       () => (
-        <CatalogPaginationControls
+        <CatalogPaginationFooter
           idPrefix="namespace-custom"
-          pageIndex={pagination.pageIndex}
-          pageSize={pagination.pageLimit}
           visibleItemCount={rows.length}
-          pageSizeOptions={pagination.pageLimitOptions}
-          totalCount={pagination.totalCount}
-          totalIsExact={pagination.totalIsExact}
-          hasPrevious={Boolean(pagination.previousToken)}
-          hasNext={Boolean(pagination.continueToken)}
-          loading={pagination.isRequestingMore || pagination.queryPending}
-          onPrevious={pagination.onRequestPrevious}
-          onNext={pagination.onRequestMore}
-          onPageSizeChange={pagination.setPageLimit}
+          pagination={pagination}
         />
       ),
       [pagination, rows.length]

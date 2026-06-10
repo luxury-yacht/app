@@ -1,9 +1,31 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import CatalogPaginationControls from './CatalogPaginationControls';
+import CatalogPaginationFooter from './CatalogPaginationFooter';
+import type { BrowseCatalogPagination } from '@modules/browse/hooks/useBrowseCatalog';
 
-describe('CatalogPaginationControls', () => {
+const pagination = (overrides: Partial<BrowseCatalogPagination> = {}): BrowseCatalogPagination => ({
+  pageIndex: 1,
+  pageLimit: 100,
+  pageLimitOptions: [25, 50, 100, 250, 500, 1000],
+  setPageLimit: vi.fn(),
+  totalCount: 0,
+  totalIsExact: true,
+  previousToken: null,
+  continueToken: null,
+  queryPending: false,
+  hasMore: false,
+  hasPrevious: false,
+  isRequestingMore: false,
+  onRequestMore: vi.fn(),
+  onRequestPrevious: vi.fn(),
+  loadMoreLabel: 'Next page',
+  previousPageLabel: 'Previous page',
+  autoLoadMore: false,
+  ...overrides,
+});
+
+describe('CatalogPaginationFooter', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
@@ -28,20 +50,14 @@ describe('CatalogPaginationControls', () => {
   it('shows an exact visible range when the backend total is exact', () => {
     act(() => {
       root.render(
-        <CatalogPaginationControls
+        <CatalogPaginationFooter
           idPrefix="browse"
-          pageIndex={2}
-          pageSize={100}
           visibleItemCount={75}
-          pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
-          totalCount={175}
-          totalIsExact={true}
-          hasPrevious={true}
-          hasNext={false}
-          loading={false}
-          onPrevious={vi.fn()}
-          onNext={vi.fn()}
-          onPageSizeChange={vi.fn()}
+          pagination={pagination({
+            pageIndex: 2,
+            totalCount: 175,
+            hasPrevious: true,
+          })}
         />
       );
     });
@@ -54,20 +70,16 @@ describe('CatalogPaginationControls', () => {
   it('does not invent total pages for approximate totals', () => {
     act(() => {
       root.render(
-        <CatalogPaginationControls
+        <CatalogPaginationFooter
           idPrefix="browse"
-          pageIndex={2}
-          pageSize={100}
           visibleItemCount={100}
-          pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
-          totalCount={10000}
-          totalIsExact={false}
-          hasPrevious={true}
-          hasNext={true}
-          loading={false}
-          onPrevious={vi.fn()}
-          onNext={vi.fn()}
-          onPageSizeChange={vi.fn()}
+          pagination={pagination({
+            pageIndex: 2,
+            totalCount: 10000,
+            totalIsExact: false,
+            hasPrevious: true,
+            hasMore: true,
+          })}
         />
       );
     });
@@ -83,20 +95,17 @@ describe('CatalogPaginationControls', () => {
 
     act(() => {
       root.render(
-        <CatalogPaginationControls
+        <CatalogPaginationFooter
           idPrefix="browse"
-          pageIndex={1}
-          pageSize={100}
           visibleItemCount={100}
-          pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
-          totalCount={1000}
-          totalIsExact={true}
-          hasPrevious={true}
-          hasNext={true}
-          loading={false}
-          onPrevious={onPrevious}
-          onNext={onNext}
-          onPageSizeChange={onPageSizeChange}
+          pagination={pagination({
+            totalCount: 1000,
+            hasPrevious: true,
+            hasMore: true,
+            onRequestPrevious: onPrevious,
+            onRequestMore: onNext,
+            setPageLimit: onPageSizeChange,
+          })}
         />
       );
     });
@@ -121,20 +130,14 @@ describe('CatalogPaginationControls', () => {
   it('keeps pagination loading state out of visible button text', () => {
     act(() => {
       root.render(
-        <CatalogPaginationControls
+        <CatalogPaginationFooter
           idPrefix="browse"
-          pageIndex={1}
-          pageSize={100}
           visibleItemCount={100}
-          pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
-          totalCount={1000}
-          totalIsExact={true}
-          hasPrevious={false}
-          hasNext={true}
-          loading={true}
-          onPrevious={vi.fn()}
-          onNext={vi.fn()}
-          onPageSizeChange={vi.fn()}
+          pagination={pagination({
+            totalCount: 1000,
+            hasMore: true,
+            isRequestingMore: true,
+          })}
         />
       );
     });

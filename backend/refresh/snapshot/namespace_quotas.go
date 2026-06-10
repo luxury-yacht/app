@@ -221,35 +221,27 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
-	if query.Enabled {
-		page := applyTypedTableQuery(resources, query, quotaTableQueryAdapter())
-		exact := len(issues) == 0
-		return &refresh.Snapshot{
-			Domain:  namespaceQuotasDomainName,
-			Scope:   namespace,
-			Version: version,
-			Payload: NamespaceQuotasSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(namespaceQuotasDomainName, page, namespaceQuotasQueryCapabilities()).withDegraded(exact, issues),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
-	}
-
-	var totalItems int
-	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceQuotasEntryLimit)
-
+	resolved := resolveTypedSnapshotPage(
+		namespaceQuotasDomainName,
+		resources,
+		query,
+		quotaTableQueryAdapter(),
+		namespaceQuotasQueryCapabilities(),
+		config.SnapshotNamespaceQuotasEntryLimit,
+		"quota resources",
+		func(resource QuotaSummary) string { return resource.Kind },
+		issues,
+	)
 	return &refresh.Snapshot{
 		Domain:  namespaceQuotasDomainName,
 		Scope:   namespace,
 		Version: version,
 		Payload: NamespaceQuotasSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceQuotasDomainName, totalItems, totalItems == len(resources) && len(issues) == 0, snapshotSortedKinds(resources, func(resource QuotaSummary) string { return resource.Kind }), namespaceQuotasQueryCapabilities()).withIssues(issues),
-			Rows:                  resources,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: snapshotWindowStats(len(resources), totalItems, "quota resources"),
+		Stats: resolved.Stats,
 	}, nil
 }
 

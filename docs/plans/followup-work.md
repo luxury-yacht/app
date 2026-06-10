@@ -102,32 +102,54 @@ P2 — Moderate
 
 P3 — Tech debt / cleanup
 
-35. Abandoned backend-export vestiges + doc drift — QuerySelectionDescriptor (resource_query_contract.go:312), QueryWideExport: true (catalog.go:157), types.ts:565 field — zero production consumers, pinned in
+35. ✅ Abandoned backend-export vestiges + doc drift — QuerySelectionDescriptor (resource_query_contract.go:312), QueryWideExport: true (catalog.go:157), types.ts:565 field — zero production consumers, pinned in
     place by the conformance test; large-data.md:40,92 and refresh-system.md:102 describe the nonexistent backend export.
-36. Dead source-pagination channel — backendQuerySource.ts:22/useResourceInventoryTable.ts:61/ResourceInventoryTable.tsx:73 — every production source sets pagination: null; tests assert behavior nothing
+    FIXED: QuerySelectionDescriptor (Go + TS), the visibleRowExport/queryWideExport capability fields, and their test pins deleted; large-data.md and refresh-system.md rewritten to the shipped model (client-driven cursor-walk export, fail-loud on a failed page).
+36. ✅ Dead source-pagination channel — backendQuerySource.ts:22/useResourceInventoryTable.ts:61/ResourceInventoryTable.tsx:73 — every production source sets pagination: null; tests assert behavior nothing
     renders.
-37. Query-or-window envelope block copy-pasted across ~16 builders — e.g. namespace_config.go:177, namespace_storage.go:134 — already drifting on exactness/issues handling; wants one generic helper.
-38. Two cursor codecs, already diverged — typed_table_query.go:411 vs query.go:707 — catalog decoder trims whitespace, typed doesn't.
-39. buildQueryBackedSource hand-duplicates backendQuerySource — useQueryBackedResourceGridTable.ts:118 — 16 typed views bypass the adapter the controller doc names; includes a dead Local Partial branch.
-40. fetchAllRows duplicated typed vs catalog — useTypedResourceQuery.ts:317 / useBrowseCatalog.ts:551 — any walk fix must land twice.
-41. selectRows boilerplate repeated in 12 views; payload→row mappings duplicated between views and namespaceResourceDescriptors.ts (double-edit proven in commit 0effd65f); descriptor row-mappings are near-dead
+    FIXED: the whole channel removed — source/render pagination fields, the wrapper's paginationProps, both adapters' input fields, and the passthrough tests.
+37. ✅ Query-or-window envelope block copy-pasted across ~16 builders — e.g. namespace_config.go:177, namespace_storage.go:134 — already drifting on exactness/issues handling; wants one generic helper.
+    FIXED: resolveTypedSnapshotPage centralizes the fork (uniform exactness/issue folding); the 10 exact-pattern builders converted (~200 lines of drift-prone copy-paste removed). nodes/pods/events/workloads/helm keep the shared primitives (structural deviations: metrics payloads, collectors, multi-variant). The envelope conformance test accepts the new helper.
+38. ✅ Two cursor codecs, already diverged — typed_table_query.go:411 vs query.go:707 — catalog decoder trims whitespace, typed doesn't.
+    FIXED: the typed decoder now trims whitespace like the catalog's, with a cross-referencing comment; behavioral divergence closed.
+39. ✅ buildQueryBackedSource hand-duplicates backendQuerySource — useQueryBackedResourceGridTable.ts:118 — 16 typed views bypass the adapter the controller doc names; includes a dead Local Partial branch.
+    FIXED: the wrapper now sources through backendQuerySource (dead Local Partial branch gone); the registry contract test's sanctioned-producer list tightened to the two adapters.
+40. ✅ fetchAllRows duplicated typed vs catalog — useTypedResourceQuery.ts:317 / useBrowseCatalog.ts:551 — any walk fix must land twice.
+    FIXED: walkQueryCursorPages (cursorPageWalk.ts) owns the loop, page guard, and no-advance failure for both walks; blocked/empty-page throws stay in each provider's fetchPage closure.
+41. ✅ selectRows boilerplate repeated in 12 views; payload→row mappings duplicated between views and namespaceResourceDescriptors.ts (double-edit proven in commit 0effd65f); descriptor row-mappings are near-dead
     — consolidate or delete.
-42. Catalog pagination footer assembled by hand 3× — BrowseView.tsx:374, ClusterViewCustom.tsx:244, NsViewCustom.tsx:284 — plus CatalogPaginationControls is a re-typing passthrough of QueryPaginationControls;
+    PARTIALLY FIXED: shared selectPayloadRows replaces 14 identical copies (12 views + NsViewPods + object-panel PodsTab; Helm keeps its real mapping). The descriptor row-mappings are NOT dead — NsResourcesContext still consumes descriptor.select for the live snapshot side — so their removal belongs to the descriptor-driven refactor (#55), not cleanup.
+42. ✅ Catalog pagination footer assembled by hand 3× — BrowseView.tsx:374, ClusterViewCustom.tsx:244, NsViewCustom.tsx:284 — plus CatalogPaginationControls is a re-typing passthrough of QueryPaginationControls;
     the drift already produced #12.
-43. NsViewCustom inlines a 17-line persistence remap — NsViewCustom.tsx:199 — sibling ClusterViewCustom gets the shape from the hook directly.
-44. useBrowseCatalog page-limit state mirror — useBrowseCatalog.ts:176 — six variables + sync effect collapse to a controlled prop.
-45. Dead keyExtractor fallback + useKubeconfig subscription — useResourceGridTable.tsx:64 — unreachable duplicate resolution chain (verified not a bug; identity guard throws).
-46. requestKey dead memo — useHydratedCustomCatalogRows.ts:121 — can never affect the effect; misleadingly implies content-keyed dedupe.
-47. showResultCount no-op flag — GridTable.types.ts:98 — only setter sets the default.
-48. Dead backgroundClusterRefresher custom map entries — backgroundClusterRefresher.ts:69,82 — correctly unreachable (upstream nulled), should be deleted; no test pins the Custom-tab skip.
-49. SaveCsvFile re-implements atomic write minus fsync, leaves 0600 perms — app_csv_export.go:57 — (the suspected Windows rename failure was refuted; modern Go replaces on rename).
-50. HydrateCatalogCustomRows ctx-cancel returns silent partial with nil error — app_object_catalog.go:613 — latent contract wart only; frontend merge guard prevents row loss (refuted as user-facing).
-51. queryWithoutCache omits UnfilteredTotal — query.go:487 — real contract gap on the fallback path; "N of 0" banner effectively unreachable.
-52. Node age adapter inlines -float64 instead of the −Inf sentinel helper — static_table_query.go:472 — convention violation; trigger unreachable on real clusters.
-53. mergeQueryBackedFilterOptions unmemoized — useQueryBackedResourceGridTable.ts:260 — per-render option-model rebuild; sub-ms typically, material only at pathological namespace counts.
-54. .claude/hooks/impact-gate.sh matches by basename with a global 60-minute window — one analysis unlocks edits to every same-named file repo-wide for an hour.
+    FIXED: useBrowseCatalog now returns the assembled pagination object (memoized, superset incl. the GridTable spread flags); CatalogPaginationFooter renders the footer from it; the re-typing passthrough CatalogPaginationControls is deleted; all three views consume the one assembly.
+43. ✅ NsViewCustom inlines a 17-line persistence remap — NsViewCustom.tsx:199 — sibling ClusterViewCustom gets the shape from the hook directly.
+    FIXED: useNamespaceGridTablePersistence exposes a memoized `persistence` field in the standard shape; NsViewCustom's remap and BOTH of BrowseView's (unmemoized!) remaps deleted.
+44. ✅ useBrowseCatalog page-limit state mirror — useBrowseCatalog.ts:176 — six variables + sync effect collapse to a controlled prop.
+    FIXED: pageLimit is now a controlled prop (normalized from the owner's persisted page size; setPageLimit delegates to onPageLimitChange) — the six mirror variables and the sync effect are gone; the hook test harness models the persistence owner.
+45. ✅ Dead keyExtractor fallback + useKubeconfig subscription — useResourceGridTable.tsx:64 — unreachable duplicate resolution chain (verified not a bug; identity guard throws).
+    FIXED: the unreachable fallback chain and the useKubeconfig subscription removed from both base hooks; keyExtractor is now required in their param types (the query wrapper always resolves it).
+46. ✅ requestKey dead memo — useHydratedCustomCatalogRows.ts:121 — can never affect the effect; misleadingly implies content-keyed dedupe.
+    FIXED: deleted (requestRows identity in the same dep list changes strictly more often).
+47. ✅ showResultCount no-op flag — GridTable.types.ts:98 — only setter sets the default.
+    FIXED: option, read, and the lone default-value setter deleted.
+48. ✅ Dead backgroundClusterRefresher custom map entries — backgroundClusterRefresher.ts:69,82 — correctly unreachable (upstream nulled), should be deleted; no test pins the Custom-tab skip.
+    FIXED: both entries deleted with explanatory notes; a new test pins the Custom-tab skip (no domain fetch for clusters parked on Custom).
+49. ✅ SaveCsvFile re-implements atomic write minus fsync, leaves 0600 perms — app_csv_export.go:57 — (the suspected Windows rename failure was refuted; modern Go replaces on rename).
+    FIXED: extracted writeCSVFileAtomically — fsync before close, chmod 0644 before rename; unit-tested (content, size, mode).
+50. ✅ HydrateCatalogCustomRows ctx-cancel returns silent partial with nil error — app_object_catalog.go:613 — latent contract wart only; frontend merge guard prevents row loss (refuted as user-facing).
+    FIXED: a done context now returns ctx.Err() after the fanout; the frontend merge guard path becomes an explicit error fallback. Test pins context.Canceled.
+51. ✅ queryWithoutCache omits UnfilteredTotal — query.go:487 — real contract gap on the fallback path; "N of 0" banner effectively unreachable.
+    FIXED: the fallback path counts the in-scope (customOnly-honored) items in its existing first pass and reports UnfilteredTotal, matching the cached path's semantics.
+52. ✅ Node age adapter inlines -float64 instead of the −Inf sentinel helper — static_table_query.go:472 — convention violation; trigger unreachable on real clusters.
+    FIXED: uses numericAgeSortValue like every other adapter.
+53. ✅ mergeQueryBackedFilterOptions unmemoized — useQueryBackedResourceGridTable.ts:260 — per-render option-model rebuild; sub-ms typically, material only at pathological namespace counts.
+    FIXED: wrapped in useMemo keyed on its two inputs.
+54. ✅ .claude/hooks/impact-gate.sh matches by basename with a global 60-minute window — one analysis unlocks edits to every same-named file repo-wide for an hour.
+    FIXED: a repo-relative path match always passes; a bare-basename mention passes only when the name is unambiguous in the repo (git ls-files count ≤ 1), otherwise the deny message demands the full path. All three paths exercised.
 
 Cross-cutting (tracked as architecture follow-ups, not single fixes)
 
 55. One shared bounded page engine would resolve #16/#24/#38 and the three-engine drift at once; descriptor-driven view config would resolve #27/#41 and most of the per-view copy-paste class.
+    PROGRESS: the collector (#16) now powers pods, workloads, and both events families (#24); the codec divergence (#38) is closed; resolveTypedSnapshotPage (#37) centralizes the envelope fork. Remaining: converting the other static families to the collector, and the descriptor-driven view config (#41's descriptor half).
 56. A controller-level error/staleness surface is the single fix point behind #3/#4/#11/#25 — the data is already on the source; the render contract just has no slot for it.
+    DONE via the P0/P2 work: the controller owns the error banner (#3), error-grace + replay-cache eviction (#4), the plumbed error channel (#11), and the resetPending refresh overlay (#25).

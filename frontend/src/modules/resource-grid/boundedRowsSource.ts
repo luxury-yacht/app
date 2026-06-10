@@ -39,8 +39,8 @@ export interface BoundedRowsSourceInput<T> {
 
 /**
  * Normalize a bounded row array into the shared source-state contract. Bounded
- * sources never paginate, so `pagination` is always null — the full set is
- * already resident and the table operates on it locally.
+ * sources never paginate — the full set is already resident and the table
+ * operates on it locally.
  */
 export function boundedRowsSource<T>(
   input: BoundedRowsSourceInput<T>
@@ -57,7 +57,6 @@ export function boundedRowsSource<T>(
     blocked: input.blocked ?? false,
     completeness,
     partialLabel: completeness === 'partial' ? (input.partialLabel ?? null) : null,
-    pagination: null,
     cacheKey: input.cacheKey,
   };
 }

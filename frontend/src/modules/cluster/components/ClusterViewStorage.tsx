@@ -18,6 +18,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -257,10 +258,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(({ error }) => {
     useShortResourceNames,
   ]);
 
-  const selectRows = useCallback(
-    (payload: ClusterStorageSnapshotPayload) => payload.rows ?? [],
-    []
-  );
   const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
     ClusterStorageSnapshotPayload,
     StorageData
@@ -269,7 +266,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(({ error }) => {
     clusterId: selectedClusterId,
     domain: 'cluster-storage',
     label: 'Cluster Storage',
-    selectRows,
+    selectRows: selectPayloadRows,
     viewId: 'cluster-storage',
     columns,
     keyExtractor,

@@ -22,6 +22,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -214,10 +215,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Storage' : 'Namespace Storage';
 
-    const selectRows = useCallback(
-      (payload: NamespaceStorageSnapshotPayload) => payload.rows ?? [],
-      []
-    );
     const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
       NamespaceStorageSnapshotPayload,
       StorageData
@@ -226,7 +223,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       clusterId: queryClusterId,
       domain: 'namespace-storage',
       label: diagnosticsLabel,
-      selectRows,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-storage',
       namespace,
       columns,

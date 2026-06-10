@@ -23,6 +23,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
 import {
   eventGridActionReference,
@@ -211,10 +212,6 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       []
     );
 
-    const selectRows = useCallback(
-      (payload: NamespaceEventsSnapshotPayload) => payload.rows ?? [],
-      []
-    );
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events';
     const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
@@ -225,7 +222,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       clusterId: queryClusterId,
       domain: 'namespace-events',
       label: diagnosticsLabel,
-      selectRows,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-events',
       namespace,
       columns,

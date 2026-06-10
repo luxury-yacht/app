@@ -95,10 +95,11 @@ export interface ResourceGridMetadataSearchParams<T extends ResourceGridTableRow
 export interface ClusterResourceGridTableParams<
   T extends ResourceGridTableRow,
 > extends ResourceGridTableBaseParams<T> {
-  // Cluster/namespace resource tables always receive persistence from their
-  // query-backed/bounded wrapper, so the override is required here (the base
-  // hooks no longer own a persistence fallback).
+  // Cluster/namespace resource tables always receive persistence AND a resolved
+  // key extractor from their query-backed wrapper, so both are required here
+  // (the base hooks no longer own fallbacks for either).
   persistenceOverride: ResourceGridPersistence<T>;
+  keyExtractor: (item: T, index: number) => string;
   defaultSortKey?: string;
   defaultSortDirection?: SortDirection;
   showNamespaceFilters?: boolean;
@@ -108,6 +109,7 @@ export interface NamespaceResourceGridTableParams<
   T extends ResourceGridTableRow,
 > extends ResourceGridTableBaseParams<T> {
   persistenceOverride: ResourceGridPersistence<T>;
+  keyExtractor: (item: T, index: number) => string;
   namespace: string;
   defaultSort?: SortConfig;
   showNamespaceFilters?: boolean;

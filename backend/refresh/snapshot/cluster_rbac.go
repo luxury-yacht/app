@@ -146,34 +146,33 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		{Kind: "ClusterRoleBinding", Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings", Available: bindingsAvailable},
 	})
 
+	resolved := resolveTypedSnapshotPage(
+		clusterRBACDomainName,
+		entries,
+		query,
+		clusterRBACTableQueryAdapter(),
+		clusterRBACQueryCapabilities(),
+		config.SnapshotClusterRBACEntryLimit,
+		"cluster RBAC resources",
+		func(entry ClusterRBACEntry) string { return entry.Kind },
+		issues,
+	)
+	// The window snapshot is the canonical unscoped refresh payload; only the
+	// query page publishes the request scope.
+	snapshotScope := ""
 	if query.Enabled {
-		page := applyTypedTableQuery(entries, query, clusterRBACTableQueryAdapter())
-		exact := len(issues) == 0
-		return &refresh.Snapshot{
-			Domain:  clusterRBACDomainName,
-			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
-			Version: version,
-			Payload: ClusterRBACSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(clusterRBACDomainName, page, clusterRBACQueryCapabilities()).withDegraded(exact, issues),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
+		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
 	}
-
-	var totalItems int
-	entries, totalItems = truncateSnapshotWindow(entries, config.SnapshotClusterRBACEntryLimit)
-
 	return &refresh.Snapshot{
 		Domain:  clusterRBACDomainName,
+		Scope:   snapshotScope,
 		Version: version,
 		Payload: ClusterRBACSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(clusterRBACDomainName, totalItems, totalItems == len(entries) && len(issues) == 0, snapshotSortedKinds(entries, func(entry ClusterRBACEntry) string { return entry.Kind }), clusterRBACQueryCapabilities()).withIssues(issues),
-			Rows:                  entries,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: snapshotWindowStats(len(entries), totalItems, "cluster RBAC resources"),
+		Stats: resolved.Stats,
 	}, nil
 }
 

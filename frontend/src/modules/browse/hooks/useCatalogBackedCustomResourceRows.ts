@@ -35,16 +35,7 @@ export function useCatalogBackedCustomResourceRows({
     totalCount,
     unfilteredTotal,
     totalIsExact,
-    queryPending,
-    continueToken,
-    previousToken,
-    isRequestingMore,
-    pageIndex,
-    pageLimit,
-    pageLimitOptions,
-    handleLoadMore,
-    handleLoadPrevious,
-    setPageLimit,
+    pagination,
     fetchAllRows: fetchAllCatalogItems,
   } = useBrowseCatalog({
     enabled: persistence.hydrated,
@@ -58,7 +49,7 @@ export function useCatalogBackedCustomResourceRows({
       namespaces: persistence.filters.namespaces ?? [],
     },
     sort: persistence.sortConfig,
-    initialPageLimit: persistence.pageSize ?? undefined,
+    pageLimit: persistence.pageSize ?? undefined,
     onPageLimitChange: persistence.setPageSize,
     diagnosticLabel,
   });
@@ -82,27 +73,8 @@ export function useCatalogBackedCustomResourceRows({
     unfilteredTotal,
     totalIsExact,
     fetchAllRows,
-    pagination: {
-      pageIndex,
-      pageLimit,
-      pageLimitOptions,
-      setPageLimit,
-      totalCount,
-      totalIsExact,
-      previousToken,
-      continueToken,
-      queryPending,
-      hasMore: Boolean(continueToken),
-      hasPrevious: Boolean(previousToken),
-      isRequestingMore,
-      onRequestMore: handleLoadMore,
-      onRequestPrevious: handleLoadPrevious,
-      loadMoreLabel: 'Next page',
-      previousPageLabel: 'Previous page',
-      // Cursor pages REPLACE the row window; the scroll sentinel must never
-      // auto-advance them (it chains pages and fires without scroll on short
-      // pages). Spread targets (the views' `{...pagination}`) inherit this.
-      autoLoadMore: false,
-    },
+    // Assembled once in useBrowseCatalog; the views' `{...pagination}` spread
+    // and the catalog footer both read this object.
+    pagination,
   };
 }

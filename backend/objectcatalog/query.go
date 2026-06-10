@@ -437,10 +437,15 @@ func (s *Service) queryWithoutCache(
 	// Scope the kinds list to namespace-filtered items when a namespace filter is active.
 	namespaceKinds := make(map[string]bool)
 	hasNamespaceFilter := len(opts.Namespaces) > 0
+	// The "of M" in "showing N of M items due to filters": in-scope count with
+	// the user filters cleared (customOnly still honored), matching the cached
+	// path's unfilteredScopeTotal semantics.
+	unfilteredTotal := 0
 	for _, item := range items {
 		if !customMatcher(item) {
 			continue
 		}
+		unfilteredTotal++
 		if item.Kind != "" {
 			kindSet[item.Kind] = item.Scope == ScopeNamespace
 		}
@@ -494,16 +499,17 @@ func (s *Service) queryWithoutCache(
 	sort.Strings(namespaces)
 
 	return QueryResult{
-		Items:         page,
-		ContinueToken: next,
-		PreviousToken: previous,
-		CursorInvalid: cursorInvalid,
-		TotalItems:    total,
-		TotalIsExact:  true,
-		ResourceCount: resourceCount,
-		Kinds:         kinds,
-		Namespaces:    namespaces,
-		FacetsExact:   true,
+		Items:           page,
+		ContinueToken:   next,
+		PreviousToken:   previous,
+		CursorInvalid:   cursorInvalid,
+		TotalItems:      total,
+		UnfilteredTotal: unfilteredTotal,
+		TotalIsExact:    true,
+		ResourceCount:   resourceCount,
+		Kinds:           kinds,
+		Namespaces:      namespaces,
+		FacetsExact:     true,
 	}
 }
 

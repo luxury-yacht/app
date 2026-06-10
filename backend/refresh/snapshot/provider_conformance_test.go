@@ -18,7 +18,7 @@ import (
 // table, reports completeness, publishes capabilities (visible-row export only),
 // and carries rows. This drives the real builders, so it catches a builder that
 // forgets to wire Provider/Capabilities/Completeness — which the capability
-// helper test (TestTypedResourceProvidersPublishVisibleRowExportOnly) alone
+// helper test (TestTypedResourceProvidersPublishQueryCapabilities) alone
 // cannot, because that one only exercises the helper functions in isolation.
 func assertTypedEnvelope(t *testing.T, domain string, env ResourceQueryEnvelope, rowCount int) {
 	t.Helper()
@@ -30,12 +30,6 @@ func assertTypedEnvelope(t *testing.T, domain string, env ResourceQueryEnvelope,
 	}
 	if env.Completeness == "" {
 		t.Errorf("%s: completeness must be set", domain)
-	}
-	if !env.Capabilities.VisibleRowExport {
-		t.Errorf("%s: capabilities must advertise visible-row export", domain)
-	}
-	if env.Capabilities.QueryWideExport {
-		t.Errorf("%s: typed provider must not advertise query-wide export", domain)
 	}
 	if len(env.Capabilities.SortableFields) == 0 {
 		t.Errorf("%s: capabilities must publish sortable fields", domain)
@@ -121,12 +115,6 @@ func assertCatalogContract(t *testing.T, label string, p CatalogSnapshot) {
 	if p.Completeness == "" {
 		t.Errorf("%s: completeness must be set", label)
 	}
-	if !p.Capabilities.QueryWideExport {
-		t.Errorf("%s: catalog must advertise query-wide export", label)
-	}
-	if !p.Capabilities.VisibleRowExport {
-		t.Errorf("%s: catalog must advertise visible-row export", label)
-	}
 	if len(p.Capabilities.SortableFields) == 0 {
 		t.Errorf("%s: catalog must publish sortable fields", label)
 	}
@@ -135,8 +123,8 @@ func assertCatalogContract(t *testing.T, label string, p CatalogSnapshot) {
 // TestCatalogBuilderEmitsTheContract covers the catalog provider in both of its
 // query modes — Browse (all resources) and Custom (customOnly) — and asserts the
 // built snapshot carries the contract fields it surfaces directly (provider,
-// completeness, capabilities with query-wide export). Browse additionally must
-// page real rows from the seed.
+// completeness, capabilities). Browse additionally must page real rows from
+// the seed.
 func TestCatalogBuilderEmitsTheContract(t *testing.T) {
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
 	summaries := []objectcatalog.Summary{

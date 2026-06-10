@@ -66,7 +66,8 @@ const REFRESHER_TO_DOMAIN: Record<string, RefreshDomain> = {
   'cluster-storage': 'cluster-storage',
   'cluster-config': 'cluster-config',
   'cluster-crds': 'cluster-crds',
-  'cluster-custom': 'cluster-custom',
+  // NOTE: no 'cluster-custom' entry — the Custom tab is catalog-backed and its
+  // refresher is nulled upstream (refresherTypes clusterViewToRefresher).
   'cluster-events': 'cluster-events',
   catalog: 'catalog',
   'catalog-diff': 'catalog-diff',
@@ -79,7 +80,7 @@ const REFRESHER_TO_DOMAIN: Record<string, RefreshDomain> = {
   events: 'namespace-events',
   quotas: 'namespace-quotas',
   autoscaling: 'namespace-autoscaling',
-  custom: 'namespace-custom',
+  // NOTE: no 'custom' entry — nulled upstream (namespaceViewToRefresher).
   helm: 'namespace-helm',
   // Object panel refreshers
   'object-maintenance': 'object-maintenance',

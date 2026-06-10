@@ -71,16 +71,6 @@ export default function ResourceInventoryTable<T>({
         }
       : gridTableProps.filters;
 
-  const paginationProps = render.pagination
-    ? {
-        hasMore: render.pagination.hasNext,
-        hasPrevious: render.pagination.hasPrevious,
-        isRequestingMore: render.pagination.isRequestingMore,
-        onRequestMore: render.pagination.onNext,
-        onRequestPrevious: render.pagination.onPrevious,
-      }
-    : undefined;
-
   // The controller surfaces an error only when it should be visible (immediately
   // when there is nothing to show; after the grace window when rows are visible).
   // An errored empty table must not read as the generic "No data available".
@@ -108,7 +98,6 @@ export default function ResourceInventoryTable<T>({
         <GridTable<T>
           {...gridTableProps}
           {...tableProps}
-          {...paginationProps}
           data={render.rows}
           filters={filters}
           loading={updatingMessage ? false : render.showRefreshOverlay}

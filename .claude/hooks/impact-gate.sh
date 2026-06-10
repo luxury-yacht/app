@@ -68,7 +68,17 @@ while IFS= read -r f; do
   gated "$f" || continue
   fresh || deny "Impact gate: no current impact analysis. $CHECK"
   base="$(basename "$f")"
-  grep -qF "$base" "$impact" 2>/dev/null || deny "Impact gate: .claude/impact-analysis.md does not mention $base. $CHECK"
+  rel="${f#"$project_dir"/}"
+  # A repo-relative path match is always sufficient.
+  grep -qF "$rel" "$impact" 2>/dev/null && continue
+  if grep -qF "$base" "$impact" 2>/dev/null; then
+    # A bare-basename mention is only acceptable when the name is unambiguous —
+    # otherwise one analysis would unlock every same-named file repo-wide.
+    count="$(git -C "$project_dir" ls-files "*/$base" "$base" 2>/dev/null | wc -l | tr -d ' ')"
+    [ "${count:-0}" -le 1 ] && continue
+    deny "Impact gate: .claude/impact-analysis.md mentions $base, but multiple files share that name; name the full path ($rel) in the entry. $CHECK"
+  fi
+  deny "Impact gate: .claude/impact-analysis.md does not mention $base. $CHECK"
 done <<<"$paths"
 
 exit 0

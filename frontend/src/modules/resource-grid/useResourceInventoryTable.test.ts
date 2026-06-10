@@ -10,7 +10,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   deriveResourceInventoryRenderState,
-  type ResourceInventoryPagination,
   type ResourceInventorySourceState,
 } from './useResourceInventoryTable';
 
@@ -33,21 +32,6 @@ function source(
     ...overrides,
   };
 }
-
-const pagination = (
-  overrides: Partial<ResourceInventoryPagination> = {}
-): ResourceInventoryPagination => ({
-  hasNext: false,
-  hasPrevious: false,
-  pageIndex: 1,
-  pageSize: 50,
-  totalCount: 0,
-  totalIsExact: true,
-  isRequestingMore: false,
-  onNext: () => {},
-  onPrevious: () => {},
-  ...overrides,
-});
 
 describe('deriveResourceInventoryRenderState', () => {
   it('initializing with no rows shows the loading boundary, not empty', () => {
@@ -168,46 +152,5 @@ describe('deriveResourceInventoryRenderState', () => {
     );
     expect(render.isPartial).toBe(false);
     expect(render.partialLabel).toBeNull();
-  });
-
-  it('passes exact-total pagination through unchanged', () => {
-    const render = deriveResourceInventoryRenderState(
-      source({
-        rows: [row('a')],
-        loaded: true,
-        pagination: pagination({ totalCount: 12, totalIsExact: true }),
-      })
-    );
-    expect(render.pagination?.totalCount).toBe(12);
-    expect(render.pagination?.totalIsExact).toBe(true);
-  });
-
-  it('passes approximate-total pagination through unchanged', () => {
-    const render = deriveResourceInventoryRenderState(
-      source({
-        rows: [row('a')],
-        loaded: true,
-        pagination: pagination({ totalCount: 5000, totalIsExact: false }),
-      })
-    );
-    expect(render.pagination?.totalIsExact).toBe(false);
-  });
-
-  it('passes cursor pagination (next/previous) through unchanged', () => {
-    const render = deriveResourceInventoryRenderState(
-      source({
-        rows: [row('a')],
-        loaded: true,
-        pagination: pagination({ hasNext: true, hasPrevious: true, pageIndex: 3 }),
-      })
-    );
-    expect(render.pagination?.hasNext).toBe(true);
-    expect(render.pagination?.hasPrevious).toBe(true);
-    expect(render.pagination?.pageIndex).toBe(3);
-  });
-
-  it('defaults pagination to null when the source has none (bounded sources)', () => {
-    const render = deriveResourceInventoryRenderState(source({ rows: [row('a')], loaded: true }));
-    expect(render.pagination).toBeNull();
   });
 });

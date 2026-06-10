@@ -35,6 +35,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import { buildObjectPanelPodsScope } from './objectPanelPodsScope';
 
 interface PodsTabProps {
@@ -57,10 +58,6 @@ const COLUMN_SIZING: ColumnSizingMap = {
 
 const workloadNameFromOwner = (pod: PodSnapshotEntry) =>
   pod.ownerName ? `${pod.ownerName}${pod.ownerKind ? ` (${pod.ownerKind})` : ''}` : '—';
-
-// The pods query returns its page as `rows`; everything else (totals, facets)
-// rides on the payload for the pagination footer.
-const selectPodRows = (payload: PodSnapshotPayload): PodSnapshotEntry[] => payload.rows ?? [];
 
 export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   const { openWithObject, objectData } = useObjectPanel();
@@ -260,7 +257,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     domain: 'pods',
     label: 'Object Panel Pods',
     baseScope: podsScope ?? undefined,
-    selectRows: selectPodRows,
+    selectRows: selectPayloadRows,
     viewId: 'object-panel-pods',
     columns,
     objectIdentity: podIdentity,

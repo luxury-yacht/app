@@ -21,6 +21,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -172,10 +173,6 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Network' : 'Namespace Network';
 
-    const selectRows = useCallback(
-      (payload: NamespaceNetworkSnapshotPayload) => payload.rows ?? [],
-      []
-    );
     const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
       NamespaceNetworkSnapshotPayload,
       NetworkData
@@ -184,7 +181,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       clusterId: queryClusterId,
       domain: 'namespace-network',
       label: diagnosticsLabel,
-      selectRows,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-network',
       namespace,
       columns,

@@ -131,34 +131,27 @@ func (b *NamespaceStorageBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
-	if query.Enabled {
-		page := applyTypedTableQuery(resources, query, storageTableQueryAdapter())
-		return &refresh.Snapshot{
-			Domain:  namespaceStorageDomainName,
-			Scope:   namespace,
-			Version: version,
-			Payload: NamespaceStorageSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(namespaceStorageDomainName, page, namespaceStorageQueryCapabilities()),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
-	}
-
-	var totalItems int
-	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceStorageEntryLimit)
-
+	resolved := resolveTypedSnapshotPage(
+		namespaceStorageDomainName,
+		resources,
+		query,
+		storageTableQueryAdapter(),
+		namespaceStorageQueryCapabilities(),
+		config.SnapshotNamespaceStorageEntryLimit,
+		"storage resources",
+		func(resource StorageSummary) string { return resource.Kind },
+		nil,
+	)
 	return &refresh.Snapshot{
 		Domain:  namespaceStorageDomainName,
 		Scope:   namespace,
 		Version: version,
 		Payload: NamespaceStorageSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceStorageDomainName, totalItems, totalItems == len(resources), snapshotSortedKinds(resources, func(resource StorageSummary) string { return resource.Kind }), namespaceStorageQueryCapabilities()),
-			Rows:                  resources,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: snapshotWindowStats(len(resources), totalItems, "storage resources"),
+		Stats: resolved.Stats,
 	}, nil
 }
 

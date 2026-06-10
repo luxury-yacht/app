@@ -59,14 +59,13 @@ const DIRECT_USE_TABLE_SORT_EXCEPTIONS = {
 
 // The only modules allowed to PRODUCE a ResourceInventorySourceState — the source
 // that feeds ResourceInventoryTable. boundedRowsSource (bounded local) and
-// backendQuerySource (catalog/explicit query) are the two public adapters; the
-// typed-query wrapper builds its typed source inline (buildQueryBackedSource).
+// backendQuerySource (catalog/typed query) are the two adapters; the typed-query
+// wrapper consumes backendQuerySource rather than building its own shape.
 // A new ad-hoc source shape outside this set is a bypass of the normalized source
 // contract and must be reviewed before being added here.
 const RESOURCE_INVENTORY_SOURCE_ADAPTERS = [
   'modules/resource-grid/backendQuerySource.ts',
   'modules/resource-grid/boundedRowsSource.ts',
-  'modules/resource-grid/useQueryBackedResourceGridTable.ts',
 ] as const;
 
 /** Recursively find all .ts/.tsx files under `dir`. */
@@ -396,8 +395,7 @@ describe('gridTableViewRegistry contract', () => {
       throw new Error(
         `Found resource-inventory source producers outside the sanctioned adapters:\n` +
           unexpected.map((file) => `  ${file}`).join('\n') +
-          '\n\nResource inventory tables must source from boundedRowsSource or backendQuerySource ' +
-          '(the typed-query wrapper builds its source inline via buildQueryBackedSource). ' +
+          '\n\nResource inventory tables must source from boundedRowsSource or backendQuerySource. ' +
           'A new source shape must be reviewed and added to RESOURCE_INVENTORY_SOURCE_ADAPTERS deliberately.'
       );
     }

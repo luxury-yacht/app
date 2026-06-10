@@ -32,6 +32,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import { buildWorkloadActionReference } from './workloadActionReference';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 
 interface WorkloadsViewProps {
   namespace: string;
@@ -161,10 +162,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
     const showNamespaceFilter = isAllNamespaces;
     const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Workloads' : 'Namespace Workloads';
-    const selectWorkloadRows = useCallback(
-      (payload: NamespaceWorkloadSnapshotPayload) => payload.rows ?? [],
-      []
-    );
 
     const getRowSearchValues = useCallback((row: WorkloadData) => {
       const tokens: string[] = [];
@@ -181,7 +178,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       clusterId: selectedClusterId,
       domain: 'namespace-workloads',
       label: diagnosticsLabel,
-      selectRows: selectWorkloadRows,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-workloads',
       namespace,
       columns: tableColumns as unknown as GridColumnDefinition<WorkloadData>[],

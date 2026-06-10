@@ -174,35 +174,27 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 
 	sortConfigSummaries(resources)
 
-	if query.Enabled {
-		page := applyTypedTableQuery(resources, query, configTableQueryAdapter())
-		exact := len(issues) == 0
-		return &refresh.Snapshot{
-			Domain:  namespaceConfigDomainName,
-			Scope:   scope,
-			Version: version,
-			Payload: NamespaceConfigSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(namespaceConfigDomainName, page, namespaceConfigQueryCapabilities()).withDegraded(exact, issues),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
-	}
-
-	var totalItems int
-	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceConfigEntryLimit)
-
+	resolved := resolveTypedSnapshotPage(
+		namespaceConfigDomainName,
+		resources,
+		query,
+		configTableQueryAdapter(),
+		namespaceConfigQueryCapabilities(),
+		config.SnapshotNamespaceConfigEntryLimit,
+		"config resources",
+		func(resource ConfigSummary) string { return resource.Kind },
+		issues,
+	)
 	return &refresh.Snapshot{
 		Domain:  namespaceConfigDomainName,
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceConfigSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceConfigDomainName, totalItems, totalItems == len(resources) && len(issues) == 0, snapshotSortedKinds(resources, func(resource ConfigSummary) string { return resource.Kind }), namespaceConfigQueryCapabilities()).withIssues(issues),
-			Rows:                  resources,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: snapshotWindowStats(len(resources), totalItems, "config resources"),
+		Stats: resolved.Stats,
 	}, nil
 }
 

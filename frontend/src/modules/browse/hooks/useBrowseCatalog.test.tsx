@@ -5,6 +5,7 @@
  * catalog paging, metadata loading, and filter-driven scope changes.
  */
 
+import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -125,6 +126,9 @@ describe('useBrowseCatalog', () => {
     initialPageLimit = 2,
     onPageLimitChange,
   }: {
+    // initialPageLimit seeds the harness's controlled pageLimit state, which
+    // feeds accepted changes back to the hook the way persistence does in
+    // production (the hook holds no page-size state of its own).
     search?: string;
     kinds?: string[];
     namespaces?: string[];
@@ -135,14 +139,20 @@ describe('useBrowseCatalog', () => {
     initialPageLimit?: number;
     onPageLimitChange?: (value: 25 | 50 | 100 | 250 | 500 | 1000) => void;
   }) => {
+    // Model the persistence owner: the prop supplies the value (hydration can
+    // change it across renders) and accepted user changes override it.
+    const [pageLimitOverride, setHarnessPageLimit] = React.useState<number | null>(null);
     result = useBrowseCatalog({
       enabled,
       clusterId: 'cluster-1',
       pinnedNamespaces,
       clusterScopedOnly,
       customOnly,
-      initialPageLimit,
-      onPageLimitChange,
+      pageLimit: pageLimitOverride ?? initialPageLimit,
+      onPageLimitChange: (value) => {
+        setHarnessPageLimit(value);
+        onPageLimitChange?.(value);
+      },
       filters: { search, kinds, namespaces },
       diagnosticLabel: 'test browse',
     });

@@ -184,6 +184,25 @@ const browseCatalogResult = (items: CatalogItem[] = []) => ({
     customOnly: true,
   },
   queryPending: false,
+  pagination: {
+    pageIndex: 1,
+    pageLimit: 50,
+    pageLimitOptions: [25, 50, 100, 250, 500, 1000],
+    setPageLimit: () => {},
+    totalCount: items.length,
+    totalIsExact: true,
+    previousToken: null,
+    continueToken: null,
+    queryPending: false,
+    hasMore: false,
+    hasPrevious: false,
+    isRequestingMore: false,
+    onRequestMore: () => {},
+    onRequestPrevious: () => {},
+    loadMoreLabel: 'Next page',
+    previousPageLabel: 'Previous page',
+    autoLoadMore: false,
+  },
 });
 
 const catalogItemFromCustom = (

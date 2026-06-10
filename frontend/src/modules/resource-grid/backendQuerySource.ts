@@ -18,20 +18,6 @@ import type {
   ResourceInventorySourceState,
 } from './useResourceInventoryTable';
 
-/** Cursor/page signals as exposed by the typed and catalog query hooks. */
-export interface BackendQueryPaginationInput {
-  /** Next-page cursor; a non-empty token means another page is available. */
-  continueToken: string | null;
-  hasPrevious: boolean;
-  pageIndex: number;
-  pageSize: number;
-  totalCount: number;
-  totalIsExact: boolean;
-  isRequestingMore: boolean;
-  loadMore: () => void;
-  loadPrevious: () => void;
-}
-
 export interface BackendQuerySourceInput<T> {
   /**
    * Whether the query is actually running. False when the view has chosen not
@@ -46,25 +32,19 @@ export interface BackendQuerySourceInput<T> {
   /**
    * Provider completeness from the result envelope. `partial` means degraded /
    * windowed with no pagination recourse (issues, streaming disabled), NOT a
-   * normal "there are more pages" state — that is carried by pagination.
+   * normal "there are more pages" state — pagination rides the providers' own
+   * footer on `gridTableProps`.
    */
   completeness?: ResourceInventoryCompleteness;
   partialLabel?: string | null;
-  /**
-   * Cursor signals. Omit (or null) when the provider renders its own rich
-   * pagination footer on `gridTableProps` (e.g. the catalog's
-   * CatalogPaginationControls with a page-size selector) — the controller then
-   * leaves pagination to that footer.
-   */
-  pagination?: BackendQueryPaginationInput | null;
   /** Per-view identity for the controller's revisit replay cache. */
   cacheKey?: string;
 }
 
 /**
  * Map a backend query result into the shared source state. A disabled query is
- * `blocked` with no pagination; an enabled query carries normalized pagination
- * derived from its cursor signals.
+ * `blocked`; pagination is not part of the source contract — every provider
+ * renders its own pagination footer on `gridTableProps`.
  */
 export function backendQuerySource<T>(
   input: BackendQuerySourceInput<T>
@@ -80,7 +60,6 @@ export function backendQuerySource<T>(
       blocked: true,
       completeness,
       partialLabel: null,
-      pagination: null,
       cacheKey: input.cacheKey,
     };
   }
@@ -93,19 +72,6 @@ export function backendQuerySource<T>(
     blocked: false,
     completeness,
     partialLabel: completeness === 'partial' ? (input.partialLabel ?? null) : null,
-    pagination: input.pagination
-      ? {
-          hasNext: Boolean(input.pagination.continueToken),
-          hasPrevious: input.pagination.hasPrevious,
-          pageIndex: input.pagination.pageIndex,
-          pageSize: input.pagination.pageSize,
-          totalCount: input.pagination.totalCount,
-          totalIsExact: input.pagination.totalIsExact,
-          isRequestingMore: input.pagination.isRequestingMore,
-          onNext: input.pagination.loadMore,
-          onPrevious: input.pagination.loadPrevious,
-        }
-      : null,
     cacheKey: input.cacheKey,
   };
 }

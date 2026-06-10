@@ -139,34 +139,27 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
-	if query.Enabled {
-		page := applyTypedTableQuery(resources, query, autoscalingTableQueryAdapter())
-		return &refresh.Snapshot{
-			Domain:  namespaceAutoscalingDomainName,
-			Scope:   scope,
-			Version: version,
-			Payload: NamespaceAutoscalingSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(namespaceAutoscalingDomainName, page, namespaceAutoscalingQueryCapabilities()),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
-	}
-
-	var totalItems int
-	resources, totalItems = truncateSnapshotWindow(resources, config.SnapshotNamespaceAutoscalingEntryLimit)
-
+	resolved := resolveTypedSnapshotPage(
+		namespaceAutoscalingDomainName,
+		resources,
+		query,
+		autoscalingTableQueryAdapter(),
+		namespaceAutoscalingQueryCapabilities(),
+		config.SnapshotNamespaceAutoscalingEntryLimit,
+		"autoscaling resources",
+		func(resource AutoscalingSummary) string { return resource.Kind },
+		nil,
+	)
 	return &refresh.Snapshot{
 		Domain:  namespaceAutoscalingDomainName,
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceAutoscalingSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceAutoscalingDomainName, totalItems, totalItems == len(resources), snapshotSortedKinds(resources, func(resource AutoscalingSummary) string { return resource.Kind }), namespaceAutoscalingQueryCapabilities()),
-			Rows:                  resources,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: snapshotWindowStats(len(resources), totalItems, "autoscaling resources"),
+		Stats: resolved.Stats,
 	}, nil
 }
 

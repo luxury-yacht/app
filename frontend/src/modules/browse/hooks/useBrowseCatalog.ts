@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState, useRefreshDomainHandle } from '@/core/data-access';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
+import { walkQueryCursorPages } from '@modules/resource-grid/cursorPageWalk';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
@@ -77,12 +78,38 @@ export interface UseBrowseCatalogOptions {
   filters: BrowseFilters;
   /** Current backend-owned sort state */
   sort?: { key: string; direction: 'asc' | 'desc' | null } | null;
-  /** Optional initial page size for catalog cursor pages */
-  initialPageLimit?: number;
+  /**
+   * Controlled backend cursor page size, normally the persisted table page
+   * size. The hook holds no page-size state of its own: `setPageLimit`
+   * delegates to `onPageLimitChange`, and the accepted value flows back in
+   * through this prop.
+   */
+  pageLimit?: number;
   /** Persists accepted page-size changes through the owning table state. */
   onPageLimitChange?: (value: BrowsePageLimit) => void;
   /** Diagnostic label for logging */
   diagnosticLabel: string;
+}
+
+/** Pagination state shared by the catalog footer and the views' GridTable spread. */
+export interface BrowseCatalogPagination {
+  pageIndex: number;
+  pageLimit: number;
+  pageLimitOptions: readonly BrowsePageLimit[];
+  setPageLimit: (value: BrowsePageLimit) => void;
+  totalCount: number;
+  totalIsExact: boolean;
+  previousToken: string | null;
+  continueToken: string | null;
+  queryPending: boolean;
+  hasMore: boolean;
+  hasPrevious: boolean;
+  isRequestingMore: boolean;
+  onRequestMore: () => void;
+  onRequestPrevious: () => void;
+  loadMoreLabel: string;
+  previousPageLabel: string;
+  autoLoadMore: boolean;
 }
 
 /**
@@ -125,6 +152,12 @@ export interface UseBrowseCatalogResult {
   pageLimitOptions: readonly BrowsePageLimit[];
   /** Updates the backend cursor page size */
   setPageLimit: (value: BrowsePageLimit) => void;
+  /**
+   * The assembled pagination state for the catalog footer and GridTable spread
+   * (`{...pagination}`) — built once here so the three catalog-backed views
+   * cannot drift on the assembly.
+   */
+  pagination: BrowseCatalogPagination;
   /** Refreshes the current query scope without changing filters or page size. */
   refresh: () => void;
   /** Exact debounced backend query descriptor currently used by this table. */
@@ -157,7 +190,7 @@ export function useBrowseCatalog({
   customOnly = false,
   filters,
   sort,
-  initialPageLimit,
+  pageLimit: pageLimitProp,
   onPageLimitChange,
   diagnosticLabel,
 }: UseBrowseCatalogOptions): UseBrowseCatalogResult {
@@ -172,15 +205,11 @@ export function useBrowseCatalog({
   const [totalIsExact, setTotalIsExact] = useState(true);
   // Page-navigation failures; the scoped domain carries baseline/stream errors.
   const [pageError, setPageError] = useState<string | null>(null);
-  const initialPageLimitKey = initialPageLimit ?? null;
-  const normalizedInitialPageLimit = useMemo(
-    () => normalizeInitialPageLimit(initialPageLimit ?? DEFAULT_BROWSE_PAGE_LIMIT),
-    [initialPageLimit]
+  // Controlled page size: normalize the owner-provided value; no local mirror.
+  const pageLimit = useMemo(
+    () => normalizeInitialPageLimit(pageLimitProp ?? DEFAULT_BROWSE_PAGE_LIMIT),
+    [pageLimitProp]
   );
-  const [pageLimit, setPageLimitState] = useState<number>(() => normalizedInitialPageLimit);
-  const lastInitialPageLimitRef = useRef(initialPageLimitKey);
-  const initialPageLimitChanged = lastInitialPageLimitRef.current !== initialPageLimitKey;
-  const activePageLimit = initialPageLimitChanged ? normalizedInitialPageLimit : pageLimit;
   const [debouncedSearch, setDebouncedSearch] = useState(filters.search ?? '');
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
@@ -211,17 +240,8 @@ export function useBrowseCatalog({
     [debouncedSearch, filters]
   );
 
-  useEffect(() => {
-    if (!initialPageLimitChanged) {
-      return;
-    }
-    lastInitialPageLimitRef.current = initialPageLimitKey;
-    setPageLimitState(normalizedInitialPageLimit);
-  }, [initialPageLimitChanged, initialPageLimitKey, normalizedInitialPageLimit]);
-
   const setPageLimit = useCallback(
     (value: BrowsePageLimit) => {
-      setPageLimitState(value);
       onPageLimitChange?.(value);
     },
     [onPageLimitChange]
@@ -240,10 +260,10 @@ export function useBrowseCatalog({
         filters: queryFilters,
         sort,
         availableNamespaces,
-        pageLimit: activePageLimit,
+        pageLimit,
       }),
     [
-      activePageLimit,
+      pageLimit,
       availableNamespaces,
       clusterId,
       clusterScopedOnly,
@@ -407,7 +427,7 @@ export function useBrowseCatalog({
           clusterId,
           filters: queryFilters,
           sort,
-          pageLimit: activePageLimit,
+          pageLimit,
           pinnedNamespaces,
           customOnly,
         },
@@ -481,7 +501,7 @@ export function useBrowseCatalog({
     },
     [
       isRequestingMore,
-      activePageLimit,
+      pageLimit,
       queryFilters,
       sort,
       plan,
@@ -563,16 +583,12 @@ export function useBrowseCatalog({
     }
     // Request the backend's max page size (config.ObjectCatalogMaxQueryLimit);
     // it caps the value anyway, so a single request can't return everything and
-    // we follow the cursor below. Paging below the cap multiplies the number of
-    // full catalog scans per export.
+    // the shared walk follows the cursor. Paging below the cap multiplies the
+    // number of full catalog scans per export. Each page is a clean one-off
+    // catalog query for the current filters/sort; the shared walk owns the
+    // loop, page guard, and failure semantics (failed/empty pages REJECT).
     const exportPageLimit = 10000;
-    const collected: CatalogItem[] = [];
-    let cursor = '';
-    const maxPages = 100000;
-    // Page through the full result set following the backend cursor. Each page is a clean
-    // one-off catalog query for the current filters/sort; the guard bounds a stuck cursor.
-    // A failed page REJECTS: a partial export saved as success is silent data loss.
-    for (let page = 0; page < maxPages; page += 1) {
+    const collected = await walkQueryCursorPages<CatalogItem>('Catalog', async (cursor, page) => {
       const scope = buildBrowseCatalogPageScope(
         plan,
         {
@@ -583,7 +599,7 @@ export function useBrowseCatalog({
           pinnedNamespaces,
           customOnly,
         },
-        cursor
+        cursor ?? ''
       );
       const result = await requestRefreshDomainState({ domain: 'catalog', scope, reason: 'user' });
       if (result.status !== 'executed') {
@@ -594,13 +610,9 @@ export function useBrowseCatalog({
         throw new Error(`Catalog export failed: page ${page + 1} returned no data`);
       }
       const applied = applyCatalogPage(emptyBrowseCatalogCollection(), payload);
-      collected.push(...applied.items);
-      if (!applied.continueToken) {
-        return filterBrowseCatalogItems(collected, clusterScopedOnly);
-      }
-      cursor = applied.continueToken;
-    }
-    throw new Error(`Catalog export failed: cursor did not advance after ${maxPages} pages`);
+      return { items: applied.items, continueToken: applied.continueToken || null };
+    });
+    return filterBrowseCatalogItems(collected, clusterScopedOnly);
   }, [
     clusterId,
     clusterScopedOnly,
@@ -611,6 +623,44 @@ export function useBrowseCatalog({
     queryFilters,
     sort,
   ]);
+
+  const pagination = useMemo<BrowseCatalogPagination>(
+    () => ({
+      pageIndex,
+      pageLimit,
+      pageLimitOptions: BROWSE_PAGE_LIMIT_OPTIONS,
+      setPageLimit,
+      totalCount,
+      totalIsExact,
+      previousToken,
+      continueToken,
+      queryPending,
+      hasMore: Boolean(continueToken),
+      hasPrevious: Boolean(previousToken),
+      isRequestingMore,
+      onRequestMore: handleLoadMore,
+      onRequestPrevious: handleLoadPrevious,
+      loadMoreLabel: 'Next page',
+      previousPageLabel: 'Previous page',
+      // Cursor pages REPLACE the row window; the scroll sentinel must never
+      // auto-advance them (it chains pages and fires without scroll on short
+      // pages). Spread targets (the views' `{...pagination}`) inherit this.
+      autoLoadMore: false,
+    }),
+    [
+      continueToken,
+      handleLoadMore,
+      handleLoadPrevious,
+      isRequestingMore,
+      pageIndex,
+      pageLimit,
+      previousToken,
+      queryPending,
+      setPageLimit,
+      totalCount,
+      totalIsExact,
+    ]
+  );
 
   return {
     items: stableFilteredItems,
@@ -628,9 +678,10 @@ export function useBrowseCatalog({
     totalCount,
     unfilteredTotal,
     totalIsExact,
-    pageLimit: activePageLimit,
+    pageLimit,
     pageLimitOptions: BROWSE_PAGE_LIMIT_OPTIONS,
     setPageLimit,
+    pagination,
     refresh: refreshCurrentQuery,
     queryDescriptor,
     queryPending,

@@ -429,6 +429,23 @@ func assertStringSlicesEqual(t *testing.T, want, got []string) {
 	}
 }
 
+// Cursor tokens must survive surrounding whitespace like the catalog codec's do
+// (the two codecs had silently diverged on this).
+func TestTypedTableQueryCursorDecodeTrimsWhitespace(t *testing.T) {
+	token := encodeTypedTableQueryCursor(typedTableQueryCursor{
+		ClusterID: "cluster-a",
+		Table:     "pods",
+		LastKey:   "default/a",
+	})
+	cursor, ok := decodeTypedTableQueryCursor("  " + token + "\n")
+	if !ok {
+		t.Fatal("expected a padded cursor token to decode")
+	}
+	if cursor.LastKey != "default/a" {
+		t.Fatalf("expected decoded cursor to round-trip, got %+v", cursor)
+	}
+}
+
 // A sort request the table cannot honor must SURFACE (the adapters fall back to
 // name order, which previously rendered under the requested column's lit arrow
 // with no signal). The published SortableFields capability is the contract.

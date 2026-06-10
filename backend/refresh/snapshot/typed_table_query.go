@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/luxury-yacht/app/backend/refresh"
 )
 
 const (
@@ -190,6 +192,48 @@ func (e ResourceQueryEnvelope) withIssues(issues []ResourceQueryIssue) ResourceQ
 	// Append: the envelope may already carry issues (e.g. an unsupported sort).
 	e.Issues = append(e.Issues, issues...)
 	return e
+}
+
+// typedSnapshotPage is a resolved query-or-window result: the envelope, the
+// rows to publish, and the snapshot stats. Builders assemble the final
+// refresh.Snapshot around it (scope/version/payload struct stay builder-owned).
+type typedSnapshotPage[T any] struct {
+	Envelope ResourceQueryEnvelope
+	Rows     []T
+	Stats    refresh.SnapshotStats
+}
+
+// resolveTypedSnapshotPage centralizes the query-or-window fork the typed
+// builders used to copy-paste (and drift on): the query path applies the typed
+// query and folds issues via withDegraded; the window path truncates to the
+// window limit and folds issues via withIssues, reporting exact only when the
+// window holds the complete set AND no source issues exist.
+func resolveTypedSnapshotPage[T any](
+	domain string,
+	rows []T,
+	query typedTableQuery,
+	adapter typedTableQueryAdapter[T],
+	capabilities ResourceQueryCapabilities,
+	windowLimit int,
+	windowNoun string,
+	kindOf func(T) string,
+	issues []ResourceQueryIssue,
+) typedSnapshotPage[T] {
+	if query.Enabled {
+		page := applyTypedTableQuery(rows, query, adapter)
+		return typedSnapshotPage[T]{
+			Envelope: typedQueryEnvelope(domain, page, capabilities).withDegraded(len(issues) == 0, issues),
+			Rows:     page.Rows,
+			Stats:    refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}
+	}
+	window, totalItems := truncateSnapshotWindow(rows, windowLimit)
+	exact := totalItems == len(window) && len(issues) == 0
+	return typedSnapshotPage[T]{
+		Envelope: typedWindowEnvelope(domain, totalItems, exact, snapshotSortedKinds(window, kindOf), capabilities).withIssues(issues),
+		Rows:     window,
+		Stats:    snapshotWindowStats(len(window), totalItems, windowNoun),
+	}
 }
 
 // typedTableQueryMatcher prebuilds the per-query filter state (namespace/kind
@@ -523,7 +567,9 @@ func encodeTypedTableQueryCursor(cursor typedTableQueryCursor) string {
 }
 
 func decodeTypedTableQueryCursor(value string) (typedTableQueryCursor, bool) {
-	raw, err := base64.RawURLEncoding.DecodeString(value)
+	// Trim like the catalog cursor codec does, so a token padded in transport
+	// decodes identically through both.
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(value))
 	if err != nil {
 		return typedTableQueryCursor{}, false
 	}

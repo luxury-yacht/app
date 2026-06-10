@@ -5,7 +5,6 @@
  */
 
 import { useCallback, useEffect, useMemo } from 'react';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
 import {
@@ -59,16 +58,12 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
   showNamespaceFilters = false,
   ...common
 }: ClusterResourceGridTableParams<T>): ResourceGridTableResult<T> {
-  const { selectedClusterId } = useKubeconfig();
-  const defaultKeyExtractor = useDefaultResourceGridKey<T>(selectedClusterId);
-  const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key ?? defaultKeyExtractor;
-
   const table = useResourceGridTableCommon({
     ...common,
     tableMode,
     data,
     columns,
-    keyExtractor: resolvedKeyExtractor,
+    keyExtractor,
     rowIdentity: common.rowIdentity ?? common.objectIdentity?.rowIdentity,
     persistence,
     defaultSortKey,
@@ -90,16 +85,12 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
   showNamespaceFilters = false,
   ...common
 }: NamespaceResourceGridTableParams<T>): ResourceGridTableResult<T> {
-  const { selectedClusterId } = useKubeconfig();
-  const defaultKeyExtractor = useDefaultResourceGridKey<T>(selectedClusterId);
-  const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key ?? defaultKeyExtractor;
-
   const table = useResourceGridTableCommon({
     ...common,
     tableMode,
     data,
     columns,
-    keyExtractor: resolvedKeyExtractor,
+    keyExtractor,
     rowIdentity: common.rowIdentity ?? common.objectIdentity?.rowIdentity,
     persistence,
     defaultSortKey: defaultSort.key,

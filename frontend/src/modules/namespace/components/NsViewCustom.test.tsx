@@ -99,18 +99,28 @@ vi.mock('@/hooks/useTableSort', () => ({
 }));
 
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
-  useNamespaceGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
-    onSortChange: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
-    setFilters: vi.fn(),
-    isNamespaceScoped: true,
-    resetState: vi.fn(),
-  }),
+  useNamespaceGridTablePersistence: () => {
+    const persistence = {
+      sortConfig: { key: 'name', direction: 'asc' },
+      setSortConfig: vi.fn(),
+      columnWidths: null,
+      setColumnWidths: vi.fn(),
+      columnVisibility: null,
+      setColumnVisibility: vi.fn(),
+      filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+      setFilters: vi.fn(),
+      pageSize: null,
+      setPageSize: vi.fn(),
+      resetState: vi.fn(),
+      hydrated: true,
+    };
+    return {
+      ...persistence,
+      onSortChange: vi.fn(),
+      isNamespaceScoped: true,
+      persistence,
+    };
+  },
 }));
 
 vi.mock('@modules/browse/hooks/useBrowseCatalog', () => ({
@@ -181,6 +191,25 @@ const browseCatalogResult = (items: CatalogItem[] = []) => ({
     customOnly: true,
   },
   queryPending: false,
+  pagination: {
+    pageIndex: 1,
+    pageLimit: 50,
+    pageLimitOptions: [25, 50, 100, 250, 500, 1000],
+    setPageLimit: () => {},
+    totalCount: items.length,
+    totalIsExact: true,
+    previousToken: null,
+    continueToken: null,
+    queryPending: false,
+    hasMore: false,
+    hasPrevious: false,
+    isRequestingMore: false,
+    onRequestMore: () => {},
+    onRequestPrevious: () => {},
+    loadMoreLabel: 'Next page',
+    previousPageLabel: 'Previous page',
+    autoLoadMore: false,
+  },
 });
 
 const catalogItemFromResource = (

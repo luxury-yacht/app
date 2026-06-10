@@ -144,17 +144,14 @@ func (b *catalogBuilder) Build(ctx context.Context, scope string) (*refresh.Snap
 }
 
 // newCatalogCapabilities builds capabilities for the catalog browse provider.
-// The catalog supports both visible-row export and a backend query-wide export
-// path (it owns the full match set behind a cursor), so both export flags are
-// true — this is the distinction from typed providers, which expose visible-row
-// export only.
+// Exports/copies are client-driven walks over the query cursor for every
+// provider (the old backend query-wide export was retired), so capabilities
+// describe only the query surface: sort/filter/search fields.
 func newCatalogCapabilities() ResourceQueryCapabilities {
 	return ResourceQueryCapabilities{
 		SortableFields:   []string{"name", "kind", "namespace", "age", "creationTimestamp"},
 		FilterableFields: []string{"kinds", "namespaces"},
 		SearchableFields: []string{"name", "kind", "namespace"},
-		VisibleRowExport: true,
-		QueryWideExport:  true,
 	}
 }
 

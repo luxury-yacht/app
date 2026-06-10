@@ -15,6 +15,40 @@ describe('BackgroundClusterRefresher', () => {
     vi.restoreAllMocks();
   });
 
+  it('skips content refresh for clusters parked on the Custom tab (catalog-backed)', async () => {
+    const fetchForCluster = vi
+      .spyOn(refreshOrchestrator, 'fetchDomainForCluster')
+      .mockResolvedValue(undefined);
+    const navigationByCluster: Record<string, NavigationTabState> = {
+      'cluster-b': {
+        viewType: 'cluster',
+        previousView: 'overview',
+        activeNamespaceView: 'workloads',
+        activeClusterView: 'custom',
+      },
+      'cluster-c': {
+        viewType: 'namespace',
+        previousView: 'overview',
+        activeNamespaceView: 'custom',
+        activeClusterView: 'nodes',
+      },
+    };
+
+    const refresher = new BackgroundClusterRefresher(
+      (clusterId) => navigationByCluster[clusterId],
+      (clusterId) => (clusterId === 'cluster-c' ? 'default' : undefined)
+    );
+    refresher.updateClusters('cluster-a', ['cluster-a', 'cluster-b', 'cluster-c']);
+
+    await (refresher as unknown as { tick: () => Promise<void> }).tick();
+
+    // The Custom tabs are catalog-backed (their refreshers are nulled
+    // upstream); the only refresh for the namespace cluster is the namespace
+    // support data — no snapshot domain fetch fires for either Custom view.
+    const domains = fetchForCluster.mock.calls.map(([domain]) => domain);
+    expect(domains).toEqual(['namespaces']);
+  });
+
   it('refreshes background clusters as separate single-cluster requests', async () => {
     const fetchForCluster = vi
       .spyOn(refreshOrchestrator, 'fetchDomainForCluster')

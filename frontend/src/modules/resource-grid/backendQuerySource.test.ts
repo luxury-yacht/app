@@ -7,34 +7,15 @@
  * retention: a warm reload that momentarily returns nothing renders as loading,
  * and only a truly settled-empty query renders the empty state.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import {
-  backendQuerySource,
-  type BackendQueryPaginationInput,
-  type BackendQuerySourceInput,
-} from './backendQuerySource';
+import { backendQuerySource, type BackendQuerySourceInput } from './backendQuerySource';
 import { deriveResourceInventoryRenderState } from './useResourceInventoryTable';
 
 interface Row {
   clusterId: string;
   name: string;
 }
-
-const pagination = (
-  overrides: Partial<BackendQueryPaginationInput> = {}
-): BackendQueryPaginationInput => ({
-  continueToken: null,
-  hasPrevious: false,
-  pageIndex: 1,
-  pageSize: 50,
-  totalCount: 0,
-  totalIsExact: true,
-  isRequestingMore: false,
-  loadMore: () => {},
-  loadPrevious: () => {},
-  ...overrides,
-});
 
 function input(
   overrides: Partial<BackendQuerySourceInput<Row>> = {}
@@ -45,73 +26,14 @@ function input(
     loading: false,
     loaded: false,
     error: null,
-    pagination: pagination(),
     ...overrides,
   };
 }
 
 describe('backendQuerySource', () => {
-  it('maps an enabled query result with pagination', () => {
-    const onNext = vi.fn();
-    const onPrevious = vi.fn();
-    const source = backendQuerySource(
-      input({
-        rows: [{ clusterId: 'c', name: 'a' }],
-        loading: false,
-        loaded: true,
-        pagination: pagination({
-          continueToken: 'next-cursor',
-          hasPrevious: true,
-          pageIndex: 2,
-          pageSize: 100,
-          totalCount: 240,
-          totalIsExact: false,
-          isRequestingMore: true,
-          loadMore: onNext,
-          loadPrevious: onPrevious,
-        }),
-      })
-    );
-
-    expect(source.blocked).toBe(false);
-    expect(source.pagination).not.toBeNull();
-    expect(source.pagination?.hasNext).toBe(true);
-    expect(source.pagination?.hasPrevious).toBe(true);
-    expect(source.pagination?.pageIndex).toBe(2);
-    expect(source.pagination?.pageSize).toBe(100);
-    expect(source.pagination?.totalCount).toBe(240);
-    expect(source.pagination?.totalIsExact).toBe(false);
-    expect(source.pagination?.isRequestingMore).toBe(true);
-    source.pagination?.onNext();
-    source.pagination?.onPrevious();
-    expect(onNext).toHaveBeenCalledOnce();
-    expect(onPrevious).toHaveBeenCalledOnce();
-  });
-
-  it('derives hasNext from the continue token', () => {
-    expect(backendQuerySource(input()).pagination?.hasNext).toBe(false);
-    expect(
-      backendQuerySource(input({ pagination: pagination({ continueToken: 'x' }) })).pagination
-        ?.hasNext
-    ).toBe(true);
-  });
-
-  it('omits pagination when the provider renders its own footer (catalog)', () => {
-    const source = backendQuerySource<Row>({
-      enabled: true,
-      rows: [{ clusterId: 'c', name: 'a' }],
-      loading: false,
-      loaded: true,
-      error: null,
-    });
-    expect(source.pagination).toBeNull();
-    expect(source.blocked).toBe(false);
-  });
-
   it('treats a disabled query as blocked with no pagination', () => {
     const source = backendQuerySource(input({ enabled: false, loaded: true }));
     expect(source.blocked).toBe(true);
-    expect(source.pagination).toBeNull();
     expect(source.loading).toBe(false);
     expect(deriveResourceInventoryRenderState(source).status).toBe('blocked');
   });

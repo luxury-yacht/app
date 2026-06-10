@@ -18,6 +18,7 @@ import type {
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
 import QueryPaginationControls from './QueryPaginationControls';
+import { backendQuerySource } from './backendQuerySource';
 import type { ResourceInventorySourceState } from './useResourceInventoryTable';
 import {
   TYPED_QUERY_PAGE_LIMIT_OPTIONS,
@@ -134,31 +135,6 @@ export interface QueryBackedNamespaceGridResult<
   source: ResourceInventorySourceState<T>;
 }
 
-const buildQueryBackedSource = <T extends ResourceGridTableRow>({
-  rows,
-  loading,
-  loaded,
-  error,
-  mode,
-  cacheKey,
-}: {
-  rows: T[];
-  loading: boolean;
-  loaded: boolean;
-  error: string | null;
-  mode: ResourceGridTableMode;
-  cacheKey: string;
-}): ResourceInventorySourceState<T> => ({
-  rows,
-  loading,
-  loaded,
-  error,
-  completeness: mode === 'Local Partial' ? 'partial' : 'complete',
-  partialLabel: null,
-  pagination: null,
-  cacheKey,
-});
-
 // Fields shared by the cluster and namespace query wrappers. Each wrapper adds
 // the scope-specific binding params (namespace vs cluster persistence + sort
 // defaults) from its base resource-grid params type.
@@ -273,6 +249,11 @@ function useTypedQueryLifecycle<
     selectRows,
   });
 
+  const effectiveFilterOptionOverrides = useMemo(
+    () => mergeQueryBackedFilterOptions(filterOptionOverrides, query.filterOptions),
+    [filterOptionOverrides, query.filterOptions]
+  );
+
   const { data, loading, loaded, error } = deriveQueryBackedData<TRow>({
     clusterId,
     queryEnabled,
@@ -289,10 +270,7 @@ function useTypedQueryLifecycle<
     loaded,
     error,
     tableMode: queryTableMode,
-    effectiveFilterOptionOverrides: mergeQueryBackedFilterOptions(
-      filterOptionOverrides,
-      query.filterOptions
-    ),
+    effectiveFilterOptionOverrides,
     onTableStateChange: handlePublishedTableState,
     query,
   };
@@ -314,7 +292,6 @@ function useQueryBackedGridResult<
   loading,
   loaded,
   error,
-  queryTableMode,
 }: {
   viewId: string;
   cacheKey: string;
@@ -325,7 +302,6 @@ function useQueryBackedGridResult<
   loading: boolean;
   loaded: boolean;
   error: string | null;
-  queryTableMode: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
 }): QueryBackedNamespaceGridResult<TRow, TPayload> {
   // Full-result fetcher for the Copy/Export "all matching rows" scope: walks the query's pages.
   // Threaded onto gridTableProps so the GridTable filter bar wires the scope toggle + Copy +
@@ -364,13 +340,14 @@ function useQueryBackedGridResult<
     gridTableProps,
     queryPayload: query.payload,
     // The typed query source feeds the one controller contract as the single source of truth
-    // (no separate wrapper-level rows/loading/loaded/error).
-    source: buildQueryBackedSource({
+    // (no separate wrapper-level rows/loading/loaded/error). enabled is true:
+    // query gating is already folded into loading/loaded by deriveQueryBackedData.
+    source: backendQuerySource({
+      enabled: true,
       rows: gridTableProps.data,
       loading,
       loaded,
       error,
-      mode: queryTableMode,
       cacheKey,
     }),
   };
@@ -395,9 +372,17 @@ export interface QueryBackedNamespaceGridParams<
   extends
     Omit<
       NamespaceResourceGridTableParams<TRow>,
-      'data' | 'tableMode' | 'onTableStateChange' | 'filterOptionOverrides' | 'persistenceOverride'
+      | 'data'
+      | 'tableMode'
+      | 'onTableStateChange'
+      | 'filterOptionOverrides'
+      | 'persistenceOverride'
+      | 'keyExtractor'
     >,
-    QueryBackedGridParamsCommon<TPayload, TRow> {}
+    QueryBackedGridParamsCommon<TPayload, TRow> {
+  /** Optional: the wrapper resolves a canonical default when omitted. */
+  keyExtractor?: (item: TRow, index: number) => string;
+}
 
 export function useQueryBackedNamespaceResourceGridTable<
   TPayload extends TypedQueryPayload,
@@ -477,7 +462,6 @@ export function useQueryBackedNamespaceResourceGridTable<
     loading: lifecycle.loading,
     loaded: lifecycle.loaded,
     error: lifecycle.error,
-    queryTableMode,
   });
 }
 
@@ -488,9 +472,17 @@ export interface QueryBackedClusterGridParams<
   extends
     Omit<
       ClusterResourceGridTableParams<TRow>,
-      'data' | 'tableMode' | 'onTableStateChange' | 'filterOptionOverrides' | 'persistenceOverride'
+      | 'data'
+      | 'tableMode'
+      | 'onTableStateChange'
+      | 'filterOptionOverrides'
+      | 'persistenceOverride'
+      | 'keyExtractor'
     >,
-    QueryBackedGridParamsCommon<TPayload, TRow> {}
+    QueryBackedGridParamsCommon<TPayload, TRow> {
+  /** Optional: the wrapper resolves a canonical default when omitted. */
+  keyExtractor?: (item: TRow, index: number) => string;
+}
 
 export function useQueryBackedClusterResourceGridTable<
   TPayload extends TypedQueryPayload,
@@ -567,6 +559,5 @@ export function useQueryBackedClusterResourceGridTable<
     loading: lifecycle.loading,
     loaded: lifecycle.loaded,
     error: lifecycle.error,
-    queryTableMode,
   });
 }

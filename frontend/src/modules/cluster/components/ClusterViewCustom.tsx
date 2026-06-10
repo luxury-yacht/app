@@ -21,7 +21,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import CatalogPaginationControls from '@modules/browse/components/CatalogPaginationControls';
+import CatalogPaginationFooter from '@modules/browse/components/CatalogPaginationFooter';
 import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
 import { BROWSE_PAGE_LIMIT_OPTIONS } from '@modules/browse/pagination';
 import {
@@ -258,20 +258,10 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     );
     const paginationControls = useMemo(
       () => (
-        <CatalogPaginationControls
+        <CatalogPaginationFooter
           idPrefix="cluster-custom"
-          pageIndex={pagination.pageIndex}
-          pageSize={pagination.pageLimit}
           visibleItemCount={rows.length}
-          pageSizeOptions={pagination.pageLimitOptions}
-          totalCount={pagination.totalCount}
-          totalIsExact={pagination.totalIsExact}
-          hasPrevious={Boolean(pagination.previousToken)}
-          hasNext={Boolean(pagination.continueToken)}
-          loading={pagination.isRequestingMore || pagination.queryPending}
-          onPrevious={pagination.onRequestPrevious}
-          onNext={pagination.onRequestMore}
-          onPageSizeChange={pagination.setPageLimit}
+          pagination={pagination}
         />
       ),
       [pagination, rows.length]

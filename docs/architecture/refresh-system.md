@@ -97,18 +97,17 @@ shape so the frontend consumes them uniformly (see
 - The catalog provider (`catalog.go`) does not embed the envelope (its kinds facet
   is the richer `[]KindInfo` and it owns keyset pagination) but surfaces the same
   provider/completeness/capabilities contract fields directly.
-- Capabilities advertise export scope: typed providers are visible-row export
-  only; the catalog additionally advertises query-wide export, driven by a
-  `QuerySelectionDescriptor` (a durable scoped query identity), never by shipping
-  rows back to the backend.
+- Capabilities describe the query surface (sortable/filterable/searchable
+  fields). Export and copy are client-driven: the current page by default, or a
+  cursor walk over the same query path for the "all matching rows" scope.
 - Pagination is keyset (`continue`/`previous`). Any batch-streaming fields are
   diagnostics only, never page metadata.
 
 Conformance is enforced in `backend/refresh/snapshot`:
 `TestTypedResourceSnapshotsEmbedTheNormalizedEnvelope` fails if a typed payload
 omits the envelope or its `Rows`, and the provider/capability conformance tests
-check provider, completeness, and export flags. A new typed domain must embed the
-envelope and be added to those tables.
+check provider, completeness, and capability fields. A new typed domain must
+embed the envelope and be added to those tables.
 
 ## Change Checklist
 

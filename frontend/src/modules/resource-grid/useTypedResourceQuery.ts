@@ -6,6 +6,7 @@ import type {
 } from '@shared/components/tables/GridTable';
 import type { SortConfig } from '@hooks/useTableSort';
 import type { RefreshDomain, ResourceQueryDynamicRef } from '@/core/refresh/types';
+import { walkQueryCursorPages } from './cursorPageWalk';
 import {
   buildTypedResourceQueryScope,
   filterOptionsFromTypedPayload,
@@ -388,13 +389,9 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     if (!enabled || !clusterId) {
       return [];
     }
-    const all: TRow[] = [];
-    let cursor: string | null = null;
-    const maxPages = 100000;
-    // Page through the full result set following the backend cursor. Each page uses the
-    // export max page size; the loop guard bounds a pathological non-advancing cursor.
-    // A failed page REJECTS: a partial export saved as success is silent data loss.
-    for (let page = 0; page < maxPages; page += 1) {
+    // Each page uses the export max page size; the shared walk owns the loop,
+    // page guard, and failure semantics (failed/empty pages REJECT).
+    return walkQueryCursorPages<TRow>(label, async (cursor, page) => {
       const exportScope = buildTypedResourceQueryScope(clusterId, {
         baseScope,
         filters: effectiveFilters,
@@ -404,7 +401,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         continueToken: cursor,
       });
       if (!exportScope) {
-        break;
+        return null;
       }
       const result = await requestRefreshDomainState({
         domain,
@@ -421,16 +418,8 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       if (!payload) {
         throw new Error(`${label} export failed: page ${page + 1} returned no data`);
       }
-      all.push(...selectRowsRef.current(payload));
-      cursor = payload.continue ?? null;
-      if (!cursor) {
-        return all;
-      }
-    }
-    if (cursor) {
-      throw new Error(`${label} export failed: cursor did not advance after ${maxPages} pages`);
-    }
-    return all;
+      return { items: selectRowsRef.current(payload), continueToken: payload.continue ?? null };
+    });
   }, [baseScope, clusterId, domain, enabled, effectiveFilters, label, predicates, sortConfig]);
 
   return {

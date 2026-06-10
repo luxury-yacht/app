@@ -118,22 +118,6 @@ export function useHydratedCustomCatalogRows(
     () => catalogItems.map(catalogItemToHydrationQueryRow),
     [catalogItems]
   );
-  const requestKey = useMemo(
-    () =>
-      requestRows
-        .map((row) =>
-          customRowKey({
-            clusterId: row.clusterId,
-            group: row.group,
-            version: row.version,
-            kind: row.kind,
-            namespace: row.namespace,
-            name: row.name,
-          })
-        )
-        .join('\n'),
-    [requestRows]
-  );
   const [rows, setRows] = useState<CatalogBackedCustomResourceRow[]>(fallbackRows);
 
   useEffect(() => {
@@ -172,7 +156,7 @@ export function useHydratedCustomCatalogRows(
     return () => {
       cancelled = true;
     };
-  }, [clusterId, fallbackRows, requestKey, requestRows]);
+  }, [clusterId, fallbackRows, requestRows]);
 
   return rows;
 }
