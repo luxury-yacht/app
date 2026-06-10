@@ -1,5 +1,3 @@
-- Catalog connection stream error toast if I visit Browse view before cluster load is complete
-
 - Can't copy data from errors. Need to be able to select/copy and also need a "copy error" button
 
 - Why is Helm so slow to load?

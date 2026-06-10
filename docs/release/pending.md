@@ -81,3 +81,15 @@
   errors — they keep loading and retry. Genuine failures are still reported
   through error notifications; the never-visible in-table error banner was
   removed.
+
+- Visiting a view while its cluster is still connecting no longer produces
+  failed requests, connection-error notifications, and console errors ("no
+  active clusters available", "Catalog stream connection lost"). The app now
+  tracks each cluster's startup state: requests and live streams for a cluster
+  that isn't serving yet are held quietly and dispatched automatically the
+  moment it is — the view simply shows its normal loading state until the data
+  arrives.
+
+- Failed live-stream requests now return proper CORS headers, so when one does
+  fail the browser console shows the real status and message instead of an
+  opaque "not allowed by Access-Control-Allow-Origin" error.

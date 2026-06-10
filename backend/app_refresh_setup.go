@@ -303,10 +303,12 @@ func (a *App) buildRefreshMux(
 		Metrics:         nil, // Don't tie metrics to a single cluster.
 		HealthHub:       nil, // Health is per-cluster, not global.
 	})
-	mux.Handle("/api/v2/stream/events", aggregateEvents)
-	mux.Handle("/api/v2/stream/container-logs", aggregateContainerLogs)
-	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)
-	mux.Handle("/api/v2/stream/resources", aggregateResources)
+	// withStreamCORS guarantees CORS headers on every stream response,
+	// including error responses written before the handlers' own header setup.
+	mux.Handle("/api/v2/stream/events", withStreamCORS(aggregateEvents))
+	mux.Handle("/api/v2/stream/container-logs", withStreamCORS(aggregateContainerLogs))
+	mux.Handle("/api/v2/stream/catalog", withStreamCORS(aggregateCatalog))
+	mux.Handle("/api/v2/stream/resources", withStreamCORS(aggregateResources))
 	// NOTE: Do NOT mount "/" to any single subsystem's handler.
 	// Requests to "/" should return 404, not route to one cluster.
 

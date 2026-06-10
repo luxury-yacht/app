@@ -29,6 +29,8 @@ import {
   type SystemRefresherName,
 } from './refresherTypes';
 import { buildClusterScope } from './clusterScope';
+import { clusterReadiness } from './clusterReadiness';
+import { eventBus } from '@/core/events';
 
 const refreshManagerMocks = vi.hoisted(() => ({
   subscribeMock: vi.fn(),
@@ -366,6 +368,71 @@ describe('refreshOrchestrator', () => {
     ).toBe(false);
 
     resetAllScopedDomainStates('nodes');
+  });
+
+  it('holds scoped fetches for an initializing cluster and dispatches once it becomes serviceable', async () => {
+    clusterReadiness.resetForTests();
+    registerStreamingClusterConfigDomain();
+    const scope = buildClusterScope('cluster-init', 'cluster');
+    resetAllScopedDomainStates('cluster-config');
+    setRuntimeScopeEnabled('cluster-config', scope, true);
+    clientMocks.fetchSnapshotMock.mockClear();
+    errorHandlerMock.handle.mockClear();
+
+    // The backend registers this cluster's services only at the 'loading'
+    // transition; until then every request would 500 with "no active
+    // clusters available".
+    eventBus.emit('cluster:lifecycle', {
+      clusterId: 'cluster-init',
+      state: 'connecting',
+      previousState: '',
+    });
+
+    await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: false });
+    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'cluster-config',
+        scope,
+        version: 1,
+        checksum: 'etag-init',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { clusterId: 'cluster-init', rows: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      etag: 'etag-init',
+      notModified: false,
+    });
+
+    eventBus.emit('cluster:lifecycle', {
+      clusterId: 'cluster-init',
+      state: 'loading',
+      previousState: 'connected',
+    });
+
+    await vi.waitFor(() => {
+      expect(clientMocks.fetchSnapshotMock).toHaveBeenCalled();
+    });
+
+    clusterReadiness.resetForTests();
+    resetAllScopedDomainStates('cluster-config');
+  });
+
+  it('classifies "no active clusters available" as warm-up instead of toasting', () => {
+    clusterReadiness.resetForTests();
+    errorHandlerMock.handle.mockClear();
+
+    orchestratorInternals.notifyRefreshError(
+      'cluster-config',
+      buildClusterScope('cluster-init', 'cluster'),
+      'no active clusters available (requested: [cluster-init:cluster-init])'
+    );
+
+    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+    clusterReadiness.resetForTests();
   });
 
   it('refreshes namespaces domain alongside context targets during manual refresh', async () => {
