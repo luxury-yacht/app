@@ -12,10 +12,12 @@ interface UseGridTableCsvExportOptions<T> {
   data: T[];
   columns?: GridColumnDefinition<T>[];
   getTextContent?: (node: ReactNode) => string;
-  /** Fetch every matching row (all pages); used when scope is 'all'. */
+  /**
+   * Fetch every matching row (all pages). When provided, Copy ALWAYS copies the
+   * full matching set (filters respected); without it, Copy takes the visible
+   * rows — which on non-paginated tables is already everything.
+   */
   fetchAllRows?: () => Promise<T[]>;
-  /** 'page' copies the visible page; 'all' copies every matching row. */
-  scope?: 'page' | 'all';
 }
 
 export function useGridTableCsvExport<T>({
@@ -23,12 +25,10 @@ export function useGridTableCsvExport<T>({
   columns,
   getTextContent,
   fetchAllRows,
-  scope = 'page',
 }: UseGridTableCsvExportOptions<T>): IconBarItem {
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<'success' | 'error' | null>(null);
   const [copying, setCopying] = useState(false);
-  const allScope = scope === 'all' && Boolean(fetchAllRows);
 
   const canCopyToClipboard =
     typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function';
@@ -60,8 +60,8 @@ export function useGridTableCsvExport<T>({
     }
     setCopying(true);
     try {
-      // 'all' scope pulls every matching row; 'page' copies the rows already on screen.
-      const rows = allScope && fetchAllRows ? await fetchAllRows() : data;
+      // With a fetcher, copy every matching row; otherwise copy the rows on screen.
+      const rows = fetchAllRows ? await fetchAllRows() : data;
       const csvText = buildGridTableCsv(rows, columns, getTextContent);
       if (!csvText) {
         setCopyFeedback('error');
@@ -76,21 +76,9 @@ export function useGridTableCsvExport<T>({
       setCopying(false);
       scheduleCopyReset();
     }
-  }, [
-    allScope,
-    canCopyToClipboard,
-    columns,
-    data,
-    fetchAllRows,
-    getTextContent,
-    scheduleCopyReset,
-  ]);
+  }, [canCopyToClipboard, columns, data, fetchAllRows, getTextContent, scheduleCopyReset]);
 
-  const title = !fetchAllRows
-    ? 'Copy visible rows as CSV'
-    : allScope
-      ? 'Copy all matching rows to clipboard'
-      : 'Copy current page to clipboard';
+  const title = fetchAllRows ? 'Copy all matching rows to clipboard' : 'Copy visible rows as CSV';
 
   return useMemo<IconBarItem>(
     () => ({

@@ -1,14 +1,13 @@
 ### Added
 
-- Every resource table with a filter bar now has a consistent **Copy · Export** pair with a
-  **scope toggle**, in the same place on every view (including the object panel's Pods and
-  Jobs tabs). Copy puts rows on the clipboard; Export saves them to a CSV file. The toggle
-  chooses the scope for both: off (default) acts on the current page, on acts on
-  **all matching rows** across every page. Both always respect your active filters, and the
-  button labels say which scope is active so nothing is exported silently. Browse and the
-  Custom-resource views use the same mechanism as the rest of the app (the separate
-  server-side catalog export was retired in favor of this one path). The object panel's
-  Events tab is the one exception — it is a bare presentation list without a filter bar.
+- Every resource table with a filter bar now has a consistent **Copy · Export** pair, in the
+  same place on every view (including the object panel's Pods and Jobs tabs). Copy puts rows
+  on the clipboard; Export saves them to a CSV file. Both always act on **all matching
+  rows** across every page, respecting your active filters — what you filtered is what you
+  get, never just the visible page. Browse and the Custom-resource views use the same
+  mechanism as the rest of the app (the separate server-side catalog export was retired in
+  favor of this one path). The object panel's Events tab is the one exception — it is a bare
+  presentation list without a filter bar.
 
 ### Changed
 

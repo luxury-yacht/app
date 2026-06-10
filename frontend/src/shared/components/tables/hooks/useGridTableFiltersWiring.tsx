@@ -5,12 +5,11 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { DropdownSelectAllIcon } from '@shared/components/icons/DropdownIcons';
 import { useGridTableFilters } from '@shared/components/tables/useGridTableFilters';
 import {
   defaultGetKind,
@@ -173,47 +172,26 @@ export function useGridTableFiltersWiring<T>({
   const resolvedPreActions = preActions ?? resolvedFilterOptions.preActions;
   const resolvedCustomActions = resolvedFilterOptions.customActions;
 
-  // Scope toggle shared by Copy and Export: off (default) acts on the visible page, on acts
-  // on every matching row. Only offered when the view can fetch all rows; both modes always
-  // respect the active filters (the page is filtered; fetchAllRows uses the filtered scope).
-  const supportsAllScope = Boolean(fetchAllRows);
-  const [exportAllScope, setExportAllScope] = useState(false);
-  const scope: 'page' | 'all' = supportsAllScope && exportAllScope ? 'all' : 'page';
+  // Copy and Export always act on EVERY matching row when the view can fetch all pages
+  // (the active filters are part of the fetch scope). Views without a fetcher keep the
+  // page-only Copy — on those non-paginated tables the visible rows ARE the full set.
+  const supportsExportAll = Boolean(fetchAllRows);
 
   const fetchAllRowsOrEmpty = useCallback(
     (): Promise<T[]> => (fetchAllRows ? fetchAllRows() : Promise.resolve([])),
     [fetchAllRows]
   );
 
-  const scopeToggle = useMemo<IconBarItem>(
-    () => ({
-      type: 'toggle',
-      id: 'gridtable-export-scope',
-      icon: <DropdownSelectAllIcon width={18} height={18} />,
-      active: exportAllScope,
-      onClick: () => setExportAllScope((current) => !current),
-      title: exportAllScope
-        ? 'Copy & export: all matching rows (click for current page only)'
-        : 'Copy & export: current page (click to include all matching rows)',
-      ariaLabel: 'Toggle copy and export scope between current page and all matching rows',
-    }),
-    [exportAllScope]
-  );
-
   const csvExportAction = useGridTableCsvExport({
     data: tableData,
     columns: exportColumns,
     getTextContent,
-    // Pass the real (possibly undefined) fetcher: when absent, Copy stays page-only with its
-    // generic label and no scope toggle is shown.
+    // Pass the real (possibly undefined) fetcher: when absent, Copy takes the visible rows.
     fetchAllRows,
-    scope,
   });
 
   const csvExportFileAction = useGridTableCsvFileExportAction({
-    data: tableData,
     fetchAllRows: fetchAllRowsOrEmpty,
-    scope,
     columns: exportColumns,
     getTextContent,
     defaultFilename: exportFilename ?? 'export',
@@ -221,12 +199,11 @@ export function useGridTableFiltersWiring<T>({
   });
 
   const resolvedPostActions = useMemo<IconBarItem[]>(() => {
-    // The grouped copy/export cluster. When the view can fetch all rows, lead with the
-    // scope toggle and add the file Export — [scope · copy · export] — so a user can pick
-    // page-vs-all explicitly. Otherwise just the page-scoped copy.
+    // The grouped copy/export pair. When the view can fetch all rows, both act on the
+    // full matching set — [copy · export]. Otherwise just the visible-rows copy.
     const items: IconBarItem[] = [];
-    if (supportsAllScope) {
-      items.push(scopeToggle, csvExportAction, csvExportFileAction);
+    if (supportsExportAll) {
+      items.push(csvExportAction, csvExportFileAction);
     } else {
       items.push(csvExportAction);
     }
@@ -244,8 +221,7 @@ export function useGridTableFiltersWiring<T>({
     csvExportFileAction,
     postActions,
     resolvedFilterOptions.postActions,
-    scopeToggle,
-    supportsAllScope,
+    supportsExportAll,
   ]);
 
   // Filter feedback for the bar: N (items matching the active filters) of M (items in scope before

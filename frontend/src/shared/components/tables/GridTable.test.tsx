@@ -258,10 +258,7 @@ describe('GridTable virtualization', () => {
     expect(resultCount?.textContent).toBe('showing 20 of 20 items due to filters');
   });
 
-  const SCOPE_TOGGLE_LABEL =
-    'Toggle copy and export scope between current page and all matching rows';
-
-  it('renders the scope toggle · Copy · Export cluster when fetchAllRows is provided', () => {
+  it('renders the Copy · Export pair acting on all matching rows (no scope toggle)', () => {
     const { container, cleanup } = renderGridTable({
       data: createRows(3),
       virtualization: { enabled: false },
@@ -278,16 +275,16 @@ describe('GridTable virtualization', () => {
     });
     cleanupRoot = cleanup;
 
-    const scopeToggle = container.querySelector(`[aria-label="${SCOPE_TOGGLE_LABEL}"]`);
-    const copy = container.querySelector('[aria-label="Copy current page to clipboard"]');
-    const exportBtn = container.querySelector('[aria-label="Export current page to file"]');
-    expect(scopeToggle).toBeTruthy();
+    expect(
+      container.querySelector(
+        '[aria-label="Toggle copy and export scope between current page and all matching rows"]'
+      )
+    ).toBeNull();
+    const copy = container.querySelector('[aria-label="Copy all matching rows to clipboard"]');
+    const exportBtn = container.querySelector('[aria-label="Export all matching rows to file"]');
     expect(copy).toBeTruthy();
     expect(exportBtn).toBeTruthy();
-    // Order: scope toggle · Copy · Export.
-    expect(
-      Boolean(scopeToggle!.compareDocumentPosition(copy!) & Node.DOCUMENT_POSITION_FOLLOWING)
-    ).toBe(true);
+    // Order: Copy · Export.
     expect(
       Boolean(copy!.compareDocumentPosition(exportBtn!) & Node.DOCUMENT_POSITION_FOLLOWING)
     ).toBe(true);
@@ -295,38 +292,51 @@ describe('GridTable virtualization', () => {
     cleanup();
   });
 
-  it('the scope toggle switches Copy/Export between current page and all matching rows', () => {
-    const { container, cleanup } = renderGridTable({
-      data: createRows(3),
-      virtualization: { enabled: false },
-      fetchAllRows: () => Promise.resolve(createRows(9)),
-      filters: {
-        enabled: true,
-        accessors: {
-          getKind: (row) => row.label,
-          getNamespace: () => '',
-          getSearchText: (row) => [row.label],
+  it('Copy fetches every matching row, not just the visible page', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    const fetchAllRows = vi.fn().mockResolvedValue(createRows(9));
+
+    try {
+      const { container, cleanup } = renderGridTable({
+        data: createRows(3),
+        virtualization: { enabled: false },
+        fetchAllRows,
+        filters: {
+          enabled: true,
+          accessors: {
+            getKind: (row) => row.label,
+            getNamespace: () => '',
+            getSearchText: (row) => [row.label],
+          },
         },
-      },
-    });
-    cleanupRoot = cleanup;
+      });
+      cleanupRoot = cleanup;
 
-    // Default scope is the current page.
-    expect(container.querySelector('[aria-label="Copy current page to clipboard"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Export current page to file"]')).toBeTruthy();
+      const copy = container.querySelector(
+        '[aria-label="Copy all matching rows to clipboard"]'
+      ) as HTMLElement;
+      expect(copy).toBeTruthy();
 
-    const toggle = container.querySelector(`[aria-label="${SCOPE_TOGGLE_LABEL}"]`) as HTMLElement;
-    act(() => {
-      toggle.click();
-    });
+      await act(async () => {
+        copy.click();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
 
-    // After toggling, both act on all matching rows.
-    expect(
-      container.querySelector('[aria-label="Copy all matching rows to clipboard"]')
-    ).toBeTruthy();
-    expect(container.querySelector('[aria-label="Export all matching rows to file"]')).toBeTruthy();
+      expect(fetchAllRows).toHaveBeenCalledTimes(1);
+      expect(writeText).toHaveBeenCalledTimes(1);
+      const csv = writeText.mock.calls[0][0] as string;
+      // Row 8 only exists in the full fetched set, not the 3 visible rows.
+      expect(csv).toContain('Row 8');
 
-    cleanup();
+      cleanup();
+    } finally {
+      Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    }
   });
 
   it('updates the rendered slice when scrolling', async () => {

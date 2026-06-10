@@ -1,10 +1,10 @@
 /**
  * frontend/src/shared/components/tables/hooks/useGridTableCsvFileExportAction.tsx
  *
- * The "Export all matching rows as CSV" toolbar action. Unlike the copy-visible
- * action (current page → clipboard), this pulls EVERY matching row via `fetchAllRows`,
- * builds the CSV from the table's displayed columns, and saves it to a file. It is the
- * single export-all mechanism shared by typed-resource and catalog-backed tables.
+ * The "Export all matching rows as CSV" toolbar action. It pulls EVERY matching row
+ * via `fetchAllRows` (the active filters are part of the fetch scope), builds the CSV
+ * from the table's displayed columns, and saves it to a file. It is the single
+ * export mechanism shared by typed-resource and catalog-backed tables.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -18,12 +18,8 @@ import { buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
 const FEEDBACK_RESET_MS = 750;
 
 interface UseGridTableCsvFileExportActionOptions<T> {
-  /** Visible page rows; exported when scope is 'page'. */
-  data: T[];
-  /** Fetch every matching row (all pages); exported when scope is 'all'. */
+  /** Fetch every matching row (all pages); Export always acts on the full set. */
   fetchAllRows: () => Promise<T[]>;
-  /** 'page' exports the visible page; 'all' exports every matching row. */
-  scope?: 'page' | 'all';
   columns?: GridColumnDefinition<T>[];
   getTextContent?: (node: ReactNode) => string;
   /** Default file name offered in the save dialog. */
@@ -33,9 +29,7 @@ interface UseGridTableCsvFileExportActionOptions<T> {
 }
 
 export function useGridTableCsvFileExportAction<T>({
-  data,
   fetchAllRows,
-  scope = 'page',
   columns,
   getTextContent,
   defaultFilename,
@@ -68,8 +62,7 @@ export function useGridTableCsvFileExportAction<T>({
     }
     setExporting(true);
     try {
-      // 'all' scope pulls every matching row; 'page' exports the rows already on screen.
-      const rows = scope === 'all' ? await fetchAllRows() : data;
+      const rows = await fetchAllRows();
       const csv = buildGridTableCsv(rows, columns, getTextContent);
       const result = await saveCsvFile(defaultFilename, csv);
       setFeedback(result?.path ? 'success' : 'error');
@@ -82,10 +75,9 @@ export function useGridTableCsvFileExportAction<T>({
       setExporting(false);
       scheduleReset();
     }
-  }, [columns, data, defaultFilename, fetchAllRows, getTextContent, scope, scheduleReset]);
+  }, [columns, defaultFilename, fetchAllRows, getTextContent, scheduleReset]);
 
-  const title =
-    scope === 'all' ? 'Export all matching rows to file' : 'Export current page to file';
+  const title = 'Export all matching rows to file';
 
   return useMemo<IconBarItem>(
     () => ({
