@@ -161,7 +161,7 @@ func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapsho
 		}
 		pods = append(pods, podList...)
 	}
-	return buildNodeSnapshot(ctx, scope, list, pods, b.metrics), nil
+	return buildNodeSnapshot(ctx, scope, list, pods, b.metrics)
 }
 
 // Build returns the node snapshot payload using direct list API calls.
@@ -211,11 +211,11 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 	if podsForbidden {
 		pods = nil
 	}
-	return buildNodeSnapshot(ctx, scope, nodes, pods, b.metrics), nil
+	return buildNodeSnapshot(ctx, scope, nodes, pods, b.metrics)
 }
 
 // buildNodeSnapshot assembles node summaries with cluster metadata.
-func buildNodeSnapshot(ctx context.Context, scope string, nodes []*corev1.Node, pods []*corev1.Pod, provider metrics.Provider) *refresh.Snapshot {
+func buildNodeSnapshot(ctx context.Context, scope string, nodes []*corev1.Node, pods []*corev1.Pod, provider metrics.Provider) (*refresh.Snapshot, error) {
 	var (
 		nodeMetrics map[string]metrics.NodeUsage
 		podMetrics  map[string]metrics.PodUsage
@@ -242,10 +242,15 @@ func buildNodeSnapshotFromUsage(
 	nodeMetrics map[string]metrics.NodeUsage,
 	podMetrics map[string]metrics.PodUsage,
 	metricsMeta metrics.Metadata,
-) *refresh.Snapshot {
+) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	_, query, _ := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), "nodes", "")
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), "nodes", "")
+	if err != nil {
+		// Every typed builder rejects a malformed query scope; silently serving
+		// default-ordered rows under the requested identity is a contract hole.
+		return nil, err
+	}
 	items := make([]NodeSummary, 0, len(nodes))
 	var version uint64
 
@@ -389,7 +394,7 @@ func buildNodeSnapshotFromUsage(
 				Metrics:               metricsInfo,
 			},
 			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}
+		}, nil
 	}
 
 	var totalItems int
@@ -407,7 +412,7 @@ func buildNodeSnapshotFromUsage(
 		},
 		Stats: snapshotWindowStats(len(items), totalItems, "nodes"),
 	}
-	return snap
+	return snap, nil
 }
 
 func nodeUsageOrEmpty(m map[string]metrics.NodeUsage) map[string]metrics.NodeUsage {

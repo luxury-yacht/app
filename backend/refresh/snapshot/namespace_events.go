@@ -119,7 +119,16 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 	}
 	events = filtered
 
-	summaries := make([]EventSummary, 0, len(events))
+	// The query path streams summaries through the bounded collector (top-K
+	// insert, no full materialization or sort); the window path still collects
+	// the slice it truncates below.
+	var collector *typedTableQueryCollector[EventSummary]
+	var summaries []EventSummary
+	if query.Enabled {
+		collector = newTypedTableQueryCollector(query, namespacedEventTableQueryAdapter())
+	} else {
+		summaries = make([]EventSummary, 0, len(events))
+	}
 	var version uint64
 
 	for _, event := range events {
@@ -151,14 +160,18 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			Age:              formatAge(timestamp),
 			AgeTimestamp:     timestamp.UnixMilli(),
 		}
-		summaries = append(summaries, summary)
+		if collector != nil {
+			collector.Add(summary)
+		} else {
+			summaries = append(summaries, summary)
+		}
 		if v := resourceVersionOrTimestamp(event); v > version {
 			version = v
 		}
 	}
 
 	if query.Enabled {
-		page := applyTypedTableQuery(summaries, query, namespacedEventTableQueryAdapter())
+		page := collector.Page()
 		return &refresh.Snapshot{
 			Domain:  namespaceEventsDomainName,
 			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),

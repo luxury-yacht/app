@@ -59,31 +59,46 @@ P1 — Major
 
 P2 — Moderate
 
-20. Object-panel pods windows retained until cluster close — useQueryBackedResourceGridTable.ts:208 lease + pods absent from every cleanup list — one uncapped window snapshot per workload/node ever visited
+20. ✅ Object-panel pods windows retained until cluster close — useQueryBackedResourceGridTable.ts:208 lease + pods absent from every cleanup list — one uncapped window snapshot per workload/node ever visited
     (main reset on unmount).
-21. Age sort inverted between catalog and typed tables — backend/objectcatalog/helpers.go:236 — Age-ascending = oldest-first in Browse/Custom, newest-first everywhere else; identical gesture, opposite
+    FIXED: getObjectPanelScopeEvictions now includes the pods window scope (workload:/node:, same builder the wrapper subscribes), so closing the panel evicts it like the other five panel domains.
+21. ✅ Age sort inverted between catalog and typed tables — backend/objectcatalog/helpers.go:236 — Age-ascending = oldest-first in Browse/Custom, newest-first everywhere else; identical gesture, opposite
     chronology.
-22. Previous-page dead end in Browse — backend/objectcatalog/query.go:307 — predecessors deleted → empty page, no tokens, no cursorInvalid; static fallback clamps to page 1 instead; self-heals only on the next
+    FIXED: the catalog comparator flips the age field's effective direction (asc = newest first), matching typed tables; one ordering authority covers page sorts and keyset cursor walks.
+22. ✅ Previous-page dead end in Browse — backend/objectcatalog/query.go:307 — predecessors deleted → empty page, no tokens, no cursorInvalid; static fallback clamps to page 1 instead; self-heals only on the next
     catalog event.
-23. Export walk is O(pages × full backend scan), uncapped — useTypedResourceQuery.ts:325 — 100k-row export ≈ 100 full builds; catalog export pages at 1000 vs the 10000 the backend accepts (10× extra scans);
+    FIXED: an empty previous page (predecessors deleted) reports cursorInvalid; the frontend's existing handling resets to page 1 immediately.
+23. ✅ Export walk is O(pages × full backend scan), uncapped — useTypedResourceQuery.ts:325 — 100k-row export ≈ 100 full builds; catalog export pages at 1000 vs the 10000 the backend accepts (10× extra scans);
     full CSV string held in memory.
-24. 13 families materialize + full-sort the entire set per request — e.g. namespace_events.go:161, cluster_events.go:142 (which models every event before discarding non-cluster-scoped) — events cardinality
+    PARTIALLY FIXED: catalog export now pages at the backend max (10000, was 1000 → 10× fewer scans); item 16 cut per-scan cost ~10-90×; typed export already used its backend max. The full-CSV-in-memory model is unchanged (see P3 #49 class).
+24. ✅ 13 families materialize + full-sort the entire set per request — e.g. namespace_events.go:161, cluster_events.go:142 (which models every event before discarding non-cluster-scoped) — events cardinality
     makes this the worst; right fix is one shared bounded top-K insert.
-25. No in-flight indicator on user sort/search — useQueryBackedResourceGridTable.ts:93 — controller's refresh overlay exists but is starved (loading forced false with rows visible); sort arrow flips before
+    FIXED (worst offenders): both events families now stream rows through the shared bounded collector (item 16's engine — the prescribed top-K insert), and cluster events skip namespaced events BEFORE building the resource model. The remaining 11 families use the now-decorated single sort (item 16) — the shared engine exists for converting them as needed.
+25. ✅ No in-flight indicator on user sort/search — useQueryBackedResourceGridTable.ts:93 — controller's refresh overlay exists but is starved (loading forced false with rows visible); sort arrow flips before
     data; stale counts shown meanwhile.
-26. Duplicate stale-filters fetch on hydration commit — useQueryBackedResourceGridTable.ts:228 — queryEnabled flips a render before hydrated filters publish; fetch #1 (wrong filters) executes and is discarded.
+    FIXED: the typed query exposes resetPending (user-initiated filter/sort/page-size changes + search debounce); rows-visible user refetches now drive the controller's refresh overlay, while background live refetches stay silent (anti-flicker contract preserved).
+26. ✅ Duplicate stale-filters fetch on hydration commit — useQueryBackedResourceGridTable.ts:228 — queryEnabled flips a render before hydrated filters publish; fetch #1 (wrong filters) executes and is discarded.
     (Empirically reproduced; narrow trigger.)
-27. Single-namespace error copy says "All Namespaces …" — labels hardcoded in all 10 NsViews (e.g. NsViewConfig.tsx:147), rendered in NsViewPods/Workloads error banners; latent in the other eight.
-28. Events views lost stream-latency delivery — eventStreamManager.ts:699 — streamed events can't trigger refetch; ~3s poll lag vs immediate on main; SSE stream is dead weight for row delivery, and typed-query
+    FIXED: tableStateReady is only set by post-hydration publishes (the publish effect now re-fires on hydration commit), so the first query always carries the hydrated filters — fetch #1 never happens.
+27. ✅ Single-namespace error copy says "All Namespaces …" — labels hardcoded in all 10 NsViews (e.g. NsViewConfig.tsx:147), rendered in NsViewPods/Workloads error banners; latent in the other eight.
+    FIXED: all 10 NsViews pass their namespace-aware label (the diagnosticsLabel) as the query label, so error copy says "Namespace X …" for single namespaces.
+28. ✅ Events views lost stream-latency delivery — eventStreamManager.ts:699 — streamed events can't trigger refetch; ~3s poll lag vs immediate on main; SSE stream is dead weight for row delivery, and typed-query
     scopes can churn the singleton events SSE connection (orchestrator.ts:567 shouldStreamScope only filters resource-stream domains).
-29. Unknown sort field silently name-sorts under a lit arrow — static_table_query.go adapters' default: return row.Name; published sortable-fields capability consumed by nothing; conformance test only checks
+    FIXED: the events stream manager bumps streamRevision on deliveries (typed events queries refetch at stream latency), and shouldStreamScope rejects ?-parameterized one-shot scopes for ALL domains so typed queries can no longer churn the singleton events SSE.
+29. ✅ Unknown sort field silently name-sorts under a lit arrow — static_table_query.go adapters' default: return row.Name; published sortable-fields capability consumed by nothing; conformance test only checks
     non-emptiness. Three unlinked places must stay in lockstep per new column.
-30. nodes.go discards the query-scope parse error — nodes.go:248 — lone outlier of 16 call sites; malformed query silently serves defaults under the requested identity (unreachable from the shipped frontend,
+    FIXED: typedQueryEnvelope validates the requested sort field against the published SortableFields capability and surfaces a "Catalog/Sort" issue when unsupported — the capability finally has a real consumer; withDegraded/withIssues now append instead of clobbering.
+30. ✅ nodes.go discards the query-scope parse error — nodes.go:248 — lone outlier of 16 call sites; malformed query silently serves defaults under the requested identity (unreachable from the shipped frontend,
     but a boundary contract hole).
-31. Release note "every resource table has Copy · Export" unmet — object-panel JobsTab is Copy-only; object-panel EventsTab has no actions at all.
-32. Max rows setting removed silently — AdvancedSection.tsx / app_settings.go — user-visible setting and persisted values dropped, not in release notes.
-33. Browse default page size changed 1000 → 50 — frontend/src/modules/browse/pagination.ts — unclaimed user-visible change.
-34. Track A acceptance A1 unmet — the required liveness-latency contract was never documented in docs/architecture/large-data.md.
+    FIXED: buildNodeSnapshot(FromUsage) returns the parse error; both Build paths propagate it like the other 15 call sites.
+31. ✅ Release note "every resource table has Copy · Export" unmet — object-panel JobsTab is Copy-only; object-panel EventsTab has no actions at all.
+    FIXED: JobsTab gets fetchAllRows + exportFilename (full trio); the release note now scopes the claim precisely (object-panel Events tab named as the bare-presentation exception).
+32. ✅ Max rows setting removed silently — AdvancedSection.tsx / app_settings.go — user-visible setting and persisted values dropped, not in release notes.
+    FIXED: the removal is claimed in docs/release/pending.md (server-side pagination made it dead; persisted values ignored).
+33. ✅ Browse default page size changed 1000 → 50 — frontend/src/modules/browse/pagination.ts — unclaimed user-visible change.
+    FIXED: claimed in docs/release/pending.md.
+34. ✅ Track A acceptance A1 unmet — the required liveness-latency contract was never documented in docs/architecture/large-data.md.
+    FIXED: "Liveness Contract for Query-Backed Tables" section added to docs/architecture/large-data.md (refetch-on-identity, latency bound, keyset stability, user-vs-background indicator split); A1 doc checkbox marked done.
 
 P3 — Tech debt / cleanup
 

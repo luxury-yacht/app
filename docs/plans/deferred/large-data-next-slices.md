@@ -165,9 +165,10 @@ near-real-time updates.
 - [ ] Confirm the scoped live domain (`useRefreshScopedDomain`) publishes a
       `liveDataVersion` for single-namespace scopes and that the query refetches
       on it, matching the all-namespaces behavior.
-- [ ] Define and test the update latency contract for a migrated
+- [x] ✅ Define and test the update latency contract for a migrated
       single-namespace table (refetch-on-version vs prior stream cadence) and
-      record it in `docs/architecture/large-data.md`.
+      record it in `docs/architecture/large-data.md` (see "Liveness Contract for
+      Query-Backed Tables").
 - [ ] Prove a cursor on page 2+ survives a live update without skipping or
       duplicating rows (reuse the keyset-consistency contract; metric-backed
       single-namespace Pods inherit the dynamic-revision tolerance).

@@ -37,6 +37,10 @@ type typedTableQueryPage[T any] struct {
 	Kinds           []string
 	FacetsExact     bool
 	Dynamic         *ResourceQueryDynamicRef
+	// SortField is the field the request asked to sort by; the envelope
+	// validates it against the published sortable-fields capability so an
+	// unsupported sort surfaces instead of silently falling back to name order.
+	SortField string
 }
 
 type typedTableQueryCursor struct {
@@ -124,7 +128,28 @@ func typedQueryEnvelope[T any](table string, page typedTableQueryPage[T], capabi
 		Completeness:    resourceQueryCompleteness(true),
 		Dynamic:         page.Dynamic,
 		Capabilities:    capabilities,
+		Issues:          unsupportedSortFieldIssues(page.SortField, capabilities),
 	}
+}
+
+// unsupportedSortFieldIssues makes the published sortable-fields capability a
+// real contract: a requested sort the table cannot honor falls back to name
+// order in the adapters, which previously rendered under the requested column's
+// lit arrow with no signal at all.
+func unsupportedSortFieldIssues(sortField string, capabilities ResourceQueryCapabilities) []ResourceQueryIssue {
+	field := strings.TrimSpace(sortField)
+	if field == "" {
+		return nil
+	}
+	for _, supported := range capabilities.SortableFields {
+		if strings.EqualFold(field, supported) {
+			return nil
+		}
+	}
+	return []ResourceQueryIssue{{
+		Kind:    "Sort",
+		Message: fmt.Sprintf("%q is not a sortable field for this table; rows are ordered by name.", field),
+	}}
 }
 
 // typedWindowEnvelope assembles the envelope for the non-query truncated-window
@@ -152,7 +177,8 @@ func (e ResourceQueryEnvelope) withDegraded(exact bool, issues []ResourceQueryIs
 	e.TotalIsExact = e.TotalIsExact && exact
 	e.FacetsExact = e.FacetsExact && exact
 	e.Completeness = resourceQueryCompleteness(exact)
-	e.Issues = issues
+	// Append: the envelope may already carry issues (e.g. an unsupported sort).
+	e.Issues = append(e.Issues, issues...)
 	return e
 }
 
@@ -161,7 +187,8 @@ func (e ResourceQueryEnvelope) withDegraded(exact bool, issues []ResourceQueryIs
 // source into the envelope's `exact` argument, so a window missing a
 // permission-blocked source is reported as both inexact and issue-bearing.
 func (e ResourceQueryEnvelope) withIssues(issues []ResourceQueryIssue) ResourceQueryEnvelope {
-	e.Issues = issues
+	// Append: the envelope may already carry issues (e.g. an unsupported sort).
+	e.Issues = append(e.Issues, issues...)
 	return e
 }
 
@@ -343,6 +370,7 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 		Namespaces:      typedTableFacetMapValues(namespaceFacets),
 		Kinds:           typedTableFacetMapValues(kindFacets),
 		Dynamic:         query.dynamicRef(),
+		SortField:       query.Request.SortField,
 	}
 }
 
@@ -443,6 +471,7 @@ func (c *typedTableQueryCollector[T]) Page() typedTableQueryPage[T] {
 		Namespaces:      typedTableFacetMapValues(c.namespaces),
 		Kinds:           typedTableFacetMapValues(c.kinds),
 		Dynamic:         c.query.dynamicRef(),
+		SortField:       c.query.Request.SortField,
 	}
 }
 

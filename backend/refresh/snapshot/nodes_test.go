@@ -261,6 +261,21 @@ func TestNodeBuilderBuild(t *testing.T) {
 	require.Equal(t, snapshotVersionWithDynamicRevision(42, fmt.Sprint(collectedAt.UnixNano())), snapshot.Version)
 }
 
+// A malformed query scope must be rejected like every other typed builder does
+// — silently serving default-ordered rows under the requested identity is a
+// boundary contract hole.
+func TestNodeBuilderRejectsMalformedQueryScope(t *testing.T) {
+	builder := &NodeBuilder{
+		lister:    testsupport.NewNodeLister(t),
+		podLister: testsupport.NewPodLister(t),
+		metrics:   fakeMetricsProvider{},
+	}
+
+	// `%zz` is an invalid percent-encoding, so the query string cannot parse.
+	_, err := builder.Build(context.Background(), "cluster-a|?limit=%zz")
+	require.Error(t, err)
+}
+
 func TestNodeBuilderCapsLargeSnapshots(t *testing.T) {
 	nodes := make([]*corev1.Node, 0, config.SnapshotClusterNodesEntryLimit+1)
 	for i := 0; i < config.SnapshotClusterNodesEntryLimit+1; i++ {

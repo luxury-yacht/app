@@ -9,10 +9,58 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getObjectPanelScopeEvictions,
   getObjectPanelScopes,
   hasCompleteObjectMapReference,
   isObjectMapSupportedKind,
 } from './objectPanelRef';
+
+// The PodsTab leases a `pods` window per panel object; closing the panel must
+// evict it like the other panel scopes or every visited workload/node leaks one
+// window snapshot until the cluster closes.
+describe('getObjectPanelScopeEvictions pods window', () => {
+  it('evicts the workload pods window for a workload panel', () => {
+    const evictions = getObjectPanelScopeEvictions({
+      clusterId: 'cluster-a',
+      kind: 'Deployment',
+      group: 'apps',
+      version: 'v1',
+      name: 'web',
+      namespace: 'team-a',
+    });
+
+    expect(evictions).toContainEqual({
+      domain: 'pods',
+      scope: 'cluster-a|workload:team-a:apps:v1:Deployment:web',
+    });
+  });
+
+  it('evicts the node pods window for a node panel', () => {
+    const evictions = getObjectPanelScopeEvictions({
+      clusterId: 'cluster-a',
+      kind: 'Node',
+      version: 'v1',
+      name: 'worker-1',
+    });
+
+    expect(evictions).toContainEqual({
+      domain: 'pods',
+      scope: 'cluster-a|node:worker-1',
+    });
+  });
+
+  it('does not evict a pods window for kinds without a pods tab', () => {
+    const evictions = getObjectPanelScopeEvictions({
+      clusterId: 'cluster-a',
+      kind: 'ConfigMap',
+      version: 'v1',
+      name: 'settings',
+      namespace: 'team-a',
+    });
+
+    expect(evictions.some((eviction) => eviction.domain === 'pods')).toBe(false);
+  });
+});
 
 describe('getObjectPanelScopes', () => {
   it('normalises kind casing and builds scopes for standard resources', () => {

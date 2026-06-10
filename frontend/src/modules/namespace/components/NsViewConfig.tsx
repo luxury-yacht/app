@@ -144,7 +144,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-config',
-      label: 'All Namespaces Configuration',
+      label: diagnosticsLabel,
       selectRows,
       viewId: 'namespace-config',
       namespace,

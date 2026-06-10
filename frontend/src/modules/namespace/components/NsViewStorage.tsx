@@ -225,7 +225,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-storage',
-      label: 'All Namespaces Storage',
+      label: diagnosticsLabel,
       selectRows,
       viewId: 'namespace-storage',
       namespace,

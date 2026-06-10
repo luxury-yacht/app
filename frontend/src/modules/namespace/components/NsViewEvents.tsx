@@ -215,6 +215,8 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       (payload: NamespaceEventsSnapshotPayload) => payload.rows ?? [],
       []
     );
+    const diagnosticsLabel =
+      namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events';
     const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
       NamespaceEventsSnapshotPayload,
       EventData
@@ -222,7 +224,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-events',
-      label: 'All Namespaces Events',
+      label: diagnosticsLabel,
       selectRows,
       viewId: 'namespace-events',
       namespace,
@@ -233,8 +235,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       filterAccessors: { getSearchText },
       showNamespaceFilters: showNamespaceFilter,
       showKindDropdown: false,
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events',
+      diagnosticsLabel,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
 

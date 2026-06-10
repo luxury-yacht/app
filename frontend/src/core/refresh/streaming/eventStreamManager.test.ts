@@ -123,6 +123,52 @@ describe('EventStreamManager', () => {
     });
   });
 
+  test('streamed event deliveries bump the live-data identity (streamRevision)', async () => {
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+    const eventFor = (name: string, message: string) => ({
+      clusterId: 'cluster-a',
+      clusterName: 'alpha',
+      kind: 'Event',
+      name,
+      namespace: 'default',
+      objectUid: `uid-${name}`,
+      objectApiVersion: 'v1',
+      type: 'Normal',
+      source: 'kubelet',
+      reason: 'Started',
+      object: 'Pod/web',
+      message,
+    });
+
+    manager.applyPayload('cluster-events', 'cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 1,
+      generatedAt: 123,
+      reset: true,
+      events: [eventFor('one', 'first')],
+    });
+    await flushTimers();
+
+    const first = getScopedDomainState('cluster-events', 'cluster');
+    // The typed events queries refetch only when the live-data identity moves;
+    // streamed deliveries carry no backend snapshot version, so the revision
+    // must move or stream latency degrades to poll cadence.
+    expect(first.streamRevision).toBe(1);
+
+    manager.applyPayload('cluster-events', 'cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 2,
+      generatedAt: 456,
+      events: [eventFor('two', 'second')],
+    });
+    await flushTimers();
+
+    expect(getScopedDomainState('cluster-events', 'cluster').streamRevision).toBe(2);
+  });
+
   test('applyPayload preserves backend createdAt for initial snapshot events', async () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();

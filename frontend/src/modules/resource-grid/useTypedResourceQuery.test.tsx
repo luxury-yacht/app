@@ -202,6 +202,66 @@ describe('useTypedResourceQuery', () => {
     expect(result?.isRequestingMore).toBe(false);
   });
 
+  it('flags user-initiated refetches (sort/filter) but not background live refetches', async () => {
+    let resolveFetch: ((value: unknown) => void) | undefined;
+    requestRefreshDomainStateMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        })
+    );
+
+    const Probe: React.FC<{ kinds: string[]; liveDataVersion: string }> = ({
+      kinds,
+      liveDataVersion,
+    }) => {
+      result = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, kinds },
+        sortConfig,
+        liveDataVersion,
+        selectRows,
+      });
+      return null;
+    };
+    const settle = async () => {
+      await act(async () => {
+        resolveFetch?.({ status: 'executed', data: { status: 'ready', data: { rows: [] } } });
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+
+    // Mount: the initial fetch counts as a reset; it clears once settled.
+    await act(async () => {
+      root.render(<Probe kinds={[]} liveDataVersion="v1" />);
+      await Promise.resolve();
+    });
+    await settle();
+    expect(result?.resetPending).toBe(false);
+
+    // A user filter change is a reset: pending until the fetch settles.
+    await act(async () => {
+      root.render(<Probe kinds={['Pod']} liveDataVersion="v1" />);
+      await Promise.resolve();
+    });
+    expect(result?.resetPending).toBe(true);
+    await settle();
+    expect(result?.resetPending).toBe(false);
+
+    // A background live invalidation refetches WITHOUT flagging a reset.
+    await act(async () => {
+      root.render(<Probe kinds={['Pod']} liveDataVersion="v2" />);
+      await Promise.resolve();
+    });
+    expect(result?.loading).toBe(true);
+    expect(result?.resetPending).toBe(false);
+    await settle();
+  });
+
   it('debounces search changes instead of querying on every keystroke', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',

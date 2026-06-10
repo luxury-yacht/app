@@ -170,7 +170,7 @@ functions can skip or duplicate rows across pages. A numeric sort field must sta
 uniformly numeric: a row that is missing a value (no age timestamp, no metric
 sample, an unparseable cell) sorts as a `-Inf` sentinel with `ok=true`, never via
 a string fallback, so numeric and string comparable spaces never mix within one
-field. See `sortTypedTableRows` and `typedTableComparableSortValue` in
+field. See `typedTableSortedItemLess` and `typedTableComparableSortValue` in
 `backend/refresh/snapshot/typed_table_query.go`; this invariant is what prevents
 silent dup/skip when a new sort field or adapter is added.
 
@@ -193,6 +193,35 @@ issue-bearing, never as a complete table.
 Object-panel related-resource tables stay local while their owner-scoped domain
 keeps them naturally bounded. They move to typed query-backed mode only if an
 object-panel table becomes namespace or cluster scale.
+
+## Liveness Contract for Query-Backed Tables (Track A acceptance A1)
+
+A query-backed table renders one-shot query pages, so its liveness comes from
+refetching — never from mutating displayed rows in place. The contract:
+
+- The typed query refetches exactly when the scoped live domain's **data
+  identity** changes: `liveDomainVersion = version:checksum:streamRevision`
+  (`useQueryBackedResourceGridTable.ts`). `version`/`checksum` come from window
+  snapshots (polls, resyncs); `streamRevision` is bumped by the resource-stream
+  and events-stream managers when a streamed delivery actually changes rows.
+  Refresh timestamps are deliberately excluded — identical data must never
+  trigger a refetch (the anti-churn invariant).
+- **Update latency**: for streamed domains, a cluster change is visible within
+  one stream coalescing window (200ms flush in the stream managers) plus one
+  query round-trip (an in-memory backend page build — tens of milliseconds at
+  100k rows). For poll-backed domains, latency is the poll cadence plus the same
+  round-trip. A healthy stream suppresses snapshot polls; the stream manager
+  falls back to polling on drift or stream failure, restoring poll-cadence
+  liveness automatically.
+- **Cursor stability across live updates**: pagination cursors are value-based
+  keysets (sort value + row key), so a page-2+ cursor survives concurrent
+  inserts/deletes without skipping or duplicating rows; metric-backed sorts
+  tolerate metrics-revision advances (`typedTableQueryCursor.matches`). A cursor
+  whose anchor context disappears reports `cursorInvalid` and the table resets
+  to page 1.
+- User-initiated query changes (sort/filter/page size) show the refresh overlay
+  until the new page lands (`resetPending`); background liveness refetches stay
+  visually silent so rows never flicker.
 
 ## High-Risk Typed Producer Trace
 

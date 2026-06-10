@@ -701,6 +701,10 @@ export class EventStreamManager {
       status: error ? 'error' : 'ready',
       data: payload,
       stats,
+      // Streamed deliveries carry no backend snapshot version; bump the stream
+      // revision (part of the live-data identity) so the typed events queries
+      // refetch at stream latency instead of poll cadence.
+      streamRevision: (previous.streamRevision ?? 0) + 1,
       error,
       lastUpdated: generatedAt,
       lastAutoRefresh: generatedAt,
@@ -734,6 +738,9 @@ export class EventStreamManager {
       status: error ? 'error' : 'ready',
       data: payload,
       stats,
+      // See updateClusterState: the revision is what lets typed queries see
+      // streamed deliveries.
+      streamRevision: (previous.streamRevision ?? 0) + 1,
       error,
       lastUpdated: generatedAt,
       lastAutoRefresh: generatedAt,

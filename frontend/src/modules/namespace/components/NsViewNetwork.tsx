@@ -183,7 +183,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-network',
-      label: 'All Namespaces Network',
+      label: diagnosticsLabel,
       selectRows,
       viewId: 'namespace-network',
       namespace,

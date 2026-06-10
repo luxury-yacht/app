@@ -68,4 +68,29 @@ describe('deriveQueryBackedData', () => {
     expect(r.data).toEqual([]);
     expect(r.error).toBe('returned no data');
   });
+
+  it('reports loading during a user-initiated refetch with rows visible (sort/search overlay)', () => {
+    const r = deriveQueryBackedData<Row>({
+      ...base,
+      queryEnabled: true,
+      queryRows: queryPage,
+      queryLoaded: true,
+      queryLoading: true,
+      queryResetPending: true,
+    });
+    expect(r.data).toBe(queryPage);
+    expect(r.loading).toBe(true);
+  });
+
+  it('stays quiet for background refetches with rows visible (no overlay flicker)', () => {
+    const r = deriveQueryBackedData<Row>({
+      ...base,
+      queryEnabled: true,
+      queryRows: queryPage,
+      queryLoaded: true,
+      queryLoading: true,
+      queryResetPending: false,
+    });
+    expect(r.loading).toBe(false);
+  });
 });

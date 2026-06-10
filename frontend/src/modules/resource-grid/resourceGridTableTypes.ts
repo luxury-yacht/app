@@ -32,6 +32,10 @@ export interface GridTableBindingProps<T> {
   columnVisibility?: Record<string, boolean> | null;
   onColumnVisibilityChange?: (visibility: Record<string, boolean>) => void;
   allowHorizontalOverflow?: boolean;
+  /** Arms the scope-toggle + Copy + Export trio in the filter bar. */
+  fetchAllRows?: () => Promise<T[]>;
+  /** Default filename offered by the file Export action. */
+  exportFilename?: string;
 }
 
 export interface ResourceGridTableRow {

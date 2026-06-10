@@ -169,6 +169,26 @@ describe('JobsTab', () => {
     expect(container.querySelector('[data-testid="grid-table"]')).toBeTruthy();
   });
 
+  it('offers the all-matching-rows export scope like every other resource table', async () => {
+    const jobs = [makeJob({ name: 'job-a' }), makeJob({ name: 'job-b' })];
+    act(() => {
+      root.render(
+        <JobsTab
+          jobs={jobs}
+          loading={false}
+          isActive={true}
+          clusterId={PANEL_CLUSTER_ID}
+          clusterName="Panel Cluster A"
+        />
+      );
+    });
+
+    // fetchAllRows arms the scope toggle + Copy + Export trio in the filter bar.
+    expect(gridTablePropsRef.current.exportFilename).toBe('object-panel-jobs');
+    const allRows = await gridTablePropsRef.current.fetchAllRows();
+    expect(allRows).toHaveLength(2);
+  });
+
   it('uses viewId "object-panel-jobs" for persistence', () => {
     act(() => {
       root.render(<JobsTab jobs={[makeJob()]} loading={false} isActive={true} />);

@@ -292,6 +292,9 @@ describe('NsViewWorkloads', () => {
       expect.objectContaining({
         domain: 'namespace-workloads',
         scope: 'path:context|namespace:team-a?limit=50&sort=name&sortDirection=asc',
+        // The label feeds user-facing error copy ("<label> returned no data");
+        // a single namespace must not claim "All Namespaces".
+        label: 'Namespace Workloads',
       })
     );
   });

@@ -189,7 +189,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-quotas',
-      label: 'All Namespaces Quotas',
+      label: diagnosticsLabel,
       selectRows,
       viewId: 'namespace-quotas',
       namespace,

@@ -180,7 +180,14 @@ func compareSummariesForCatalogQueryWithOptions(left, right Summary, opts QueryO
 	if field != catalogQueryDefaultSort {
 		leftValue := catalogQuerySortValue(left, field)
 		rightValue := catalogQuerySortValue(right, field)
-		if direction == "desc" {
+		descending := direction == "desc"
+		if catalogQuerySortFieldIsAge(field) {
+			// "Age ascending" = newest first, matching the typed tables (they
+			// encode age as a negated timestamp). The raw timestamp string
+			// orders oldest-first, so the comparison flips.
+			descending = !descending
+		}
+		if descending {
 			leftValue, rightValue = rightValue, leftValue
 		}
 		if leftValue < rightValue {
@@ -237,6 +244,15 @@ func catalogQuerySortValue(item Summary, field string) string {
 		return item.CreationTimestamp
 	default:
 		return ""
+	}
+}
+
+func catalogQuerySortFieldIsAge(field string) bool {
+	switch field {
+	case "age", "creationtimestamp", "creation-timestamp":
+		return true
+	default:
+		return false
 	}
 }
 

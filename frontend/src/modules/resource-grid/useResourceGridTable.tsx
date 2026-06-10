@@ -342,6 +342,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     [normalizeTableFilters, setPersistenceFilters]
   );
 
+  const persistenceHydrated = persistence.hydrated;
   useEffect(() => {
     const filters = normalizeTableFilters(persistenceFilters);
     if (filters !== persistenceFilters) {
@@ -351,10 +352,15 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       filters,
       sortConfig: sortConfig ?? null,
     });
+    // persistenceHydrated is a deliberate dependency: hydration may commit
+    // WITHOUT changing the filters object identity, and the query lifecycle
+    // only arms itself on a post-hydration publish. Re-publishing the same
+    // value is safe (consumers dedupe by value).
   }, [
     normalizeTableFilters,
     onTableStateChange,
     persistenceFilters,
+    persistenceHydrated,
     setPersistenceFilters,
     sortConfig,
   ]);

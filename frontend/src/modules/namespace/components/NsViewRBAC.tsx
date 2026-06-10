@@ -194,7 +194,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-rbac',
-      label: 'All Namespaces RBAC',
+      label: diagnosticsLabel,
       selectRows,
       viewId: 'namespace-rbac',
       namespace,

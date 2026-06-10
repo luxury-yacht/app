@@ -7,6 +7,7 @@
  */
 
 import { buildClusterScope, buildObjectScope } from '@/core/refresh/clusterScope';
+import { buildObjectPanelPodsScope } from '@modules/object-panel/components/ObjectPanel/Pods/objectPanelPodsScope';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import {
   buildObjectReference,
@@ -35,6 +36,8 @@ export interface ObjectPanelScopes {
   containerLogsScope: string | null;
   mapScope: string | null;
   helmScope: string | null;
+  /** The PodsTab's leased pods window scope; null for kinds without a pods tab. */
+  podsScope: string | null;
   isHelmRelease: boolean;
   isEvent: boolean;
 }
@@ -47,7 +50,8 @@ export interface ObjectPanelScopeEviction {
     | 'object-map'
     | 'object-helm-manifest'
     | 'object-helm-values'
-    | 'container-logs';
+    | 'container-logs'
+    | 'pods';
   scope: string;
 }
 
@@ -196,6 +200,7 @@ export const getObjectPanelScopes = (
       containerLogsScope: null,
       mapScope: null,
       helmScope: null,
+      podsScope: null,
       isHelmRelease: false,
       isEvent: objectData?.kind?.trim().toLowerCase() === 'event',
     };
@@ -213,6 +218,7 @@ export const getObjectPanelScopes = (
       containerLogsScope: null,
       mapScope: null,
       helmScope: null,
+      podsScope: null,
       isHelmRelease: false,
       isEvent: objectData.kind.trim().toLowerCase() === 'event',
     };
@@ -259,6 +265,19 @@ export const getObjectPanelScopes = (
   const helmScope = syntheticHelmRelease
     ? buildClusterScope(clusterId, `${scopeNamespace}:${ref.name}`)
     : null;
+  // The PodsTab leases a pods window under this exact scope (same builder the
+  // query-backed wrapper uses); null for kinds without a pods tab.
+  const podsBaseScope = buildObjectPanelPodsScope(
+    {
+      kind: ref.kind,
+      group: ref.group,
+      version: ref.version,
+      namespace: ref.namespace,
+      name: ref.name,
+    },
+    ref.kind
+  );
+  const podsScope = podsBaseScope && clusterId ? buildClusterScope(clusterId, podsBaseScope) : null;
 
   return {
     objectKind,
@@ -268,6 +287,7 @@ export const getObjectPanelScopes = (
     containerLogsScope,
     mapScope,
     helmScope,
+    podsScope,
     isHelmRelease: syntheticHelmRelease,
     isEvent: objectKind === 'event',
   };
@@ -294,6 +314,9 @@ export const getObjectPanelScopeEvictions = (
   if (scopes.helmScope) {
     evictions.push({ domain: 'object-helm-manifest', scope: scopes.helmScope });
     evictions.push({ domain: 'object-helm-values', scope: scopes.helmScope });
+  }
+  if (scopes.podsScope) {
+    evictions.push({ domain: 'pods', scope: scopes.podsScope });
   }
   return evictions;
 };

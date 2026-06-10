@@ -847,7 +847,11 @@ func BuildNodeSummary(meta ClusterMeta, node *corev1.Node, pods []*corev1.Pod, n
 		return NodeSummary{}, errors.New("node is nil")
 	}
 	ctx := WithClusterMeta(context.Background(), meta)
-	snap := buildNodeSnapshotFromUsage(ctx, "", []*corev1.Node{node}, pods, nodeUsageOrEmpty(nodeUsage), podUsageOrEmpty(podUsage), metrics.Metadata{})
+	// Scope "" carries no query string, so the parse cannot fail here.
+	snap, err := buildNodeSnapshotFromUsage(ctx, "", []*corev1.Node{node}, pods, nodeUsageOrEmpty(nodeUsage), podUsageOrEmpty(podUsage), metrics.Metadata{})
+	if err != nil {
+		return NodeSummary{}, err
+	}
 	if snap == nil {
 		return NodeSummary{}, errors.New("node snapshot unavailable")
 	}

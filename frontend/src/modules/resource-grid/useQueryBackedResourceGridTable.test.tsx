@@ -20,6 +20,8 @@ const {
   useClusterResourceGridTableMock,
   useNamespaceResourceGridTableMock,
   persistedPageSizeRef,
+  persistenceHydratedRef,
+  persistedFiltersRef,
   setPageSizeMock,
 } = vi.hoisted(() => ({
   liveDomainStateRef: {
@@ -43,6 +45,8 @@ const {
   useClusterResourceGridTableMock: vi.fn(),
   useNamespaceResourceGridTableMock: vi.fn(),
   persistedPageSizeRef: { current: null as number | null },
+  persistenceHydratedRef: { current: true },
+  persistedFiltersRef: { current: null as Record<string, unknown> | null },
   setPageSizeMock: vi.fn(),
 }));
 
@@ -78,11 +82,11 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnVisibility: vi.fn(),
     columnWidths: null,
     setColumnWidths: vi.fn(),
-    filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+    filters: persistedFiltersRef.current ?? DEFAULT_GRID_TABLE_FILTER_STATE,
     setFilters: vi.fn(),
     pageSize: persistedPageSizeRef.current,
     setPageSize: setPageSizeMock,
-    hydrated: true,
+    hydrated: persistenceHydratedRef.current,
     resetState: vi.fn(),
   }),
 }));
@@ -146,6 +150,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     lifecycleCallsRef.current = [];
     useTypedResourceQueryMock.mockReset();
     persistedPageSizeRef.current = null;
+    persistenceHydratedRef.current = true;
+    persistedFiltersRef.current = null;
     setPageSizeMock.mockReset();
     useTypedResourceQueryMock.mockReturnValue({
       rows: [row],
@@ -857,6 +863,57 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
     expect(result?.source.loading).toBe(false);
     expect(paginationLoading(result)).toBe(true);
+  });
+
+  it('never issues the first query with pre-hydration filters', async () => {
+    const Probe: React.FC = () => {
+      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        selectRows,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+    const publish = async (state: typeof publishedTableState) => {
+      await act(async () => {
+        const calls = useClusterResourceGridTableMock.mock.calls;
+        calls[calls.length - 1]?.[0].onTableStateChange(state);
+        await Promise.resolve();
+      });
+    };
+
+    // Render before hydration: the table publishes its DEFAULT state.
+    persistenceHydratedRef.current = false;
+    act(() => {
+      root.render(<Probe />);
+    });
+    await publish(publishedTableState);
+    expect(useTypedResourceQueryMock.mock.calls.some((call: any[]) => call[0].enabled)).toBe(false);
+
+    // Hydration commits, but the post-hydration publish has not run yet (it is
+    // an effect). The query must NOT fire with the stale default filters.
+    persistenceHydratedRef.current = true;
+    act(() => {
+      root.render(<Probe />);
+    });
+    expect(useTypedResourceQueryMock.mock.calls.some((call: any[]) => call[0].enabled)).toBe(false);
+
+    // The post-hydration publish lands with the persisted filters — only now
+    // does the query run, and with those filters.
+    const hydratedState = {
+      filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search: 'persisted' },
+      sortConfig: { key: 'name', direction: 'asc' } as const,
+    };
+    await publish(hydratedState);
+    const enabledCalls = useTypedResourceQueryMock.mock.calls.filter(
+      (call: any[]) => call[0].enabled
+    );
+    expect(enabledCalls.length).toBeGreaterThan(0);
+    expect(enabledCalls[0][0].filters).toEqual(hydratedState.filters);
   });
 
   it('uses persisted rows per page for the query and saves page size changes', async () => {

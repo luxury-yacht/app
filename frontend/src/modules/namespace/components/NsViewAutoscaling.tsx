@@ -355,7 +355,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-autoscaling',
-      label: 'All Namespaces Autoscaling',
+      label: diagnosticsLabel,
       selectRows,
       viewId: 'namespace-autoscaling',
       namespace,

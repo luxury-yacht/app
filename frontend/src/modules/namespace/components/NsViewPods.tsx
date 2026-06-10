@@ -458,6 +458,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     ]);
 
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
+    const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Pods' : 'Namespace Pods';
     const showNamespaceFilter = isAllNamespaces;
     const podQueryPredicates = useMemo(
       () => (activePodFilter ? { health: activePodFilter } : undefined),
@@ -506,7 +507,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       queryTableMode: 'Query Backed Dynamic',
       clusterId: queryClusterId,
       domain: 'pods',
-      label: 'All Namespaces Pods',
+      label: diagnosticsLabel,
       predicates: podQueryPredicates,
       selectRows: selectPodRows,
       viewId: 'namespace-pods',
@@ -514,8 +515,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods',
+      diagnosticsLabel,
       rowIdentity: keyExtractor,
       showKindDropdown: false,
       showNamespaceFilters: showNamespaceFilter,

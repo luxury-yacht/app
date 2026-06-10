@@ -262,6 +262,34 @@ describe('useBrowseCatalog', () => {
     await expect(result!.fetchAllRows()).rejects.toThrow(/page 2/);
   });
 
+  it('fetchAllRows pages at the backend max page size', async () => {
+    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    mocks.useRefreshScopedDomain.mockReturnValue({
+      status: 'ready',
+      data: makePayload({ items: [first], total: 1, batchSize: 1 }),
+      scope: 'cluster-1|limit=2&namespace=default',
+    });
+    mocks.requestRefreshDomainState.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: makePayload({ items: [first], total: 1, batchSize: 1 }) },
+    });
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    await result!.fetchAllRows();
+
+    const exportCall = mocks.requestRefreshDomainState.mock.calls.find((call: unknown[]) =>
+      String((call[0] as { scope: string }).scope).includes('limit=')
+    );
+    expect(exportCall).toBeDefined();
+    // The backend caps catalog query limits at 10000; paging below that
+    // multiplies the number of full catalog scans per export.
+    expect((exportCall![0] as { scope: string }).scope).toContain('limit=10000');
+  });
+
   it('keeps the selected Cluster Browse cursor page when the base scope refreshes', async () => {
     const baseScope = 'cluster-1|limit=2&namespace=cluster';
     const metadataScope = 'cluster-1|limit=1&namespace=cluster';

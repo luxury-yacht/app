@@ -561,9 +561,11 @@ export function useBrowseCatalog({
     if (!enabled || !clusterId) {
       return [];
     }
-    // Request the backend's max page size; it caps the value anyway, so a single request
-    // can't return everything and we follow the cursor below.
-    const exportPageLimit = 1000;
+    // Request the backend's max page size (config.ObjectCatalogMaxQueryLimit);
+    // it caps the value anyway, so a single request can't return everything and
+    // we follow the cursor below. Paging below the cap multiplies the number of
+    // full catalog scans per export.
+    const exportPageLimit = 10000;
     const collected: CatalogItem[] = [];
     let cursor = '';
     const maxPages = 100000;

@@ -38,6 +38,13 @@ export interface UseTypedResourceQueryResult<TRow, TPayload = unknown> {
   payload: TPayload | null;
   loading: boolean;
   loaded: boolean;
+  /**
+   * True while a USER-initiated query change (filters/sort/page size — the
+   * reset identity) or a pending search debounce has not settled. Background
+   * live-data refetches do not set it; consumers use it to show an in-flight
+   * indicator without reintroducing overlay flicker on every stream tick.
+   */
+  resetPending: boolean;
   error: string | null;
   continueToken: string | null;
   hasPrevious: boolean;
@@ -100,6 +107,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
 
   const [rows, setRows] = useState<TRow[]>([]);
   const [payload, setPayload] = useState<TPayload | null>(null);
+  const [resetPending, setResetPending] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -194,6 +202,9 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     queryResetIdentityRef.current = queryResetIdentity;
     const hardReset = queryHardResetIdentityRef.current !== queryHardResetIdentity;
     queryHardResetIdentityRef.current = queryHardResetIdentity;
+    // A reset is user-driven (filters/sort/page size); flag it until the fetch
+    // settles so the table can show an in-flight indicator.
+    setResetPending(true);
     setRequestToken(null);
     setContinueToken(null);
     setPreviousTokens([]);
@@ -330,6 +341,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       } finally {
         if (!cancelled) {
           setLoading(false);
+          setResetPending(false);
           setIsRequestingMore(false);
         }
       }
@@ -426,6 +438,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     payload,
     loading,
     loaded,
+    resetPending: resetPending || (filters.search ?? '') !== debouncedSearch,
     error,
     continueToken,
     hasPrevious: previousTokens.length > 0,

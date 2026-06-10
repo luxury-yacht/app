@@ -310,7 +310,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       queryTableMode: 'Query Backed Static',
       clusterId: queryClusterId,
       domain: 'namespace-helm',
-      label: 'All Namespaces Helm',
+      label: diagnosticsLabel,
       selectRows,
       viewId: 'namespace-helm',
       namespace,

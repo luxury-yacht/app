@@ -180,7 +180,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       queryTableMode: 'Query Backed Dynamic',
       clusterId: selectedClusterId,
       domain: 'namespace-workloads',
-      label: 'All Namespaces Workloads',
+      label: diagnosticsLabel,
       selectRows: selectWorkloadRows,
       viewId: 'namespace-workloads',
       namespace,

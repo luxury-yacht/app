@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import type { RefreshDomain } from '@/core/refresh/types';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
@@ -78,6 +78,7 @@ export function deriveQueryBackedData<TRow>({
   queryLoading,
   queryLoaded,
   queryError,
+  queryResetPending = false,
 }: {
   clusterId?: string | null;
   queryEnabled: boolean;
@@ -85,6 +86,13 @@ export function deriveQueryBackedData<TRow>({
   queryLoading: boolean;
   queryLoaded: boolean;
   queryError: string | null;
+  /**
+   * A USER-initiated query change (sort/filters/page size) is in flight. Unlike
+   * background live refetches — which stay silent so rows never flicker — this
+   * keeps `loading` true with rows visible so the controller shows its refresh
+   * overlay until the new page lands.
+   */
+  queryResetPending?: boolean;
 }): { data: TRow[]; loading: boolean; loaded: boolean; error: string | null } {
   if (!queryEnabled) {
     // Gating (awaiting cluster/persistence/live-domain readiness): hold loading so the
@@ -94,7 +102,7 @@ export function deriveQueryBackedData<TRow>({
   const queryInitialLoading = queryRows.length === 0 && !queryLoaded && !queryError;
   return {
     data: queryRows,
-    loading: queryRows.length === 0 && (queryLoading || queryInitialLoading),
+    loading: (queryRows.length === 0 && (queryLoading || queryInitialLoading)) || queryResetPending,
     loaded: queryLoaded,
     error: queryError,
   };
@@ -229,9 +237,18 @@ function useTypedQueryLifecycle<
   const liveDomain = useRefreshScopedDomain(domain, liveScope);
   const liveDataVersion = liveDomainVersion(liveDomain);
   const liveDomainInitialLoadPending = isLiveDomainInitialLoadPending(liveDomain);
+  const hydratedRef = useRef(persistence.hydrated);
+  hydratedRef.current = persistence.hydrated;
   const handlePublishedTableState = useCallback(
     (next: QueryBackedTableState) => {
-      setTableStateReady(true);
+      // A publish from before persistence hydration carries the default
+      // filters; arming the query then would fire a wrong-filters fetch the
+      // moment `hydrated` flips (it gets discarded, but it still runs). Only
+      // the post-hydration publish (guaranteed by the table's publish effect
+      // depending on `hydrated`) marks the state ready.
+      if (hydratedRef.current) {
+        setTableStateReady(true);
+      }
       handleTableStateChange(next);
     },
     [handleTableStateChange]
@@ -263,6 +280,7 @@ function useTypedQueryLifecycle<
     queryLoading: query.loading,
     queryLoaded: query.loaded,
     queryError: query.error,
+    queryResetPending: query.resetPending,
   });
 
   return {

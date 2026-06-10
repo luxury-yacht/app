@@ -304,7 +304,16 @@ func (e catalogQueryExecutor) pageCatalogChunksPrevious(
 	if beforeCount > e.limit && len(buffer) > 0 {
 		previous = encodeCatalogQueryCursor(e.service.catalogQueryCursorFor(e.opts, e.limit, catalogQueryDirectionPrev, buffer[0]))
 	}
-	return catalogQueryPageResult{items: buffer, continueToken: next, previousToken: previous}
+	// A previous token is only issued when predecessors existed, so an empty
+	// buffer means they were all deleted since — an un-navigable dead end
+	// (no items, no tokens). Invalidate so the client resets to page 1.
+	cursorInvalid := len(buffer) == 0
+	return catalogQueryPageResult{
+		items:         buffer,
+		continueToken: next,
+		previousToken: previous,
+		cursorInvalid: cursorInvalid,
+	}
 }
 
 func (e catalogQueryExecutor) matches(item Summary) bool {

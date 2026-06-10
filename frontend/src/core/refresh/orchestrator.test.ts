@@ -2901,6 +2901,21 @@ describe('refreshOrchestrator', () => {
     resetAllScopedDomainStates('namespace-workloads');
   });
 
+  it('never treats one-shot query scopes (`?` params) as streaming targets', () => {
+    // Typed events queries use parameterized one-shot scopes on the SAME domain
+    // as the singleton events SSE stream; treating them as streamable churned
+    // the shared connection on every query.
+    expect(
+      orchestratorInternals.shouldStreamScope('cluster-events', 'cluster-a|?limit=50&sort=age')
+    ).toBe(false);
+    expect(
+      orchestratorInternals.shouldStreamScope(
+        'namespace-events',
+        'cluster-a|namespace:all?limit=50'
+      )
+    ).toBe(false);
+  });
+
   it('handles global reset and kubeconfig transitions by cancelling inflight work', () => {
     const scope = 'cluster-a';
     const teardownSpy = vi.spyOn(orchestratorInternals as Record<string, any>, 'teardownInFlight');

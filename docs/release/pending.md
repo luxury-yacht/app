@@ -1,12 +1,14 @@
 ### Added
 
-- Every resource table now has a consistent **Copy · Export** pair with a **scope toggle**,
-  in the same place on every view. Copy puts rows on the clipboard; Export saves them to a
-  CSV file. The toggle chooses the scope for both: off (default) acts on the current page,
-  on acts on **all matching rows** across every page. Both always respect your active
-  filters, and the button labels say which scope is active so nothing is exported silently.
-  Browse and the Custom-resource views use the same mechanism as the rest of the app (the
-  separate server-side catalog export was retired in favor of this one path).
+- Every resource table with a filter bar now has a consistent **Copy · Export** pair with a
+  **scope toggle**, in the same place on every view (including the object panel's Pods and
+  Jobs tabs). Copy puts rows on the clipboard; Export saves them to a CSV file. The toggle
+  chooses the scope for both: off (default) acts on the current page, on acts on
+  **all matching rows** across every page. Both always respect your active filters, and the
+  button labels say which scope is active so nothing is exported silently. Browse and the
+  Custom-resource views use the same mechanism as the rest of the app (the separate
+  server-side catalog export was retired in favor of this one path). The object panel's
+  Events tab is the one exception — it is a bare presentation list without a filter bar.
 
 ### Changed
 
@@ -25,6 +27,12 @@
   "bounded local snapshot" / "applies only to the visible rows" note is gone (it no longer
   applies now that filtering and sorting run server-side across the whole dataset); pagination
   position still lives in the footer.
+
+- The **"Maximum table rows"** advanced setting was removed. Tables paginate and filter
+  server-side now, so the client-side row cap no longer did anything; a previously persisted
+  value is ignored.
+- Browse's default page size changed from 1000 to 50 rows. Large catalogs open much faster;
+  the page-size selector still offers up to 1000 per page.
 
 ### Fixed
 

@@ -572,6 +572,12 @@ class RefreshOrchestrator {
     if (!getAutoRefreshEnabled()) {
       return false;
     }
+    // One-shot typed-query scopes (`?` params) are never streaming targets, for
+    // ANY domain: on the events domains they share the singleton SSE connection
+    // with the parameterless base scope and would churn it on every query.
+    if (trimmed.includes('?')) {
+      return false;
+    }
     if (!isResourceStreamDomain(domain)) {
       return true;
     }
@@ -583,9 +589,6 @@ class RefreshOrchestrator {
       return false;
     }
     if (parsed.isMultiCluster) {
-      return false;
-    }
-    if (parsed.scope.includes('?')) {
       return false;
     }
     if (this.isStreamingBlocked(domain, trimmed)) {

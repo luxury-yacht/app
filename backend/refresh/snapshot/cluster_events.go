@@ -93,19 +93,31 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, err
 	}
 
-	entries := make([]ClusterEventEntry, 0, len(events))
+	// The query path streams entries through the bounded collector (top-K
+	// insert, no full materialization or sort); the window path still collects
+	// the slice it truncates below.
+	var collector *typedTableQueryCollector[ClusterEventEntry]
+	var entries []ClusterEventEntry
+	if query.Enabled {
+		collector = newTypedTableQueryCollector(query, clusterEventTableQueryAdapter())
+	} else {
+		entries = make([]ClusterEventEntry, 0, len(events))
+	}
 	var version uint64
 	for _, evt := range events {
 		if evt == nil {
 			continue
 		}
-		model := resourcemodel.BuildEventResourceModel(meta.ClusterID, evt)
-		facts := model.Facts.Event
-		timestamp := resourcemodel.EventTimestamp(evt).Time
+		// Cluster events involve cluster-scoped objects only; skip namespaced
+		// events BEFORE building the (expensive) resource model — they are the
+		// overwhelming majority.
 		objectNamespace := evt.InvolvedObject.Namespace
 		if strings.TrimSpace(objectNamespace) != "" {
 			continue
 		}
+		model := resourcemodel.BuildEventResourceModel(meta.ClusterID, evt)
+		facts := model.Facts.Event
+		timestamp := resourcemodel.EventTimestamp(evt).Time
 		eventType := facts.EventType
 		if eventType == "" {
 			eventType = "-"
@@ -114,7 +126,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		if source == "" {
 			source = "-"
 		}
-		entries = append(entries, ClusterEventEntry{
+		entry := ClusterEventEntry{
 			ClusterMeta:      meta,
 			Kind:             "Event",
 			Name:             evt.Name,
@@ -132,14 +144,19 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 			Message:          resourcemodel.EventMessage(evt),
 			Age:              formatAge(timestamp),
 			AgeTimestamp:     timestamp.UnixMilli(),
-		})
+		}
+		if collector != nil {
+			collector.Add(entry)
+		} else {
+			entries = append(entries, entry)
+		}
 		if v := resourceVersionOrTimestamp(evt); v > version {
 			version = v
 		}
 	}
 
 	if query.Enabled {
-		page := applyTypedTableQuery(entries, query, clusterEventTableQueryAdapter())
+		page := collector.Page()
 		return &refresh.Snapshot{
 			Domain:  clusterEventsDomainName,
 			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),

@@ -146,6 +146,84 @@ func TestServiceQueryIndexRebuiltAfterLaterPublish(t *testing.T) {
 	}
 }
 
+// A previous-page cursor whose predecessors were all deleted must report
+// cursorInvalid so the UI resets to page 1 instead of rendering a dead-end
+// empty page with no tokens.
+func TestCatalogPreviousPageWithDeletedPredecessorsInvalidatesCursor(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+	summary := func(name string) Summary {
+		return Summary{
+			Kind: "Pod", Version: "v1", Resource: "pods",
+			Namespace: "default", Name: name, UID: "uid-" + name, Scope: ScopeNamespace,
+		}
+	}
+	publish := func(items []Summary) {
+		svc.publishStreamingState(
+			[]*summaryChunk{{items: items}},
+			map[string]bool{"Pod": true},
+			map[string]struct{}{"default": {}},
+			nil,
+			true,
+		)
+	}
+
+	publish([]Summary{summary("alpha"), summary("bravo"), summary("charlie")})
+
+	first := svc.Query(QueryOptions{Limit: 1})
+	if first.ContinueToken == "" {
+		t.Fatal("expected a continue token on page 1")
+	}
+	second := svc.Query(QueryOptions{Limit: 1, Continue: first.ContinueToken})
+	if second.PreviousToken == "" {
+		t.Fatal("expected a previous token on page 2")
+	}
+
+	// Everything before the page-2 anchor is deleted.
+	publish([]Summary{summary("bravo"), summary("charlie")})
+
+	recovered := svc.Query(QueryOptions{Limit: 1, Continue: second.PreviousToken})
+	if !recovered.CursorInvalid {
+		t.Fatalf(
+			"expected an empty previous page to invalidate the cursor, got items=%d continue=%q previous=%q invalid=%t",
+			len(recovered.Items), recovered.ContinueToken, recovered.PreviousToken, recovered.CursorInvalid,
+		)
+	}
+}
+
+// "Age ascending" means newest-first everywhere else in the app (typed tables
+// encode age as a negated timestamp); the catalog must match — the identical
+// header gesture must not produce opposite chronology in Browse/Custom.
+func TestCatalogAgeSortMatchesTypedTableConvention(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+	summary := func(name, created string) Summary {
+		return Summary{
+			Kind: "Pod", Version: "v1", Resource: "pods",
+			Namespace: "default", Name: name, UID: "uid-" + name,
+			CreationTimestamp: created, Scope: ScopeNamespace,
+		}
+	}
+	svc.publishStreamingState(
+		[]*summaryChunk{{items: []Summary{
+			summary("old", "2020-01-01T00:00:00Z"),
+			summary("new", "2026-01-01T00:00:00Z"),
+		}}},
+		map[string]bool{"Pod": true},
+		map[string]struct{}{"default": {}},
+		nil,
+		true,
+	)
+
+	asc := svc.Query(QueryOptions{Limit: 10, SortField: "age", SortDirection: "asc"})
+	if len(asc.Items) != 2 || asc.Items[0].Name != "new" {
+		t.Fatalf("expected age ascending to put the newest first, got %+v", asc.Items)
+	}
+
+	desc := svc.Query(QueryOptions{Limit: 10, SortField: "age", SortDirection: "desc"})
+	if len(desc.Items) != 2 || desc.Items[0].Name != "old" {
+		t.Fatalf("expected age descending to put the oldest first, got %+v", desc.Items)
+	}
+}
+
 func TestQueryReportsUnfilteredScopeTotal(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 	chunk := &summaryChunk{

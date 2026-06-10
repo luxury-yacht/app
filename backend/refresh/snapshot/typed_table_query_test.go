@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -425,6 +426,64 @@ func assertStringSlicesEqual(t *testing.T, want, got []string) {
 		if want[i] != got[i] {
 			t.Fatalf("expected %v, got %v", want, got)
 		}
+	}
+}
+
+// A sort request the table cannot honor must SURFACE (the adapters fall back to
+// name order, which previously rendered under the requested column's lit arrow
+// with no signal). The published SortableFields capability is the contract.
+func TestTypedQueryEnvelopeFlagsUnsupportedSortField(t *testing.T) {
+	capabilities := newTypedResourceCapabilities(
+		[]string{"name", "age"},
+		nil,
+		[]string{"name"},
+	)
+	rows := []typedQueryTestRow{
+		{key: "default/a", name: "a", namespace: "default", kind: "Pod"},
+		{key: "default/b", name: "b", namespace: "default", kind: "Pod"},
+	}
+	queryFor := func(sortField string) typedTableQuery {
+		return typedTableQuery{
+			Enabled: true,
+			Request: ResourceQueryRequest{
+				ClusterID:     "cluster-a",
+				Table:         "pods",
+				SortField:     sortField,
+				SortDirection: "asc",
+				Limit:         10,
+			},
+		}
+	}
+
+	unsupported := typedQueryEnvelope(
+		"pods",
+		applyTypedTableQuery(rows, queryFor("bogus"), typedQueryTestAdapter()),
+		capabilities,
+	)
+	if len(unsupported.Issues) == 0 {
+		t.Fatal("expected an issue for an unsupported sort field")
+	}
+	if !strings.Contains(unsupported.Issues[0].Message, "bogus") {
+		t.Fatalf("expected the issue to name the field, got %q", unsupported.Issues[0].Message)
+	}
+
+	supported := typedQueryEnvelope(
+		"pods",
+		applyTypedTableQuery(rows, queryFor("name"), typedQueryTestAdapter()),
+		capabilities,
+	)
+	if len(supported.Issues) != 0 {
+		t.Fatalf("expected no issues for a supported sort field, got %+v", supported.Issues)
+	}
+
+	// The collector path records the requested field identically.
+	collector := newTypedTableQueryCollector(queryFor("bogus"), typedQueryTestAdapter())
+	for _, row := range rows {
+		collector.Add(row)
+	}
+	collected := typedQueryEnvelope("pods", collector.Page(), capabilities)
+	if len(collected.Issues) == 0 {
+		t.Fatal("expected the collector page to flag the unsupported sort field too")
 	}
 }
 
