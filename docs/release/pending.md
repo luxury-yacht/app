@@ -7,7 +7,9 @@
   get, never just the visible page. Browse and the Custom-resource views use the same
   mechanism as the rest of the app (the separate server-side catalog export was retired in
   favor of this one path). The object panel's Events tab is the one exception — it is a bare
-  presentation list without a filter bar.
+  presentation list without a filter bar. Exported files are offered as
+  `luxury-yacht-<view>-<timestamp>.csv` (e.g. `luxury-yacht-cluster-crds-20260610142233.csv`),
+  so repeated exports never collide and the file name says where and when it came from.
 
 ### Changed
 

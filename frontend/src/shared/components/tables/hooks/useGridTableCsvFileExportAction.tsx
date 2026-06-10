@@ -13,7 +13,7 @@ import { saveCsvFile } from '@core/data-access';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { YamlSaveIcon } from '@shared/components/icons/YamlIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
+import { buildCsvExportFilename, buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
 
 const FEEDBACK_RESET_MS = 750;
 
@@ -22,7 +22,10 @@ interface UseGridTableCsvFileExportActionOptions<T> {
   fetchAllRows: () => Promise<T[]>;
   columns?: GridColumnDefinition<T>[];
   getTextContent?: (node: ReactNode) => string;
-  /** Default file name offered in the save dialog. */
+  /**
+   * Per-view base for the save-dialog file name; offered as
+   * `luxury-yacht-<base>-<YYYYMMDDHHmmss>.csv`, stamped at export time.
+   */
   defaultFilename: string;
   /** Disable when there is nothing to export (e.g. the table is empty). */
   disabled?: boolean;
@@ -64,7 +67,8 @@ export function useGridTableCsvFileExportAction<T>({
     try {
       const rows = await fetchAllRows();
       const csv = buildGridTableCsv(rows, columns, getTextContent);
-      const result = await saveCsvFile(defaultFilename, csv);
+      // Stamp the name at export time so the timestamp is the moment of export.
+      const result = await saveCsvFile(buildCsvExportFilename(defaultFilename, new Date()), csv);
       setFeedback(result?.path ? 'success' : 'error');
     } catch (error) {
       // The backend rejects on a canceled save dialog too; surface a brief error
