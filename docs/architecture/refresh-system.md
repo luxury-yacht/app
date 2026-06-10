@@ -104,10 +104,13 @@ shape so the frontend consumes them uniformly (see
   diagnostics only, never page metadata.
 
 Conformance is enforced in `backend/refresh/snapshot`:
-`TestTypedResourceSnapshotsEmbedTheNormalizedEnvelope` fails if a typed payload
-omits the envelope or its `Rows`, and the provider/capability conformance tests
-check provider, completeness, and capability fields. A new typed domain must
-embed the envelope and be added to those tables.
+`TestEveryTypedResourceDomainEmbedsTheNormalizedEnvelope` (source discovery, in
+`typed_provider_discovery_test.go`) fails if a typed payload omits the envelope,
+its `Rows`, or constructs the envelope outside the canonical helpers
+(`typedQueryEnvelope`/`typedWindowEnvelope`/`resolveTypedSnapshotPage`), and the
+provider/capability conformance tests check provider, completeness, and
+capability fields. A new typed domain must embed the envelope and be added to
+the capability conformance table.
 
 ## Change Checklist
 
