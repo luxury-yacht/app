@@ -127,6 +127,18 @@ describe('deriveResourceInventoryRenderState', () => {
     expect(render.showRefreshOverlay).toBe(false);
   });
 
+  it('error with no rows before any settlement still renders through the boundary', () => {
+    // A cold-load failure can report loaded=false; the error surface must not
+    // hide behind the boundary spinner.
+    const render = deriveResourceInventoryRenderState(
+      source({ rows: [], loaded: false, loading: false, error: 'forbidden' })
+    );
+    expect(render.status).toBe('error');
+    expect(render.hasLoaded).toBe(true);
+    expect(render.showLoadingBoundary).toBe(false);
+    expect(render.isEmpty).toBe(false);
+  });
+
   it('blocked takes precedence over an in-flight load but not over an error', () => {
     expect(
       deriveResourceInventoryRenderState(source({ loading: true, blocked: true })).status

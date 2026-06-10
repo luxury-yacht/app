@@ -55,6 +55,8 @@ export interface AppEvents {
   'favorites:changed': unknown[];
 
   // Refresh events
+  /** A cluster's refresh runtime was torn down (cluster closed/deselected). */
+  'refresh:cluster-pruned': { clusterId: string };
   'refresh:state-change': { name: string; state: RefresherState };
   'refresh:registered': { name: string };
   'refresh:start': { name: string; isManual: boolean };

@@ -9,8 +9,9 @@
  */
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { eventBus } from '@/core/events';
 import {
   resetResourceInventoryRowCache,
   useResourceInventoryTable,
@@ -132,6 +133,93 @@ describe('useResourceInventoryTable revisit replay cache', () => {
     // Retry succeeds → live rows replace the bridged page.
     render(src({ cacheKey: 'view-k', rows: [{ name: 'n1' }, { name: 'n2' }], loaded: true }));
     expect(captured.current?.rows).toEqual([{ name: 'n1' }, { name: 'n2' }]);
+  });
+
+  it('surfaces a persistent error after the grace window while keeping cached rows', () => {
+    vi.useFakeTimers();
+    try {
+      render(src({ cacheKey: 'view-k', rows: [{ name: 'n1' }], loaded: true }));
+      // The refetch fails and STAYS failed (e.g. revoked permissions).
+      render(
+        src({ cacheKey: 'view-k', rows: [], loading: false, loaded: true, error: 'forbidden' })
+      );
+      // Within the grace window the bridge is silent — no banner flash on blips.
+      expect(captured.current?.rows).toEqual([{ name: 'n1' }]);
+      expect(captured.current?.error).toBeNull();
+      // Past the grace window the failure surfaces; the rows stay visible.
+      act(() => {
+        vi.advanceTimersByTime(5_000);
+      });
+      expect(captured.current?.rows).toEqual([{ name: 'n1' }]);
+      expect(captured.current?.error).toBe('forbidden');
+      expect(captured.current?.status).toBe('error');
+      expect(captured.current?.isEmpty).toBe(false);
+
+      // Recovery clears the surfaced error again.
+      render(src({ cacheKey: 'view-k', rows: [{ name: 'n1' }], loaded: true }));
+      expect(captured.current?.error).toBeNull();
+      expect(captured.current?.status).toBe('ready');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('surfaces an error immediately when there are no rows to bridge', () => {
+    // Cold-load failure with nothing cached: an honest error beats a false
+    // "No data available".
+    render(src({ cacheKey: 'view-k', rows: [], loading: false, loaded: true, error: 'forbidden' }));
+    expect(captured.current?.error).toBe('forbidden');
+    expect(captured.current?.status).toBe('error');
+    expect(captured.current?.isEmpty).toBe(false);
+  });
+
+  it('evicts a cluster’s cached rows when that cluster is pruned', () => {
+    render(
+      src({ cacheKey: 'view-pods|cluster-a|namespace:all', rows: [{ name: 'n1' }], loaded: true })
+    );
+    remount();
+    act(() => {
+      eventBus.emit('refresh:cluster-pruned', { clusterId: 'cluster-a' });
+    });
+    render(src({ cacheKey: 'view-pods|cluster-a|namespace:all', rows: [], loading: true }));
+    expect(captured.current?.rows).toEqual([]);
+    expect(captured.current?.showLoadingBoundary).toBe(true);
+  });
+
+  it('keeps other clusters’ cached rows when one cluster is pruned', () => {
+    render(
+      src({ cacheKey: 'view-pods|cluster-b|namespace:all', rows: [{ name: 'nb' }], loaded: true })
+    );
+    remount();
+    act(() => {
+      eventBus.emit('refresh:cluster-pruned', { clusterId: 'cluster-a' });
+    });
+    render(src({ cacheKey: 'view-pods|cluster-b|namespace:all', rows: [], loading: true }));
+    expect(captured.current?.rows).toEqual([{ name: 'nb' }]);
+  });
+
+  it('clears the whole cache when the kubeconfig is changing', () => {
+    render(src({ cacheKey: 'view-k|cluster-a|', rows: [{ name: 'n1' }], loaded: true }));
+    remount();
+    act(() => {
+      eventBus.emit('kubeconfig:changing', 'other-config');
+    });
+    render(src({ cacheKey: 'view-k|cluster-a|', rows: [], loading: true }));
+    expect(captured.current?.rows).toEqual([]);
+  });
+
+  it('caps the cache and evicts the oldest view key', () => {
+    // Fill the cache one past its cap; the first key written must fall out.
+    for (let i = 0; i <= 64; i += 1) {
+      render(src({ cacheKey: `view-${i}|c|`, rows: [{ name: `n${i}` }], loaded: true }));
+    }
+    remount();
+    render(src({ cacheKey: 'view-0|c|', rows: [], loading: true }));
+    expect(captured.current?.rows).toEqual([]);
+    // A recent key is still cached.
+    remount();
+    render(src({ cacheKey: 'view-64|c|', rows: [], loading: true }));
+    expect(captured.current?.rows).toEqual([{ name: 'n64' }]);
   });
 
   it('shows empty once a REAL fetch settles empty, and clears the cache', () => {

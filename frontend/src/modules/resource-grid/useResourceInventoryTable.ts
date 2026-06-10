@@ -19,16 +19,65 @@
  */
 import * as React from 'react';
 
+import { eventBus } from '@/core/events';
+
 // Module-level replay cache: the last non-empty rows per view identity. It must
 // survive unmount so a revisit can render the prior rows immediately instead of a
 // spinner. Keyed by `source.cacheKey` (view + cluster + namespace) so one view's
-// rows can never appear under another's.
+// rows can never appear under another's. Bounded: writes refresh recency (Map
+// insertion order) and the oldest entry is evicted past the cap.
 const lastRowsByCacheKey = new Map<string, unknown[]>();
+const MAX_CACHED_VIEWS = 64;
+
+// How long a source error with rows still visible (own or replayed) stays
+// bridged before it surfaces. Transient refetch blips (the diagnostic showed
+// sub-second error frames) must not flash a banner; persistent failures —
+// revoked permissions, a dead cluster — must not be masked as healthy forever.
+const ERROR_SURFACE_GRACE_MS = 5_000;
+
+function writeRowCache(cacheKey: string, rows: unknown[]): void {
+  // Re-insert so recency is tracked by Map insertion order.
+  lastRowsByCacheKey.delete(cacheKey);
+  lastRowsByCacheKey.set(cacheKey, rows);
+  if (lastRowsByCacheKey.size > MAX_CACHED_VIEWS) {
+    const oldest = lastRowsByCacheKey.keys().next().value;
+    if (oldest !== undefined) {
+      lastRowsByCacheKey.delete(oldest);
+    }
+  }
+}
 
 /** Test-only: clear the revisit replay cache so module state never leaks across specs. */
 export function resetResourceInventoryRowCache(): void {
   lastRowsByCacheKey.clear();
 }
+
+/**
+ * Drop every cached page belonging to a cluster. Cache keys are '|'-joined
+ * (`viewId|<cluster-prefixed scope>`), so a key belongs to the cluster when any
+ * segment equals its id. Called when a cluster is closed so reopening it never
+ * replays prior-session rows.
+ */
+function evictResourceInventoryRowCacheForCluster(clusterId: string): void {
+  const id = clusterId.trim();
+  if (!id) {
+    return;
+  }
+  Array.from(lastRowsByCacheKey.keys()).forEach((key) => {
+    if (key.split('|').includes(id)) {
+      lastRowsByCacheKey.delete(key);
+    }
+  });
+}
+
+// The replay cache shadows the scoped refresh-domain state, so it must die with
+// it: per-cluster on cluster close, wholesale when the kubeconfig switches.
+eventBus.on('refresh:cluster-pruned', ({ clusterId }) => {
+  evictResourceInventoryRowCacheForCluster(clusterId);
+});
+eventBus.on('kubeconfig:changing', () => {
+  resetResourceInventoryRowCache();
+});
 
 /** Truthfulness of the row set, mirroring the backend query envelope. */
 export type ResourceInventoryCompleteness = 'complete' | 'partial';
@@ -156,8 +205,9 @@ export function deriveResourceInventoryRenderState<T>(
     status,
     showLoadingBoundary: status === 'initializing' || status === 'loading',
     // `ResourceLoadingBoundary` treats hasLoaded as "the surface has content to
-    // trust"; visible rows count even before the first formal settlement.
-    hasLoaded: source.loaded || hasRows,
+    // trust"; visible rows count even before the first formal settlement, and an
+    // error is content too — it must never hide behind the boundary spinner.
+    hasLoaded: source.loaded || hasRows || Boolean(source.error),
     showRefreshOverlay: status === 'refreshing',
     isEmpty: status === 'empty',
     isPartial,
@@ -202,7 +252,7 @@ export function useResourceInventoryTable<T>(
       return;
     }
     if (rows.length > 0) {
-      lastRowsByCacheKey.set(cacheKey, rows);
+      writeRowCache(cacheKey, rows);
     } else if (!loading && !error) {
       lastRowsByCacheKey.delete(cacheKey);
     }
@@ -212,24 +262,66 @@ export function useResourceInventoryTable<T>(
     cacheKey && transientEmpty ? (lastRowsByCacheKey.get(cacheKey) as T[] | undefined) : undefined;
   const replayRows = cached && cached.length > 0 ? cached : null;
 
+  // Error-surface grace: while rows are visible (own or replayed), a fresh error
+  // stays bridged for ERROR_SURFACE_GRACE_MS so transient blips never flash a
+  // banner; one that outlives the grace window surfaces (rows stay visible).
+  // With NOTHING to show there is no flicker to prevent — surface immediately,
+  // since the alternative is a false "No data available".
+  const hasError = Boolean(error);
+  const [errorPersisted, setErrorPersisted] = React.useState(false);
+  React.useEffect(() => {
+    if (!hasError) {
+      setErrorPersisted(false);
+      return;
+    }
+    if (errorPersisted) {
+      return;
+    }
+    const timer = window.setTimeout(() => setErrorPersisted(true), ERROR_SURFACE_GRACE_MS);
+    return () => window.clearTimeout(timer);
+  }, [hasError, errorPersisted]);
+
+  const hasContent = rows.length > 0 || Boolean(replayRows);
+  const surfacedError = error && (!hasContent || errorPersisted) ? error : null;
+
   return React.useMemo(
     () =>
       deriveResourceInventoryRenderState(
         replayRows
           ? {
-              // Show the cached page as a healthy, settled result: the live
-              // source's transient loading/error/blocked is bridged, not shown.
+              // Show the cached page as a settled result: the live source's
+              // transient loading/blocked is bridged, not shown. A persistent
+              // error surfaces through `surfacedError` while the rows stay.
               rows: replayRows,
               loading: false,
               loaded: true,
-              error: null,
+              error: surfacedError,
               blocked: false,
               completeness,
               partialLabel,
               pagination,
             }
-          : { rows, loading, loaded, error, blocked, completeness, partialLabel, pagination }
+          : {
+              rows,
+              loading,
+              loaded,
+              error: surfacedError,
+              blocked,
+              completeness,
+              partialLabel,
+              pagination,
+            }
       ),
-    [replayRows, rows, loading, loaded, error, blocked, completeness, partialLabel, pagination]
+    [
+      replayRows,
+      rows,
+      loading,
+      loaded,
+      surfacedError,
+      blocked,
+      completeness,
+      partialLabel,
+      pagination,
+    ]
   );
 }

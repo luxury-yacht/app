@@ -83,6 +83,8 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   const pendingNavigationRef = useRef<{
     direction: 'next' | 'previous';
     previousPageToken?: string | null;
+    /** The requestToken at click time — restored when the navigation fetch fails. */
+    revertToken: string | null;
   } | null>(null);
   // Hold selectRows in a ref so applyPayload (and therefore the fetch effect)
   // stays stable even if a caller passes an unmemoized selector. Without this an
@@ -224,6 +226,18 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setLoaded(true);
   }, []);
 
+  // A failed navigation fetch must restore the pre-navigation cursor. Leaving
+  // the failed cursor in place latched the pagination: a retry set the SAME
+  // token (no state change → no fetch, isRequestingMore stuck true) and every
+  // later live refetch silently served the failed page under the current label.
+  const revertFailedNavigation = useCallback(() => {
+    const pending = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    if (pending) {
+      setRequestToken(pending.revertToken);
+    }
+  }, []);
+
   useEffect(() => {
     if (!enabled || !scope) {
       return;
@@ -248,7 +262,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           return;
         }
         if (result.status !== 'executed') {
-          pendingNavigationRef.current = null;
+          revertFailedNavigation();
           setError(
             result.blockedReason === 'auto-refresh-disabled'
               ? `${label} could not load because auto-refresh is disabled`
@@ -259,7 +273,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         }
         const payload = result.data?.data as TPayload | null | undefined;
         if (!payload) {
-          pendingNavigationRef.current = null;
+          revertFailedNavigation();
           setError(`${label} returned no data`);
           setLoaded(true);
           return;
@@ -274,8 +288,8 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         }
         applyPayload(payload);
       } catch (caught) {
-        if (!cancelled) {
-          pendingNavigationRef.current = null;
+        if (!cancelled && queryIdentityRef.current === identityAtRequest) {
+          revertFailedNavigation();
           setError(caught instanceof Error ? caught.message : String(caught));
           setLoaded(true);
         }
@@ -290,7 +304,16 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     return () => {
       cancelled = true;
     };
-  }, [applyPayload, domain, enabled, label, queryIdentity, requestTokenForScope, scope]);
+  }, [
+    applyPayload,
+    domain,
+    enabled,
+    label,
+    queryIdentity,
+    requestTokenForScope,
+    revertFailedNavigation,
+    scope,
+  ]);
 
   const loadMore = useCallback(() => {
     if (!continueToken || isRequestingMore) {
@@ -300,6 +323,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     pendingNavigationRef.current = {
       direction: 'next',
       previousPageToken: requestToken,
+      revertToken: requestToken,
     };
     setRequestToken(continueToken);
   }, [continueToken, isRequestingMore, requestToken]);
@@ -310,9 +334,9 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     }
     const previousToken = previousTokens[previousTokens.length - 1] ?? null;
     setIsRequestingMore(true);
-    pendingNavigationRef.current = { direction: 'previous' };
+    pendingNavigationRef.current = { direction: 'previous', revertToken: requestToken };
     setRequestToken(previousToken);
-  }, [isRequestingMore, previousTokens]);
+  }, [isRequestingMore, previousTokens, requestToken]);
 
   const fetchAllRows = useCallback(async (): Promise<TRow[]> => {
     if (!enabled || !clusterId) {

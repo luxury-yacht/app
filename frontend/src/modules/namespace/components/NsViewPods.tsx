@@ -528,7 +528,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     // Non-display reads come from the single source of truth (the controller
     // source); the wrapper no longer re-exposes rows/error separately.
     const displayedPods = source.rows;
-    const tableError = source.error;
 
     const visiblePermissionTargets = useMemo(() => {
       if (!isAllNamespaces) {
@@ -643,7 +642,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
     return (
       <>
-        {tableError && <div className="namespace-error-message">{tableError}</div>}
         {metricsBanner && (
           <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
             <span className="metrics-warning-banner__dot" />

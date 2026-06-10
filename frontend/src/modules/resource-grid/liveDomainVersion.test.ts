@@ -38,4 +38,16 @@ describe('liveDomainVersion', () => {
       liveDomainVersion({ version: 7, etag: 'e2' })
     );
   });
+
+  // Streamed row updates change the data without producing a new backend
+  // snapshot version/checksum; the stream manager bumps streamRevision so the
+  // typed query still refetches on real streamed changes.
+  it('changes when the stream revision bumps (streamed row update, same snapshot)', () => {
+    expect(liveDomainVersion({ version: 7, checksum: 'abc', streamRevision: 1 })).not.toBe(
+      liveDomainVersion({ version: 7, checksum: 'abc' })
+    );
+    expect(liveDomainVersion({ version: 7, checksum: 'abc', streamRevision: 2 })).not.toBe(
+      liveDomainVersion({ version: 7, checksum: 'abc', streamRevision: 1 })
+    );
+  });
 });

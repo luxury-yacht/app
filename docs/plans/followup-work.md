@@ -1,17 +1,23 @@
 P0 — Blockers
 
-1. Snapshot requests can hang forever — backend/refresh/snapshot/service.go:209 — new sync gate polls a factory-wide one-shot HasSynced with no deadline anywhere in the chain; one never-syncing informer (e.g.
+1. ✅ Snapshot requests can hang forever — backend/refresh/snapshot/service.go:209 — new sync gate polls a factory-wide one-shot HasSynced with no deadline anywhere in the chain; one never-syncing informer (e.g.
    namespace-scoped RBAC user → Forbidden Secrets watch) hangs every snapshot for that cluster; cluster never reaches Ready, no error shown.
-2. Streamed changes never reach 10 query-backed views — frontend/src/core/refresh/streaming/resourceStreamManager.ts:746 — row updates don't bump version/checksum, queries refetch only on that version, and a
+   FIXED: waitForInformerSync now bounded by config.RefreshInformerSyncTimeout (30s); timeout returns errInformerSyncTimeout (→ HTTP 500 with message) and records failure telemetry; poll interval unified on config.RefreshInformerSyncPollInterval.
+2. ✅ Streamed changes never reach 10 query-backed views — frontend/src/core/refresh/streaming/resourceStreamManager.ts:746 — row updates don't bump version/checksum, queries refetch only on that version, and a
    healthy stream disables snapshot polls; cluster rbac/storage/config/crds + namespace config/network/rbac/storage/autoscaling/quotas go stale until manual refresh.
-3. Errors render as "No data available" — frontend/src/modules/resource-grid/ResourceInventoryTable.tsx:105 — render.error is rendered nowhere; ~14 of 17 query-backed views show a generic empty table on
+   FIXED: applyRowUpdates bumps a new DomainSnapshotState.streamRevision on real row changes; liveDomainVersion includes it as a third identity component (timestamps still excluded — no churn).
+3. ✅ Errors render as "No data available" — frontend/src/modules/resource-grid/ResourceInventoryTable.tsx:105 — render.error is rendered nowhere; ~14 of 17 query-backed views show a generic empty table on
    permission/query failure (regression vs main on cluster views; only NsViewPods/Workloads escape).
-4. Replay cache masks persistent failures and is never evicted — frontend/src/modules/resource-grid/useResourceInventoryTable.ts:196 — any zero-row error replays cached rows as healthy "ready" forever; cache
+   FIXED: ResourceInventoryTable renders a role="alert" error banner from render.error (all views inherit it; per-view duplicate banners removed); errored empty tables say "Unable to load data"; hasLoaded accounts for errors so they can't hide behind the boundary spinner.
+4. ✅ Replay cache masks persistent failures and is never evicted — frontend/src/modules/resource-grid/useResourceInventoryTable.ts:196 — any zero-row error replays cached rows as healthy "ready" forever; cache
    survives cluster close, replays prior-session rows on reopen, grows unbounded (reset is test-only).
-5. Persisted namespace filters destroyed — frontend/src/modules/resource-grid/queryBackedTableState.ts:99 (+ write-back at useResourceGridTable.tsx:337) — a cluster blip or tab switch-back while an
+   FIXED: errors surface after a 5s grace while cached rows stay visible (immediately when nothing to show); cache is LRU-capped at 64 entries, evicted per cluster on the new refresh:cluster-pruned event (emitted by orchestrator prune), and cleared on kubeconfig:changing.
+5. ✅ Persisted namespace filters destroyed — frontend/src/modules/resource-grid/queryBackedTableState.ts:99 (+ write-back at useResourceGridTable.tsx:337) — a cluster blip or tab switch-back while an
    all-namespaces view is mounted empties the option list, clears the selection, and persists the wipe.
-6. Failed page-nav latches pagination — frontend/src/modules/resource-grid/useTypedResourceQuery.ts:304 — requestToken never rolls back: retry is a same-value no-op with isRequestingMore stuck true (both
+   FIXED: an empty option list (availability unknown) now preserves the selection identity-stable, so the write-back effect persists nothing.
+6. ✅ Failed page-nav latches pagination — frontend/src/modules/resource-grid/useTypedResourceQuery.ts:304 — requestToken never rolls back: retry is a same-value no-op with isRequestingMore stuck true (both
    buttons disabled); next live refetch reuses the stale cursor and renders page 2 labeled page 1; retry-then-refetch corrupts previousTokens. (Empirically reproduced.)
+   FIXED: pendingNavigation carries a revertToken; all three failure paths roll requestToken back (current page refetches, retry issues a real fetch, previousTokens stay consistent); catch path now also identity-guarded.
 
 P1 — Major
 

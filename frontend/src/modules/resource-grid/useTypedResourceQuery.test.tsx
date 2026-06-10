@@ -134,6 +134,74 @@ describe('useTypedResourceQuery', () => {
     expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
   });
 
+  it('rolls back a failed page navigation so the cursor, buttons, and retry stay usable', async () => {
+    // Page 1 with a next cursor.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: { rows: [{ name: 'a' }, { name: 'b' }], continue: 'cursor-2', total: 3 },
+      },
+    });
+    await renderPagedQuery();
+    expect(result?.rows).toEqual([{ name: 'a' }, { name: 'b' }]);
+    expect(result?.continueToken).toBe('cursor-2');
+    const pageOneScope = requestRefreshDomainStateMock.mock.calls[0][0].scope as string;
+
+    // The page-2 fetch fails; the rollback refetch of page 1 succeeds.
+    requestRefreshDomainStateMock.mockReset();
+    requestRefreshDomainStateMock
+      .mockRejectedValueOnce(new Error('page fetch failed'))
+      .mockResolvedValue({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: { rows: [{ name: 'a' }, { name: 'b' }], continue: 'cursor-2', total: 3 },
+        },
+      });
+
+    await act(async () => {
+      result!.loadMore();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // Let the rollback-triggered refetch settle.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The failure must not advance the page or latch the pagination buttons.
+    expect(result?.pageIndex).toBe(1);
+    expect(result?.isRequestingMore).toBe(false);
+
+    // The failed cursor must not leak into later refetches: the rollback
+    // refetch reuses the page-1 scope, not the failed page-2 cursor.
+    const calls = requestRefreshDomainStateMock.mock.calls;
+    const lastScope = calls[calls.length - 1][0].scope as string;
+    expect(lastScope).toBe(pageOneScope);
+
+    // Retry issues a REAL page-2 fetch (the latch bug made this a no-op with
+    // isRequestingMore stuck true).
+    requestRefreshDomainStateMock.mockClear();
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: { rows: [{ name: 'c' }], total: 3 } },
+    });
+    await act(async () => {
+      result!.loadMore();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenCalled();
+    const retryCalls = requestRefreshDomainStateMock.mock.calls;
+    expect((retryCalls[retryCalls.length - 1][0].scope as string).includes('cursor-2')).toBe(true);
+    expect(result?.rows).toEqual([{ name: 'c' }]);
+    expect(result?.pageIndex).toBe(2);
+    expect(result?.isRequestingMore).toBe(false);
+  });
+
   it('treats a payload with rows but no total as approximate instead of an exact 0', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',

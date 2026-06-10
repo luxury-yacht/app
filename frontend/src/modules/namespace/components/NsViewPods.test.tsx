@@ -597,7 +597,7 @@ describe('NsViewPods', () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.namespace-error-message')?.textContent).toContain(
+    expect(container.querySelector('.resource-inventory-error')?.textContent).toContain(
       'returned no data'
     );
     expect(container.querySelector('.metrics-warning-banner')?.textContent).toContain(

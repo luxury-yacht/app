@@ -34,6 +34,11 @@ const (
 	// are ready. Once they are synced, the poller stops.
 	RefreshInformerSyncPollInterval = 50 * time.Millisecond
 
+	// RefreshInformerSyncTimeout bounds how long a snapshot build waits for informer caches
+	// to sync. A single informer whose watch can never complete (for example an
+	// RBAC-forbidden resource) would otherwise hang every snapshot for the cluster forever.
+	RefreshInformerSyncTimeout = 30 * time.Second
+
 	// RefreshMetricsInterval determines the cadence for the metrics poller (node/pod metrics).
 	RefreshMetricsInterval = 5 * time.Second
 

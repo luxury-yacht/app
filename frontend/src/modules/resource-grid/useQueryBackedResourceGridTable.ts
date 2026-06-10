@@ -56,11 +56,15 @@ export const liveDomainVersion = (state: {
   version?: number | string;
   checksum?: string;
   etag?: string;
+  // Bumped by the stream manager when streamed row updates change the data
+  // without a new backend snapshot version — a real data change, not a tick.
+  streamRevision?: number;
   // Accepted from the scoped domain state but deliberately IGNORED below — see comment.
   lastUpdated?: number;
   lastAutoRefresh?: number;
   lastManualRefresh?: number;
-}): string => [state.version ?? '', state.checksum ?? state.etag ?? ''].join(':');
+}): string =>
+  [state.version ?? '', state.checksum ?? state.etag ?? '', state.streamRevision ?? ''].join(':');
 
 // Derives the controller source state (data/loading/loaded/error) for a query-backed
 // resource grid. Sourced ONLY from the typed query — never the live snapshot, which is the

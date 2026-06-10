@@ -56,19 +56,16 @@ describe('queryBackedTableState', () => {
     });
   });
 
-  it('drops unvalidated persisted namespace filters when no namespace options are loaded yet', () => {
-    expect(
-      normalizeQueryBackedNamespaceFilters(
-        {
-          ...DEFAULT_GRID_TABLE_FILTER_STATE,
-          namespaces: ['stale-namespace'],
-        },
-        []
-      )
-    ).toEqual({
+  it('preserves persisted namespace filters while no namespace options are loaded', () => {
+    // An empty option list means availability is UNKNOWN (cluster blip, options
+    // still loading) — clearing here would permanently destroy persisted state
+    // because the caller writes normalization results back to persistence.
+    const filters = {
       ...DEFAULT_GRID_TABLE_FILTER_STATE,
-      namespaces: [],
-    });
+      namespaces: ['team-a'],
+    };
+
+    expect(normalizeQueryBackedNamespaceFilters(filters, [])).toBe(filters);
   });
 
   it('preserves real namespace subsets', () => {

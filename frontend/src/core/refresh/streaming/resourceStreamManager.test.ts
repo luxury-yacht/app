@@ -617,6 +617,74 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.rows?.[0]?.name).toBe('config-a');
   });
 
+  // The typed query refetches only when the live-data identity
+  // (version/checksum/streamRevision) changes. Streamed row updates do not carry
+  // a new backend snapshot version, so they must bump streamRevision or the
+  // query-backed views never see streamed changes.
+  test('streamed row updates bump streamRevision; identical updates do not', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-config', storeScope);
+
+    setScopedDomainState('namespace-config', storeScope, () => ({
+      status: 'ready',
+      data: { rows: [], clusterId: 'cluster-a' },
+      stats: null,
+      version: 7,
+      checksum: 'abc',
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    const configRow = {
+      clusterId: 'cluster-a',
+      clusterName: 'cluster-a',
+      kind: 'ConfigMap',
+      typeAlias: 'CM',
+      name: 'config-a',
+      namespace: 'default',
+      data: 2,
+      age: '1m',
+    };
+    const updateMessage = (row: typeof configRow, resourceVersion: string) =>
+      JSON.stringify({
+        type: 'MODIFIED',
+        domain: 'namespace-config',
+        scope: 'namespace:default',
+        resourceVersion,
+        name: 'config-a',
+        namespace: 'default',
+        kind: 'ConfigMap',
+        ref: resourceRef({ kind: 'ConfigMap', namespace: 'default', name: 'config-a' }),
+        row,
+      });
+
+    manager.handleMessage('cluster-a', updateMessage(configRow, '3'));
+    vi.advanceTimersByTime(200);
+
+    const afterAdd = getScopedDomainState('namespace-config', storeScope);
+    expect(afterAdd.streamRevision).toBe(1);
+    // The backend snapshot identity is untouched — only the stream revision moves.
+    expect(afterAdd.version).toBe(7);
+    expect(afterAdd.checksum).toBe('abc');
+
+    // An identical update changes nothing, so the revision must not churn.
+    manager.handleMessage('cluster-a', updateMessage({ ...configRow }, '4'));
+    vi.advanceTimersByTime(200);
+    expect(getScopedDomainState('namespace-config', storeScope).streamRevision).toBe(1);
+
+    // A real change bumps it again.
+    manager.handleMessage('cluster-a', updateMessage({ ...configRow, data: 3 }, '5'));
+    vi.advanceTimersByTime(200);
+    expect(getScopedDomainState('namespace-config', storeScope).streamRevision).toBe(2);
+  });
+
   test('applies updates when cluster id mismatches but scope is unique', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;

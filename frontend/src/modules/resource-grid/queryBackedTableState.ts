@@ -96,11 +96,12 @@ export function normalizeQueryBackedNamespaceFilters(
   if (withoutSentinels.namespaces.length === 0) {
     return withoutSentinels;
   }
+  // An empty option list means availability is UNKNOWN (options still loading,
+  // or a cluster blip emptied them while the view stayed mounted) — never
+  // "the selection is invalid". The caller persists normalization results, so
+  // clearing here would permanently destroy the user's saved filters.
   if (available.size === 0) {
-    return {
-      ...withoutSentinels,
-      namespaces: [],
-    };
+    return withoutSentinels;
   }
 
   const selected = normalizeOptionSet(withoutSentinels.namespaces);

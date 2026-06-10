@@ -200,9 +200,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
 
-    // Error banner reads the single source of truth (the controller source).
-    const tableError = source.error;
-
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {
         return objectActions.getMenuItems(buildWorkloadActionReference(row, selectedClusterId));
@@ -221,7 +218,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     return (
       <>
-        {tableError && <div className="namespace-error-message">{tableError}</div>}
         {metricsBanner && (
           <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
             <span className="metrics-warning-banner__dot" />

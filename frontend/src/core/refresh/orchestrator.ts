@@ -853,6 +853,8 @@ class RefreshOrchestrator {
       runtime.forEachScopedDomain((domain, scope) => resetScopedDomainState(domain, scope));
       runtime.resetAllState();
       this.clusterRuntimes.delete(clusterId);
+      // Let cluster-keyed caches outside the refresh store die with the runtime.
+      eventBus.emit('refresh:cluster-pruned', { clusterId });
     });
   }
 

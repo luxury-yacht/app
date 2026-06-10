@@ -285,7 +285,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
 
   return (
     <div className="object-panel-pods">
-      {source.error && <div className="namespace-error-message">{source.error}</div>}
       {metricsBanner && (
         <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
           <span className="metrics-warning-banner__dot" />
