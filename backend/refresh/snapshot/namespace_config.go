@@ -47,6 +47,7 @@ func namespaceConfigQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "data", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "typeAlias", "name", "namespace", "data"},
+		[]string{"ConfigMap", "Secret"},
 	)
 }
 
@@ -117,11 +118,12 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 		}
 	}
 
-	issues := typedTableQueryResourceIssues(ctx, namespaceConfigDomainName, query, []typedTableResourceSource{
+	sources := []typedTableResourceSource{
 		{Kind: "ConfigMap", Group: "", Resource: "configmaps", Available: configMapsAvailable},
 		{Kind: "Secret", Group: "", Resource: "secrets", Available: secretsAvailable},
-	})
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, configMaps, secrets, issues)
+	}
+	issues := typedTableQueryResourceIssues(ctx, namespaceConfigDomainName, query, sources)
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, configMaps, secrets, issues, capabilitiesWithAvailableKinds(namespaceConfigQueryCapabilities(), sources))
 }
 
 func (b *NamespaceConfigBuilder) listConfigMaps(namespace string) ([]*corev1.ConfigMap, error) {
@@ -145,6 +147,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 	configMaps []*corev1.ConfigMap,
 	secrets []*corev1.Secret,
 	issues []ResourceQueryIssue,
+	capabilities ResourceQueryCapabilities,
 ) (*refresh.Snapshot, error) {
 	resources := make([]ConfigSummary, 0, len(configMaps)+len(secrets))
 	var version uint64
@@ -179,7 +182,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 		resources,
 		query,
 		configTableQueryAdapter(),
-		namespaceConfigQueryCapabilities(),
+		capabilities,
 		config.SnapshotNamespaceConfigEntryLimit,
 		"config resources",
 		func(resource ConfigSummary) string { return resource.Kind },

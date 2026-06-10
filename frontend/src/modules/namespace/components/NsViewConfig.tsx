@@ -38,7 +38,6 @@ export interface ConfigData {
 
 interface ConfigViewProps {
   namespace: string;
-  availableKinds?: string[];
   showNamespaceColumn?: boolean;
 }
 
@@ -47,7 +46,7 @@ interface ConfigViewProps {
  * Aggregates ConfigMaps and Secrets
  */
 const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
-  ({ namespace, availableKinds: kindOptions, showNamespaceColumn = false }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -148,7 +147,6 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       columns,
       objectIdentity: resourceIdentity,
       defaultSort: { key: 'name', direction: 'asc' },
-      availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       diagnosticsLabel,

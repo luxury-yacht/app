@@ -53,6 +53,7 @@ func nodeQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"},
 		nil,
 		[]string{"name", "status", "roles", "version", "internalIP", "externalIP"},
+		nil, // no kind filtering
 	)
 }
 

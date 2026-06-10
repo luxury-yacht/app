@@ -202,6 +202,9 @@ export function useBrowseCatalog({
   const [totalIsExact, setTotalIsExact] = useState(true);
   // Page-navigation failures; the scoped domain carries baseline/stream errors.
   const [pageError, setPageError] = useState<string | null>(null);
+  // Last derived filter options, held across transient no-payload gaps so the
+  // filter dropdowns never blank mid-interaction (see the filterOptions memo).
+  const lastFilterOptionsRef = useRef<BrowseFilterOptions | null>(null);
   // Controlled page size: normalize the owner-provided value; no local mirror.
   // Views without a persisted page size fall back to the app-wide Default Page
   // Size preference (Settings ▸ Display ▸ Tables).
@@ -343,6 +346,7 @@ export function useBrowseCatalog({
     if (scopeIdentityChanged) {
       hasLoadedOnceRef.current = false;
       setHasLoadedOnce(false);
+      lastFilterOptionsRef.current = null;
     }
 
     void refreshCatalogScope('startup');
@@ -537,16 +541,26 @@ export function useBrowseCatalog({
   }, [items, clusterScopedOnly]);
   const stableFilteredItems = useStableSelectedValue(filteredItems);
 
-  // Derive filter options from the catalog snapshot
+  // Derive filter options from the catalog snapshot. Across transient gaps —
+  // a filter change swaps to a scope with no state for a frame — hold the last
+  // derived options so the dropdowns never blank (an empty option list disables
+  // them mid-interaction). A real payload always wins, including a genuinely
+  // empty one; the ref clears on structural scope changes (see the reset
+  // effect) so cluster/namespace switches never leak stale options.
   const filterOptions = useMemo<BrowseFilterOptions>(() => {
     const payload = (
       metadataUsesActiveScope ? domain.data : (metadataDomain.data ?? domain.data)
     ) as CatalogSnapshotPayload | null;
-    return deriveBrowseFilterOptions({
+    if (!payload && lastFilterOptionsRef.current) {
+      return lastFilterOptionsRef.current;
+    }
+    const derived = deriveBrowseFilterOptions({
       payload,
       clusterScopedOnly,
       isNamespaceScoped: plan.isNamespaceScoped,
     });
+    lastFilterOptionsRef.current = derived;
+    return derived;
   }, [clusterScopedOnly, domain.data, metadataDomain.data, metadataUsesActiveScope, plan]);
 
   // Update available namespaces when the snapshot includes them.

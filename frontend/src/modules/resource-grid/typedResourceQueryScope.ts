@@ -4,7 +4,11 @@ import type {
   GridTableFilterState,
 } from '@shared/components/tables/GridTable';
 import type { SortConfig } from '@hooks/useTableSort';
-import type { ResourceQueryDynamicRef, ResourceQueryIssue } from '@/core/refresh/types';
+import type {
+  ResourceQueryCapabilities,
+  ResourceQueryDynamicRef,
+  ResourceQueryIssue,
+} from '@/core/refresh/types';
 
 export interface TypedQueryPayload {
   continue?: string;
@@ -18,6 +22,7 @@ export interface TypedQueryPayload {
   facetsExact?: boolean;
   issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
+  capabilities?: ResourceQueryCapabilities;
 }
 
 export interface TypedResourceQueryDescriptor {

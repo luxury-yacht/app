@@ -39,6 +39,7 @@ func namespaceAutoscalingQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "target", "min", "max", "current", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "target", "targetApiVersion"},
+		[]string{"HorizontalPodAutoscaler"},
 	)
 }
 

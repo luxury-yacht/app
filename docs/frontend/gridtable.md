@@ -125,6 +125,18 @@ The wrapper hooks (`useQueryBackedClusterResourceGridTable` /
 favModal }`. Read rows/loading/error from `source` — there are no separate
 wrapper-level lifecycle fields.
 
+**Kind vocabulary is backend-owned:** the Kinds dropdown's option list is the
+family's `capabilities.kindVocabulary`, published on every query payload
+(`ResourceQueryCapabilities` in `backend/refresh/snapshot/resource_query_contract.go`,
+pinned per family by `TestTypedResourceProvidersPublishKindVocabulary`). Builders
+narrow it to the kinds whose backing resource can currently produce rows
+(`capabilitiesWithAvailableKinds` over the same source lists the issues channel
+uses), so e.g. Gateway API kinds are only offered on clusters that serve them.
+The kind FACETS on a result collapse to the active selection by design — they
+describe the matched rows and must never feed the dropdown. Do not reintroduce
+frontend kind lists or thread `availableKinds` from snapshot meta; the query
+wrapper supplies the vocabulary to the binding itself.
+
 **Quiet-refresh contract:** a server-backed source reports `loading: true` only
 before its first applied result for the current scope (cluster/namespace/base
 scope — the points where its rows reset). Filter, sort, page-size, manual, and

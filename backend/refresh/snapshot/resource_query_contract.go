@@ -147,6 +147,13 @@ type ResourceQueryCapabilities struct {
 	SortableFields   []string `json:"sortableFields,omitempty"`
 	FilterableFields []string `json:"filterableFields,omitempty"`
 	SearchableFields []string `json:"searchableFields,omitempty"`
+	// KindVocabulary is the closed set of kinds this family can emit — the
+	// option list the frontend's Kinds dropdown renders. It is the single owner
+	// of that list: the kind FACETS on results collapse to the active selection
+	// by design (they describe the matched rows) and must never be used as the
+	// dropdown options. Families with an open kind set (events: involved-object
+	// kinds) publish none and must not render a kind dropdown.
+	KindVocabulary []string `json:"kindVocabulary,omitempty"`
 }
 
 // ResourceQueryEnvelope is the one canonical metadata envelope shared by every
@@ -183,12 +190,14 @@ type ResourceQueryEnvelope struct {
 }
 
 // newTypedResourceCapabilities builds capabilities for a typed-resource table:
-// the query surface (sortable/filterable/searchable fields) the frontend reads.
-func newTypedResourceCapabilities(sortable, filterable, searchable []string) ResourceQueryCapabilities {
+// the query surface (sortable/filterable/searchable fields) the frontend reads,
+// plus the family's closed kind vocabulary (nil for open kind sets).
+func newTypedResourceCapabilities(sortable, filterable, searchable, kindVocabulary []string) ResourceQueryCapabilities {
 	return ResourceQueryCapabilities{
 		SortableFields:   sortable,
 		FilterableFields: filterable,
 		SearchableFields: searchable,
+		KindVocabulary:   kindVocabulary,
 	}
 }
 
@@ -303,4 +312,3 @@ func resourceQueryPredicateMapToList(predicates map[string]string) []ResourceQue
 	})
 	return result
 }
-

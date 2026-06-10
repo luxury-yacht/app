@@ -71,6 +71,7 @@ func namespaceNetworkQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "details", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "details"},
+		[]string{"Service", "Ingress", "EndpointSlice", "NetworkPolicy", "Gateway", "HTTPRoute", "GRPCRoute", "TLSRoute", "ListenerSet", "ReferenceGrant", "BackendTLSPolicy"},
 	)
 }
 
@@ -200,7 +201,7 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 
 	slicesByService := groupEndpointSlicesByService(slices)
 
-	issues := typedTableQueryResourceIssues(ctx, namespaceNetworkDomainName, query, []typedTableResourceSource{
+	sources := []typedTableResourceSource{
 		{Kind: "Service", Group: "", Resource: "services", Available: servicesAvailable},
 		{Kind: "EndpointSlice", Group: "discovery.k8s.io", Resource: "endpointslices", Available: endpointSlicesAvailable, QueryKinds: []string{"EndpointSlice", "Service"}},
 		{Kind: "Ingress", Group: "networking.k8s.io", Resource: "ingresses", Available: ingressesAvailable},
@@ -212,8 +213,9 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 		{Kind: "ListenerSet", Group: "gateway.networking.k8s.io", Resource: "listenersets", Available: b.listenerSetLister != nil},
 		{Kind: "ReferenceGrant", Group: "gateway.networking.k8s.io", Resource: "referencegrants", Available: b.referenceGrantLister != nil},
 		{Kind: "BackendTLSPolicy", Group: "gateway.networking.k8s.io", Resource: "backendtlspolicies", Available: b.backendTLSPolicyLister != nil},
-	})
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, services, slices, slicesByService, ingresses, policies, gatewayItems, issues)
+	}
+	issues := typedTableQueryResourceIssues(ctx, namespaceNetworkDomainName, query, sources)
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, services, slices, slicesByService, ingresses, policies, gatewayItems, issues, capabilitiesWithAvailableKinds(namespaceNetworkQueryCapabilities(), sources))
 }
 
 func (b *NamespaceNetworkBuilder) listServices(namespace string) ([]*corev1.Service, error) {
@@ -341,6 +343,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 	policies []*networkingv1.NetworkPolicy,
 	gatewayItems gatewayAPIResources,
 	issues []ResourceQueryIssue,
+	capabilities ResourceQueryCapabilities,
 ) (*refresh.Snapshot, error) {
 	resources := make([]NetworkSummary, 0, len(services)+len(slicesByService)+len(ingresses)+len(policies)+len(gatewayItems.gateways)+len(gatewayItems.httpRoutes)+len(gatewayItems.grpcRoutes)+len(gatewayItems.tlsRoutes)+len(gatewayItems.listenerSets)+len(gatewayItems.referenceGrants)+len(gatewayItems.backendTLSPolicies))
 	var version uint64
@@ -439,7 +442,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		resources,
 		query,
 		networkTableQueryAdapter(),
-		namespaceNetworkQueryCapabilities(),
+		capabilities,
 		config.SnapshotNamespaceNetworkEntryLimit,
 		"network resources",
 		func(resource NetworkSummary) string { return resource.Kind },

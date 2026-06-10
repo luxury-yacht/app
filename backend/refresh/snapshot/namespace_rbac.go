@@ -47,6 +47,7 @@ func namespaceRBACQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "details", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "details"},
+		[]string{"Role", "RoleBinding", "ServiceAccount"},
 	)
 }
 
@@ -153,12 +154,13 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 		}
 	}
 
-	issues := typedTableQueryResourceIssues(ctx, namespaceRBACDomainName, query, []typedTableResourceSource{
+	sources := []typedTableResourceSource{
 		{Kind: "Role", Group: "rbac.authorization.k8s.io", Resource: "roles", Available: rolesAvailable},
 		{Kind: "RoleBinding", Group: "rbac.authorization.k8s.io", Resource: "rolebindings", Available: bindingsAvailable},
 		{Kind: "ServiceAccount", Group: "", Resource: "serviceaccounts", Available: serviceAccountsAvailable},
-	})
-	return buildNamespaceRBACSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, roles, bindings, serviceAccounts, issues)
+	}
+	issues := typedTableQueryResourceIssues(ctx, namespaceRBACDomainName, query, sources)
+	return buildNamespaceRBACSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, roles, bindings, serviceAccounts, issues, capabilitiesWithAvailableKinds(namespaceRBACQueryCapabilities(), sources))
 }
 
 func buildNamespaceRBACSnapshot(
@@ -169,6 +171,7 @@ func buildNamespaceRBACSnapshot(
 	bindings []*rbacv1.RoleBinding,
 	serviceAccounts []*corev1.ServiceAccount,
 	issues []ResourceQueryIssue,
+	capabilities ResourceQueryCapabilities,
 ) (*refresh.Snapshot, error) {
 	resources := make([]RBACSummary, 0, len(roles)+len(bindings)+len(serviceAccounts))
 	var version uint64
@@ -213,7 +216,7 @@ func buildNamespaceRBACSnapshot(
 		resources,
 		query,
 		rbacTableQueryAdapter(),
-		namespaceRBACQueryCapabilities(),
+		capabilities,
 		config.SnapshotNamespaceRBACEntryLimit,
 		"RBAC resources",
 		func(resource RBACSummary) string { return resource.Kind },

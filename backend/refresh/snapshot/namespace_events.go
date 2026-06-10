@@ -36,6 +36,7 @@ func namespaceEventsQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "type", "source", "reason", "object", "objectType", "objectName", "message", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "type", "source", "reason", "object", "message"},
+		nil, // open kind set (involved-object kinds); no kind dropdown
 	)
 }
 

@@ -39,6 +39,7 @@ func clusterStorageQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "storageClass", "capacity", "accessModes", "status", "claim", "age"},
 		[]string{"kinds"},
 		[]string{"kind", "name", "storageClass", "capacity", "accessModes", "status", "claim"},
+		[]string{"PersistentVolume"},
 	)
 }
 

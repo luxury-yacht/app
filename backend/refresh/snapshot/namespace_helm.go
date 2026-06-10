@@ -39,6 +39,7 @@ func namespaceHelmQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "chart", "appVersion", "status", "revision", "updated", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"name", "namespace", "chart", "appVersion", "status", "description"},
+		[]string{"HelmRelease"},
 	)
 }
 

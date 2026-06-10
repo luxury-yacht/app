@@ -121,3 +121,64 @@ func TestResourceQueryRequestCarriesProviderAndScope(t *testing.T) {
 // gate now lives in typed_provider_discovery_test.go
 // (TestEveryTypedResourceDomainEmbedsTheNormalizedEnvelope), driven by source
 // discovery instead of a hardcoded payload list.
+
+// Every typed provider that supports kind filtering publishes its closed kind
+// vocabulary — the option list the frontend's Kinds dropdown renders. The kind
+// FACETS collapse to the active selection by design (they describe the matched
+// rows), so the dropdown must come from this vocabulary, never the facets.
+// Exemptions: the two events domains (their kind set is the open set of
+// involved-object kinds and their views render no kind dropdown) and nodes
+// (no kind filtering at all).
+func TestTypedResourceProvidersPublishKindVocabulary(t *testing.T) {
+	expected := map[string][]string{
+		"cluster-config":        {"StorageClass", "IngressClass", "GatewayClass", "MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"},
+		"cluster-storage":       {"PersistentVolume"},
+		"cluster-rbac":          {"ClusterRole", "ClusterRoleBinding"},
+		"cluster-crds":          {"CustomResourceDefinition"},
+		"cluster-events":        nil,
+		"namespace-config":      {"ConfigMap", "Secret"},
+		"namespace-network":     {"Service", "Ingress", "EndpointSlice", "NetworkPolicy", "Gateway", "HTTPRoute", "GRPCRoute", "TLSRoute", "ListenerSet", "ReferenceGrant", "BackendTLSPolicy"},
+		"namespace-storage":     {"PersistentVolumeClaim"},
+		"namespace-rbac":        {"Role", "RoleBinding", "ServiceAccount"},
+		"namespace-quotas":      {"ResourceQuota", "LimitRange", "PodDisruptionBudget"},
+		"namespace-autoscaling": {"HorizontalPodAutoscaler"},
+		"namespace-helm":        {"HelmRelease"},
+		"namespace-events":      nil,
+		"namespace-workloads":   {"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"},
+		"nodes":                 nil,
+		"pods":                  {"Pod"},
+	}
+
+	if len(expected) != len(typedCapabilityConformance) {
+		t.Fatalf("kind vocabulary table covers %d domains but the capability conformance map has %d; keep them in lockstep", len(expected), len(typedCapabilityConformance))
+	}
+
+	for domain, caps := range typedCapabilityConformance {
+		want, ok := expected[domain]
+		if !ok {
+			t.Errorf("%s: add the domain's kind vocabulary to this conformance table", domain)
+			continue
+		}
+		if len(want) == 0 {
+			if len(caps.KindVocabulary) != 0 {
+				t.Errorf("%s: expected no kind vocabulary (open kind set or no kind filter), got %v", domain, caps.KindVocabulary)
+			}
+			continue
+		}
+		if got := caps.KindVocabulary; !equalStringSlices(got, want) {
+			t.Errorf("%s: kind vocabulary mismatch\n got: %v\nwant: %v", domain, got, want)
+		}
+	}
+}
+
+func equalStringSlices(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}

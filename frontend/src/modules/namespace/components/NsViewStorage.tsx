@@ -30,8 +30,6 @@ import {
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import type { NamespaceStorageSnapshotPayload } from '@/core/refresh/types';
 
-const NAMESPACE_STORAGE_KIND_OPTIONS = ['PersistentVolumeClaim'];
-
 // Data interface for storage resources (PVCs, VolumeAttachments, etc.)
 export interface StorageData {
   kind: string;
@@ -229,7 +227,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      availableKinds: NAMESPACE_STORAGE_KIND_OPTIONS,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       diagnosticsLabel,

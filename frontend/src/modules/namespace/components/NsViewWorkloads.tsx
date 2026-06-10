@@ -36,7 +36,6 @@ import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScop
 
 interface WorkloadsViewProps {
   namespace: string;
-  availableKinds?: string[];
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
 }
@@ -45,7 +44,7 @@ interface WorkloadsViewProps {
  * GridTable component for namespace workloads without nested pod expansion
  */
 const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
-  ({ namespace, availableKinds: kindOptions, showNamespaceColumn = false, metrics = null }) => {
+  ({ namespace, showNamespaceColumn = false, metrics = null }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
@@ -185,7 +184,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
       rowIdentity: keyExtractor,
-      availableKinds: kindOptions,
       showKindDropdown: true,
       filterAccessors: {
         getKind: (row) => row.kind,

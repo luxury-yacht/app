@@ -360,6 +360,50 @@ describe('NsViewWorkloads', () => {
     );
   });
 
+  it('renders the backend-published kind vocabulary even when facets collapse to the selection', async () => {
+    // The Kinds dropdown options are the family's capabilities-published
+    // vocabulary. Facets collapse to the active selection by design; selecting
+    // a kind must never remove the other options.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [],
+          total: 0,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+          capabilities: {
+            kindVocabulary: ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob'],
+          },
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace={ALL_NAMESPACES_SCOPE}
+          showNamespaceColumn={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.filters?.options?.kinds).toEqual([
+      'Pod',
+      'Deployment',
+      'StatefulSet',
+      'DaemonSet',
+      'Job',
+      'CronJob',
+    ]);
+  });
+
   it('renders a settled-empty query on remount without retaining stale rows (dynamic table)', async () => {
     // The second dynamic query-backed table covered by the remount lifecycle
     // regression (Nodes is the first). The controller trusts a settled query, so

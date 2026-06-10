@@ -561,6 +561,14 @@ export interface ResourceQueryCapabilities {
   sortableFields?: string[];
   filterableFields?: string[];
   searchableFields?: string[];
+  /**
+   * The family's closed set of kinds — the option list the Kinds dropdown
+   * renders. Backend-owned (see ResourceQueryCapabilities in
+   * backend/refresh/snapshot/resource_query_contract.go); the kind FACETS
+   * collapse to the active selection by design and must never be used as the
+   * dropdown options. Absent for open kind sets (events).
+   */
+  kindVocabulary?: string[];
 }
 
 /**

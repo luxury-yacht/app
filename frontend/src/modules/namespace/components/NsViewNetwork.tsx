@@ -42,7 +42,6 @@ export interface NetworkData {
 
 interface NetworkViewProps {
   namespace: string;
-  availableKinds?: string[];
   showNamespaceColumn?: boolean;
 }
 
@@ -51,7 +50,7 @@ interface NetworkViewProps {
  * Aggregates Services, Ingresses, NetworkPolicies, etc.
  */
 const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
-  ({ namespace, availableKinds: kindOptions, showNamespaceColumn = false }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -187,7 +186,6 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       diagnosticsLabel,

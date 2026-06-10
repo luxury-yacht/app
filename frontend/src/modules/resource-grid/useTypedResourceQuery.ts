@@ -51,6 +51,13 @@ export interface UseTypedResourceQueryResult<TRow, TPayload = unknown> {
   totalCount: number;
   totalIsExact: boolean;
   filterOptions: Partial<GridTableFilterOptions>;
+  /**
+   * The backend-published closed kind set for this family (the Kinds dropdown
+   * option list). Rides the applied payload's capabilities, so it survives
+   * filter refetches whose facets collapse to the selection; null before the
+   * first page applies or after a hard reset.
+   */
+  kindVocabulary: string[] | null;
   dynamic: ResourceQueryDynamicRef | null;
   /** Fetch every matching row (all pages) for the current filters/sort — used by export. */
   fetchAllRows: () => Promise<TRow[]>;
@@ -424,6 +431,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     totalCount,
     totalIsExact,
     filterOptions,
+    kindVocabulary: payload?.capabilities?.kindVocabulary ?? null,
     dynamic,
     fetchAllRows,
   };

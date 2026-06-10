@@ -202,6 +202,63 @@ describe('useTypedResourceQuery', () => {
     expect(result?.isRequestingMore).toBe(false);
   });
 
+  it('exposes the backend-published kind vocabulary and keeps it across filter refetches', async () => {
+    let resolveFetch: ((value: unknown) => void) | undefined;
+    requestRefreshDomainStateMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        })
+    );
+
+    const Probe: React.FC<{ kinds: string[] }> = ({ kinds }) => {
+      result = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, kinds },
+        sortConfig,
+        selectRows,
+      });
+      return null;
+    };
+    const settle = async (payload: TestPayload) => {
+      await act(async () => {
+        resolveFetch?.({ status: 'executed', data: { status: 'ready', data: payload } });
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+
+    await act(async () => {
+      root.render(<Probe kinds={[]} />);
+      await Promise.resolve();
+    });
+    // No payload applied yet — no vocabulary.
+    expect(result?.kindVocabulary).toBeNull();
+
+    await settle({
+      rows: [{ name: 'pod-a' }],
+      kinds: ['Pod', 'Deployment'],
+      capabilities: { kindVocabulary: ['Pod', 'Deployment', 'StatefulSet'] },
+    });
+    expect(result?.kindVocabulary).toEqual(['Pod', 'Deployment', 'StatefulSet']);
+
+    // A kind filter collapses the FACETS but the vocabulary rides the payload
+    // capabilities and stays complete.
+    await act(async () => {
+      root.render(<Probe kinds={['Pod']} />);
+      await Promise.resolve();
+    });
+    await settle({
+      rows: [{ name: 'pod-a' }],
+      kinds: ['Pod'],
+      capabilities: { kindVocabulary: ['Pod', 'Deployment', 'StatefulSet'] },
+    });
+    expect(result?.kindVocabulary).toEqual(['Pod', 'Deployment', 'StatefulSet']);
+  });
+
   it('keeps the applied rows and loaded state during user filter refetches (quiet refresh)', async () => {
     let resolveFetch: ((value: unknown) => void) | undefined;
     requestRefreshDomainStateMock.mockImplementation(

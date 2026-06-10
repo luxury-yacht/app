@@ -31,8 +31,6 @@ import type {
 } from '@/core/refresh/types';
 import { parseAutoscalingTarget } from '@shared/resources/resourceDescriptorSelectors';
 
-const NAMESPACE_AUTOSCALING_KIND_OPTIONS = ['HorizontalPodAutoscaler'];
-
 // Data interface for autoscaling resources
 export interface AutoscalingData {
   kind: string;
@@ -77,7 +75,6 @@ export interface AutoscalingData {
 
 interface AutoscalingViewProps {
   namespace: string;
-  availableKinds?: string[];
   showNamespaceColumn?: boolean;
 }
 
@@ -86,7 +83,7 @@ interface AutoscalingViewProps {
  * Aggregates HorizontalPodAutoscalers and VerticalPodAutoscalers
  */
 const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
-  ({ namespace, availableKinds: kindOptions, showNamespaceColumn = false }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -363,8 +360,6 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
       diagnosticsLabel,
-      availableKinds:
-        kindOptions && kindOptions.length > 0 ? kindOptions : NAMESPACE_AUTOSCALING_KIND_OPTIONS,
       showKindDropdown: true,
       showNamespaceFilters: showNamespaceFilter,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },

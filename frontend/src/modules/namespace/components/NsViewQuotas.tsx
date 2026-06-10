@@ -56,7 +56,6 @@ export interface QuotaData {
 
 interface QuotasViewProps {
   namespace: string;
-  availableKinds?: string[];
   showNamespaceColumn?: boolean;
 }
 
@@ -65,7 +64,7 @@ interface QuotasViewProps {
  * Aggregates ResourceQuotas, LimitRanges, and PodDisruptionBudgets
  */
 const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
-  ({ namespace, availableKinds: kindOptions, showNamespaceColumn = false }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -196,7 +195,6 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       diagnosticsLabel,

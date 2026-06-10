@@ -63,7 +63,6 @@ export interface RBACData {
 
 interface RBACViewProps {
   namespace: string;
-  availableKinds?: string[];
   showNamespaceColumn?: boolean;
 }
 
@@ -72,7 +71,7 @@ interface RBACViewProps {
  * Aggregates Roles, RoleBindings, and ServiceAccounts
  */
 const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
-  ({ namespace, availableKinds: kindOptions, showNamespaceColumn = false }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -198,7 +197,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       diagnosticsLabel,

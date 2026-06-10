@@ -265,9 +265,13 @@ describe('NsViewStorage', () => {
     );
   });
 
-  it('uses explicit kind metadata instead of deriving kinds from rows', async () => {
+  it('leaves the kind options to the backend-published vocabulary (no frontend list)', async () => {
     const props = await renderStorageView({ namespace: 'team-a' });
-    expect(props.filters?.options?.kinds).toEqual(['PersistentVolumeClaim']);
+    // No query payload applies in this harness, so there is no vocabulary yet
+    // (only the empty row-derived fallback): the kind options come ONLY from
+    // the backend capabilities on the payload (see the NsViewWorkloads
+    // end-to-end pin), never from a frontend constant.
+    expect(props.filters?.options?.kinds).toEqual([]);
   });
 
   it('uses canonical object identity for row keys', async () => {

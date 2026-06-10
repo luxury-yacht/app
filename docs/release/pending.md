@@ -57,3 +57,18 @@
   while the refreshed rows load — the current rows stay up and swap in place.
   This also fixes the filter input losing keyboard focus while typing when the
   filter text had no matches.
+
+- Selecting kinds in the Kinds dropdown no longer removes the unselected kinds
+  from the dropdown (seen in the All Namespaces Workloads, Config, Network,
+  RBAC, and Quotas views, and possible in cluster Config/RBAC). Each table's
+  kind list is now published by the backend alongside its query results, so
+  the dropdown always offers the full list regardless of the active filter —
+  and only kinds the cluster actually serves: for example, the Gateway API
+  kinds appear in the Network view's dropdown only on clusters that have them.
+
+- In Browse views, the Kinds dropdown no longer flashes and redraws on the
+  first filter selection after opening or switching Browse views. (Filtering
+  swapped the catalog query, and a cleanup step wrongly reset the separate
+  snapshot that feeds the dropdown options; the live catalog stream was also
+  being disconnected by the same step. Both fixed, and the dropdowns now hold
+  their options across momentary data gaps.)

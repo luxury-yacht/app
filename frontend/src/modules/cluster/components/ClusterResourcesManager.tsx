@@ -152,14 +152,12 @@ export function ClusterResourcesManager({
       // only the per-view error (+ kinds for filtered views) derived from the live
       // domain and permissions. Custom is catalog-backed and takes loading/loaded.
       nodesError={nodesErrorMessage}
-      configKinds={(config?.meta as { kinds?: string[] } | undefined)?.kinds}
       configError={configErrorMessage}
       crdsError={crdsErrorMessage}
       customLoading={false}
       customError={customErrorMessage}
       customLoaded={Boolean(customErrorMessage)}
       eventsError={eventsErrorMessage}
-      rbacKinds={(rbac?.meta as { kinds?: string[] } | undefined)?.kinds}
       rbacError={rbacErrorMessage}
       storageError={storageErrorMessage}
       objectPanel={objectPanel}

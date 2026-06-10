@@ -375,6 +375,7 @@ export interface QueryBackedNamespaceGridParams<
       | 'filterOptionOverrides'
       | 'persistenceOverride'
       | 'keyExtractor'
+      | 'availableKinds'
     >,
     QueryBackedGridParamsCommon<TPayload, TRow> {
   /** Optional: the wrapper resolves a canonical default when omitted. */
@@ -442,6 +443,10 @@ export function useQueryBackedNamespaceResourceGridTable<
     keyExtractor: resolvedKeyExtractor,
     namespace,
     defaultSort,
+    // The Kinds dropdown vocabulary is backend-owned: the family's capabilities
+    // publish it on every query payload (facets collapse to the selection by
+    // design and never feed the dropdown).
+    availableKinds: lifecycle.query.kindVocabulary ?? undefined,
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     persistenceOverride: persistence,
     tableMode: lifecycle.tableMode,
@@ -475,6 +480,7 @@ export interface QueryBackedClusterGridParams<
       | 'filterOptionOverrides'
       | 'persistenceOverride'
       | 'keyExtractor'
+      | 'availableKinds'
     >,
     QueryBackedGridParamsCommon<TPayload, TRow> {
   /** Optional: the wrapper resolves a canonical default when omitted. */
@@ -539,6 +545,8 @@ export function useQueryBackedClusterResourceGridTable<
     keyExtractor: resolvedKeyExtractor,
     defaultSortKey,
     defaultSortDirection,
+    // The Kinds dropdown vocabulary is backend-owned (see the namespace wrapper).
+    availableKinds: lifecycle.query.kindVocabulary ?? undefined,
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     persistenceOverride: persistence,
     tableMode: lifecycle.tableMode,

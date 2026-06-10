@@ -140,7 +140,21 @@ class CatalogStreamManager {
     return () => this.stop(false);
   }
 
-  stop(reset = false): void {
+  stop(reset = false, scope?: string): void {
+    const requested = scope?.trim() || null;
+    // A scope-targeted stop for a scope this singleton is NOT currently
+    // streaming must neither tear down the live connection nor reset the held
+    // scope's state. (Disabling Browse's old page scope used to reset the
+    // metadata scope the stream happened to hold, blanking the Kinds dropdown
+    // options for a frame on the first filter selection after every mount.)
+    // The requested scope's own state still resets — that is the caller's
+    // resetOnDisable intent, the same treatment non-streaming domains get.
+    if (requested && this.scope && requested !== this.scope) {
+      if (reset) {
+        resetScopedDomainState('catalog', requested);
+      }
+      return;
+    }
     this.closed = true;
     this.bumpSession();
     this.attempt = 0;
@@ -157,8 +171,9 @@ class CatalogStreamManager {
     this.eventSource = null;
     if (reset) {
       // Guard: scope is set to null after reset, so capture before clearing.
-      if (this.scope) {
-        resetScopedDomainState('catalog', this.scope);
+      const target = this.scope ?? requested;
+      if (target) {
+        resetScopedDomainState('catalog', target);
       }
       this.scope = null;
     }

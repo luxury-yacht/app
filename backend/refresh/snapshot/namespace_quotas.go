@@ -49,6 +49,7 @@ func namespaceQuotasQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "details", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "details"},
+		[]string{"ResourceQuota", "LimitRange", "PodDisruptionBudget"},
 	)
 }
 
@@ -139,12 +140,13 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 		}
 	}
 
-	issues := typedTableQueryResourceIssues(ctx, namespaceQuotasDomainName, query, []typedTableResourceSource{
+	sources := []typedTableResourceSource{
 		{Kind: "ResourceQuota", Group: "", Resource: "resourcequotas", Available: quotasAvailable},
 		{Kind: "LimitRange", Group: "", Resource: "limitranges", Available: limitsAvailable},
 		{Kind: "PodDisruptionBudget", Group: "policy", Resource: "poddisruptionbudgets", Available: pdbsAvailable},
-	})
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, quotas, limits, pdbs, issues)
+	}
+	issues := typedTableQueryResourceIssues(ctx, namespaceQuotasDomainName, query, sources)
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, quotas, limits, pdbs, issues, capabilitiesWithAvailableKinds(namespaceQuotasQueryCapabilities(), sources))
 }
 
 func (b *NamespaceQuotasBuilder) listResourceQuotas(namespace string) ([]*corev1.ResourceQuota, error) {
@@ -176,6 +178,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 	limits []*corev1.LimitRange,
 	pdbs []*policyv1.PodDisruptionBudget,
 	issues []ResourceQueryIssue,
+	capabilities ResourceQueryCapabilities,
 ) (*refresh.Snapshot, error) {
 	resources := make([]QuotaSummary, 0, len(quotas)+len(limits)+len(pdbs))
 	var version uint64
@@ -226,7 +229,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		resources,
 		query,
 		quotaTableQueryAdapter(),
-		namespaceQuotasQueryCapabilities(),
+		capabilities,
 		config.SnapshotNamespaceQuotasEntryLimit,
 		"quota resources",
 		func(resource QuotaSummary) string { return resource.Kind },

@@ -226,6 +226,40 @@ describe('catalogStreamManager', () => {
     expect(MockEventSource.instances[0].closed).toBe(true);
   });
 
+  it('a scope-targeted stop must not reset or disconnect a different streamed scope', async () => {
+    const manager = await importManager();
+    // The singleton is parked on Browse's metadata scope (the Kinds dropdown
+    // option source)…
+    await manager.start('limit=1');
+
+    setScopedDomainState('catalog', 'limit=1', () => ({
+      status: 'ready',
+      data: createEmptySnapshot(),
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: 'limit=1',
+    }));
+    setScopedDomainState('catalog', 'limit=50', () => ({
+      status: 'ready',
+      data: createEmptySnapshot(),
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: 'limit=50',
+    }));
+
+    // …when Browse swaps filters, the OLD page scope is disabled with cleanup.
+    // Only that scope's state may reset; the streamed metadata scope and the
+    // live connection must survive.
+    manager.stop(true, 'limit=50');
+    await Promise.resolve();
+
+    expect(getScopedDomainState('catalog', 'limit=50').data).toBeNull();
+    expect(getScopedDomainState('catalog', 'limit=1').data).not.toBeNull();
+    expect(MockEventSource.instances[0].closed).toBe(false);
+  });
+
   it('merges partial stream updates by uid', async () => {
     vi.useFakeTimers();
     const manager = await importManager();

@@ -261,18 +261,12 @@ export function NamespaceResourcesManager({
       nsPods={pods?.data || []}
       nsPodsMetrics={podsMetrics}
       // Workloads data
-      nsWorkloadsKinds={(workloads?.meta as { kinds?: string[] } | undefined)?.kinds}
       // Config data
-      nsConfigKinds={(config?.meta as { kinds?: string[] } | undefined)?.kinds}
       // Network data
-      nsNetworkKinds={(network?.meta as { kinds?: string[] } | undefined)?.kinds}
       // RBAC data
-      nsRBACKinds={(rbac?.meta as { kinds?: string[] } | undefined)?.kinds}
       // Storage data
       // Autoscaling data
-      nsAutoscalingKinds={(autoscaling?.meta as { kinds?: string[] } | undefined)?.kinds}
       // Quotas data
-      nsQuotasKinds={(quotas?.meta as { kinds?: string[] } | undefined)?.kinds}
       // Custom resources data
       // Helm data
       // Events data

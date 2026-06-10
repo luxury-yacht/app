@@ -74,6 +74,7 @@ func namespaceWorkloadsQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "status", "ready"},
+		[]string{"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"},
 	)
 }
 
@@ -351,7 +352,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 			Version: version,
 			Payload: NamespaceWorkloadsSnapshot{
 				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(namespaceWorkloadsDomainName, page, namespaceWorkloadsQueryCapabilities()).withDegraded(exact, issues),
+				ResourceQueryEnvelope: typedQueryEnvelope(namespaceWorkloadsDomainName, page, b.queryCapabilities()).withDegraded(exact, issues),
 				Rows:                  page.Rows,
 			},
 			Stats: refresh.SnapshotStats{
@@ -374,7 +375,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		Version: version,
 		Payload: NamespaceWorkloadsSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceWorkloadsDomainName, totalItems, !stats.Truncated && len(issues) == 0, snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }), namespaceWorkloadsQueryCapabilities()).withIssues(issues),
+			ResourceQueryEnvelope: typedWindowEnvelope(namespaceWorkloadsDomainName, totalItems, !stats.Truncated && len(issues) == 0, snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }), b.queryCapabilities()).withIssues(issues),
 			Rows:                  items,
 		},
 		Stats: stats,
@@ -396,8 +397,8 @@ func sortWorkloadSummaries(items []WorkloadSummary) {
 	})
 }
 
-func (b *NamespaceWorkloadsBuilder) queryIssues(ctx context.Context, query typedTableQuery) []ResourceQueryIssue {
-	return typedTableQueryResourceIssues(ctx, namespaceWorkloadsDomainName, query, []typedTableResourceSource{
+func (b *NamespaceWorkloadsBuilder) resourceSources() []typedTableResourceSource {
+	return []typedTableResourceSource{
 		{
 			Kind:       "Pod",
 			Group:      "",
@@ -410,7 +411,17 @@ func (b *NamespaceWorkloadsBuilder) queryIssues(ctx context.Context, query typed
 		{Kind: "DaemonSet", Group: "apps", Resource: "daemonsets", Available: b.daemonLister != nil},
 		{Kind: "Job", Group: "batch", Resource: "jobs", Available: b.jobLister != nil},
 		{Kind: "CronJob", Group: "batch", Resource: "cronjobs", Available: b.cronJobLister != nil},
-	})
+	}
+}
+
+// queryCapabilities narrows the family vocabulary to the kinds whose backing
+// listers exist (see capabilitiesWithAvailableKinds).
+func (b *NamespaceWorkloadsBuilder) queryCapabilities() ResourceQueryCapabilities {
+	return capabilitiesWithAvailableKinds(namespaceWorkloadsQueryCapabilities(), b.resourceSources())
+}
+
+func (b *NamespaceWorkloadsBuilder) queryIssues(ctx context.Context, query typedTableQuery) []ResourceQueryIssue {
+	return typedTableQueryResourceIssues(ctx, namespaceWorkloadsDomainName, query, b.resourceSources())
 }
 
 func (b *NamespaceWorkloadsBuilder) workloadsDynamicRevision() string {

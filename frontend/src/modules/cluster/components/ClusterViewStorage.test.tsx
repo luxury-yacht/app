@@ -167,14 +167,18 @@ describe('ClusterViewStorage', () => {
     );
   });
 
-  it('uses explicit kind metadata instead of deriving kinds from rows', async () => {
+  it('leaves the kind options to the backend-published vocabulary (no frontend list)', async () => {
     await act(async () => {
       root.render(<ClusterViewStorage />);
       await Promise.resolve();
     });
 
+    // No query payload applies in this harness, so there is no vocabulary yet
+    // (only the empty row-derived fallback): the kind options come ONLY from
+    // the backend capabilities on the payload (see the NsViewWorkloads
+    // end-to-end pin), never from a frontend constant.
     const props = gridTablePropsRef.current;
-    expect(props.filters?.options?.kinds).toEqual(['PersistentVolume']);
+    expect(props.filters?.options?.kinds).toEqual([]);
   });
 
   it('uses backend statusPresentation for PersistentVolume status styling', async () => {

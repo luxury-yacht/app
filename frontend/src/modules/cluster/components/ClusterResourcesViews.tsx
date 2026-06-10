@@ -22,7 +22,6 @@ interface ClusterResourcesViewsProps {
   // its loading/loaded.
   nodesError?: string | null;
 
-  configKinds?: string[];
   configError?: string | null;
 
   crdsError?: string | null;
@@ -33,7 +32,6 @@ interface ClusterResourcesViewsProps {
 
   eventsError?: string | null;
 
-  rbacKinds?: string[];
   rbacError?: string | null;
 
   storageError?: string | null;
@@ -48,14 +46,12 @@ interface ClusterResourcesViewsProps {
 
 function ClusterResourcesViews({
   nodesError = null,
-  configKinds,
   configError = null,
   crdsError = null,
   customLoading = false,
   customError = null,
   customLoaded = false,
   eventsError = null,
-  rbacKinds,
   rbacError = null,
   storageError = null,
   activeTab: controlledActiveTab,
@@ -74,7 +70,7 @@ function ClusterResourcesViews({
       case 'nodes':
         return <ClusterViewNodes error={nodesError} />;
       case 'config':
-        return <ClusterViewConfig availableKinds={configKinds} error={configError} />;
+        return <ClusterViewConfig error={configError} />;
       case 'crds':
         return <ClusterViewCRDs error={crdsError} />;
       case 'custom':
@@ -84,7 +80,7 @@ function ClusterResourcesViews({
       case 'events':
         return <ClusterViewEvents error={eventsError} />;
       case 'rbac':
-        return <ClusterViewRBAC availableKinds={rbacKinds} error={rbacError} />;
+        return <ClusterViewRBAC error={rbacError} />;
       case 'storage':
         return <ClusterViewStorage error={storageError} />;
       default:

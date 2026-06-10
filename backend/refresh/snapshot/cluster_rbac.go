@@ -45,6 +45,7 @@ func clusterRBACQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "details", "age"},
 		[]string{"kinds"},
 		[]string{"kind", "typeAlias", "name", "details"},
+		[]string{"ClusterRole", "ClusterRoleBinding"},
 	)
 }
 
@@ -141,17 +142,18 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		}
 		return entries[i].Kind < entries[j].Kind
 	})
-	issues := typedTableQueryResourceIssues(ctx, clusterRBACDomainName, query, []typedTableResourceSource{
+	sources := []typedTableResourceSource{
 		{Kind: "ClusterRole", Group: "rbac.authorization.k8s.io", Resource: "clusterroles", Available: rolesAvailable},
 		{Kind: "ClusterRoleBinding", Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings", Available: bindingsAvailable},
-	})
+	}
+	issues := typedTableQueryResourceIssues(ctx, clusterRBACDomainName, query, sources)
 
 	resolved := resolveTypedSnapshotPage(
 		clusterRBACDomainName,
 		entries,
 		query,
 		clusterRBACTableQueryAdapter(),
-		clusterRBACQueryCapabilities(),
+		capabilitiesWithAvailableKinds(clusterRBACQueryCapabilities(), sources),
 		config.SnapshotClusterRBACEntryLimit,
 		"cluster RBAC resources",
 		func(entry ClusterRBACEntry) string { return entry.Kind },

@@ -219,6 +219,35 @@ describe('useBrowseCatalog', () => {
     expect(result?.pageLimit).toBe(250);
   });
 
+  it('holds the last filter options while a filter-change scope swap has no data yet', async () => {
+    const baseScope = 'cluster-1|limit=2&namespace=default';
+    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const baseState = {
+      status: 'ready',
+      data: makePayload({ items: [first], total: 1, batchSize: 1 }),
+      scope: baseScope,
+    };
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) =>
+      scope === baseScope ? baseState : { status: 'idle', data: null, scope }
+    );
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+    expect(result?.filterOptions.kinds).toEqual(['Pod']);
+
+    // Selecting a kind swaps to a scope with no state yet; the dropdown options
+    // must hold their last derived value instead of blanking (the dropdown
+    // disables itself on empty options — the "flash").
+    await act(async () => {
+      root.render(<Harness kinds={['Pod']} />);
+      await Promise.resolve();
+    });
+    expect(result?.filterOptions.kinds).toEqual(['Pod']);
+  });
+
   it('stays quiet (no loading) when the catalog refreshes after the first load', async () => {
     const baseScope = 'cluster-1|limit=2&namespace=default';
     const metadataScope = 'cluster-1|limit=1&namespace=default';

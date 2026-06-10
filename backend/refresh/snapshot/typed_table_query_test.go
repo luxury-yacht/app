@@ -454,6 +454,7 @@ func TestTypedQueryEnvelopeFlagsUnsupportedSortField(t *testing.T) {
 		[]string{"name", "age"},
 		nil,
 		[]string{"name"},
+		nil,
 	)
 	rows := []typedQueryTestRow{
 		{key: "default/a", name: "a", namespace: "default", kind: "Pod"},

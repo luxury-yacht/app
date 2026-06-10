@@ -126,46 +126,34 @@ describe('NamespaceResourcesViews', () => {
     },
     {
       tab: 'workloads' as const,
-      props: {
-        nsWorkloadsKinds: ['Deployment', 'StatefulSet'],
-      },
+      props: {},
       mock: workloadsViewMock,
       expected: {
         namespace: 'team-a',
-        availableKinds: ['Deployment', 'StatefulSet'],
       },
     },
     {
       tab: 'config' as const,
-      props: {
-        nsConfigKinds: ['ConfigMap', 'Secret'],
-      },
+      props: {},
       mock: configViewMock,
       expected: {
         namespace: 'team-a',
-        availableKinds: ['ConfigMap', 'Secret'],
       },
     },
     {
       tab: 'network' as const,
-      props: {
-        nsNetworkKinds: ['Ingress', 'NetworkPolicy', 'Service'],
-      },
+      props: {},
       mock: networkViewMock,
       expected: {
         namespace: 'team-a',
-        availableKinds: ['Ingress', 'NetworkPolicy', 'Service'],
       },
     },
     {
       tab: 'rbac' as const,
-      props: {
-        nsRBACKinds: ['Role', 'RoleBinding', 'ServiceAccount'],
-      },
+      props: {},
       mock: rbacViewMock,
       expected: {
         namespace: 'team-a',
-        availableKinds: ['Role', 'RoleBinding', 'ServiceAccount'],
       },
     },
     {
@@ -178,24 +166,18 @@ describe('NamespaceResourcesViews', () => {
     },
     {
       tab: 'autoscaling' as const,
-      props: {
-        nsAutoscalingKinds: ['HorizontalPodAutoscaler'],
-      },
+      props: {},
       mock: autoscalingViewMock,
       expected: {
         namespace: 'team-a',
-        availableKinds: ['HorizontalPodAutoscaler'],
       },
     },
     {
       tab: 'quotas' as const,
-      props: {
-        nsQuotasKinds: ['LimitRange', 'PodDisruptionBudget', 'ResourceQuota'],
-      },
+      props: {},
       mock: quotasViewMock,
       expected: {
         namespace: 'team-a',
-        availableKinds: ['LimitRange', 'PodDisruptionBudget', 'ResourceQuota'],
       },
     },
     {

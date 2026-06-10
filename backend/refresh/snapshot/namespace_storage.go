@@ -38,6 +38,7 @@ func namespaceStorageQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "capacity", "status", "storageClass", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "capacity", "status", "storageClass"},
+		[]string{"PersistentVolumeClaim"},
 	)
 }
 

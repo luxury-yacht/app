@@ -54,6 +54,7 @@ func clusterConfigQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "details", "age"},
 		[]string{"kinds"},
 		[]string{"kind", "name", "details"},
+		[]string{"StorageClass", "IngressClass", "GatewayClass", "MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"},
 	)
 }
 
@@ -229,20 +230,21 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 		}
 		return entries[i].Kind < entries[j].Kind
 	})
-	issues := typedTableQueryResourceIssues(ctx, clusterConfigDomainName, query, []typedTableResourceSource{
+	sources := []typedTableResourceSource{
 		{Kind: "StorageClass", Group: "storage.k8s.io", Resource: "storageclasses", Available: storageClassesAvailable},
 		{Kind: "IngressClass", Group: "networking.k8s.io", Resource: "ingressclasses", Available: ingressClassesAvailable},
 		{Kind: "GatewayClass", Group: "gateway.networking.k8s.io", Resource: "gatewayclasses", Available: gatewayClassesAvailable},
 		{Kind: "ValidatingWebhookConfiguration", Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Available: validatingWebhooksAvailable},
 		{Kind: "MutatingWebhookConfiguration", Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Available: mutatingWebhooksAvailable},
-	})
+	}
+	issues := typedTableQueryResourceIssues(ctx, clusterConfigDomainName, query, sources)
 
 	resolved := resolveTypedSnapshotPage(
 		clusterConfigDomainName,
 		entries,
 		query,
 		clusterConfigTableQueryAdapter(),
-		clusterConfigQueryCapabilities(),
+		capabilitiesWithAvailableKinds(clusterConfigQueryCapabilities(), sources),
 		config.SnapshotClusterConfigEntryLimit,
 		"cluster configuration resources",
 		func(entry ClusterConfigEntry) string { return entry.Kind },

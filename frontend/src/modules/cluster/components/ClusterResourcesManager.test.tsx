@@ -127,26 +127,17 @@ describe('ClusterResourcesManager', () => {
     });
   };
 
-  it('sets the active resource type and forwards per-view error and kinds downstream', async () => {
-    clusterResourceStates.config.meta = {
-      kinds: ['IngressClass', 'MutatingWebhookConfiguration', 'StorageClass'],
-    };
-    clusterResourceStates.rbac.meta = { kinds: ['ClusterRole', 'ClusterRoleBinding'] };
-
+  it('sets the active resource type and forwards per-view errors downstream', async () => {
     await renderManager('storage');
 
     expect(setActiveResourceTypeMock).toHaveBeenCalledWith('storage');
 
     const props = viewPropsRef.current;
-    // Query-backed views source their own rows; the manager forwards only the per-view
-    // error and (for kind-filtered views) the available kinds — not live-snapshot
-    // rows/stats/loading/loaded.
-    expect(props.configKinds).toEqual([
-      'IngressClass',
-      'MutatingWebhookConfiguration',
-      'StorageClass',
-    ]);
-    expect(props.rbacKinds).toEqual(['ClusterRole', 'ClusterRoleBinding']);
+    // Query-backed views source their own rows and the Kinds dropdown vocabulary
+    // is backend-owned (query capabilities); the manager forwards only the
+    // per-view error — not live-snapshot rows/stats/loading/loaded or kind lists.
+    expect(props.configKinds).toBeUndefined();
+    expect(props.rbacKinds).toBeUndefined();
     expect(props.nodes).toBeUndefined();
     expect(props.storage).toBeUndefined();
     expect(props.nodesStats).toBeUndefined();

@@ -41,6 +41,7 @@ func clusterEventsQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "type", "source", "reason", "object", "objectType", "objectName", "message", "age"},
 		[]string{"kinds"},
 		[]string{"kind", "name", "type", "source", "reason", "object", "message"},
+		nil, // open kind set (involved-object kinds); no kind dropdown
 	)
 }
 

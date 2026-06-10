@@ -26,8 +26,6 @@ import {
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import type { ClusterStorageSnapshotPayload } from '@/core/refresh/types';
 
-const CLUSTER_STORAGE_KIND_OPTIONS = ['PersistentVolume'];
-
 // Define the data structure for Persistent Volumes
 interface StorageData {
   kind: string;
@@ -270,7 +268,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(({ error }) => {
     viewId: 'cluster-storage',
     columns,
     keyExtractor,
-    availableKinds: CLUSTER_STORAGE_KIND_OPTIONS,
     showKindDropdown: true,
     diagnosticsLabel: 'Cluster Storage',
   });
