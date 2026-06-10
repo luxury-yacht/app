@@ -274,7 +274,7 @@ describe('ClusterViewCustom', () => {
     container.remove();
   });
 
-  it('surfaces a catalog error through the inventory error banner', async () => {
+  it('renders the errored empty state for a catalog error (details report via toasts)', async () => {
     useBrowseCatalogMock.mockReturnValue({
       ...browseCatalogResult(),
       hasLoadedOnce: false,
@@ -286,9 +286,10 @@ describe('ClusterViewCustom', () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.resource-inventory-error')?.textContent).toContain(
-      'catalog list forbidden'
-    );
+    // No in-table banner exists; an errored empty table reads "Unable to load
+    // data" instead of the generic empty message.
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(gridTablePropsRef.current?.emptyMessage).toBe('Unable to load data');
   });
 
   it('disarms scroll auto-load for page-replacing cursor pagination', async () => {

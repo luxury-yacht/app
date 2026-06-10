@@ -302,20 +302,19 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           return;
         }
         if (result.status !== 'executed') {
+          // A blocked refresh (cluster still connecting, auto-refresh paused) is a
+          // warm-up condition, not a failure: stay not-loaded so the table keeps its
+          // loading (or paused) presentation, and let the next live-data identity
+          // change retry. Persistent causes surface through the refresh error
+          // toasts — never as a fabricated table error.
           revertFailedNavigation();
-          setError(
-            result.blockedReason === 'auto-refresh-disabled'
-              ? `${label} could not load because auto-refresh is disabled`
-              : `${label} request was blocked`
-          );
-          setLoaded(true);
           return;
         }
         const payload = result.data?.data as TPayload | null | undefined;
         if (!payload) {
+          // Executed but the scoped state carries no payload yet (backend caches
+          // still syncing) — same warm-up treatment as a blocked request.
           revertFailedNavigation();
-          setError(`${label} returned no data`);
-          setLoaded(true);
           return;
         }
         if (payload.cursorInvalid) {

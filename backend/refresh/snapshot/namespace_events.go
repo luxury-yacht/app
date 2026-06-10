@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -22,6 +23,9 @@ const namespaceEventsDomainName = "namespace-events"
 // NamespaceEventsBuilder constructs summaries for namespace scoped events.
 type NamespaceEventsBuilder struct {
 	eventLister corelisters.EventLister
+	// eventsSynced reports whether the events informer finished its initial
+	// sync; see ClusterEventsBuilder for why listing an unsynced cache is a lie.
+	eventsSynced cache.InformerSynced
 }
 
 // NamespaceEventsSnapshot payload for events tab.
@@ -67,7 +71,8 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &NamespaceEventsBuilder{
-		eventLister: factory.Core().V1().Events().Lister(),
+		eventLister:  factory.Core().V1().Events().Lister(),
+		eventsSynced: factory.Core().V1().Events().Informer().HasSynced,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceEventsDomainName,
@@ -89,6 +94,12 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, err
 	}
 
+	// Wait out the informer's initial sync (bounded by the request context)
+	// instead of listing an unsynced cache: the first request after connect is
+	// slower, never wrong. See ClusterEventsBuilder.Build.
+	if b.eventsSynced != nil && !cache.WaitForCacheSync(ctx.Done(), b.eventsSynced) {
+		return nil, fmt.Errorf("namespace events cache has not finished syncing")
+	}
 	var (
 		events []*corev1.Event
 	)

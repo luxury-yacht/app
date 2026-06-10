@@ -21,7 +21,6 @@ import {
   useResourceInventoryTable,
   type ResourceInventorySourceState,
 } from './useResourceInventoryTable';
-import './ResourceInventoryTable.css';
 
 interface ResourceInventoryTableProps<T> extends Omit<
   GridTableProps<T>,
@@ -71,9 +70,9 @@ export default function ResourceInventoryTable<T>({
         }
       : gridTableProps.filters;
 
-  // The controller surfaces an error only when it should be visible (immediately
-  // when there is nothing to show; after the grace window when rows are visible).
-  // An errored empty table must not read as the generic "No data available".
+  // A genuinely errored empty table must not read as the generic "No data
+  // available"; the error detail itself is reported through the refresh error
+  // toasts, never an in-table banner.
   const emptyMessageForState = render.isEmpty
     ? emptyMessage
     : render.error
@@ -82,11 +81,6 @@ export default function ResourceInventoryTable<T>({
 
   return (
     <>
-      {render.error && (
-        <div className="resource-inventory-error" role="alert">
-          {render.error}
-        </div>
-      )}
       <ResourceLoadingBoundary
         loading={render.showLoadingBoundary}
         dataLength={render.rows.length}

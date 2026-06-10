@@ -29,12 +29,6 @@ import { eventBus } from '@/core/events';
 const lastRowsByCacheKey = new Map<string, unknown[]>();
 const MAX_CACHED_VIEWS = 64;
 
-// How long a source error with rows still visible (own or replayed) stays
-// bridged before it surfaces. Transient refetch blips (the diagnostic showed
-// sub-second error frames) must not flash a banner; persistent failures —
-// revoked permissions, a dead cluster — must not be masked as healthy forever.
-const ERROR_SURFACE_GRACE_MS = 5_000;
-
 function writeRowCache(cacheKey: string, rows: unknown[]): void {
   // Re-insert so recency is tracked by Map insertion order.
   lastRowsByCacheKey.delete(cacheKey);
@@ -235,40 +229,19 @@ export function useResourceInventoryTable<T>(
     cacheKey && transientEmpty ? (lastRowsByCacheKey.get(cacheKey) as T[] | undefined) : undefined;
   const replayRows = cached && cached.length > 0 ? cached : null;
 
-  // Error-surface grace: while rows are visible (own or replayed), a fresh error
-  // stays bridged for ERROR_SURFACE_GRACE_MS so transient blips never flash a
-  // banner; one that outlives the grace window surfaces (rows stay visible).
-  // With NOTHING to show there is no flicker to prevent — surface immediately,
-  // since the alternative is a false "No data available".
-  const hasError = Boolean(error);
-  const [errorPersisted, setErrorPersisted] = React.useState(false);
-  React.useEffect(() => {
-    if (!hasError) {
-      setErrorPersisted(false);
-      return;
-    }
-    if (errorPersisted) {
-      return;
-    }
-    const timer = window.setTimeout(() => setErrorPersisted(true), ERROR_SURFACE_GRACE_MS);
-    return () => window.clearTimeout(timer);
-  }, [hasError, errorPersisted]);
-
-  const hasContent = rows.length > 0 || Boolean(replayRows);
-  const surfacedError = error && (!hasContent || errorPersisted) ? error : null;
-
   return React.useMemo(
     () =>
       deriveResourceInventoryRenderState(
         replayRows
           ? {
               // Show the cached page as a settled result: the live source's
-              // transient loading/blocked is bridged, not shown. A persistent
-              // error surfaces through `surfacedError` while the rows stay.
+              // transient loading/blocked is bridged, not shown. Errors are
+              // reported through the refresh error toasts; with replayed rows
+              // visible the table stays usable.
               rows: replayRows,
               loading: false,
               loaded: true,
-              error: surfacedError,
+              error: null,
               blocked: false,
               completeness,
               partialLabel,
@@ -277,12 +250,12 @@ export function useResourceInventoryTable<T>(
               rows,
               loading,
               loaded,
-              error: surfacedError,
+              error,
               blocked,
               completeness,
               partialLabel,
             }
       ),
-    [replayRows, rows, loading, loaded, surfacedError, blocked, completeness, partialLabel]
+    [replayRows, rows, loading, loaded, error, blocked, completeness, partialLabel]
   );
 }

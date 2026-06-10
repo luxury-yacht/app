@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -25,6 +26,11 @@ const (
 // ClusterEventsBuilder aggregates Kubernetes Events for the cluster tab.
 type ClusterEventsBuilder struct {
 	eventLister corelisters.EventLister
+	// eventsSynced reports whether the events informer finished its initial
+	// sync. Events are the highest-cardinality resource in a cluster; listing
+	// an UNSYNCED informer silently returns an empty slice, which would publish
+	// a confident "zero events" page during the post-connect window.
+	eventsSynced cache.InformerSynced
 }
 
 // ClusterEventsSnapshot is the payload returned to the UI. It embeds the
@@ -72,7 +78,8 @@ func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedI
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &ClusterEventsBuilder{
-		eventLister: factory.Core().V1().Events().Lister(),
+		eventLister:  factory.Core().V1().Events().Lister(),
+		eventsSynced: factory.Core().V1().Events().Informer().HasSynced,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          clusterEventsDomainName,
@@ -89,6 +96,13 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, err
 	}
 	_ = baseScope
+	// Wait out the informer's initial sync (bounded by the request context)
+	// instead of listing an unsynced cache: the first request after connect is
+	// slower, never wrong. A sync that cannot complete within the request
+	// deadline is a real failure.
+	if b.eventsSynced != nil && !cache.WaitForCacheSync(ctx.Done(), b.eventsSynced) {
+		return nil, fmt.Errorf("cluster events cache has not finished syncing")
+	}
 	events, err := b.eventLister.List(labels.Everything())
 	if err != nil {
 		return nil, err

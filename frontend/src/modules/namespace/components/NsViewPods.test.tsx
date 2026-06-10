@@ -573,9 +573,10 @@ describe('NsViewPods', () => {
     );
   });
 
-  it('renders namespace error and metrics banners when provided', async () => {
-    // Query-backed: the table error banner reflects the typed query's error, not a local prop.
-    // A null query payload surfaces as "<label> returned no data".
+  it('treats a missing query payload as warm-up and still renders the metrics banner', async () => {
+    // A null query payload is a backend warm-up condition, not a failure: the
+    // table stays in its loading presentation with no error surface, and the
+    // next live-data identity change retries.
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: { status: 'ready', data: null },
@@ -597,9 +598,8 @@ describe('NsViewPods', () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.resource-inventory-error')?.textContent).toContain(
-      'returned no data'
-    );
+    expect(container.querySelector('.resource-inventory-error')).toBeNull();
+    expect(container.textContent).not.toContain('returned no data');
     expect(container.querySelector('.metrics-warning-banner')?.textContent).toContain(
       'Awaiting metrics data...'
     );

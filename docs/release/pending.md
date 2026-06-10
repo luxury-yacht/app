@@ -72,3 +72,12 @@
   snapshot that feeds the dropdown options; the live catalog stream was also
   being disconnected by the same step. Both fixed, and the dropdowns now hold
   their options across momentary data gaps.)
+
+- Opening the Events views shortly after connecting to a cluster no longer
+  shows "Unable to load data" before the events appear. Two fixes: the backend
+  now waits for its event cache to finish its initial sync instead of
+  answering early (the first request is just slightly slower), and tables no
+  longer present warm-up conditions (a blocked or not-yet-ready request) as
+  errors — they keep loading and retry. Genuine failures are still reported
+  through error notifications; the never-visible in-table error banner was
+  removed.

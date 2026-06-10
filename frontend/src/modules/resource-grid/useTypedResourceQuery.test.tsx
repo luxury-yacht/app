@@ -90,7 +90,11 @@ describe('useTypedResourceQuery', () => {
     });
   };
 
-  it('marks missing query payloads as loaded so the table does not stay in an initial spinner', async () => {
+  it('keeps a missing query payload in the warm-up (not-loaded) state', async () => {
+    // An executed refresh whose scoped state carries no payload yet means the
+    // backend is still warming up. The hook stays not-loaded (the table keeps
+    // its loading presentation) and the next live-data identity change retries
+    // — no fabricated error.
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: { status: 'ready' },
@@ -98,9 +102,8 @@ describe('useTypedResourceQuery', () => {
 
     await renderQuery();
 
-    expect(result?.loading).toBe(false);
-    expect(result?.loaded).toBe(true);
-    expect(result?.error).toBe('All Namespaces Pods returned no data');
+    expect(result?.loaded).toBe(false);
+    expect(result?.error).toBeNull();
   });
 
   it('fetchAllRows pages through the full result set following the cursor', async () => {
@@ -257,6 +260,88 @@ describe('useTypedResourceQuery', () => {
       capabilities: { kindVocabulary: ['Pod', 'Deployment', 'StatefulSet'] },
     });
     expect(result?.kindVocabulary).toEqual(['Pod', 'Deployment', 'StatefulSet']);
+  });
+
+  it('treats blocked and payload-less results as warm-up, not failures', async () => {
+    // First request: blocked (e.g., cluster still connecting). The hook must
+    // stay in the not-loaded (loading) state — no fabricated error — so the
+    // table keeps its spinner instead of flashing "Unable to load data".
+    requestRefreshDomainStateMock.mockResolvedValueOnce({ status: 'blocked' });
+
+    const Probe: React.FC<{ liveDataVersion: string }> = ({ liveDataVersion }) => {
+      result = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'Cluster Events',
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        sortConfig,
+        liveDataVersion,
+        selectRows,
+      });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<Probe liveDataVersion="v1" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result?.error).toBeNull();
+    expect(result?.loaded).toBe(false);
+
+    // Second request: executed but the scoped state carries no payload yet
+    // (backend caches still syncing). Same treatment.
+    requestRefreshDomainStateMock.mockResolvedValueOnce({
+      status: 'executed',
+      data: { status: 'ready', data: null },
+    });
+    await act(async () => {
+      root.render(<Probe liveDataVersion="v2" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result?.error).toBeNull();
+    expect(result?.loaded).toBe(false);
+
+    // The live domain delivers → identity change → the retry succeeds.
+    requestRefreshDomainStateMock.mockResolvedValueOnce({
+      status: 'executed',
+      data: { status: 'ready', data: { rows: [{ name: 'event-a' }] } },
+    });
+    await act(async () => {
+      root.render(<Probe liveDataVersion="v3" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result?.rows).toEqual([{ name: 'event-a' }]);
+    expect(result?.loaded).toBe(true);
+    expect(result?.error).toBeNull();
+  });
+
+  it('keeps a thrown fetch failure as a real error', async () => {
+    requestRefreshDomainStateMock.mockRejectedValueOnce(new Error('cluster gone'));
+
+    const Probe: React.FC = () => {
+      result = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'Cluster Events',
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        sortConfig,
+        selectRows,
+      });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<Probe />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result?.error).toBe('cluster gone');
+    expect(result?.loaded).toBe(true);
   });
 
   it('keeps the applied rows and loaded state during user filter refetches (quiet refresh)', async () => {
@@ -564,7 +649,11 @@ describe('useTypedResourceQuery', () => {
     expect(result?.rows).toEqual([{ name: 'pod-b' }]);
   });
 
-  it('marks blocked query requests as loaded so the table does not stay in an initial spinner', async () => {
+  it('keeps a blocked query request in the warm-up (not-loaded) state', async () => {
+    // Blocked refreshes (auto-refresh paused, cluster still connecting) are
+    // warm-up conditions, not failures. With auto-refresh paused the table's
+    // boundary renders the paused empty state; otherwise the loading state
+    // holds until the live domain delivers and the query retries.
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'blocked',
       blockedReason: 'auto-refresh-disabled',
@@ -572,11 +661,8 @@ describe('useTypedResourceQuery', () => {
 
     await renderQuery();
 
-    expect(result?.loading).toBe(false);
-    expect(result?.loaded).toBe(true);
-    expect(result?.error).toBe(
-      'All Namespaces Pods could not load because auto-refresh is disabled'
-    );
+    expect(result?.loaded).toBe(false);
+    expect(result?.error).toBeNull();
   });
 
   it('tracks cursor-backed next and previous pages without exposing random page jumps', async () => {

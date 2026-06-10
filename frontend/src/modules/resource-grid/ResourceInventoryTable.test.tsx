@@ -89,10 +89,12 @@ afterEach(() => {
 });
 
 describe('ResourceInventoryTable error surface', () => {
-  it('renders an error banner instead of a bare "No data available" table', () => {
+  it('renders the errored empty state without any in-table banner', () => {
+    // Error details belong to the refresh error toasts; the table only
+    // distinguishes an errored empty from a genuine empty.
     renderTable(src({ error: 'pods is forbidden: User cannot list resource' }));
-    const banner = container.querySelector('[role="alert"]');
-    expect(banner?.textContent).toContain('pods is forbidden');
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain('Unable to load data');
     expect(container.textContent).not.toContain('No data available');
   });
 
@@ -107,9 +109,8 @@ describe('ResourceInventoryTable error surface', () => {
     expect(container.textContent).toContain('row-1');
   });
 
-  it('keeps rows visible while an error with rows present is still graced', () => {
+  it('keeps rows visible when an error arrives with rows present', () => {
     renderTable(src({ rows: [{ name: 'row-1' }], error: 'refresh failed' }));
-    // With rows visible the error surface is graced — rows stay, no banner yet.
     expect(container.textContent).toContain('row-1');
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });

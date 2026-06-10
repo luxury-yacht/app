@@ -9,7 +9,7 @@
  */
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { eventBus } from '@/core/events';
 import {
@@ -135,33 +135,20 @@ describe('useResourceInventoryTable revisit replay cache', () => {
     expect(captured.current?.rows).toEqual([{ name: 'n1' }, { name: 'n2' }]);
   });
 
-  it('surfaces a persistent error after the grace window while keeping cached rows', () => {
-    vi.useFakeTimers();
-    try {
-      render(src({ cacheKey: 'view-k', rows: [{ name: 'n1' }], loaded: true }));
-      // The refetch fails and STAYS failed (e.g. revoked permissions).
-      render(
-        src({ cacheKey: 'view-k', rows: [], loading: false, loaded: true, error: 'forbidden' })
-      );
-      // Within the grace window the bridge is silent — no banner flash on blips.
-      expect(captured.current?.rows).toEqual([{ name: 'n1' }]);
-      expect(captured.current?.error).toBeNull();
-      // Past the grace window the failure surfaces; the rows stay visible.
-      act(() => {
-        vi.advanceTimersByTime(5_000);
-      });
-      expect(captured.current?.rows).toEqual([{ name: 'n1' }]);
-      expect(captured.current?.error).toBe('forbidden');
-      expect(captured.current?.status).toBe('error');
-      expect(captured.current?.isEmpty).toBe(false);
+  it('keeps cached rows visible across a failed refetch (errors report via toasts)', () => {
+    render(src({ cacheKey: 'view-k', rows: [{ name: 'n1' }], loaded: true }));
+    // The refetch fails (e.g. revoked permissions). The bridged page stays
+    // usable; the failure itself is reported through the refresh error toasts,
+    // so the render state carries no error while cached rows are shown.
+    render(src({ cacheKey: 'view-k', rows: [], loading: false, loaded: true, error: 'forbidden' }));
+    expect(captured.current?.rows).toEqual([{ name: 'n1' }]);
+    expect(captured.current?.error).toBeNull();
+    expect(captured.current?.status).toBe('ready');
 
-      // Recovery clears the surfaced error again.
-      render(src({ cacheKey: 'view-k', rows: [{ name: 'n1' }], loaded: true }));
-      expect(captured.current?.error).toBeNull();
-      expect(captured.current?.status).toBe('ready');
-    } finally {
-      vi.useRealTimers();
-    }
+    // Recovery replaces the bridged page with live rows.
+    render(src({ cacheKey: 'view-k', rows: [{ name: 'n1' }], loaded: true }));
+    expect(captured.current?.error).toBeNull();
+    expect(captured.current?.status).toBe('ready');
   });
 
   it('surfaces an error immediately when there are no rows to bridge', () => {

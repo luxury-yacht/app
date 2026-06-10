@@ -159,3 +159,21 @@ func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 	require.Equal(t, "event-high-rv", payload.Rows[0].Name)
 	require.Equal(t, "event-low-rv", payload.Rows[1].Name)
 }
+
+// An unsynced events informer lists empty with no error (client-go semantics),
+// which would publish a confident "zero events" page during the post-connect
+// sync window. The builder must wait for the sync (bounded by the request
+// context) and report an error if it cannot — never an exact-empty snapshot.
+func TestClusterEventsBuilderWaitsForCacheSync(t *testing.T) {
+	builder := &ClusterEventsBuilder{
+		eventLister:  testsupport.NewEventLister(t),
+		eventsSynced: func() bool { return false },
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	snapshot, err := builder.Build(ctx, "")
+	require.Error(t, err)
+	require.Nil(t, snapshot)
+}
