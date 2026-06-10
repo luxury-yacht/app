@@ -89,6 +89,7 @@ export interface AppEvents {
   'settings:appearance-mode': 'light' | 'dark' | 'system';
   'settings:metrics-interval': number;
   'settings:kubernetes-client-qps': number;
+  'settings:default-table-page-size': number;
   'settings:kubernetes-client-burst': number;
   'settings:permission-ssrr-fetch-concurrency': number;
   'settings:obj-panel-logs-buffer-size': number;

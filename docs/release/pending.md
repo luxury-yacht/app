@@ -36,6 +36,13 @@
   CustomResourceDefinition, so the dropdown had exactly one option. Search and the other
   filters are unchanged.
 
+### Added
+
+- New setting: **Settings ▸ Display ▸ Tables ▸ Default page size** (default 50). It sets the
+  rows-per-page for any table that doesn't have a saved page size yet; picking a page size in
+  a table's footer still overrides it for that table. The dropdown offers the same values as
+  every pagination footer — they share one list in the app.
+
 ### Fixed
 
 - Resource tables no longer flash a loading spinner or "no data available" when

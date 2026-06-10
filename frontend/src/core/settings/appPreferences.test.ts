@@ -16,6 +16,7 @@ import {
   getDefaultObjectPanelPosition,
   getDimInactiveNamespaces,
   getExclusiveNamespaces,
+  getDefaultTablePageSize,
   getGridTablePersistenceMode,
   getKubernetesClientBurst,
   getKubernetesClientQPS,
@@ -57,6 +58,7 @@ import {
   setBackgroundRefreshEnabled,
   setDimInactiveNamespaces,
   setExclusiveNamespaces,
+  setDefaultTablePageSize,
   setGridTablePersistenceMode,
   setKubernetesClientBurst,
   setKubernetesClientQPS,
@@ -572,6 +574,37 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     expect(getObjPanelLogsApiTimestampFormat()).toBe('YYYY-MM-DDTHH:mm:ss.SSS[Z]');
+  });
+
+  it('hydrates the default table page size and snaps off-list values to the default', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ defaultTablePageSize: 250 });
+    await hydrateAppPreferences({ force: true });
+    expect(getDefaultTablePageSize()).toBe(250);
+
+    resetAppPreferencesCacheForTesting();
+    appMocks.GetAppSettings.mockResolvedValue({ defaultTablePageSize: 333 });
+    await hydrateAppPreferences({ force: true });
+    expect(getDefaultTablePageSize()).toBe(50);
+  });
+
+  it('persists the default table page size and emits its change event', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ defaultTablePageSize: 50 });
+    await hydrateAppPreferences({ force: true });
+
+    const events: number[] = [];
+    const unsubscribe = eventBus.on('settings:default-table-page-size', (value) =>
+      events.push(value)
+    );
+
+    setDefaultTablePageSize(100);
+
+    expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
+      changes: [{ key: 'defaultTablePageSize', value: 100 }],
+    });
+    expect(getDefaultTablePageSize()).toBe(100);
+    expect(events).toEqual([100]);
+
+    unsubscribe();
   });
 
   it('persists preference updates and updates the cache', async () => {

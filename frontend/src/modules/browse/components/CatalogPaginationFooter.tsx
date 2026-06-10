@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { BrowsePageLimit } from '@modules/browse/pagination';
+import type { TablePageSize } from '@shared/components/tables/pageSizeOptions';
 import type { BrowseCatalogPagination } from '@modules/browse/hooks/useBrowseCatalog';
 import QueryPaginationControls from '@modules/resource-grid/QueryPaginationControls';
 
@@ -33,7 +33,7 @@ const CatalogPaginationFooter: React.FC<CatalogPaginationFooterProps> = ({
     loading={pagination.isRequestingMore || pagination.queryPending}
     onPrevious={pagination.onRequestPrevious}
     onNext={pagination.onRequestMore}
-    onPageSizeChange={(value) => pagination.setPageLimit(value as BrowsePageLimit)}
+    onPageSizeChange={(value) => pagination.setPageLimit(value as TablePageSize)}
   />
 );
 

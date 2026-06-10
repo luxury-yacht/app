@@ -76,6 +76,12 @@ vi.mock('@/core/refresh/loadingPolicy', () => ({
   applyPassiveLoadingPolicy: ({ loading }: { loading: boolean }) => ({ loading }),
 }));
 
+const defaultTablePageSizeMock = vi.hoisted(() => vi.fn(() => 50));
+
+vi.mock('@/hooks/useDefaultTablePageSize', () => ({
+  useDefaultTablePageSize: () => defaultTablePageSizeMock(),
+}));
+
 const makeItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
   clusterId: 'cluster-1',
   clusterName: 'Cluster 1',
@@ -170,6 +176,7 @@ describe('useBrowseCatalog', () => {
     result = null;
     vi.clearAllMocks();
     mocks.refreshFns.clear();
+    defaultTablePageSizeMock.mockReturnValue(50);
   });
 
   afterEach(() => {
@@ -178,6 +185,38 @@ describe('useBrowseCatalog', () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it('uses the app-wide Default Page Size preference when the view has no persisted page size', async () => {
+    defaultTablePageSizeMock.mockReturnValue(250);
+
+    const UnpersistedHarness = () => {
+      result = useBrowseCatalog({
+        enabled: true,
+        clusterId: 'cluster-1',
+        pinnedNamespaces: defaultPinnedNamespaces,
+        clusterScopedOnly: false,
+        customOnly: false,
+        pageLimit: undefined,
+        onPageLimitChange: () => {},
+        filters: { search: '', kinds: [], namespaces: [] },
+        diagnosticLabel: 'test browse',
+      });
+      return null;
+    };
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => ({
+      status: 'idle',
+      data: null,
+      scope,
+    }));
+
+    await act(async () => {
+      root.render(<UnpersistedHarness />);
+      await Promise.resolve();
+    });
+
+    expect(result?.pageLimit).toBe(250);
   });
 
   it('stays quiet (no loading) when the catalog refreshes after the first load', async () => {

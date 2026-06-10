@@ -33,7 +33,7 @@ import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNa
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
-import { BROWSE_PAGE_LIMIT_OPTIONS } from '@modules/browse/pagination';
+import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import {
   useBrowseColumns,
   toTableRows,
@@ -275,7 +275,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     data: [], // We'll populate this after we have catalog data
     keyExtractor,
     filterOptions: { kinds: [], namespaces: [], isNamespaceScoped: false },
-    pageSizeOptions: BROWSE_PAGE_LIMIT_OPTIONS,
+    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     enabled: !isNamespaceScoped,
   });
 
@@ -287,7 +287,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     data: [], // We'll populate this after we have catalog data
     keyExtractor,
     filterOptions: { kinds: [], namespaces: [], isNamespaceScoped: true },
-    pageSizeOptions: BROWSE_PAGE_LIMIT_OPTIONS,
+    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     enabled: isNamespaceScoped,
   });
 

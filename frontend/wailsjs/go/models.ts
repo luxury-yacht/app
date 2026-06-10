@@ -1318,6 +1318,7 @@ export namespace types {
 	    objPanelLogsApiTimestampFormat: string;
 	    objPanelLogsApiTimestampUseLocalTimeZone: boolean;
 	    gridTablePersistenceMode: string;
+	    defaultTablePageSize: number;
 	    defaultObjectPanelPosition: string;
 	    objectPanelDockedRightWidth: number;
 	    objectPanelDockedBottomHeight: number;
@@ -1360,6 +1361,7 @@ export namespace types {
 	        this.objPanelLogsApiTimestampFormat = source["objPanelLogsApiTimestampFormat"];
 	        this.objPanelLogsApiTimestampUseLocalTimeZone = source["objPanelLogsApiTimestampUseLocalTimeZone"];
 	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
+	        this.defaultTablePageSize = source["defaultTablePageSize"];
 	        this.defaultObjectPanelPosition = source["defaultObjectPanelPosition"];
 	        this.objectPanelDockedRightWidth = source["objectPanelDockedRightWidth"];
 	        this.objectPanelDockedBottomHeight = source["objectPanelDockedBottomHeight"];

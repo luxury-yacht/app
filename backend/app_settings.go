@@ -44,6 +44,7 @@ const (
 	appPreferenceObjPanelLogsTargetPerScopeLimit          = "objPanelLogsTargetPerScopeLimit"
 	appPreferenceObjPanelLogsTargetGlobalLimit            = "objPanelLogsTargetGlobalLimit"
 	appPreferenceGridTablePersistenceMode                 = "gridTablePersistenceMode"
+	appPreferenceDefaultTablePageSize                     = "defaultTablePageSize"
 	appPreferenceDefaultObjectPanelPosition               = "defaultObjectPanelPosition"
 	appPreferenceObjectPanelDockedRightWidth              = "objectPanelDockedRightWidth"
 	appPreferenceObjectPanelDockedBottomHeight            = "objectPanelDockedBottomHeight"
@@ -82,6 +83,7 @@ type settingsPreferences struct {
 	KubernetesAPI                 *settingsKubernetesAPI `json:"kubernetesAPI,omitempty"`
 	ObjPanelLogs                  *settingsObjPanelLogs  `json:"objPanelLogs,omitempty"`
 	GridTablePersistenceMode      string                 `json:"gridTablePersistenceMode"`
+	DefaultTablePageSize          int                    `json:"defaultTablePageSize"`
 	DefaultObjectPanelPosition    string                 `json:"defaultObjectPanelPosition"`
 	ObjectPanelDockedRightWidth   int                    `json:"objectPanelDockedRightWidth"`
 	ObjectPanelDockedBottomHeight int                    `json:"objectPanelDockedBottomHeight"`
@@ -181,6 +183,12 @@ const (
 	defaultPermissionSSRRFetchConcurrency  = config.PermissionSSRRFetchConcurrency
 	minPermissionSSRRFetchConcurrency      = 1
 	maxPermissionSSRRFetchConcurrency      = config.PermissionSSRRFetchConcurrency * 8
+	// Sanity bounds only — the selectable page-size values are owned by the
+	// frontend's shared TABLE_PAGE_SIZE_OPTIONS list (one source for the
+	// pagination footers and the Settings dropdown).
+	defaultTablePageSize                   = 50
+	minTablePageSize                       = 1
+	maxTablePageSize                       = 1000
 	defaultObjectPanelPosition             = "right"
 	defaultObjectPanelDockedRightWidth     = 600
 	defaultObjectPanelDockedBottomHeight   = 400
@@ -300,6 +308,7 @@ func defaultSettingsFile() *settingsFile {
 			},
 
 			GridTablePersistenceMode:      "shared",
+			DefaultTablePageSize:          defaultTablePageSize,
 			DefaultObjectPanelPosition:    defaultObjectPanelPosition,
 			ObjectPanelDockedRightWidth:   defaultObjectPanelDockedRightWidth,
 			ObjectPanelDockedBottomHeight: defaultObjectPanelDockedBottomHeight,
@@ -392,6 +401,11 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.DefaultObjectPanelPosition == "" {
 		settings.Preferences.DefaultObjectPanelPosition = defaultObjectPanelPosition
+	}
+	if settings.Preferences.DefaultTablePageSize <= 0 {
+		settings.Preferences.DefaultTablePageSize = defaultTablePageSize
+	} else {
+		settings.Preferences.DefaultTablePageSize = clampInt(settings.Preferences.DefaultTablePageSize, minTablePageSize, maxTablePageSize)
 	}
 	if settings.Preferences.ObjectPanelDockedRightWidth <= 0 {
 		settings.Preferences.ObjectPanelDockedRightWidth = defaultObjectPanelDockedRightWidth
@@ -663,6 +677,7 @@ func getDefaultAppSettings() *AppSettings {
 		ObjPanelLogsAPITimestampFormat:           defaultObjPanelLogsAPITimestampFormat,
 		ObjPanelLogsAPITimestampUseLocalTimeZone: false,
 		GridTablePersistenceMode:                 "shared",
+		DefaultTablePageSize:                     defaultTablePageSize,
 		DefaultObjectPanelPosition:               defaultObjectPanelPosition,
 		ObjectPanelDockedRightWidth:              defaultObjectPanelDockedRightWidth,
 		ObjectPanelDockedBottomHeight:            defaultObjectPanelDockedBottomHeight,
@@ -741,6 +756,7 @@ func (a *App) loadAppSettings() error {
 		ObjPanelLogsAPITimestampFormat:           logAPITimestampFormat,
 		ObjPanelLogsAPITimestampUseLocalTimeZone: logAPITimestampUseLocalTimeZone,
 		GridTablePersistenceMode:                 settings.Preferences.GridTablePersistenceMode,
+		DefaultTablePageSize:                     settings.Preferences.DefaultTablePageSize,
 		DefaultObjectPanelPosition:               settings.Preferences.DefaultObjectPanelPosition,
 		ObjectPanelDockedRightWidth:              settings.Preferences.ObjectPanelDockedRightWidth,
 		ObjectPanelDockedBottomHeight:            settings.Preferences.ObjectPanelDockedBottomHeight,
@@ -806,6 +822,7 @@ func (a *App) saveAppSettings() error {
 	}
 	settings.Preferences.ObjPanelLogs.UseLocalTimeZone = a.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
+	settings.Preferences.DefaultTablePageSize = a.appSettings.DefaultTablePageSize
 	settings.Preferences.DefaultObjectPanelPosition = a.appSettings.DefaultObjectPanelPosition
 	settings.Preferences.ObjectPanelDockedRightWidth = a.appSettings.ObjectPanelDockedRightWidth
 	settings.Preferences.ObjectPanelDockedBottomHeight = a.appSettings.ObjectPanelDockedBottomHeight
@@ -934,6 +951,7 @@ func buildAppSettingsSchema(settings *AppSettings) *AppSettingsSchema {
 		appPreferenceSchema(appPreferenceObjPanelLogsTargetPerScopeLimit, "integer", defaultObjPanelLogsTargetPerScopeLimit, settings.ObjPanelLogsTargetPerScopeLimit, intPtr(minObjPanelLogsTargetPerScopeLimit), intPtr(maxObjPanelLogsTargetPerScopeLimit), nil, "", true),
 		appPreferenceSchema(appPreferenceObjPanelLogsTargetGlobalLimit, "integer", defaultObjPanelLogsTargetGlobalLimit, settings.ObjPanelLogsTargetGlobalLimit, intPtr(minObjPanelLogsTargetGlobalLimit), intPtr(maxObjPanelLogsTargetGlobalLimit), nil, "", true),
 		appPreferenceSchema(appPreferenceGridTablePersistenceMode, "enum", "shared", settings.GridTablePersistenceMode, nil, nil, []string{"shared", "namespaced"}, "", false),
+		appPreferenceSchema(appPreferenceDefaultTablePageSize, "integer", defaultTablePageSize, settings.DefaultTablePageSize, intPtr(minTablePageSize), intPtr(maxTablePageSize), nil, "", false),
 		appPreferenceSchema(appPreferenceDefaultObjectPanelPosition, "enum", defaultObjectPanelPosition, settings.DefaultObjectPanelPosition, nil, nil, []string{"right", "bottom", "floating"}, "", false),
 		appPreferenceSchema(appPreferenceObjectPanelDockedRightWidth, "integer", defaultObjectPanelDockedRightWidth, settings.ObjectPanelDockedRightWidth, intPtr(minObjectPanelDockedRightWidth), intPtr(maxObjectPanelLayoutValue), nil, "", false),
 		appPreferenceSchema(appPreferenceObjectPanelDockedBottomHeight, "integer", defaultObjectPanelDockedBottomHeight, settings.ObjectPanelDockedBottomHeight, intPtr(minObjectPanelDockedBottomHeight), intPtr(maxObjectPanelLayoutValue), nil, "", false),
@@ -1135,6 +1153,12 @@ func applyAppPreferenceChange(settings *AppSettings, change AppPreferenceChange,
 			return fmt.Errorf("invalid grid table persistence mode: %s", mode)
 		}
 		settings.GridTablePersistenceMode = mode
+	case appPreferenceDefaultTablePageSize:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.DefaultTablePageSize = clampInt(value, minTablePageSize, maxTablePageSize)
 	case appPreferenceDefaultObjectPanelPosition:
 		position, err := stringPreferenceValue(change.Value)
 		if err != nil {
@@ -1280,6 +1304,7 @@ func appPreferenceKeys() []string {
 		appPreferenceObjPanelLogsTargetPerScopeLimit,
 		appPreferenceObjPanelLogsTargetGlobalLimit,
 		appPreferenceGridTablePersistenceMode,
+		appPreferenceDefaultTablePageSize,
 		appPreferenceDefaultObjectPanelPosition,
 		appPreferenceObjectPanelDockedRightWidth,
 		appPreferenceObjectPanelDockedBottomHeight,
@@ -1335,6 +1360,8 @@ func logPreferenceChange(logger *Logger, key string, value any) {
 		logger.Info(fmt.Sprintf("Object Panel Logs Tab API timestamp local timezone changed to: %v", value), logsources.Settings)
 	case appPreferenceGridTablePersistenceMode:
 		logger.Info(fmt.Sprintf("Grid table persistence mode changed to: %v", value), logsources.Settings)
+	case appPreferenceDefaultTablePageSize:
+		logger.Info(fmt.Sprintf("Default table page size changed to: %v", value), logsources.Settings)
 	case appPreferenceDefaultObjectPanelPosition:
 		logger.Info(fmt.Sprintf("Default object panel position changed to: %v", value), logsources.Settings)
 	default:
@@ -1440,6 +1467,8 @@ func preferenceValueForLog(settings *AppSettings, key string) any {
 		return settings.ObjPanelLogsTargetGlobalLimit
 	case appPreferenceGridTablePersistenceMode:
 		return settings.GridTablePersistenceMode
+	case appPreferenceDefaultTablePageSize:
+		return settings.DefaultTablePageSize
 	case appPreferenceDefaultObjectPanelPosition:
 		return settings.DefaultObjectPanelPosition
 	default:

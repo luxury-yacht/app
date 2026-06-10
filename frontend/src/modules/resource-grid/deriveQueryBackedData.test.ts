@@ -13,7 +13,10 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { deriveQueryBackedData } from './useQueryBackedResourceGridTable';
+import {
+  deriveQueryBackedData,
+  typedQueryPageLimitOrDefault,
+} from './useQueryBackedResourceGridTable';
 
 interface Row {
   name: string;
@@ -93,5 +96,17 @@ describe('deriveQueryBackedData', () => {
     });
     expect(r.data).toEqual([]);
     expect(r.loading).toBe(false);
+  });
+});
+
+describe('typedQueryPageLimitOrDefault', () => {
+  it('keeps a persisted page size that is a real option', () => {
+    expect(typedQueryPageLimitOrDefault(250, 100)).toBe(250);
+  });
+
+  it('falls back to the app default for missing or off-list page sizes', () => {
+    expect(typedQueryPageLimitOrDefault(null, 100)).toBe(100);
+    expect(typedQueryPageLimitOrDefault(undefined, 100)).toBe(100);
+    expect(typedQueryPageLimitOrDefault(333, 100)).toBe(100);
   });
 });

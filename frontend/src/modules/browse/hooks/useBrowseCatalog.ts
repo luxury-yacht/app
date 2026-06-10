@@ -27,11 +27,11 @@ import {
   type BrowseFilters,
 } from './browseCatalogData';
 import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
+import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 import {
-  BROWSE_PAGE_LIMIT_OPTIONS,
-  DEFAULT_BROWSE_PAGE_LIMIT,
-  type BrowsePageLimit,
-} from '../pagination';
+  TABLE_PAGE_SIZE_OPTIONS,
+  type TablePageSize,
+} from '@shared/components/tables/pageSizeOptions';
 export type { BrowseFilterOptions, BrowseFilters } from './browseCatalogData';
 
 const BROWSE_SEARCH_DEBOUNCE_MS = 250;
@@ -47,14 +47,11 @@ const browseCatalogSortDescriptor = (
   return { sortField: key, sortDirection: direction };
 };
 
-const normalizeInitialPageLimit = (value: number): number => {
+const normalizeInitialPageLimit = (value: number, fallback: TablePageSize): number => {
   if (!Number.isFinite(value)) {
-    return DEFAULT_BROWSE_PAGE_LIMIT;
+    return fallback;
   }
-  return Math.max(
-    1,
-    Math.min(BROWSE_PAGE_LIMIT_OPTIONS[BROWSE_PAGE_LIMIT_OPTIONS.length - 1], value)
-  );
+  return Math.max(1, Math.min(TABLE_PAGE_SIZE_OPTIONS[TABLE_PAGE_SIZE_OPTIONS.length - 1], value));
 };
 
 const isRenderableCatalogPayload = (payload: CatalogSnapshotPayload): boolean =>
@@ -86,7 +83,7 @@ export interface UseBrowseCatalogOptions {
    */
   pageLimit?: number;
   /** Persists accepted page-size changes through the owning table state. */
-  onPageLimitChange?: (value: BrowsePageLimit) => void;
+  onPageLimitChange?: (value: TablePageSize) => void;
   /** Diagnostic label for logging */
   diagnosticLabel: string;
 }
@@ -95,8 +92,8 @@ export interface UseBrowseCatalogOptions {
 export interface BrowseCatalogPagination {
   pageIndex: number;
   pageLimit: number;
-  pageLimitOptions: readonly BrowsePageLimit[];
-  setPageLimit: (value: BrowsePageLimit) => void;
+  pageLimitOptions: readonly TablePageSize[];
+  setPageLimit: (value: TablePageSize) => void;
   totalCount: number;
   totalIsExact: boolean;
   previousToken: string | null;
@@ -149,9 +146,9 @@ export interface UseBrowseCatalogResult {
   /** Current backend cursor page size */
   pageLimit: number;
   /** Supported backend cursor page sizes */
-  pageLimitOptions: readonly BrowsePageLimit[];
+  pageLimitOptions: readonly TablePageSize[];
   /** Updates the backend cursor page size */
-  setPageLimit: (value: BrowsePageLimit) => void;
+  setPageLimit: (value: TablePageSize) => void;
   /**
    * The assembled pagination state for the catalog footer and GridTable spread
    * (`{...pagination}`) — built once here so the three catalog-backed views
@@ -206,9 +203,12 @@ export function useBrowseCatalog({
   // Page-navigation failures; the scoped domain carries baseline/stream errors.
   const [pageError, setPageError] = useState<string | null>(null);
   // Controlled page size: normalize the owner-provided value; no local mirror.
+  // Views without a persisted page size fall back to the app-wide Default Page
+  // Size preference (Settings ▸ Display ▸ Tables).
+  const defaultTablePageSize = useDefaultTablePageSize();
   const pageLimit = useMemo(
-    () => normalizeInitialPageLimit(pageLimitProp ?? DEFAULT_BROWSE_PAGE_LIMIT),
-    [pageLimitProp]
+    () => normalizeInitialPageLimit(pageLimitProp ?? defaultTablePageSize, defaultTablePageSize),
+    [defaultTablePageSize, pageLimitProp]
   );
   const [debouncedSearch, setDebouncedSearch] = useState(filters.search ?? '');
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
@@ -241,7 +241,7 @@ export function useBrowseCatalog({
   );
 
   const setPageLimit = useCallback(
-    (value: BrowsePageLimit) => {
+    (value: TablePageSize) => {
       onPageLimitChange?.(value);
     },
     [onPageLimitChange]
@@ -632,7 +632,7 @@ export function useBrowseCatalog({
     () => ({
       pageIndex,
       pageLimit,
-      pageLimitOptions: BROWSE_PAGE_LIMIT_OPTIONS,
+      pageLimitOptions: TABLE_PAGE_SIZE_OPTIONS,
       setPageLimit,
       totalCount,
       totalIsExact,
@@ -683,7 +683,7 @@ export function useBrowseCatalog({
     unfilteredTotal,
     totalIsExact,
     pageLimit,
-    pageLimitOptions: BROWSE_PAGE_LIMIT_OPTIONS,
+    pageLimitOptions: TABLE_PAGE_SIZE_OPTIONS,
     setPageLimit,
     pagination,
     refresh: refreshCurrentQuery,

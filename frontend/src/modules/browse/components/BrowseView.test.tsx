@@ -79,6 +79,7 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
 
 vi.mock('@/core/settings/appPreferences', () => ({
   getAutoRefreshEnabled: () => true,
+  getDefaultTablePageSize: () => 50,
 }));
 
 vi.mock('@core/contexts/ViewStateContext', () => ({

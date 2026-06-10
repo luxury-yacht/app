@@ -49,6 +49,7 @@ type AppSettings struct {
 	ObjPanelLogsAPITimestampFormat           string   `json:"objPanelLogsApiTimestampFormat"`           // Day.js format for the Kubernetes API timestamp shown in container logs
 	ObjPanelLogsAPITimestampUseLocalTimeZone bool     `json:"objPanelLogsApiTimestampUseLocalTimeZone"` // Render the Kubernetes API timestamp in the user's local timezone instead of UTC
 	GridTablePersistenceMode                 string   `json:"gridTablePersistenceMode"`                 // "shared" or "namespaced"
+	DefaultTablePageSize                     int      `json:"defaultTablePageSize"`                     // Default rows per page for tables without a persisted page size
 	DefaultObjectPanelPosition               string   `json:"defaultObjectPanelPosition"`               // "right", "bottom", or "floating"
 	ObjectPanelDockedRightWidth              int      `json:"objectPanelDockedRightWidth"`              // Default width when docked right (px)
 	ObjectPanelDockedBottomHeight            int      `json:"objectPanelDockedBottomHeight"`            // Default height when docked bottom (px)

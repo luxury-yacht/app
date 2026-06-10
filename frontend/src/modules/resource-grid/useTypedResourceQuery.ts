@@ -5,6 +5,7 @@ import type {
   GridTableFilterOptions,
 } from '@shared/components/tables/GridTable';
 import type { SortConfig } from '@hooks/useTableSort';
+import { DEFAULT_TABLE_PAGE_SIZE } from '@shared/components/tables/pageSizeOptions';
 import type { RefreshDomain, ResourceQueryDynamicRef } from '@/core/refresh/types';
 import { walkQueryCursorPages } from './cursorPageWalk';
 import {
@@ -55,14 +56,11 @@ export interface UseTypedResourceQueryResult<TRow, TPayload = unknown> {
   fetchAllRows: () => Promise<TRow[]>;
 }
 
-const DEFAULT_PAGE_LIMIT = 50;
 // Each export page requests the backend's max page size to minimise round-trips.
 const EXPORT_PAGE_LIMIT = 1000;
 // Matches Browse: a full backend page build per keystroke is pure waste (the
 // out-of-order identity guard already prevents wrong rows).
 const SEARCH_DEBOUNCE_MS = 250;
-export const TYPED_QUERY_PAGE_LIMIT_OPTIONS = [25, 50, 100, 250, 500, 1000] as const;
-export type TypedQueryPageLimit = (typeof TYPED_QUERY_PAGE_LIMIT_OPTIONS)[number];
 
 export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>({
   enabled,
@@ -72,7 +70,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   baseScope,
   filters,
   sortConfig,
-  pageLimit = DEFAULT_PAGE_LIMIT,
+  pageLimit = DEFAULT_TABLE_PAGE_SIZE,
   predicates,
   liveDataVersion,
   selectRows,
@@ -178,7 +176,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           includeMetadata: false,
         },
         sortConfig: null,
-        pageLimit: DEFAULT_PAGE_LIMIT,
+        pageLimit: DEFAULT_TABLE_PAGE_SIZE,
         predicates,
       }),
     [baseScope, clusterId, domain, enabled, predicates]

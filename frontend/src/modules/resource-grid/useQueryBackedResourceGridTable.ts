@@ -5,6 +5,7 @@ import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
 import type { SortConfig } from '@/hooks/useTableSort';
+import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import type { UseGridTablePersistenceResult } from '@shared/components/tables/persistence/useGridTablePersistence';
@@ -21,12 +22,15 @@ import QueryPaginationControls from './QueryPaginationControls';
 import { backendQuerySource } from './backendQuerySource';
 import type { ResourceInventorySourceState } from './useResourceInventoryTable';
 import {
-  TYPED_QUERY_PAGE_LIMIT_OPTIONS,
   useTypedResourceQuery,
-  type TypedQueryPageLimit,
   type TypedQueryPayload,
   type UseTypedResourceQueryResult,
 } from './useTypedResourceQuery';
+import {
+  TABLE_PAGE_SIZE_OPTIONS,
+  isTablePageSize,
+  type TablePageSize,
+} from '@shared/components/tables/pageSizeOptions';
 import {
   mergeQueryBackedFilterOptions,
   queryBackedPaginationProps,
@@ -34,18 +38,18 @@ import {
 } from './queryBackedTableState';
 import type { QueryBackedTableState } from './queryBackedTableState';
 
-const DEFAULT_TYPED_QUERY_PAGE_LIMIT: TypedQueryPageLimit = 50;
-
 // The namespace prop is the raw name for a single namespace but the `namespace:all` sentinel for
 // all-namespaces; the backend scope key is always `namespace:<value>` (see pods.go collectPods,
 // which splits the scope on ':' and rejects a bare name). Normalize before building any scope.
 const namespaceScopeKey = (namespace: string): string =>
   namespace.startsWith('namespace:') ? namespace : `namespace:${namespace}`;
 
-const typedQueryPageLimitOrDefault = (value: number | null | undefined): TypedQueryPageLimit =>
-  TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)
-    ? (value as TypedQueryPageLimit)
-    : DEFAULT_TYPED_QUERY_PAGE_LIMIT;
+// A view's persisted page size wins when it is a real option; otherwise the
+// fallback applies (the app-wide Default Page Size preference).
+export const typedQueryPageLimitOrDefault = (
+  value: number | null | undefined,
+  fallback: TablePageSize
+): TablePageSize => (isTablePageSize(value) ? value : fallback);
 
 // The live-data identity the typed query watches to decide when to refetch. It
 // uses ONLY the data identity (version + checksum/etag) — deliberately NOT a
@@ -196,7 +200,8 @@ function useTypedQueryLifecycle<
 }): TypedQueryLifecycle<TPayload, TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
-  const pageLimit = typedQueryPageLimitOrDefault(persistence.pageSize);
+  const defaultPageSize = useDefaultTablePageSize();
+  const pageLimit = typedQueryPageLimitOrDefault(persistence.pageSize, defaultPageSize);
   useScopedRefreshDomainLifecycle({
     domain,
     scope: liveScope || null,
@@ -309,7 +314,7 @@ function useQueryBackedGridResult<
         pageIndex: query.pageIndex,
         pageSize: query.pageSize,
         visibleItemCount: data.length,
-        pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+        pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
         totalCount: query.totalCount,
         totalIsExact: query.totalIsExact,
         hasPrevious: query.hasPrevious,
@@ -318,7 +323,7 @@ function useQueryBackedGridResult<
         onPrevious: query.loadPrevious,
         onNext: query.loadMore,
         onPageSizeChange: (value: number) => {
-          if (TYPED_QUERY_PAGE_LIMIT_OPTIONS.includes(value as TypedQueryPageLimit)) {
+          if (isTablePageSize(value)) {
             persistence.setPageSize(value);
           }
         },
@@ -409,7 +414,7 @@ export function useQueryBackedNamespaceResourceGridTable<
       ...(tableParams.filterOptions ?? {}),
       isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
     },
-    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
   });
   const liveScope = useMemo(
     () =>
@@ -437,7 +442,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     keyExtractor: resolvedKeyExtractor,
     namespace,
     defaultSort,
-    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     persistenceOverride: persistence,
     tableMode: lifecycle.tableMode,
     data: lifecycle.data,
@@ -510,7 +515,7 @@ export function useQueryBackedClusterResourceGridTable<
     data: tableParams.persistenceData ?? [],
     keyExtractor: resolvedKeyExtractor,
     filterOptions: { ...(tableParams.filterOptions ?? {}), isNamespaceScoped: false },
-    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
   });
   const liveScope = useMemo(
     () => (clusterId ? buildClusterScope(clusterId, baseScope) : ''),
@@ -534,7 +539,7 @@ export function useQueryBackedClusterResourceGridTable<
     keyExtractor: resolvedKeyExtractor,
     defaultSortKey,
     defaultSortDirection,
-    pageSizeOptions: TYPED_QUERY_PAGE_LIMIT_OPTIONS,
+    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     persistenceOverride: persistence,
     tableMode: lifecycle.tableMode,
     data: lifecycle.data,

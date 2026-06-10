@@ -24,7 +24,7 @@ import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGri
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import CatalogPaginationFooter from '@modules/browse/components/CatalogPaginationFooter';
 import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
-import { BROWSE_PAGE_LIMIT_OPTIONS } from '@modules/browse/pagination';
+import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import {
   customCatalogCRDReference,
   customCatalogObjectReference,
@@ -194,7 +194,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       defaultSort: { key: 'name', direction: 'asc' },
       data: [],
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      pageSizeOptions: BROWSE_PAGE_LIMIT_OPTIONS,
+      pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     });
     const persistence = persistenceState.persistence;
 

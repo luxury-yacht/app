@@ -966,3 +966,45 @@ func TestAppSetAccentColorValidation(t *testing.T) {
 	require.NoError(t, app.SetAccentColor("dark", ""))
 	require.Equal(t, "", app.appSettings.AccentColorDark)
 }
+
+func TestAppSettingsDefaultTablePageSize(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	// Defaults: a fresh settings file carries the backend-owned default.
+	configPath, err := app.getSettingsFilePath()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(configPath, []byte(`{"schemaVersion":0}`), 0o644))
+	settings, err := app.loadSettingsFile()
+	require.NoError(t, err)
+	require.Equal(t, defaultTablePageSize, settings.Preferences.DefaultTablePageSize)
+
+	// Schema: integer preference with the default and sanity bounds.
+	schema, err := app.GetAppSettingsSchema()
+	require.NoError(t, err)
+	byKey := make(map[string]AppPreferenceSchema, len(schema.Preferences))
+	for _, pref := range schema.Preferences {
+		byKey[pref.Key] = pref
+	}
+	require.Equal(t, "integer", byKey[appPreferenceDefaultTablePageSize].Type)
+	require.Equal(t, defaultTablePageSize, byKey[appPreferenceDefaultTablePageSize].DefaultValue)
+	require.Equal(t, minTablePageSize, *byKey[appPreferenceDefaultTablePageSize].Min)
+	require.Equal(t, maxTablePageSize, *byKey[appPreferenceDefaultTablePageSize].Max)
+
+	// Updates persist, clamp to the sanity bounds, and survive a reload.
+	response, err := app.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
+		{Key: appPreferenceDefaultTablePageSize, Value: 250},
+	}})
+	require.NoError(t, err)
+	require.Equal(t, 250, response.Settings.DefaultTablePageSize)
+
+	response, err = app.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
+		{Key: appPreferenceDefaultTablePageSize, Value: 999999},
+	}})
+	require.NoError(t, err)
+	require.Equal(t, maxTablePageSize, response.Settings.DefaultTablePageSize)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, maxTablePageSize, app.appSettings.DefaultTablePageSize)
+}

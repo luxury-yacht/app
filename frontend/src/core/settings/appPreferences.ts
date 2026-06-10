@@ -22,6 +22,12 @@ import {
 } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
 import {
+  DEFAULT_TABLE_PAGE_SIZE,
+  TABLE_PAGE_SIZE_OPTIONS,
+  normalizeTablePageSize,
+  type TablePageSize,
+} from '@shared/components/tables/pageSizeOptions';
+import {
   APPEARANCE_BOOTSTRAP_STORAGE_KEY,
   saveAppearanceBootstrapToLocalStorage,
 } from '@/utils/appearanceBootstrap';
@@ -52,6 +58,7 @@ export interface AppPreferences {
   objPanelLogsTargetPerScopeLimit: number;
   objPanelLogsTargetGlobalLimit: number;
   gridTablePersistenceMode: GridTablePersistenceMode;
+  defaultTablePageSize: TablePageSize;
   defaultObjectPanelPosition: ObjectPanelPosition;
   objectPanelDockedRightWidth: number;
   objectPanelDockedBottomHeight: number;
@@ -142,6 +149,7 @@ interface AppSettingsPayload {
   objPanelLogsTargetPerScopeLimit?: number;
   objPanelLogsTargetGlobalLimit?: number;
   gridTablePersistenceMode?: string;
+  defaultTablePageSize?: number;
   defaultObjectPanelPosition?: string;
   objectPanelDockedRightWidth?: number;
   objectPanelDockedBottomHeight?: number;
@@ -228,6 +236,7 @@ const DEFAULT_PREFERENCES: AppPreferences = {
 
   // Used only before backend schema metadata is available.
   gridTablePersistenceMode: 'shared',
+  defaultTablePageSize: DEFAULT_TABLE_PAGE_SIZE,
   defaultObjectPanelPosition: 'right',
   objectPanelDockedRightWidth: 600,
   objectPanelDockedBottomHeight: 400,
@@ -338,6 +347,11 @@ const FALLBACK_PREFERENCE_METADATA: {
   ),
   gridTablePersistenceMode: createPreferenceMetadata('gridTablePersistenceMode', 'enum', {
     enumOptions: ['shared', 'namespaced'],
+    runtimeSideEffect: false,
+  }),
+  defaultTablePageSize: createPreferenceMetadata('defaultTablePageSize', 'integer', {
+    min: 1,
+    max: TABLE_PAGE_SIZE_OPTIONS[TABLE_PAGE_SIZE_OPTIONS.length - 1],
     runtimeSideEffect: false,
   }),
   defaultObjectPanelPosition: createPreferenceMetadata('defaultObjectPanelPosition', 'enum', {
@@ -685,6 +699,9 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   if (previous.gridTablePersistenceMode !== next.gridTablePersistenceMode) {
     eventBus.emit('gridtable:persistence-mode', next.gridTablePersistenceMode);
   }
+  if (previous.defaultTablePageSize !== next.defaultTablePageSize) {
+    eventBus.emit('settings:default-table-page-size', next.defaultTablePageSize);
+  }
   // Emit per-mode palette changes separately for light and dark.
   if (
     previous.paletteHueLight !== next.paletteHueLight ||
@@ -958,6 +975,7 @@ export const hydrateAppPreferences = async (options?: {
       backendSettings?.objPanelLogsTargetGlobalLimit
     ),
     gridTablePersistenceMode: normalizeGridTableMode(backendSettings?.gridTablePersistenceMode),
+    defaultTablePageSize: normalizeTablePageSize(backendSettings?.defaultTablePageSize),
     defaultObjectPanelPosition: normalizeObjectPanelPosition(
       backendSettings?.defaultObjectPanelPosition
     ),
@@ -1104,6 +1122,10 @@ export const getGridTablePersistenceMode = (): GridTablePersistenceMode => {
 
 export const getDefaultObjectPanelPosition = (): ObjectPanelPosition => {
   return preferenceCache.defaultObjectPanelPosition;
+};
+
+export const getDefaultTablePageSize = (): TablePageSize => {
+  return normalizeTablePageSize(preferenceCache.defaultTablePageSize);
 };
 
 export interface ObjectPanelLayoutDefaults {
@@ -1305,6 +1327,14 @@ export const setGridTablePersistenceMode = (mode: GridTablePersistenceMode): voi
   commitPreferenceMutation(
     'Failed to persist grid table persistence mode:',
     singlePreferenceMutation('gridTablePersistenceMode', normalized)
+  );
+};
+
+export const setDefaultTablePageSize = (size: number): void => {
+  const normalized = normalizeTablePageSize(size);
+  commitPreferenceMutation(
+    'Failed to persist default table page size:',
+    singlePreferenceMutation('defaultTablePageSize', normalized)
   );
 };
 

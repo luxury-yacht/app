@@ -64,7 +64,6 @@ vi.mock('@/core/data-access', () => ({
 }));
 
 vi.mock('./useTypedResourceQuery', () => ({
-  TYPED_QUERY_PAGE_LIMIT_OPTIONS: [25, 50, 100, 250, 500, 1000],
   useTypedResourceQuery: (params: unknown) => useTypedResourceQueryMock(params),
 }));
 
