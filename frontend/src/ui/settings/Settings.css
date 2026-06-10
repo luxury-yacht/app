@@ -80,6 +80,18 @@
   align-items: flex-start;
 }
 
+/* The Default Page Size dropdown matches the pagination footers' page-size
+   dropdown width instead of the shared trigger's 150px floor. */
+.settings-page-size-dropdown.dropdown {
+  width: var(--page-size-dropdown-width);
+  min-width: var(--page-size-dropdown-width);
+}
+
+.settings-page-size-dropdown .dropdown-trigger {
+  width: 100%;
+  min-width: 0;
+}
+
 /* Inline checkbox label inside a row control */
 .settings-checkbox-label {
   display: inline-flex;

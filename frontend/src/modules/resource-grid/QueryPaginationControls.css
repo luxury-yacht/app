@@ -25,8 +25,8 @@
 }
 
 .query-pagination-page-size .dropdown {
-  width: 4.75rem;
-  min-width: 4.75rem;
+  width: var(--page-size-dropdown-width);
+  min-width: var(--page-size-dropdown-width);
 }
 
 .query-pagination-page-size .dropdown-trigger {

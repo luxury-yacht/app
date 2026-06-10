@@ -15,4 +15,7 @@
 
   /* Component-specific spacing */
   --dockable-panel-floating-resize-zone: 8px;
+  /* Page-size dropdowns (pagination footers and Settings ▸ Display ▸ Tables)
+     share this width so the same option list renders the same everywhere. */
+  --page-size-dropdown-width: 4.75rem;
 }
