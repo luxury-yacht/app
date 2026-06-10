@@ -180,6 +180,53 @@ describe('useBrowseCatalog', () => {
     container.remove();
   });
 
+  it('stays quiet (no loading) when the catalog refreshes after the first load', async () => {
+    const baseScope = 'cluster-1|limit=2&namespace=default';
+    const metadataScope = 'cluster-1|limit=1&namespace=default';
+    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const readyState = {
+      status: 'ready',
+      data: makePayload({ items: [first], total: 1, batchSize: 1 }),
+      scope: baseScope,
+    };
+    const metadataState = {
+      status: 'ready',
+      data: makePayload({ items: [], total: 1, batchSize: 0 }),
+      scope: metadataScope,
+    };
+    let scopeState = readyState;
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === baseScope) {
+        return scopeState;
+      }
+      if (scope === metadataScope) {
+        return metadataState;
+      }
+      return { status: 'idle', data: null, scope };
+    });
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
+    expect(result?.hasLoadedOnce).toBe(true);
+    expect(result?.loading).toBe(false);
+
+    // A refresh in flight after the first load (filter change, manual refresh)
+    // must stay visually silent: the rows stay up and no overlay/spinner shows.
+    scopeState = { ...readyState, status: 'loading' };
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
+    expect(result?.loading).toBe(false);
+  });
+
   it('replaces the current row window with the next cursor page', async () => {
     const baseScope = 'cluster-1|limit=2&namespace=default';
     const metadataScope = 'cluster-1|limit=1&namespace=default';

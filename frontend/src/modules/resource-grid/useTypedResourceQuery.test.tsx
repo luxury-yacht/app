@@ -202,7 +202,7 @@ describe('useTypedResourceQuery', () => {
     expect(result?.isRequestingMore).toBe(false);
   });
 
-  it('flags user-initiated refetches (sort/filter) but not background live refetches', async () => {
+  it('keeps the applied rows and loaded state during user filter refetches (quiet refresh)', async () => {
     let resolveFetch: ((value: unknown) => void) | undefined;
     requestRefreshDomainStateMock.mockImplementation(
       () =>
@@ -211,10 +211,7 @@ describe('useTypedResourceQuery', () => {
         })
     );
 
-    const Probe: React.FC<{ kinds: string[]; liveDataVersion: string }> = ({
-      kinds,
-      liveDataVersion,
-    }) => {
+    const Probe: React.FC<{ kinds: string[] }> = ({ kinds }) => {
       result = useTypedResourceQuery<TestPayload, TestRow>({
         enabled: true,
         clusterId: 'cluster-a',
@@ -222,44 +219,50 @@ describe('useTypedResourceQuery', () => {
         label: 'All Namespaces Pods',
         filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, kinds },
         sortConfig,
-        liveDataVersion,
+        liveDataVersion: 'v1',
         selectRows,
       });
       return null;
     };
-    const settle = async () => {
+    const settle = async (rows: TestRow[]) => {
       await act(async () => {
-        resolveFetch?.({ status: 'executed', data: { status: 'ready', data: { rows: [] } } });
+        resolveFetch?.({ status: 'executed', data: { status: 'ready', data: { rows } } });
         await Promise.resolve();
         await Promise.resolve();
       });
     };
 
-    // Mount: the initial fetch counts as a reset; it clears once settled.
     await act(async () => {
-      root.render(<Probe kinds={[]} liveDataVersion="v1" />);
+      root.render(<Probe kinds={[]} />);
       await Promise.resolve();
     });
-    await settle();
-    expect(result?.resetPending).toBe(false);
+    await settle([{ name: 'pod-a' }]);
+    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
+    expect(result?.loaded).toBe(true);
 
-    // A user filter change is a reset: pending until the fetch settles.
+    // A filter change refetches QUIETLY: the applied rows and loaded state
+    // survive until the new page lands, so the table never dims or swaps to a
+    // spinner mid-filtering.
     await act(async () => {
-      root.render(<Probe kinds={['Pod']} liveDataVersion="v1" />);
+      root.render(<Probe kinds={['Pod']} />);
       await Promise.resolve();
     });
-    expect(result?.resetPending).toBe(true);
-    await settle();
-    expect(result?.resetPending).toBe(false);
+    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
+    expect(result?.loaded).toBe(true);
 
-    // A background live invalidation refetches WITHOUT flagging a reset.
+    // A no-match result settles to empty rows but STAYS loaded — the next
+    // keystroke's refetch must not re-enter the initial-loading state (that
+    // unmounts the filter input and steals focus).
+    await settle([]);
+    expect(result?.rows).toEqual([]);
+    expect(result?.loaded).toBe(true);
+
     await act(async () => {
-      root.render(<Probe kinds={['Pod']} liveDataVersion="v2" />);
+      root.render(<Probe kinds={['Pod', 'Job']} />);
       await Promise.resolve();
     });
-    expect(result?.loading).toBe(true);
-    expect(result?.resetPending).toBe(false);
-    await settle();
+    expect(result?.loaded).toBe(true);
+    await settle([]);
   });
 
   it('debounces search changes instead of querying on every keystroke', async () => {

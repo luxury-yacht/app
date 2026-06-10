@@ -25,8 +25,6 @@ import {
 } from '@shared/utils/objectIdentity';
 import type { ClusterCRDSnapshotPayload } from '@/core/refresh/types';
 
-const CLUSTER_CRD_KIND_OPTIONS = ['CustomResourceDefinition'];
-
 // Define the data structure for Custom Resource Definitions
 interface CRDsData {
   kind: string;
@@ -190,8 +188,6 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(({ error }) => {
     viewId: 'cluster-crds',
     columns,
     keyExtractor,
-    availableKinds: CLUSTER_CRD_KIND_OPTIONS,
-    showKindDropdown: true,
     filterOptions: { isNamespaceScoped: false },
   });
 

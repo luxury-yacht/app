@@ -217,9 +217,12 @@ refetching — never from mutating displayed rows in place. The contract:
   tolerate metrics-revision advances (`typedTableQueryCursor.matches`). A cursor
   whose anchor context disappears reports `cursorInvalid` and the table resets
   to page 1.
-- User-initiated query changes (sort/filter/page size) show the refresh overlay
-  until the new page lands (`resetPending`); background liveness refetches stay
-  visually silent so rows never flicker.
+- Every query refetch is visually silent — user-initiated (sort/filter/page
+  size) and background liveness alike. The table keeps the last applied rows
+  (or the settled "no matches" state) until the new page lands; `loading` is
+  reported only before the first applied result for a scope, so filtering never
+  dims the view, swaps in a spinner, or unmounts the filter input (which would
+  steal focus while typing).
 
 ## High-Risk Typed Producer Trace
 

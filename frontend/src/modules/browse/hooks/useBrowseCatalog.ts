@@ -564,11 +564,15 @@ export function useBrowseCatalog({
     }
   }, [filterOptions.namespaces, plan.isNamespaceScoped]);
 
-  // Compute loading state
+  // Compute loading state. Loading is reported ONLY before the first applied
+  // result for the current scope (hasLoadedOnce resets on scope identity
+  // changes, not on filter changes). Later refreshes — filter-driven, manual,
+  // or background — stay visually silent: the table keeps the current rows (or
+  // the settled "no matches" state) until the new result lands, so filtering
+  // never dims the view, swaps in a spinner, or unmounts the filter input.
   const loading =
-    domain.status === 'loading' ||
-    domain.status === 'initialising' ||
-    (items.length === 0 && !hasLoadedOnce);
+    !hasLoadedOnce &&
+    (domain.status === 'loading' || domain.status === 'initialising' || items.length === 0);
   const passiveLoadingState = applyPassiveLoadingPolicy({
     loading,
     hasLoaded: hasLoadedOnce,

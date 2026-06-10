@@ -154,14 +154,14 @@ describe('ClusterViewCRDs', () => {
     expect(props.columnWidths).toBeFalsy();
   });
 
-  it('uses explicit kind metadata instead of deriving kinds from rows', async () => {
+  it('does not offer a kind dropdown (every row is a CustomResourceDefinition)', async () => {
     await act(async () => {
       root.render(<ClusterViewCRDs />);
       await Promise.resolve();
     });
 
     const props = gridTablePropsRef.current;
-    expect(props.filters?.options?.kinds).toEqual(['CustomResourceDefinition']);
+    expect(props.filters?.options?.showKindDropdown).toBeFalsy();
   });
 
   // Version column rendering. The Version column shows the storage

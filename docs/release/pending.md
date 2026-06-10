@@ -33,6 +33,9 @@
   value is ignored.
 - Browse's default page size changed from 1000 to 50 rows. Large catalogs open much faster;
   the page-size selector still offers up to 1000 per page.
+- The Cluster CRDs view no longer shows a Kind filter dropdown — every row there is a
+  CustomResourceDefinition, so the dropdown had exactly one option. Search and the other
+  filters are unchanged.
 
 ### Fixed
 
@@ -40,3 +43,9 @@
   you re-visit a view you've already opened. Every table now shows the rows it
   had last time for that cluster/namespace immediately on return and refreshes
   in the background; the loading spinner appears only on the first-ever load.
+
+- Filtering is now quiet and consistent in every view: changing filters or
+  typing in the filter box no longer dims the table or shows a loading spinner
+  while the refreshed rows load — the current rows stay up and swap in place.
+  This also fixes the filter input losing keyboard focus while typing when the
+  filter text had no matches.

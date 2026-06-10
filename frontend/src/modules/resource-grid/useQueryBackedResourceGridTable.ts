@@ -70,40 +70,34 @@ export const liveDomainVersion = (state: {
 // Derives the controller source state (data/loading/loaded/error) for a query-backed
 // resource grid. Sourced ONLY from the typed query — never the live snapshot, which is the
 // wrong representation for a query-backed view (unsorted client-side, unpaginated). While the
-// query is gating or in flight, it reports empty+loading so the controller bridges with the
-// cached page (correctly sorted) or shows a first-load spinner.
+// query is gating or before its first page applies, it reports empty+loading so the controller
+// bridges with the cached page (correctly sorted) or shows a first-load spinner.
+//
+// `loading` is true ONLY for that initial gap. Every later refetch — filter, sort, page size,
+// manual, or background liveness — is visually silent: the table keeps the last applied rows
+// (or the settled "no matches" state, which keeps the filter input mounted and focused) until
+// the new page lands.
 export function deriveQueryBackedData<TRow>({
   clusterId,
   queryEnabled,
   queryRows,
-  queryLoading,
   queryLoaded,
   queryError,
-  queryResetPending = false,
 }: {
   clusterId?: string | null;
   queryEnabled: boolean;
   queryRows: TRow[];
-  queryLoading: boolean;
   queryLoaded: boolean;
   queryError: string | null;
-  /**
-   * A USER-initiated query change (sort/filters/page size) is in flight. Unlike
-   * background live refetches — which stay silent so rows never flicker — this
-   * keeps `loading` true with rows visible so the controller shows its refresh
-   * overlay until the new page lands.
-   */
-  queryResetPending?: boolean;
 }): { data: TRow[]; loading: boolean; loaded: boolean; error: string | null } {
   if (!queryEnabled) {
     // Gating (awaiting cluster/persistence/live-domain readiness): hold loading so the
     // controller replays the cached page or shows a spinner — never the live snapshot.
     return { data: [], loading: Boolean(clusterId), loaded: false, error: null };
   }
-  const queryInitialLoading = queryRows.length === 0 && !queryLoaded && !queryError;
   return {
     data: queryRows,
-    loading: (queryRows.length === 0 && (queryLoading || queryInitialLoading)) || queryResetPending,
+    loading: queryRows.length === 0 && !queryLoaded && !queryError,
     loaded: queryLoaded,
     error: queryError,
   };
@@ -258,10 +252,8 @@ function useTypedQueryLifecycle<
     clusterId,
     queryEnabled,
     queryRows: query.rows,
-    queryLoading: query.loading,
     queryLoaded: query.loaded,
     queryError: query.error,
-    queryResetPending: query.resetPending,
   });
 
   return {

@@ -1,7 +1,14 @@
-- Select text in light mode sucks
-- cmd+c does not work in yaml editor
+- YAML editor
+  - Fix text selection colors
+    - Make them consistent whether read or edit mode
+    - Make sure they are readable when selected
+  - cmd+c does not work in yaml editor
+- CRDs does not need Kinds dropdown
+- Add default page size to Settings -> Display -> Tables
+  - Uses same values from hardcoded list for tables
+  - Abstract this list to a shared location
 - Look into reconnect errors
-- Filters lose focus
+- Better icon for copy/export mode
 - Missing permissions in Workloads Pods tab
 - Missing permissions in Object Details actions menu for pods
 - Ingress/service/gateway hostnames should be clickable links

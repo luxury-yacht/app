@@ -125,6 +125,15 @@ The wrapper hooks (`useQueryBackedClusterResourceGridTable` /
 favModal }`. Read rows/loading/error from `source` — there are no separate
 wrapper-level lifecycle fields.
 
+**Quiet-refresh contract:** a server-backed source reports `loading: true` only
+before its first applied result for the current scope (cluster/namespace/base
+scope — the points where its rows reset). Filter, sort, page-size, manual, and
+background refetches must NOT raise `loading`: the table keeps the last applied
+rows (or the settled "no matches" state) until the new result lands. Raising
+`loading` mid-session dims the table (`refreshing`) or, with zero rows, swaps
+the whole surface — filter bar included — for the loading boundary, which
+unmounts the filter input and steals focus while the user is typing.
+
 ### Building a new resource table
 
 1. Pick the source adapter: bounded local → `boundedRowsSource`; backend-owned

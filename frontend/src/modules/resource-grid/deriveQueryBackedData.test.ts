@@ -1,10 +1,15 @@
 /**
- * `deriveQueryBackedData` decides what a resource grid shows. The contract that
- * matters for the revisit sort bug: a query-backed table is NEVER sourced from the
- * live snapshot — that snapshot is unsorted client-side and unpaginated, so showing
- * it during the reload window made a revisit appear unsorted until the server-sorted
- * query reloaded. While the query is gating or in flight it reports empty+loading so
- * the controller bridges with the cached page.
+ * `deriveQueryBackedData` decides what a resource grid shows. Two contracts matter:
+ *
+ * 1. A query-backed table is NEVER sourced from the live snapshot — that snapshot is
+ *    unsorted client-side and unpaginated, so showing it during the reload window made
+ *    a revisit appear unsorted until the server-sorted query reloaded. While the query
+ *    is gating or before its first page applies it reports empty+loading so the
+ *    controller bridges with the cached page.
+ *
+ * 2. `loading` is true ONLY for that initial gap. Every later refetch — filter, sort,
+ *    page size, manual, or background — is visually silent: no overlay, no spinner
+ *    swap, and the filter input stays mounted (and focused) on a no-match result.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -20,7 +25,6 @@ const base = {
   clusterId: 'c1',
   queryEnabled: false,
   queryRows: [] as Row[],
-  queryLoading: false,
   queryLoaded: false,
   queryError: null as string | null,
 };
@@ -46,12 +50,12 @@ describe('deriveQueryBackedData', () => {
     expect(r.loaded).toBe(true);
   });
 
-  it('reports empty+loading while the enabled query is in flight (no live-snapshot fallback)', () => {
+  it('reports empty+loading before the first page applies (no live-snapshot fallback)', () => {
     const r = deriveQueryBackedData<Row>({
       ...base,
       queryEnabled: true,
       queryRows: [],
-      queryLoading: true,
+      queryLoaded: false,
     });
     expect(r.data).toEqual([]);
     expect(r.loading).toBe(true);
@@ -69,28 +73,25 @@ describe('deriveQueryBackedData', () => {
     expect(r.error).toBe('returned no data');
   });
 
-  it('reports loading during a user-initiated refetch with rows visible (sort/search overlay)', () => {
+  it('stays quiet during refetches with rows visible (quiet filter refresh, no overlay)', () => {
     const r = deriveQueryBackedData<Row>({
       ...base,
       queryEnabled: true,
       queryRows: queryPage,
       queryLoaded: true,
-      queryLoading: true,
-      queryResetPending: true,
     });
     expect(r.data).toBe(queryPage);
-    expect(r.loading).toBe(true);
+    expect(r.loading).toBe(false);
   });
 
-  it('stays quiet for background refetches with rows visible (no overlay flicker)', () => {
+  it('stays quiet while refetching a no-match result (filter input must stay mounted)', () => {
     const r = deriveQueryBackedData<Row>({
       ...base,
       queryEnabled: true,
-      queryRows: queryPage,
+      queryRows: [],
       queryLoaded: true,
-      queryLoading: true,
-      queryResetPending: false,
     });
+    expect(r.data).toEqual([]);
     expect(r.loading).toBe(false);
   });
 });
