@@ -202,6 +202,74 @@ describe('useTypedResourceQuery', () => {
     expect(result?.isRequestingMore).toBe(false);
   });
 
+  it('debounces search changes instead of querying on every keystroke', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: { rows: [], total: 0 } },
+    });
+
+    const Probe: React.FC<{ search: string }> = ({ search }) => {
+      result = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search },
+        sortConfig,
+        selectRows,
+      });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<Probe search="" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(1);
+
+    vi.useFakeTimers();
+    try {
+      // Two quick keystrokes: no new backend build until the debounce elapses.
+      await act(async () => {
+        root.render(<Probe search="a" />);
+      });
+      await act(async () => {
+        root.render(<Probe search="ap" />);
+      });
+      expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
+      const calls = requestRefreshDomainStateMock.mock.calls;
+      expect(calls[calls.length - 1][0].scope as string).toContain('search=ap');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fetchAllRows rejects when a page fails instead of returning a partial result', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: { rows: [] } },
+    });
+    await renderQuery();
+
+    requestRefreshDomainStateMock.mockReset();
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: { status: 'ready', data: { rows: [{ name: 'a' }], continue: 'cursor-1' } },
+      })
+      .mockResolvedValueOnce({ status: 'blocked', blockedReason: 'auto-refresh-disabled' });
+
+    // A partial export saved with a success toast is worse than an error: the
+    // walk must reject so the action surfaces the failure.
+    await expect(result!.fetchAllRows()).rejects.toThrow(/page 2/);
+  });
+
   it('treats a payload with rows but no total as approximate instead of an exact 0', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',

@@ -22,8 +22,7 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
-import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
-import type { PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
+import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
@@ -69,17 +68,15 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   const objectLink = useObjectLink();
   const viewState = useViewState();
   const namespaceContext = useNamespace();
-  // Pod CPU/memory ride in the query rows; the banner + per-pod staleness come
-  // from the active cluster's metrics availability (mirrors NsViewPods).
-  const clusterMetrics = useClusterMetricsAvailability();
-  const effectiveMetrics = clusterMetrics ?? null;
-
-  const metricsBanner = useMemo(() => getMetricsBannerInfo(effectiveMetrics), [effectiveMetrics]);
-  const metricsLastUpdated = useMemo(
-    () =>
-      effectiveMetrics?.collectedAt ? new Date(effectiveMetrics.collectedAt * 1000) : undefined,
-    [effectiveMetrics?.collectedAt]
-  );
+  // The banner + per-pod staleness come from the pods query payload's metrics
+  // meta, which is scoped to the PANEL OBJECT's cluster (the globally selected
+  // cluster can be a different one). The query hook needs `columns`, so the
+  // column callbacks read this ref instead of closing over the query result.
+  const metricsRef = React.useRef<PodMetricsInfo | null>(null);
+  const metricsLastUpdated = useCallback(() => {
+    const collectedAt = metricsRef.current?.collectedAt;
+    return collectedAt ? new Date(collectedAt * 1000) : undefined;
+  }, []);
 
   const getPodIdentity = useCallback(
     (pod: PodSnapshotEntry) => ({
@@ -215,9 +212,9 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         getRequest: (pod) => pod.cpuRequest,
         getLimit: (pod) => pod.cpuLimit,
         getVariant: () => 'compact',
-        getMetricsStale: () => Boolean(effectiveMetrics?.stale),
-        getMetricsError: () => effectiveMetrics?.lastError ?? undefined,
-        getMetricsLastUpdated: () => metricsLastUpdated,
+        getMetricsStale: () => Boolean(metricsRef.current?.stale),
+        getMetricsError: () => metricsRef.current?.lastError || undefined,
+        getMetricsLastUpdated: metricsLastUpdated,
         getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:cpu`,
         getShowEmptyState: () => true,
       }),
@@ -229,9 +226,9 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         getRequest: (pod) => pod.memRequest,
         getLimit: (pod) => pod.memLimit,
         getVariant: () => 'compact',
-        getMetricsStale: () => Boolean(effectiveMetrics?.stale),
-        getMetricsError: () => effectiveMetrics?.lastError ?? undefined,
-        getMetricsLastUpdated: () => metricsLastUpdated,
+        getMetricsStale: () => Boolean(metricsRef.current?.stale),
+        getMetricsError: () => metricsRef.current?.lastError || undefined,
+        getMetricsLastUpdated: metricsLastUpdated,
         getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:memory`,
         getShowEmptyState: () => true,
       }),
@@ -247,8 +244,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   }, [
     handleNamespaceSelect,
     handlePodOpen,
-    effectiveMetrics?.lastError,
-    effectiveMetrics?.stale,
     metricsLastUpdated,
     objectData?.clusterId,
     objectLink,
@@ -256,7 +251,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     navigatePod,
   ]);
 
-  const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
+  const { gridTableProps, favModal, source, queryPayload } = useQueryBackedClusterResourceGridTable<
     PodSnapshotPayload,
     PodSnapshotEntry
   >({
@@ -275,6 +270,11 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     // filter UI is not applicable here.
     filterOptions: { isNamespaceScoped: false },
   });
+
+  // Payload-scoped metrics: same snapshot as the rows, same cluster.
+  const effectiveMetrics = queryPayload?.metrics ?? null;
+  metricsRef.current = effectiveMetrics;
+  const metricsBanner = useMemo(() => getMetricsBannerInfo(effectiveMetrics), [effectiveMetrics]);
 
   const objectActions = useObjectActionController({
     context: 'gridtable',

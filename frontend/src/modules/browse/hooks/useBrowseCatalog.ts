@@ -97,6 +97,8 @@ export interface UseBrowseCatalogResult {
   loading: boolean;
   /** Whether the catalog has loaded at least once */
   hasLoadedOnce: boolean;
+  /** Catalog failure: the scoped domain's error, or a failed page navigation. */
+  error: string | null;
   /** The continue token for pagination (null if no more pages) */
   continueToken: string | null;
   /** The previous token for pagination (null on the first page) */
@@ -168,6 +170,8 @@ export function useBrowseCatalog({
   const [totalCount, setTotalCount] = useState(0);
   const [unfilteredTotal, setUnfilteredTotal] = useState(0);
   const [totalIsExact, setTotalIsExact] = useState(true);
+  // Page-navigation failures; the scoped domain carries baseline/stream errors.
+  const [pageError, setPageError] = useState<string | null>(null);
   const initialPageLimitKey = initialPageLimit ?? null;
   const normalizedInitialPageLimit = useMemo(
     () => normalizeInitialPageLimit(initialPageLimit ?? DEFAULT_BROWSE_PAGE_LIMIT),
@@ -307,6 +311,7 @@ export function useBrowseCatalog({
     currentPageTokenRef.current = null;
     setContinueToken(null);
     setPreviousToken(null);
+    setPageError(null);
     // Preserve the current dataset while filter-only queries refresh so the
     // filter bar/dropdowns stay mounted and open menus don't lose their scroll
     // position. We still clear eagerly when the structural scope changes
@@ -442,6 +447,7 @@ export function useBrowseCatalog({
 
           const next = applyCatalogPage(collectionRef.current, payload);
           collectionRef.current = { items: next.items, indexByUid: next.indexByUid };
+          setPageError(null);
           setItems(next.items);
           setContinueToken(next.continueToken);
           setPreviousToken(next.previousToken);
@@ -463,6 +469,9 @@ export function useBrowseCatalog({
           }
         } catch (error) {
           console.error('Failed to load additional catalog page', error);
+          if (catalogScopeRef.current === baseScopeAtRequest) {
+            setPageError(error instanceof Error ? error.message : String(error));
+          }
         } finally {
           if (catalogScopeRef.current === baseScopeAtRequest) {
             setIsRequestingMore(false);
@@ -557,9 +566,11 @@ export function useBrowseCatalog({
     const exportPageLimit = 1000;
     const collected: CatalogItem[] = [];
     let cursor = '';
+    const maxPages = 100000;
     // Page through the full result set following the backend cursor. Each page is a clean
     // one-off catalog query for the current filters/sort; the guard bounds a stuck cursor.
-    for (let page = 0; page < 100000; page += 1) {
+    // A failed page REJECTS: a partial export saved as success is silent data loss.
+    for (let page = 0; page < maxPages; page += 1) {
       const scope = buildBrowseCatalogPageScope(
         plan,
         {
@@ -574,20 +585,20 @@ export function useBrowseCatalog({
       );
       const result = await requestRefreshDomainState({ domain: 'catalog', scope, reason: 'user' });
       if (result.status !== 'executed') {
-        break;
+        throw new Error(`Catalog export failed: page ${page + 1} request was blocked`);
       }
       const payload = result.data?.data as CatalogSnapshotPayload | null;
       if (!payload) {
-        break;
+        throw new Error(`Catalog export failed: page ${page + 1} returned no data`);
       }
       const applied = applyCatalogPage(emptyBrowseCatalogCollection(), payload);
       collected.push(...applied.items);
       if (!applied.continueToken) {
-        break;
+        return filterBrowseCatalogItems(collected, clusterScopedOnly);
       }
       cursor = applied.continueToken;
     }
-    return filterBrowseCatalogItems(collected, clusterScopedOnly);
+    throw new Error(`Catalog export failed: cursor did not advance after ${maxPages} pages`);
   }, [
     clusterId,
     clusterScopedOnly,
@@ -604,6 +615,7 @@ export function useBrowseCatalog({
     fetchAllRows,
     loading: passiveLoadingState.loading,
     hasLoadedOnce,
+    error: domain.error ?? pageError ?? null,
     continueToken,
     previousToken,
     isRequestingMore,

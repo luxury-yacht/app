@@ -30,8 +30,10 @@ export function useCatalogBackedCustomResourceRows({
     items: catalogItems,
     loading,
     hasLoadedOnce,
+    error,
     filterOptions,
     totalCount,
+    unfilteredTotal,
     totalIsExact,
     queryPending,
     continueToken,
@@ -74,8 +76,10 @@ export function useCatalogBackedCustomResourceRows({
     rows,
     loading,
     hasLoadedOnce,
+    error,
     filterOptions,
     totalCount,
+    unfilteredTotal,
     totalIsExact,
     fetchAllRows,
     pagination: {
@@ -95,6 +99,10 @@ export function useCatalogBackedCustomResourceRows({
       onRequestPrevious: handleLoadPrevious,
       loadMoreLabel: 'Next page',
       previousPageLabel: 'Previous page',
+      // Cursor pages REPLACE the row window; the scroll sentinel must never
+      // auto-advance them (it chains pages and fires without scroll on short
+      // pages). Spread targets (the views' `{...pagination}`) inherit this.
+      autoLoadMore: false,
     },
   };
 }

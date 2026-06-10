@@ -96,6 +96,9 @@ type resourceDescriptor struct {
 	Scope      Scope
 }
 
+// summaryChunk holds one published batch of summaries. Chunks are IMMUTABLE
+// once published: items are never mutated in place — emit and cache rebuilds
+// always create fresh chunks. Snapshots therefore share chunk pointers.
 type summaryChunk struct {
 	items []Summary
 }

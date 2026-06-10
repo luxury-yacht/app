@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
 import type { CatalogItem } from '@/core/refresh/types';
 import { catalogItemToFallbackCustomRow } from '@modules/browse/hooks/customCatalogRowAdapter';
+import { resetResourceInventoryRowCache } from '@modules/resource-grid/useResourceInventoryTable';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -82,9 +83,15 @@ vi.mock('@/hooks/useTableSort', () => ({
 
 const setFiltersMock = vi.fn();
 
+// The persisted sort starts as null in production (nothing persisted yet);
+// tests can set this ref to simulate a stored user sort.
+const persistedSortRef = vi.hoisted(() => ({
+  current: null as { key: string; direction: 'asc' | 'desc' | null } | null,
+}));
+
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
   useGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
+    sortConfig: persistedSortRef.current,
     setSortConfig: vi.fn(),
     columnWidths: null,
     setColumnWidths: vi.fn(),
@@ -229,6 +236,8 @@ describe('ClusterViewCustom', () => {
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
     modalProps.current = null;
+    persistedSortRef.current = null;
+    resetResourceInventoryRowCache();
     openWithObjectMock.mockReset();
     runObjectActionMock.mockReset();
     useBrowseCatalogMock.mockReset();
@@ -244,6 +253,105 @@ describe('ClusterViewCustom', () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it('surfaces a catalog error through the inventory error banner', async () => {
+    useBrowseCatalogMock.mockReturnValue({
+      ...browseCatalogResult(),
+      hasLoadedOnce: false,
+      error: 'catalog list forbidden',
+    });
+
+    await act(async () => {
+      root.render(<ClusterViewCustom />);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.resource-inventory-error')?.textContent).toContain(
+      'catalog list forbidden'
+    );
+  });
+
+  it('disarms scroll auto-load for page-replacing cursor pagination', async () => {
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
+
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.autoLoadMore).toBe(false);
+  });
+
+  it('passes the unfiltered total through to the filter options', async () => {
+    useBrowseCatalogMock.mockReturnValue({
+      ...browseCatalogResult([catalogItemFromCustom(baseCustom)]),
+      totalCount: 1,
+      unfilteredTotal: 25,
+    });
+
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.filters?.options?.unfilteredTotal).toBe(25);
+  });
+
+  it('replays the last rows on revisit instead of a cold spinner', async () => {
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
+
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+    expect(gridTablePropsRef.current?.data).toHaveLength(1);
+
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
+
+    // Revisit: the catalog restarts cold (no rows, loading). The controller
+    // must replay the previous rows instead of blanking to a spinner.
+    useBrowseCatalogMock.mockReturnValue({
+      ...browseCatalogResult([]),
+      loading: true,
+      hasLoadedOnce: false,
+    });
+    await act(async () => {
+      root.render(<ClusterViewCustom />);
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.data).toHaveLength(1);
+  });
+
+  it('queries the catalog with the displayed default sort when no sort is persisted', async () => {
+    // The header arrow shows name-ascending by default; the catalog query must
+    // sort the same way or the rows render in backend kind-grouped order under
+    // a lying indicator.
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+
+    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: { key: 'name', direction: 'asc' } })
+    );
+  });
+
+  it('queries the catalog with the persisted user sort when one exists', async () => {
+    persistedSortRef.current = { key: 'age', direction: 'desc' };
+
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+
+    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: { key: 'age', direction: 'desc' } })
+    );
   });
 
   it('passes metadata to the object panel when opening a resource', async () => {

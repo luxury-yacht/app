@@ -169,6 +169,24 @@ func BenchmarkCatalogQueryChurnDuringPagination(b *testing.B) {
 	}
 }
 
+// BenchmarkCatalogPublish measures the cost of a single watch-flush publish
+// (full cache rebuild from items) — this runs on every coalesced watch flush
+// (200ms under churn) whether or not anything queries the catalog.
+func BenchmarkCatalogPublish(b *testing.B) {
+	for _, size := range []int{10000, 100000} {
+		b.Run(fmt.Sprintf("rebuild-%d", size), func(b *testing.B) {
+			svc := benchmarkCatalogService(size)
+			items := cloneSummaryMap(svc.items)
+			descriptors := svc.catalogIndex.descriptors()
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				svc.catalogIndex.rebuildCacheFromItems(items, descriptors)
+			}
+		})
+	}
+}
+
 func measureCatalogIndexResidency(objectsPerCluster, clusterCount int) uint64 {
 	stdruntime.GC()
 	var before stdruntime.MemStats
@@ -267,6 +285,9 @@ func benchmarkCatalogServiceWithShape(objects int, shape benchmarkCatalogShape) 
 	for _, desc := range descriptorsByKey {
 		descriptors = append(descriptors, exportDescriptor(desc))
 	}
+	// Mirror the real sync flow (sync.go), which stores the item map AND
+	// rebuilds the cache. Benchmarks that clone svc.items rely on this.
+	svc.items = items
 	svc.catalogIndex.rebuildCacheFromItems(items, descriptors)
 	return svc
 }

@@ -113,6 +113,39 @@ func TestServiceQueryStreamsWithoutFullCache(t *testing.T) {
 	}
 }
 
+// The query index is built lazily on the first query after a publish; a later
+// publish must invalidate the memoized index so queries never serve stale
+// results.
+func TestServiceQueryIndexRebuiltAfterLaterPublish(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+	podSummary := func(name string) Summary {
+		return Summary{
+			Kind: "Pod", Version: "v1", Resource: "pods",
+			Namespace: "default", Name: name, UID: "uid-" + name, Scope: ScopeNamespace,
+		}
+	}
+	kindSet := map[string]bool{"Pod": true}
+	namespaceSet := map[string]struct{}{"default": {}}
+
+	svc.publishStreamingState(
+		[]*summaryChunk{{items: []Summary{podSummary("alpha")}}},
+		kindSet, namespaceSet, nil, true,
+	)
+	first := svc.Query(QueryOptions{Limit: 10, Namespaces: []string{"default"}})
+	if len(first.Items) != 1 {
+		t.Fatalf("expected one item before the second publish, got %d", len(first.Items))
+	}
+
+	svc.publishStreamingState(
+		[]*summaryChunk{{items: []Summary{podSummary("alpha"), podSummary("beta")}}},
+		kindSet, namespaceSet, nil, true,
+	)
+	second := svc.Query(QueryOptions{Limit: 10, Namespaces: []string{"default"}})
+	if len(second.Items) != 2 {
+		t.Fatalf("expected the rebuilt index to surface both items, got %d", len(second.Items))
+	}
+}
+
 func TestQueryReportsUnfilteredScopeTotal(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 	chunk := &summaryChunk{

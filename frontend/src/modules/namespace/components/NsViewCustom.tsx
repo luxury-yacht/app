@@ -218,8 +218,10 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       rows,
       loading: catalogLoading,
       hasLoadedOnce: catalogLoaded,
+      error: catalogError,
       filterOptions: catalogFilterOptions,
       totalCount,
+      unfilteredTotal,
       totalIsExact,
       fetchAllRows,
       pagination,
@@ -251,6 +253,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         namespaceDropdownSearchable: showNamespaceFilter,
         namespaceDropdownBulkActions: showNamespaceFilter,
         totalCount,
+        unfilteredTotal,
         totalIsExact,
         partialDataLabel: catalogFilterOptions.partialDataLabel,
       },
@@ -309,7 +312,9 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       rows,
       loading: catalogLoading || (loading ?? false),
       loaded: catalogLoaded || loaded,
-      error: null,
+      error: catalogError ?? null,
+      // Per-view identity so a revisit replays the last page instead of a spinner.
+      cacheKey: `namespace-custom|${selectedClusterId ?? ''}|${namespace}`,
     });
 
     return (

@@ -2,7 +2,10 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"net/url"
+	"reflect"
 	"testing"
 )
 
@@ -421,6 +424,94 @@ func assertStringSlicesEqual(t *testing.T, want, got []string) {
 	for i := range want {
 		if want[i] != got[i] {
 			t.Fatalf("expected %v, got %v", want, got)
+		}
+	}
+}
+
+// The collector (streaming/window path) and applyTypedTableQuery (static path)
+// must produce IDENTICAL pages for the same input: rows, order, cursor token,
+// totals, and facets. The keyset cursor contract depends on both paths walking
+// the exact same (sort value, row key) order.
+func TestTypedTableQueryCollectorMatchesApplyPath(t *testing.T) {
+	rng := rand.New(rand.NewSource(42))
+	rows := make([]typedQueryTestRow, 0, 500)
+	namespaces := []string{"default", "kube-system", "team-a", "team-b"}
+	kinds := []string{"Pod", "Deployment", "Service"}
+	for i := 0; i < 500; i += 1 {
+		namespace := namespaces[rng.Intn(len(namespaces))]
+		// Duplicate names across namespaces exercise the key tiebreak.
+		name := fmt.Sprintf("row-%03d", rng.Intn(200))
+		rows = append(rows, typedQueryTestRow{
+			key:       fmt.Sprintf("%s/%s-%d", namespace, name, i),
+			name:      name,
+			namespace: namespace,
+			kind:      kinds[rng.Intn(len(kinds))],
+			cpu:       float64(rng.Intn(50)), // duplicates exercise numeric ties
+		})
+	}
+
+	baseQuery := func(sortField, direction, cursor string) typedTableQuery {
+		return typedTableQuery{
+			Enabled: true,
+			Request: ResourceQueryRequest{
+				ClusterID:     "cluster-a",
+				Table:         "pods",
+				SortField:     sortField,
+				SortDirection: direction,
+				Limit:         50,
+				Continue:      cursor,
+				Namespaces:    []string{"default", "team-a", "team-b"},
+				Search:        "row",
+			},
+		}
+	}
+
+	comparePages := func(t *testing.T, query typedTableQuery) typedTableQueryPage[typedQueryTestRow] {
+		t.Helper()
+		applied := applyTypedTableQuery(rows, query, typedQueryTestAdapter())
+		collector := newTypedTableQueryCollector(query, typedQueryTestAdapter())
+		for _, row := range rows {
+			collector.Add(row)
+		}
+		collected := collector.Page()
+
+		appliedKeys := make([]string, 0, len(applied.Rows))
+		for _, row := range applied.Rows {
+			appliedKeys = append(appliedKeys, row.key)
+		}
+		collectedKeys := make([]string, 0, len(collected.Rows))
+		for _, row := range collected.Rows {
+			collectedKeys = append(collectedKeys, row.key)
+		}
+		if !reflect.DeepEqual(appliedKeys, collectedKeys) {
+			t.Fatalf("row order diverged:\napply:   %v\ncollect: %v", appliedKeys, collectedKeys)
+		}
+		if applied.Continue != collected.Continue {
+			t.Fatalf("continue token diverged: apply %q vs collect %q", applied.Continue, collected.Continue)
+		}
+		if applied.Total != collected.Total || applied.UnfilteredTotal != collected.UnfilteredTotal {
+			t.Fatalf(
+				"totals diverged: apply %d/%d vs collect %d/%d",
+				applied.Total, applied.UnfilteredTotal, collected.Total, collected.UnfilteredTotal,
+			)
+		}
+		if !reflect.DeepEqual(applied.Namespaces, collected.Namespaces) ||
+			!reflect.DeepEqual(applied.Kinds, collected.Kinds) {
+			t.Fatalf("facets diverged: apply %v/%v vs collect %v/%v",
+				applied.Namespaces, applied.Kinds, collected.Namespaces, collected.Kinds)
+		}
+		return applied
+	}
+
+	for _, sortField := range []string{"name", "cpu"} {
+		for _, direction := range []string{"asc", "desc"} {
+			t.Run(fmt.Sprintf("%s-%s", sortField, direction), func(t *testing.T) {
+				first := comparePages(t, baseQuery(sortField, direction, ""))
+				if first.Continue == "" {
+					t.Fatal("expected a continue token for page 2")
+				}
+				comparePages(t, baseQuery(sortField, direction, first.Continue))
+			})
 		}
 	}
 }

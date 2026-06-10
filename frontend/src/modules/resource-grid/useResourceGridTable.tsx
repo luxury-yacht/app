@@ -21,7 +21,7 @@ import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useGridTableBinding } from './useGridTableBinding';
 import {
   normalizeQueryBackedNamespaceFilters,
-  queryBackedNamespaceFilterOptions,
+  queryBackedFacetFilterOptions,
 } from './queryBackedTableState';
 import type {
   ClusterResourceGridTableParams,
@@ -102,6 +102,7 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
     keyExtractor: resolvedKeyExtractor,
     rowIdentity: common.rowIdentity ?? common.objectIdentity?.rowIdentity,
     persistence,
+    defaultSortKey: defaultSort.key,
     defaultSortDirection: defaultSort.direction ?? 'asc',
     namespace,
     showNamespaceFilters,
@@ -311,10 +312,17 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
   const persistenceFilters = persistence.filters;
   const setPersistenceFilters = persistence.setFilters;
-  const namespaceFilterOptions = queryBackedNamespaceFilterOptions(
+  const namespaceFilterOptions = queryBackedFacetFilterOptions(
     availableFilterNamespaces,
     filterOptionOverrides?.namespaces,
     fallbackNamespaces
+  );
+  // The static per-view kind vocabulary (the prop, when supplied) must survive
+  // collapsed post-filter facets the same way namespace metadata does.
+  const kindFilterOptions = queryBackedFacetFilterOptions(
+    kindOptions,
+    filterOptionOverrides?.kinds,
+    fallbackKinds
   );
   const normalizeTableFilters = useCallback(
     (next: GridTableFilterState) =>
@@ -422,7 +430,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       onReset: persistence.resetState,
       options: {
         ...filterOptionOverrides,
-        kinds: filterOptionOverrides?.kinds ?? availableKinds,
+        kinds: kindFilterOptions ?? availableKinds,
         namespaces: showNamespaceFilters ? namespaceFilterOptions : undefined,
         searchBehavior: isQueryBackedResourceGridTableMode(tableMode) ? 'query' : 'local',
         showKindDropdown,
@@ -445,6 +453,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       filterPreActions,
       kindDropdownBulkActions,
       kindDropdownSearchable,
+      kindFilterOptions,
       persistence.resetState,
       showKindDropdown,
       showNamespaceFilters,

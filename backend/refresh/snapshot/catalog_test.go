@@ -272,6 +272,40 @@ func TestCatalogSnapshotIssuesDescribeApproximateAndDegradedResults(t *testing.T
 	}
 }
 
+// An RBAC-blocked catalog must be distinguishable from an empty cluster: the
+// denied resource types surface as a "Catalog permissions" issue.
+func TestCatalogSnapshotIssuesReportDeniedResources(t *testing.T) {
+	payload, _ := buildCatalogSnapshot(
+		objectcatalog.QueryResult{TotalIsExact: true, FacetsExact: true},
+		browseQueryOptions{Limit: 1},
+		objectcatalog.HealthStatus{
+			Status: objectcatalog.HealthStateOK,
+			DeniedResources: []string{
+				"secrets",
+				"widgets.example.com",
+				"a", "b", "c", "d",
+			},
+		},
+		false,
+		false,
+	)
+
+	var permissions string
+	for _, issue := range payload.Issues {
+		if issue.Kind == "Catalog permissions" {
+			permissions = issue.Message
+		}
+	}
+	if permissions == "" {
+		t.Fatalf("expected a Catalog permissions issue, got %+v", payload.Issues)
+	}
+	for _, expected := range []string{"secrets", "widgets.example.com", "and 1 more"} {
+		if !strings.Contains(permissions, expected) {
+			t.Fatalf("expected %q in permissions issue %q", expected, permissions)
+		}
+	}
+}
+
 func TestCatalogBuildPreservesContinueWhenCachesReady(t *testing.T) {
 	summaries := []objectcatalog.Summary{
 		{

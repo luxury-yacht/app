@@ -165,6 +165,115 @@ func (e ResourceQueryEnvelope) withIssues(issues []ResourceQueryIssue) ResourceQ
 	return e
 }
 
+// typedTableQueryMatcher prebuilds the per-query filter state (namespace/kind
+// sets, search needle, predicate map) so matching N rows costs N membership
+// checks, not N map constructions.
+type typedTableQueryMatcher[T any] struct {
+	adapter         typedTableQueryAdapter[T]
+	includeMetadata bool
+	namespaceSet    map[string]struct{}
+	kindSet         map[string]struct{}
+	searchNeedle    string
+	predicates      map[string]string
+}
+
+func newTypedTableQueryMatcher[T any](query typedTableQuery, adapter typedTableQueryAdapter[T]) typedTableQueryMatcher[T] {
+	return typedTableQueryMatcher[T]{
+		adapter:         adapter,
+		includeMetadata: query.Request.IncludeMetadata,
+		namespaceSet:    stringSet(query.Request.Namespaces),
+		kindSet:         stringSet(query.Request.Kinds),
+		searchNeedle:    strings.ToLower(strings.TrimSpace(query.Request.Search)),
+		predicates:      resourceQueryPredicatesToMap(query.Request.Predicates),
+	}
+}
+
+func (m typedTableQueryMatcher[T]) Matches(item T) bool {
+	if len(m.namespaceSet) > 0 {
+		if _, ok := m.namespaceSet[strings.ToLower(strings.TrimSpace(m.adapter.Namespace(item)))]; !ok {
+			return false
+		}
+	}
+	if len(m.kindSet) > 0 {
+		if _, ok := m.kindSet[strings.ToLower(strings.TrimSpace(m.adapter.Kind(item)))]; !ok {
+			return false
+		}
+	}
+	if m.searchNeedle != "" {
+		matched := typedTableSearchMatches(m.adapter.SearchText(item), m.searchNeedle)
+		if !matched && m.includeMetadata && m.adapter.MetadataText != nil {
+			matched = typedTableSearchMatches(m.adapter.MetadataText(item), m.searchNeedle)
+		}
+		if !matched {
+			return false
+		}
+	}
+	for field, value := range m.predicates {
+		if !m.adapter.Predicate(item, field, value) {
+			return false
+		}
+	}
+	return true
+}
+
+// typedTableSortedItem decorates a row with its comparable sort value and row
+// key, computed ONCE per row. Page order and the keyset cursor boundary both
+// derive from this same (value, key) pair — see typedTableSortedItemLess.
+type typedTableSortedItem[T any] struct {
+	item  T
+	value string
+	key   string
+}
+
+func decorateTypedTableItem[T any](item T, query typedTableQuery, adapter typedTableQueryAdapter[T]) typedTableSortedItem[T] {
+	return typedTableSortedItem[T]{
+		item:  item,
+		value: typedTableComparableSortValue(item, query.Request.SortField, adapter),
+		key:   adapter.Key(item),
+	}
+}
+
+// typedTableSortedItemLess is the ONE total order for typed-table pages: the
+// comparable sort value, tie-broken by the stable row key. Driving the page
+// sort, the bounded insert, and the cursor boundary from this single function
+// is what guarantees a cursor can never skip or duplicate a row — the order
+// pages are laid out in is, by construction, the order the boundary walks.
+// Row keys are unique, so the order is strict (no equal elements).
+func typedTableSortedItemLess[T any](a, b typedTableSortedItem[T], desc bool) bool {
+	if a.value != b.value {
+		if desc {
+			return a.value > b.value
+		}
+		return a.value < b.value
+	}
+	return a.key < b.key
+}
+
+// typedTableSortedItemAfterCursor reports whether the decorated row sorts
+// strictly after the cursor position in the page walk order.
+func typedTableSortedItemAfterCursor[T any](candidate typedTableSortedItem[T], cursor typedTableQueryCursor, desc bool) bool {
+	if desc {
+		return candidate.value < cursor.LastValue ||
+			(candidate.value == cursor.LastValue && candidate.key > cursor.LastKey)
+	}
+	return candidate.value > cursor.LastValue ||
+		(candidate.value == cursor.LastValue && candidate.key > cursor.LastKey)
+}
+
+func typedTableCursorFor[T any](last typedTableSortedItem[T], query typedTableQuery) string {
+	return encodeTypedTableQueryCursor(typedTableQueryCursor{
+		ClusterID:       query.Request.ClusterID,
+		Table:           query.Request.Table,
+		Signature:       query.signature(),
+		SortField:       query.Request.SortField,
+		SortDirection:   query.Request.SortDirection,
+		Limit:           query.Request.Limit,
+		LastValue:       last.value,
+		LastKey:         last.key,
+		DynamicRevision: query.DynamicRevision,
+	})
+}
+
 func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typedTableQueryAdapter[T]) typedTableQueryPage[T] {
 	if !query.Enabled {
 		return typedTableQueryPage[T]{
@@ -179,46 +288,48 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 		}
 	}
 
-	filtered := make([]T, 0, len(items))
+	desc := query.Request.SortDirection == "desc"
+	matcher := newTypedTableQueryMatcher(query, adapter)
+	filtered := make([]typedTableSortedItem[T], 0, len(items))
+	namespaceFacets := map[string]string{}
+	kindFacets := map[string]string{}
 	for _, item := range items {
-		if !typedTableQueryMatches(item, query, adapter) {
+		if !matcher.Matches(item) {
 			continue
 		}
-		filtered = append(filtered, item)
+		addTypedTableFacetValue(namespaceFacets, adapter.Namespace(item))
+		addTypedTableFacetValue(kindFacets, adapter.Kind(item))
+		filtered = append(filtered, decorateTypedTableItem(item, query, adapter))
 	}
 
-	sortTypedTableRows(filtered, query, adapter)
+	// Row keys are unique → strict order → an unstable sort is equivalent.
+	sort.Slice(filtered, func(i, j int) bool {
+		return typedTableSortedItemLess(filtered[i], filtered[j], desc)
+	})
 	total := len(filtered)
 
 	start := 0
 	cursorInvalid := false
 	if query.Request.Continue != "" {
 		if cursor, ok := decodeTypedTableQueryCursor(query.Request.Continue); ok && cursor.matches(query) {
-			start = typedTableCursorStart(filtered, cursor, query, adapter)
+			// The slice is sorted in walk order, so "after cursor" is monotone
+			// and the boundary is a binary search.
+			start = sort.Search(len(filtered), func(i int) bool {
+				return typedTableSortedItemAfterCursor(filtered[i], cursor, desc)
+			})
 		} else {
 			cursorInvalid = true
 		}
 	}
 
-	if start > len(filtered) {
-		start = len(filtered)
-	}
 	end := min(start+query.Request.Limit, len(filtered))
-	pageRows := append([]T(nil), filtered[start:end]...)
+	pageRows := make([]T, 0, end-start)
+	for _, candidate := range filtered[start:end] {
+		pageRows = append(pageRows, candidate.item)
+	}
 	continueToken := ""
 	if end < len(filtered) && len(pageRows) > 0 {
-		last := pageRows[len(pageRows)-1]
-		continueToken = encodeTypedTableQueryCursor(typedTableQueryCursor{
-			ClusterID:       query.Request.ClusterID,
-			Table:           query.Request.Table,
-			Signature:       query.signature(),
-			SortField:       query.Request.SortField,
-			SortDirection:   query.Request.SortDirection,
-			Limit:           query.Request.Limit,
-			LastValue:       typedTableComparableSortValue(last, query.Request.SortField, adapter),
-			LastKey:         adapter.Key(last),
-			DynamicRevision: query.DynamicRevision,
-		})
+		continueToken = typedTableCursorFor(filtered[end-1], query)
 	}
 
 	return typedTableQueryPage[T]{
@@ -229,8 +340,8 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 		UnfilteredTotal: len(items),
 		TotalIsExact:    true,
 		FacetsExact:     true,
-		Namespaces:      collectTypedTableFacet(filtered, adapter.Namespace),
-		Kinds:           collectTypedTableFacet(filtered, adapter.Kind),
+		Namespaces:      typedTableFacetMapValues(namespaceFacets),
+		Kinds:           typedTableFacetMapValues(kindFacets),
 		Dynamic:         query.dynamicRef(),
 	}
 }
@@ -238,22 +349,30 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 type typedTableQueryCollector[T any] struct {
 	query           typedTableQuery
 	adapter         typedTableQueryAdapter[T]
+	matcher         typedTableQueryMatcher[T]
 	cursor          typedTableQueryCursor
 	cursorValid     bool
+	desc            bool
+	maxCandidates   int
 	total           int
 	unfilteredTotal int
 	namespaces      map[string]string
 	kinds           map[string]string
-	candidates      []T
-	invalid         bool
+	// candidates is kept SORTED in page-walk order and capped at limit+1; Add
+	// rejects out-of-window rows in O(1) and inserts in-window rows in place.
+	candidates []typedTableSortedItem[T]
+	invalid    bool
 }
 
 func newTypedTableQueryCollector[T any](query typedTableQuery, adapter typedTableQueryAdapter[T]) *typedTableQueryCollector[T] {
 	collector := &typedTableQueryCollector[T]{
-		query:      query,
-		adapter:    adapter,
-		namespaces: make(map[string]string),
-		kinds:      make(map[string]string),
+		query:         query,
+		adapter:       adapter,
+		matcher:       newTypedTableQueryMatcher(query, adapter),
+		desc:          query.Request.SortDirection == "desc",
+		maxCandidates: max(query.Request.Limit+1, 1),
+		namespaces:    make(map[string]string),
+		kinds:         make(map[string]string),
 	}
 	if query.Request.Continue != "" {
 		if cursor, ok := decodeTypedTableQueryCursor(query.Request.Continue); ok && cursor.matches(query) {
@@ -273,20 +392,30 @@ func (c *typedTableQueryCollector[T]) Add(item T) {
 	// Count every item fed in (the pre-filter scope total) before the match check,
 	// so Page can report UnfilteredTotal alongside the filtered Total.
 	c.unfilteredTotal++
-	if !typedTableQueryMatches(item, c.query, c.adapter) {
+	if !c.matcher.Matches(item) {
 		return
 	}
 	c.total++
 	addTypedTableFacetValue(c.namespaces, c.adapter.Namespace(item))
 	addTypedTableFacetValue(c.kinds, c.adapter.Kind(item))
-	if c.cursorValid && !typedTableItemAfterCursor(item, c.cursor, c.query, c.adapter) {
+	candidate := decorateTypedTableItem(item, c.query, c.adapter)
+	if c.cursorValid && !typedTableSortedItemAfterCursor(candidate, c.cursor, c.desc) {
 		return
 	}
-	c.candidates = append(c.candidates, item)
-	sortTypedTableRows(c.candidates, c.query, c.adapter)
-	maxCandidates := max(c.query.Request.Limit+1, 1)
-	if len(c.candidates) > maxCandidates {
-		c.candidates = c.candidates[:maxCandidates]
+	// Full buffer and the candidate sorts at/after the current maximum: out of
+	// the page window — the common case on large tables, rejected in O(1).
+	if len(c.candidates) == c.maxCandidates &&
+		!typedTableSortedItemLess(candidate, c.candidates[len(c.candidates)-1], c.desc) {
+		return
+	}
+	index := sort.Search(len(c.candidates), func(i int) bool {
+		return typedTableSortedItemLess(candidate, c.candidates[i], c.desc)
+	})
+	c.candidates = append(c.candidates, typedTableSortedItem[T]{})
+	copy(c.candidates[index+1:], c.candidates[index:])
+	c.candidates[index] = candidate
+	if len(c.candidates) > c.maxCandidates {
+		c.candidates = c.candidates[:c.maxCandidates]
 	}
 }
 
@@ -294,23 +423,14 @@ func (c *typedTableQueryCollector[T]) Page() typedTableQueryPage[T] {
 	if c == nil {
 		return typedTableQueryPage[T]{TotalIsExact: true, FacetsExact: true}
 	}
-	sortTypedTableRows(c.candidates, c.query, c.adapter)
 	end := min(c.query.Request.Limit, len(c.candidates))
-	pageRows := append([]T(nil), c.candidates[:end]...)
+	pageRows := make([]T, 0, end)
+	for _, candidate := range c.candidates[:end] {
+		pageRows = append(pageRows, candidate.item)
+	}
 	continueToken := ""
 	if len(c.candidates) > c.query.Request.Limit && len(pageRows) > 0 {
-		last := pageRows[len(pageRows)-1]
-		continueToken = encodeTypedTableQueryCursor(typedTableQueryCursor{
-			ClusterID:       c.query.Request.ClusterID,
-			Table:           c.query.Request.Table,
-			Signature:       c.query.signature(),
-			SortField:       c.query.Request.SortField,
-			SortDirection:   c.query.Request.SortDirection,
-			Limit:           c.query.Request.Limit,
-			LastValue:       typedTableComparableSortValue(last, c.query.Request.SortField, c.adapter),
-			LastKey:         c.adapter.Key(last),
-			DynamicRevision: c.query.DynamicRevision,
-		})
+		continueToken = typedTableCursorFor(c.candidates[end-1], c.query)
 	}
 	return typedTableQueryPage[T]{
 		Rows:            pageRows,
@@ -324,46 +444,6 @@ func (c *typedTableQueryCollector[T]) Page() typedTableQueryPage[T] {
 		Kinds:           typedTableFacetMapValues(c.kinds),
 		Dynamic:         c.query.dynamicRef(),
 	}
-}
-
-func typedTableQueryMatches[T any](item T, query typedTableQuery, adapter typedTableQueryAdapter[T]) bool {
-	namespaceSet := stringSet(query.Request.Namespaces)
-	kindSet := stringSet(query.Request.Kinds)
-	searchNeedle := strings.ToLower(strings.TrimSpace(query.Request.Search))
-	if len(namespaceSet) > 0 {
-		if _, ok := namespaceSet[strings.ToLower(strings.TrimSpace(adapter.Namespace(item)))]; !ok {
-			return false
-		}
-	}
-	if len(kindSet) > 0 {
-		if _, ok := kindSet[strings.ToLower(strings.TrimSpace(adapter.Kind(item)))]; !ok {
-			return false
-		}
-	}
-	if searchNeedle != "" {
-		matched := typedTableSearchMatches(adapter.SearchText(item), searchNeedle)
-		if !matched && query.Request.IncludeMetadata && adapter.MetadataText != nil {
-			matched = typedTableSearchMatches(adapter.MetadataText(item), searchNeedle)
-		}
-		if !matched {
-			return false
-		}
-	}
-	for field, value := range resourceQueryPredicatesToMap(query.Request.Predicates) {
-		if !adapter.Predicate(item, field, value) {
-			return false
-		}
-	}
-	return true
-}
-
-func typedTableItemAfterCursor[T any](item T, cursor typedTableQueryCursor, query typedTableQuery, adapter typedTableQueryAdapter[T]) bool {
-	value := typedTableComparableSortValue(item, query.Request.SortField, adapter)
-	key := adapter.Key(item)
-	if query.Request.SortDirection == "desc" {
-		return value < cursor.LastValue || (value == cursor.LastValue && key > cursor.LastKey)
-	}
-	return value > cursor.LastValue || (value == cursor.LastValue && key > cursor.LastKey)
 }
 
 func (c typedTableQueryCursor) matches(query typedTableQuery) bool {
@@ -423,43 +503,6 @@ func decodeTypedTableQueryCursor(value string) (typedTableQueryCursor, bool) {
 		return typedTableQueryCursor{}, false
 	}
 	return cursor, true
-}
-
-func typedTableCursorStart[T any](items []T, cursor typedTableQueryCursor, query typedTableQuery, adapter typedTableQueryAdapter[T]) int {
-	for i, item := range items {
-		value := typedTableComparableSortValue(item, query.Request.SortField, adapter)
-		key := adapter.Key(item)
-		if query.Request.SortDirection == "desc" {
-			if value < cursor.LastValue || (value == cursor.LastValue && key > cursor.LastKey) {
-				return i
-			}
-			continue
-		}
-		if value > cursor.LastValue || (value == cursor.LastValue && key > cursor.LastKey) {
-			return i
-		}
-	}
-	return len(items)
-}
-
-// sortTypedTableRows orders rows by the exact same comparable value that the
-// keyset cursor records and compares against (typedTableComparableSortValue),
-// with the stable row key as the final tiebreak. Driving the page sort and the
-// cursor boundary from one function is what guarantees a cursor can never skip
-// or duplicate a row: the order the page is laid out in is, by construction,
-// the order the boundary walks.
-func sortTypedTableRows[T any](items []T, query typedTableQuery, adapter typedTableQueryAdapter[T]) {
-	sort.SliceStable(items, func(i, j int) bool {
-		left := typedTableComparableSortValue(items[i], query.Request.SortField, adapter)
-		right := typedTableComparableSortValue(items[j], query.Request.SortField, adapter)
-		if left != right {
-			if query.Request.SortDirection == "desc" {
-				return left > right
-			}
-			return left < right
-		}
-		return adapter.Key(items[i]) < adapter.Key(items[j])
-	})
 }
 
 func (q typedTableQuery) dynamicRef() *ResourceQueryDynamicRef {

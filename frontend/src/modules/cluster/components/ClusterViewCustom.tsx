@@ -35,6 +35,11 @@ import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation'
 // Define the data structure for cluster custom resources
 type ClusterCustomData = CatalogBackedCustomResourceRow;
 
+// The binding's header arrow and the catalog query must agree on the default
+// order. NsViewCustom gets this from useNamespaceGridTablePersistence's
+// defaultSort seed; this view seeds the same default onto its raw persistence.
+const CLUSTER_CUSTOM_DEFAULT_SORT = { key: 'name', direction: 'asc' } as const;
+
 // Define props for ClusterViewCustom component
 interface ClusterCustomViewProps {
   loading?: boolean;
@@ -168,7 +173,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
-    const persistence = useGridTablePersistence<ClusterCustomData>({
+    const basePersistence = useGridTablePersistence<ClusterCustomData>({
       viewId: 'cluster-custom',
       clusterIdentity: selectedClusterId,
       namespace: null,
@@ -179,13 +184,22 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       filterOptions: { isNamespaceScoped: false },
       pageSizeOptions: BROWSE_PAGE_LIMIT_OPTIONS,
     });
+    const persistence = useMemo(
+      () => ({
+        ...basePersistence,
+        sortConfig: basePersistence.sortConfig ?? CLUSTER_CUSTOM_DEFAULT_SORT,
+      }),
+      [basePersistence]
+    );
 
     const {
       rows,
       loading: catalogLoading,
       hasLoadedOnce: catalogLoaded,
+      error: catalogError,
       filterOptions: catalogFilterOptions,
       totalCount,
+      unfilteredTotal,
       totalIsExact,
       fetchAllRows,
       pagination,
@@ -213,6 +227,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         kindDropdownSearchable: true,
         kindDropdownBulkActions: true,
         totalCount,
+        unfilteredTotal,
         totalIsExact,
         partialDataLabel: catalogFilterOptions.partialDataLabel,
       },
@@ -270,7 +285,9 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       rows,
       loading: catalogLoading || (loading ?? false),
       loaded: catalogLoaded || loaded,
-      error: error ?? null,
+      error: catalogError ?? error ?? null,
+      // Per-view identity so a revisit replays the last page instead of a spinner.
+      cacheKey: `cluster-custom|${selectedClusterId ?? ''}|`,
     });
 
     return (

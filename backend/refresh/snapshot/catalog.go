@@ -279,6 +279,20 @@ func catalogSnapshotIssues(result objectcatalog.QueryResult, health objectcatalo
 			Message: "Pagination is disabled while the catalog is degraded to avoid serving misleading cursor pages.",
 		})
 	}
+	if len(health.DeniedResources) > 0 {
+		const maxNamed = 5
+		named := health.DeniedResources
+		suffix := ""
+		if len(named) > maxNamed {
+			suffix = " and " + strconv.Itoa(len(named)-maxNamed) + " more"
+			named = named[:maxNamed]
+		}
+		issues = append(issues, ResourceQueryIssue{
+			Kind: "Catalog permissions",
+			Message: "Your role cannot list " + strings.Join(named, ", ") + suffix +
+				"; objects of those types are not shown.",
+		})
+	}
 	return issues
 }
 

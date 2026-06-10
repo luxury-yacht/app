@@ -56,6 +56,11 @@ const columns: GridColumnDefinition<TestRow>[] = [
     header: 'Name',
     render: (row) => row.name,
   },
+  {
+    key: 'age',
+    header: 'Age',
+    render: (row) => row.name,
+  },
 ];
 
 const row: TestRow = {
@@ -245,6 +250,45 @@ describe('useNamespaceResourceGridTable', () => {
     expect(harness.onTableStateChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({ namespaces: [] }),
+      })
+    );
+
+    harness.cleanup();
+  });
+
+  it('keeps the static kind vocabulary when query facets collapse to the selected kind', () => {
+    // Backend facets are computed post-kind-filter: with kind "Secret" selected
+    // the facets shrink to ['Secret']. The static per-view list must win or the
+    // dropdown collapses and other kinds become unselectable.
+    const harness = renderNamespaceGrid({
+      availableKinds: ['ConfigMap', 'Secret'],
+      showKindDropdown: true,
+      filterOptionOverrides: {
+        kinds: ['Secret'],
+        namespaces: ['team-a'],
+      },
+    });
+
+    expect(harness.result.current?.gridTableProps.filters?.options?.kinds).toEqual([
+      'ConfigMap',
+      'Secret',
+    ]);
+
+    harness.cleanup();
+  });
+
+  it('publishes the default sort key and direction before any user sort', () => {
+    const harness = renderNamespaceGrid({
+      defaultSort: { key: 'age', direction: 'desc' },
+    });
+
+    expect(harness.result.current?.gridTableProps.sortConfig).toEqual({
+      key: 'age',
+      direction: 'desc',
+    });
+    expect(harness.onTableStateChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sortConfig: expect.objectContaining({ key: 'age', direction: 'desc' }),
       })
     );
 

@@ -105,7 +105,14 @@ const isLiveDomainInitialLoadPending = (state: { status?: string; data?: unknown
 
 export interface QueryBackedNamespaceGridResult<
   T extends ResourceGridTableRow,
+  TPayload = unknown,
 > extends ResourceGridTableResult<T> {
+  /**
+   * The typed query's last applied page payload. Rows come through `source`;
+   * payload-level metadata (e.g. the pods metrics meta, scoped to the queried
+   * cluster) is read from here.
+   */
+  queryPayload: TPayload | null;
   /**
    * Normalized source state for the resource-inventory controller — the single
    * source of truth for the table's lifecycle. Views render
@@ -161,7 +168,10 @@ interface QueryBackedGridParamsCommon<
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
 }
 
-interface TypedQueryLifecycle<TRow extends ResourceGridTableRow> {
+interface TypedQueryLifecycle<
+  TPayload extends TypedQueryPayload,
+  TRow extends ResourceGridTableRow,
+> {
   data: TRow[];
   loading: boolean;
   loaded: boolean;
@@ -169,7 +179,7 @@ interface TypedQueryLifecycle<TRow extends ResourceGridTableRow> {
   tableMode: ResourceGridTableMode;
   effectiveFilterOptionOverrides?: Partial<GridTableFilterOptions>;
   onTableStateChange?: (next: QueryBackedTableState) => void;
-  query: UseTypedResourceQueryResult<TRow>;
+  query: UseTypedResourceQueryResult<TRow, TPayload>;
 }
 
 // The shared query lifecycle for both scopes: it owns table state, the scoped
@@ -205,7 +215,7 @@ function useTypedQueryLifecycle<
   defaultSort: SortConfig;
   persistence: UseGridTablePersistenceResult;
   liveScope: string;
-}): TypedQueryLifecycle<TRow> {
+}): TypedQueryLifecycle<TPayload, TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
   const pageLimit = typedQueryPageLimitOrDefault(persistence.pageSize);
@@ -273,7 +283,10 @@ function useTypedQueryLifecycle<
 // Builds the shared result for both scopes: the pagination footer (query scope
 // only) plus the normalized controller source (typed query source when enabled,
 // bounded local source otherwise).
-function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
+function useQueryBackedGridResult<
+  TPayload extends TypedQueryPayload,
+  TRow extends ResourceGridTableRow,
+>({
   viewId,
   cacheKey,
   table,
@@ -288,14 +301,14 @@ function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
   viewId: string;
   cacheKey: string;
   table: ResourceGridTableResult<TRow>;
-  query: UseTypedResourceQueryResult<TRow>;
+  query: UseTypedResourceQueryResult<TRow, TPayload>;
   persistence: UseGridTablePersistenceResult;
   data: TRow[];
   loading: boolean;
   loaded: boolean;
   error: string | null;
   queryTableMode: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
-}): QueryBackedNamespaceGridResult<TRow> {
+}): QueryBackedNamespaceGridResult<TRow, TPayload> {
   // Full-result fetcher for the Copy/Export "all matching rows" scope: walks the query's pages.
   // Threaded onto gridTableProps so the GridTable filter bar wires the scope toggle + Copy +
   // Export cluster itself (no per-view export action here).
@@ -331,6 +344,7 @@ function useQueryBackedGridResult<TRow extends ResourceGridTableRow>({
   return {
     ...table,
     gridTableProps,
+    queryPayload: query.payload,
     // The typed query source feeds the one controller contract as the single source of truth
     // (no separate wrapper-level rows/loading/loaded/error).
     source: buildQueryBackedSource({
@@ -382,7 +396,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   defaultSort = { key: 'name', direction: 'asc' },
   namespace,
   ...tableParams
-}: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow> {
+}: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow, TPayload> {
   const resolvedKeyExtractor = useResolvedQueryKeyExtractor(
     tableParams.keyExtractor,
     tableParams.objectIdentity?.key,
@@ -435,7 +449,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     filterOptionOverrides: lifecycle.effectiveFilterOptionOverrides,
     onTableStateChange: lifecycle.onTableStateChange,
   });
-  return useQueryBackedGridResult<TRow>({
+  return useQueryBackedGridResult<TPayload, TRow>({
     viewId: tableParams.viewId,
     cacheKey: `${tableParams.viewId}|${liveScope}`,
     table,
@@ -475,7 +489,7 @@ export function useQueryBackedClusterResourceGridTable<
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   ...tableParams
-}: QueryBackedClusterGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow> {
+}: QueryBackedClusterGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow, TPayload> {
   const defaultSort = useMemo(
     () => ({ key: defaultSortKey, direction: defaultSortDirection }),
     [defaultSortDirection, defaultSortKey]
@@ -525,7 +539,7 @@ export function useQueryBackedClusterResourceGridTable<
     filterOptionOverrides: lifecycle.effectiveFilterOptionOverrides,
     onTableStateChange: lifecycle.onTableStateChange,
   });
-  return useQueryBackedGridResult<TRow>({
+  return useQueryBackedGridResult<TPayload, TRow>({
     viewId: tableParams.viewId,
     cacheKey: `${tableParams.viewId}|${liveScope}`,
     table,

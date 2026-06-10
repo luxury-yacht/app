@@ -327,6 +327,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     items,
     loading,
     hasLoadedOnce,
+    error: catalogError,
     continueToken,
     previousToken,
     isRequestingMore,
@@ -457,7 +458,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     rows,
     loading,
     loaded: hasLoadedOnce,
-    error: null,
+    error: catalogError,
     // Per-view identity so a revisit replays the last browse page instead of a spinner.
     cacheKey: `${resolvedViewId}|${selectedClusterId ?? ''}|${namespace ?? ''}`,
   });

@@ -243,6 +243,10 @@ func (s *Service) listNamespaceItems(ctx context.Context, index int, desc resour
 				break
 			}
 			if apierrors.IsForbidden(err) {
+				// Record the denial so the catalog can report WHY the type is
+				// missing — an RBAC-blocked catalog must not look like an
+				// empty cluster.
+				s.recordDeniedResource(deniedResourceName(desc))
 				s.logDebug(fmt.Sprintf("permission denied listing %s, skipping", desc.GVR.String()))
 				return results, nil
 			}
@@ -278,6 +282,15 @@ func (s *Service) listNamespaceItems(ctx context.Context, index int, desc resour
 		options.Continue = cont
 	}
 	return results, nil
+}
+
+// deniedResourceName renders a kubectl-style resource name (`resource[.group]`)
+// for permission diagnostics.
+func deniedResourceName(desc resourceDescriptor) string {
+	if desc.Group != "" {
+		return desc.Resource + "." + desc.Group
+	}
+	return desc.Resource
 }
 
 func (s *Service) namespaceWorkerLimit(targetCount int) int {

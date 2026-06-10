@@ -223,6 +223,10 @@ func (s *Service) sync(ctx context.Context) error {
 	s.syncInProgress.Store(true)
 	defer s.syncInProgress.Store(false)
 
+	// A fresh sync re-attempts every list, so denials from the previous pass
+	// are stale; a permission grant clears the warning here.
+	s.resetDeniedResources()
+
 	currentItems, currentLastSeen, prevResourceCount := s.captureCurrentState()
 	newItems := cloneSummaryMap(currentItems)
 	newLastSeen := cloneTimeMap(currentLastSeen)

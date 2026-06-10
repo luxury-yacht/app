@@ -21,28 +21,41 @@ P0 — Blockers
 
 P1 — Major
 
-7. Kinds multi-select collapses to the selected kind — useResourceGridTable.tsx:425 + typed_table_query.go (facets computed post-kind-filter) — 8 views visibly affected; namespaces have a protective merge,
+7. ✅ Kinds multi-select collapses to the selected kind — useResourceGridTable.tsx:425 + typed_table_query.go (facets computed post-kind-filter) — 8 views visibly affected; namespaces have a protective merge,
    kinds don't.
-8. Default sort dropped on every NsView — useResourceGridTable.tsx:105 — defaultSort.key never forwarded; queries go out unsorted, no header arrow anywhere; NsViewEvents shows name-asc instead of newest-first.
+   FIXED: queryBackedNamespaceFilterOptions generalized to queryBackedFacetFilterOptions and applied to kinds — the static per-view kind vocabulary wins over collapsed facets, mirroring namespaces.
+8. ✅ Default sort dropped on every NsView — useResourceGridTable.tsx:105 — defaultSort.key never forwarded; queries go out unsorted, no header arrow anywhere; NsViewEvents shows name-asc instead of newest-first.
    Test passes only because the inner hook is mocked.
-9. ClusterViewCustom shows a false "Name ↑" arrow — ClusterViewCustom.tsx:205 — sortConfig null → backend kind-grouped default order under a lit name-ascending indicator (NsViewCustom is unaffected).
-10. PodsTab metrics read the wrong cluster — PodsTab.tsx:74 — banner and per-pod staleness come from the globally selected cluster while rows query the panel object's cluster; violates the clusterId critical
+   FIXED: useNamespaceResourceGridTable forwards defaultSortKey; unmocked test pins sortConfig + onTableStateChange publication.
+9. ✅ ClusterViewCustom shows a false "Name ↑" arrow — ClusterViewCustom.tsx:205 — sortConfig null → backend kind-grouped default order under a lit name-ascending indicator (NsViewCustom is unaffected).
+   FIXED: persistence sortConfig defaults to name-asc (the same default the binding displays), so the catalog query and the header arrow agree — matching NsViewCustom's seed.
+10. ✅ PodsTab metrics read the wrong cluster — PodsTab.tsx:74 — banner and per-pod staleness come from the globally selected cluster while rows query the panel object's cluster; violates the clusterId critical
     rule; the deleted hook's payload-scoped metrics are still produced but unread.
-11. Custom views' error channel severed — useBrowseCatalog.ts:464 → useCatalogBackedCustomResourceRows.ts:73 → error: null hardcoded — first-load failure spins forever; mid-session failure silently freezes the
+    FIXED: the typed query now exposes its payload (queryPayload through the wrapper); PodsTab reads payload.metrics — same snapshot as the rows, same cluster; global metrics hook removed from the panel.
+11. ✅ Custom views' error channel severed — useBrowseCatalog.ts:464 → useCatalogBackedCustomResourceRows.ts:73 → error: null hardcoded — first-load failure spins forever; mid-session failure silently freezes the
     page.
-12. Custom views auto-advance pages on scroll — ClusterViewCustom.tsx:295 / NsViewCustom.tsx:334 — {...pagination} without autoLoadMore={false} arms the scroll sentinel on page-replacing cursor pagination;
+    FIXED: useBrowseCatalog exposes error (domain.error + page-nav failures); plumbed through useCatalogBackedCustomResourceRows into both Custom views' sources AND BrowseView; renders via the P0-3 wrapper banner.
+12. ✅ Custom views auto-advance pages on scroll — ClusterViewCustom.tsx:295 / NsViewCustom.tsx:334 — {...pagination} without autoLoadMore={false} arms the scroll sentinel on page-replacing cursor pagination;
     chains pages; advances with no scroll on short pages.
-13. Custom views still cold-spin on revisit — same files (no cacheKey; rows die with the hook) — contradicts the release-note "every table" claim.
-14. Custom filter banner shows "N of N" — unfilteredTotal returned by useBrowseCatalog.ts:615 but never plumbed; useGridTableFiltersWiring.tsx:265 falls back to the filtered total.
-15. Export-all silently truncates with a success toast — useTypedResourceQuery.ts:345 + useBrowseCatalog.ts:576 — any failed page breaks the walk (orchestrator never rethrows); partial/header-only CSV saved as
+    FIXED: the shared pagination object carries autoLoadMore: false.
+13. ✅ Custom views still cold-spin on revisit — same files (no cacheKey; rows die with the hook) — contradicts the release-note "every table" claim.
+    FIXED: cluster-custom/namespace-custom sources carry cacheKeys ('|'-segmented for the P0-4 cluster eviction).
+14. ✅ Custom filter banner shows "N of N" — unfilteredTotal returned by useBrowseCatalog.ts:615 but never plumbed; useGridTableFiltersWiring.tsx:265 falls back to the filtered total.
+    FIXED: unfilteredTotal plumbed through useCatalogBackedCustomResourceRows into both Custom views' filterOptions.
+15. ✅ Export-all silently truncates with a success toast — useTypedResourceQuery.ts:345 + useBrowseCatalog.ts:576 — any failed page breaks the walk (orchestrator never rethrows); partial/header-only CSV saved as
     success; same for clipboard "all" scope.
-16. Collector re-sorts the whole buffer per row — typed_table_query.go:286 — full sort.SliceStable per Add with allocating, undecorated comparators (fmt.Sprintf/metric re-parse per comparison at :452, matchers
+    FIXED: both fetchAllRows walks throw on blocked/missing pages (and on a non-advancing cursor); the Copy/Export actions already surface rejections as error feedback.
+16. ✅ Collector re-sorts the whole buffer per row — typed_table_query.go:286 — full sort.SliceStable per Add with allocating, undecorated comparators (fmt.Sprintf/metric re-parse per comparison at :452, matchers
     rebuilt per row at :330); ~100× the work of one sort at 100k pods, per tick and per keystroke; no benchmark covers it.
-17. Catalog index rebuilt from scratch per publish — catalog_index.go:229 — every initial-sync emit (quadratic for dynamic types) and every 200ms watch flush re-sorts and re-indexes all N items, with Browse
+    FIXED: prebuilt per-query matcher, decorated (value,key) candidates, sorted bounded insert with O(1) out-of-window reject; apply path decorates once + binary-search cursor boundary. Parity pinned by a characterization test; new benchmark: collector at 100k pods 524ms→15ms (name) / 1.93s→21ms (cpu, 52M→400k allocs).
+17. ✅ Catalog index rebuilt from scratch per publish — catalog_index.go:229 — every initial-sync emit (quadratic for dynamic types) and every 200ms watch flush re-sorts and re-indexes all N items, with Browse
     closed; the benchmark excludes this via b.StopTimer().
-18. No search debounce on typed queries — useTypedResourceQuery.ts:227 chain — every keystroke runs a full backend build (Browse debounces at 250ms); out-of-order guard exists so it's waste, not wrong rows.
-19. Catalog has no permission signal — backend/objectcatalog/collect.go:245 — Forbidden lists are skipped with a debug log and a healthy return; an RBAC-blocked catalog is indistinguishable from an empty
+    FIXED: query index (and the watch-flush sort) built lazily on first query, memoized until the next publish; per-query index clones removed; emit shares immutable chunk pointers instead of deep-copying. New publish benchmark: 231ms→37ms per flush at 100k (1.46M→542 allocs). Also repaired the broken churn benchmark (svc.items was never populated).
+18. ✅ No search debounce on typed queries — useTypedResourceQuery.ts:227 chain — every keystroke runs a full backend build (Browse debounces at 250ms); out-of-order guard exists so it's waste, not wrong rows.
+    FIXED: 250ms search debounce mirroring Browse (seeded so persisted searches fire immediately; only the search string is deferred).
+19. ✅ Catalog has no permission signal — backend/objectcatalog/collect.go:245 — Forbidden lists are skipped with a debug log and a healthy return; an RBAC-blocked catalog is indistinguishable from an empty
     cluster (root cause beneath #11's "No custom objects found").
+    FIXED: Forbidden lists are recorded per sync (reset on each sync start), exposed via HealthStatus.DeniedResources, and surfaced as a "Catalog permissions" issue → existing partialDataLabel on Browse/Custom.
 
 P2 — Moderate
 

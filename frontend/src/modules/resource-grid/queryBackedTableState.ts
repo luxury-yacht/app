@@ -60,24 +60,31 @@ const isAllNamespacesFilterSentinel = (value: string): boolean => {
   return normalized === ALL_NAMESPACES_SCOPE || normalized === 'all' || normalized === '*';
 };
 
-export function queryBackedNamespaceFilterOptions(
-  explicitNamespaces: string[] | undefined,
-  queryFacetNamespaces: string[] | undefined,
-  fallbackNamespaces: string[] | undefined = undefined
+/**
+ * Picks the option list for a faceted filter dimension (namespaces, kinds).
+ * Backend facets are computed AFTER the dimension's own filter is applied, so
+ * once a value is selected the facets collapse to just that value — the
+ * explicit metadata list (namespace context, the view's static kind
+ * vocabulary) must win whenever it knows more than the loaded rows do.
+ */
+export function queryBackedFacetFilterOptions(
+  explicitValues: string[] | undefined,
+  queryFacetValues: string[] | undefined,
+  fallbackValues: string[] | undefined = undefined
 ): string[] | undefined {
-  if (!explicitNamespaces || explicitNamespaces.length === 0) {
-    return queryFacetNamespaces;
+  if (!explicitValues || explicitValues.length === 0) {
+    return queryFacetValues;
   }
-  if (!queryFacetNamespaces || queryFacetNamespaces.length === 0) {
-    return explicitNamespaces;
+  if (!queryFacetValues || queryFacetValues.length === 0) {
+    return explicitValues;
   }
-  const explicit = normalizeOptionSet(explicitNamespaces);
-  const fallback = normalizeOptionSet(fallbackNamespaces);
+  const explicit = normalizeOptionSet(explicitValues);
+  const fallback = normalizeOptionSet(fallbackValues);
   const explicitHasMetadataBeyondFallback =
     fallback.size === 0 ||
     explicit.size > fallback.size ||
-    [...explicit].some((namespace) => !fallback.has(namespace));
-  return explicitHasMetadataBeyondFallback ? explicitNamespaces : queryFacetNamespaces;
+    [...explicit].some((value) => !fallback.has(value));
+  return explicitHasMetadataBeyondFallback ? explicitValues : queryFacetValues;
 }
 
 export function normalizeQueryBackedNamespaceFilters(

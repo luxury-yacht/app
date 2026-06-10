@@ -21,10 +21,12 @@ type catalogIndex struct {
 	uid   map[string]string
 
 	sortedChunks      []*summaryChunk
+	chunksNeedSort    bool
 	cachedKinds       []KindInfo
 	cachedNamespaces  []string
 	cachedDescriptors []Descriptor
 	queryIndex        catalogQueryIndex
+	queryIndexBuilt   bool
 	cachesReady       bool
 
 	lastFirstBatchLatency time.Duration
@@ -141,15 +143,41 @@ func (idx *catalogIndex) resourceForGroupResource(group, resource string) (strin
 	return "", nil
 }
 
+// ensureQueryIndex sorts the chunks (when a watch-flush rebuild deferred it)
+// and builds the query index on demand. Publishes only invalidate, so the cost
+// is paid at most once per data change — and only when a catalog consumer
+// actually queries (never while Browse/Custom views are closed). Callers must
+// hold the service write lock.
+func (idx *catalogIndex) ensureQueryIndex() {
+	if idx.chunksNeedSort {
+		sorted := make([]*summaryChunk, len(idx.sortedChunks))
+		for i, chunk := range idx.sortedChunks {
+			items := append([]Summary(nil), chunk.items...)
+			sortSummaries(items)
+			sorted[i] = &summaryChunk{items: items}
+		}
+		idx.sortedChunks = sorted
+		idx.chunksNeedSort = false
+	}
+	if idx.queryIndexBuilt {
+		return
+	}
+	idx.queryIndex = buildCatalogQueryIndex(idx.sortedChunks)
+	idx.queryIndexBuilt = true
+}
+
 func (idx *catalogIndex) cachedQueryState() catalogCachedQueryState {
 	chunks := make([]*summaryChunk, len(idx.sortedChunks))
 	copy(chunks, idx.sortedChunks)
 	return catalogCachedQueryState{
-		chunks:      chunks,
-		kinds:       append([]KindInfo(nil), idx.cachedKinds...),
-		namespaces:  append([]string(nil), idx.cachedNamespaces...),
+		chunks:     chunks,
+		kinds:      append([]KindInfo(nil), idx.cachedKinds...),
+		namespaces: append([]string(nil), idx.cachedNamespaces...),
+		// Chunks are immutable once published and the query index is replaced
+		// wholesale on rebuild (never mutated in place), so the maps are shared
+		// with the executor instead of deep-copied per query.
 		descriptors: append([]Descriptor(nil), idx.cachedDescriptors...),
-		queryIndex:  idx.queryIndex.clone(),
+		queryIndex:  idx.queryIndex,
 	}
 }
 
@@ -224,9 +252,16 @@ func (idx *catalogIndex) publishStreamingState(
 	chunkSnapshot := make([]*summaryChunk, len(chunks))
 	copy(chunkSnapshot, chunks)
 	idx.sortedChunks = chunkSnapshot
+	idx.chunksNeedSort = false
 	idx.cachedKinds = snapshotSortedKindInfos(kindSet)
 	idx.cachedNamespaces = snapshotSortedKeys(namespaceSet)
-	idx.queryIndex = buildCatalogQueryIndex(chunkSnapshot)
+	// Invalidate the query index instead of rebuilding it: initial sync
+	// publishes once per emitted batch and watch flushes publish every 200ms
+	// under churn — rebuilding here made that quadratic across a sync and
+	// charged full re-index cost even with no catalog consumer open. The index
+	// is built lazily in ensureQueryIndex when a query needs it.
+	idx.queryIndex = catalogQueryIndex{}
+	idx.queryIndexBuilt = false
 	if descriptors != nil {
 		idx.cachedDescriptors = append([]Descriptor(nil), descriptors...)
 	}
@@ -266,37 +301,6 @@ func buildCatalogQueryIndex(chunks []*summaryChunk) catalogQueryIndex {
 	return index
 }
 
-func (idx catalogQueryIndex) clone() catalogQueryIndex {
-	return catalogQueryIndex{
-		byNamespace:        cloneCatalogQueryRefMap(idx.byNamespace),
-		byKind:             cloneCatalogQueryRefMap(idx.byKind),
-		byNamespaceAndKind: cloneCatalogQueryRefMap(idx.byNamespaceAndKind),
-		kindsByNamespace:   cloneCatalogNamespaceKinds(idx.kindsByNamespace),
-	}
-}
-
-func cloneCatalogQueryRefMap(src map[string][]catalogIndexedSummaryRef) map[string][]catalogIndexedSummaryRef {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make(map[string][]catalogIndexedSummaryRef, len(src))
-	for key, refs := range src {
-		dst[key] = append([]catalogIndexedSummaryRef(nil), refs...)
-	}
-	return dst
-}
-
-func cloneCatalogNamespaceKinds(src map[string]map[string]bool) map[string]map[string]bool {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make(map[string]map[string]bool, len(src))
-	for namespace, kinds := range src {
-		dst[namespace] = cloneKindSet(kinds)
-	}
-	return dst
-}
-
 func catalogQueryNamespaceIndexKey(namespace string, scope Scope) string {
 	if scope == ScopeCluster || namespace == "" {
 		return "cluster"
@@ -324,13 +328,13 @@ func (idx *catalogIndex) rebuildCacheFromItems(items map[string]Summary, descrip
 				namespaceSet[summary.Namespace] = struct{}{}
 			}
 		}
-		sortSummaries(summaries)
-		chunkCopy := make([]Summary, len(summaries))
-		copy(chunkCopy, summaries)
-		chunks = append(chunks, &summaryChunk{items: chunkCopy})
+		chunks = append(chunks, &summaryChunk{items: summaries})
 	}
 
 	idx.publishStreamingState(chunks, kindSet, namespaceSet, descriptors, true)
+	// Sorting all N items per watch flush (200ms under churn) is deferred to
+	// the first query, alongside the index build (ensureQueryIndex).
+	idx.chunksNeedSort = true
 	idx.rebuildLookupIndexes()
 }
 

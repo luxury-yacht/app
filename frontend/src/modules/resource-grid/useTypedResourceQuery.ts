@@ -28,8 +28,14 @@ export interface UseTypedResourceQueryParams<TPayload extends TypedQueryPayload,
   selectRows: (payload: TPayload) => TRow[];
 }
 
-export interface UseTypedResourceQueryResult<TRow> {
+export interface UseTypedResourceQueryResult<TRow, TPayload = unknown> {
   rows: TRow[];
+  /**
+   * The last successfully applied page payload. Rows are extracted via
+   * selectRows; payload-level metadata (e.g. the pods metrics meta, scoped to
+   * the QUERIED cluster) rides here for consumers that need it.
+   */
+  payload: TPayload | null;
   loading: boolean;
   loaded: boolean;
   error: string | null;
@@ -51,6 +57,9 @@ export interface UseTypedResourceQueryResult<TRow> {
 const DEFAULT_PAGE_LIMIT = 50;
 // Each export page requests the backend's max page size to minimise round-trips.
 const EXPORT_PAGE_LIMIT = 1000;
+// Matches Browse: a full backend page build per keystroke is pure waste (the
+// out-of-order identity guard already prevents wrong rows).
+const SEARCH_DEBOUNCE_MS = 250;
 export const TYPED_QUERY_PAGE_LIMIT_OPTIONS = [25, 50, 100, 250, 500, 1000] as const;
 export type TypedQueryPageLimit = (typeof TYPED_QUERY_PAGE_LIMIT_OPTIONS)[number];
 
@@ -66,8 +75,31 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   predicates,
   liveDataVersion,
   selectRows,
-}: UseTypedResourceQueryParams<TPayload, TRow>): UseTypedResourceQueryResult<TRow> {
+}: UseTypedResourceQueryParams<TPayload, TRow>): UseTypedResourceQueryResult<TRow, TPayload> {
+  // Debounce ONLY the search string (sort/kind/namespace changes apply
+  // immediately). Seeded from the live value so a persisted search fires
+  // without delay on mount.
+  const [debouncedSearch, setDebouncedSearch] = useState(filters.search ?? '');
+  useEffect(() => {
+    const nextSearch = filters.search ?? '';
+    if (nextSearch === debouncedSearch) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(nextSearch);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [debouncedSearch, filters.search]);
+  const effectiveFilters = useMemo(
+    () =>
+      (filters.search ?? '') === debouncedSearch
+        ? filters
+        : { ...filters, search: debouncedSearch },
+    [debouncedSearch, filters]
+  );
+
   const [rows, setRows] = useState<TRow[]>([]);
+  const [payload, setPayload] = useState<TPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +130,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         clusterId,
         domain,
         baseScope,
-        filters,
+        filters: effectiveFilters,
         sortConfig,
         pageLimit,
         predicates,
@@ -109,7 +141,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       clusterId,
       domain,
       enabled,
-      filters,
+      effectiveFilters,
       liveDataVersion,
       pageLimit,
       predicates,
@@ -123,12 +155,12 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         clusterId,
         domain,
         baseScope,
-        filters,
+        filters: effectiveFilters,
         sortConfig,
         pageLimit,
         predicates,
       }),
-    [baseScope, clusterId, domain, enabled, filters, pageLimit, predicates, sortConfig]
+    [baseScope, clusterId, domain, enabled, effectiveFilters, pageLimit, predicates, sortConfig]
   );
   const queryHardResetIdentity = useMemo(
     () =>
@@ -170,6 +202,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       setTotalCount(0);
       setTotalIsExact(true);
       setRows([]);
+      setPayload(null);
       setLoaded(false);
       setFilterOptions({});
       setDynamic(null);
@@ -183,7 +216,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     }
     return buildTypedResourceQueryScope(clusterId, {
       baseScope,
-      filters,
+      filters: effectiveFilters,
       sortConfig,
       pageLimit,
       predicates,
@@ -193,7 +226,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     baseScope,
     clusterId,
     enabled,
-    filters,
+    effectiveFilters,
     pageLimit,
     predicates,
     requestTokenForScope,
@@ -203,6 +236,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   const applyPayload = useCallback((payload: TPayload) => {
     const nextRows = selectRowsRef.current(payload);
     setRows(nextRows);
+    setPayload(payload);
     setContinueToken(payload.continue ?? null);
     const hasTotal = typeof payload.total === 'number';
     // A missing total must never render as an exact 0 while rows are visible.
@@ -344,12 +378,14 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     }
     const all: TRow[] = [];
     let cursor: string | null = null;
+    const maxPages = 100000;
     // Page through the full result set following the backend cursor. Each page uses the
     // export max page size; the loop guard bounds a pathological non-advancing cursor.
-    for (let page = 0; page < 100000; page += 1) {
+    // A failed page REJECTS: a partial export saved as success is silent data loss.
+    for (let page = 0; page < maxPages; page += 1) {
       const exportScope = buildTypedResourceQueryScope(clusterId, {
         baseScope,
-        filters,
+        filters: effectiveFilters,
         sortConfig,
         pageLimit: EXPORT_PAGE_LIMIT,
         predicates,
@@ -367,23 +403,27 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         preserveState: false,
       });
       if (result.status !== 'executed') {
-        break;
+        throw new Error(`${label} export failed: page ${page + 1} request was blocked`);
       }
       const payload = result.data?.data as TPayload | null | undefined;
       if (!payload) {
-        break;
+        throw new Error(`${label} export failed: page ${page + 1} returned no data`);
       }
       all.push(...selectRowsRef.current(payload));
       cursor = payload.continue ?? null;
       if (!cursor) {
-        break;
+        return all;
       }
     }
+    if (cursor) {
+      throw new Error(`${label} export failed: cursor did not advance after ${maxPages} pages`);
+    }
     return all;
-  }, [baseScope, clusterId, domain, enabled, filters, label, predicates, sortConfig]);
+  }, [baseScope, clusterId, domain, enabled, effectiveFilters, label, predicates, sortConfig]);
 
   return {
     rows,
+    payload,
     loading,
     loaded,
     error,

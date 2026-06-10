@@ -378,19 +378,66 @@ describe('PodsTab (query-backed)', () => {
     );
   });
 
-  it('renders a metrics warning banner sourced from cluster metrics availability', async () => {
-    clusterMetricsRef.current = {
-      stale: false,
-      lastError: 'metrics api unavailable',
-      collectedAt: 1700000000,
-      successCount: 0,
-      failureCount: 1,
-    };
+  it('renders the metrics banner from the pods query payload (the panel cluster)', async () => {
+    // The rows query is scoped to the panel object's cluster and its payload
+    // carries that cluster's metrics meta — the banner must come from there.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [createPod()],
+          total: 1,
+          totalIsExact: true,
+          metrics: {
+            stale: false,
+            lastError: 'metrics api unavailable',
+            collectedAt: 1700000000,
+            successCount: 0,
+            failureCount: 1,
+          },
+        },
+      },
+    });
 
     await renderPods();
 
     expect(container.querySelector('.metrics-warning-banner')?.textContent).toContain(
       'Metrics API not found'
     );
+  });
+
+  it('ignores the globally selected cluster metrics state (wrong cluster)', async () => {
+    // The globally selected cluster is failing, but the panel object's cluster
+    // (the query payload) is healthy — no banner may show.
+    clusterMetricsRef.current = {
+      stale: true,
+      lastError: 'metrics api unavailable',
+      collectedAt: 1700000000,
+      successCount: 0,
+      failureCount: 5,
+    };
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [createPod()],
+          total: 1,
+          totalIsExact: true,
+          metrics: {
+            stale: false,
+            lastError: '',
+            collectedAt: 1700000000,
+            successCount: 5,
+            failureCount: 0,
+          },
+        },
+      },
+    });
+
+    await renderPods();
+
+    expect(container.querySelector('.metrics-warning-banner')).toBeNull();
   });
 });

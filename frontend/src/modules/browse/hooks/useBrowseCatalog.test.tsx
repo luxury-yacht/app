@@ -236,6 +236,32 @@ describe('useBrowseCatalog', () => {
     expect(result?.pageIndex).toBe(2);
   });
 
+  it('fetchAllRows rejects when a page fails instead of returning a partial result', async () => {
+    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    mocks.useRefreshScopedDomain.mockReturnValue({
+      status: 'ready',
+      data: makePayload({ items: [first], total: 2, batchSize: 1 }),
+      scope: 'cluster-1|limit=2&namespace=default',
+    });
+    // First export page succeeds with a cursor; the follow-up page is blocked.
+    mocks.requestRefreshDomainState
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: makePayload({ items: [first], continue: 'page-2', total: 2, batchSize: 1 }),
+        },
+      })
+      .mockResolvedValueOnce({ status: 'blocked' });
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    await expect(result!.fetchAllRows()).rejects.toThrow(/page 2/);
+  });
+
   it('keeps the selected Cluster Browse cursor page when the base scope refreshes', async () => {
     const baseScope = 'cluster-1|limit=2&namespace=cluster';
     const metadataScope = 'cluster-1|limit=1&namespace=cluster';

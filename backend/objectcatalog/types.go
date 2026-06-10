@@ -48,6 +48,10 @@ type HealthStatus struct {
 	LastError           string      `json:"lastError,omitempty"`       // error message from the last sync attempt
 	Stale               bool        `json:"stale"`                     // indicates if the catalog is serving stale data
 	FailedResources     int         `json:"failedResources,omitempty"` // optional number of resources that failed to sync
+	// DeniedResources lists resource types (kubectl-style `resource[.group]`)
+	// whose lists were RBAC-forbidden during the last sync — so an RBAC-blocked
+	// catalog is distinguishable from an empty cluster. Sorted.
+	DeniedResources []string `json:"deniedResources,omitempty"`
 }
 
 // Summary represents the lightweight metadata captured for each Kubernetes object.
