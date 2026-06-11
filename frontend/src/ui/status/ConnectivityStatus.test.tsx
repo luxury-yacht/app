@@ -20,6 +20,7 @@ let mockAuthState: ClusterAuthState = {
   currentAttempt: 0,
   maxAttempts: 0,
   secondsUntilRetry: 0,
+  errorClass: '',
 };
 
 vi.mock('@shared/components/status/StatusIndicator', () => ({
@@ -126,6 +127,7 @@ describe('ConnectivityStatus', () => {
       currentAttempt: 0,
       maxAttempts: 0,
       secondsUntilRetry: 0,
+      errorClass: '',
     };
   });
 
@@ -175,6 +177,7 @@ describe('ConnectivityStatus', () => {
       currentAttempt: 0,
       maxAttempts: 0,
       secondsUntilRetry: 0,
+      errorClass: 'auth',
     };
 
     const indicator = renderStatus();

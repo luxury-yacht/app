@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/versioning"
@@ -110,6 +111,11 @@ type App struct {
 	// recovery scheduling without affecting other clusters.
 	clusterAuthRecoveryMu        sync.Mutex
 	clusterAuthRecoveryScheduled map[string]bool
+
+	// Per-cluster timestamps of the last automatic auth recovery retry,
+	// used by the heartbeat to rate-limit retries for invalid clusters.
+	clusterAuthAutoRetryMu sync.Mutex
+	clusterAuthAutoRetry   map[string]time.Time
 
 	// ssrrCaches holds per-cluster SSRR rule caches for QueryPermissions.
 	ssrrCachesMu sync.Mutex

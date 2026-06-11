@@ -47,6 +47,26 @@
 
 ### Fixed
 
+- Clusters now reconnect automatically after extended outages such as control-plane
+  upgrades. Previously, an authentication error during an outage (for example a
+  transient 401 while the API server restarted) started a recovery cycle that gave
+  up permanently after ~30 seconds — far shorter than a typical upgrade — and
+  nothing ever re-checked the cluster afterwards, so it stayed at "Authentication
+  failed, please re-authenticate" until the app was restarted. Recovery now
+  distinguishes an unreachable cluster from rejected credentials: while the cluster
+  is unreachable the app keeps probing (every 15 seconds) and reconnects on its own
+  as soon as the cluster answers, and the connectivity indicator shows
+  "Reconnecting" instead of a misleading authentication-failure overlay. Genuine
+  credential failures still show the authentication overlay — and the app now
+  rechecks those once a minute too, so fixing credentials externally (for example
+  `aws sso login`) reconnects the cluster without needing the Retry button.
+
+- Fixed a wiring bug where any rebuild of a cluster's clients (after auth recovery,
+  a kubeconfig file change, or a transport rebuild) attached the new connections to
+  a discarded internal auth tracker. The next authentication error after a rebuild
+  could permanently block all requests to that cluster — with the cluster stuck
+  showing "Retrying…" forever and the Retry button silently doing nothing.
+
 - Resource tables no longer flash a loading spinner or "no data available" when
   you re-visit a view you've already opened. Every table now shows the rows it
   had last time for that cluster/namespace immediately on return and refreshes

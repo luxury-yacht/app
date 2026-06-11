@@ -24,6 +24,10 @@ type RecoveryProgress struct {
 	// SecondsUntilRetry is the number of seconds until the next retry attempt.
 	// This is 0 when a retry is in progress.
 	SecondsUntilRetry int
+	// ErrorClass is the verdict of the most recent failed probe. It is
+	// ErrorClassUnknown until a probe completes, and survives TriggerRetry
+	// so consumers see a stable verdict while a new probe is in flight.
+	ErrorClass ErrorClass
 }
 
 // Config holds the configuration for the auth state Manager.
@@ -50,6 +54,17 @@ type Config struct {
 	// It should return nil if auth is valid, an error otherwise.
 	// If nil, recovery will always succeed immediately.
 	RecoveryTest func() error
+
+	// ClassifyError maps a RecoveryTest error to an ErrorClass. Connectivity
+	// failures do not consume recovery attempts; everything else does.
+	// If nil — or if the classifier returns anything other than
+	// ErrorClassConnectivity — the failure is treated as auth-class, which
+	// preserves the bounded-attempts behavior.
+	ClassifyError func(error) ErrorClass
+
+	// ConnectivityRetryInterval is the delay between probes while the cluster
+	// is unreachable. If 0, the tail of BackoffSchedule is used.
+	ConnectivityRetryInterval time.Duration
 }
 
 // Manager manages authentication state and recovery.
@@ -68,6 +83,11 @@ type Manager struct {
 
 	// secondsUntilRetry tracks seconds until next retry (0 if retry in progress or not recovering).
 	secondsUntilRetry int
+
+	// lastProbeClass is the verdict of the most recent failed recovery probe.
+	// Reset on a fresh failure from StateValid; sticky across TriggerRetry so
+	// the UI keeps a stable verdict while a re-probe is in flight.
+	lastProbeClass ErrorClass
 
 	// config holds the manager configuration.
 	config Config
@@ -101,11 +121,13 @@ func New(cfg Config) *Manager {
 	return &Manager{
 		state: StateValid,
 		config: Config{
-			MaxAttempts:        cfg.MaxAttempts,
-			BackoffSchedule:    backoff,
-			OnStateChange:      cfg.OnStateChange,
-			OnRecoveryProgress: cfg.OnRecoveryProgress,
-			RecoveryTest:       cfg.RecoveryTest,
+			MaxAttempts:               cfg.MaxAttempts,
+			BackoffSchedule:           backoff,
+			OnStateChange:             cfg.OnStateChange,
+			OnRecoveryProgress:        cfg.OnRecoveryProgress,
+			RecoveryTest:              cfg.RecoveryTest,
+			ClassifyError:             cfg.ClassifyError,
+			ConnectivityRetryInterval: cfg.ConnectivityRetryInterval,
 		},
 		ctx:    ctx,
 		cancel: cancel,
@@ -137,6 +159,9 @@ func (m *Manager) ReportFailure(reason string) {
 	if m.state != StateValid {
 		return
 	}
+
+	// Fresh failure: no probe has produced a verdict yet.
+	m.lastProbeClass = ErrorClassUnknown
 
 	// Transition to recovering or invalid based on config
 	if m.config.MaxAttempts > 0 {
@@ -240,10 +265,18 @@ func (m *Manager) startRecoveryLocked() {
 }
 
 // runRecovery runs the recovery loop in the background.
+//
+// Only auth-class probe failures consume the bounded attempt budget. A
+// connectivity-class failure means the cluster could not be reached, which
+// says nothing about credential validity — the loop keeps probing at
+// connectivityRetryDelay until the cluster answers, an auth-class failure
+// spends an attempt, or the recovery is cancelled.
 func (m *Manager) runRecovery(ctx context.Context) {
 	defer m.wg.Done()
 
-	for attempt := 0; attempt < m.config.MaxAttempts; attempt++ {
+	attempt := 0
+	delay := m.getBackoffDelay(attempt)
+	for {
 		// Check if cancelled before starting
 		select {
 		case <-ctx.Done():
@@ -251,8 +284,6 @@ func (m *Manager) runRecovery(ctx context.Context) {
 		default:
 		}
 
-		// Get backoff delay for this attempt
-		delay := m.getBackoffDelay(attempt)
 		if delay > 0 {
 			// Emit progress every second during the countdown
 			remaining := int(delay.Seconds())
@@ -279,7 +310,8 @@ func (m *Manager) runRecovery(ctx context.Context) {
 		}
 
 		// Run the recovery test
-		if err := m.testRecovery(); err == nil {
+		err := m.testRecovery()
+		if err == nil {
 			m.mu.Lock()
 			// Only update state if we're still the active recovery and in recovering state
 			if ctx.Err() == nil && m.state == StateRecovering {
@@ -288,6 +320,23 @@ func (m *Manager) runRecovery(ctx context.Context) {
 			m.mu.Unlock()
 			return
 		}
+
+		class := m.classifyProbeError(err)
+		m.mu.Lock()
+		m.lastProbeClass = class
+		m.mu.Unlock()
+
+		if class == ErrorClassConnectivity {
+			// Cluster unreachable: wait without consuming an attempt.
+			delay = m.connectivityRetryDelay()
+			continue
+		}
+
+		attempt++
+		if attempt >= m.config.MaxAttempts {
+			break
+		}
+		delay = m.getBackoffDelay(attempt)
 	}
 
 	// All attempts exhausted - transition to invalid
@@ -299,11 +348,37 @@ func (m *Manager) runRecovery(ctx context.Context) {
 	m.mu.Unlock()
 }
 
+// classifyProbeError maps a recovery test failure to an ErrorClass.
+// Without a classifier — or for any verdict other than connectivity — the
+// failure is treated as auth-class so it consumes a recovery attempt.
+func (m *Manager) classifyProbeError(err error) ErrorClass {
+	if m.config.ClassifyError == nil {
+		return ErrorClassAuth
+	}
+	if class := m.config.ClassifyError(err); class == ErrorClassConnectivity {
+		return ErrorClassConnectivity
+	}
+	return ErrorClassAuth
+}
+
+// connectivityRetryDelay returns the wait between probes while the cluster is
+// unreachable: the configured interval, falling back to the backoff tail.
+func (m *Manager) connectivityRetryDelay() time.Duration {
+	if m.config.ConnectivityRetryInterval > 0 {
+		return m.config.ConnectivityRetryInterval
+	}
+	if len(m.config.BackoffSchedule) == 0 {
+		return 0
+	}
+	return m.config.BackoffSchedule[len(m.config.BackoffSchedule)-1]
+}
+
 // emitProgress updates tracked progress and calls the OnRecoveryProgress callback if set.
 func (m *Manager) emitProgress(currentAttempt, secondsUntilRetry int) {
 	m.mu.Lock()
 	m.currentAttempt = currentAttempt
 	m.secondsUntilRetry = secondsUntilRetry
+	probeClass := m.lastProbeClass
 	m.mu.Unlock()
 
 	if m.config.OnRecoveryProgress == nil {
@@ -313,6 +388,7 @@ func (m *Manager) emitProgress(currentAttempt, secondsUntilRetry int) {
 		CurrentAttempt:    currentAttempt,
 		MaxAttempts:       m.config.MaxAttempts,
 		SecondsUntilRetry: secondsUntilRetry,
+		ErrorClass:        probeClass,
 	})
 }
 
@@ -328,6 +404,7 @@ func (m *Manager) RecoveryInfo() RecoveryProgress {
 		CurrentAttempt:    m.currentAttempt,
 		MaxAttempts:       m.config.MaxAttempts,
 		SecondsUntilRetry: m.secondsUntilRetry,
+		ErrorClass:        m.lastProbeClass,
 	}
 }
 

@@ -15,10 +15,12 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/discovery"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	cgofake "k8s.io/client-go/kubernetes/fake"
@@ -674,4 +676,115 @@ func TestStartHeartbeatLoopRunsImmediately(t *testing.T) {
 	if count < 1 {
 		t.Fatalf("expected at least 1 immediate iteration, got %d", count)
 	}
+}
+
+// TestHeartbeatAutoRetriesInvalidAuthClusters tests that the heartbeat
+// schedules a recovery retry for clusters stuck in invalid auth state, so
+// externally fixed credentials (or a cluster that finished upgrading) are
+// noticed without user action.
+func TestHeartbeatAutoRetriesInvalidAuthClusters(t *testing.T) {
+	app := NewApp()
+	app.logger = NewLogger(10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app.Ctx = ctx
+	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
+
+	// A manager that lands in invalid, then has its credentials fixed
+	// externally: the probe fails until `fixed` is set.
+	var fixed atomic.Bool
+	recoveredMgr := authstate.New(authstate.Config{
+		MaxAttempts:     1,
+		BackoffSchedule: []time.Duration{0},
+		RecoveryTest: func() error {
+			if fixed.Load() {
+				return nil
+			}
+			return errors.New("401 Unauthorized")
+		},
+	})
+	defer recoveredMgr.Shutdown()
+	forceAuthManagerInvalid(t, recoveredMgr)
+	fixed.Store(true)
+
+	app.clusterClientsMu.Lock()
+	app.clusterClients = map[string]*clusterClients{
+		"cluster-fixed": {
+			meta:        ClusterMeta{ID: "cluster-fixed", Name: "Fixed Cluster"},
+			client:      &heartbeatClientSet{Clientset: cgofake.NewClientset()},
+			authManager: recoveredMgr,
+		},
+	}
+	app.clusterClientsMu.Unlock()
+
+	app.runHeartbeatIteration()
+
+	// The heartbeat must have triggered a retry; recovery succeeds and the
+	// manager returns to valid without any user action.
+	require.Eventually(t, func() bool {
+		return recoveredMgr.IsValid()
+	}, time.Second, 5*time.Millisecond,
+		"heartbeat must auto-retry invalid clusters")
+}
+
+// TestHeartbeatAutoRetryIsRateLimited tests that back-to-back heartbeat
+// iterations do not re-trigger recovery for a still-broken cluster within
+// the auto-retry interval.
+func TestHeartbeatAutoRetryIsRateLimited(t *testing.T) {
+	app := NewApp()
+	app.logger = NewLogger(10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app.Ctx = ctx
+	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
+
+	var probes atomic.Int32
+	brokenMgr := authstate.New(authstate.Config{
+		MaxAttempts:     1,
+		BackoffSchedule: []time.Duration{0},
+		RecoveryTest: func() error {
+			probes.Add(1)
+			return errors.New("still broken")
+		},
+	})
+	defer brokenMgr.Shutdown()
+	forceAuthManagerInvalid(t, brokenMgr)
+
+	app.clusterClientsMu.Lock()
+	app.clusterClients = map[string]*clusterClients{
+		"cluster-broken": {
+			meta:        ClusterMeta{ID: "cluster-broken", Name: "Broken Cluster"},
+			client:      &heartbeatClientSet{Clientset: cgofake.NewClientset()},
+			authManager: brokenMgr,
+		},
+	}
+	app.clusterClientsMu.Unlock()
+
+	// Forcing invalid consumed one probe; the heartbeat retry adds exactly one.
+	require.Equal(t, int32(1), probes.Load())
+	app.runHeartbeatIteration()
+
+	// The triggered recovery fails and lands back in invalid.
+	require.Eventually(t, func() bool {
+		state, _ := brokenMgr.State()
+		return state == authstate.StateInvalid
+	}, time.Second, 5*time.Millisecond)
+	require.Equal(t, int32(2), probes.Load())
+
+	// A second iteration within the rate-limit window must not retry again.
+	app.runHeartbeatIteration()
+	time.Sleep(50 * time.Millisecond)
+	require.Equal(t, int32(2), probes.Load(),
+		"auto-retry must be rate limited per cluster")
+}
+
+// forceAuthManagerInvalid drives a manager to StateInvalid by exhausting one
+// recovery cycle. The manager's RecoveryTest must fail at this point.
+func forceAuthManagerInvalid(t *testing.T, m *authstate.Manager) {
+	t.Helper()
+	m.ReportFailure("forced invalid for test")
+	require.Eventually(t, func() bool {
+		state, _ := m.State()
+		return state == authstate.StateInvalid
+	}, time.Second, 5*time.Millisecond)
 }

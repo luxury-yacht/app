@@ -7,10 +7,6 @@
   - cmd+c does not work in yaml editor
   - Talk about SSA vs CSA and potential conflicts
 
-- Gradual data load as opposed to waiting for complete data set
-
-- Look into reconnect errors
-
 - Missing permissions in Workloads Pods tab
 - Missing permissions in Object Details actions menu for pods
 

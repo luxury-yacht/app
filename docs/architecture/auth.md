@@ -41,6 +41,45 @@ Recovery must prove both sides of the gate:
 - invalid early state is blocked for the affected cluster
 - the operation required to recover can still run
 
+### Recovery error classification
+
+Recovery probes classify failures (`authstate.ErrorClass`, classifier in
+`backend/cluster_clients.go`):
+
+- **auth** — the cluster rejected the credentials (HTTP 401/403) or the exec
+  credential plugin failed. Only these consume the bounded recovery attempts;
+  exhausting them yields the terminal `invalid` state.
+- **connectivity** — the cluster could not be reached (refused, timeout, DNS,
+  TLS). These say nothing about credential validity, so the recovery loop keeps
+  probing at `ClusterAuthConnectivityRetryInterval` without consuming attempts;
+  the cluster reconnects on its own when it answers. This is what keeps a
+  cluster upgrade (multi-minute outage, often with transient 401s) from
+  stranding the cluster in `invalid`.
+
+The latest probe verdict travels on `cluster:auth:progress` events and the auth
+state RPCs as `errorClass`, and is sticky across retries. The frontend shows
+the blocking auth overlay only for confirmed auth verdicts (terminal `invalid`,
+or a probe rejected by the cluster); connectivity-class recovery presents as
+"Reconnecting" in the connectivity indicator instead.
+
+### Invalid is not terminal for the app
+
+The heartbeat auto-retries clusters parked in `invalid` at
+`ClusterAuthAutoRetryInterval` (`maybeAutoRetryClusterAuth`), so externally
+fixed credentials (fresh SSO login) or a recovered cluster are noticed without
+user action. Recovery probes always build a fresh client from kubeconfig — they
+must never run through the cluster's wrapped transport, which blocks requests
+while auth is not valid.
+
+### Rebuild wiring invariant
+
+`rebuildClusterSubsystem` must wire rebuilt client transports to the cluster's
+EXISTING auth manager (`buildClusterClientsWithManager`). Building around a
+fresh manager and swapping afterwards leaves the transports reporting to a
+discarded manager — auth failures then block all traffic forever while the
+tracked manager stays valid and `RetryClusterAuth` no-ops. Pinned by
+`TestRebuildClusterSubsystemPreservesAuthManagerWiring`.
+
 ## Change Checklist
 
 When changing auth behavior:

@@ -10,6 +10,14 @@ import { readAllClusterAuthStates, requestAppState } from '@/core/app-state-acce
 import { eventBus } from '@/core/events';
 
 /**
+ * Classification of the most recent recovery probe failure.
+ * 'auth' means the cluster rejected the credentials (confirmed failure);
+ * 'connectivity' means the cluster is unreachable (waiting state);
+ * '' means no probe has produced a verdict yet.
+ */
+export type AuthErrorClass = 'auth' | 'connectivity' | '';
+
+/**
  * Auth state for a single cluster.
  */
 export interface ClusterAuthState {
@@ -27,6 +35,8 @@ export interface ClusterAuthState {
   maxAttempts: number;
   /** Seconds until next retry attempt (0 if retry in progress). */
   secondsUntilRetry: number;
+  /** Latest recovery verdict; sticky until a probe result contradicts it. */
+  errorClass: AuthErrorClass;
 }
 
 /**
@@ -40,6 +50,7 @@ const DEFAULT_AUTH_STATE: ClusterAuthState = {
   currentAttempt: 0,
   maxAttempts: 0,
   secondsUntilRetry: 0,
+  errorClass: '',
 };
 
 /**
@@ -60,7 +71,105 @@ interface AuthProgressPayload {
   currentAttempt?: number;
   maxAttempts?: number;
   secondsUntilRetry?: number;
+  errorClass?: string;
 }
+
+/** Narrows an event payload value to a known error class. */
+const normalizeAuthErrorClass = (value: unknown): AuthErrorClass => {
+  return value === 'auth' || value === 'connectivity' ? value : '';
+};
+
+/**
+ * isConfirmedAuthFailure reports whether a cluster's failure is a confirmed
+ * authentication problem the user must act on. A recovering cluster whose
+ * latest verdict is connectivity (or that has no verdict yet) is a waiting
+ * state — the backend keeps probing and recovers on its own.
+ */
+export const isConfirmedAuthFailure = (state: ClusterAuthState): boolean => {
+  return state.hasError && (!state.isRecovering || state.errorClass === 'auth');
+};
+
+/**
+ * applyAuthFailedEvent records a terminal auth failure. Terminal failures only
+ * happen after auth-class probe failures exhaust the retry budget, so the
+ * verdict is 'auth' by definition.
+ */
+export const applyAuthFailedEvent = (
+  prev: Map<string, ClusterAuthState>,
+  payload: AuthEventPayload
+): Map<string, ClusterAuthState> => {
+  if (!payload.clusterId) {
+    return prev;
+  }
+  const next = new Map(prev);
+  next.set(payload.clusterId, {
+    hasError: true,
+    reason: payload.reason || 'Authentication failed',
+    clusterName: payload.clusterName || payload.clusterId,
+    isRecovering: false,
+    currentAttempt: 0,
+    maxAttempts: 0,
+    secondsUntilRetry: 0,
+    errorClass: 'auth',
+  });
+  return next;
+};
+
+/**
+ * applyAuthRecoveringEvent marks recovery as in progress. The previous verdict
+ * is preserved (sticky): entering recovery says a retry started, not that the
+ * earlier verdict stopped being true.
+ */
+export const applyAuthRecoveringEvent = (
+  prev: Map<string, ClusterAuthState>,
+  payload: AuthEventPayload
+): Map<string, ClusterAuthState> => {
+  if (!payload.clusterId) {
+    return prev;
+  }
+  const existing = prev.get(payload.clusterId);
+  const next = new Map(prev);
+  next.set(payload.clusterId, {
+    hasError: true, // Still in error state while recovering
+    reason: existing?.reason || payload.reason || 'Authentication failed',
+    clusterName: existing?.clusterName || payload.clusterName || payload.clusterId,
+    isRecovering: true,
+    currentAttempt: existing?.currentAttempt || 1,
+    maxAttempts: existing?.maxAttempts || 4,
+    secondsUntilRetry: existing?.secondsUntilRetry || 0,
+    errorClass: existing?.errorClass ?? '',
+  });
+  return next;
+};
+
+/**
+ * applyAuthProgressEvent updates countdown/attempt info during recovery and
+ * adopts the probe verdict when the event carries one; an empty verdict keeps
+ * the previous one.
+ */
+export const applyAuthProgressEvent = (
+  prev: Map<string, ClusterAuthState>,
+  payload: AuthProgressPayload
+): Map<string, ClusterAuthState> => {
+  if (!payload.clusterId) {
+    return prev;
+  }
+  const existing = prev.get(payload.clusterId);
+  // Only update if we have an existing error for this cluster
+  if (!existing?.hasError) {
+    return prev;
+  }
+  const next = new Map(prev);
+  next.set(payload.clusterId, {
+    ...existing,
+    clusterName: payload.clusterName || existing.clusterName,
+    currentAttempt: payload.currentAttempt ?? existing.currentAttempt,
+    maxAttempts: payload.maxAttempts ?? existing.maxAttempts,
+    secondsUntilRetry: payload.secondsUntilRetry ?? existing.secondsUntilRetry,
+    errorClass: normalizeAuthErrorClass(payload.errorClass) || existing.errorClass,
+  });
+  return next;
+};
 
 /**
  * Context value for auth error state.
@@ -132,6 +241,7 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               currentAttempt,
               maxAttempts,
               secondsUntilRetry,
+              errorClass: normalizeAuthErrorClass(stateInfo.errorClass),
             });
           } else if (state === 'invalid') {
             initialErrors.set(clusterId, {
@@ -142,6 +252,8 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               currentAttempt: 0,
               maxAttempts: 0,
               secondsUntilRetry: 0,
+              // Invalid is only reached by exhausting auth-class failures.
+              errorClass: 'auth',
             });
           }
         }
@@ -171,24 +283,10 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return;
       }
 
-      const { clusterId, clusterName, reason } = payload;
-
       // Notify the refresh orchestrator so it can pause refresh activity.
-      eventBus.emit('cluster:auth:failed', { clusterId });
+      eventBus.emit('cluster:auth:failed', { clusterId: payload.clusterId });
 
-      setClusterAuthErrors((prev) => {
-        const next = new Map(prev);
-        next.set(clusterId, {
-          hasError: true,
-          reason: reason || 'Authentication failed',
-          clusterName: clusterName || clusterId,
-          isRecovering: false,
-          currentAttempt: 0,
-          maxAttempts: 0,
-          secondsUntilRetry: 0,
-        });
-        return next;
-      });
+      setClusterAuthErrors((prev) => applyAuthFailedEvent(prev, payload));
     };
 
     // Handler for auth recovering events (auth is being retried).
@@ -198,23 +296,7 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         console.warn('[AuthErrorContext] Received auth:recovering without clusterId');
         return;
       }
-
-      const { clusterId, clusterName, reason } = payload;
-
-      setClusterAuthErrors((prev) => {
-        const next = new Map(prev);
-        const existing = prev.get(clusterId);
-        next.set(clusterId, {
-          hasError: true, // Still in error state while recovering
-          reason: existing?.reason || reason || 'Authentication failed',
-          clusterName: existing?.clusterName || clusterName || clusterId,
-          isRecovering: true,
-          currentAttempt: existing?.currentAttempt || 1,
-          maxAttempts: existing?.maxAttempts || 4,
-          secondsUntilRetry: existing?.secondsUntilRetry || 0,
-        });
-        return next;
-      });
+      setClusterAuthErrors((prev) => applyAuthRecoveringEvent(prev, payload));
     };
 
     // Handler for auth progress events (countdown updates during recovery).
@@ -223,25 +305,7 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!payload?.clusterId) {
         return;
       }
-
-      const { clusterId, clusterName, currentAttempt, maxAttempts, secondsUntilRetry } = payload;
-
-      setClusterAuthErrors((prev) => {
-        const existing = prev.get(clusterId);
-        // Only update if we have an existing error for this cluster
-        if (!existing?.hasError) {
-          return prev;
-        }
-        const next = new Map(prev);
-        next.set(clusterId, {
-          ...existing,
-          clusterName: clusterName || existing.clusterName,
-          currentAttempt: currentAttempt ?? existing.currentAttempt,
-          maxAttempts: maxAttempts ?? existing.maxAttempts,
-          secondsUntilRetry: secondsUntilRetry ?? existing.secondsUntilRetry,
-        });
-        return next;
-      });
+      setClusterAuthErrors((prev) => applyAuthProgressEvent(prev, payload));
     };
 
     // Handler for auth recovery events.

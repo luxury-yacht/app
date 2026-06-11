@@ -302,6 +302,164 @@ func TestTriggerRetryWhileValid(t *testing.T) {
 	require.Equal(t, int32(0), atomic.LoadInt32(&calls))
 }
 
+func TestConnectivityErrorsDoNotConsumeRecoveryAttempts(t *testing.T) {
+	// A cluster that is unreachable (e.g. mid-upgrade) must not exhaust the
+	// recovery budget: connectivity-class probe failures keep the manager in
+	// StateRecovering and probing until the cluster answers.
+	probes := 0
+	var mu sync.Mutex
+	m := New(Config{
+		MaxAttempts:               2,
+		BackoffSchedule:           []time.Duration{0, 0},
+		ConnectivityRetryInterval: time.Millisecond,
+		ClassifyError: func(err error) ErrorClass {
+			return ErrorClassConnectivity
+		},
+		RecoveryTest: func() error {
+			mu.Lock()
+			probes++
+			count := probes
+			mu.Unlock()
+			if count < 5 {
+				return errors.New("connection refused")
+			}
+			return nil
+		},
+	})
+	defer m.Shutdown()
+
+	m.ReportFailure("401 Unauthorized")
+
+	require.Eventually(t, func() bool {
+		state, _ := m.State()
+		return state == StateValid
+	}, time.Second, 5*time.Millisecond)
+
+	mu.Lock()
+	require.Equal(t, 5, probes, "recovery must keep probing past MaxAttempts while unreachable")
+	mu.Unlock()
+}
+
+func TestAuthErrorsConsumeRecoveryAttemptsAcrossConnectivityGaps(t *testing.T) {
+	// Mixed failures: connectivity probes wait without consuming attempts,
+	// auth-class probes consume them. Two auth verdicts with MaxAttempts=2
+	// must end in StateInvalid even with connectivity gaps in between.
+	var mu sync.Mutex
+	results := []ErrorClass{
+		ErrorClassConnectivity,
+		ErrorClassAuth,
+		ErrorClassConnectivity,
+		ErrorClassAuth,
+	}
+	probes := 0
+	m := New(Config{
+		MaxAttempts:               2,
+		BackoffSchedule:           []time.Duration{0, 0},
+		ConnectivityRetryInterval: time.Millisecond,
+		ClassifyError: func(err error) ErrorClass {
+			mu.Lock()
+			defer mu.Unlock()
+			return results[probes-1]
+		},
+		RecoveryTest: func() error {
+			mu.Lock()
+			probes++
+			mu.Unlock()
+			return errors.New("probe failed")
+		},
+	})
+	defer m.Shutdown()
+
+	m.ReportFailure("401 Unauthorized")
+
+	require.Eventually(t, func() bool {
+		state, _ := m.State()
+		return state == StateInvalid
+	}, time.Second, 5*time.Millisecond)
+
+	mu.Lock()
+	require.Equal(t, 4, probes)
+	mu.Unlock()
+}
+
+func TestRecoveryInfoReportsLastErrorClass(t *testing.T) {
+	probeDone := make(chan struct{}, 8)
+	gate := make(chan struct{})
+	m := New(Config{
+		MaxAttempts:               4,
+		BackoffSchedule:           []time.Duration{0, 0, 0, 0},
+		ConnectivityRetryInterval: 250 * time.Millisecond,
+		ClassifyError: func(err error) ErrorClass {
+			return ErrorClassConnectivity
+		},
+		RecoveryTest: func() error {
+			select {
+			case probeDone <- struct{}{}:
+			default:
+			}
+			<-gate
+			return errors.New("connection refused")
+		},
+	})
+	defer m.Shutdown()
+
+	m.ReportFailure("401 Unauthorized")
+
+	// Before any probe result, the verdict is unknown.
+	<-probeDone
+	require.Equal(t, ErrorClassUnknown, m.RecoveryInfo().ErrorClass)
+
+	// Let the probes fail; the connectivity verdict must be exposed while
+	// the manager waits to probe again. close (not a single send) so later
+	// probes never block — a probe stuck in RecoveryTest would deadlock
+	// Shutdown, which waits for the recovery goroutine.
+	close(gate)
+	require.Eventually(t, func() bool {
+		return m.RecoveryInfo().ErrorClass == ErrorClassConnectivity
+	}, time.Second, 5*time.Millisecond)
+}
+
+func TestErrorClassIsStickyAcrossTriggerRetry(t *testing.T) {
+	// After auth-class failures exhaust recovery, a manual/automatic retry
+	// must keep reporting the auth verdict until a new probe result
+	// contradicts it — the UI uses this to keep the failure surface stable.
+	gate := make(chan struct{})
+	probeStarted := make(chan struct{}, 8)
+	var blockProbes atomic.Bool
+	m := New(Config{
+		MaxAttempts:     1,
+		BackoffSchedule: []time.Duration{0},
+		ClassifyError: func(err error) ErrorClass {
+			return ErrorClassAuth
+		},
+		RecoveryTest: func() error {
+			if blockProbes.Load() {
+				select {
+				case probeStarted <- struct{}{}:
+				default:
+				}
+				<-gate
+			}
+			return errors.New("401 Unauthorized")
+		},
+	})
+	defer m.Shutdown()
+
+	m.ReportFailure("401 Unauthorized")
+	require.Eventually(t, func() bool {
+		state, _ := m.State()
+		return state == StateInvalid
+	}, time.Second, 5*time.Millisecond)
+
+	blockProbes.Store(true)
+	m.TriggerRetry()
+
+	// While the retry probe is in flight the previous auth verdict holds.
+	<-probeStarted
+	require.Equal(t, ErrorClassAuth, m.RecoveryInfo().ErrorClass)
+	close(gate)
+}
+
 func TestTriggerRetryWhileRecovering(t *testing.T) {
 	recoveryStarted := make(chan struct{}, 1)
 	recoveryAllowed := make(chan struct{})

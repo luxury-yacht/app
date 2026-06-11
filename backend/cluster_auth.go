@@ -195,8 +195,11 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 
 	// Rebuild the cluster clients with fresh credentials from kubeconfig.
 	// This picks up refreshed SSO tokens that weren't available when the
-	// original clients were created.
-	newClients, err := a.buildClusterClients(selection, oldClients.meta)
+	// original clients were created. The existing auth manager is reused so
+	// the rebuilt transports keep reporting to the manager the app tracks —
+	// wiring them to a fresh manager and swapping afterwards would leave the
+	// transports pointing at a discarded manager that can never recover.
+	newClients, err := a.buildClusterClientsWithManager(context.Background(), selection, oldClients.meta, oldClients.authManager)
 	if err != nil {
 		if a.logger != nil {
 			a.logger.Error(fmt.Sprintf("Failed to rebuild clients for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
@@ -205,18 +208,19 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		return
 	}
 
-	// Preserve the auth manager from the old clients (it's already in valid state)
-	// and shutdown the new one we just created
-	if newClients.authManager != nil {
-		newClients.authManager.Shutdown()
-	}
-	newClients.authManager = oldClients.authManager
-	newClients.authFailedOnInit = false // Clear the init failure flag
-
 	// Update the cluster clients map
 	a.clusterClientsMu.Lock()
 	a.clusterClients[clusterID] = newClients
 	a.clusterClientsMu.Unlock()
+
+	// If the preflight reported an auth failure, stop here: the auth manager's
+	// recovery cycle owns the next rebuild attempt once credentials are valid.
+	if newClients.authFailedOnInit || (newClients.authManager != nil && !newClients.authManager.IsValid()) {
+		if a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Skipping subsystem rebuild for cluster %s: auth not valid after client rebuild", clusterID), logsources.Auth, clusterID, clusterName)
+		}
+		return
+	}
 
 	// Build the subsystem with the new clients
 	subsystem, err := a.buildRefreshSubsystemForSelection(selection, newClients, newClients.meta)
@@ -345,6 +349,7 @@ func (a *App) GetAllClusterAuthStates() map[string]map[string]any {
 			"currentAttempt":    info.CurrentAttempt,
 			"maxAttempts":       info.MaxAttempts,
 			"secondsUntilRetry": info.SecondsUntilRetry,
+			"errorClass":        string(info.ErrorClass),
 		}
 	}
 	return states
@@ -363,12 +368,15 @@ func (a *App) handleClusterAuthRecoveryProgress(clusterID string, progress auths
 		clusterName = clients.meta.Name
 	}
 
-	// Emit per-cluster progress event for the frontend
+	// Emit per-cluster progress event for the frontend. errorClass carries the
+	// latest probe verdict ("auth", "connectivity", or "" before any verdict)
+	// so the UI can distinguish an unreachable cluster from rejected credentials.
 	a.emitEvent("cluster:auth:progress", map[string]any{
 		"clusterId":         clusterID,
 		"clusterName":       clusterName,
 		"currentAttempt":    progress.CurrentAttempt,
 		"maxAttempts":       progress.MaxAttempts,
 		"secondsUntilRetry": progress.SecondsUntilRetry,
+		"errorClass":        string(progress.ErrorClass),
 	})
 }

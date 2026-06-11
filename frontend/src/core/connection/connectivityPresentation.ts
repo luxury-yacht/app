@@ -68,6 +68,17 @@ export const buildConnectivityPresentation = ({
     };
   }
 
+  if (authState.hasError && authState.isRecovering && authState.errorClass !== 'auth') {
+    // Recovery is waiting on reachability, not on credentials: the latest
+    // probe verdict is connectivity (or no verdict exists yet). The backend
+    // keeps probing and reconnects on its own once the cluster responds.
+    return {
+      status: 'degraded',
+      summary: 'Reconnecting',
+      detail: `${clusterLabel} is unreachable. The app will reconnect automatically when the cluster responds.`,
+    };
+  }
+
   if (authState.hasError && authState.isRecovering) {
     const attemptLabel =
       authState.currentAttempt > 0 && authState.maxAttempts > 0
