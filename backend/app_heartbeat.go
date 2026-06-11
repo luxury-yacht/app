@@ -48,7 +48,9 @@ func (a *App) runHeartbeatIteration() {
 			continue
 		}
 
-		// Skip if auth is already invalid - these clusters need auth recovery, not heartbeat checks
+		// Skip health checks while auth is not valid: requests through the
+		// cluster's transport are blocked in that state, and the auth
+		// manager's recovery loop keeps probing on its own cadence.
 		if cc.authManager != nil && !cc.authManager.IsValid() {
 			if a.logger != nil {
 				a.logger.Debug("Skipping heartbeat for cluster "+cc.meta.Name+" (auth invalid)", logsources.Heartbeat, clusterID, cc.meta.Name)

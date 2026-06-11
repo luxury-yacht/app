@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/stretchr/testify/require"
@@ -201,4 +202,96 @@ func TestHandleClusterAuthStateChange_EmptyClusterIDNoOp(t *testing.T) {
 
 	app.handleClusterAuthStateChange("", authstate.StateInvalid, "reason")
 	require.False(t, eventCalled, "no event should be emitted for empty clusterID")
+}
+
+// TestHandleClusterAuthRecoveryProgress_CarriesErrorClass verifies that
+// recovery progress events expose the latest probe verdict so the frontend
+// can distinguish "cluster unreachable, waiting" from a confirmed
+// credential failure.
+func TestHandleClusterAuthRecoveryProgress_CarriesErrorClass(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app.Ctx = ctx
+
+	var progressEvents []map[string]any
+	var mu sync.Mutex
+	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+		if name != "cluster:auth:progress" || len(args) == 0 {
+			return
+		}
+		data, ok := args[0].(map[string]any)
+		if !ok {
+			return
+		}
+		mu.Lock()
+		progressEvents = append(progressEvents, data)
+		mu.Unlock()
+	}
+
+	app.handleClusterAuthRecoveryProgress("cluster-p", authstate.RecoveryProgress{
+		SecondsUntilRetry: 10,
+		ErrorClass:        authstate.ErrorClassConnectivity,
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, progressEvents, 1)
+	require.Equal(t, "connectivity", progressEvents[0]["errorClass"])
+}
+
+// TestGetAllClusterAuthStates_IncludesErrorClass verifies the state RPC
+// surfaces the recovery verdict for recovering clusters so a freshly mounted
+// frontend can restore the correct presentation.
+func TestGetAllClusterAuthStates_IncludesErrorClass(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app.Ctx = ctx
+
+	gate := make(chan struct{})
+	probeStarted := make(chan struct{}, 8)
+	mgr := authstate.New(authstate.Config{
+		MaxAttempts:               4,
+		BackoffSchedule:           []time.Duration{0, 0, 0, 0},
+		ConnectivityRetryInterval: 200 * time.Millisecond,
+		ClassifyError: func(error) authstate.ErrorClass {
+			return authstate.ErrorClassConnectivity
+		},
+		RecoveryTest: func() error {
+			select {
+			case probeStarted <- struct{}{}:
+			default:
+			}
+			select {
+			case <-gate:
+			default:
+			}
+			return context.DeadlineExceeded
+		},
+	})
+	defer mgr.Shutdown()
+	defer close(gate)
+
+	app.clusterClientsMu.Lock()
+	app.clusterClients = map[string]*clusterClients{
+		"cluster-s": {
+			meta:        ClusterMeta{ID: "cluster-s", Name: "Stuck Cluster"},
+			authManager: mgr,
+		},
+	}
+	app.clusterClientsMu.Unlock()
+
+	mgr.ReportFailure("401 Unauthorized")
+	<-probeStarted
+
+	require.Eventually(t, func() bool {
+		states := app.GetAllClusterAuthStates()
+		state, ok := states["cluster-s"]
+		if !ok {
+			return false
+		}
+		return state["state"] == "recovering" && state["errorClass"] == "connectivity"
+	}, time.Second, 10*time.Millisecond,
+		"auth state RPC must expose the recovery verdict")
 }

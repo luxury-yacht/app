@@ -9,7 +9,15 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AuthErrorProvider, useAuthError } from './AuthErrorContext';
+import {
+  AuthErrorProvider,
+  applyAuthFailedEvent,
+  applyAuthProgressEvent,
+  applyAuthRecoveringEvent,
+  isConfirmedAuthFailure,
+  useAuthError,
+  type ClusterAuthState,
+} from './AuthErrorContext';
 
 // Mock @wailsjs/go/backend/App — provider calls these on mount
 vi.mock('@wailsjs/go/backend/App', () => ({
@@ -183,5 +191,113 @@ describe('AuthErrorContext', () => {
 
     logSpy.mockRestore();
     warnSpy.mockRestore();
+  });
+});
+
+/**
+ * The per-cluster error class (verdict) must be sticky — set by terminal
+ * failures and probe results, never cleared by a recovering transition alone —
+ * so the failure surface stays stable across automatic retries.
+ */
+describe('auth error state transitions', () => {
+  const empty = () => new Map<string, ClusterAuthState>();
+
+  it('marks a terminal failure as a confirmed auth verdict', () => {
+    const next = applyAuthFailedEvent(empty(), {
+      clusterId: 'c1',
+      clusterName: 'alpha',
+      reason: 'token expired',
+    });
+
+    const state = next.get('c1')!;
+    expect(state.hasError).toBe(true);
+    expect(state.errorClass).toBe('auth');
+    expect(isConfirmedAuthFailure(state)).toBe(true);
+  });
+
+  it('does not confirm a fresh recovering cluster before any probe verdict', () => {
+    const next = applyAuthRecoveringEvent(empty(), {
+      clusterId: 'c1',
+      clusterName: 'alpha',
+      reason: '401 Unauthorized',
+    });
+
+    const state = next.get('c1')!;
+    expect(state.hasError).toBe(true);
+    expect(state.isRecovering).toBe(true);
+    expect(state.errorClass).toBe('');
+    expect(isConfirmedAuthFailure(state)).toBe(false);
+  });
+
+  it('keeps a connectivity verdict unconfirmed (cluster unreachable, waiting)', () => {
+    let map = applyAuthRecoveringEvent(empty(), { clusterId: 'c1', reason: '401' });
+    map = applyAuthProgressEvent(map, {
+      clusterId: 'c1',
+      secondsUntilRetry: 15,
+      errorClass: 'connectivity',
+    });
+
+    const state = map.get('c1')!;
+    expect(state.errorClass).toBe('connectivity');
+    expect(isConfirmedAuthFailure(state)).toBe(false);
+  });
+
+  it('confirms an auth verdict reported by a probe', () => {
+    let map = applyAuthRecoveringEvent(empty(), { clusterId: 'c1', reason: '401' });
+    map = applyAuthProgressEvent(map, {
+      clusterId: 'c1',
+      secondsUntilRetry: 5,
+      errorClass: 'auth',
+    });
+
+    expect(isConfirmedAuthFailure(map.get('c1')!)).toBe(true);
+  });
+
+  it('keeps the previous verdict when a progress event has no verdict yet', () => {
+    let map = applyAuthFailedEvent(empty(), { clusterId: 'c1', reason: 'expired' });
+    map = applyAuthRecoveringEvent(map, { clusterId: 'c1' });
+    map = applyAuthProgressEvent(map, {
+      clusterId: 'c1',
+      secondsUntilRetry: 0,
+      errorClass: '',
+    });
+
+    const state = map.get('c1')!;
+    expect(state.errorClass).toBe('auth');
+    expect(isConfirmedAuthFailure(state)).toBe(true);
+  });
+
+  it('keeps the auth verdict across an automatic retry (no overlay flicker)', () => {
+    let map = applyAuthFailedEvent(empty(), { clusterId: 'c1', reason: 'expired' });
+    map = applyAuthRecoveringEvent(map, { clusterId: 'c1', reason: 'expired' });
+
+    const state = map.get('c1')!;
+    expect(state.isRecovering).toBe(true);
+    expect(state.errorClass).toBe('auth');
+    expect(isConfirmedAuthFailure(state)).toBe(true);
+  });
+
+  it('lets a connectivity probe verdict supersede an auth verdict', () => {
+    // Credentials were bad, then the cluster became unreachable before they
+    // were fixed: unreachable is a waiting state, not a confirmed failure.
+    let map = applyAuthFailedEvent(empty(), { clusterId: 'c1', reason: 'expired' });
+    map = applyAuthRecoveringEvent(map, { clusterId: 'c1' });
+    map = applyAuthProgressEvent(map, {
+      clusterId: 'c1',
+      secondsUntilRetry: 15,
+      errorClass: 'connectivity',
+    });
+
+    expect(isConfirmedAuthFailure(map.get('c1')!)).toBe(false);
+  });
+
+  it('ignores progress for clusters without an active error', () => {
+    const map = applyAuthProgressEvent(empty(), {
+      clusterId: 'c1',
+      secondsUntilRetry: 0,
+      errorClass: 'auth',
+    });
+
+    expect(map.size).toBe(0);
   });
 });

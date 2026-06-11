@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -275,11 +276,6 @@ func (a *App) applyKubernetesClientRateLimits(qps int, burst int) {
 	}
 }
 
-// buildClusterClients initializes client-go dependencies for a specific kubeconfig selection.
-func (a *App) buildClusterClients(selection kubeconfigSelection, meta ClusterMeta) (*clusterClients, error) {
-	return a.buildClusterClientsWithContext(context.Background(), selection, meta)
-}
-
 // buildClusterClientsWithContext initializes client-go dependencies for a specific kubeconfig selection.
 // The preflight check is context-bound so superseding selection generations can preempt stale work.
 func (a *App) buildClusterClientsWithContext(
@@ -287,31 +283,53 @@ func (a *App) buildClusterClientsWithContext(
 	selection kubeconfigSelection,
 	meta ClusterMeta,
 ) (*clusterClients, error) {
-	// Create a per-cluster auth manager. This ensures auth failures in one cluster
-	// don't affect other clusters.
-	clusterAuthMgr := a.createClusterAuthManager(meta)
+	return a.buildClusterClientsWithManager(ctx, selection, meta, nil)
+}
+
+// buildClusterClientsWithManager initializes client-go dependencies for a specific
+// kubeconfig selection. When existingMgr is non-nil (subsystem rebuilds), the new
+// clients' transports are wired to it so auth failures keep reaching the manager
+// the app tracks; otherwise a fresh per-cluster manager is created. A reused
+// manager is never shut down here — the previous clients still reference it.
+func (a *App) buildClusterClientsWithManager(
+	ctx context.Context,
+	selection kubeconfigSelection,
+	meta ClusterMeta,
+	existingMgr *authstate.Manager,
+) (*clusterClients, error) {
+	// Per-cluster auth manager: auth failures in one cluster don't affect others.
+	clusterAuthMgr := existingMgr
+	ownsManager := clusterAuthMgr == nil
+	if ownsManager {
+		clusterAuthMgr = a.createClusterAuthManager(meta)
+	}
+	shutdownOwned := func() {
+		if ownsManager {
+			clusterAuthMgr.Shutdown()
+		}
+	}
 
 	config, err := a.buildRestConfigForSelection(selection, meta, clusterAuthMgr)
 	if err != nil {
-		clusterAuthMgr.Shutdown()
+		shutdownOwned()
 		return nil, err
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		clusterAuthMgr.Shutdown()
+		shutdownOwned()
 		return nil, fmt.Errorf("failed to create clientset: %w", err)
 	}
 
 	apiextensionsClient, err := apiextensionsclientset.NewForConfig(config)
 	if err != nil {
-		clusterAuthMgr.Shutdown()
+		shutdownOwned()
 		return nil, fmt.Errorf("failed to create apiextensions clientset: %w", err)
 	}
 
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
-		clusterAuthMgr.Shutdown()
+		shutdownOwned()
 		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
 	}
 
@@ -334,7 +352,7 @@ func (a *App) buildClusterClientsWithContext(
 	if gatewayPresence.AnyPresent() {
 		gatewayClientset, err := gatewayversioned.NewForConfig(config)
 		if err != nil {
-			clusterAuthMgr.Shutdown()
+			shutdownOwned()
 			return nil, fmt.Errorf("failed to create gateway api clientset: %w", err)
 		}
 		gatewayClient = gatewayClientset
@@ -357,6 +375,9 @@ func (a *App) buildClusterClientsWithContext(
 		if err != nil {
 			return fmt.Errorf("failed to load kubeconfig: %w", err)
 		}
+		// Bound the probe: rest.Config has no default timeout, and a hung
+		// probe would stall the recovery loop indefinitely.
+		freshConfig.Timeout = appconfig.ClusterAuthRecoveryProbeTimeout
 
 		// Build a fresh clientset with the new credentials
 		freshClient, err := kubernetes.NewForConfig(freshConfig)
@@ -437,8 +458,11 @@ func (a *App) preflightClusterClientWithContext(ctx context.Context, client kube
 // createClusterAuthManager creates a new auth state manager for a specific cluster.
 func (a *App) createClusterAuthManager(meta ClusterMeta) *authstate.Manager {
 	return authstate.New(authstate.Config{
-		MaxAttempts:     authstate.DefaultMaxAttempts,
-		BackoffSchedule: authstate.DefaultBackoffSchedule,
+		MaxAttempts:               authstate.DefaultMaxAttempts,
+		BackoffSchedule:           authstate.DefaultBackoffSchedule,
+		ClassifyError:             classifyRecoveryError,
+		ConnectivityRetryInterval: appconfig.ClusterAuthConnectivityRetryInterval,
+		SteadyRetryInterval:       appconfig.ClusterAuthSteadyRetryInterval,
 		OnStateChange: func(state authstate.State, reason string) {
 			a.handleClusterAuthStateChange(meta.ID, state, reason)
 		},
@@ -447,6 +471,25 @@ func (a *App) createClusterAuthManager(meta ClusterMeta) *authstate.Manager {
 		},
 		// RecoveryTest is set later once we have the clientset
 	})
+}
+
+// classifyRecoveryError maps a recovery probe failure to an auth or
+// connectivity verdict. Only errors proving the cluster rejected the
+// credentials — an HTTP 401/403 or a failed exec credential plugin — are
+// auth-class and consume recovery attempts. Everything else (connection
+// refused, timeouts, DNS, TLS) means the cluster could not be reached, which
+// says nothing about credential validity, so the recovery loop keeps probing.
+func classifyRecoveryError(err error) authstate.ErrorClass {
+	if err == nil {
+		return authstate.ErrorClassUnknown
+	}
+	if k8sErrors.IsUnauthorized(err) || k8sErrors.IsForbidden(err) {
+		return authstate.ErrorClassAuth
+	}
+	if isCredentialError(err) {
+		return authstate.ErrorClassAuth
+	}
+	return authstate.ErrorClassConnectivity
 }
 
 // buildRestConfigForSelection loads a REST config for the provided kubeconfig path/context.

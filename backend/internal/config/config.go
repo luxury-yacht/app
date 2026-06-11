@@ -458,6 +458,20 @@ const (
 
 	// AuthRecoveryProgressInterval controls countdown progress emission during auth recovery backoff.
 	AuthRecoveryProgressInterval = time.Second
+
+	// ClusterAuthConnectivityRetryInterval is the delay between recovery probes
+	// while a cluster is unreachable. Connectivity failures do not consume
+	// recovery attempts, so this paces the open-ended reconnect loop.
+	ClusterAuthConnectivityRetryInterval = 15 * time.Second
+
+	// ClusterAuthRecoveryProbeTimeout bounds a single auth recovery probe request.
+	ClusterAuthRecoveryProbeTimeout = 10 * time.Second
+
+	// ClusterAuthSteadyRetryInterval is the delay between recovery probes after
+	// the auth verdict has settled to invalid. The recovery loop never stops,
+	// so externally fixed credentials (e.g. a fresh SSO login) are noticed
+	// without user action.
+	ClusterAuthSteadyRetryInterval = time.Minute
 )
 
 // ClusterAuthRecoveryBackoffSchedule is the default delay schedule between auth recovery attempts.

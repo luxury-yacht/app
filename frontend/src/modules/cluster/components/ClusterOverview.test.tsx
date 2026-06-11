@@ -77,9 +77,8 @@ let mockAuthState = {
   reason: '',
   clusterName: '',
   isRecovering: false,
-  currentAttempt: 0,
-  maxAttempts: 0,
   secondsUntilRetry: 0,
+  errorClass: '' as const,
 };
 
 vi.mock('@/core/refresh', () => ({
@@ -269,9 +268,8 @@ describe('ClusterOverview', () => {
       reason: '',
       clusterName: '',
       isRecovering: false,
-      currentAttempt: 0,
-      maxAttempts: 0,
       secondsUntilRetry: 0,
+      errorClass: '' as const,
     };
     getAppInfoMock.mockResolvedValue({
       version: '1.0.0',

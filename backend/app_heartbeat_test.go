@@ -675,3 +675,4 @@ func TestStartHeartbeatLoopRunsImmediately(t *testing.T) {
 		t.Fatalf("expected at least 1 immediate iteration, got %d", count)
 	}
 }
+

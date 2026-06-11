@@ -139,40 +139,65 @@ func TestRecoveryRetriesOnFailure(t *testing.T) {
 	mu.Unlock()
 }
 
-func TestRecoveryStopsAfterMaxAttempts(t *testing.T) {
-	recoveryAttempts := 0
+func TestAuthFailuresSettleInvalidAndKeepProbing(t *testing.T) {
+	// Exhausting the burst settles the verdict to invalid but must NOT stop
+	// the loop: probing continues at the steady cadence and a later success
+	// (credentials fixed externally) recovers without any outside trigger.
+	probes := 0
 	var mu sync.Mutex
+	var states []State
 	m := New(Config{
-		MaxAttempts:     4,
-		BackoffSchedule: []time.Duration{0, 0, 0, 0},
+		MaxAttempts:         2,
+		BackoffSchedule:     []time.Duration{0, 0},
+		SteadyRetryInterval: time.Millisecond,
+		ClassifyError: func(error) ErrorClass {
+			return ErrorClassAuth
+		},
+		OnStateChange: func(s State, reason string) {
+			mu.Lock()
+			states = append(states, s)
+			mu.Unlock()
+		},
 		RecoveryTest: func() error {
 			mu.Lock()
-			recoveryAttempts++
+			probes++
+			count := probes
 			mu.Unlock()
-			return errors.New("always fails")
+			if count < 5 {
+				return errors.New("401 Unauthorized")
+			}
+			return nil
 		},
 	})
 	defer m.Shutdown()
 
 	m.ReportFailure("token expired")
 
-	time.Sleep(50 * time.Millisecond)
-
-	state, reason := m.State()
-	require.Equal(t, StateInvalid, state)
-	require.Contains(t, reason, "maximum attempts")
+	require.Eventually(t, func() bool {
+		state, _ := m.State()
+		return state == StateValid
+	}, time.Second, 5*time.Millisecond,
+		"the loop must keep probing past the settled invalid verdict")
 
 	mu.Lock()
-	require.Equal(t, 4, recoveryAttempts)
+	require.Equal(t, 5, probes)
+	require.Equal(t, []State{StateRecovering, StateInvalid, StateValid}, states,
+		"the invalid verdict must settle exactly once, then recover")
 	mu.Unlock()
 }
 
-func TestTriggerRetryRestartsRecovery(t *testing.T) {
+func TestTriggerRetryProbesImmediately(t *testing.T) {
 	attempts := 0
 	var mu sync.Mutex
 	m := New(Config{
 		MaxAttempts:     1,
 		BackoffSchedule: []time.Duration{0},
+		// Park the steady cadence out of the test window so only the manual
+		// retry can produce the second probe.
+		SteadyRetryInterval: time.Hour,
+		ClassifyError: func(error) ErrorClass {
+			return ErrorClassAuth
+		},
 		RecoveryTest: func() error {
 			mu.Lock()
 			attempts++
@@ -187,18 +212,17 @@ func TestTriggerRetryRestartsRecovery(t *testing.T) {
 	defer m.Shutdown()
 
 	m.ReportFailure("token expired")
-	time.Sleep(50 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		state, _ := m.State()
+		return state == StateInvalid
+	}, time.Second, 5*time.Millisecond)
 
-	// Should be invalid after 1 failed attempt
-	state, _ := m.State()
-	require.Equal(t, StateInvalid, state)
-
-	// Trigger retry
+	// Trigger retry: restarts the loop with an immediate probe.
 	m.TriggerRetry()
-	time.Sleep(50 * time.Millisecond)
-
-	state, _ = m.State()
-	require.Equal(t, StateValid, state)
+	require.Eventually(t, func() bool {
+		state, _ := m.State()
+		return state == StateValid
+	}, time.Second, 5*time.Millisecond)
 
 	mu.Lock()
 	require.Equal(t, 2, attempts)
@@ -300,6 +324,170 @@ func TestTriggerRetryWhileValid(t *testing.T) {
 	m.TriggerRetry()
 
 	require.Equal(t, int32(0), atomic.LoadInt32(&calls))
+}
+
+func TestConnectivityErrorsDoNotConsumeRecoveryAttempts(t *testing.T) {
+	// A cluster that is unreachable (e.g. mid-upgrade) must not exhaust the
+	// recovery budget: connectivity-class probe failures keep the manager in
+	// StateRecovering and probing until the cluster answers.
+	probes := 0
+	var mu sync.Mutex
+	m := New(Config{
+		MaxAttempts:               2,
+		BackoffSchedule:           []time.Duration{0, 0},
+		ConnectivityRetryInterval: time.Millisecond,
+		ClassifyError: func(err error) ErrorClass {
+			return ErrorClassConnectivity
+		},
+		RecoveryTest: func() error {
+			mu.Lock()
+			probes++
+			count := probes
+			mu.Unlock()
+			if count < 5 {
+				return errors.New("connection refused")
+			}
+			return nil
+		},
+	})
+	defer m.Shutdown()
+
+	m.ReportFailure("401 Unauthorized")
+
+	require.Eventually(t, func() bool {
+		state, _ := m.State()
+		return state == StateValid
+	}, time.Second, 5*time.Millisecond)
+
+	mu.Lock()
+	require.Equal(t, 5, probes, "recovery must keep probing past MaxAttempts while unreachable")
+	mu.Unlock()
+}
+
+func TestAuthErrorsConsumeRecoveryAttemptsAcrossConnectivityGaps(t *testing.T) {
+	// Mixed failures: connectivity probes wait without consuming attempts,
+	// auth-class probes consume them. Two auth verdicts with MaxAttempts=2
+	// must end in StateInvalid even with connectivity gaps in between.
+	var mu sync.Mutex
+	results := []ErrorClass{
+		ErrorClassConnectivity,
+		ErrorClassAuth,
+		ErrorClassConnectivity,
+		ErrorClassAuth,
+	}
+	probes := 0
+	m := New(Config{
+		MaxAttempts:               2,
+		BackoffSchedule:           []time.Duration{0, 0},
+		ConnectivityRetryInterval: time.Millisecond,
+		// Park the post-settle cadence outside the test window: this test
+		// only exercises the burst's attempt accounting.
+		SteadyRetryInterval: time.Hour,
+		ClassifyError: func(err error) ErrorClass {
+			mu.Lock()
+			defer mu.Unlock()
+			if probes > len(results) {
+				return ErrorClassAuth
+			}
+			return results[probes-1]
+		},
+		RecoveryTest: func() error {
+			mu.Lock()
+			probes++
+			mu.Unlock()
+			return errors.New("probe failed")
+		},
+	})
+	defer m.Shutdown()
+
+	m.ReportFailure("401 Unauthorized")
+
+	require.Eventually(t, func() bool {
+		state, _ := m.State()
+		return state == StateInvalid
+	}, time.Second, 5*time.Millisecond)
+
+	mu.Lock()
+	require.Equal(t, 4, probes)
+	mu.Unlock()
+}
+
+func TestRecoveryInfoReportsLastErrorClass(t *testing.T) {
+	probeDone := make(chan struct{}, 8)
+	gate := make(chan struct{})
+	m := New(Config{
+		MaxAttempts:               4,
+		BackoffSchedule:           []time.Duration{0, 0, 0, 0},
+		ConnectivityRetryInterval: 250 * time.Millisecond,
+		ClassifyError: func(err error) ErrorClass {
+			return ErrorClassConnectivity
+		},
+		RecoveryTest: func() error {
+			select {
+			case probeDone <- struct{}{}:
+			default:
+			}
+			<-gate
+			return errors.New("connection refused")
+		},
+	})
+	defer m.Shutdown()
+
+	m.ReportFailure("401 Unauthorized")
+
+	// Before any probe result, the verdict is unknown.
+	<-probeDone
+	require.Equal(t, ErrorClassUnknown, m.RecoveryInfo().ErrorClass)
+
+	// Let the probes fail; the connectivity verdict must be exposed while
+	// the manager waits to probe again. close (not a single send) so later
+	// probes never block — a probe stuck in RecoveryTest would deadlock
+	// Shutdown, which waits for the recovery goroutine.
+	close(gate)
+	require.Eventually(t, func() bool {
+		return m.RecoveryInfo().ErrorClass == ErrorClassConnectivity
+	}, time.Second, 5*time.Millisecond)
+}
+
+func TestErrorClassIsStickyAcrossTriggerRetry(t *testing.T) {
+	// After auth-class failures exhaust recovery, a manual/automatic retry
+	// must keep reporting the auth verdict until a new probe result
+	// contradicts it — the UI uses this to keep the failure surface stable.
+	gate := make(chan struct{})
+	probeStarted := make(chan struct{}, 8)
+	var blockProbes atomic.Bool
+	m := New(Config{
+		MaxAttempts:     1,
+		BackoffSchedule: []time.Duration{0},
+		ClassifyError: func(err error) ErrorClass {
+			return ErrorClassAuth
+		},
+		RecoveryTest: func() error {
+			if blockProbes.Load() {
+				select {
+				case probeStarted <- struct{}{}:
+				default:
+				}
+				<-gate
+			}
+			return errors.New("401 Unauthorized")
+		},
+	})
+	defer m.Shutdown()
+
+	m.ReportFailure("401 Unauthorized")
+	require.Eventually(t, func() bool {
+		state, _ := m.State()
+		return state == StateInvalid
+	}, time.Second, 5*time.Millisecond)
+
+	blockProbes.Store(true)
+	m.TriggerRetry()
+
+	// While the retry probe is in flight the previous auth verdict holds.
+	<-probeStarted
+	require.Equal(t, ErrorClassAuth, m.RecoveryInfo().ErrorClass)
+	close(gate)
 }
 
 func TestTriggerRetryWhileRecovering(t *testing.T) {

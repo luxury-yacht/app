@@ -41,6 +41,50 @@ Recovery must prove both sides of the gate:
 - invalid early state is blocked for the affected cluster
 - the operation required to recover can still run
 
+### Recovery error classification
+
+One continuous recovery loop owns the retry cadence; it exits only on a
+successful probe or cancellation. Probe failures are classified
+(`authstate.ErrorClass`, classifier in `backend/cluster_clients.go`):
+
+- **auth** — the cluster rejected the credentials (HTTP 401/403) or the exec
+  credential plugin failed. The initial burst probes on the backoff schedule;
+  `MaxAttempts` auth verdicts settle the state to `invalid` — a settled
+  verdict, **not** a stop: the loop continues probing at
+  `ClusterAuthSteadyRetryInterval`, so externally fixed credentials (a fresh
+  SSO login) are picked up without user action.
+- **connectivity** — the cluster could not be reached (refused, timeout, DNS,
+  TLS). These say nothing about credential validity, so they never consume
+  attempts; the loop probes at `ClusterAuthConnectivityRetryInterval` and the
+  cluster reconnects on its own when it answers. This is what keeps a cluster
+  upgrade (multi-minute outage, often with transient 401s) from stranding the
+  cluster in `invalid`.
+
+State transitions are driven only by probe results: `ReportFailure` moves
+valid → recovering; the loop settles recovering → invalid and recovers any
+non-valid state → valid. `TriggerRetry` restarts the loop (immediate probe)
+without touching the state. There is no attempt counter in the public surface —
+progress events and the auth state RPCs carry `secondsUntilRetry` (live in both
+recovering and invalid) and the sticky `errorClass` verdict.
+
+The frontend shows the blocking auth overlay only for confirmed auth verdicts
+(settled `invalid`, or a probe rejected by the cluster) with a single message
+and a next-recheck countdown; connectivity-class recovery presents as
+"Reconnecting" in the connectivity indicator instead.
+
+Recovery probes always build a fresh client from kubeconfig — they must never
+run through the cluster's wrapped transport, which blocks requests while auth
+is not valid.
+
+### Rebuild wiring invariant
+
+`rebuildClusterSubsystem` must wire rebuilt client transports to the cluster's
+EXISTING auth manager (`buildClusterClientsWithManager`). Building around a
+fresh manager and swapping afterwards leaves the transports reporting to a
+discarded manager — auth failures then block all traffic forever while the
+tracked manager stays valid and `RetryClusterAuth` no-ops. Pinned by
+`TestRebuildClusterSubsystemPreservesAuthManagerWiring`.
+
 ## Change Checklist
 
 When changing auth behavior:

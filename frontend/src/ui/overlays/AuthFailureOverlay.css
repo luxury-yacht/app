@@ -34,7 +34,7 @@
 .auth-failure-title {
   font-size: 1.25rem;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--color-text);
   margin: 0 0 0.5rem 0;
 }
 
@@ -51,19 +51,9 @@
   line-height: 1.5;
 }
 
-.auth-failure-recovering {
-  color: var(--color-warning, #f59e0b);
-}
-
-.auth-failure-attempts {
-  font-size: 0.85rem;
-  color: var(--color-text-tertiary);
-  margin: 0 0 1rem 0;
-}
-
 .auth-failure-reason {
   font-size: 0.8rem;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
   background-color: var(--color-bg-tertiary);
   padding: 0.75rem;
   border-radius: 4px;
