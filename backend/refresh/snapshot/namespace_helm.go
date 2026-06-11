@@ -1,15 +1,19 @@
 package snapshot
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/release"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -20,27 +24,28 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 )
 
 const namespaceHelmDomainName = "namespace-helm"
 
-// HelmActionFactory creates a Helm action configuration scoped to the provided namespace.
-type HelmActionFactory func(namespace string) (*action.Configuration, error)
+// helmReleaseSecretType marks the secrets helm's storage driver writes (one
+// secret per release revision).
+const helmReleaseSecretType corev1.SecretType = "helm.sh/release.v1"
+
+// helmDecodeCacheLimit bounds the decoded-release memo; past it the cache is
+// rebuilt from scratch (release counts this high are not a realistic working
+// set, this is purely a leak guard).
+const helmDecodeCacheLimit = 4096
+
+// helmOwnerSelector narrows the lister scan to helm storage records.
+var helmOwnerSelector = labels.SelectorFromSet(labels.Set{"owner": "helm"})
 
 // NamespaceHelmSnapshot payload returned to the frontend.
 type NamespaceHelmSnapshot struct {
 	ClusterMeta
 	ResourceQueryEnvelope
 	Rows []NamespaceHelmSummary `json:"rows"`
-}
-
-func namespaceHelmQueryCapabilities() ResourceQueryCapabilities {
-	return newTypedResourceCapabilities(
-		[]string{"name", "kind", "namespace", "chart", "appVersion", "status", "revision", "updated", "age"},
-		[]string{"kinds", "namespaces"},
-		[]string{"name", "namespace", "chart", "appVersion", "status", "description"},
-		[]string{"HelmRelease"},
-	)
 }
 
 // NamespaceHelmSummary captures the fields required by the Helm table.
@@ -61,21 +66,26 @@ type NamespaceHelmSummary struct {
 	AgeTimestamp       int64  `json:"ageTimestamp,omitempty"`
 }
 
-// RegisterNamespaceHelmDomain registers the Helm snapshot builder.
+func namespaceHelmQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "namespace", "chart", "appVersion", "status", "revision", "updated", "age"},
+		[]string{"kinds", "namespaces"},
+		[]string{"name", "namespace", "chart", "appVersion", "status", "description"},
+		[]string{"HelmRelease"},
+	)
+}
+
+// RegisterNamespaceHelmDomain registers the namespace helm domain.
 func RegisterNamespaceHelmDomain(
 	reg *domain.Registry,
 	informerFactory informers.SharedInformerFactory,
-	helmFactory HelmActionFactory,
 ) error {
 	if informerFactory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	if helmFactory == nil {
-		return fmt.Errorf("helm action factory is nil")
-	}
 	builder := &NamespaceHelmBuilder{
-		factory:         helmFactory,
-		namespaceLister: informerFactory.Core().V1().Namespaces().Lister(),
+		secretLister:  informerFactory.Core().V1().Secrets().Lister(),
+		secretsSynced: informerFactory.Core().V1().Secrets().Informer().HasSynced,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceHelmDomainName,
@@ -83,10 +93,26 @@ func RegisterNamespaceHelmDomain(
 	})
 }
 
-// NamespaceHelmBuilder renders Helm releases for a namespace.
+// NamespaceHelmBuilder renders Helm releases straight from the shared secrets
+// informer — helm stores every release revision as a typed secret, so the
+// already-synced cache replaces what used to be live per-namespace Helm SDK
+// list calls (one client bootstrap + API round-trip per namespace, plus a
+// cluster-wide re-list for every namespace without releases).
 type NamespaceHelmBuilder struct {
-	factory         HelmActionFactory
-	namespaceLister corelisters.NamespaceLister
+	secretLister  corelisters.SecretLister
+	secretsSynced cache.InformerSynced
+
+	// decodeCache memoizes decoded release payloads by secret identity so
+	// repeat builds (pagination, per-keystroke filter queries) skip the
+	// gzip+json work. Keyed by namespace/name (unique per revision secret),
+	// validated by resourceVersion.
+	decodeMu    sync.Mutex
+	decodeCache map[string]decodedHelmRelease
+}
+
+type decodedHelmRelease struct {
+	resourceVersion string
+	release         *release.Release
 }
 
 func (b *NamespaceHelmBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
@@ -101,144 +127,26 @@ func (b *NamespaceHelmBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, err
 	}
 
+	// Wait out the informer's initial sync (bounded by the request context)
+	// instead of listing an unsynced cache: the first request after connect is
+	// slower, never wrong. See ClusterEventsBuilder.Build.
+	if b.secretsSynced != nil && !cache.WaitForCacheSync(ctx.Done(), b.secretsSynced) {
+		return nil, fmt.Errorf("helm release cache has not finished syncing")
+	}
+
+	namespaceFilter := parsedScope.Namespace
 	if parsedScope.AllNamespaces {
-		return b.buildAllNamespaces(ctx, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), meta, query)
+		namespaceFilter = ""
 	}
-	return b.buildSingleNamespace(refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), meta, parsedScope.Namespace, query)
-}
 
-func (b *NamespaceHelmBuilder) buildSingleNamespace(snapshotScope string, meta ClusterMeta, namespace string, query typedTableQuery) (*refresh.Snapshot, error) {
-	actionCfg, err := b.factory(namespace)
+	releases, err := b.listReleases(namespaceFilter)
 	if err != nil {
 		return nil, err
 	}
 
-	list := action.NewList(actionCfg)
-	list.All = false
-	releases, err := list.Run()
-	if err != nil {
-		return nil, err
-	}
-
-	summaries, version := mapHelmReleases(releases, namespace, meta)
-	if query.Enabled {
-		page := applyTypedTableQuery(summaries, query, helmTableQueryAdapter())
-		return &refresh.Snapshot{
-			Domain:  namespaceHelmDomainName,
-			Scope:   snapshotScope,
-			Version: version,
-			Payload: NamespaceHelmSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(namespaceHelmDomainName, page, namespaceHelmQueryCapabilities()),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
-	}
-
-	var totalItems int
-	summaries, totalItems = truncateSnapshotWindow(summaries, config.SnapshotNamespaceHelmEntryLimit)
-
-	return &refresh.Snapshot{
-		Domain:  namespaceHelmDomainName,
-		Scope:   snapshotScope,
-		Version: version,
-		Payload: NamespaceHelmSnapshot{
-			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceHelmDomainName, totalItems, totalItems == len(summaries), snapshotSortedKinds(summaries, func(NamespaceHelmSummary) string { return "HelmRelease" }), namespaceHelmQueryCapabilities()),
-			Rows:                  summaries,
-		},
-		Stats: snapshotWindowStats(len(summaries), totalItems, "Helm releases"),
-	}, nil
-}
-
-func (b *NamespaceHelmBuilder) buildAllNamespaces(
-	ctx context.Context,
-	snapshotScope string,
-	meta ClusterMeta,
-	query typedTableQuery,
-) (*refresh.Snapshot, error) {
-	if b.namespaceLister == nil {
-		return nil, fmt.Errorf("namespace lister unavailable for helm aggregation")
-	}
-
-	namespaceObjs, err := b.namespaceLister.List(labels.Everything())
-	if err != nil {
-		return nil, err
-	}
-
-	namespaces := uniqueNamespaceNames(namespaceObjs)
-	if len(namespaces) == 0 {
-		return &refresh.Snapshot{
-			Domain:  namespaceHelmDomainName,
-			Scope:   snapshotScope,
-			Version: 0,
-			Payload: NamespaceHelmSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: typedWindowEnvelope(namespaceHelmDomainName, 0, true, []string{}, namespaceHelmQueryCapabilities()), Rows: []NamespaceHelmSummary{}},
-			Stats: refresh.SnapshotStats{
-				ItemCount: 0,
-			},
-		}, nil
-	}
-
-	sem := make(chan struct{}, config.SnapshotNamespaceHelmWorkerLimit)
-
-	var (
-		mu        sync.Mutex
-		summaries []NamespaceHelmSummary
-		version   uint64
-	)
-
-	g, gctx := errgroup.WithContext(ctx)
-	for _, ns := range namespaces {
-		ns := ns
-		g.Go(func() error {
-			select {
-			case sem <- struct{}{}:
-			case <-gctx.Done():
-				return gctx.Err()
-			}
-			defer func() { <-sem }()
-
-			actionCfg, err := b.factory(ns)
-			if err != nil {
-				return fmt.Errorf("helm namespace %s: %w", ns, err)
-			}
-
-			list := action.NewList(actionCfg)
-			list.All = false
-			releases, err := list.Run()
-			if err != nil {
-				return fmt.Errorf("helm namespace %s: %w", ns, err)
-			}
-
-			if len(releases) == 0 {
-				list.All = true
-				list.AllNamespaces = true
-				releases, err = list.Run()
-				if err != nil {
-					return fmt.Errorf("helm namespace %s: %w", ns, err)
-				}
-			}
-
-			localSummaries, localVersion := mapHelmReleases(releases, ns, meta)
-			if len(localSummaries) == 0 {
-				return nil
-			}
-
-			mu.Lock()
-			summaries = append(summaries, localSummaries...)
-			if localVersion > version {
-				version = localVersion
-			}
-			mu.Unlock()
-			return nil
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
-
+	summaries, version := mapHelmReleases(releases, namespaceFilter, meta)
+	// The lister + latest-revision map yield no particular order; builds must
+	// be deterministic for stable snapshot checksums.
 	sort.Slice(summaries, func(i, j int) bool {
 		if summaries[i].Namespace == summaries[j].Namespace {
 			return summaries[i].Name < summaries[j].Name
@@ -246,6 +154,7 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(
 		return summaries[i].Namespace < summaries[j].Namespace
 	})
 
+	snapshotScope := refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
 	if query.Enabled {
 		page := applyTypedTableQuery(summaries, query, helmTableQueryAdapter())
 		return &refresh.Snapshot{
@@ -275,6 +184,115 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(
 		},
 		Stats: snapshotWindowStats(len(summaries), totalItems, "Helm releases"),
 	}, nil
+}
+
+// listReleases returns the current state of every release in the namespace
+// (cluster-wide when namespace is empty).
+func (b *NamespaceHelmBuilder) listReleases(namespace string) ([]*release.Release, error) {
+	var (
+		secrets []*corev1.Secret
+		err     error
+	)
+	if namespace == "" {
+		secrets, err = b.secretLister.List(helmOwnerSelector)
+	} else {
+		secrets, err = b.secretLister.Secrets(namespace).List(helmOwnerSelector)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Helm stores every revision of a release as its own secret; only the
+	// newest revision describes the release's current state. Pick it per
+	// (namespace, name) BEFORE decoding so decode cost scales with releases,
+	// not revisions.
+	type releaseKey struct{ namespace, name string }
+	latest := make(map[releaseKey]*corev1.Secret)
+	latestVersion := make(map[releaseKey]int)
+	for _, secret := range secrets {
+		if secret == nil || secret.Type != helmReleaseSecretType {
+			continue
+		}
+		name := secret.Labels["name"]
+		version, err := strconv.Atoi(secret.Labels["version"])
+		if name == "" || err != nil {
+			continue
+		}
+		key := releaseKey{namespace: secret.Namespace, name: name}
+		if existing, ok := latestVersion[key]; !ok || version > existing {
+			latestVersion[key] = version
+			latest[key] = secret
+		}
+	}
+
+	releases := make([]*release.Release, 0, len(latest))
+	for _, secret := range latest {
+		// A latest revision marked superseded or uninstalled is history, not a
+		// current release.
+		switch secret.Labels["status"] {
+		case "superseded", "uninstalled":
+			continue
+		}
+		rls, err := b.decodeReleaseSecret(secret)
+		if err != nil {
+			// One corrupt record must not take down the whole view; helm's own
+			// list is similarly tolerant.
+			continue
+		}
+		releases = append(releases, rls)
+	}
+	return releases, nil
+}
+
+func (b *NamespaceHelmBuilder) decodeReleaseSecret(secret *corev1.Secret) (*release.Release, error) {
+	cacheKey := secret.Namespace + "/" + secret.Name
+	b.decodeMu.Lock()
+	cached, ok := b.decodeCache[cacheKey]
+	b.decodeMu.Unlock()
+	if ok && cached.resourceVersion == secret.ResourceVersion {
+		return cached.release, nil
+	}
+
+	rls, err := decodeHelmRelease(secret.Data["release"])
+	if err != nil {
+		return nil, err
+	}
+
+	b.decodeMu.Lock()
+	if b.decodeCache == nil || len(b.decodeCache) >= helmDecodeCacheLimit {
+		b.decodeCache = make(map[string]decodedHelmRelease)
+	}
+	b.decodeCache[cacheKey] = decodedHelmRelease{resourceVersion: secret.ResourceVersion, release: rls}
+	b.decodeMu.Unlock()
+	return rls, nil
+}
+
+// decodeHelmRelease mirrors helm v3's storage record format
+// (storage/driver/util.go): base64 text wrapping an optionally-gzipped JSON
+// release.
+func decodeHelmRelease(data []byte) (*release.Release, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("helm release record is empty")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(string(data))
+	if err != nil {
+		return nil, err
+	}
+	if len(decoded) > 3 && bytes.Equal(decoded[:3], []byte{0x1f, 0x8b, 0x08}) {
+		reader, err := gzip.NewReader(bytes.NewReader(decoded))
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+		if decoded, err = io.ReadAll(reader); err != nil {
+			return nil, err
+		}
+	}
+	var rls release.Release
+	if err := json.Unmarshal(decoded, &rls); err != nil {
+		return nil, err
+	}
+	return &rls, nil
 }
 
 func mapHelmReleases(
@@ -342,20 +360,4 @@ func mapHelmReleases(
 	}
 
 	return summaries, version
-}
-
-func uniqueNamespaceNames(namespaces []*corev1.Namespace) []string {
-	set := make(map[string]struct{}, len(namespaces))
-	for _, ns := range namespaces {
-		if ns == nil || ns.Name == "" {
-			continue
-		}
-		set[ns.Name] = struct{}{}
-	}
-	result := make([]string, 0, len(set))
-	for name := range set {
-		result = append(result, name)
-	}
-	sort.Strings(result)
-	return result
 }

@@ -1,7 +1,5 @@
 - Can't copy data from errors. Need to be able to select/copy and also need a "copy error" button
 
-- Why is Helm so slow to load?
-
 - YAML editor
   - Fix text selection colors
     - Make them consistent whether read or edit mode

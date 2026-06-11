@@ -478,23 +478,20 @@ func TestDomainRegistrationRequiresDependencies(t *testing.T) {
 	require.NotNil(t, custom.require)
 	require.ErrorContains(t, custom.require(), "dynamic client must be provided for namespace custom resources")
 
+	// The helm domain reads from the shared secrets informer and has no extra
+	// dependency gate.
 	helm := findRegistration(t, missingDeps, "namespace-helm")
-	require.NotNil(t, helm.require)
-	require.ErrorContains(t, helm.require(), "helm factory must be provided for namespace helm domain")
+	require.Nil(t, helm.require)
 
 	// Verify that dependency checks pass when the dependencies are provided.
 	withDeps := domainRegistrations(registrationDeps{
 		cfg: Config{
 			DynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
-			HelmFactory:   dummyHelmFactory,
 		},
 	})
 
 	customWithDeps := findRegistration(t, withDeps, "namespace-custom")
 	require.NoError(t, customWithDeps.require())
-
-	helmWithDeps := findRegistration(t, withDeps, "namespace-helm")
-	require.NoError(t, helmWithDeps.require())
 }
 
 func TestDomainRegistrationProviderAndServiceGatesAreExplicit(t *testing.T) {

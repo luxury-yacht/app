@@ -18,8 +18,6 @@ import (
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	cgotesting "k8s.io/client-go/testing"
-
-	"helm.sh/helm/v3/pkg/action"
 )
 
 func TestNewSubsystemRequiresDynamicClient(t *testing.T) {
@@ -29,7 +27,6 @@ func TestNewSubsystemRequiresDynamicClient(t *testing.T) {
 		ResyncInterval:      time.Millisecond,
 		MetricsInterval:     time.Millisecond,
 		APIExtensionsClient: apiextensionsfake.NewClientset(),
-		HelmFactory:         dummyHelmFactory,
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
@@ -44,32 +41,6 @@ func TestNewSubsystemRequiresDynamicClient(t *testing.T) {
 	require.NotNil(t, recorder)
 	require.Nil(t, cache)
 	require.Contains(t, err.Error(), "dynamic client")
-}
-
-func TestNewSubsystemRequiresHelmFactory(t *testing.T) {
-	dyn := testsupport.NewDynamicClient(t, runtime.NewScheme())
-
-	cfg := Config{
-		KubernetesClient:    kubernetesfake.NewClientset(),
-		RestConfig:          &rest.Config{},
-		ResyncInterval:      time.Millisecond,
-		MetricsInterval:     time.Millisecond,
-		APIExtensionsClient: apiextensionsfake.NewClientset(),
-		DynamicClient:       dyn,
-		ObjectDetailsProvider: noopObjectDetailProvider{
-			err: snapshot.ErrObjectDetailNotImplemented,
-		},
-		Logger: noopLogger{},
-	}
-
-	manager, handler, recorder, _, cache, _, err := NewSubsystem(cfg)
-
-	require.Error(t, err)
-	require.Nil(t, manager)
-	require.Nil(t, handler)
-	require.NotNil(t, recorder)
-	require.Nil(t, cache)
-	require.Contains(t, err.Error(), "helm factory")
 }
 
 func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T) {
@@ -88,7 +59,6 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 		MetricsInterval:     time.Millisecond,
 		APIExtensionsClient: apiextensionsfake.NewClientset(),
 		DynamicClient:       dyn,
-		HelmFactory:         dummyHelmFactory,
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
@@ -126,10 +96,6 @@ func TestHealthHandlerReflectsInformerSync(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.Equal(t, "ok", rec.Body.String())
 	})
-}
-
-func dummyHelmFactory(string) (*action.Configuration, error) {
-	return &action.Configuration{}, nil
 }
 
 type noopObjectDetailProvider struct {

@@ -57,7 +57,6 @@ type Config struct {
 	GatewayInformerFactory     gatewayinformers.SharedInformerFactory   // Informers for Gateway API resources.
 	GatewayAPIPresence         common.GatewayAPIPresence                // Installed Gateway API kind set.
 	DynamicClient              dynamic.Interface                        // Dynamic client for interacting with Kubernetes resources.
-	HelmFactory                snapshot.HelmActionFactory               // Factory for creating Helm actions.
 	ObjectDetailsProvider      snapshot.ObjectDetailProvider            // Provider for detailed object information.
 	Logger                     containerlogsstream.Logger               // Logger for recording refresh operations.
 	ObjectCatalogEnabled       func() bool                              // Function to check if the object catalog is enabled.

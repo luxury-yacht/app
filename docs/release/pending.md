@@ -93,3 +93,13 @@
 - Failed live-stream requests now return proper CORS headers, so when one does
   fail the browser console shows the real status and message instead of an
   opaque "not allowed by Access-Control-Allow-Origin" error.
+
+- The Helm view now loads as fast as every other view. It previously made live
+  Kubernetes API calls through the Helm SDK on every load — one full client
+  bootstrap and list call per namespace, plus a cluster-wide re-scan for every
+  namespace without releases — repeated for every page, sort, and filter
+  change. It now reads Helm's release records straight from the app's existing
+  in-memory cache: zero API calls per load, instant pagination and filtering.
+  One visible improvement: releases with operations in flight
+  (pending-install, pending-upgrade, pending-rollback, uninstalling) now
+  appear in the list with their current status instead of being hidden.

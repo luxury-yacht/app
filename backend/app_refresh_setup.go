@@ -12,11 +12,8 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
-	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/cli"
 )
 
 func (a *App) resolveMetricsInterval() time.Duration {
@@ -162,7 +159,6 @@ func (a *App) buildRefreshSubsystemForSelection(
 		GatewayInformerFactory:     clients.gatewayInformerFactory,
 		GatewayAPIPresence:         clients.gatewayAPIPresence,
 		DynamicClient:              clients.dynamicClient,
-		HelmFactory:                a.helmActionFactoryForSelection(selection),
 		ObjectDetailsProvider:      a.objectDetailProvider(),
 		Logger:                     a.logger,
 		ContainerLogsTargetLimiter: a.sharedContainerLogsTargetLimiter(),
@@ -431,27 +427,4 @@ func (a *App) buildRefreshSubsystem(cfg system.Config) (*system.Subsystem, error
 		a.handlePermissionIssues(subsystem.PermissionIssues)
 	}
 	return subsystem, nil
-}
-
-// helmActionFactoryForSelection wires Helm actions to a specific kubeconfig selection.
-func (a *App) helmActionFactoryForSelection(selection kubeconfigSelection) snapshot.HelmActionFactory {
-	return func(namespace string) (*action.Configuration, error) {
-		settings := cli.New()
-		if selection.Path != "" {
-			settings.KubeConfig = selection.Path
-		}
-		if selection.Context != "" {
-			settings.KubeContext = selection.Context
-		}
-
-		actionConfig := new(action.Configuration)
-		if err := actionConfig.Init(settings.RESTClientGetter(), namespace, "secret", func(format string, v ...interface{}) {
-			if a.logger != nil {
-				a.logger.Debug(fmt.Sprintf(format, v...), logsources.Helm)
-			}
-		}); err != nil {
-			return nil, err
-		}
-		return actionConfig, nil
-	}
 }
