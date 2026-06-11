@@ -14,6 +14,8 @@ import {
   type GridTableFilterConfig,
   type GridTableVirtualizationOptions,
 } from '@shared/components/tables/GridTable';
+import type { ResourceGridTableMode } from './resourceGridTableTypes';
+import { isQueryBackedResourceGridTableMode } from './resourceGridTableTypes';
 
 interface GridTableBindingPersistence {
   sortConfig?: SortConfig | null;
@@ -26,6 +28,7 @@ interface GridTableBindingPersistence {
 
 interface GridTableBindingParams<T> {
   data: T[];
+  tableMode: ResourceGridTableMode;
   columns: GridColumnDefinition<T>[];
   keyExtractor: (item: T, index: number) => string;
   defaultSortKey?: string;
@@ -39,6 +42,7 @@ interface GridTableBindingParams<T> {
 
 export function useGridTableBinding<T>({
   data,
+  tableMode,
   columns,
   keyExtractor,
   defaultSortKey,
@@ -59,6 +63,7 @@ export function useGridTableBinding<T>({
       onChange: persistence?.setSortConfig,
       diagnosticsLabel,
       rowIdentity,
+      disableLocalSort: isQueryBackedResourceGridTableMode(tableMode),
     }
   );
 

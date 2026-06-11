@@ -123,16 +123,6 @@ describe('NamespaceResourcesManager', () => {
   };
 
   it('passes resource data to view component and triggers manual load for active tab', async () => {
-    resourceStates.workloads.meta = { kinds: ['Deployment', 'StatefulSet'] };
-    resourceStates.config.meta = { kinds: ['ConfigMap', 'Secret'] };
-    resourceStates.network.meta = { kinds: ['Ingress', 'Service'] };
-    resourceStates.rbac.meta = { kinds: ['Role', 'RoleBinding', 'ServiceAccount'] };
-    resourceStates.autoscaling.meta = { kinds: ['HorizontalPodAutoscaler'] };
-    resourceStates.quotas.meta = {
-      kinds: ['LimitRange', 'PodDisruptionBudget', 'ResourceQuota'],
-    };
-    resourceStates.custom.meta = { kinds: ['DBCluster', 'Widget'] };
-
     await renderManager('network');
     expect(setActiveResourceTypeMock).toHaveBeenCalledWith('network');
 
@@ -141,17 +131,11 @@ describe('NamespaceResourcesManager', () => {
 
     const props = viewPropsRef.current;
     expect(props).toBeTruthy();
-    expect(props.nsNetwork).toEqual(['network-row']);
-    expect(props.nsNetworkLoaded).toBe(false);
     expect(props.nsPods).toEqual(['pods-row']);
     expect(props.nsPodsMetrics).toBe(resourceStates.pods.metrics);
-    expect(props.nsWorkloadsKinds).toEqual(['Deployment', 'StatefulSet']);
-    expect(props.nsConfigKinds).toEqual(['ConfigMap', 'Secret']);
-    expect(props.nsNetworkKinds).toEqual(['Ingress', 'Service']);
-    expect(props.nsRBACKinds).toEqual(['Role', 'RoleBinding', 'ServiceAccount']);
-    expect(props.nsAutoscalingKinds).toEqual(['HorizontalPodAutoscaler']);
-    expect(props.nsQuotasKinds).toEqual(['LimitRange', 'PodDisruptionBudget', 'ResourceQuota']);
-    expect(props.nsCustomKinds).toEqual(['DBCluster', 'Widget']);
+    // The Kinds dropdown vocabulary is backend-owned (query capabilities); the
+    // manager forwards no kind lists.
+    expect(props.nsWorkloadsKinds).toBeUndefined();
   });
 
   it('cancels outstanding resource operations on unmount', async () => {

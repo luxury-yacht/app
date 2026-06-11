@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -32,22 +33,34 @@ type NamespaceConfigBuilder struct {
 	secrets    corelisters.SecretLister
 }
 
-// NamespaceConfigSnapshot payload returned to the frontend.
+// NamespaceConfigSnapshot payload returned to the frontend. It embeds the
+// canonical ResourceQueryEnvelope (flattened into top-level JSON) plus the
+// domain-typed rows.
 type NamespaceConfigSnapshot struct {
 	ClusterMeta
-	Resources []ConfigSummary `json:"resources"`
-	Kinds     []string        `json:"kinds,omitempty"`
+	ResourceQueryEnvelope
+	Rows []ConfigSummary `json:"rows"`
+}
+
+func namespaceConfigQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "namespace", "data", "age"},
+		[]string{"kinds", "namespaces"},
+		[]string{"kind", "typeAlias", "name", "namespace", "data"},
+		[]string{"ConfigMap", "Secret"},
+	)
 }
 
 // ConfigSummary describes a ConfigMap or Secret entry.
 type ConfigSummary struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	TypeAlias string `json:"typeAlias,omitempty"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Data      int    `json:"data"`
-	Age       string `json:"age"`
+	Kind         string `json:"kind"`
+	TypeAlias    string `json:"typeAlias,omitempty"`
+	Name         string `json:"name"`
+	Namespace    string `json:"namespace"`
+	Data         int    `json:"data"`
+	Age          string `json:"age"`
+	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterNamespaceConfigDomain registers the namespace config domain.
@@ -77,28 +90,40 @@ func RegisterNamespaceConfigDomain(
 // Build assembles ConfigMap and Secret summaries for a namespace scope.
 func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, errNamespaceConfigScopeRequired)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceConfigDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), errNamespaceConfigScopeRequired)
 	if err != nil {
 		return nil, err
 	}
 
+	configMapsAvailable := b.configMaps != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "configmaps")
 	var configMaps []*corev1.ConfigMap
-	if b.configMaps != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "configmaps") {
+	if configMapsAvailable {
 		configMaps, err = b.listConfigMaps(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace config: failed to list configmaps: %w", err)
 		}
 	}
 
+	secretsAvailable := b.secrets != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "secrets")
 	var secrets []*corev1.Secret
-	if b.secrets != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "secrets") {
+	if secretsAvailable {
 		secrets, err = b.listSecrets(parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace config: failed to list secrets: %w", err)
 		}
 	}
 
-	return b.buildSnapshot(meta, parsedScope.CanonicalScope, configMaps, secrets)
+	sources := []typedTableResourceSource{
+		{Kind: "ConfigMap", Group: "", Resource: "configmaps", Available: configMapsAvailable},
+		{Kind: "Secret", Group: "", Resource: "secrets", Available: secretsAvailable},
+	}
+	issues := typedTableQueryResourceIssues(ctx, namespaceConfigDomainName, query, sources)
+	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, configMaps, secrets, issues, capabilitiesWithAvailableKinds(namespaceConfigQueryCapabilities(), sources))
 }
 
 func (b *NamespaceConfigBuilder) listConfigMaps(namespace string) ([]*corev1.ConfigMap, error) {
@@ -118,8 +143,11 @@ func (b *NamespaceConfigBuilder) listSecrets(namespace string) ([]*corev1.Secret
 func (b *NamespaceConfigBuilder) buildSnapshot(
 	meta ClusterMeta,
 	scope string,
+	query typedTableQuery,
 	configMaps []*corev1.ConfigMap,
 	secrets []*corev1.Secret,
+	issues []ResourceQueryIssue,
+	capabilities ResourceQueryCapabilities,
 ) (*refresh.Snapshot, error) {
 	resources := make([]ConfigSummary, 0, len(configMaps)+len(secrets))
 	var version uint64
@@ -149,20 +177,27 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 
 	sortConfigSummaries(resources)
 
-	if len(resources) > config.SnapshotNamespaceConfigEntryLimit {
-		resources = resources[:config.SnapshotNamespaceConfigEntryLimit]
-	}
-
+	resolved := resolveTypedSnapshotPage(
+		namespaceConfigDomainName,
+		resources,
+		query,
+		configTableQueryAdapter(),
+		capabilities,
+		config.SnapshotNamespaceConfigEntryLimit,
+		"config resources",
+		func(resource ConfigSummary) string { return resource.Kind },
+		issues,
+	)
 	return &refresh.Snapshot{
 		Domain:  namespaceConfigDomainName,
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceConfigSnapshot{
-			ClusterMeta: meta,
-			Resources:   resources,
-			Kinds:       snapshotSortedKinds(resources, func(resource ConfigSummary) string { return resource.Kind }),
+			ClusterMeta:           meta,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: refresh.SnapshotStats{ItemCount: len(resources)},
+		Stats: resolved.Stats,
 	}, nil
 }
 

@@ -154,7 +154,7 @@ describe('GridTablePerformance', () => {
     expect(markup).toContain('Render slow');
     expect(markup).toContain('Mode');
     expect(markup).toContain('Local');
-    expect(markup).toContain('Post-Cap');
+    expect(markup).toContain('Source');
     expect(markup).toContain('Visible');
     expect(markup).toContain('9 (90%)');
     expect(markup).toContain('Reset Samples');
@@ -190,7 +190,7 @@ describe('GridTablePerformance', () => {
     expect(markup).toContain('Query');
     expect(markup).toContain('Live');
     expect(markup).toContain(
-      'Query-backed table: Input is the upstream query result size before the shared cap is applied.'
+      'Query-backed table: Input is the upstream query result size returned by the backend.'
     );
   });
 

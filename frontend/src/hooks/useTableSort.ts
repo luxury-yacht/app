@@ -19,6 +19,7 @@ export interface UseTableSortOptions {
   controlledSort?: SortConfig | null;
   onChange?: (config: SortConfig) => void;
   diagnosticsLabel?: string;
+  disableLocalSort?: boolean;
   // When provided, columns with a `sortValue` accessor are used to extract
   // comparison values instead of direct property access on the row.
   columns?: ReadonlyArray<{ key: string; sortValue?: (item: any) => any }>;
@@ -50,7 +51,9 @@ export function useTableSort<T>(
 ) {
   const controlledSort = options?.controlledSort;
   const onChange = options?.onChange;
+  const isControlled = controlledSort !== undefined || Boolean(onChange);
   const diagnosticsLabel = options?.diagnosticsLabel;
+  const disableLocalSort = options?.disableLocalSort ?? false;
   const columns = options?.columns;
   const rowIdentity = options?.rowIdentity;
   const [sortConfig, setSortConfig] = useState<SortConfig>({
@@ -79,8 +82,8 @@ export function useTableSort<T>(
       return { key, direction: defaultDirection };
     };
 
-    if (controlledSort) {
-      const next = computeNext(controlledSort);
+    if (isControlled) {
+      const next = computeNext(controlledSort ?? sortConfig);
       onChange?.(next);
       return;
     }
@@ -142,6 +145,12 @@ export function useTableSort<T>(
     // Handle null or undefined data
     if (!data) {
       return [];
+    }
+
+    if (disableLocalSort) {
+      sortDurationRef.current = null;
+      sortCacheRef.current = null;
+      return data;
     }
 
     if (!effectiveSort.key || !effectiveSort.direction) {
@@ -307,7 +316,7 @@ export function useTableSort<T>(
     sortDurationRef.current = getNow() - startedAt;
 
     return sorted;
-  }, [data, effectiveSort, rowIdentity, sortValueExtractors, stringCollator]);
+  }, [data, disableLocalSort, effectiveSort, rowIdentity, sortValueExtractors, stringCollator]);
 
   useEffect(() => {
     if (!diagnosticsLabel || sortDurationRef.current == null) {

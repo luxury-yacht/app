@@ -18,10 +18,12 @@ import { getUseShortResourceNames } from '@/core/settings/appPreferences';
  * Analogous to the HTML table columnFactories but for CSS Grid tables
  */
 
+type AgeColumnRow = { age?: string; ageTimestamp?: number };
+
 /**
- * Creates an age column for resources with an age property
+ * Creates an age column for resources with an age property.
  */
-export const createAgeColumn = <T extends { age?: string }>(
+export const createAgeColumn = <T extends AgeColumnRow>(
   key: string = 'age',
   header: string = 'Age',
   getValue: (item: T) => string | undefined = (item) => item.age
@@ -30,6 +32,10 @@ export const createAgeColumn = <T extends { age?: string }>(
   header,
   render: (item) => getValue(item) || '-',
   sortable: true,
+  sortValue: (item) =>
+    typeof item.ageTimestamp === 'number' && Number.isFinite(item.ageTimestamp)
+      ? -item.ageTimestamp
+      : getValue(item),
 });
 
 export interface CreateResourceBarColumnOptions<T> {
@@ -222,6 +228,7 @@ export const applyColumnSizing = <T,>(
 export interface CreateTextColumnOptions<T> {
   className?: string;
   sortable?: boolean;
+  sortValue?: (item: T) => string | number | undefined;
   onClick?: (item: T) => void;
   /** Alt+click handler — navigates to the item's view and focuses it. */
   onAltClick?: (item: T) => void;
@@ -281,6 +288,7 @@ export function createTextColumn<T>(
     header,
     className: options?.className,
     sortable: options?.sortable ?? true,
+    sortValue: options?.sortValue ?? accessor,
     disableShortcuts: options?.disableShortcuts,
     render: (item: T) => {
       const display = renderValue(item);

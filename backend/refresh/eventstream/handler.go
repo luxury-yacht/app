@@ -304,9 +304,9 @@ func convertSnapshot(snap *refresh.Snapshot) []Entry {
 	}
 	switch payload := snap.Payload.(type) {
 	case snapshot.ClusterEventsSnapshot:
-		return convertClusterEntries(payload.Events)
+		return convertClusterEntries(payload.Rows)
 	case snapshot.NamespaceEventsSnapshot:
-		return convertNamespaceEntries(payload.Events)
+		return convertNamespaceEntries(payload.Rows)
 	default:
 		return nil
 	}

@@ -6,7 +6,10 @@
 
 package objectcatalog
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // Snapshot returns a copy of the current catalog contents.
 func (s *Service) Snapshot() []Summary {
@@ -40,6 +43,14 @@ func (s *Service) Descriptors() []Descriptor {
 func (s *Service) Health() HealthStatus {
 	s.healthMu.RLock()
 	defer s.healthMu.RUnlock()
+	var denied []string
+	if len(s.health.DeniedResources) > 0 {
+		denied = make([]string, 0, len(s.health.DeniedResources))
+		for resource := range s.health.DeniedResources {
+			denied = append(denied, resource)
+		}
+		sort.Strings(denied)
+	}
 	return HealthStatus{
 		Status:              s.health.State,
 		ConsecutiveFailures: s.health.ConsecutiveFailures,
@@ -48,6 +59,7 @@ func (s *Service) Health() HealthStatus {
 		LastError:           s.health.LastError,
 		Stale:               s.health.Stale,
 		FailedResources:     s.health.FailedResources,
+		DeniedResources:     denied,
 	}
 }
 

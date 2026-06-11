@@ -11,6 +11,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type { CatalogItem } from '@/core/refresh/types';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -33,6 +34,8 @@ const sortHandlerMock = vi.fn();
 const useTableSortMock = vi.fn();
 const useShortNamesMock = vi.fn();
 const runObjectActionMock = vi.fn();
+const useBrowseCatalogMock = vi.hoisted(() => vi.fn());
+const useHydratedCustomCatalogRowsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -96,18 +99,36 @@ vi.mock('@/hooks/useTableSort', () => ({
 }));
 
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
-  useNamespaceGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
-    onSortChange: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
-    setFilters: vi.fn(),
-    isNamespaceScoped: true,
-    resetState: vi.fn(),
-  }),
+  useNamespaceGridTablePersistence: () => {
+    const persistence = {
+      sortConfig: { key: 'name', direction: 'asc' },
+      setSortConfig: vi.fn(),
+      columnWidths: null,
+      setColumnWidths: vi.fn(),
+      columnVisibility: null,
+      setColumnVisibility: vi.fn(),
+      filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+      setFilters: vi.fn(),
+      pageSize: null,
+      setPageSize: vi.fn(),
+      resetState: vi.fn(),
+      hydrated: true,
+    };
+    return {
+      ...persistence,
+      onSortChange: vi.fn(),
+      isNamespaceScoped: true,
+      persistence,
+    };
+  },
+}));
+
+vi.mock('@modules/browse/hooks/useBrowseCatalog', () => ({
+  useBrowseCatalog: (...args: unknown[]) => useBrowseCatalogMock(...args),
+}));
+
+vi.mock('@modules/browse/hooks/useHydratedCustomCatalogRows', () => ({
+  useHydratedCustomCatalogRows: (...args: unknown[]) => useHydratedCustomCatalogRowsMock(...args),
 }));
 
 vi.mock('@/hooks/useShortNames', () => ({
@@ -148,6 +169,87 @@ const baseResource: CustomResourceData = {
   annotations: { owner: 'ops' },
 };
 
+const browseCatalogResult = (items: CatalogItem[] = []) => ({
+  items,
+  loading: false,
+  hasLoadedOnce: true,
+  filterOptions: {
+    kinds: [],
+    namespaces: [],
+  },
+  totalCount: items.length,
+  totalIsExact: true,
+  queryDescriptor: {
+    clusterId: 'cluster-a',
+    namespaces: ['team-a'],
+    hasUserNamespaceScope: true,
+    kinds: [],
+    search: '',
+    sortField: 'name',
+    sortDirection: 'asc',
+    scope: 'cluster-a|customOnly=true&limit=1000&namespace=team-a&sort=name&sortDirection=asc',
+    customOnly: true,
+  },
+  queryPending: false,
+  pagination: {
+    pageIndex: 1,
+    pageLimit: 50,
+    pageLimitOptions: [25, 50, 100, 250, 500, 1000],
+    setPageLimit: () => {},
+    totalCount: items.length,
+    totalIsExact: true,
+    previousToken: null,
+    continueToken: null,
+    queryPending: false,
+    hasMore: false,
+    hasPrevious: false,
+    isRequestingMore: false,
+    onRequestMore: () => {},
+    onRequestPrevious: () => {},
+    loadMoreLabel: 'Next page',
+    previousPageLabel: 'Previous page',
+    autoLoadMore: false,
+  },
+});
+
+const catalogItemFromResource = (
+  resource: CustomResourceData,
+  overrides: Partial<CatalogItem> = {}
+): CatalogItem => ({
+  kind: resource.kind || resource.kindAlias || 'CustomResource',
+  group: resource.apiGroup ?? '',
+  version: resource.apiVersion ?? '',
+  resource: 'cronjobs',
+  namespace: resource.namespace,
+  name: resource.name,
+  uid: `${resource.name}-uid`,
+  resourceVersion: '1',
+  creationTimestamp: resource.age ?? '',
+  scope: 'Namespace',
+  clusterId: resource.clusterId,
+  clusterName: resource.clusterName,
+  actionFacts: resource.status ? { status: resource.status } : undefined,
+  ...overrides,
+});
+
+const catalogItemToCustomResourceData = (item: CatalogItem): CustomResourceData => ({
+  kind: item.kind,
+  kindAlias: item.kind,
+  name: item.name,
+  namespace: item.namespace ?? '',
+  clusterId: item.clusterId,
+  clusterName: item.clusterName,
+  apiGroup: item.group,
+  apiVersion: item.version,
+  group: item.group,
+  version: item.version,
+  resource: item.resource,
+  crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
+  status: item.actionFacts?.status,
+  statusPresentation: item.actionFacts?.status,
+  age: item.creationTimestamp,
+});
+
 const getLastGridProps = () => gridTableMock.mock.calls[gridTableMock.mock.calls.length - 1]?.[0];
 
 describe('NsViewCustom', () => {
@@ -159,6 +261,8 @@ describe('NsViewCustom', () => {
     openWithObjectMock.mockReset();
     sortHandlerMock.mockReset();
     runObjectActionMock.mockReset();
+    useBrowseCatalogMock.mockReset();
+    useHydratedCustomCatalogRowsMock.mockReset();
     modalProps.current = null;
     useTableSortMock.mockImplementation((data: CustomResourceData[]) => ({
       sortedData: data,
@@ -166,6 +270,10 @@ describe('NsViewCustom', () => {
       handleSort: sortHandlerMock,
     }));
     useShortNamesMock.mockReturnValue(false);
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult());
+    useHydratedCustomCatalogRowsMock.mockImplementation(
+      (_clusterId: string, items: CatalogItem[]) => items.map(catalogItemToCustomResourceData)
+    );
     errorHandlerMock.handle.mockClear();
 
     container = document.createElement('div');
@@ -185,7 +293,6 @@ describe('NsViewCustom', () => {
   const renderComponent = async (props: Partial<NsViewCustomProps> = {}) => {
     const mergedProps: NsViewCustomProps = {
       namespace: 'team-a',
-      data: [],
       loading: false,
       loaded: false,
       showNamespaceColumn: false,
@@ -205,19 +312,32 @@ describe('NsViewCustom', () => {
   };
 
   it('renders GridTable with context menu actions and opens the object panel', async () => {
-    await renderComponent({ data: [baseResource], loaded: true, showNamespaceColumn: true });
+    useBrowseCatalogMock.mockReturnValue(
+      browseCatalogResult([catalogItemFromResource(baseResource)])
+    );
+
+    await renderComponent({ loaded: true, showNamespaceColumn: true });
 
     expect(gridTableMock).toHaveBeenCalled();
 
     const gridProps = gridTableMock.mock.calls[0][0];
-    expect(gridProps.data).toEqual([baseResource]);
-    expect(gridProps.keyExtractor(baseResource)).toBe(
-      'alpha:ctx|batch/v1/CronJob/ops/nightly-cleanup'
-    );
+    expect(gridProps.data).toEqual([
+      expect.objectContaining({
+        kind: 'CronJob',
+        name: 'nightly-cleanup',
+        namespace: 'ops',
+        clusterId: 'alpha:ctx',
+        apiGroup: 'batch',
+        apiVersion: 'v1',
+        crdName: 'cronjobs.batch',
+      }),
+    ]);
+    const row = gridProps.data[0];
+    expect(gridProps.keyExtractor(row)).toBe('alpha:ctx|batch/v1/CronJob/ops/nightly-cleanup');
     gridProps.onSort?.('name');
     expect(sortHandlerMock).toHaveBeenCalledWith('name');
 
-    const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
+    const contextItems = gridProps.getCustomContextMenuItems(row, 'kind');
     expect(contextItems[0].actionId).toBe(OBJECT_ACTION_IDS.viewDetails);
     contextItems[0].onClick();
     expect(openWithObjectMock).toHaveBeenCalledWith(
@@ -225,19 +345,98 @@ describe('NsViewCustom', () => {
         kind: 'CronJob',
         name: 'nightly-cleanup',
         namespace: 'ops',
-        age: '10m',
-        labels: { team: 'platform' },
-        annotations: { owner: 'ops' },
         clusterId: 'alpha:ctx',
+        group: 'batch',
+        version: 'v1',
       })
     );
+  });
+
+  it('uses the catalog query current page on first render for a single namespace', async () => {
+    const queryResource: CustomResourceData = {
+      ...baseResource,
+      name: 'query-custom',
+      namespace: 'team-a',
+      clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
+    };
+    const queryItem = catalogItemFromResource(queryResource);
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
+
+    await renderComponent({
+      namespace: 'team-a',
+      loaded: true,
+      showNamespaceColumn: false,
+    });
+
+    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'cluster-a',
+        pinnedNamespaces: ['team-a'],
+        customOnly: true,
+      })
+    );
+    expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
+    expect(getLastGridProps()?.data).toEqual([
+      expect.objectContaining({
+        kind: 'CronJob',
+        name: 'query-custom',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        apiGroup: 'batch',
+        apiVersion: 'v1',
+        crdName: 'cronjobs.batch',
+      }),
+    ]);
+    expect(getLastGridProps()?.data).not.toEqual([
+      expect.objectContaining({ name: 'stale-local-custom' }),
+    ]);
+  });
+
+  it('uses the catalog query current page on first render for all namespaces', async () => {
+    const queryResource: CustomResourceData = {
+      ...baseResource,
+      name: 'query-all-custom',
+      namespace: 'team-b',
+      clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
+    };
+    const queryItem = catalogItemFromResource(queryResource);
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
+
+    await renderComponent({
+      namespace: ALL_NAMESPACES_SCOPE,
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'cluster-a',
+        pinnedNamespaces: [],
+        customOnly: true,
+      })
+    );
+    expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
+    expect(getLastGridProps()?.data).toEqual([
+      expect.objectContaining({
+        kind: 'CronJob',
+        name: 'query-all-custom',
+        namespace: 'team-b',
+        clusterId: 'cluster-a',
+        apiGroup: 'batch',
+        apiVersion: 'v1',
+        crdName: 'cronjobs.batch',
+      }),
+    ]);
+    expect(getLastGridProps()?.data).not.toEqual([
+      expect.objectContaining({ name: 'stale-local-custom' }),
+    ]);
   });
 
   it('enables searchable kind dropdown bulk actions in all-namespaces custom view', async () => {
     await renderComponent({
       namespace: ALL_NAMESPACES_SCOPE,
-      data: [baseResource],
-      availableKinds: ['DBCluster', 'Widget'],
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -246,25 +445,64 @@ describe('NsViewCustom', () => {
     expect(gridProps.filters.options.showKindDropdown).toBe(true);
     expect(gridProps.filters.options.kindDropdownSearchable).toBe(true);
     expect(gridProps.filters.options.kindDropdownBulkActions).toBe(true);
+    // Export is now the unified frontend fetcher, not a server-side per-action catalog export.
+    expect(typeof gridProps.fetchAllRows).toBe('function');
+    expect(
+      (gridProps.filters.options.postActions ?? []).some(
+        (item: any) => item.id === 'copy-namespace-custom-query-csv'
+      )
+    ).toBe(false);
   });
 
-  it('uses the provided kind metadata instead of deriving kinds from loaded rows', async () => {
+  it('uses catalog facet metadata instead of deriving kinds from loaded rows', async () => {
+    useBrowseCatalogMock.mockReturnValue({
+      ...browseCatalogResult(),
+      filterOptions: {
+        kinds: ['DBCluster', 'Widget'],
+        namespaces: [],
+        partialDataLabel: 'Catalog health: Catalog data may be stale.',
+      },
+    });
+
     await renderComponent({
-      data: [baseResource],
-      availableKinds: ['DBCluster', 'Widget'],
       loaded: true,
     });
 
     const gridProps = getLastGridProps();
     expect(gridProps?.filters?.options?.kinds).toEqual(['DBCluster', 'Widget']);
+    expect(gridProps?.filters?.options?.partialDataLabel).toContain('Catalog health');
+  });
+
+  it('renders hydrated custom-resource status and metadata for the current page', async () => {
+    useBrowseCatalogMock.mockReturnValue(
+      browseCatalogResult([catalogItemFromResource(baseResource)])
+    );
+    useHydratedCustomCatalogRowsMock.mockReturnValue([
+      {
+        ...baseResource,
+        crdName: 'cronjobs.batch',
+        status: 'Ready',
+        statusState: 'Ready',
+        statusPresentation: 'ready',
+      },
+    ]);
+
+    await renderComponent({ loaded: true });
+
+    const gridProps = getLastGridProps();
+    expect(gridProps?.data?.[0]).toEqual(
+      expect.objectContaining({
+        status: 'Ready',
+        statusPresentation: 'ready',
+        labels: { team: 'platform' },
+        annotations: { owner: 'ops' },
+      })
+    );
   });
 
   it('preserves the column definitions across rerenders with unchanged inputs', async () => {
-    const data = [baseResource];
-
     await renderComponent({
       namespace: 'team-a',
-      data,
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -273,7 +511,6 @@ describe('NsViewCustom', () => {
 
     await renderComponent({
       namespace: 'team-a',
-      data,
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -282,11 +519,8 @@ describe('NsViewCustom', () => {
   });
 
   it('preserves the filters config across rerenders with unchanged inputs', async () => {
-    const data = [baseResource];
-
     await renderComponent({
       namespace: 'team-a',
-      data,
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -295,7 +529,6 @@ describe('NsViewCustom', () => {
 
     await renderComponent({
       namespace: 'team-a',
-      data,
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -333,7 +566,7 @@ describe('NsViewCustom', () => {
       annotations: {},
     };
 
-    await renderComponent({ data: [dbInstance], loaded: true, showNamespaceColumn: true });
+    await renderComponent({ loaded: true, showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
@@ -375,7 +608,6 @@ describe('NsViewCustom', () => {
     };
 
     await renderComponent({
-      data: [resourceWithGVK],
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -431,7 +663,7 @@ describe('NsViewCustom', () => {
       annotations: {},
     };
 
-    await renderComponent({ data: [dbInstance], loaded: true, showNamespaceColumn: true });
+    await renderComponent({ loaded: true, showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
@@ -478,7 +710,7 @@ describe('NsViewCustom', () => {
       apiVersion: undefined,
     };
 
-    await renderComponent({ data: [missingGVK], loaded: true, showNamespaceColumn: true });
+    await renderComponent({ loaded: true, showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(missingGVK, 'kind');
@@ -514,7 +746,6 @@ describe('NsViewCustom', () => {
     };
 
     await renderComponent({
-      data: [resourceWithGVK],
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -559,13 +790,6 @@ describe('NsViewCustom', () => {
     useShortNamesMock.mockReturnValue(true);
 
     await renderComponent({
-      data: [
-        {
-          ...baseResource,
-          kind: undefined,
-          kindAlias: 'CR',
-        },
-      ],
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -606,7 +830,7 @@ describe('NsViewCustom', () => {
         crdName: 'dbinstances.rds.services.k8s.aws',
       };
 
-      await renderComponent({ data: [resource], loaded: true });
+      await renderComponent({ loaded: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
@@ -632,7 +856,7 @@ describe('NsViewCustom', () => {
         crdName: 'dbinstances.rds.services.k8s.aws',
       };
 
-      await renderComponent({ data: [resource], loaded: true });
+      await renderComponent({ loaded: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
@@ -661,31 +885,43 @@ describe('NsViewCustom', () => {
       expect(callArg.clusterName).toBe('alpha');
     });
 
-    it('exposes a sortValue extractor so the column sorts by crdName', async () => {
-      // Regression guard: the column key is "crd" but the data field is
-      // "crdName", so without an explicit sortValue the default sort
-      // (row[column.key]) reads undefined for every row and the column
-      // silently doesn't sort. The column factory only wires sortValue
-      // if we set it on the returned column object — verify that happened.
+    it('does not expose hydrated custom-resource fields as query-backed sort keys', async () => {
+      // Custom-resource rows are page-selected by the object catalog before
+      // CRD/status are hydrated. Those fields cannot be globally sorted by
+      // the query backend, so the columns must not advertise sorting.
       const resource: CustomResourceData = {
         ...baseResource,
         crdName: 'dbinstances.rds.services.k8s.aws',
       };
 
-      await renderComponent({ data: [resource], loaded: true });
+      await renderComponent({ loaded: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
+      const statusCol = findColumn(gridProps, 'status');
+      expect(crdCol.sortable).toBe(false);
+      expect(statusCol.sortable).toBe(false);
+
+      // Keep the local extractor intact for defensive consumers, but do not
+      // make this a query-backed sortable column.
       expect(crdCol.sortValue).toBeTypeOf('function');
 
-      // The extractor should return a comparable string that useTableSort
-      // can feed into localeCompare. We lowercase for case-insensitive sort.
       expect(crdCol.sortValue(resource)).toBe('dbinstances.rds.services.k8s.aws');
 
-      // Rows without a crdName sort as empty string (they cluster at the
-      // top or bottom depending on direction, not scattered randomly).
       const noCRD: CustomResourceData = { ...baseResource };
       expect(crdCol.sortValue(noCRD)).toBe('');
+    });
+
+    it('publishes only catalog-backed sortable keys', async () => {
+      await renderComponent({ loaded: true, showNamespaceColumn: true });
+
+      const gridProps = gridTableMock.mock.calls[0][0];
+      const sortableKeys = gridProps.columns
+        .filter((column: any) => column.sortable !== false)
+        .map((column: any) => column.key)
+        .sort((left: string, right: string) => left.localeCompare(right));
+
+      expect(sortableKeys).toEqual(['age', 'kind', 'name', 'namespace']);
     });
 
     it('renders the CRD cell as inert text when crdName is missing', async () => {
@@ -702,7 +938,7 @@ describe('NsViewCustom', () => {
         // crdName intentionally omitted
       };
 
-      await renderComponent({ data: [resource], loaded: true });
+      await renderComponent({ loaded: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
@@ -724,7 +960,7 @@ describe('NsViewCustom', () => {
         statusPresentation: 'warning',
       };
 
-      await renderComponent({ data: [resource], loaded: true });
+      await renderComponent({ loaded: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const statusCol = findColumn(gridProps, 'status');

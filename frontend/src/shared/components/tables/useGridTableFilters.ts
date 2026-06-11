@@ -161,6 +161,7 @@ export function useGridTableFilters<T>({
     const startedAt = getNow();
     const filtered = applyGridTableFilters({
       filteringEnabled,
+      searchBehavior: resolvedFilterOptions.searchBehavior,
       data,
       activeFilters,
       accessors: filterAccessors,
@@ -174,6 +175,7 @@ export function useGridTableFilters<T>({
     filteringEnabled,
     data,
     activeFilters,
+    resolvedFilterOptions.searchBehavior,
     filterAccessors,
     defaultGetKind,
     defaultGetNamespace,

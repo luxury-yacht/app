@@ -285,7 +285,7 @@ func parityPodsCase(meta ClusterMeta, withMetrics bool) parityCase {
 				BuildPodSummary(meta, podA, usage, rsLister),
 				BuildPodSummary(meta, podB, usage, rsLister),
 			}
-			requireRowParity(t, toAnySlice(payload.Pods), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(PodSummary)
 				return row.Namespace + "/" + row.Name
 			})
@@ -361,13 +361,13 @@ func parityWorkloadsCase(meta ClusterMeta, withHPA bool) parityCase {
 			require.NoError(t, err)
 			expected := []WorkloadSummary{deploymentRow, statefulRow}
 
-			requireRowParity(t, toAnySlice(payload.Workloads), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(WorkloadSummary)
 				return row.Kind + "/" + row.Namespace + "/" + row.Name
 			})
 
 			if withHPA {
-				for _, row := range payload.Workloads {
+				for _, row := range payload.Rows {
 					if row.Kind == "Deployment" && row.Name == "web" {
 						require.NotNil(t, row.HPAManaged, "snapshot deployment row should have HPA coverage")
 						require.True(t, *row.HPAManaged, "snapshot deployment row should be marked HPA-managed")
@@ -429,7 +429,7 @@ func parityServiceCase(meta ClusterMeta, withEndpoints bool) parityCase {
 				expected = append(expected, BuildEndpointSliceSummary(meta, slice))
 			}
 
-			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(NetworkSummary)
 				return row.Kind + "/" + row.Namespace + "/" + row.Name
 			})
@@ -482,7 +482,7 @@ func parityNamespaceNetworkObjectsCase(meta ClusterMeta) parityCase {
 				BuildIngressNetworkSummary(meta, ingress),
 				BuildNetworkPolicySummary(meta, policy),
 			}
-			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(NetworkSummary)
 				return row.Kind + "/" + row.Namespace + "/" + row.Name
 			})
@@ -518,7 +518,7 @@ func parityNamespaceConfigCase(meta ClusterMeta) parityCase {
 				BuildConfigMapSummary(meta, cm),
 				BuildSecretSummary(meta, secret),
 			}
-			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ConfigSummary)
 				return row.Kind + "/" + row.Namespace + "/" + row.Name
 			})
@@ -554,7 +554,7 @@ func parityNamespaceRBACCase(meta ClusterMeta) parityCase {
 				BuildRoleBindingSummary(meta, binding),
 				BuildServiceAccountSummary(meta, sa),
 			}
-			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(RBACSummary)
 				return row.Kind + "/" + row.Namespace + "/" + row.Name
 			})
@@ -589,7 +589,7 @@ func parityNamespaceQuotasCase(meta ClusterMeta) parityCase {
 				BuildLimitRangeSummary(meta, limit),
 				BuildPodDisruptionBudgetSummary(meta, pdb),
 			}
-			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(QuotaSummary)
 				return row.Kind + "/" + row.Namespace + "/" + row.Name
 			})
@@ -618,7 +618,7 @@ func parityNamespaceStorageCase(meta ClusterMeta) parityCase {
 			payload := snap.Payload.(NamespaceStorageSnapshot)
 
 			expected := []StorageSummary{BuildPVCStorageSummary(meta, pvc)}
-			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(StorageSummary)
 				return row.Kind + "/" + row.Namespace + "/" + row.Name
 			})
@@ -650,7 +650,7 @@ func parityNamespaceAutoscalingCase(meta ClusterMeta) parityCase {
 			payload := snap.Payload.(NamespaceAutoscalingSnapshot)
 
 			expected := []AutoscalingSummary{BuildHPASummary(meta, hpa)}
-			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(AutoscalingSummary)
 				return row.Kind + "/" + row.Namespace + "/" + row.Name
 			})
@@ -753,7 +753,7 @@ func parityClusterRBACCase(meta ClusterMeta) parityCase {
 				BuildClusterRoleSummary(meta, cr),
 				BuildClusterRoleBindingSummary(meta, crb),
 			}
-			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterRBACEntry)
 				return row.Kind + "/" + row.Name
 			})
@@ -783,7 +783,7 @@ func parityClusterStorageCase(meta ClusterMeta) parityCase {
 			payload := snap.Payload.(ClusterStorageSnapshot)
 
 			expected := []ClusterStorageEntry{BuildClusterStorageSummary(meta, pv)}
-			requireRowParity(t, toAnySlice(payload.Volumes), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterStorageEntry)
 				return row.Kind + "/" + row.Name
 			})
@@ -828,7 +828,7 @@ func parityClusterConfigCase(meta ClusterMeta) parityCase {
 				BuildClusterValidatingWebhookSummary(meta, vwh),
 				BuildClusterMutatingWebhookSummary(meta, mwh),
 			}
-			requireRowParity(t, toAnySlice(payload.Resources), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterConfigEntry)
 				return row.Kind + "/" + row.Name
 			})
@@ -863,7 +863,7 @@ func parityClusterCRDCase(meta ClusterMeta) parityCase {
 			payload := snap.Payload.(ClusterCRDSnapshot)
 
 			expected := []ClusterCRDEntry{BuildClusterCRDSummary(meta, crd)}
-			requireRowParity(t, toAnySlice(payload.Definitions), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterCRDEntry)
 				return row.Name
 			})
@@ -923,7 +923,7 @@ func parityNodesCase(meta ClusterMeta, withMetrics bool) parityCase {
 			expectedRow, err := BuildNodeSummary(meta, node, []*corev1.Pod{pod}, provider.LatestNodeUsage(), provider.LatestPodUsage())
 			require.NoError(t, err)
 			expected := []NodeSummary{expectedRow}
-			requireRowParity(t, toAnySlice(payload.Nodes), toAnySlice(expected), func(r any) string {
+			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(NodeSummary)
 				return row.Name
 			})

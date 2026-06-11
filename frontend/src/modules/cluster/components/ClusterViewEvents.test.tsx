@@ -10,14 +10,18 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
 
-const { useTableSortMock } = vi.hoisted(() => ({
-  useTableSortMock: vi.fn(
-    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
+const { persistedSortRef, useTableSortMock } = vi.hoisted(() => ({
+  persistedSortRef: { current: null as any },
+  useTableSortMock: vi.fn((data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => {
+    const fallbackSort = defaultKey
+      ? { key: defaultKey, direction: defaultDir ?? 'asc' }
+      : { key: '', direction: null };
+    return {
       sortedData: data,
-      sortConfig: opts?.controlledSort ?? { key: 'ageTimestamp', direction: 'desc' },
+      sortConfig: opts?.controlledSort ?? fallbackSort,
       handleSort: vi.fn(),
-    })
-  ),
+    };
+  }),
 }));
 
 const openWithObjectMock = vi.fn();
@@ -88,7 +92,7 @@ vi.mock('@/hooks/useTableSort', () => ({
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
   useGridTablePersistence: () => ({
-    sortConfig: { key: 'ageTimestamp', direction: 'desc' },
+    sortConfig: persistedSortRef.current,
     setSortConfig: vi.fn(),
     columnWidths: null,
     setColumnWidths: vi.fn(),
@@ -133,6 +137,7 @@ describe('ClusterViewEvents', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    persistedSortRef.current = null;
     openWithObjectMock.mockReset();
     findCatalogObjectByUIDMock.mockReset();
     useTableSortMock.mockClear();
@@ -145,15 +150,15 @@ describe('ClusterViewEvents', () => {
     container.remove();
   });
 
-  it('passes persisted state to GridTable', async () => {
+  it('passes the query-backed newest-first Age sort to GridTable when no persisted sort exists', async () => {
     await act(async () => {
-      root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
-    expect(props.sortConfig).toEqual({ key: 'ageTimestamp', direction: 'desc' });
+    expect(props.sortConfig).toEqual({ key: 'age', direction: 'asc' });
     expect(props.columnVisibility).toBe(null);
     expect(props.filters?.value).toEqual({
       search: '',
@@ -167,9 +172,21 @@ describe('ClusterViewEvents', () => {
     expect(props.columnWidths).toBe(null);
   });
 
+  it('uses the shared newest-first Age sort value for local table fallback rows', async () => {
+    await act(async () => {
+      root.render(<ClusterViewEvents />);
+      await Promise.resolve();
+    });
+
+    const ageColumn = gridTablePropsRef.current.columns.find((column: any) => column.key === 'age');
+
+    expect(ageColumn).toBeTruthy();
+    expect(ageColumn.sortValue(baseEvent)).toBe(-123);
+  });
+
   it('opens the involved object with group/version when object name is clicked', async () => {
     await act(async () => {
-      root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
@@ -197,7 +214,7 @@ describe('ClusterViewEvents', () => {
 
   it('passes stable event row identity into useTableSort', async () => {
     await act(async () => {
-      root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
@@ -226,7 +243,7 @@ describe('ClusterViewEvents', () => {
     };
 
     await act(async () => {
-      root.render(<ClusterViewEvents data={[event]} loaded={true} />);
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
@@ -261,7 +278,7 @@ describe('ClusterViewEvents', () => {
     };
 
     await act(async () => {
-      root.render(<ClusterViewEvents data={[event]} loaded={true} />);
+      root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
@@ -275,5 +292,14 @@ describe('ClusterViewEvents', () => {
     });
 
     expect(openWithObjectMock).not.toHaveBeenCalled();
+  });
+
+  it('does not expose recent-window copy for query-backed cluster events', async () => {
+    await act(async () => {
+      root.render(<ClusterViewEvents />);
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current.filters.options.partialDataLabel).toBeUndefined();
   });
 });

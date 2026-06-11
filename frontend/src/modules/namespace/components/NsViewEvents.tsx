@@ -16,13 +16,14 @@ import { useShortNames } from '@/hooks/useShortNames';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
 import {
   eventGridActionReference,
@@ -33,7 +34,7 @@ import {
   namespaceEventRowIdentity,
   resolveEventGridRelatedObject,
 } from '@shared/events/eventGridModel';
-import type { ResourceLink } from '@core/refresh/types';
+import type { NamespaceEventsSnapshotPayload, ResourceLink } from '@core/refresh/types';
 
 export interface EventData {
   kind: string;
@@ -56,9 +57,6 @@ export interface EventData {
 
 interface EventViewProps {
   namespace: string;
-  data: EventData[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
 
@@ -66,10 +64,11 @@ interface EventViewProps {
  * GridTable component for namespace Events
  */
 const NsEventsTable: React.FC<EventViewProps> = React.memo(
-  ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<EventData>('events', (event) =>
       event.objectNamespace && event.objectNamespace.length > 0
@@ -175,12 +174,9 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         ),
         cf.createTextColumn('reason', 'Reason', (event) => event.reason || '-'),
         cf.createTextColumn('message', 'Message', (event) => event.message || '-'),
-        {
-          ...cf.createAgeColumn<EventData>('age', 'Age', (event) =>
-            formatAge(event.ageTimestamp ?? event.age ?? null)
-          ),
-          sortValue: (event) => event.ageTimestamp ?? 0,
-        }
+        cf.createAgeColumn<EventData>('age', 'Age', (event) =>
+          formatAge(event.ageTimestamp ?? event.age ?? null)
+        )
       );
 
       const sizing: cf.ColumnSizingMap = {
@@ -207,28 +203,47 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     ]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
+    const defaultSort = useMemo(
+      () =>
+        ({
+          key: 'age',
+          direction: 'asc',
+        }) as const,
+      []
+    );
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<EventData>({
+    const diagnosticsLabel =
+      namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events';
+    const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceEventsSnapshotPayload,
+      EventData
+    >({
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-events',
+      label: diagnosticsLabel,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-events',
       namespace,
-      data,
       columns,
       keyExtractor,
-      defaultSort: { key: 'ageTimestamp', direction: 'desc' },
+      defaultSort,
       rowIdentity: sortRowIdentity,
       filterAccessors: { getSearchText },
       showNamespaceFilters: showNamespaceFilter,
       showKindDropdown: false,
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events',
+      diagnosticsLabel,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
+
+    // The involved-object action handler reads the single source of truth.
+    const displayedEvents = source.rows;
 
     const objectActions = useObjectActionController({
       context: 'gridtable',
       useDefaultHandlers: false,
       onViewInvolvedObject: (object) => {
-        const event = data.find(
+        const event = displayedEvents.find(
           (candidate) =>
             candidate.clusterId === object.clusterId &&
             candidate.namespace === object.namespace &&
@@ -270,10 +285,9 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
           spinnerMessage="Loading events..."
           favModal={favModal}
           columns={columns}
@@ -281,7 +295,6 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events'
           }
           diagnosticsMode="live"
-          loading={loading}
           onRowClick={handleEventClick}
           tableClassName="gridtable-ns-events"
           enableContextMenu={true}

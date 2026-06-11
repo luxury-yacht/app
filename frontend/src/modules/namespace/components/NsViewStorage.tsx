@@ -15,20 +15,20 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-
-const NAMESPACE_STORAGE_KIND_OPTIONS = ['PersistentVolumeClaim'];
+import type { NamespaceStorageSnapshotPayload } from '@/core/refresh/types';
 
 // Data interface for storage resources (PVCs, VolumeAttachments, etc.)
 export interface StorageData {
@@ -49,9 +49,6 @@ export interface StorageData {
 
 interface StorageViewProps {
   namespace: string;
-  data: StorageData[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
 
@@ -60,10 +57,11 @@ interface StorageViewProps {
  * Aggregates PersistentVolumeClaims, VolumeAttachments, and related storage resources
  */
 const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
-  ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const objectLink = useObjectLink();
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<StorageData>('storage');
@@ -215,14 +213,20 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Storage' : 'Namespace Storage';
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<StorageData>({
+    const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceStorageSnapshotPayload,
+      StorageData
+    >({
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-storage',
+      label: diagnosticsLabel,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-storage',
       namespace,
       columns,
-      data,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      availableKinds: NAMESPACE_STORAGE_KIND_OPTIONS,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       diagnosticsLabel,
@@ -263,15 +267,13 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={loading}
-          loaded={loaded}
           spinnerMessage="Loading storage resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
-          loading={loading}
           onRowClick={handleResourceClick}
           tableClassName="ns-storage-table"
           enableContextMenu={true}

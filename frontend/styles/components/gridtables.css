@@ -136,19 +136,30 @@
   margin-bottom: var(--dock-bottom-offset, 0px);
 }
 
-.content-body .gridtable-header-container {
+.content-body .gridtable-container.has-footer .gridtable-wrapper {
+  margin-bottom: 0;
+}
+
+.content-body .gridtable-header-container,
+.content-body .gridtable-pagination {
   margin-right: var(--dock-right-offset, 0px);
+}
+
+.content-body .gridtable-pagination {
+  margin-bottom: var(--dock-bottom-offset, 0px);
 }
 
 /* Smooth transition only while a docked panel is open.
    When the panel closes the class is removed first so the margin snaps
    back instantly instead of leaving a visible gap. */
 body.dock-right-open .content-body .gridtable-wrapper,
-body.dock-right-open .content-body .gridtable-header-container {
+body.dock-right-open .content-body .gridtable-header-container,
+body.dock-right-open .content-body .gridtable-pagination {
   transition: margin-right 0.3s ease-out;
 }
 
-body.dock-bottom-open .content-body .gridtable-wrapper {
+body.dock-bottom-open .content-body .gridtable-wrapper,
+body.dock-bottom-open .content-body .gridtable-pagination {
   transition: margin-bottom 0.3s ease-out;
 }
 
@@ -159,8 +170,15 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
     margin-bottom 0.3s ease-out;
 }
 
+body.dock-right-open.dock-bottom-open .content-body .gridtable-pagination {
+  transition:
+    margin-right 0.3s ease-out,
+    margin-bottom 0.3s ease-out;
+}
+
 body.dockable-panel-resizing .content-body .gridtable-wrapper,
-body.dockable-panel-resizing .content-body .gridtable-header-container {
+body.dockable-panel-resizing .content-body .gridtable-header-container,
+body.dockable-panel-resizing .content-body .gridtable-pagination {
   transition: none;
 }
 
@@ -540,18 +558,35 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 /* Pagination footer */
 .gridtable-pagination {
   display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
+  flex-direction: row;
   align-items: center;
-  gap: var(--grid-spacing-sm);
-  padding: var(--grid-spacing-md) var(--grid-spacing-cell-x);
+  justify-content: flex-end;
+  gap: var(--grid-spacing-md);
+  min-height: 2.75rem;
+  padding: 0.35rem var(--grid-spacing-cell-x);
   border-top: 1px solid var(--grid-border-color);
   background-color: var(--grid-bg-primary);
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+.gridtable-pagination:empty {
+  display: none;
 }
 
 .gridtable-pagination-sentinel {
   width: 100%;
   height: 1px;
+  flex: 0 0 auto;
   pointer-events: none;
+}
+
+.gridtable-pagination-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--grid-spacing-sm);
 }
 
 .gridtable-pagination-button {

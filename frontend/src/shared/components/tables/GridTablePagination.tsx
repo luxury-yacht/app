@@ -6,45 +6,56 @@
  */
 
 import React from 'react';
-import type { RefObject } from 'react';
 
 interface GridTablePaginationProps {
   hasMore: boolean;
+  hasPrevious: boolean;
   isRequestingMore: boolean;
   showLoadMoreButton: boolean;
   showPaginationStatus: boolean;
   loadMoreLabel: string;
+  previousPageLabel: string;
   paginationStatus: string;
+  paginationControls?: React.ReactNode;
   onManualLoadMore: () => void;
-  sentinelRef: RefObject<HTMLDivElement | null>;
+  onManualLoadPrevious: () => void;
 }
 
 const GridTablePagination: React.FC<GridTablePaginationProps> = ({
   hasMore,
+  hasPrevious,
   isRequestingMore,
   showLoadMoreButton,
   showPaginationStatus,
   loadMoreLabel,
+  previousPageLabel,
   paginationStatus,
+  paginationControls,
   onManualLoadMore,
-  sentinelRef,
+  onManualLoadPrevious,
 }) => {
   return (
     <div className="gridtable-pagination">
-      <div
-        ref={hasMore ? sentinelRef : null}
-        className="gridtable-pagination-sentinel"
-        aria-hidden="true"
-      />
+      {paginationControls}
       {showLoadMoreButton && (
-        <button
-          type="button"
-          className="gridtable-pagination-button"
-          onClick={onManualLoadMore}
-          disabled={!hasMore || isRequestingMore}
-        >
-          {isRequestingMore ? 'Loading…' : loadMoreLabel}
-        </button>
+        <div className="gridtable-pagination-buttons">
+          <button
+            type="button"
+            className="gridtable-pagination-button"
+            onClick={onManualLoadPrevious}
+            disabled={!hasPrevious || isRequestingMore}
+          >
+            {previousPageLabel}
+          </button>
+          <button
+            type="button"
+            className="gridtable-pagination-button"
+            onClick={onManualLoadMore}
+            disabled={!hasMore || isRequestingMore}
+          >
+            {isRequestingMore ? 'Loading…' : loadMoreLabel}
+          </button>
+        </div>
       )}
       {showPaginationStatus && (
         <div className="gridtable-pagination-status" aria-live="polite">

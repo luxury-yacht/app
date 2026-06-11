@@ -8,6 +8,7 @@
 import { useCallback, useState } from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 
 // Encapsulates the bare context menu state/actions (open/close, position, source),
 // leaving item construction to callers. Used by GridTable context menu wiring.
@@ -67,7 +68,7 @@ export function useGridTableContextMenu<T>({
 
       const column = columns.find((col) => col.key === columnKey);
       const hasCustomItems = Boolean(getCustomContextMenuItems && item);
-      const isSortable = Boolean(column?.sortable && onSort);
+      const isSortable = isSortableColumn(column) && Boolean(onSort);
 
       if (!hasCustomItems && !isSortable) {
         return false;

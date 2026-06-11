@@ -11,6 +11,7 @@ import (
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
@@ -22,10 +23,24 @@ type ClusterStorageBuilder struct {
 	pvLister corelisters.PersistentVolumeLister
 }
 
-// ClusterStorageSnapshot is the payload exposed to the frontend.
+// ClusterStorageSnapshot is the payload exposed to the frontend. It embeds the
+// canonical ResourceQueryEnvelope (flattened into the top-level JSON) and adds
+// the domain-typed rows, so every backend-query table presents one shape.
 type ClusterStorageSnapshot struct {
 	ClusterMeta
-	Volumes []ClusterStorageEntry `json:"volumes"`
+	ResourceQueryEnvelope
+	Rows []ClusterStorageEntry `json:"rows"`
+}
+
+// clusterStorageQueryCapabilities reports the backend-supported global table
+// behavior for the cluster storage table (matching clusterStorageTableQueryAdapter).
+func clusterStorageQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "storageClass", "capacity", "accessModes", "status", "claim", "age"},
+		[]string{"kinds"},
+		[]string{"kind", "name", "storageClass", "capacity", "accessModes", "status", "claim"},
+		[]string{"PersistentVolume"},
+	)
 }
 
 // ClusterStorageEntry represents a persistent volume in the cluster view.
@@ -42,6 +57,7 @@ type ClusterStorageEntry struct {
 	StatusReason       string `json:"statusReason,omitempty"`
 	Claim              string `json:"claim"`
 	Age                string `json:"age"`
+	AgeTimestamp       int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterClusterStorageDomain registers the storage domain.
@@ -67,6 +83,11 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 		return nil, fmt.Errorf("cluster storage: persistent volume lister unavailable")
 	}
 	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterStorageDomainName, "")
+	if err != nil {
+		return nil, err
+	}
 	pvs, err := b.pvLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("cluster storage: failed to list persistent volumes: %w", err)
@@ -90,11 +111,33 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 		return entries[i].Name < entries[j].Name
 	})
 
+	resolved := resolveTypedSnapshotPage(
+		clusterStorageDomainName,
+		entries,
+		query,
+		clusterStorageTableQueryAdapter(),
+		clusterStorageQueryCapabilities(),
+		config.SnapshotClusterStorageEntryLimit,
+		"persistent volumes",
+		func(entry ClusterStorageEntry) string { return entry.Kind },
+		nil,
+	)
+	// The window snapshot is the canonical unscoped refresh payload; only the
+	// query page publishes the request scope.
+	snapshotScope := ""
+	if query.Enabled {
+		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
+	}
 	return &refresh.Snapshot{
 		Domain:  clusterStorageDomainName,
+		Scope:   snapshotScope,
 		Version: version,
-		Payload: ClusterStorageSnapshot{ClusterMeta: meta, Volumes: entries},
-		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
+		Payload: ClusterStorageSnapshot{
+			ClusterMeta:           meta,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
+		},
+		Stats: resolved.Stats,
 	}, nil
 }
 

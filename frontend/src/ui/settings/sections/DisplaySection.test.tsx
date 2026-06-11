@@ -9,12 +9,14 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DisplaySection from './DisplaySection';
+import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 
 const appPreferenceMocks = vi.hoisted(() => ({
   hydrateAppPreferences: vi.fn(),
   setUseShortResourceNames: vi.fn(),
   setDimInactiveNamespaces: vi.fn(),
   setExclusiveNamespaces: vi.fn(),
+  setDefaultTablePageSize: vi.fn(),
 }));
 
 vi.mock('@/core/settings/appPreferences', () => ({
@@ -25,12 +27,42 @@ vi.mock('@/core/settings/appPreferences', () => ({
     appPreferenceMocks.setDimInactiveNamespaces(...args),
   setExclusiveNamespaces: (...args: unknown[]) =>
     appPreferenceMocks.setExclusiveNamespaces(...args),
+  setDefaultTablePageSize: (...args: unknown[]) =>
+    appPreferenceMocks.setDefaultTablePageSize(...args),
 }));
 
 vi.mock('@utils/errorHandler', () => ({
   errorHandler: {
     handle: vi.fn(),
   },
+}));
+
+// Render the shared Dropdown as a native select so options and changes are
+// directly assertable without driving the custom popup.
+vi.mock('@shared/components/dropdowns/Dropdown', () => ({
+  Dropdown: ({
+    value = '',
+    onChange,
+    options = [],
+    ariaLabel,
+  }: {
+    value?: string;
+    onChange?: (value: string) => void;
+    options?: Array<{ value: string; label: string }>;
+    ariaLabel?: string;
+  }) => (
+    <select
+      value={value}
+      aria-label={ariaLabel}
+      onChange={(event) => onChange?.(event.target.value)}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ),
 }));
 
 describe('DisplaySection', () => {
@@ -50,6 +82,7 @@ describe('DisplaySection', () => {
       useShortResourceNames: false,
       dimInactiveNamespaces: true,
       exclusiveNamespaces: true,
+      defaultTablePageSize: 50,
     });
     appPreferenceMocks.setUseShortResourceNames.mockResolvedValue(undefined);
     appPreferenceMocks.setDimInactiveNamespaces.mockResolvedValue(undefined);
@@ -117,6 +150,43 @@ describe('DisplaySection', () => {
 
     expect(appPreferenceMocks.setExclusiveNamespaces).toHaveBeenCalledWith(false);
     expect(toggle?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('shows the Tables subsection first with the Default Page Size dropdown', () => {
+    expect(container.textContent).toContain('Tables');
+    expect(container.textContent).toContain('Default page size');
+
+    // Tables renders FIRST on the page, before Resources.
+    expect(container.textContent.indexOf('Tables')).toBeLessThan(
+      container.textContent.indexOf('Resources')
+    );
+
+    // The dropdown derives its options from the shared page-size list — the
+    // same source as every pagination footer.
+    const dropdown = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Default page size"]'
+    );
+    expect(dropdown).not.toBeNull();
+    const optionValues = Array.from(dropdown!.querySelectorAll('option')).map(
+      (option) => option.value
+    );
+    expect(optionValues).toEqual(TABLE_PAGE_SIZE_OPTIONS.map((value) => String(value)));
+    expect(dropdown!.value).toBe('50');
+  });
+
+  it('persists default page size changes', async () => {
+    const dropdown = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Default page size"]'
+    );
+    expect(dropdown).not.toBeNull();
+
+    await act(async () => {
+      dropdown!.value = '250';
+      dropdown!.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(appPreferenceMocks.setDefaultTablePageSize).toHaveBeenCalledWith(250);
   });
 
   it('persists dim inactive namespaces changes', async () => {

@@ -6,7 +6,11 @@
  */
 
 import React from 'react';
-import type { ColumnWidthInput, ColumnWidthUnit } from '@shared/components/tables/GridTable.types';
+import type {
+  ColumnWidthInput,
+  ColumnWidthUnit,
+  GridColumnDefinition,
+} from '@shared/components/tables/GridTable.types';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 
 export const DEFAULT_COLUMN_WIDTH = 150;
@@ -17,6 +21,8 @@ const FIXED_KIND_KEYS = new Set(['kind']);
 
 export const isKindColumnKey = (key: string) => FIXED_KIND_KEYS.has(key);
 export const isFixedColumnKey = (key: string) => isKindColumnKey(key);
+export const isSortableColumn = <T>(column: GridColumnDefinition<T> | null | undefined) =>
+  column != null && column.sortable !== false;
 
 export const normalizeKindClass = (value: string) => getKindColorClass(value);
 

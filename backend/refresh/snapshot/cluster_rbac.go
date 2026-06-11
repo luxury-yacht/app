@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
 	rbaclisters "k8s.io/client-go/listers/rbac/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -29,21 +31,33 @@ type ClusterRBACBuilder struct {
 	bindingLister rbaclisters.ClusterRoleBindingLister
 }
 
-// ClusterRBACSnapshot is the payload returned to the frontend.
+// ClusterRBACSnapshot is the payload returned to the frontend. It embeds the
+// canonical ResourceQueryEnvelope (flattened into top-level JSON) plus the
+// domain-typed rows.
 type ClusterRBACSnapshot struct {
 	ClusterMeta
-	Resources []ClusterRBACEntry `json:"resources"`
-	Kinds     []string           `json:"kinds,omitempty"`
+	ResourceQueryEnvelope
+	Rows []ClusterRBACEntry `json:"rows"`
+}
+
+func clusterRBACQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "details", "age"},
+		[]string{"kinds"},
+		[]string{"kind", "typeAlias", "name", "details"},
+		[]string{"ClusterRole", "ClusterRoleBinding"},
+	)
 }
 
 // ClusterRBACEntry represents either a ClusterRole or ClusterRoleBinding.
 type ClusterRBACEntry struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Details   string `json:"details"`
-	Age       string `json:"age"`
-	TypeAlias string `json:"typeAlias,omitempty"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Details      string `json:"details"`
+	Age          string `json:"age"`
+	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
+	TypeAlias    string `json:"typeAlias,omitempty"`
 }
 
 // RegisterClusterRBACDomain wires the cluster RBAC domain into the registry.
@@ -73,17 +87,22 @@ func RegisterClusterRBACDomain(
 // Build constructs a snapshot of cluster RBAC resources.
 func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterRBACDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	rolesAvailable := b.roleLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterroles")
 	var roles []*rbacv1.ClusterRole
-	if b.roleLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterroles") {
-		var err error
+	if rolesAvailable {
 		roles, err = b.roleLister.List(labels.Everything())
 		if err != nil {
 			return nil, fmt.Errorf("cluster rbac: failed to list clusterroles: %w", err)
 		}
 	}
+	bindingsAvailable := b.bindingLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterrolebindings")
 	var bindings []*rbacv1.ClusterRoleBinding
-	if b.bindingLister != nil && runtimeResourceAllowed(ctx, clusterRBACDomainName, "rbac.authorization.k8s.io", "clusterrolebindings") {
-		var err error
+	if bindingsAvailable {
 		bindings, err = b.bindingLister.List(labels.Everything())
 		if err != nil {
 			return nil, fmt.Errorf("cluster rbac: failed to list clusterrolebindings: %w", err)
@@ -123,16 +142,39 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		}
 		return entries[i].Kind < entries[j].Kind
 	})
+	sources := []typedTableResourceSource{
+		{Kind: "ClusterRole", Group: "rbac.authorization.k8s.io", Resource: "clusterroles", Available: rolesAvailable},
+		{Kind: "ClusterRoleBinding", Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings", Available: bindingsAvailable},
+	}
+	issues := typedTableQueryResourceIssues(ctx, clusterRBACDomainName, query, sources)
 
+	resolved := resolveTypedSnapshotPage(
+		clusterRBACDomainName,
+		entries,
+		query,
+		clusterRBACTableQueryAdapter(),
+		capabilitiesWithAvailableKinds(clusterRBACQueryCapabilities(), sources),
+		config.SnapshotClusterRBACEntryLimit,
+		"cluster RBAC resources",
+		func(entry ClusterRBACEntry) string { return entry.Kind },
+		issues,
+	)
+	// The window snapshot is the canonical unscoped refresh payload; only the
+	// query page publishes the request scope.
+	snapshotScope := ""
+	if query.Enabled {
+		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
+	}
 	return &refresh.Snapshot{
 		Domain:  clusterRBACDomainName,
+		Scope:   snapshotScope,
 		Version: version,
 		Payload: ClusterRBACSnapshot{
-			ClusterMeta: meta,
-			Resources:   entries,
-			Kinds:       snapshotSortedKinds(entries, func(entry ClusterRBACEntry) string { return entry.Kind }),
+			ClusterMeta:           meta,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: refresh.SnapshotStats{ItemCount: len(entries)},
+		Stats: resolved.Stats,
 	}, nil
 }
 

@@ -41,6 +41,7 @@ export interface UseGridTablePersistenceParams<T> {
   data: T[];
   keyExtractor: (item: T, index: number) => string;
   filterOptions?: GridTableFilterPersistenceOptions;
+  pageSizeOptions?: readonly number[];
   enabled?: boolean;
 }
 
@@ -54,6 +55,8 @@ export interface UseGridTablePersistenceResult {
   setColumnWidths: (widths: Record<string, ColumnWidthState>) => void;
   filters: GridTableFilterState;
   setFilters: (next: GridTableFilterState) => void;
+  pageSize: number | null;
+  setPageSize: (next: number | null) => void;
   hydrated: boolean;
   resetState: () => void;
 }
@@ -69,6 +72,7 @@ export function useGridTablePersistence<T>({
   data,
   keyExtractor,
   filterOptions,
+  pageSizeOptions,
   enabled = true,
 }: UseGridTablePersistenceParams<T>): UseGridTablePersistenceResult {
   const [clusterHash, setClusterHash] = useState<string>('');
@@ -82,6 +86,7 @@ export function useGridTablePersistence<T>({
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean> | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, ColumnWidthState> | null>(null);
   const [filters, setFilters] = useState<GridTableFilterState>(DEFAULT_GRID_TABLE_FILTER_STATE);
+  const [pageSize, setPageSize] = useState<number | null>(null);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavePayloadRef = useRef<string>('');
@@ -131,6 +136,7 @@ export function useGridTablePersistence<T>({
     setColumnVisibility(null);
     setColumnWidths(null);
     setFilters(DEFAULT_GRID_TABLE_FILTER_STATE);
+    setPageSize(null);
   }, [storageKey]);
 
   useEffect(() => {
@@ -155,6 +161,7 @@ export function useGridTablePersistence<T>({
           ...(filterOptions ?? {}),
           isNamespaceScoped,
         },
+        pageSizeOptions,
       });
 
       if (pruned?.sort) {
@@ -169,6 +176,9 @@ export function useGridTablePersistence<T>({
       if (pruned?.filters) {
         setFilters(pruned.filters);
       }
+      if (pruned?.pageSize) {
+        setPageSize(pruned.pageSize);
+      }
       lastHydratedPayloadRef.current = pruned ? JSON.stringify(pruned) : '';
       setHydrated(true);
     };
@@ -177,7 +187,16 @@ export function useGridTablePersistence<T>({
     return () => {
       active = false;
     };
-  }, [storageKey, hydrated, columns, data, keyExtractor, filterOptions, isNamespaceScoped]);
+  }, [
+    storageKey,
+    hydrated,
+    columns,
+    data,
+    keyExtractor,
+    filterOptions,
+    isNamespaceScoped,
+    pageSizeOptions,
+  ]);
 
   const resetLocalState = useCallback(() => {
     if (storageKey) {
@@ -189,6 +208,7 @@ export function useGridTablePersistence<T>({
     setColumnVisibility({});
     setColumnWidths({});
     setFilters(DEFAULT_GRID_TABLE_FILTER_STATE);
+    setPageSize(null);
   }, [storageKey]);
 
   useEffect(() => {
@@ -211,10 +231,12 @@ export function useGridTablePersistence<T>({
         columnWidths,
         sort: sortConfig,
         filters,
+        pageSize,
         filterOptions: {
           ...(filterOptions ?? {}),
           isNamespaceScoped,
         },
+        pageSizeOptions,
       });
 
       if (!state) {
@@ -255,7 +277,9 @@ export function useGridTablePersistence<T>({
     columnWidths,
     sortConfig,
     filters,
+    pageSize,
     filterOptions,
+    pageSizeOptions,
     isNamespaceScoped,
   ]);
 
@@ -270,10 +294,21 @@ export function useGridTablePersistence<T>({
       setColumnWidths,
       filters,
       setFilters,
+      pageSize,
+      setPageSize,
       hydrated,
       resetState: resetLocalState,
     }),
-    [storageKey, sortConfig, columnVisibility, columnWidths, filters, hydrated, resetLocalState]
+    [
+      storageKey,
+      sortConfig,
+      columnVisibility,
+      columnWidths,
+      filters,
+      pageSize,
+      hydrated,
+      resetLocalState,
+    ]
   );
 
   return result;

@@ -7,6 +7,7 @@
 
 import type React from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 
 export interface UseGridTableHeaderRowParams<T> {
   renderedColumns: GridColumnDefinition<T>[];
@@ -36,6 +37,7 @@ export function useGridTableHeaderRow<T>({
   return (
     <div className="gridtable-header" role="row">
       {renderedColumns.map((column, index) => {
+        const isSortable = isSortableColumn(column);
         const nextColumn = renderedColumns[index + 1];
         const showResizeHandle =
           enableColumnResizing &&
@@ -46,7 +48,7 @@ export function useGridTableHeaderRow<T>({
 
         // Compute aria-sort for this header cell.
         const ariaSortValue = (() => {
-          if (!column.sortable) return undefined;
+          if (!isSortable) return undefined;
           if (!sortConfig || sortConfig.key !== column.key || !sortConfig.direction) return 'none';
           return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
         })();
@@ -58,7 +60,7 @@ export function useGridTableHeaderRow<T>({
             role="columnheader"
             aria-sort={ariaSortValue}
             data-column={column.key}
-            data-sortable={column.sortable || false}
+            data-sortable={isSortable}
             onContextMenu={
               handleHeaderContextMenu ? (e) => handleHeaderContextMenu(e, column.key) : undefined
             }
@@ -71,8 +73,8 @@ export function useGridTableHeaderRow<T>({
           >
             <span className="header-content">
               <span
-                onClick={() => column.sortable && handleHeaderClick(column)}
-                {...(column.sortable
+                onClick={() => isSortable && handleHeaderClick(column)}
+                {...(isSortable
                   ? {
                       role: 'button',
                       tabIndex: 0,
@@ -87,7 +89,7 @@ export function useGridTableHeaderRow<T>({
                   : undefined)}
               >
                 {column.header}
-                {column.sortable && renderSortIndicator(column.key)}
+                {isSortable && renderSortIndicator(column.key)}
               </span>
             </span>
             {showResizeHandle && (

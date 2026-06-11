@@ -1,7 +1,7 @@
 /**
  * frontend/src/ui/settings/sections/AdvancedSection.tsx
  *
- * Advanced tab content: refresh, table limits, persistence, and reset actions.
+ * Advanced tab content: refresh, persistence, Kubernetes API, and reset actions.
  */
 
 import { useState, useEffect } from 'react';
@@ -14,11 +14,9 @@ import {
   hydrateAppPreferences,
   getKubernetesClientBurst,
   getKubernetesClientQPS,
-  getMaxTableRows,
   getPermissionSSRRFetchConcurrency,
   setKubernetesClientBurst,
   setKubernetesClientQPS,
-  setMaxTableRows,
   setPermissionSSRRFetchConcurrency,
 } from '@/core/settings/appPreferences';
 import { clearTintedPalette } from '@utils/paletteTint';
@@ -35,9 +33,6 @@ import ToggleSwitch from '@shared/components/ToggleSwitch';
 function AdvancedSection() {
   const { enabled: refreshEnabled, setAutoRefresh } = useAutoRefresh();
   const { enabled: backgroundRefreshEnabled, setBackgroundRefresh } = useBackgroundRefresh();
-  const [maxTableRowsInput, setMaxTableRowsInput] = useState<string>(() =>
-    String(getMaxTableRows())
-  );
   const [kubernetesClientQPSInput, setKubernetesClientQPSInput] = useState<string>(() =>
     String(getKubernetesClientQPS())
   );
@@ -51,7 +46,6 @@ function AdvancedSection() {
   );
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
-  const maxTableRowsMetadata = getIntegerPreferenceMetadata('maxTableRows');
   const kubernetesClientQPSMetadata = getIntegerPreferenceMetadata('kubernetesClientQPS');
   const kubernetesClientBurstMetadata = getIntegerPreferenceMetadata('kubernetesClientBurst');
   const permissionSSRRFetchConcurrencyMetadata = getIntegerPreferenceMetadata(
@@ -64,7 +58,6 @@ function AdvancedSection() {
       try {
         const prefs = await hydrateAppPreferences({ force: true });
         if (!cancelled) {
-          setMaxTableRowsInput(String(prefs.maxTableRows));
           setKubernetesClientQPSInput(String(prefs.kubernetesClientQPS));
           setKubernetesClientBurstInput(String(prefs.kubernetesClientBurst));
           setPermissionSSRRFetchConcurrencyInput(String(prefs.permissionSSRRFetchConcurrency));
@@ -85,13 +78,6 @@ function AdvancedSection() {
     const mode: GridTablePersistenceMode = checked ? 'namespaced' : 'shared';
     setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
-  };
-
-  const commitMaxTableRows = (raw: string) => {
-    const normalized = commitIntegerPreferenceInput('maxTableRows', raw, setMaxTableRows, {
-      defaultOnNonPositive: true,
-    });
-    setMaxTableRowsInput(String(normalized));
   };
 
   const commitKubernetesClientQPS = (raw: string) => {
@@ -210,40 +196,6 @@ function AdvancedSection() {
             onChange={setBackgroundRefresh}
             ariaLabel="Background clusters refresh"
           />
-        </div>
-      </div>
-
-      <div className="settings-subgroup-label">Tables</div>
-      <hr className="settings-subgroup-divider" />
-
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Max rows</div>
-          <div className="settings-row-label-help">
-            Max number of rows in a data table. Larger values will show more data, but could impact
-            app rendering performance.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <div className="setting-item setting-item-inline">
-            <input
-              type="number"
-              id="settings-max-table-rows"
-              min={maxTableRowsMetadata.min}
-              max={maxTableRowsMetadata.max}
-              step={100}
-              value={maxTableRowsInput}
-              onChange={(e) => setMaxTableRowsInput(e.target.value)}
-              onBlur={(e) => commitMaxTableRows(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-              }}
-            />{' '}
-            rows
-          </div>
         </div>
       </div>
 

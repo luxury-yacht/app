@@ -13,6 +13,7 @@ import type {
   ColumnWidthInput,
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
+import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 
 // Provides DOM-based column width measurement helpers for GridTable:
 // - measures arbitrary column content
@@ -134,7 +135,7 @@ export function useGridTableColumnMeasurer<T>({
       document.body.appendChild(headerMeasurer);
       try {
         let headerWidth = headerMeasurer.scrollWidth;
-        if (column.sortable) {
+        if (headerWidth > 0 && isSortableColumn(column)) {
           headerWidth += 20;
         }
         maxWidth = Math.max(maxWidth, headerWidth);

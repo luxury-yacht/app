@@ -13,7 +13,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import * as cf from '@shared/components/tables/columnFactories';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
@@ -28,7 +28,14 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import {
+  POD_PERMISSIONS,
+  queryNamespacesPermissions,
+  type PermissionSpecList,
+} from '@/core/capabilities';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -37,15 +44,13 @@ import {
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 import { WarningTriangleIcon } from '@shared/components/icons/SharedIcons';
+import type { PodSnapshotPayload } from '@/core/refresh/types';
 
 interface PodsViewProps {
   namespace: string;
   data: PodSnapshotEntry[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
-  error?: string | null;
 }
 
 const UNHEALTHY_POD_PRESENTATIONS = new Set(['warning', 'error', 'not-ready', 'terminating']);
@@ -90,7 +95,9 @@ const isPodNotReady = (pod: PodSnapshotEntry): boolean => {
   return !isCompletedPod(pod) && counts !== null && counts.total > 0 && counts.ready < counts.total;
 };
 
-const matchesPodsFilter = (filter: PodsFilterMode, pod: PodSnapshotEntry): boolean => {
+// Exported so the namespace-pods test can mirror the backend health predicate when it mocks the
+// typed query (the unhealthy/restarts/not-ready filter is server-side now, not a client filter).
+export const matchesPodsFilter = (filter: PodsFilterMode, pod: PodSnapshotEntry): boolean => {
   switch (filter) {
     case 'restarts':
       return isPodRestarted(pod);
@@ -107,21 +114,15 @@ const matchesPodsFilter = (filter: PodsFilterMode, pod: PodSnapshotEntry): boole
  * GridTable component for namespace Pods
  */
 const NsViewPods: React.FC<PodsViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-    metrics,
-    error = null,
-  }) => {
+  ({ namespace, data, showNamespaceColumn = false, metrics }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const namespaceColumnLink = useNamespaceColumnLink<PodSnapshotEntry>('pods');
     const clusterMetrics = useClusterMetricsAvailability();
     const effectiveMetrics = metrics ?? clusterMetrics ?? null;
     const { selectedClusterId } = useKubeconfig();
+    const { selectedNamespaceClusterId } = useNamespace();
+    const queryClusterId = selectedNamespaceClusterId ?? selectedClusterId;
 
     const [activePodFilter, setActivePodFilter] = useState<PodsFilterMode | null>(null);
 
@@ -457,7 +458,13 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       showNamespaceColumn,
     ]);
 
-    const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
+    const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
+    const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Pods' : 'Namespace Pods';
+    const showNamespaceFilter = isAllNamespaces;
+    const podQueryPredicates = useMemo(
+      () => (activePodFilter ? { health: activePodFilter } : undefined),
+      [activePodFilter]
+    );
 
     const unhealthyCount = useMemo(() => data.filter((pod) => isPodUnhealthy(pod)).length, [data]);
 
@@ -466,13 +473,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     }, []);
 
     const unhealthyToggle = useMemo<IconBarItem | null>(() => {
-      if (unhealthyCount <= 0 && !activePodFilter) {
+      if (!isAllNamespaces && unhealthyCount <= 0 && !activePodFilter) {
         return null;
       }
 
       const title = activePodFilter
         ? 'Show all pods'
-        : `Show unhealthy pods (${unhealthyCount}/${data.length})`;
+        : isAllNamespaces
+          ? 'Show unhealthy pods'
+          : `Show unhealthy pods (${unhealthyCount}/${data.length})`;
 
       return {
         type: 'toggle',
@@ -483,38 +492,73 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         title,
         ariaLabel: title,
       };
-    }, [activePodFilter, data.length, handleToggleUnhealthy, unhealthyCount]);
-
-    const transformSortedPods = useCallback(
-      (sortedPods: PodSnapshotEntry[]) =>
-        activePodFilter
-          ? sortedPods.filter((pod) => matchesPodsFilter(activePodFilter, pod))
-          : sortedPods,
-      [activePodFilter]
-    );
+    }, [activePodFilter, data.length, handleToggleUnhealthy, isAllNamespaces, unhealthyCount]);
 
     const getTrailingFilterActions = useCallback(
       () => (unhealthyToggle ? [unhealthyToggle] : []),
       [unhealthyToggle]
     );
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<PodSnapshotEntry>({
+    const {
+      gridTableProps: resolvedGridTableProps,
+      favModal,
+      source,
+    } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
+      queryTableMode: 'Query Backed Dynamic',
+      clusterId: queryClusterId,
+      domain: 'pods',
+      label: diagnosticsLabel,
+      predicates: podQueryPredicates,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-pods',
       namespace,
-      data,
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods',
+      diagnosticsLabel,
       rowIdentity: keyExtractor,
       showKindDropdown: false,
       showNamespaceFilters: showNamespaceFilter,
       getTrailingFilterActions,
-      transformSortedData: transformSortedPods,
+      // The unhealthy filter is a backend predicate (podQueryPredicates) in query mode, which
+      // now backs single namespaces too — no client-side re-filter of the page.
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
-    const displayedPods = gridTableProps.data;
+
+    // Non-display reads come from the single source of truth (the controller
+    // source); the wrapper no longer re-exposes rows/error separately.
+    const displayedPods = source.rows;
+
+    const visiblePermissionTargets = useMemo(() => {
+      if (!isAllNamespaces) {
+        return [];
+      }
+      const seen = new Set<string>();
+      const targets: Array<{ namespace: string; clusterId: string }> = [];
+      displayedPods.forEach((pod) => {
+        const podNamespace = pod.namespace?.trim();
+        const podClusterId = pod.clusterId?.trim() || queryClusterId?.trim();
+        if (!podNamespace || !podClusterId) {
+          return;
+        }
+        const key = `${podClusterId}|${podNamespace.toLowerCase()}`;
+        if (seen.has(key)) {
+          return;
+        }
+        seen.add(key);
+        targets.push({ namespace: podNamespace, clusterId: podClusterId });
+      });
+      return targets;
+    }, [displayedPods, isAllNamespaces, queryClusterId]);
+
+    useEffect(() => {
+      if (visiblePermissionTargets.length === 0) {
+        return;
+      }
+      void queryNamespacesPermissions(visiblePermissionTargets, {
+        specLists: [POD_PERMISSIONS] satisfies PermissionSpecList[],
+      });
+    }, [visiblePermissionTargets]);
 
     useEffect(() => {
       if (typeof window === 'undefined' || !selectedClusterId) {
@@ -530,9 +574,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         if (!request || request.scope !== namespace) {
           return;
         }
-        const matchingCount = data.filter((pod) => matchesPodsFilter(request.filter, pod)).length;
-        if (matchingCount === 0) {
-          return;
+        if (!isAllNamespaces) {
+          const matchingCount = data.filter((pod) => matchesPodsFilter(request.filter, pod)).length;
+          if (matchingCount === 0) {
+            return;
+          }
         }
         setActivePodFilter(request.filter);
         if (shouldClearStorage) {
@@ -562,7 +608,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         }
         applyPendingFilter({ scope, filter }, true);
       });
-    }, [data, namespace, selectedClusterId]);
+    }, [data, isAllNamespaces, namespace, selectedClusterId]);
 
     const getContextMenuItems = useCallback(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {
@@ -596,34 +642,28 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
     return (
       <>
-        {error && <div className="namespace-error-message">{error}</div>}
         {metricsBanner && (
           <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
             <span className="metrics-warning-banner__dot" />
             {metricsBanner.message}
           </div>
         )}
-        <ResourceGridTableView
-          gridTableProps={gridTableProps}
-          boundaryLoading={loading}
-          loaded={loaded}
+        <ResourceInventoryTable
+          source={source}
+          gridTableProps={resolvedGridTableProps}
           spinnerMessage="Loading pods..."
+          updatingMessage="Updating pods…"
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods'
           }
           diagnosticsMode="live"
-          loading={loading && displayedPods.length === 0}
           onRowClick={handlePodOpen}
           tableClassName={`gridtable-pods${showNamespaceColumn ? ' gridtable-pods--namespaced' : ''}`}
           enableContextMenu
           getCustomContextMenuItems={getContextMenuItems}
           emptyMessage={emptyMessage}
-          loadingOverlay={{
-            show: Boolean(loading) && displayedPods.length > 0,
-            message: 'Updating pods…',
-          }}
         />
 
         {objectActions.modals}

@@ -12,11 +12,8 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
-	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/cli"
 )
 
 func (a *App) resolveMetricsInterval() time.Duration {
@@ -162,7 +159,6 @@ func (a *App) buildRefreshSubsystemForSelection(
 		GatewayInformerFactory:     clients.gatewayInformerFactory,
 		GatewayAPIPresence:         clients.gatewayAPIPresence,
 		DynamicClient:              clients.dynamicClient,
-		HelmFactory:                a.helmActionFactoryForSelection(selection),
 		ObjectDetailsProvider:      a.objectDetailProvider(),
 		Logger:                     a.logger,
 		ContainerLogsTargetLimiter: a.sharedContainerLogsTargetLimiter(),
@@ -303,10 +299,12 @@ func (a *App) buildRefreshMux(
 		Metrics:         nil, // Don't tie metrics to a single cluster.
 		HealthHub:       nil, // Health is per-cluster, not global.
 	})
-	mux.Handle("/api/v2/stream/events", aggregateEvents)
-	mux.Handle("/api/v2/stream/container-logs", aggregateContainerLogs)
-	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)
-	mux.Handle("/api/v2/stream/resources", aggregateResources)
+	// withStreamCORS guarantees CORS headers on every stream response,
+	// including error responses written before the handlers' own header setup.
+	mux.Handle("/api/v2/stream/events", withStreamCORS(aggregateEvents))
+	mux.Handle("/api/v2/stream/container-logs", withStreamCORS(aggregateContainerLogs))
+	mux.Handle("/api/v2/stream/catalog", withStreamCORS(aggregateCatalog))
+	mux.Handle("/api/v2/stream/resources", withStreamCORS(aggregateResources))
 	// NOTE: Do NOT mount "/" to any single subsystem's handler.
 	// Requests to "/" should return 404, not route to one cluster.
 
@@ -429,27 +427,4 @@ func (a *App) buildRefreshSubsystem(cfg system.Config) (*system.Subsystem, error
 		a.handlePermissionIssues(subsystem.PermissionIssues)
 	}
 	return subsystem, nil
-}
-
-// helmActionFactoryForSelection wires Helm actions to a specific kubeconfig selection.
-func (a *App) helmActionFactoryForSelection(selection kubeconfigSelection) snapshot.HelmActionFactory {
-	return func(namespace string) (*action.Configuration, error) {
-		settings := cli.New()
-		if selection.Path != "" {
-			settings.KubeConfig = selection.Path
-		}
-		if selection.Context != "" {
-			settings.KubeContext = selection.Context
-		}
-
-		actionConfig := new(action.Configuration)
-		if err := actionConfig.Init(settings.RESTClientGetter(), namespace, "secret", func(format string, v ...interface{}) {
-			if a.logger != nil {
-				a.logger.Debug(fmt.Sprintf(format, v...), logsources.Helm)
-			}
-		}); err != nil {
-			return nil, err
-		}
-		return actionConfig, nil
-	}
 }

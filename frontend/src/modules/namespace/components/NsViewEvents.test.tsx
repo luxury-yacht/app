@@ -23,23 +23,30 @@ import NsViewEvents, { type EventData } from '@modules/namespace/components/NsVi
 const {
   gridTablePropsRef,
   openWithObjectMock,
+  persistedSortRef,
   shortNamesMock,
   formatAgeMock,
   findCatalogObjectByUIDMock,
   useTableSortMock,
+  requestRefreshDomainStateMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
+  persistedSortRef: { current: null as any },
   shortNamesMock: vi.fn(() => false),
   formatAgeMock: vi.fn((timestamp: number) => `${timestamp}s`),
   findCatalogObjectByUIDMock: vi.fn(),
-  useTableSortMock: vi.fn(
-    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
+  requestRefreshDomainStateMock: vi.fn(),
+  useTableSortMock: vi.fn((data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => {
+    const fallbackSort = defaultKey
+      ? { key: defaultKey, direction: defaultDir ?? 'asc' }
+      : { key: '', direction: null };
+    return {
       sortedData: data,
-      sortConfig: opts?.controlledSort ?? { key: 'ageTimestamp', direction: 'desc' },
+      sortConfig: opts?.controlledSort ?? fallbackSort,
       handleSort: vi.fn(),
-    })
-  ),
+    };
+  }),
 }));
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
@@ -112,6 +119,60 @@ vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => shortNamesMock(),
 }));
 
+// Single-namespace event tables are query-backed now, so the displayed rows come from the typed
+// query. Override only the typed-query data path and its readiness gates; keep the rest of these
+// modules real so the involved-object catalog lookup (requestData/readCatalogObjectByUID) still
+// resolves through the mocked Wails layer.
+vi.mock('@/core/data-access', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/core/data-access')>();
+  return {
+    ...actual,
+    requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...args),
+    useScopedRefreshDomainLifecycle: vi.fn(),
+  };
+});
+
+vi.mock('@/core/refresh', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/core/refresh')>();
+  return {
+    ...actual,
+    // A settled live domain so the typed query's readiness gate opens in tests.
+    useRefreshScopedDomain: () => ({
+      status: 'ready',
+      data: { rows: [] },
+      stats: null,
+      version: 1,
+      checksum: '',
+      lastUpdated: 1,
+      droppedAutoRefreshes: 0,
+    }),
+  };
+});
+
+vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
+  useGridTablePersistence: () => ({
+    storageKey: 'gridtable:v1:cluster-a:namespace-events',
+    sortConfig: { key: 'age', direction: 'asc' },
+    setSortConfig: vi.fn(),
+    columnWidths: null,
+    setColumnWidths: vi.fn(),
+    columnVisibility: null,
+    setColumnVisibility: vi.fn(),
+    filters: {
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    },
+    setFilters: vi.fn(),
+    pageSize: null,
+    setPageSize: vi.fn(),
+    resetState: vi.fn(),
+    hydrated: true,
+  }),
+}));
+
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   default: ({ children }: any) => children,
 }));
@@ -122,7 +183,7 @@ vi.mock('@/utils/ageFormatter', () => ({
 
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
   useNamespaceGridTablePersistence: () => ({
-    sortConfig: { key: 'ageTimestamp', direction: 'desc' },
+    sortConfig: persistedSortRef.current,
     onSortChange: vi.fn(),
     columnWidths: null,
     setColumnWidths: vi.fn(),
@@ -148,11 +209,21 @@ describe('NsViewEvents', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    persistedSortRef.current = null;
     openWithObjectMock.mockReset();
     findCatalogObjectByUIDMock.mockReset();
     useTableSortMock.mockClear();
     shortNamesMock.mockReturnValue(false);
     formatAgeMock.mockClear();
+    requestRefreshDomainStateMock.mockReset();
+    // Default: the typed query settles with no payload (no rows). Tests that assert on rendered
+    // rows / the involved-object action override this with their own row(s). A null payload leaves
+    // the query's facet filter options untouched, so the local truncation/partial label is
+    // preserved for the single-namespace partial-data copy test.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: null },
+    });
   });
 
   afterEach(() => {
@@ -179,17 +250,19 @@ describe('NsViewEvents', () => {
   });
 
   const renderEventsView = async (
-    rows: EventData[] = [baseEvent()],
-    showNamespaceColumn = true
+    showNamespaceColumnOrOptions:
+      | boolean
+      | { namespace?: string; showNamespaceColumn?: boolean; stats?: any } = true
   ) => {
+    const options =
+      typeof showNamespaceColumnOrOptions === 'boolean'
+        ? { showNamespaceColumn: showNamespaceColumnOrOptions }
+        : showNamespaceColumnOrOptions;
     await act(async () => {
       root.render(
         <NsViewEvents
-          data={rows}
-          loading={false}
-          loaded={true}
-          namespace="team-a"
-          showNamespaceColumn={showNamespaceColumn}
+          namespace={options.namespace ?? 'team-a'}
+          showNamespaceColumn={options.showNamespaceColumn ?? true}
         />
       );
       await Promise.resolve();
@@ -197,9 +270,40 @@ describe('NsViewEvents', () => {
     return gridTablePropsRef.current;
   };
 
+  it('defines Age as the visible event timestamp sort column', async () => {
+    const event = baseEvent({ ageTimestamp: 42 });
+    const props = await renderEventsView();
+    const ageColumn = props.columns.find((column: any) => column.key === 'age');
+
+    expect(ageColumn).toBeTruthy();
+    expect(ageColumn.sortable).not.toBe(false);
+    expect(ageColumn.sortValue(event)).toBe(-42);
+  });
+
   it('offers context menu navigation to related object', async () => {
     const event = baseEvent();
-    const props = await renderEventsView([event]);
+    // Single-namespace events are query-backed now; the involved-object action resolves the clicked
+    // event against the rendered query rows, so feed the query the same row.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [event],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Event'],
+          facetsExact: true,
+        },
+      },
+    });
+    await renderEventsView();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const props = gridTablePropsRef.current;
 
     const menu = props.getCustomContextMenuItems(event, 'objectName');
     const labels = menu.map((item: any) => item.label);
@@ -225,7 +329,7 @@ describe('NsViewEvents', () => {
 
   it('renders interactive object column that triggers navigation', async () => {
     const event = baseEvent();
-    const props = await renderEventsView([event]);
+    const props = await renderEventsView();
 
     const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
     expect(objectNameColumn).toBeTruthy();
@@ -266,7 +370,7 @@ describe('NsViewEvents', () => {
       objectUid: 'database-uid',
       objectApiVersion: undefined,
     });
-    const props = await renderEventsView([event]);
+    const props = await renderEventsView();
     const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
     const cell = objectNameColumn.render(event);
 
@@ -289,14 +393,14 @@ describe('NsViewEvents', () => {
 
   it('suppresses context actions when no related object provided', async () => {
     const event = baseEvent({ object: undefined });
-    const props = await renderEventsView([event]);
+    const props = await renderEventsView();
     const menu = props.getCustomContextMenuItems(event, 'objectName');
     expect(menu).toHaveLength(0);
   });
 
   it('passes stable event row identity into useTableSort', async () => {
     const event = baseEvent();
-    await renderEventsView([event]);
+    await renderEventsView();
 
     const options = useTableSortMock.mock.calls[0]?.[3];
     expect(options?.rowIdentity).toBeTypeOf('function');
@@ -307,7 +411,7 @@ describe('NsViewEvents', () => {
 
   it('formats age using timestamp when available and falls back to provided age', async () => {
     const eventWithTimestamp = baseEvent({ ageTimestamp: 99, age: undefined });
-    const props = await renderEventsView([eventWithTimestamp]);
+    const props = await renderEventsView();
     const ageColumn = props.columns.find((column: any) => column.key === 'age');
     const cell = ageColumn.render(eventWithTimestamp);
     expect(formatAgeMock).toHaveBeenCalledWith(99);
@@ -315,7 +419,7 @@ describe('NsViewEvents', () => {
 
     formatAgeMock.mockClear();
     const eventWithAge = baseEvent({ ageTimestamp: undefined, age: '5m' });
-    const fallbackProps = await renderEventsView([eventWithAge]);
+    const fallbackProps = await renderEventsView();
     const fallbackAgeColumn = fallbackProps.columns.find((column: any) => column.key === 'age');
     fallbackAgeColumn.render(eventWithAge);
     // Age is passed through formatAge for consistency with ClusterViewEvents
@@ -324,7 +428,27 @@ describe('NsViewEvents', () => {
 
   it('derives namespace from objectNamespace, event namespace, or component namespace', async () => {
     const noNamespaceEvent = baseEvent({ objectNamespace: undefined, namespace: undefined });
-    const props = await renderEventsView([noNamespaceEvent]);
+    // Query-backed: feed the query the row so the involved-object action can resolve it.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [noNamespaceEvent],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Event'],
+          facetsExact: true,
+        },
+      },
+    });
+    await renderEventsView();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const props = gridTablePropsRef.current;
     const menu = props.getCustomContextMenuItems(noNamespaceEvent, 'objectName');
     await act(async () => {
       menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewInvolvedObject)?.onClick?.();
@@ -347,12 +471,12 @@ describe('NsViewEvents', () => {
       age: '2m',
       ageTimestamp: undefined,
     });
-    const props = await renderEventsView([event]);
+    const props = await renderEventsView();
     const key = props.keyExtractor(event, 0);
     expect(key).toContain('ns-one');
     expect(key).toContain('2m');
 
-    const noNamespaceProps = await renderEventsView([event], false);
+    const noNamespaceProps = await renderEventsView(false);
     const namespaceColumn = noNamespaceProps.columns.find(
       (column: any) => column.key === 'namespace'
     );
@@ -361,7 +485,7 @@ describe('NsViewEvents', () => {
 
   it('respects short name preferences when sizing columns', async () => {
     shortNamesMock.mockReturnValue(true);
-    const props = await renderEventsView([baseEvent({ type: 'Normal' })]);
+    const props = await renderEventsView();
 
     const typeColumn = props.columns.find((column: any) => column.key === 'type');
     expect(typeColumn).toBeTruthy();

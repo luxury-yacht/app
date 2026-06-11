@@ -9,6 +9,9 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
+import type { CatalogItem } from '@/core/refresh/types';
+import { catalogItemToFallbackCustomRow } from '@modules/browse/hooks/customCatalogRowAdapter';
+import { resetResourceInventoryRowCache } from '@modules/resource-grid/useResourceInventoryTable';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -36,6 +39,8 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 const gridTablePropsRef: { current: any } = { current: null };
 const openWithObjectMock = vi.fn();
 const runObjectActionMock = vi.fn();
+const useBrowseCatalogMock = vi.hoisted(() => vi.fn());
+const useHydratedCustomCatalogRowsMock = vi.hoisted(() => vi.fn());
 const modalProps: { current: any } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -78,9 +83,15 @@ vi.mock('@/hooks/useTableSort', () => ({
 
 const setFiltersMock = vi.fn();
 
+// The persisted sort starts as null in production (nothing persisted yet);
+// tests can set this ref to simulate a stored user sort.
+const persistedSortRef = vi.hoisted(() => ({
+  current: null as { key: string; direction: 'asc' | 'desc' | null } | null,
+}));
+
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
   useGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
+    sortConfig: persistedSortRef.current,
     setSortConfig: vi.fn(),
     columnWidths: null,
     setColumnWidths: vi.fn(),
@@ -92,6 +103,14 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     hydrated: true,
     storageKey: 'gridtable:v1:test',
   }),
+}));
+
+vi.mock('@modules/browse/hooks/useBrowseCatalog', () => ({
+  useBrowseCatalog: (...args: unknown[]) => useBrowseCatalogMock(...args),
+}));
+
+vi.mock('@modules/browse/hooks/useHydratedCustomCatalogRows', () => ({
+  useHydratedCustomCatalogRows: (...args: unknown[]) => useHydratedCustomCatalogRowsMock(...args),
 }));
 
 vi.mock('@/hooks/useShortNames', () => ({
@@ -133,6 +152,7 @@ vi.mock('@/core/capabilities', () => ({
 const baseCustom = {
   kind: 'Widget',
   name: 'gizmo',
+  namespace: '',
   apiGroup: 'example.com',
   apiVersion: 'v1',
   age: '1d',
@@ -141,6 +161,85 @@ const baseCustom = {
   labels: { env: 'prod' },
   annotations: { owner: 'custom-team' },
 };
+
+const browseCatalogResult = (items: CatalogItem[] = []) => ({
+  items,
+  loading: false,
+  hasLoadedOnce: true,
+  filterOptions: {
+    kinds: [],
+    namespaces: [],
+  },
+  totalCount: items.length,
+  totalIsExact: true,
+  queryDescriptor: {
+    clusterId: 'cluster-a',
+    namespaces: ['cluster'],
+    hasUserNamespaceScope: false,
+    kinds: [],
+    search: '',
+    sortField: 'name',
+    sortDirection: 'asc',
+    scope: 'cluster-a|customOnly=true&limit=1000&namespace=cluster&sort=name&sortDirection=asc',
+    customOnly: true,
+  },
+  queryPending: false,
+  pagination: {
+    pageIndex: 1,
+    pageLimit: 50,
+    pageLimitOptions: [25, 50, 100, 250, 500, 1000],
+    setPageLimit: () => {},
+    totalCount: items.length,
+    totalIsExact: true,
+    previousToken: null,
+    continueToken: null,
+    queryPending: false,
+    hasMore: false,
+    hasPrevious: false,
+    isRequestingMore: false,
+    onRequestMore: () => {},
+    onRequestPrevious: () => {},
+    loadMoreLabel: 'Next page',
+    previousPageLabel: 'Previous page',
+    autoLoadMore: false,
+  },
+});
+
+const catalogItemFromCustom = (
+  resource: {
+    kind: string;
+    name: string;
+    apiGroup?: string;
+    apiVersion?: string;
+    age?: string;
+    clusterId: string;
+    clusterName?: string;
+    status?: string;
+  },
+  overrides: Partial<CatalogItem> = {}
+): CatalogItem => {
+  const creationTimestamp =
+    resource.age === '1d'
+      ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      : (resource.age ?? '');
+  return {
+    kind: resource.kind,
+    group: resource.apiGroup ?? '',
+    version: resource.apiVersion ?? '',
+    resource: 'widgets',
+    name: resource.name,
+    uid: `${resource.name}-uid`,
+    resourceVersion: '1',
+    creationTimestamp,
+    scope: 'Cluster',
+    clusterId: resource.clusterId,
+    clusterName: resource.clusterName,
+    actionFacts: resource.status ? { status: resource.status } : undefined,
+    ...overrides,
+  };
+};
+
+const catalogItemToClusterCustomData = (item: CatalogItem) => catalogItemToFallbackCustomRow(item);
 
 describe('ClusterViewCustom', () => {
   let container: HTMLDivElement;
@@ -156,8 +255,16 @@ describe('ClusterViewCustom', () => {
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
     modalProps.current = null;
+    persistedSortRef.current = null;
+    resetResourceInventoryRowCache();
     openWithObjectMock.mockReset();
     runObjectActionMock.mockReset();
+    useBrowseCatalogMock.mockReset();
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult());
+    useHydratedCustomCatalogRowsMock.mockReset();
+    useHydratedCustomCatalogRowsMock.mockImplementation(
+      (_clusterId: string, items: CatalogItem[]) => items.map(catalogItemToClusterCustomData)
+    );
   });
 
   afterEach(() => {
@@ -167,37 +274,175 @@ describe('ClusterViewCustom', () => {
     container.remove();
   });
 
-  it('passes metadata to the object panel when opening a resource', async () => {
+  it('renders the errored empty state for a catalog error (details report via toasts)', async () => {
+    useBrowseCatalogMock.mockReturnValue({
+      ...browseCatalogResult(),
+      hasLoadedOnce: false,
+      error: 'catalog list forbidden',
+    });
+
     await act(async () => {
-      root.render(<ClusterViewCustom data={[baseCustom]} loaded={true} />);
+      root.render(<ClusterViewCustom />);
+      await Promise.resolve();
+    });
+
+    // No in-table banner exists; an errored empty table reads "Unable to load
+    // data" instead of the generic empty message.
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(gridTablePropsRef.current?.emptyMessage).toBe('Unable to load data');
+  });
+
+  it('disarms scroll auto-load for page-replacing cursor pagination', async () => {
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
+
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.autoLoadMore).toBe(false);
+  });
+
+  it('passes the unfiltered total through to the filter options', async () => {
+    useBrowseCatalogMock.mockReturnValue({
+      ...browseCatalogResult([catalogItemFromCustom(baseCustom)]),
+      totalCount: 1,
+      unfilteredTotal: 25,
+    });
+
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.filters?.options?.unfilteredTotal).toBe(25);
+  });
+
+  it('replays the last rows on revisit instead of a cold spinner', async () => {
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
+
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+    expect(gridTablePropsRef.current?.data).toHaveLength(1);
+
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
+
+    // Revisit: the catalog restarts cold (no rows, loading). The controller
+    // must replay the previous rows instead of blanking to a spinner.
+    useBrowseCatalogMock.mockReturnValue({
+      ...browseCatalogResult([]),
+      loading: true,
+      hasLoadedOnce: false,
+    });
+    await act(async () => {
+      root.render(<ClusterViewCustom />);
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.data).toHaveLength(1);
+  });
+
+  it('queries the catalog with the displayed default sort when no sort is persisted', async () => {
+    // The header arrow shows name-ascending by default; the catalog query must
+    // sort the same way or the rows render in backend kind-grouped order under
+    // a lying indicator.
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+
+    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: { key: 'name', direction: 'asc' } })
+    );
+  });
+
+  it('queries the catalog with the persisted user sort when one exists', async () => {
+    persistedSortRef.current = { key: 'age', direction: 'desc' };
+
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+
+    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: { key: 'age', direction: 'desc' } })
+    );
+  });
+
+  it('passes metadata to the object panel when opening a resource', async () => {
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
+
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
+    expect(props.data).toEqual([
+      expect.objectContaining({
+        kind: 'Widget',
+        name: 'gizmo',
+        clusterId: 'alpha:ctx',
+        apiGroup: 'example.com',
+        apiVersion: 'v1',
+        crdName: 'widgets.example.com',
+        age: '1d',
+      }),
+    ]);
+    expect(props.data[0].age).not.toContain('T');
 
-    props.getCustomContextMenuItems(baseCustom, 'kind')[0].onClick();
+    props.getCustomContextMenuItems(props.data[0], 'kind')[0].onClick();
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'Widget',
         name: 'gizmo',
         age: '1d',
-        labels: { env: 'prod' },
-        annotations: { owner: 'custom-team' },
         clusterId: 'alpha:ctx',
+        group: 'example.com',
+        version: 'v1',
       })
     );
   });
 
+  it('uses the catalog query current page on first render', async () => {
+    const queryItem = catalogItemFromCustom({
+      ...baseCustom,
+      name: 'query-widget',
+      clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
+    });
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
+
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+
+    expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
+    expect(gridTablePropsRef.current?.data).toEqual([
+      expect.objectContaining({
+        kind: 'Widget',
+        name: 'query-widget',
+        clusterId: 'cluster-a',
+        apiGroup: 'example.com',
+        apiVersion: 'v1',
+        crdName: 'widgets.example.com',
+      }),
+    ]);
+    expect(gridTablePropsRef.current?.data).not.toEqual([
+      expect.objectContaining({ name: 'stale-local-widget' }),
+    ]);
+  });
+
   it('enables searchable kind dropdown bulk actions for custom resources', async () => {
     await act(async () => {
-      root.render(
-        <ClusterViewCustom
-          data={[baseCustom]}
-          availableKinds={['DBCluster', 'Widget']}
-          loaded={true}
-        />
-      );
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
@@ -205,22 +450,62 @@ describe('ClusterViewCustom', () => {
     expect(props?.filters?.options?.showKindDropdown).toBe(true);
     expect(props?.filters?.options?.kindDropdownSearchable).toBe(true);
     expect(props?.filters?.options?.kindDropdownBulkActions).toBe(true);
+    // Export is now the unified frontend fetcher (the GridTable filter bar wires the Copy/Export
+    // cluster from it), not a server-side per-action catalog export.
+    expect(typeof props?.fetchAllRows).toBe('function');
+    expect(
+      (props?.filters?.options?.postActions ?? []).some(
+        (item: any) => item.id === 'copy-cluster-custom-query-csv'
+      )
+    ).toBe(false);
   });
 
-  it('uses the provided kind metadata instead of deriving kinds from loaded rows', async () => {
+  it('uses catalog facet metadata instead of deriving kinds from loaded rows', async () => {
+    useBrowseCatalogMock.mockReturnValue({
+      ...browseCatalogResult(),
+      filterOptions: {
+        kinds: ['DBCluster', 'Widget'],
+        namespaces: [],
+        partialDataLabel: 'Catalog health: Catalog data may be stale.',
+      },
+    });
+
     await act(async () => {
-      root.render(
-        <ClusterViewCustom
-          data={[baseCustom]}
-          availableKinds={['DBCluster', 'Widget']}
-          loaded={true}
-        />
-      );
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
     const props = gridTablePropsRef.current;
     expect(props?.filters?.options?.kinds).toEqual(['DBCluster', 'Widget']);
+    expect(props?.filters?.options?.partialDataLabel).toContain('Catalog health');
+  });
+
+  it('renders hydrated custom-resource status and metadata for the current page', async () => {
+    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
+    useHydratedCustomCatalogRowsMock.mockReturnValue([
+      {
+        ...baseCustom,
+        crdName: 'widgets.example.com',
+        status: 'Ready',
+        statusState: 'Ready',
+        statusPresentation: 'ready',
+      },
+    ]);
+
+    await act(async () => {
+      root.render(<ClusterViewCustom loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props?.data?.[0]).toEqual(
+      expect.objectContaining({
+        status: 'Ready',
+        statusPresentation: 'ready',
+        labels: { env: 'prod' },
+        annotations: { owner: 'custom-team' },
+      })
+    );
   });
 
   // Regression test mirroring NsViewCustom's colliding-CRD guardrail.
@@ -232,6 +517,7 @@ describe('ClusterViewCustom', () => {
     const clusterScopedCR = {
       kind: 'DBCluster',
       name: 'shared-pg',
+      namespace: '',
       apiGroup: 'postgresql.cnpg.io',
       apiVersion: 'v1',
       age: '3d',
@@ -242,7 +528,7 @@ describe('ClusterViewCustom', () => {
     };
 
     await act(async () => {
-      root.render(<ClusterViewCustom data={[clusterScopedCR]} loaded={true} />);
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
@@ -279,6 +565,7 @@ describe('ClusterViewCustom', () => {
     const clusterScopedCR = {
       kind: 'DBCluster',
       name: 'shared-pg',
+      namespace: '',
       apiGroup: 'postgresql.cnpg.io',
       apiVersion: 'v1',
       age: '3d',
@@ -289,7 +576,7 @@ describe('ClusterViewCustom', () => {
     };
 
     await act(async () => {
-      root.render(<ClusterViewCustom data={[clusterScopedCR]} loaded={true} />);
+      root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
     });
 
@@ -342,8 +629,11 @@ describe('ClusterViewCustom', () => {
     };
 
     const renderWith = async (rows: any[]) => {
+      useBrowseCatalogMock.mockReturnValue(
+        browseCatalogResult(rows.map((row) => catalogItemFromCustom(row)))
+      );
       await act(async () => {
-        root.render(<ClusterViewCustom data={rows} loaded={true} />);
+        root.render(<ClusterViewCustom loaded={true} />);
         await Promise.resolve();
       });
     };
@@ -397,19 +687,37 @@ describe('ClusterViewCustom', () => {
       expect(callArg.clusterName).toBe('alpha');
     });
 
-    it('exposes a sortValue extractor so the column sorts by crdName', async () => {
-      // Regression guard: column key "crd" vs field "crdName" mismatch
-      // would silently break sorting without an explicit sortValue. See
-      // useTableSort.ts:124.
+    it('does not expose hydrated custom-resource fields as query-backed sort keys', async () => {
+      // Custom-resource rows are page-selected by the object catalog before
+      // CRD/status are hydrated. Those fields cannot be globally sorted by
+      // the query backend, so the columns must not advertise sorting.
       await renderWith([resourceWithCRD]);
 
       const props = gridTablePropsRef.current;
       const crdCol = findColumn(props, 'crd');
+      const statusCol = findColumn(props, 'status');
+      expect(crdCol.sortable).toBe(false);
+      expect(statusCol.sortable).toBe(false);
+
+      // Keep the local extractor intact for defensive consumers, but do not
+      // make this a query-backed sortable column.
       expect(crdCol.sortValue).toBeTypeOf('function');
       expect(crdCol.sortValue(resourceWithCRD)).toBe('dbclusters.postgresql.cnpg.io');
 
       const noCRD = { ...baseCustom };
       expect(crdCol.sortValue(noCRD)).toBe('');
+    });
+
+    it('publishes only catalog-backed sortable keys', async () => {
+      await renderWith([resourceWithCRD]);
+
+      const props = gridTablePropsRef.current;
+      const sortableKeys = props.columns
+        .filter((column: any) => column.sortable !== false)
+        .map((column: any) => column.key)
+        .sort((left: string, right: string) => left.localeCompare(right));
+
+      expect(sortableKeys).toEqual(['age', 'kind', 'name']);
     });
 
     it('renders the CRD cell as inert text when crdName is missing', async () => {

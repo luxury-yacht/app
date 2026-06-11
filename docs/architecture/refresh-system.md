@@ -82,6 +82,36 @@ Keep common lifecycle plumbing shared where behavior matches. Do not collapse
 domain-specific identity, merge, cache, or recovery semantics into a generic
 handler.
 
+## Normalized Resource Query Provider Contract
+
+Snapshot domains that back a resource inventory table expose one normalized query
+shape so the frontend consumes them uniformly (see
+[`docs/architecture/large-data.md`](large-data.md) and
+[`docs/frontend/gridtable.md`](../frontend/gridtable.md)):
+
+- Typed-resource domains embed `ResourceQueryEnvelope`
+  (`backend/refresh/snapshot/resource_query_contract.go`) in their payload — flat
+  facets (kinds/namespaces/statuses/nodes), `completeness`, `capabilities`, and
+  exactness flags — alongside a typed `Rows` slice. Go embedding flattens the
+  envelope to top-level JSON keys, so every typed payload presents the same shape.
+- The catalog provider (`catalog.go`) does not embed the envelope (its kinds facet
+  is the richer `[]KindInfo` and it owns keyset pagination) but surfaces the same
+  provider/completeness/capabilities contract fields directly.
+- Capabilities describe the query surface (sortable/filterable/searchable
+  fields). Export and copy are client-driven: the current page by default, or a
+  cursor walk over the same query path for the "all matching rows" scope.
+- Pagination is keyset (`continue`/`previous`). Any batch-streaming fields are
+  diagnostics only, never page metadata.
+
+Conformance is enforced in `backend/refresh/snapshot`:
+`TestEveryTypedResourceDomainEmbedsTheNormalizedEnvelope` (source discovery, in
+`typed_provider_discovery_test.go`) fails if a typed payload omits the envelope,
+its `Rows`, or constructs the envelope outside the canonical helpers
+(`typedQueryEnvelope`/`typedWindowEnvelope`/`resolveTypedSnapshotPage`), and the
+provider/capability conformance tests check provider, completeness, and
+capability fields. A new typed domain must embed the envelope and be added to
+the capability conformance table.
+
 ## Change Checklist
 
 When adding or changing a domain:

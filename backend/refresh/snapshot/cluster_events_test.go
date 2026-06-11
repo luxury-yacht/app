@@ -89,11 +89,11 @@ func TestClusterEventsBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(ClusterEventsSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Events, 2)
+	require.Len(t, payload.Rows, 2)
 
 	// Events should be sorted newest first
-	first := payload.Events[0]
-	second := payload.Events[1]
+	first := payload.Rows[0]
+	second := payload.Rows[1]
 	require.Equal(t, "event-new", first.Name)
 	require.Equal(t, "Normal", first.Type)
 	require.Equal(t, "scheduler", first.Source)
@@ -155,7 +155,25 @@ func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(ClusterEventsSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Events, 2)
-	require.Equal(t, "event-high-rv", payload.Events[0].Name)
-	require.Equal(t, "event-low-rv", payload.Events[1].Name)
+	require.Len(t, payload.Rows, 2)
+	require.Equal(t, "event-high-rv", payload.Rows[0].Name)
+	require.Equal(t, "event-low-rv", payload.Rows[1].Name)
+}
+
+// An unsynced events informer lists empty with no error (client-go semantics),
+// which would publish a confident "zero events" page during the post-connect
+// sync window. The builder must wait for the sync (bounded by the request
+// context) and report an error if it cannot — never an exact-empty snapshot.
+func TestClusterEventsBuilderWaitsForCacheSync(t *testing.T) {
+	builder := &ClusterEventsBuilder{
+		eventLister:  testsupport.NewEventLister(t),
+		eventsSynced: func() bool { return false },
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	snapshot, err := builder.Build(ctx, "")
+	require.Error(t, err)
+	require.Nil(t, snapshot)
 }

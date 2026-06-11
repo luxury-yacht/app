@@ -64,7 +64,8 @@ type Service struct {
 
 	mu sync.RWMutex
 	catalogIndex
-	identity *resourceIdentityResolver
+	queryStore CatalogQueryStore
+	identity   *resourceIdentityResolver
 
 	promotedMu sync.RWMutex
 	promoted   map[string]*promotedDescriptor
@@ -95,6 +96,9 @@ type resourceDescriptor struct {
 	Scope      Scope
 }
 
+// summaryChunk holds one published batch of summaries. Chunks are IMMUTABLE
+// once published: items are never mutated in place — emit and cache rebuilds
+// always create fresh chunks. Snapshots therefore share chunk pointers.
 type summaryChunk struct {
 	items []Summary
 }
@@ -140,6 +144,9 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		if !opts.EnableReactiveUpdates {
 			serviceOpts.EnableReactiveUpdates = false
 		}
+		if opts.QueryStore != nil {
+			serviceOpts.QueryStore = opts.QueryStore
+		}
 	}
 
 	nowFn := deps.Now
@@ -147,7 +154,7 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		nowFn = time.Now
 	}
 
-	return &Service{
+	service := &Service{
 		deps:              deps,
 		opts:              serviceOpts,
 		clusterID:         deps.ClusterID,
@@ -160,6 +167,12 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		now:               nowFn,
 		streamSubscribers: make(map[int]chan StreamingUpdate),
 	}
+	if serviceOpts.QueryStore != nil {
+		service.queryStore = serviceOpts.QueryStore
+	} else {
+		service.queryStore = newInMemoryCatalogQueryStore(service)
+	}
+	return service
 }
 
 // Run starts the catalog ingestion loop and blocks until the context is cancelled.

@@ -11,15 +11,54 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
-const { useTableSortMock } = vi.hoisted(() => ({
-  useTableSortMock: vi.fn(
-    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
-      sortedData: data,
-      sortConfig: opts?.controlledSort ?? { key: '', direction: null },
-      handleSort: vi.fn(),
-    })
-  ),
-}));
+const {
+  latestTableRowsRef,
+  typedQueryRowsRef,
+  scopedDomainStateRef,
+  requestRefreshDomainStateMock,
+  useTableSortMock,
+} = vi.hoisted(() => {
+  const latestRows: { current: unknown[] } = { current: [] };
+  const typedQueryRows: { current: unknown[] } = { current: [] };
+  const scopedDomainState: { current: Record<string, unknown> } = {
+    current: {
+      data: { metrics: null, rows: [] },
+      status: 'idle',
+      isManual: false,
+    },
+  };
+
+  return {
+    latestTableRowsRef: latestRows,
+    typedQueryRowsRef: typedQueryRows,
+    scopedDomainStateRef: scopedDomainState,
+    requestRefreshDomainStateMock: vi.fn((_request?: unknown) =>
+      Promise.resolve({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: typedQueryRows.current,
+            total: typedQueryRows.current.length,
+            totalIsExact: true,
+            kinds: ['Node'],
+            facetsExact: true,
+          },
+        },
+      })
+    ),
+    useTableSortMock: vi.fn(
+      (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => {
+        latestRows.current = data;
+        return {
+          sortedData: data,
+          sortConfig: opts?.controlledSort ?? { key: '', direction: null },
+          handleSort: vi.fn(),
+        };
+      }
+    ),
+  };
+});
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -34,17 +73,22 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
 }));
 
 vi.mock('@ui/favorites/FavToggle', () => ({
+  // Matches the real hook's shape: { item, modal }.
   useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => {},
-    title: 'Save as favorite',
+    item: {
+      type: 'toggle',
+      id: 'favorite',
+      icon: null,
+      active: false,
+      onClick: () => {},
+      title: 'Save as favorite',
+    },
+    modal: null,
   }),
 }));
 
 const gridTablePropsRef: { current: any } = { current: null };
+const loadingBoundaryPropsRef: { current: any } = { current: null };
 const openWithObjectMock = vi.fn();
 const scopedDomainCallsRef: { current: Array<[string, string]> } = { current: [] };
 
@@ -79,7 +123,10 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  default: (props: { children: React.ReactNode }) => {
+    loadingBoundaryPropsRef.current = props;
+    return <>{props.children}</>;
+  },
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -94,8 +141,17 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+    filters: {
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    },
     setFilters: vi.fn(),
+    pageSize: null,
+    setPageSize: vi.fn(),
+    hydrated: true,
     resetState: vi.fn(),
   }),
 }));
@@ -103,15 +159,13 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 vi.mock('@/core/refresh', () => ({
   useRefreshScopedDomain: (domain: string, scope: string) => {
     scopedDomainCallsRef.current.push([domain, scope]);
-    return {
-      data: { metrics: null, nodes: [] },
-      status: 'idle',
-      isManual: false,
-    };
+    return scopedDomainStateRef.current;
   },
   refreshManager: { triggerManualRefresh: vi.fn() },
   refreshOrchestrator: {
     setScopedDomainEnabled: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
     resetScopedDomain: vi.fn(),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
   },
@@ -122,6 +176,7 @@ vi.mock('@/core/data-access', async (importOriginal) => {
   return {
     ...actual,
     requestRefreshDomain: vi.fn().mockResolvedValue(undefined),
+    requestRefreshDomainState: (request: unknown) => requestRefreshDomainStateMock(request),
   };
 });
 
@@ -150,6 +205,8 @@ const baseNode = {
   restarts: 0,
   clusterId: 'alpha:ctx',
   clusterName: 'alpha',
+  age: '2h',
+  ageTimestamp: 1_700_000_000_000,
 };
 
 describe('ClusterViewNodes', () => {
@@ -165,8 +222,32 @@ describe('ClusterViewNodes', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    loadingBoundaryPropsRef.current = null;
     scopedDomainCallsRef.current = [];
+    latestTableRowsRef.current = [];
+    typedQueryRowsRef.current = [];
+    scopedDomainStateRef.current = {
+      data: { metrics: null, rows: [] },
+      status: 'idle',
+      isManual: false,
+    };
     openWithObjectMock.mockReset();
+    requestRefreshDomainStateMock.mockReset();
+    requestRefreshDomainStateMock.mockImplementation((_request?: unknown) =>
+      Promise.resolve({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: typedQueryRowsRef.current,
+            total: typedQueryRowsRef.current.length,
+            totalIsExact: true,
+            kinds: ['Node'],
+            facetsExact: true,
+          },
+        },
+      })
+    );
     useTableSortMock.mockClear();
   });
 
@@ -177,11 +258,17 @@ describe('ClusterViewNodes', () => {
     container.remove();
   });
 
-  it('passes persisted state to GridTable', async () => {
+  const renderNodes = async (nodes: Array<typeof baseNode | Record<string, unknown>>) => {
+    typedQueryRowsRef.current = nodes;
     await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
+      root.render(<ClusterViewNodes />);
+      await Promise.resolve();
       await Promise.resolve();
     });
+  };
+
+  it('passes persisted state to GridTable', async () => {
+    await renderNodes([baseNode]);
 
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
@@ -191,16 +278,56 @@ describe('ClusterViewNodes', () => {
       kinds: [],
       namespaces: [],
       caseSensitive: false,
+      includeMetadata: false,
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
   });
 
-  it('passes numeric CPU and memory sort values into useTableSort', async () => {
+  it('wires the Include metadata search toggle for the query-backed nodes table', async () => {
+    await renderNodes([baseNode]);
+
+    const preActions = gridTablePropsRef.current?.filters?.options?.preActions ?? [];
+    expect(preActions.some((item: { id?: string }) => item?.id === 'include-metadata')).toBe(true);
+  });
+
+  it('places the favorite with the filter pre-actions (left), not the export cluster', async () => {
+    await renderNodes([baseNode]);
+
+    const options = gridTablePropsRef.current?.filters?.options;
+    const preActions = options?.preActions ?? [];
+    expect(preActions.some((item: { id?: string }) => item?.id === 'favorite')).toBe(true);
+    const postActions = options?.postActions ?? [];
+    expect(postActions.some((item: { id?: string }) => item?.id === 'favorite')).toBe(false);
+  });
+
+  it('threads fetchAllRows so the table can offer the all-matching-rows scope', async () => {
+    await renderNodes([baseNode]);
+
+    expect(typeof gridTablePropsRef.current?.fetchAllRows).toBe('function');
+  });
+
+  it('keeps initial empty query-backed nodes behind the loading boundary', async () => {
+    requestRefreshDomainStateMock.mockImplementation(() => new Promise(() => {}));
+
     await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
+      root.render(<ClusterViewNodes />);
+      await Promise.resolve();
       await Promise.resolve();
     });
+
+    expect(loadingBoundaryPropsRef.current).toEqual(
+      expect.objectContaining({
+        loading: true,
+        hasLoaded: false,
+        dataLength: 0,
+        spinnerMessage: 'Loading nodes...',
+      })
+    );
+  });
+
+  it('passes numeric Pods, CPU, memory, and age sort values into useTableSort', async () => {
+    await renderNodes([baseNode]);
 
     expect(useTableSortMock).toHaveBeenCalled();
     const options = useTableSortMock.mock.calls[0]?.[3];
@@ -208,11 +335,19 @@ describe('ClusterViewNodes', () => {
       key: string;
       sortValue?: (item: typeof baseNode) => unknown;
     }>;
+    const podsColumn = columns.find((column) => column.key === 'pods');
     const cpuColumn = columns.find((column) => column.key === 'cpu');
     const memoryColumn = columns.find((column) => column.key === 'memory');
+    const ageColumn = columns.find((column) => column.key === 'age');
 
+    expect(podsColumn?.sortValue?.({ ...baseNode, pods: '3/50' } as any)).toBe(3);
     expect(cpuColumn?.sortValue?.(baseNode)).toBe(1000);
     expect(memoryColumn?.sortValue?.(baseNode)).toBe(2048);
+    expect(
+      Number(ageColumn?.sortValue?.({ ...baseNode, ageTimestamp: 1_700_000_000_000 }))
+    ).toBeGreaterThan(
+      Number(ageColumn?.sortValue?.({ ...baseNode, ageTimestamp: 1_700_003_600_000 }))
+    );
   });
 
   it('renders the backend node status without reinterpreting cordon state', async () => {
@@ -225,10 +360,7 @@ describe('ClusterViewNodes', () => {
       taints: [{ key: 'node.kubernetes.io/unschedulable', effect: 'NoSchedule' }],
     };
 
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
     const statusColumn = props.columns.find((column: any) => column.key === 'status');
@@ -248,10 +380,7 @@ describe('ClusterViewNodes', () => {
       unschedulable: true,
     };
 
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
     const statusColumn = props.columns.find((column: any) => column.key === 'status');
@@ -270,10 +399,7 @@ describe('ClusterViewNodes', () => {
       statusPresentation: 'terminating',
     };
 
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
     const statusColumn = props.columns.find((column: any) => column.key === 'status');
@@ -292,10 +418,7 @@ describe('ClusterViewNodes', () => {
       statusPresentation: undefined,
     };
 
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
     const statusColumn = props.columns.find((column: any) => column.key === 'status');
@@ -307,10 +430,7 @@ describe('ClusterViewNodes', () => {
   });
 
   it('opens the object panel with cluster metadata when clicking a node name', async () => {
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([baseNode]);
 
     const props = gridTablePropsRef.current;
     const nameColumn = props.columns.find((column: any) => column.key === 'name');
@@ -332,10 +452,7 @@ describe('ClusterViewNodes', () => {
   });
 
   it('opens the Map from the node context menu', async () => {
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([baseNode]);
 
     const props = gridTablePropsRef.current;
     const objectMapItem = props
@@ -361,15 +478,125 @@ describe('ClusterViewNodes', () => {
   });
 
   it('resolves node metrics from the active cluster scope only', async () => {
-    await act(async () => {
-      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
-      await Promise.resolve();
-    });
+    await renderNodes([baseNode]);
 
     expect(scopedDomainCallsRef.current).toContainEqual(['nodes', 'path:context|']);
     expect(scopedDomainCallsRef.current).not.toContainEqual([
       'nodes',
       'clusters=path:context,other:context|',
     ]);
+  });
+
+  it('loads fresh query rows on revisit after the live nodes domain advances', async () => {
+    const initialQueryNode = { ...baseNode, name: 'query-node-1' };
+    const updatedQueryNode = { ...baseNode, name: 'query-node-2' };
+    typedQueryRowsRef.current = [initialQueryNode];
+
+    await act(async () => {
+      root.render(<ClusterViewNodes />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(1);
+    expect(latestTableRowsRef.current).toEqual([initialQueryNode]);
+
+    typedQueryRowsRef.current = [updatedQueryNode];
+    // The live nodes domain advances (new data → new version/checksum) and the view is
+    // revisited. That a version bump — not a timestamp tick — is what re-invalidates the
+    // typed query is asserted at the wrapper level (useQueryBackedResourceGridTable.test
+    // "passes cluster scoped live refresh revisions"); here we assert the revisited view
+    // issues a fresh query and renders the updated rows.
+    scopedDomainStateRef.current = {
+      data: { metrics: null, rows: [updatedQueryNode] },
+      status: 'ready',
+      isManual: false,
+      version: 2,
+      checksum: 'updated',
+      lastUpdated: 2,
+    };
+
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
+
+    await act(async () => {
+      root.render(<ClusterViewNodes />);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
+    expect(latestTableRowsRef.current).toEqual([updatedQueryNode]);
+  });
+
+  it('renders a settled-empty query on remount without retaining stale local rows', async () => {
+    // The retain-on-empty symptom patch is gone. The resource-inventory
+    // controller trusts a settled query: a definitive empty result renders the
+    // empty state rather than resurrecting stale local rows. The transient
+    // empty-while-loading protection (the actual false-empty guard) lives in the
+    // controller's refreshing→loading rule, covered by the controller unit tests.
+    const localNode = { ...baseNode, clusterId: 'path:context' };
+    const initialQueryNode = { ...localNode, name: 'node-1' };
+
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [initialQueryNode],
+            total: 1,
+            totalIsExact: true,
+            kinds: ['Node'],
+            facetsExact: true,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: {
+            rows: [],
+            total: 0,
+            totalIsExact: true,
+            kinds: [],
+            facetsExact: true,
+          },
+        },
+      });
+
+    await act(async () => {
+      root.render(<ClusterViewNodes />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(latestTableRowsRef.current).toEqual([initialQueryNode]);
+
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
+
+    await act(async () => {
+      root.render(<ClusterViewNodes />);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
+    expect(latestTableRowsRef.current).toEqual([]);
+    expect(loadingBoundaryPropsRef.current).toEqual(
+      expect.objectContaining({
+        loading: false,
+        hasLoaded: true,
+        dataLength: 0,
+      })
+    );
   });
 });

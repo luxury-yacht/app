@@ -21,6 +21,8 @@ const searchShortcutMocks = vi.hoisted(() => ({
 
 const refreshMocks = vi.hoisted(() => ({
   setScopedDomainEnabled: vi.fn(),
+  acquireScopedDomainLease: vi.fn(),
+  releaseScopedDomainLease: vi.fn(),
   fetchScopedDomain: vi.fn(() => Promise.resolve()),
 }));
 
@@ -411,10 +413,9 @@ describe('ValuesTab', () => {
   it('enables scoped domain on mount when active, disables on unmount', async () => {
     const { unmount } = await renderValuesTab({ scope: 'ns:helmrelease:chart', isActive: true });
 
-    expect(refreshMocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(refreshMocks.acquireScopedDomainLease).toHaveBeenCalledWith(
       'object-helm-values',
       'ns:helmrelease:chart',
-      true,
       { preserveState: true }
     );
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
@@ -425,10 +426,9 @@ describe('ValuesTab', () => {
 
     await unmount();
 
-    expect(refreshMocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(refreshMocks.releaseScopedDomainLease).toHaveBeenCalledWith(
       'object-helm-values',
       'ns:helmrelease:chart',
-      false,
       { preserveState: true }
     );
   });

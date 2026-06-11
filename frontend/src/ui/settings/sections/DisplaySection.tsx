@@ -7,17 +7,33 @@
 import { useState, useEffect } from 'react';
 import { errorHandler } from '@utils/errorHandler';
 import ToggleSwitch from '@/shared/components/ToggleSwitch';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import {
+  DEFAULT_TABLE_PAGE_SIZE,
+  TABLE_PAGE_SIZE_OPTIONS,
+  normalizeTablePageSize,
+  type TablePageSize,
+} from '@shared/components/tables/pageSizeOptions';
 import {
   hydrateAppPreferences,
+  setDefaultTablePageSize as persistDefaultTablePageSize,
   setDimInactiveNamespaces as persistDimInactiveNamespaces,
   setExclusiveNamespaces as persistExclusiveNamespaces,
   setUseShortResourceNames as persistUseShortResourceNames,
 } from '@/core/settings/appPreferences';
 
+// The same list every pagination footer renders — one source for both.
+const PAGE_SIZE_DROPDOWN_OPTIONS = TABLE_PAGE_SIZE_OPTIONS.map((value) => ({
+  value: String(value),
+  label: String(value),
+}));
+
 function DisplaySection() {
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
   const [dimInactiveNamespaces, setDimInactiveNamespaces] = useState<boolean>(true);
   const [exclusiveNamespaces, setExclusiveNamespaces] = useState<boolean>(true);
+  const [defaultTablePageSize, setDefaultTablePageSize] =
+    useState<TablePageSize>(DEFAULT_TABLE_PAGE_SIZE);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,6 +44,7 @@ function DisplaySection() {
           setUseShortResourceNames(prefs.useShortResourceNames);
           setDimInactiveNamespaces(prefs.dimInactiveNamespaces);
           setExclusiveNamespaces(prefs.exclusiveNamespaces);
+          setDefaultTablePageSize(normalizeTablePageSize(prefs.defaultTablePageSize));
         }
       } catch (error) {
         errorHandler.handle(error, { action: 'loadDisplaySettings' });
@@ -37,6 +54,12 @@ function DisplaySection() {
       cancelled = true;
     };
   }, []);
+
+  const handleDefaultTablePageSizeChange = (value: string | string[]) => {
+    const size = normalizeTablePageSize(Number(value));
+    setDefaultTablePageSize(size);
+    persistDefaultTablePageSize(size);
+  };
 
   const handleShortNamesToggle = async (useShort: boolean) => {
     setUseShortResourceNames(useShort);
@@ -72,6 +95,29 @@ function DisplaySection() {
   return (
     <div className="settings-panel">
       <h2 className="settings-panel-title">Display</h2>
+
+      <div className="settings-subgroup-label">Tables</div>
+      <hr className="settings-subgroup-divider" />
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div className="settings-row-label-title">Default page size</div>
+          <div className="settings-row-label-help">
+            Default page size for tables. Changing the page size on a specific table will override
+            this value for that table only.
+          </div>
+        </div>
+        <div className="settings-row-control">
+          <Dropdown
+            options={PAGE_SIZE_DROPDOWN_OPTIONS}
+            value={String(defaultTablePageSize)}
+            onChange={handleDefaultTablePageSizeChange}
+            ariaLabel="Default page size"
+            size="compact"
+            className="settings-page-size-dropdown"
+          />
+        </div>
+      </div>
 
       <div className="settings-subgroup-label">Resources</div>
       <hr className="settings-subgroup-divider" />

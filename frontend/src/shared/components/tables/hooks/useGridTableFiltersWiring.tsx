@@ -22,6 +22,7 @@ import type {
 } from '@shared/components/tables/GridTable.types';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { useGridTableCsvExport } from '@shared/components/tables/hooks/useGridTableCsvExport';
+import { useGridTableCsvFileExportAction } from '@shared/components/tables/hooks/useGridTableCsvFileExportAction';
 
 // Bundles all filter-bar wiring for GridTable: resolves filter state, builds
 // dropdown IDs and renderers, manages focus refs, and returns a ready-to-render
@@ -42,13 +43,16 @@ type SearchShortcutConfig = {
 type UseGridTableFiltersWiringOptions<T> = {
   data: T[];
   totalDataCount?: number;
-  maxDisplayRows?: number;
   filters: GridTableFilterConfig<T> | undefined;
   diagnosticsLabel?: string;
   columnsDropdown?: ColumnsDropdownConfig;
   searchShortcut?: SearchShortcutConfig;
   exportColumns?: GridColumnDefinition<T>[];
   getTextContent?: (node: ReactNode) => string;
+  /** When provided, Copy/Export gain an "all matching rows" scope toggle that calls this. */
+  fetchAllRows?: () => Promise<T[]>;
+  /** Default filename offered by the file Export action. */
+  exportFilename?: string;
   /** IconBar items rendered before the built-in Reset action. */
   preActions?: IconBarItem[];
   /** IconBar items rendered after a separator following Reset. */
@@ -62,13 +66,14 @@ type UseGridTableFiltersWiringOptions<T> = {
 export function useGridTableFiltersWiring<T>({
   data,
   totalDataCount,
-  maxDisplayRows,
   filters,
   diagnosticsLabel,
   columnsDropdown,
   searchShortcut,
   exportColumns,
   getTextContent,
+  fetchAllRows,
+  exportFilename,
   preActions,
   postActions,
 }: UseGridTableFiltersWiringOptions<T>) {
@@ -166,15 +171,42 @@ export function useGridTableFiltersWiring<T>({
   const showColumnsDropdown = Boolean(columnsDropdown);
   const resolvedPreActions = preActions ?? resolvedFilterOptions.preActions;
   const resolvedCustomActions = resolvedFilterOptions.customActions;
+
+  // Copy and Export always act on EVERY matching row when the view can fetch all pages
+  // (the active filters are part of the fetch scope). Views without a fetcher keep the
+  // page-only Copy — on those non-paginated tables the visible rows ARE the full set.
+  const supportsExportAll = Boolean(fetchAllRows);
+
+  const fetchAllRowsOrEmpty = useCallback(
+    (): Promise<T[]> => (fetchAllRows ? fetchAllRows() : Promise.resolve([])),
+    [fetchAllRows]
+  );
+
   const csvExportAction = useGridTableCsvExport({
     data: tableData,
-    maxDisplayRows,
     columns: exportColumns,
     getTextContent,
+    // Pass the real (possibly undefined) fetcher: when absent, Copy takes the visible rows.
+    fetchAllRows,
+  });
+
+  const csvExportFileAction = useGridTableCsvFileExportAction({
+    fetchAllRows: fetchAllRowsOrEmpty,
+    columns: exportColumns,
+    getTextContent,
+    defaultFilename: exportFilename ?? 'export',
+    disabled: tableData.length === 0,
   });
 
   const resolvedPostActions = useMemo<IconBarItem[]>(() => {
-    const items: IconBarItem[] = [csvExportAction];
+    // The grouped copy/export pair. When the view can fetch all rows, both act on the
+    // full matching set — [copy · export]. Otherwise just the visible-rows copy.
+    const items: IconBarItem[] = [];
+    if (supportsExportAll) {
+      items.push(csvExportAction, csvExportFileAction);
+    } else {
+      items.push(csvExportAction);
+    }
 
     if (resolvedFilterOptions.postActions?.length) {
       items.push(...resolvedFilterOptions.postActions);
@@ -184,27 +216,46 @@ export function useGridTableFiltersWiring<T>({
     }
 
     return items;
-  }, [csvExportAction, postActions, resolvedFilterOptions.postActions]);
+  }, [
+    csvExportAction,
+    csvExportFileAction,
+    postActions,
+    resolvedFilterOptions.postActions,
+    supportsExportAll,
+  ]);
 
-  // Compute result count: displayed items vs total items.
-  // If the consumer provides a totalCount override (e.g. server-side paginated total), use it.
+  // Filter feedback for the bar: N (items matching the active filters) of M (items in scope before
+  // them). Both are TOTALS, never the current page. Server-paginated tables get them from the
+  // backend (totalCount = N, unfilteredTotal = M); local tables derive N from the client-filtered
+  // set and M from the full row set. The bar only renders this while a narrowing filter is active.
   const resultCount = useMemo(() => {
     if (!filteringEnabled) return undefined;
-    const total = filters?.options?.totalCount ?? totalDataCount ?? data.length;
-    const displayed =
-      typeof maxDisplayRows === 'number' && maxDisplayRows > 0
-        ? Math.min(tableData.length, maxDisplayRows)
-        : tableData.length;
+    // Server-paginated tables (searchBehavior 'query') filter on the backend, so the displayed
+    // rows are just the current page — N/M come from the backend counts. Local tables filter
+    // client-side, so N is the filtered row set and M is the full provided dataset.
+    const isServerPaginated = filters?.options?.searchBehavior === 'query';
+    const filtered = isServerPaginated
+      ? (filters?.options?.totalCount ?? totalDataCount ?? data.length)
+      : tableData.length;
+    const unfiltered = isServerPaginated
+      ? (filters?.options?.unfilteredTotal ?? filtered)
+      : data.length;
     return {
-      displayed,
-      total,
-      capped: displayed < tableData.length || total > data.length,
+      filtered,
+      unfiltered,
+      totalIsExact: filters?.options?.totalIsExact ?? true,
+      partialDataLabel: filters?.options?.partialDataLabel,
+      capped:
+        Boolean(filters?.options?.partialDataLabel) || filters?.options?.totalIsExact === false,
     };
   }, [
     filteringEnabled,
+    filters?.options?.searchBehavior,
     filters?.options?.totalCount,
+    filters?.options?.unfilteredTotal,
+    filters?.options?.totalIsExact,
+    filters?.options?.partialDataLabel,
     totalDataCount,
-    maxDisplayRows,
     data.length,
     tableData.length,
   ]);

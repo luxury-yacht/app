@@ -1,5 +1,13 @@
 import { afterEach, vi } from 'vitest';
 
+import { resetResourceInventoryRowCache } from './src/modules/resource-grid/useResourceInventoryTable';
+
+// The resource-inventory revisit replay cache is module-level (it must survive
+// unmount). Clear it between specs so one test's rows never replay in another.
+afterEach(() => {
+  resetResourceInventoryRowCache();
+});
+
 const buildStorageShim = (): Storage => {
   const store = new Map<string, string>();
   return {

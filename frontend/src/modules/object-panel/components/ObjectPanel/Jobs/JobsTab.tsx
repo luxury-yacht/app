@@ -207,6 +207,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
   }, []);
 
   const { gridTableProps } = useObjectPanelResourceGridTable<JobRow>({
+    tableMode: 'Local Complete',
     viewId: 'object-panel-jobs',
     clusterIdentity: objectData?.clusterId ?? '',
     enabled: Boolean(objectData?.clusterId),
@@ -233,7 +234,13 @@ export const JobsTab: React.FC<JobsTabProps> = ({
     <div className="object-panel-pods">
       <div className="object-panel-pods__table">
         <ObjectPanelResourceGridTableSurface<JobRow>
-          gridTableProps={gridTableProps}
+          gridTableProps={{
+            ...gridTableProps,
+            // Local-complete table: "all matching rows" is the local row set.
+            // fetchAllRows arms the standard scope-toggle + Copy + Export trio.
+            fetchAllRows: () => Promise.resolve(jobRows),
+            exportFilename: 'object-panel-jobs',
+          }}
           columns={columns}
           diagnosticsLabel="Object Panel Jobs"
           onRowClick={handleJobOpen}

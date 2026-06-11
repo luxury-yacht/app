@@ -8,6 +8,7 @@
 
 import {
   DiscoverNodeLogs,
+  SaveCsvFile,
   FetchContainerLogs,
   FetchNodeLogs,
   FindCatalogObjectByUID,
@@ -17,6 +18,7 @@ import {
   GetPodContainers,
   GetRevisionHistory,
   GetTargetPorts,
+  HydrateCatalogCustomRows,
   IsWorkloadHPAManaged,
 } from '@wailsjs/go/backend/App';
 import type { types } from '@wailsjs/go/models';
@@ -107,6 +109,31 @@ export const readCatalogObjectMatchForRef = (
 
 export const readCatalogObjectByUID = (clusterId: string, uid: string) =>
   FindCatalogObjectByUID(clusterId, uid);
+
+export interface CatalogQueryCSVExport {
+  path: string;
+  bytes: number;
+}
+
+/** Save a frontend-built CSV string to a user-selected file (returns the chosen path). */
+export const saveCsvFile = (defaultFilename: string, content: string) =>
+  SaveCsvFile(defaultFilename, content) as Promise<CatalogQueryCSVExport>;
+
+export interface CustomCatalogHydrationRow {
+  clusterId: string;
+  group: string;
+  version: string;
+  kind: string;
+  resource: string;
+  namespace?: string;
+  name: string;
+  uid?: string;
+}
+
+export const readHydratedCustomCatalogRows = (
+  clusterId: string,
+  rows: CustomCatalogHydrationRow[]
+) => HydrateCatalogCustomRows(clusterId, rows);
 
 export const readRevisionHistoryForRef = (target: ObjectReadTarget) =>
   GetRevisionHistory(

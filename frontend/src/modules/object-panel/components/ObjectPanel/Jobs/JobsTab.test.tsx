@@ -169,6 +169,26 @@ describe('JobsTab', () => {
     expect(container.querySelector('[data-testid="grid-table"]')).toBeTruthy();
   });
 
+  it('offers the all-matching-rows export scope like every other resource table', async () => {
+    const jobs = [makeJob({ name: 'job-a' }), makeJob({ name: 'job-b' })];
+    act(() => {
+      root.render(
+        <JobsTab
+          jobs={jobs}
+          loading={false}
+          isActive={true}
+          clusterId={PANEL_CLUSTER_ID}
+          clusterName="Panel Cluster A"
+        />
+      );
+    });
+
+    // fetchAllRows arms the scope toggle + Copy + Export trio in the filter bar.
+    expect(gridTablePropsRef.current.exportFilename).toBe('object-panel-jobs');
+    const allRows = await gridTablePropsRef.current.fetchAllRows();
+    expect(allRows).toHaveLength(2);
+  });
+
   it('uses viewId "object-panel-jobs" for persistence', () => {
     act(() => {
       root.render(<JobsTab jobs={[makeJob()]} loading={false} isActive={true} />);
@@ -205,6 +225,22 @@ describe('JobsTab', () => {
     const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
     const cell = statusColumn.render(gridTablePropsRef.current.data[0]);
     expect(cell.props.className).toBe('status-text error');
+  });
+
+  it('publishes sortable local job columns for displayed job facts', () => {
+    const job = makeJob({ name: 'nightly', namespace: 'ops' });
+
+    act(() => {
+      root.render(
+        <JobsTab jobs={[job]} loading={false} isActive={true} clusterId={PANEL_CLUSTER_ID} />
+      );
+    });
+
+    const sortableKeys = gridTablePropsRef.current.columns
+      .filter((column: any) => column.sortable !== false)
+      .map((column: any) => column.key)
+      .sort((left: string, right: string) => left.localeCompare(right));
+    expect(sortableKeys).toEqual(['age', 'completions', 'duration', 'name', 'namespace', 'status']);
   });
 
   it('opens the Map from the job context menu', () => {

@@ -119,7 +119,6 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	require.Equal(t, restConfig, capturedCfg.RestConfig)
 	require.Equal(t, apiExtensionsClient, capturedCfg.APIExtensionsClient)
 	require.Equal(t, dynamicClient, capturedCfg.DynamicClient)
-	require.NotNil(t, capturedCfg.HelmFactory)
 	require.NotNil(t, capturedCfg.ObjectDetailsProvider)
 
 	require.NotNil(t, app.telemetryRecorder)

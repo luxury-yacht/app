@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
@@ -190,9 +192,9 @@ func TestNodeBuilderBuild(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NodeSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Nodes, 1)
+	require.Len(t, payload.Rows, 1)
 
-	summary := payload.Nodes[0]
+	summary := payload.Rows[0]
 
 	require.Equal(t, "node-1", summary.Name)
 	require.Equal(t, "Ready (Cordoned)", summary.Status)
@@ -256,5 +258,58 @@ func TestNodeBuilderBuild(t *testing.T) {
 	node.Annotations["example"] = "mutated"
 	require.Equal(t, "annotation", summary.Annotations["example"])
 
-	require.Equal(t, uint64(42), snapshot.Version)
+	require.Equal(t, snapshotVersionWithDynamicRevision(42, fmt.Sprint(collectedAt.UnixNano())), snapshot.Version)
+}
+
+// A malformed query scope must be rejected like every other typed builder does
+// — silently serving default-ordered rows under the requested identity is a
+// boundary contract hole.
+func TestNodeBuilderRejectsMalformedQueryScope(t *testing.T) {
+	builder := &NodeBuilder{
+		lister:    testsupport.NewNodeLister(t),
+		podLister: testsupport.NewPodLister(t),
+		metrics:   fakeMetricsProvider{},
+	}
+
+	// `%zz` is an invalid percent-encoding, so the query string cannot parse.
+	_, err := builder.Build(context.Background(), "cluster-a|?limit=%zz")
+	require.Error(t, err)
+}
+
+func TestNodeBuilderCapsLargeSnapshots(t *testing.T) {
+	nodes := make([]*corev1.Node, 0, config.SnapshotClusterNodesEntryLimit+1)
+	for i := 0; i < config.SnapshotClusterNodesEntryLimit+1; i++ {
+		nodes = append(nodes, &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "node-" + time.Unix(int64(i), 0).Format("150405"),
+				ResourceVersion: "1",
+			},
+			Status: corev1.NodeStatus{
+				Capacity: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("1"),
+					corev1.ResourceMemory: resource.MustParse("1Gi"),
+					corev1.ResourcePods:   resource.MustParse("10"),
+				},
+				Allocatable: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("1"),
+					corev1.ResourceMemory: resource.MustParse("1Gi"),
+					corev1.ResourcePods:   resource.MustParse("10"),
+				},
+			},
+		})
+	}
+
+	builder := &NodeBuilder{
+		lister:    testsupport.NewNodeLister(t, nodes...),
+		podLister: testsupport.NewPodLister(t),
+		metrics:   fakeMetricsProvider{},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NodeSnapshot)
+	require.Len(t, payload.Rows, config.SnapshotClusterNodesEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotClusterNodesEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "nodes")
 }

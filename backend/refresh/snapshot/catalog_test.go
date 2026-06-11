@@ -112,6 +112,200 @@ func TestCatalogBuildUsesCatalogOnly(t *testing.T) {
 	}
 }
 
+func TestCatalogBuildClusterScopedNamespaceSentinel(t *testing.T) {
+	summaries := []objectcatalog.Summary{
+		{
+			ClusterID:       "cluster-a",
+			ClusterName:     "Cluster A",
+			Kind:            "CustomResourceDefinition",
+			Group:           "apiextensions.k8s.io",
+			Version:         "v1",
+			Resource:        "customresourcedefinitions",
+			Name:            "widgets.example.com",
+			UID:             "uid-crd",
+			ResourceVersion: "1",
+			Scope:           objectcatalog.ScopeCluster,
+		},
+		{
+			ClusterID:       "cluster-a",
+			ClusterName:     "Cluster A",
+			Kind:            "Service",
+			Group:           "",
+			Version:         "v1",
+			Resource:        "services",
+			Namespace:       "default",
+			Name:            "web",
+			UID:             "uid-service",
+			ResourceVersion: "2",
+			Scope:           objectcatalog.ScopeNamespace,
+		},
+	}
+	svc := seedCatalogService(t, summaries)
+	markCatalogCachesReady(t, svc, summaries)
+
+	builder := &catalogBuilder{
+		domain:         catalogDomain,
+		catalogService: func() *objectcatalog.Service { return svc },
+	}
+
+	snap, err := builder.Build(context.Background(), "cluster-a|limit=50&namespace=cluster")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	payload, ok := snap.Payload.(CatalogSnapshot)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", snap.Payload)
+	}
+
+	if payload.Total != 1 {
+		t.Fatalf("expected one cluster-scoped match, got total=%d payload=%+v", payload.Total, payload)
+	}
+	if len(payload.Items) != 1 {
+		t.Fatalf("expected one cluster-scoped row, got %+v", payload.Items)
+	}
+	item := payload.Items[0]
+	if item.Scope != objectcatalog.ScopeCluster {
+		t.Fatalf("expected cluster-scoped row, got %+v", item)
+	}
+	if item.Namespace != "" {
+		t.Fatalf("expected cluster-scoped row to have empty namespace, got %q", item.Namespace)
+	}
+	if item.Group != "apiextensions.k8s.io" || item.Version != "v1" ||
+		item.Kind != "CustomResourceDefinition" || item.Resource != "customresourcedefinitions" ||
+		item.Name != "widgets.example.com" || item.UID != "uid-crd" {
+		t.Fatalf("cluster-scoped identity was not preserved: %+v", item)
+	}
+	if !reflect.DeepEqual(payload.Kinds, []objectcatalog.KindInfo{
+		{Kind: "CustomResourceDefinition", Namespaced: false},
+	}) {
+		t.Fatalf("unexpected cluster-scoped kind facets: %+v", payload.Kinds)
+	}
+	if !reflect.DeepEqual(payload.Namespaces, []string{"default"}) {
+		t.Fatalf("expected namespace facets to exclude literal cluster sentinel, got %+v", payload.Namespaces)
+	}
+}
+
+func TestCatalogSnapshotMetadataUsesKeysetSemantics(t *testing.T) {
+	payload, _ := buildCatalogSnapshot(
+		objectcatalog.QueryResult{
+			Items: []objectcatalog.Summary{{
+				Kind:      "Pod",
+				Version:   "v1",
+				Resource:  "pods",
+				Namespace: "default",
+				Name:      "pod-b",
+			}},
+			ContinueToken: "next-keyset",
+			PreviousToken: "previous-keyset",
+			TotalItems:    3,
+			TotalIsExact:  true,
+			FacetsExact:   true,
+		},
+		browseQueryOptions{Limit: 1, Continue: "previous-keyset"},
+		objectcatalog.HealthStatus{},
+		true,
+		false,
+	)
+
+	if !payload.HasNext || !payload.HasPrevious {
+		t.Fatalf("expected keyset next/previous flags, got next=%t previous=%t", payload.HasNext, payload.HasPrevious)
+	}
+	if payload.BatchIndex != -1 {
+		t.Fatalf("expected keyset batch index sentinel -1, got %d", payload.BatchIndex)
+	}
+	if payload.TotalBatches != 0 {
+		t.Fatalf("expected no offset total batches for previous keyset page, got %d", payload.TotalBatches)
+	}
+}
+
+func TestCatalogSnapshotIssuesDescribeApproximateAndDegradedResults(t *testing.T) {
+	payload, _ := buildCatalogSnapshot(
+		objectcatalog.QueryResult{
+			Items: []objectcatalog.Summary{{
+				Kind:      "Pod",
+				Version:   "v1",
+				Resource:  "pods",
+				Namespace: "default",
+				Name:      "pod-a",
+			}},
+			ContinueToken: "next-keyset",
+			PreviousToken: "previous-keyset",
+			TotalItems:    200000,
+			TotalIsExact:  false,
+			FacetsExact:   false,
+			CursorInvalid: true,
+		},
+		browseQueryOptions{Limit: 1},
+		objectcatalog.HealthStatus{
+			Status:          objectcatalog.HealthStateDegraded,
+			Stale:           true,
+			FailedResources: 2,
+			LastError:       "forbidden",
+		},
+		true,
+		false,
+	)
+
+	if payload.Continue != "" || payload.HasNext {
+		t.Fatalf("expected degraded catalog to disable pagination, continue=%q hasNext=%t", payload.Continue, payload.HasNext)
+	}
+	if payload.Previous != "" || payload.HasPrevious {
+		t.Fatalf("expected degraded catalog to disable previous pagination, previous=%q hasPrevious=%t", payload.Previous, payload.HasPrevious)
+	}
+	var messages []string
+	for _, issue := range payload.Issues {
+		messages = append(messages, issue.Kind+": "+issue.Message)
+	}
+	joined := strings.Join(messages, "\n")
+	for _, expected := range []string{
+		"Catalog cursor",
+		"Catalog totals",
+		"Catalog facets",
+		"Catalog health",
+		"Failed resources: 2",
+		"Catalog pagination",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected issue text %q in:\n%s", expected, joined)
+		}
+	}
+}
+
+// An RBAC-blocked catalog must be distinguishable from an empty cluster: the
+// denied resource types surface as a "Catalog permissions" issue.
+func TestCatalogSnapshotIssuesReportDeniedResources(t *testing.T) {
+	payload, _ := buildCatalogSnapshot(
+		objectcatalog.QueryResult{TotalIsExact: true, FacetsExact: true},
+		browseQueryOptions{Limit: 1},
+		objectcatalog.HealthStatus{
+			Status: objectcatalog.HealthStateOK,
+			DeniedResources: []string{
+				"secrets",
+				"widgets.example.com",
+				"a", "b", "c", "d",
+			},
+		},
+		false,
+		false,
+	)
+
+	var permissions string
+	for _, issue := range payload.Issues {
+		if issue.Kind == "Catalog permissions" {
+			permissions = issue.Message
+		}
+	}
+	if permissions == "" {
+		t.Fatalf("expected a Catalog permissions issue, got %+v", payload.Issues)
+	}
+	for _, expected := range []string{"secrets", "widgets.example.com", "and 1 more"} {
+		if !strings.Contains(permissions, expected) {
+			t.Fatalf("expected %q in permissions issue %q", expected, permissions)
+		}
+	}
+}
+
 func TestCatalogBuildPreservesContinueWhenCachesReady(t *testing.T) {
 	summaries := []objectcatalog.Summary{
 		{

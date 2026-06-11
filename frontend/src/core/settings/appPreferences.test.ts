@@ -16,6 +16,7 @@ import {
   getDefaultObjectPanelPosition,
   getDimInactiveNamespaces,
   getExclusiveNamespaces,
+  getDefaultTablePageSize,
   getGridTablePersistenceMode,
   getKubernetesClientBurst,
   getKubernetesClientQPS,
@@ -26,7 +27,6 @@ import {
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
   getObjPanelLogsBufferMaxSize,
-  getMaxTableRows,
   getObjPanelLogsTargetGlobalLimit,
   getObjPanelLogsTargetPerScopeLimit,
   getMetricsRefreshIntervalMs,
@@ -43,9 +43,6 @@ import {
   OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
   OBJ_PANEL_LOGS_BUFFER_MAX_SIZE,
   OBJ_PANEL_LOGS_BUFFER_MIN_SIZE,
-  MAX_TABLE_ROWS_DEFAULT,
-  MAX_TABLE_ROWS_MAX,
-  MAX_TABLE_ROWS_MIN,
   OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT,
   OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX,
   OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT,
@@ -61,13 +58,13 @@ import {
   setBackgroundRefreshEnabled,
   setDimInactiveNamespaces,
   setExclusiveNamespaces,
+  setDefaultTablePageSize,
   setGridTablePersistenceMode,
   setKubernetesClientBurst,
   setKubernetesClientQPS,
   setObjPanelLogsApiTimestampFormat,
   setObjPanelLogsApiTimestampUseLocalTimeZone,
   setObjPanelLogsBufferMaxSize,
-  setMaxTableRows,
   setObjectPanelLayoutDefaults,
   setObjPanelLogsTargetGlobalLimit,
   setObjPanelLogsTargetPerScopeLimit,
@@ -150,15 +147,6 @@ const preferenceSchema = (overrides: Record<string, Partial<Record<string, unkno
       currentValue: 5000,
       min: 1,
       runtimeSideEffect: true,
-    },
-    {
-      key: 'maxTableRows',
-      type: 'integer',
-      defaultValue: 1000,
-      currentValue: 1000,
-      min: 100,
-      max: 10000,
-      runtimeSideEffect: false,
     },
     {
       key: 'kubernetesClientQPS',
@@ -448,7 +436,6 @@ describe('appPreferences', () => {
       autoRefreshEnabled: false,
       refreshBackgroundClustersEnabled: false,
       metricsRefreshIntervalMs: 7000,
-      maxTableRows: 2500,
       kubernetesClientQPS: 250,
       kubernetesClientBurst: 500,
       permissionSSRRFetchConcurrency: 16,
@@ -476,7 +463,6 @@ describe('appPreferences', () => {
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(7000);
-    expect(getMaxTableRows()).toBe(2500);
     expect(getKubernetesClientQPS()).toBe(250);
     expect(getKubernetesClientBurst()).toBe(500);
     expect(getPermissionSSRRFetchConcurrency()).toBe(16);
@@ -495,7 +481,7 @@ describe('appPreferences', () => {
     appMocks.GetAppSettingsSchema.mockResolvedValue({
       preferences: [
         { key: 'appearanceMode', type: 'enum', defaultValue: 'system', currentValue: 'dark' },
-        { key: 'maxTableRows', type: 'integer', defaultValue: 1000, currentValue: 5000 },
+        { key: 'retiredPreference', type: 'integer', defaultValue: 1000, currentValue: 5000 },
         {
           key: 'defaultObjectPanelPosition',
           type: 'enum',
@@ -515,14 +501,13 @@ describe('appPreferences', () => {
 
     expect(appMocks.GetAppSettings).not.toHaveBeenCalled();
     expect(getAppearanceModePreference()).toBe('dark');
-    expect(getMaxTableRows()).toBe(5000);
     expect(getDefaultObjectPanelPosition()).toBe('bottom');
   });
 
   it('exposes typed preference metadata from the backend schema', async () => {
     appMocks.GetAppSettingsSchema.mockResolvedValue(
       preferenceSchema({
-        maxTableRows: { defaultValue: 750, currentValue: 5000, min: 50, max: 9000 },
+        kubernetesClientQPS: { defaultValue: 150, currentValue: 5000, min: 50, max: 9000 },
         appearanceMode: { defaultValue: 'system', currentValue: 'dark' },
       })
     );
@@ -537,16 +522,16 @@ describe('appPreferences', () => {
       enumOptions: ['light', 'dark', 'system'],
       runtimeSideEffect: true,
     });
-    expect(getIntegerPreferenceMetadata('maxTableRows')).toMatchObject({
-      key: 'maxTableRows',
+    expect(getIntegerPreferenceMetadata('kubernetesClientQPS')).toMatchObject({
+      key: 'kubernetesClientQPS',
       type: 'integer',
-      defaultValue: 750,
+      defaultValue: 150,
       currentValue: 5000,
       min: 50,
       max: 9000,
     });
-    expect(normalizeIntegerPreferenceValue('maxTableRows', 10)).toBe(50);
-    expect(normalizeIntegerPreferenceValue('maxTableRows', 99999)).toBe(9000);
+    expect(normalizeIntegerPreferenceValue('kubernetesClientQPS', 10)).toBe(50);
+    expect(normalizeIntegerPreferenceValue('kubernetesClientQPS', 99999)).toBe(9000);
   });
 
   it('tracks schema metadata for every appPreferences key', async () => {
@@ -591,6 +576,37 @@ describe('appPreferences', () => {
     expect(getObjPanelLogsApiTimestampFormat()).toBe('YYYY-MM-DDTHH:mm:ss.SSS[Z]');
   });
 
+  it('hydrates the default table page size and snaps off-list values to the default', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ defaultTablePageSize: 250 });
+    await hydrateAppPreferences({ force: true });
+    expect(getDefaultTablePageSize()).toBe(250);
+
+    resetAppPreferencesCacheForTesting();
+    appMocks.GetAppSettings.mockResolvedValue({ defaultTablePageSize: 333 });
+    await hydrateAppPreferences({ force: true });
+    expect(getDefaultTablePageSize()).toBe(50);
+  });
+
+  it('persists the default table page size and emits its change event', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ defaultTablePageSize: 50 });
+    await hydrateAppPreferences({ force: true });
+
+    const events: number[] = [];
+    const unsubscribe = eventBus.on('settings:default-table-page-size', (value) =>
+      events.push(value)
+    );
+
+    setDefaultTablePageSize(100);
+
+    expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
+      changes: [{ key: 'defaultTablePageSize', value: 100 }],
+    });
+    expect(getDefaultTablePageSize()).toBe(100);
+    expect(events).toEqual([100]);
+
+    unsubscribe();
+  });
+
   it('persists preference updates and updates the cache', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       appearanceMode: 'system',
@@ -611,7 +627,6 @@ describe('appPreferences', () => {
     await setExclusiveNamespaces(false);
     setObjPanelLogsApiTimestampFormat('HH:mm:ss.SSS');
     setObjPanelLogsApiTimestampUseLocalTimeZone(true);
-    setMaxTableRows(2500);
     setKubernetesClientQPS(250);
     setKubernetesClientBurst(500);
     setPermissionSSRRFetchConcurrency(16);
@@ -638,9 +653,6 @@ describe('appPreferences', () => {
       changes: [{ key: 'objPanelLogsApiTimestampUseLocalTimeZone', value: true }],
     });
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
-      changes: [{ key: 'maxTableRows', value: 2500 }],
-    });
-    expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'kubernetesClientQPS', value: 250 }],
     });
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
@@ -665,7 +677,6 @@ describe('appPreferences', () => {
     expect(getExclusiveNamespaces()).toBe(false);
     expect(getObjPanelLogsApiTimestampFormat()).toBe('HH:mm:ss.SSS');
     expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(true);
-    expect(getMaxTableRows()).toBe(2500);
     expect(getKubernetesClientQPS()).toBe(250);
     expect(getKubernetesClientBurst()).toBe(500);
     expect(getPermissionSSRRFetchConcurrency()).toBe(16);
@@ -846,14 +857,14 @@ describe('appPreferences', () => {
   it('commits integer preference inputs through schema-backed normalization', async () => {
     appMocks.GetAppSettingsSchema.mockResolvedValue(
       preferenceSchema({
-        maxTableRows: { defaultValue: 750, currentValue: 1000, min: 50, max: 9000 },
+        kubernetesClientQPS: { defaultValue: 750, currentValue: 1000, min: 50, max: 9000 },
       })
     );
     await hydrateAppPreferences({ force: true });
     const persisted: number[] = [];
 
     const normalized = commitIntegerPreferenceInput(
-      'maxTableRows',
+      'kubernetesClientQPS',
       '99999',
       (value) => persisted.push(value),
       { defaultOnNonPositive: true }
@@ -918,47 +929,6 @@ describe('appPreferences', () => {
     });
     await hydrateAppPreferences({ force: true });
     expect(getObjPanelLogsBufferMaxSize()).toBe(2500);
-  });
-
-  it('hydrates maxTableRows from backend settings', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({
-      appearanceMode: 'system',
-      maxTableRows: 2500,
-    });
-    await hydrateAppPreferences({ force: true });
-    expect(getMaxTableRows()).toBe(2500);
-  });
-
-  it('defaults maxTableRows when the backend payload is missing the field', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
-    await hydrateAppPreferences({ force: true });
-    expect(getMaxTableRows()).toBe(MAX_TABLE_ROWS_DEFAULT);
-  });
-
-  it('setMaxTableRows round-trips an in-range value through the cache and backend', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({
-      appearanceMode: 'system',
-      maxTableRows: MAX_TABLE_ROWS_DEFAULT,
-    });
-    await hydrateAppPreferences({ force: true });
-
-    setMaxTableRows(2500);
-    expect(getMaxTableRows()).toBe(2500);
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
-      changes: [{ key: 'maxTableRows', value: 2500 }],
-    });
-  });
-
-  it('setMaxTableRows clamps values outside the allowed range', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
-    await hydrateAppPreferences({ force: true });
-
-    setMaxTableRows(1);
-    expect(getMaxTableRows()).toBe(MAX_TABLE_ROWS_MIN);
-
-    setMaxTableRows(999_999);
-    expect(getMaxTableRows()).toBe(MAX_TABLE_ROWS_MAX);
   });
 
   it('defaults Kubernetes API settings when backend payload is missing the fields', async () => {

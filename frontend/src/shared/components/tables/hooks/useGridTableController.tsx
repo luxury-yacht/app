@@ -9,10 +9,8 @@
  * Extracted from GridTable.tsx — no behavioral change, purely mechanical.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { ReactElement, ReactNode, RefObject } from 'react';
-import { eventBus } from '@/core/events';
-import { getMaxTableRows } from '@/core/settings/appPreferences';
 import {
   recordGridTablePerformanceSample,
   recordGridTablePerformanceSnapshot,
@@ -97,6 +95,7 @@ export interface GridTableControllerResult<T> {
   resolvedPaginationStatus: string;
   loadMoreSentinelRef: RefObject<HTMLDivElement | null>;
   handleManualLoadMore: () => void;
+  handleManualLoadPrevious: () => void;
 
   // Loading
   showLoadingOverlay: boolean;
@@ -137,19 +136,22 @@ export function useGridTableController<T>({
   nonHideableColumns = DEFAULT_NON_HIDEABLE_COLUMNS,
   enableColumnVisibilityMenu = true,
   hasMore = false,
+  hasPrevious = false,
   onRequestMore,
+  onRequestPrevious,
   isRequestingMore = false,
   autoLoadMore = true,
   showPaginationStatus = true,
   virtualization,
   loadingOverlay,
   filters,
+  fetchAllRows,
+  exportFilename,
   diagnosticsLabel,
   diagnosticsMode = 'local',
   allowHorizontalOverflow = true,
   isKindColumnKey = defaultIsKindColumnKey,
 }: GridTableProps<T>): GridTableControllerResult<T> {
-  const [maxTableRows, setMaxTableRows] = useState<number>(() => getMaxTableRows());
   const totalDataCount = Array.isArray(inputData) ? inputData.length : 0;
   const sourceData = useMemo<T[]>(
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
@@ -160,16 +162,10 @@ export function useGridTableController<T>({
   const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
   const headerInnerRef = useRef<HTMLDivElement | null>(null);
   const previousInputDataRef = useRef(inputData);
-  const paginationEnabled = Boolean(onRequestMore);
+  const paginationEnabled = Boolean(onRequestMore || onRequestPrevious);
   const contextMenuActiveRef = useRef(false);
   const clusterKeyCheckRef = useRef(false);
   const keyExtractorRef = useRef(keyExtractor);
-
-  useEffect(() => {
-    return eventBus.on('settings:max-table-rows', (value) => {
-      setMaxTableRows(value);
-    });
-  }, []);
 
   const externalColumnWidths = useGridTableExternalWidths(controlledColumnWidths);
 
@@ -222,18 +218,16 @@ export function useGridTableController<T>({
   } = useGridTableFiltersWiring<T>({
     data: sourceData,
     totalDataCount,
-    maxDisplayRows: maxTableRows,
     filters,
     diagnosticsLabel,
     columnsDropdown: columnsDropdownConfig ?? undefined,
     exportColumns: renderedColumns,
     getTextContent,
+    fetchAllRows,
+    exportFilename,
   });
 
-  const tableData = useMemo<T[]>(
-    () => filteredData.slice(0, maxTableRows),
-    [filteredData, maxTableRows]
-  );
+  const tableData = filteredData;
 
   useEffect(() => {
     if (!diagnosticsLabel) {
@@ -245,19 +239,12 @@ export function useGridTableController<T>({
     recordGridTablePerformanceSnapshot(diagnosticsLabel, {
       mode: diagnosticsMode,
       inputRows: totalDataCount,
-      sourceRows: Math.min(totalDataCount, maxTableRows),
+      sourceRows: totalDataCount,
       displayedRows: tableData.length,
       inputReferenceChanged,
     });
     previousInputDataRef.current = inputData;
-  }, [
-    diagnosticsLabel,
-    diagnosticsMode,
-    inputData,
-    maxTableRows,
-    tableData.length,
-    totalDataCount,
-  ]);
+  }, [diagnosticsLabel, diagnosticsMode, inputData, tableData.length, totalDataCount]);
 
   // Whether any filter is actively narrowing results (search text, kind, or namespace selections).
   const hasActiveFilters = filteringEnabled && hasNarrowingGridTableFilters(activeFilters);
@@ -462,15 +449,18 @@ export function useGridTableController<T>({
     measureRowRef,
   });
 
-  const { loadMoreSentinelRef, handleManualLoadMore, paginationStatus } = useGridTablePagination({
-    paginationEnabled,
-    autoLoadMore,
-    hasMore,
-    isRequestingMore,
-    onRequestMore,
-    tableDataLength: tableData.length,
-    tableRef: tableRefMutable,
-  });
+  const { loadMoreSentinelRef, handleManualLoadMore, handleManualLoadPrevious, paginationStatus } =
+    useGridTablePagination({
+      paginationEnabled,
+      autoLoadMore,
+      hasMore,
+      hasPrevious,
+      isRequestingMore,
+      onRequestMore,
+      onRequestPrevious,
+      tableDataLength: tableData.length,
+      tableRef: tableRefMutable,
+    });
 
   const resolvedPaginationStatus = useMemo(() => {
     if (!showPaginationStatus) {
@@ -519,6 +509,7 @@ export function useGridTableController<T>({
     resolvedPaginationStatus,
     loadMoreSentinelRef,
     handleManualLoadMore,
+    handleManualLoadPrevious,
     showLoadingOverlay,
     loadingOverlayMessage,
     hasActiveFilters,

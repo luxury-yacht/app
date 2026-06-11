@@ -6,7 +6,6 @@ import (
 	"math"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -167,14 +166,94 @@ func containsVerb(verbs []string, target string) bool {
 // sortSummaries sorts summaries by kind, namespace, and name.
 func sortSummaries(items []Summary) {
 	sort.Slice(items, func(i, j int) bool {
-		if items[i].Kind != items[j].Kind {
-			return items[i].Kind < items[j].Kind
-		}
-		if items[i].Namespace != items[j].Namespace {
-			return items[i].Namespace < items[j].Namespace
-		}
-		return items[i].Name < items[j].Name
+		return compareSummariesForCatalogQuery(items[i], items[j]) < 0
 	})
+}
+
+func compareSummariesForCatalogQuery(left, right Summary) int {
+	return compareSummariesForCatalogQueryWithOptions(left, right, QueryOptions{})
+}
+
+func compareSummariesForCatalogQueryWithOptions(left, right Summary, opts QueryOptions) int {
+	field := normalizeCatalogQuerySortField(opts.SortField)
+	direction := normalizeCatalogQuerySortDirection(opts.SortDirection)
+	if field != catalogQueryDefaultSort {
+		leftValue := catalogQuerySortValue(left, field)
+		rightValue := catalogQuerySortValue(right, field)
+		descending := direction == "desc"
+		if catalogQuerySortFieldIsAge(field) {
+			// "Age ascending" = newest first, matching the typed tables (they
+			// encode age as a negated timestamp). The raw timestamp string
+			// orders oldest-first, so the comparison flips.
+			descending = !descending
+		}
+		if descending {
+			leftValue, rightValue = rightValue, leftValue
+		}
+		if leftValue < rightValue {
+			return -1
+		}
+		if leftValue > rightValue {
+			return 1
+		}
+		// Explicit-field sorts break ties by the ascending identity chain
+		// regardless of direction, so the keyset stays deterministic.
+		return compareCatalogIdentity(left, right)
+	}
+	// The default sort IS the identity chain (kind/namespace/name/...), so a
+	// desc request reverses the whole composite order.
+	cmp := compareCatalogIdentity(left, right)
+	if direction == "desc" {
+		return -cmp
+	}
+	return cmp
+}
+
+// compareCatalogIdentity is the stable ascending total order over a summary's
+// kind/namespace/name and full GVK+UID identity. It is the catalog's default
+// ordering and the keyset tiebreak for every other sort field.
+func compareCatalogIdentity(left, right Summary) int {
+	for _, pair := range [][2]string{
+		{left.Kind, right.Kind},
+		{left.Namespace, right.Namespace},
+		{left.Name, right.Name},
+		{left.Group, right.Group},
+		{left.Version, right.Version},
+		{left.Resource, right.Resource},
+		{left.UID, right.UID},
+	} {
+		if pair[0] < pair[1] {
+			return -1
+		}
+		if pair[0] > pair[1] {
+			return 1
+		}
+	}
+	return 0
+}
+
+func catalogQuerySortValue(item Summary, field string) string {
+	switch field {
+	case "kind":
+		return item.Kind
+	case "namespace":
+		return item.Namespace
+	case "name":
+		return item.Name
+	case "age", "creationtimestamp", "creation-timestamp":
+		return item.CreationTimestamp
+	default:
+		return ""
+	}
+}
+
+func catalogQuerySortFieldIsAge(field string) bool {
+	switch field {
+	case "age", "creationtimestamp", "creation-timestamp":
+		return true
+	default:
+		return false
+	}
 }
 
 // snapshotSortedKeys returns a sorted slice of keys from a set.
@@ -214,35 +293,6 @@ func clampQueryLimit(limit int) int {
 		return config.ObjectCatalogMaxQueryLimit
 	}
 	return limit
-}
-
-// parseContinueToken parses a pagination continue token.
-func parseContinueToken(token string, total int) int {
-	if token == "" {
-		return 0
-	}
-	value, err := strconv.Atoi(token)
-	if err != nil || value < 0 {
-		return 0
-	}
-	if value > total {
-		return total
-	}
-	return value
-}
-
-// countMatchingDescriptors counts descriptors that match the kind filter.
-func countMatchingDescriptors(descriptors []Descriptor, matcher kindMatcher) int {
-	if matcher == nil {
-		return len(descriptors)
-	}
-	count := 0
-	for _, desc := range descriptors {
-		if matcher(desc.Kind, desc.Group, desc.Version, desc.Resource) {
-			count++
-		}
-	}
-	return count
 }
 
 // removeDisallowedEntries removes items from maps that are not in the allowed set.

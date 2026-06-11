@@ -64,7 +64,7 @@ func TestAggregateEventStreamHandlerStreamsSingleCluster(t *testing.T) {
 			return &refresh.Snapshot{
 				Domain: domain,
 				Payload: snapshot.ClusterEventsSnapshot{
-					Events: []snapshot.ClusterEventEntry{{
+					Rows: []snapshot.ClusterEventEntry{{
 						ClusterMeta:  snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
 						Message:      "initial message",
 						AgeTimestamp: initialTimestamp.UnixMilli(),
@@ -183,7 +183,7 @@ func TestConvertAggregateSnapshotPreservesEventObjectIdentity(t *testing.T) {
 	clusterLink := resourcemodel.NewClusterResourceLink("", "", "v1", "Node", "nodes", "node-a", "node-uid")
 	clusterEntries := convertAggregateSnapshot(&refresh.Snapshot{
 		Payload: snapshot.ClusterEventsSnapshot{
-			Events: []snapshot.ClusterEventEntry{{
+			Rows: []snapshot.ClusterEventEntry{{
 				ClusterMeta:      snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
 				Name:             "cluster-event",
 				ObjectUID:        "node-uid",
@@ -202,7 +202,7 @@ func TestConvertAggregateSnapshotPreservesEventObjectIdentity(t *testing.T) {
 	namespaceLink := resourcemodel.NewNamespacedResourceLink("", "batch", "v1", "Job", "jobs", "default", "sync", "job-uid")
 	namespaceEntries := convertAggregateSnapshot(&refresh.Snapshot{
 		Payload: snapshot.NamespaceEventsSnapshot{
-			Events: []snapshot.EventSummary{{
+			Rows: []snapshot.EventSummary{{
 				ClusterMeta:      snapshot.ClusterMeta{ClusterID: "cluster-b", ClusterName: "bravo"},
 				Name:             "namespace-event",
 				ObjectUID:        "job-uid",
@@ -227,7 +227,7 @@ func TestAggregateEventStreamResumesFromBuffer(t *testing.T) {
 			return &refresh.Snapshot{
 				Domain: domain,
 				Payload: snapshot.ClusterEventsSnapshot{
-					Events: []snapshot.ClusterEventEntry{{
+					Rows: []snapshot.ClusterEventEntry{{
 						ClusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
 						Message:     "snapshot message",
 					}},
@@ -287,7 +287,7 @@ func TestAggregateEventStreamFallsBackToSnapshotWhenResumeTooOld(t *testing.T) {
 			return &refresh.Snapshot{
 				Domain: domain,
 				Payload: snapshot.ClusterEventsSnapshot{
-					Events: []snapshot.ClusterEventEntry{{
+					Rows: []snapshot.ClusterEventEntry{{
 						ClusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
 						Message:     "snapshot fallback",
 					}},

@@ -14,6 +14,7 @@ import (
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 	gatewaylisters "sigs.k8s.io/gateway-api/pkg/client/listers/apis/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
@@ -39,21 +40,33 @@ type ClusterConfigPermissions struct {
 	IncludeMutatingWebhooks   bool
 }
 
-// ClusterConfigSnapshot represents the payload exposed to the UI.
+// ClusterConfigSnapshot represents the payload exposed to the UI. It embeds the
+// canonical ResourceQueryEnvelope (flattened into top-level JSON) plus the
+// domain-typed rows.
 type ClusterConfigSnapshot struct {
 	ClusterMeta
-	Resources []ClusterConfigEntry `json:"resources"`
-	Kinds     []string             `json:"kinds,omitempty"`
+	ResourceQueryEnvelope
+	Rows []ClusterConfigEntry `json:"rows"`
+}
+
+func clusterConfigQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "details", "age"},
+		[]string{"kinds"},
+		[]string{"kind", "name", "details"},
+		[]string{"StorageClass", "IngressClass", "GatewayClass", "MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"},
+	)
 }
 
 // ClusterConfigEntry covers a storage class, ingress class, or webhook config.
 type ClusterConfigEntry struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Details   string `json:"details"`
-	IsDefault bool   `json:"isDefault,omitempty"`
-	Age       string `json:"age"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Details      string `json:"details"`
+	IsDefault    bool   `json:"isDefault,omitempty"`
+	Age          string `json:"age"`
+	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterClusterConfigDomain registers the domain with the registry.
@@ -107,15 +120,25 @@ func RegisterClusterConfigDomainWithGatewayAPI(
 
 // Build produces the cluster configuration snapshot.
 func (b *ClusterConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return b.buildFromListers(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterConfigDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	return b.buildFromListers(ctx, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query)
 }
 
-func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.Snapshot, error) {
+func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope string, query typedTableQuery) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	var version uint64
 	entries := make([]ClusterConfigEntry, 0, 64)
+	storageClassesAvailable := b.storageClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "storage.k8s.io", "storageclasses")
+	ingressClassesAvailable := b.ingressClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "networking.k8s.io", "ingressclasses")
+	gatewayClassesAvailable := b.gatewayClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "gateway.networking.k8s.io", "gatewayclasses")
+	validatingWebhooksAvailable := b.validatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "validatingwebhookconfigurations")
+	mutatingWebhooksAvailable := b.mutatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "mutatingwebhookconfigurations")
 
-	if b.storageClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "storage.k8s.io", "storageclasses") {
+	if storageClassesAvailable {
 		storageClasses, err := b.storageClassLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -137,7 +160,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 	}
 
-	if b.ingressClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "networking.k8s.io", "ingressclasses") {
+	if ingressClassesAvailable {
 		ingressClasses, err := b.ingressClassLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -153,7 +176,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 	}
 
-	if b.gatewayClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "gateway.networking.k8s.io", "gatewayclasses") {
+	if gatewayClassesAvailable {
 		gatewayClasses, err := b.gatewayClassLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -169,7 +192,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 	}
 
-	if b.validatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "validatingwebhookconfigurations") {
+	if validatingWebhooksAvailable {
 		validatingWebhooks, err := b.validatingWebhookLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -185,7 +208,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 	}
 
-	if b.mutatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "mutatingwebhookconfigurations") {
+	if mutatingWebhooksAvailable {
 		mutatingWebhooks, err := b.mutatingWebhookLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
@@ -207,16 +230,42 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 		return entries[i].Kind < entries[j].Kind
 	})
+	sources := []typedTableResourceSource{
+		{Kind: "StorageClass", Group: "storage.k8s.io", Resource: "storageclasses", Available: storageClassesAvailable},
+		{Kind: "IngressClass", Group: "networking.k8s.io", Resource: "ingressclasses", Available: ingressClassesAvailable},
+		{Kind: "GatewayClass", Group: "gateway.networking.k8s.io", Resource: "gatewayclasses", Available: gatewayClassesAvailable},
+		{Kind: "ValidatingWebhookConfiguration", Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Available: validatingWebhooksAvailable},
+		{Kind: "MutatingWebhookConfiguration", Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Available: mutatingWebhooksAvailable},
+	}
+	issues := typedTableQueryResourceIssues(ctx, clusterConfigDomainName, query, sources)
 
+	resolved := resolveTypedSnapshotPage(
+		clusterConfigDomainName,
+		entries,
+		query,
+		clusterConfigTableQueryAdapter(),
+		capabilitiesWithAvailableKinds(clusterConfigQueryCapabilities(), sources),
+		config.SnapshotClusterConfigEntryLimit,
+		"cluster configuration resources",
+		func(entry ClusterConfigEntry) string { return entry.Kind },
+		issues,
+	)
+	// The window snapshot is the canonical unscoped refresh payload; only the
+	// query page publishes the request scope.
+	snapshotScope := ""
+	if query.Enabled {
+		snapshotScope = scope
+	}
 	return &refresh.Snapshot{
 		Domain:  clusterConfigDomainName,
+		Scope:   snapshotScope,
 		Version: version,
 		Payload: ClusterConfigSnapshot{
-			ClusterMeta: meta,
-			Resources:   entries,
-			Kinds:       snapshotSortedKinds(entries, func(entry ClusterConfigEntry) string { return entry.Kind }),
+			ClusterMeta:           meta,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: refresh.SnapshotStats{ItemCount: len(entries)},
+		Stats: resolved.Stats,
 	}, nil
 }
 

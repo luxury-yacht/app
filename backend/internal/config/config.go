@@ -34,6 +34,11 @@ const (
 	// are ready. Once they are synced, the poller stops.
 	RefreshInformerSyncPollInterval = 50 * time.Millisecond
 
+	// RefreshInformerSyncTimeout bounds how long a snapshot build waits for informer caches
+	// to sync. A single informer whose watch can never complete (for example an
+	// RBAC-forbidden resource) would otherwise hang every snapshot for the cluster forever.
+	RefreshInformerSyncTimeout = 30 * time.Second
+
 	// RefreshMetricsInterval determines the cadence for the metrics poller (node/pod metrics).
 	RefreshMetricsInterval = 5 * time.Second
 
@@ -65,6 +70,21 @@ const (
 	// SnapshotObjectEventsLimit caps object event summaries in refresh snapshots.
 	SnapshotObjectEventsLimit = 500
 
+	// SnapshotClusterNodesEntryLimit caps cluster node snapshot rows before the table becomes partial.
+	SnapshotClusterNodesEntryLimit = 1000
+
+	// SnapshotClusterConfigEntryLimit caps cluster configuration snapshot rows.
+	SnapshotClusterConfigEntryLimit = 1000
+
+	// SnapshotClusterStorageEntryLimit caps cluster storage snapshot rows.
+	SnapshotClusterStorageEntryLimit = 1000
+
+	// SnapshotClusterRBACEntryLimit caps cluster RBAC snapshot rows.
+	SnapshotClusterRBACEntryLimit = 1000
+
+	// SnapshotClusterCRDEntryLimit caps cluster CRD snapshot rows.
+	SnapshotClusterCRDEntryLimit = 1000
+
 	// SnapshotClusterOverviewRecentEventsLimit caps recent warning events in cluster overview snapshots.
 	SnapshotClusterOverviewRecentEventsLimit = 20
 
@@ -88,6 +108,12 @@ const (
 
 	// SnapshotNamespaceQuotasEntryLimit caps namespace quota snapshot rows.
 	SnapshotNamespaceQuotasEntryLimit = 1000
+
+	// SnapshotNamespaceHelmEntryLimit caps all-namespaces Helm snapshot rows.
+	SnapshotNamespaceHelmEntryLimit = 1000
+
+	// SnapshotNamespaceRBACEntryLimit caps all-namespaces namespace RBAC snapshot rows.
+	SnapshotNamespaceRBACEntryLimit = 1000
 
 	// SnapshotNamespaceCustomWorkerLimit caps namespace custom-resource list fanout.
 	SnapshotNamespaceCustomWorkerLimit = 8

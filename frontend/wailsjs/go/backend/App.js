@@ -374,6 +374,10 @@ export function GetZoomLevel() {
   return window['go']['backend']['App']['GetZoomLevel']();
 }
 
+export function HydrateCatalogCustomRows(arg1, arg2) {
+  return window['go']['backend']['App']['HydrateCatalogCustomRows'](arg1, arg2);
+}
+
 export function IsAppLogsPanelVisible() {
   return window['go']['backend']['App']['IsAppLogsPanelVisible']();
 }
@@ -448,6 +452,10 @@ export function RetryClusterAuth(arg1) {
 
 export function RunObjectAction(arg1) {
   return window['go']['backend']['App']['RunObjectAction'](arg1);
+}
+
+export function SaveCsvFile(arg1, arg2) {
+  return window['go']['backend']['App']['SaveCsvFile'](arg1, arg2);
 }
 
 export function SaveTheme(arg1) {
@@ -528,10 +536,6 @@ export function SetKubernetesClientQPS(arg1) {
 
 export function SetLinkColor(arg1, arg2) {
   return window['go']['backend']['App']['SetLinkColor'](arg1, arg2);
-}
-
-export function SetMaxTableRows(arg1) {
-  return window['go']['backend']['App']['SetMaxTableRows'](arg1);
 }
 
 export function SetObjPanelLogsAPITimestampFormat(arg1) {

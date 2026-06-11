@@ -32,6 +32,10 @@ export interface GridTableBindingProps<T> {
   columnVisibility?: Record<string, boolean> | null;
   onColumnVisibilityChange?: (visibility: Record<string, boolean>) => void;
   allowHorizontalOverflow?: boolean;
+  /** Arms the scope-toggle + Copy + Export trio in the filter bar. */
+  fetchAllRows?: () => Promise<T[]>;
+  /** Default filename offered by the file Export action. */
+  exportFilename?: string;
 }
 
 export interface ResourceGridTableRow {
@@ -45,8 +49,18 @@ export interface ResourceGridTableRow {
   version?: string | null;
 }
 
+export type ResourceGridTableMode =
+  | 'Local Complete'
+  | 'Local Partial'
+  | 'Query Backed Static'
+  | 'Query Backed Dynamic';
+
+export const isQueryBackedResourceGridTableMode = (mode: ResourceGridTableMode): boolean =>
+  mode === 'Query Backed Static' || mode === 'Query Backed Dynamic';
+
 export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   viewId: string;
+  tableMode: ResourceGridTableMode;
   data: T[];
   columns: GridColumnDefinition<T>[];
   keyExtractor?: (item: T, index: number) => string;
@@ -56,9 +70,16 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   filterAccessors?: GridTableFilterConfig<T>['accessors'];
   leadingFilterActions?: IconBarItem[];
   filterOptions?: GridTableFilterPersistenceOptions;
+  pageSizeOptions?: readonly number[];
+  filterOptionOverrides?: Partial<GridTableFilterOptions>;
   kindDropdownBulkActions?: boolean;
   kindDropdownSearchable?: boolean;
   metadataSearch?: ResourceGridMetadataSearchParams<T>;
+  onTableStateChange?: (state: {
+    filters: GridTableFilterState;
+    sortConfig: SortConfig | null;
+  }) => void;
+  persistenceOverride?: ResourceGridPersistence<T>;
   persistenceData?: T[];
   rowIdentity?: (item: T, index: number) => string;
   showKindDropdown?: boolean;
@@ -74,6 +95,11 @@ export interface ResourceGridMetadataSearchParams<T extends ResourceGridTableRow
 export interface ClusterResourceGridTableParams<
   T extends ResourceGridTableRow,
 > extends ResourceGridTableBaseParams<T> {
+  // Cluster/namespace resource tables always receive persistence AND a resolved
+  // key extractor from their query-backed wrapper, so both are required here
+  // (the base hooks no longer own fallbacks for either).
+  persistenceOverride: ResourceGridPersistence<T>;
+  keyExtractor: (item: T, index: number) => string;
   defaultSortKey?: string;
   defaultSortDirection?: SortDirection;
   showNamespaceFilters?: boolean;
@@ -82,6 +108,8 @@ export interface ClusterResourceGridTableParams<
 export interface NamespaceResourceGridTableParams<
   T extends ResourceGridTableRow,
 > extends ResourceGridTableBaseParams<T> {
+  persistenceOverride: ResourceGridPersistence<T>;
+  keyExtractor: (item: T, index: number) => string;
   namespace: string;
   defaultSort?: SortConfig;
   showNamespaceFilters?: boolean;
@@ -104,6 +132,8 @@ export interface ResourceGridPersistence<T extends ResourceGridTableRow> {
   setColumnVisibility: (next: Record<string, boolean>) => void;
   filters: GridTableFilterState;
   setFilters: NonNullable<GridTableFilterConfig<T>['onChange']>;
+  pageSize: number | null;
+  setPageSize: (next: number | null) => void;
   resetState: () => void;
   hydrated: boolean;
 }
@@ -123,6 +153,7 @@ export interface ResourceGridCommonParams<T extends ResourceGridTableRow> extend
 export interface ResourceGridTableResult<T extends ResourceGridTableRow> {
   gridTableProps: GridTableBindingProps<T>;
   favModal: React.ReactNode;
+  persistence?: ResourceGridPersistence<T>;
 }
 
 export interface ObjectPanelResourceGridTableSurfaceProps<T extends ResourceGridTableRow> {
@@ -141,6 +172,7 @@ export interface ObjectPanelResourceGridTableSurfaceProps<T extends ResourceGrid
 }
 
 export interface QueryResourceGridTableParams<T extends ResourceGridTableRow> {
+  tableMode: ResourceGridTableMode;
   data: T[];
   columns: GridColumnDefinition<T>[];
   persistence: ResourceGridPersistence<T>;

@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -22,12 +23,25 @@ const namespaceEventsDomainName = "namespace-events"
 // NamespaceEventsBuilder constructs summaries for namespace scoped events.
 type NamespaceEventsBuilder struct {
 	eventLister corelisters.EventLister
+	// eventsSynced reports whether the events informer finished its initial
+	// sync; see ClusterEventsBuilder for why listing an unsynced cache is a lie.
+	eventsSynced cache.InformerSynced
 }
 
 // NamespaceEventsSnapshot payload for events tab.
 type NamespaceEventsSnapshot struct {
 	ClusterMeta
-	Events []EventSummary `json:"events"`
+	ResourceQueryEnvelope
+	Rows []EventSummary `json:"rows"`
+}
+
+func namespaceEventsQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "namespace", "type", "source", "reason", "object", "objectType", "objectName", "message", "age"},
+		[]string{"kinds", "namespaces"},
+		[]string{"kind", "name", "namespace", "type", "source", "reason", "object", "message"},
+		nil, // open kind set (involved-object kinds); no kind dropdown
+	)
 }
 
 // EventSummary captures the essential event fields for display.
@@ -57,7 +71,8 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &NamespaceEventsBuilder{
-		eventLister: factory.Core().V1().Events().Lister(),
+		eventLister:  factory.Core().V1().Events().Lister(),
+		eventsSynced: factory.Core().V1().Events().Informer().HasSynced,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceEventsDomainName,
@@ -69,11 +84,22 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	_ = ctx
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, "namespace scope is required")
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceEventsDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), "namespace scope is required")
 	if err != nil {
 		return nil, err
 	}
 
+	// Wait out the informer's initial sync (bounded by the request context)
+	// instead of listing an unsynced cache: the first request after connect is
+	// slower, never wrong. See ClusterEventsBuilder.Build.
+	if b.eventsSynced != nil && !cache.WaitForCacheSync(ctx.Done(), b.eventsSynced) {
+		return nil, fmt.Errorf("namespace events cache has not finished syncing")
+	}
 	var (
 		events []*corev1.Event
 	)
@@ -105,16 +131,16 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 	}
 	events = filtered
 
-	sort.Slice(events, func(i, j int) bool {
-		return compareEventOrder(events[i], events[j]) < 0
-	})
-
-	originalCount := len(events)
-	if originalCount > config.SnapshotNamespaceEventsLimit {
-		events = events[:config.SnapshotNamespaceEventsLimit]
+	// The query path streams summaries through the bounded collector (top-K
+	// insert, no full materialization or sort); the window path still collects
+	// the slice it truncates below.
+	var collector *typedTableQueryCollector[EventSummary]
+	var summaries []EventSummary
+	if query.Enabled {
+		collector = newTypedTableQueryCollector(query, namespacedEventTableQueryAdapter())
+	} else {
+		summaries = make([]EventSummary, 0, len(events))
 	}
-
-	summaries := make([]EventSummary, 0, len(events))
 	var version uint64
 
 	for _, event := range events {
@@ -146,10 +172,41 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			Age:              formatAge(timestamp),
 			AgeTimestamp:     timestamp.UnixMilli(),
 		}
-		summaries = append(summaries, summary)
+		if collector != nil {
+			collector.Add(summary)
+		} else {
+			summaries = append(summaries, summary)
+		}
 		if v := resourceVersionOrTimestamp(event); v > version {
 			version = v
 		}
+	}
+
+	if query.Enabled {
+		page := collector.Page()
+		return &refresh.Snapshot{
+			Domain:  namespaceEventsDomainName,
+			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
+			Version: version,
+			Payload: NamespaceEventsSnapshot{
+				ClusterMeta:           meta,
+				ResourceQueryEnvelope: typedQueryEnvelope(namespaceEventsDomainName, page, namespaceEventsQueryCapabilities()),
+				Rows:                  page.Rows,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].AgeTimestamp != summaries[j].AgeTimestamp {
+			return summaries[i].AgeTimestamp > summaries[j].AgeTimestamp
+		}
+		return summaries[i].Name < summaries[j].Name
+	})
+
+	originalCount := len(summaries)
+	if originalCount > config.SnapshotNamespaceEventsLimit {
+		summaries = summaries[:config.SnapshotNamespaceEventsLimit]
 	}
 
 	stats := refresh.SnapshotStats{
@@ -165,7 +222,11 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		Domain:  namespaceEventsDomainName,
 		Scope:   parsedScope.CanonicalScope,
 		Version: version,
-		Payload: NamespaceEventsSnapshot{ClusterMeta: meta, Events: summaries},
-		Stats:   stats,
+		Payload: NamespaceEventsSnapshot{
+			ClusterMeta:           meta,
+			ResourceQueryEnvelope: typedWindowEnvelope(namespaceEventsDomainName, originalCount, originalCount == len(summaries), snapshotSortedKinds(summaries, func(event EventSummary) string { return event.Kind }), namespaceEventsQueryCapabilities()),
+			Rows:                  summaries,
+		},
+		Stats: stats,
 	}, nil
 }

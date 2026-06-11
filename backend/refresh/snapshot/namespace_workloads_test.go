@@ -30,3 +30,14 @@ func TestSortWorkloadSummariesUsesNamespaceTieBreaker(t *testing.T) {
 		}
 	}
 }
+
+// The envelope-published kind vocabulary narrows to the kinds whose backing
+// listers exist: a builder with no listers can produce no rows, so it offers
+// no kinds. (The static family vocabulary stays full — conformance pins it.)
+func TestNamespaceWorkloadsCapabilitiesNarrowToAvailableSources(t *testing.T) {
+	builder := &NamespaceWorkloadsBuilder{}
+	capabilities := builder.queryCapabilities()
+	if len(capabilities.KindVocabulary) != 0 {
+		t.Errorf("expected an empty kind vocabulary with no listers, got %v", capabilities.KindVocabulary)
+	}
+}

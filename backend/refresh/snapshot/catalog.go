@@ -26,20 +26,44 @@ type CatalogConfig struct {
 }
 
 // CatalogSnapshot captures the browse payload returned to clients.
+//
+// The catalog is the ResourceQueryProviderCatalog member of the resource-query
+// contract. It deliberately does NOT embed ResourceQueryEnvelope: its `kinds`
+// facet is the richer []objectcatalog.KindInfo (with per-kind counts), and it
+// carries a keyset pagination model (previous/hasNext/batches) the flat envelope
+// does not. Instead it surfaces the envelope's provider/completeness/capabilities
+// contract fields directly alongside its own projection so the frontend
+// controller can treat it as a conformant provider.
 type CatalogSnapshot struct {
 	ClusterMeta
-	Items               []objectcatalog.Summary  `json:"items"`
-	Continue            string                   `json:"continue,omitempty"`
-	Total               int                      `json:"total"`
-	ResourceCount       int                      `json:"resourceCount"`
-	Kinds               []objectcatalog.KindInfo `json:"kinds,omitempty"`
-	Namespaces          []string                 `json:"namespaces,omitempty"`
-	NamespaceGroups     []CatalogNamespaceGroup  `json:"namespaceGroups,omitempty"`
-	BatchIndex          int                      `json:"batchIndex"`
-	BatchSize           int                      `json:"batchSize"`
-	TotalBatches        int                      `json:"totalBatches"`
-	IsFinal             bool                     `json:"isFinal"`
-	FirstBatchLatencyMs int64                    `json:"firstBatchLatencyMs,omitempty"`
+	Provider        ResourceQueryProvider     `json:"provider"`
+	Completeness    ResourceQueryCompleteness `json:"completeness,omitempty"`
+	Capabilities    ResourceQueryCapabilities `json:"capabilities"`
+	Items           []objectcatalog.Summary   `json:"items"`
+	Continue        string                    `json:"continue,omitempty"`
+	Previous        string                    `json:"previous,omitempty"`
+	CursorInvalid   bool                      `json:"cursorInvalid,omitempty"`
+	Total           int                       `json:"total"`
+	UnfilteredTotal int                       `json:"unfilteredTotal"`
+	TotalIsExact    bool                      `json:"totalIsExact"`
+	ResourceCount   int                       `json:"resourceCount"`
+	Kinds           []objectcatalog.KindInfo  `json:"kinds,omitempty"`
+	Namespaces      []string                  `json:"namespaces,omitempty"`
+	FacetsExact     bool                      `json:"facetsExact"`
+	Issues          []ResourceQueryIssue      `json:"issues,omitempty"`
+	HasNext         bool                      `json:"hasNext"`
+	HasPrevious     bool                      `json:"hasPrevious"`
+	NamespaceGroups []CatalogNamespaceGroup   `json:"namespaceGroups,omitempty"`
+	// Batch fields below are diagnostics / streaming-progress only — NOT page
+	// metadata. Pagination is the keyset Continue/Previous/HasNext/HasPrevious
+	// above; the resource-inventory controller must not treat these as page state
+	// (the "more pages" signal is the keyset token, not the batch counters). See
+	// TestCatalogPaginationIsKeysetNotBatch.
+	BatchIndex          int   `json:"batchIndex"`
+	BatchSize           int   `json:"batchSize"`
+	TotalBatches        int   `json:"totalBatches"`
+	IsFinal             bool  `json:"isFinal"`
+	FirstBatchLatencyMs int64 `json:"firstBatchLatencyMs,omitempty"`
 }
 
 // CatalogNamespaceGroup captures per-cluster namespace lists and selection.
@@ -60,8 +84,11 @@ type browseQueryOptions struct {
 	Kinds      []string
 	Namespaces []string
 	Search     string
+	SortField  string
+	SortDir    string
 	Limit      int
 	Continue   string
+	CustomOnly bool
 }
 
 // RegisterCatalogDomain registers the catalog browse domain with the registry.
@@ -116,6 +143,18 @@ func (b *catalogBuilder) Build(ctx context.Context, scope string) (*refresh.Snap
 	return adapter.BuildSnapshot(b.domain, scope, opts), nil
 }
 
+// newCatalogCapabilities builds capabilities for the catalog browse provider.
+// Exports/copies are client-driven walks over the query cursor for every
+// provider (the old backend query-wide export was retired), so capabilities
+// describe only the query surface: sort/filter/search fields.
+func newCatalogCapabilities() ResourceQueryCapabilities {
+	return ResourceQueryCapabilities{
+		SortableFields:   []string{"name", "kind", "namespace", "age", "creationTimestamp"},
+		FilterableFields: []string{"kinds", "namespaces"},
+		SearchableFields: []string{"name", "kind", "namespace"},
+	}
+}
+
 func buildCatalogSnapshot(
 	result objectcatalog.QueryResult,
 	opts browseQueryOptions,
@@ -123,12 +162,6 @@ func buildCatalogSnapshot(
 	cachesReady bool,
 	forceFinal bool,
 ) (CatalogSnapshot, bool) {
-	startOffset := 0
-	if opts.Continue != "" {
-		if parsed, err := strconv.Atoi(opts.Continue); err == nil && parsed >= 0 {
-			startOffset = parsed
-		}
-	}
 	effectiveLimit := opts.Limit
 	if effectiveLimit <= 0 {
 		effectiveLimit = len(result.Items)
@@ -136,52 +169,135 @@ func buildCatalogSnapshot(
 	if effectiveLimit <= 0 {
 		effectiveLimit = 1
 	}
-	batchIndex := 0
-	if startOffset > 0 {
-		batchIndex = startOffset / effectiveLimit
-	}
+	hasNext := result.ContinueToken != ""
+	hasPrevious := result.PreviousToken != ""
+	batchIndex := keysetCatalogBatchIndex(hasPrevious)
 	totalBatches := 0
-	if result.TotalItems > 0 && effectiveLimit > 0 {
+	if result.TotalIsExact && !hasPrevious && result.TotalItems > 0 && effectiveLimit > 0 {
 		totalBatches = (result.TotalItems + effectiveLimit - 1) / effectiveLimit
 	}
-	isFinal := result.ContinueToken == "" || result.TotalItems == 0
+	isFinal := !hasNext || result.TotalItems == 0
 	streamingDisabled := health.Status == objectcatalog.HealthStateError ||
 		health.Status == objectcatalog.HealthStateDegraded ||
 		health.Stale ||
 		health.ConsecutiveFailures > 3
+	issues := catalogSnapshotIssues(result, health, streamingDisabled)
 	if streamingDisabled {
 		isFinal = true
 		result.ContinueToken = ""
-		if totalBatches == 0 {
-			totalBatches = batchIndex + 1
-		}
+		result.PreviousToken = ""
+		hasNext = false
+		hasPrevious = false
 	}
 
 	if forceFinal {
 		isFinal = true
-		if totalBatches == 0 {
+		if totalBatches == 0 && !hasPrevious {
 			totalBatches = max(1, totalBatches)
 		}
 	} else if !cachesReady {
 		isFinal = false
 	}
 
+	truncated := result.ContinueToken != "" || (result.TotalItems > 0 && len(result.Items) < result.TotalItems)
+
+	// Completeness mirrors the typed providers' degraded-based meaning, NOT
+	// "fits in one page": a healthy catalog that simply has more pages is
+	// `complete` (pagination is the recourse), and only a degraded catalog —
+	// where streaming/pagination is disabled, so what you see is all you get —
+	// is `partial`. This keeps the frontend controller's partial/degraded banner
+	// off normal paginated browsing.
 	payload := CatalogSnapshot{
-		Items:         cloneSummaries(result.Items),
-		Continue:      result.ContinueToken,
-		Total:         result.TotalItems,
-		ResourceCount: result.ResourceCount,
-		Kinds:         cloneKindInfos(result.Kinds),
-		Namespaces:    cloneStrings(result.Namespaces),
-		BatchIndex:    batchIndex,
-		BatchSize:     len(result.Items),
-		TotalBatches:  totalBatches,
-		IsFinal:       isFinal,
+		Provider:        ResourceQueryProviderCatalog,
+		Completeness:    resourceQueryCompleteness(!streamingDisabled),
+		Capabilities:    newCatalogCapabilities(),
+		Items:           cloneSummaries(result.Items),
+		Continue:        result.ContinueToken,
+		Previous:        result.PreviousToken,
+		CursorInvalid:   result.CursorInvalid,
+		Total:           result.TotalItems,
+		UnfilteredTotal: result.UnfilteredTotal,
+		TotalIsExact:    result.TotalIsExact,
+		ResourceCount:   result.ResourceCount,
+		Kinds:           cloneKindInfos(result.Kinds),
+		Namespaces:      cloneStrings(result.Namespaces),
+		FacetsExact:     result.FacetsExact,
+		Issues:          issues,
+		HasNext:         hasNext,
+		HasPrevious:     hasPrevious,
+		BatchIndex:      batchIndex,
+		BatchSize:       len(result.Items),
+		TotalBatches:    totalBatches,
+		IsFinal:         isFinal,
 	}
 
-	truncated := result.ContinueToken != "" || (payload.Total > 0 && len(payload.Items) < payload.Total)
-
 	return payload, truncated
+}
+
+func catalogSnapshotIssues(result objectcatalog.QueryResult, health objectcatalog.HealthStatus, streamingDisabled bool) []ResourceQueryIssue {
+	issues := make([]ResourceQueryIssue, 0, 4)
+	if result.CursorInvalid {
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    "Catalog cursor",
+			Message: "The previous page cursor expired or no longer matches this query; the table reset to a valid page.",
+		})
+	}
+	if !result.TotalIsExact {
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    "Catalog totals",
+			Message: "The total result count is approximate because the match set exceeded the catalog metadata budget.",
+		})
+	}
+	if !result.FacetsExact {
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    "Catalog facets",
+			Message: "Kind and namespace filter options are approximate because the catalog metadata is incomplete.",
+		})
+	}
+	if health.Status == objectcatalog.HealthStateDegraded ||
+		health.Status == objectcatalog.HealthStateError ||
+		health.Stale ||
+		health.ConsecutiveFailures > 0 {
+		message := "Catalog data may be stale or incomplete because one or more resource syncs failed."
+		if health.FailedResources > 0 {
+			message += " Failed resources: " + strconv.Itoa(health.FailedResources) + "."
+		}
+		if health.LastError != "" {
+			message += " Last error: " + health.LastError
+		}
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    "Catalog health",
+			Message: message,
+		})
+	}
+	if streamingDisabled {
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    "Catalog pagination",
+			Message: "Pagination is disabled while the catalog is degraded to avoid serving misleading cursor pages.",
+		})
+	}
+	if len(health.DeniedResources) > 0 {
+		const maxNamed = 5
+		named := health.DeniedResources
+		suffix := ""
+		if len(named) > maxNamed {
+			suffix = " and " + strconv.Itoa(len(named)-maxNamed) + " more"
+			named = named[:maxNamed]
+		}
+		issues = append(issues, ResourceQueryIssue{
+			Kind: "Catalog permissions",
+			Message: "Your role cannot list " + strings.Join(named, ", ") + suffix +
+				"; objects of those types are not shown.",
+		})
+	}
+	return issues
+}
+
+func keysetCatalogBatchIndex(hasPrevious bool) int {
+	if hasPrevious {
+		return -1
+	}
+	return 0
 }
 
 func buildCatalogNamespaceGroups(
@@ -234,27 +350,30 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 	if err != nil {
 		return browseQueryOptions{}, err
 	}
+	request := resourceQueryRequestFromValues("", "browse", values, ResourceQueryRequest{})
 	opts := browseQueryOptions{
-		Kinds:      values["kind"],
-		Namespaces: values["namespace"],
-		Search:     values.Get("search"),
-		Continue:   values.Get("continue"),
-	}
-	if limit := values.Get("limit"); limit != "" {
-		if parsed, err := strconv.Atoi(limit); err == nil {
-			opts.Limit = parsed
-		}
+		Kinds:      request.Kinds,
+		Namespaces: request.Namespaces,
+		Search:     request.Search,
+		SortField:  request.SortField,
+		SortDir:    request.SortDirection,
+		Continue:   request.Continue,
+		Limit:      request.Limit,
+		CustomOnly: values.Get("customOnly") == "true",
 	}
 	return opts, nil
 }
 
 func (o browseQueryOptions) toQueryOptions() objectcatalog.QueryOptions {
 	return objectcatalog.QueryOptions{
-		Kinds:      o.Kinds,
-		Namespaces: o.Namespaces,
-		Search:     o.Search,
-		Limit:      o.Limit,
-		Continue:   o.Continue,
+		Kinds:         o.Kinds,
+		Namespaces:    o.Namespaces,
+		Search:        o.Search,
+		SortField:     o.SortField,
+		SortDirection: o.SortDir,
+		Limit:         o.Limit,
+		Continue:      o.Continue,
+		CustomOnly:    o.CustomOnly,
 	}
 }
 

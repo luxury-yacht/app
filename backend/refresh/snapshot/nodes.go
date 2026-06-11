@@ -42,9 +42,19 @@ type NodeListBuilder struct {
 // NodeSnapshot is the payload for the nodes domain.
 type NodeSnapshot struct {
 	ClusterMeta
-	Nodes            []NodeSummary              `json:"nodes"`
+	ResourceQueryEnvelope
+	Rows             []NodeSummary              `json:"rows"`
 	Metrics          NodeMetricsInfo            `json:"metrics"`
 	MetricsByCluster map[string]NodeMetricsInfo `json:"metricsByCluster,omitempty"`
+}
+
+func nodeQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"},
+		nil,
+		[]string{"name", "status", "roles", "version", "internalIP", "externalIP"},
+		nil, // no kind filtering
+	)
 }
 
 // NodeMetricsInfo captures metadata about metrics collection.
@@ -67,6 +77,7 @@ type NodeSummary struct {
 	StatusReason       string            `json:"statusReason,omitempty"`
 	Roles              string            `json:"roles"`
 	Age                string            `json:"age"`
+	AgeTimestamp       int64             `json:"ageTimestamp,omitempty"`
 	Version            string            `json:"version"`
 	InternalIP         string            `json:"internalIP,omitempty"`
 	ExternalIP         string            `json:"externalIP,omitempty"`
@@ -151,7 +162,7 @@ func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapsho
 		}
 		pods = append(pods, podList...)
 	}
-	return buildNodeSnapshot(ctx, list, pods, b.metrics), nil
+	return buildNodeSnapshot(ctx, scope, list, pods, b.metrics)
 }
 
 // Build returns the node snapshot payload using direct list API calls.
@@ -201,11 +212,11 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 	if podsForbidden {
 		pods = nil
 	}
-	return buildNodeSnapshot(ctx, nodes, pods, b.metrics), nil
+	return buildNodeSnapshot(ctx, scope, nodes, pods, b.metrics)
 }
 
 // buildNodeSnapshot assembles node summaries with cluster metadata.
-func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1.Pod, provider metrics.Provider) *refresh.Snapshot {
+func buildNodeSnapshot(ctx context.Context, scope string, nodes []*corev1.Node, pods []*corev1.Pod, provider metrics.Provider) (*refresh.Snapshot, error) {
 	var (
 		nodeMetrics map[string]metrics.NodeUsage
 		podMetrics  map[string]metrics.PodUsage
@@ -216,7 +227,7 @@ func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1
 		podMetrics = provider.LatestPodUsage()
 		metaSrc = provider.Metadata()
 	}
-	return buildNodeSnapshotFromUsage(ctx, nodes, pods, nodeUsageOrEmpty(nodeMetrics), podUsageOrEmpty(podMetrics), metaSrc)
+	return buildNodeSnapshotFromUsage(ctx, scope, nodes, pods, nodeUsageOrEmpty(nodeMetrics), podUsageOrEmpty(podMetrics), metaSrc)
 }
 
 // buildNodeSnapshotFromUsage assembles node summaries using pre-resolved
@@ -226,13 +237,21 @@ func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1
 // deterministic and tests can use fixture metrics.
 func buildNodeSnapshotFromUsage(
 	ctx context.Context,
+	scope string,
 	nodes []*corev1.Node,
 	pods []*corev1.Pod,
 	nodeMetrics map[string]metrics.NodeUsage,
 	podMetrics map[string]metrics.PodUsage,
 	metricsMeta metrics.Metadata,
-) *refresh.Snapshot {
+) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), "nodes", "")
+	if err != nil {
+		// Every typed builder rejects a malformed query scope; silently serving
+		// default-ordered rows under the requested identity is a contract hole.
+		return nil, err
+	}
 	items := make([]NodeSummary, 0, len(nodes))
 	var version uint64
 
@@ -252,6 +271,10 @@ func buildNodeSnapshotFromUsage(
 		}
 		model := resourcemodel.BuildNodeResourceModel(meta.ClusterID, node)
 		nodeFacts := model.Facts.Node
+		ageTimestamp := int64(0)
+		if !node.CreationTimestamp.Time.IsZero() {
+			ageTimestamp = node.CreationTimestamp.Time.UnixMilli()
+		}
 		summary := NodeSummary{
 			ClusterMeta:        meta,
 			Name:               node.Name,
@@ -261,6 +284,7 @@ func buildNodeSnapshotFromUsage(
 			StatusReason:       model.Status.Reason,
 			Roles:              formatRoles(extractRoles(node.Labels)),
 			Age:                formatAge(node.CreationTimestamp.Time),
+			AgeTimestamp:       ageTimestamp,
 			Version:            node.Status.NodeInfo.KubeletVersion,
 			Labels:             copyStringMap(node.Labels),
 			Annotations:        copyStringMap(node.Annotations),
@@ -342,7 +366,9 @@ func buildNodeSnapshotFromUsage(
 	}
 
 	metricsInfo := NodeMetricsInfo{Stale: true}
+	dynamicRevision := ""
 	if !metricsMeta.CollectedAt.IsZero() {
+		dynamicRevision = strconv.FormatInt(metricsMeta.CollectedAt.UnixNano(), 10)
 		metricsInfo.CollectedAt = metricsMeta.CollectedAt.Unix()
 		metricsInfo.Stale = time.Since(metricsMeta.CollectedAt) > config.MetricsStaleThreshold
 	}
@@ -355,16 +381,39 @@ func buildNodeSnapshotFromUsage(
 	metricsInfo.SuccessCount = metricsMeta.SuccessCount
 	metricsInfo.FailureCount = metricsMeta.FailureCount
 
+	if query.Enabled {
+		query.DynamicRevision = dynamicRevision
+		page := applyTypedTableQuery(items, query, nodeTableQueryAdapter())
+		return &refresh.Snapshot{
+			Domain:  "nodes",
+			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
+			Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
+			Payload: NodeSnapshot{
+				ClusterMeta:           meta,
+				ResourceQueryEnvelope: typedQueryEnvelope("nodes", page, nodeQueryCapabilities()),
+				Rows:                  page.Rows,
+				Metrics:               metricsInfo,
+			},
+			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
+		}, nil
+	}
+
+	var totalItems int
+	items, totalItems = truncateSnapshotWindow(items, config.SnapshotClusterNodesEntryLimit)
+
 	snap := &refresh.Snapshot{
 		Domain:  "nodes",
 		Scope:   "",
-		Version: version,
-		Payload: NodeSnapshot{ClusterMeta: meta, Nodes: items, Metrics: metricsInfo},
-		Stats: refresh.SnapshotStats{
-			ItemCount: len(items),
+		Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
+		Payload: NodeSnapshot{
+			ClusterMeta:           meta,
+			ResourceQueryEnvelope: typedWindowEnvelope("nodes", totalItems, totalItems == len(items), snapshotSortedKinds(items, func(NodeSummary) string { return "Node" }), nodeQueryCapabilities()),
+			Rows:                  items,
+			Metrics:               metricsInfo,
 		},
+		Stats: snapshotWindowStats(len(items), totalItems, "nodes"),
 	}
-	return snap
+	return snap, nil
 }
 
 func nodeUsageOrEmpty(m map[string]metrics.NodeUsage) map[string]metrics.NodeUsage {

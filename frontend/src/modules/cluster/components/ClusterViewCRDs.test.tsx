@@ -137,7 +137,7 @@ describe('ClusterViewCRDs', () => {
 
   it('passes persisted state to GridTable', async () => {
     await act(async () => {
-      root.render(<ClusterViewCRDs data={[baseCRD]} loaded={true} />);
+      root.render(<ClusterViewCRDs />);
       await Promise.resolve();
     });
 
@@ -154,14 +154,14 @@ describe('ClusterViewCRDs', () => {
     expect(props.columnWidths).toBeFalsy();
   });
 
-  it('uses explicit kind metadata instead of deriving kinds from rows', async () => {
+  it('does not offer a kind dropdown (every row is a CustomResourceDefinition)', async () => {
     await act(async () => {
-      root.render(<ClusterViewCRDs data={[]} loaded={true} />);
+      root.render(<ClusterViewCRDs />);
       await Promise.resolve();
     });
 
     const props = gridTablePropsRef.current;
-    expect(props.filters?.options?.kinds).toEqual(['CustomResourceDefinition']);
+    expect(props.filters?.options?.showKindDropdown).toBeFalsy();
   });
 
   // Version column rendering. The Version column shows the storage
@@ -180,7 +180,7 @@ describe('ClusterViewCRDs', () => {
       };
 
       await act(async () => {
-        root.render(<ClusterViewCRDs data={[singleVersion]} loaded={true} />);
+        root.render(<ClusterViewCRDs />);
         await Promise.resolve();
       });
 
@@ -206,7 +206,7 @@ describe('ClusterViewCRDs', () => {
       };
 
       await act(async () => {
-        root.render(<ClusterViewCRDs data={[multiVersion]} loaded={true} />);
+        root.render(<ClusterViewCRDs />);
         await Promise.resolve();
       });
 
@@ -223,7 +223,7 @@ describe('ClusterViewCRDs', () => {
       const noVersion = { ...baseCRD };
 
       await act(async () => {
-        root.render(<ClusterViewCRDs data={[noVersion]} loaded={true} />);
+        root.render(<ClusterViewCRDs />);
         await Promise.resolve();
       });
 
@@ -245,7 +245,7 @@ describe('ClusterViewCRDs', () => {
       };
 
       await act(async () => {
-        root.render(<ClusterViewCRDs data={[multiVersion]} loaded={true} />);
+        root.render(<ClusterViewCRDs />);
         await Promise.resolve();
       });
 

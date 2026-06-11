@@ -8,7 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -63,8 +65,17 @@ type NamespaceWorkloadsBuilder struct {
 // NamespaceWorkloadsSnapshot is returned to the frontend.
 type NamespaceWorkloadsSnapshot struct {
 	ClusterMeta
-	Workloads []WorkloadSummary `json:"workloads"`
-	Kinds     []string          `json:"kinds,omitempty"`
+	ResourceQueryEnvelope
+	Rows []WorkloadSummary `json:"rows"`
+}
+
+func namespaceWorkloadsQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
+		[]string{"kinds", "namespaces"},
+		[]string{"kind", "name", "namespace", "status", "ready"},
+		[]string{"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"},
+	)
 }
 
 // WorkloadSummary mirrors the data required by the workloads table.
@@ -80,6 +91,7 @@ type WorkloadSummary struct {
 	StatusReason         string `json:"statusReason,omitempty"`
 	Restarts             int32  `json:"restarts"`
 	Age                  string `json:"age"`
+	AgeTimestamp         int64  `json:"ageTimestamp,omitempty"`
 	CPUUsage             string `json:"cpuUsage,omitempty"`
 	CPURequest           string `json:"cpuRequest,omitempty"`
 	CPULimit             string `json:"cpuLimit,omitempty"`
@@ -139,11 +151,18 @@ func RegisterNamespaceWorkloadsDomain(
 // Build assembles workload summaries for the requested namespace scope.
 func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, errNamespaceScopeRequired)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	dynamicRevision := b.workloadsDynamicRevision()
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceWorkloadsDomainName, dynamicRevision)
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), errNamespaceScopeRequired)
 	if err != nil {
 		return nil, err
 	}
 	namespace := parsedScope.Namespace
+	issues := b.queryIssues(ctx, query)
 
 	var pods []*corev1.Pod
 	if b.podLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "", "pods") {
@@ -192,11 +211,17 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	// coverage is unavailable, leave ownership unknown instead of emitting false.
 	hpas, hpaErr := b.listHPAs(namespace)
 
-	return b.buildSnapshot(meta, parsedScope.CanonicalScope, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas, hpaErr == nil)
+	snapshot, err := b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas, hpaErr == nil, issues)
+	if err != nil {
+		return nil, err
+	}
+	snapshot.Version = snapshotVersionWithDynamicRevision(snapshot.Version, dynamicRevision)
+	return snapshot, nil
 }
 func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	meta ClusterMeta,
 	scope string,
+	query typedTableQuery,
 	pods []*corev1.Pod,
 	deployments []*appsv1.Deployment,
 	statefulSets []*appsv1.StatefulSet,
@@ -205,6 +230,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	cronJobs []*batchv1.CronJob,
 	hpas []*autoscalingv1.HorizontalPodAutoscaler,
 	hpaKnown bool,
+	issues []ResourceQueryIssue,
 ) (*refresh.Snapshot, error) {
 	podUsage := map[string]metrics.PodUsage{}
 	if b.metrics != nil {
@@ -225,9 +251,14 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	}
 
 	var (
-		items   []WorkloadSummary
-		version uint64
+		items           []WorkloadSummary
+		version         uint64
+		processedOwners = map[string]struct{}{}
 	)
+	var queryCollector *typedTableQueryCollector[WorkloadSummary]
+	if query.Enabled {
+		queryCollector = newTypedTableQueryCollector(query, workloadTableQueryAdapter())
+	}
 
 	appendSummary := func(summary WorkloadSummary, obj metav1.Object) {
 		summary.ClusterMeta = meta
@@ -240,7 +271,14 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 			}
 			summary.HPAManaged = &managed
 		}
-		items = append(items, summary)
+		if summary.Kind != "Pod" {
+			processedOwners[workloadOwnerKey(summary.Kind, summary.Namespace, summary.Name)] = struct{}{}
+		}
+		if queryCollector != nil {
+			queryCollector.Add(summary)
+		} else {
+			items = append(items, summary)
+		}
 		if obj == nil {
 			return
 		}
@@ -289,12 +327,6 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		appendSummary(summary, cron)
 	}
 
-	processedOwners := make(map[string]struct{}, len(items))
-	for _, summary := range items {
-		key := workloadOwnerKey(summary.Kind, summary.Namespace, summary.Name)
-		processedOwners[key] = struct{}{}
-	}
-
 	for _, pod := range pods {
 		if pod == nil {
 			continue
@@ -311,24 +343,42 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		appendSummary(summary, pod)
 	}
 
+	if query.Enabled {
+		page := queryCollector.Page()
+		exact := len(issues) == 0
+		return &refresh.Snapshot{
+			Domain:  namespaceWorkloadsDomainName,
+			Scope:   scope,
+			Version: version,
+			Payload: NamespaceWorkloadsSnapshot{
+				ClusterMeta:           meta,
+				ResourceQueryEnvelope: typedQueryEnvelope(namespaceWorkloadsDomainName, page, b.queryCapabilities()).withDegraded(exact, issues),
+				Rows:                  page.Rows,
+			},
+			Stats: refresh.SnapshotStats{
+				ItemCount: len(page.Rows),
+			},
+		}, nil
+	}
+
 	sortWorkloadSummaries(items)
 
-	if len(items) > config.SnapshotNamespaceWorkloadsEntryLimit {
+	totalItems := len(items)
+	if totalItems > config.SnapshotNamespaceWorkloadsEntryLimit {
 		items = items[:config.SnapshotNamespaceWorkloadsEntryLimit]
 	}
+	stats := snapshotWindowStats(len(items), totalItems, "workloads")
 
 	return &refresh.Snapshot{
 		Domain:  namespaceWorkloadsDomainName,
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceWorkloadsSnapshot{
-			ClusterMeta: meta,
-			Workloads:   items,
-			Kinds:       snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }),
+			ClusterMeta:           meta,
+			ResourceQueryEnvelope: typedWindowEnvelope(namespaceWorkloadsDomainName, totalItems, !stats.Truncated && len(issues) == 0, snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }), b.queryCapabilities()).withIssues(issues),
+			Rows:                  items,
 		},
-		Stats: refresh.SnapshotStats{
-			ItemCount: len(items),
-		},
+		Stats: stats,
 	}, nil
 }
 
@@ -345,6 +395,126 @@ func sortWorkloadSummaries(items []WorkloadSummary) {
 		}
 		return items[i].Status < items[j].Status
 	})
+}
+
+func (b *NamespaceWorkloadsBuilder) resourceSources() []typedTableResourceSource {
+	return []typedTableResourceSource{
+		{
+			Kind:       "Pod",
+			Group:      "",
+			Resource:   "pods",
+			Available:  b.podLister != nil,
+			QueryKinds: []string{"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"},
+		},
+		{Kind: "Deployment", Group: "apps", Resource: "deployments", Available: b.deploymentLister != nil},
+		{Kind: "StatefulSet", Group: "apps", Resource: "statefulsets", Available: b.statefulLister != nil},
+		{Kind: "DaemonSet", Group: "apps", Resource: "daemonsets", Available: b.daemonLister != nil},
+		{Kind: "Job", Group: "batch", Resource: "jobs", Available: b.jobLister != nil},
+		{Kind: "CronJob", Group: "batch", Resource: "cronjobs", Available: b.cronJobLister != nil},
+	}
+}
+
+// queryCapabilities narrows the family vocabulary to the kinds whose backing
+// listers exist (see capabilitiesWithAvailableKinds).
+func (b *NamespaceWorkloadsBuilder) queryCapabilities() ResourceQueryCapabilities {
+	return capabilitiesWithAvailableKinds(namespaceWorkloadsQueryCapabilities(), b.resourceSources())
+}
+
+func (b *NamespaceWorkloadsBuilder) queryIssues(ctx context.Context, query typedTableQuery) []ResourceQueryIssue {
+	return typedTableQueryResourceIssues(ctx, namespaceWorkloadsDomainName, query, b.resourceSources())
+}
+
+func (b *NamespaceWorkloadsBuilder) workloadsDynamicRevision() string {
+	if b.metrics == nil {
+		return ""
+	}
+	metadata := b.metrics.Metadata()
+	if metadata.CollectedAt.IsZero() {
+		return ""
+	}
+	return strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10)
+}
+
+func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
+	return typedTableQueryAdapter[WorkloadSummary]{
+		Key: func(row WorkloadSummary) string {
+			return fmt.Sprintf("%s/%s/%s", strings.ToLower(row.Kind), strings.ToLower(row.Namespace), strings.ToLower(row.Name))
+		},
+		Namespace: func(row WorkloadSummary) string { return row.Namespace },
+		Kind:      func(row WorkloadSummary) string { return row.Kind },
+		SearchText: func(row WorkloadSummary) []string {
+			return []string{
+				row.Kind,
+				row.Name,
+				row.Namespace,
+				row.Status,
+				row.Ready,
+			}
+		},
+		Predicate: func(row WorkloadSummary, field, value string) bool {
+			switch strings.ToLower(strings.TrimSpace(field)) {
+			case "health":
+				switch strings.ToLower(strings.TrimSpace(value)) {
+				case "restarts":
+					return row.Restarts > 0
+				case "not-ready":
+					ready, total, ok := parseReadyPair(row.Ready)
+					return ok && total > 0 && ready < total
+				case "unhealthy":
+					presentation := strings.ToLower(strings.TrimSpace(row.StatusPresentation))
+					return presentation == "warning" || presentation == "error" || presentation == "not-ready"
+				default:
+					return true
+				}
+			default:
+				return true
+			}
+		},
+		SortValue: func(row WorkloadSummary, field string) string {
+			switch strings.ToLower(field) {
+			case "kind":
+				return row.Kind
+			case "namespace":
+				return row.Namespace
+			case "status":
+				return row.Status
+			case "ready":
+				return row.Ready
+			case "restarts":
+				return strconv.Itoa(int(row.Restarts))
+			case "cpu":
+				return row.CPUUsage
+			case "memory":
+				return row.MemUsage
+			case "age":
+				return row.Age
+			default:
+				return row.Name
+			}
+		},
+		NumericSort: func(row WorkloadSummary, field string) (float64, bool) {
+			switch strings.ToLower(field) {
+			case "cpu":
+				return parseFormattedCPUToMilli(row.CPUUsage)
+			case "memory":
+				return parseFormattedMemoryToBytes(row.MemUsage)
+			case "restarts":
+				return float64(row.Restarts), true
+			case "ready":
+				ready, total, ok := parseReadyPair(row.Ready)
+				if !ok {
+					// Keep "ready" uniformly numeric so the page sort and keyset
+					// cursor agree; an unparseable pair sorts first ascending.
+					return math.Inf(-1), true
+				}
+				return float64(ready*1000000 + total), true
+			case "age":
+				return numericAgeSortValue(row.AgeTimestamp)
+			default:
+				return 0, false
+			}
+		},
+	}
 }
 
 func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
@@ -381,6 +551,7 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(deployment.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(deployment),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
@@ -426,6 +597,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(stateful.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(stateful),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
@@ -469,6 +641,7 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(daemon.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(daemon),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
@@ -512,6 +685,7 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(job.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(job),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
@@ -551,6 +725,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(cron.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(cron),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
@@ -577,6 +752,7 @@ func buildStandalonePodSummary(clusterID string, pod *corev1.Pod, usage map[stri
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
 		Age:                  formatAge(pod.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(pod),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),

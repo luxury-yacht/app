@@ -17,7 +17,8 @@ import { NamespaceViewType } from '@/types/navigation/views';
 // The browse tab is catalog-driven, not a namespace resource loader.
 const isLoadableNamespaceTab = (
   tab: NamespaceViewType
-): tab is Exclude<NamespaceViewType, 'browse' | 'map'> => tab !== 'browse' && tab !== 'map';
+): tab is Exclude<NamespaceViewType, 'browse' | 'map' | 'custom'> =>
+  tab !== 'browse' && tab !== 'map' && tab !== 'custom';
 
 interface NamespaceResourcesManagerProps {
   namespace: string;
@@ -50,7 +51,6 @@ export function NamespaceResourcesManager({
   const storage = useNamespaceResource('storage');
   const autoscaling = useNamespaceResource('autoscaling');
   const quotas = useNamespaceResource('quotas');
-  const custom = useNamespaceResource('custom');
   const helm = useNamespaceResource('helm');
   const events = useNamespaceResource('events');
 
@@ -73,7 +73,7 @@ export function NamespaceResourcesManager({
       storage: wrap(storage?.load),
       autoscaling: wrap(autoscaling?.load),
       quotas: wrap(quotas?.load),
-      custom: wrap(custom?.load),
+      custom: async () => {},
       helm: wrap(helm?.load),
       events: wrap(events?.load),
     };
@@ -81,7 +81,6 @@ export function NamespaceResourcesManager({
     pods?.load,
     autoscaling?.load,
     config?.load,
-    custom?.load,
     events?.load,
     helm?.load,
     network?.load,
@@ -100,10 +99,9 @@ export function NamespaceResourcesManager({
     storage?.cancel?.();
     autoscaling?.cancel?.();
     quotas?.cancel?.();
-    custom?.cancel?.();
     helm?.cancel?.();
     events?.cancel?.();
-  }, [autoscaling, config, custom, events, helm, network, pods, quotas, rbac, storage, workloads]);
+  }, [autoscaling, config, events, helm, network, pods, quotas, rbac, storage, workloads]);
 
   // Cancel all operations on unmount without retriggering mid-render
   const cancelAllRef = useRef(cancelAll);
@@ -171,12 +169,6 @@ export function NamespaceResourcesManager({
         error: quotas?.error ?? null,
         hasLoaded: quotas?.hasLoaded ?? false,
       },
-      custom: {
-        data: custom?.data,
-        loading: custom?.loading ?? false,
-        error: custom?.error ?? null,
-        hasLoaded: custom?.hasLoaded ?? false,
-      },
       helm: {
         data: helm?.data,
         loading: helm?.loading ?? false,
@@ -223,10 +215,6 @@ export function NamespaceResourcesManager({
       quotas?.loading,
       quotas?.error,
       quotas?.hasLoaded,
-      custom?.data,
-      custom?.loading,
-      custom?.error,
-      custom?.hasLoaded,
       helm?.data,
       helm?.loading,
       helm?.error,
@@ -271,78 +259,17 @@ export function NamespaceResourcesManager({
       onTabChange={onTabChange}
       // Pods data
       nsPods={pods?.data || []}
-      nsPodsLoading={pods?.loading || false}
-      nsPodsError={pods?.error?.message || null}
-      loadPods={manualLoaders.pods}
-      nsPodsLoaded={pods?.hasLoaded ?? false}
       nsPodsMetrics={podsMetrics}
       // Workloads data
-      nsWorkloads={workloads?.data || []}
-      nsWorkloadsKinds={(workloads?.meta as { kinds?: string[] } | undefined)?.kinds}
-      nsWorkloadsLoading={workloads?.loading || false}
-      nsWorkloadsError={workloads?.error?.message || null}
-      loadWorkloads={manualLoaders.workloads}
-      nsWorkloadsLoaded={workloads?.hasLoaded ?? false}
       // Config data
-      nsConfig={config?.data || []}
-      nsConfigKinds={(config?.meta as { kinds?: string[] } | undefined)?.kinds}
-      nsConfigLoading={config?.loading || false}
-      nsConfigError={config?.error?.message || null}
-      loadConfig={manualLoaders.config}
-      nsConfigLoaded={config?.hasLoaded ?? false}
       // Network data
-      nsNetwork={network?.data || []}
-      nsNetworkKinds={(network?.meta as { kinds?: string[] } | undefined)?.kinds}
-      nsNetworkLoading={network?.loading || false}
-      nsNetworkError={network?.error?.message || null}
-      loadNetwork={manualLoaders.network}
-      nsNetworkLoaded={network?.hasLoaded ?? false}
       // RBAC data
-      nsRBAC={rbac?.data || []}
-      nsRBACKinds={(rbac?.meta as { kinds?: string[] } | undefined)?.kinds}
-      nsRBACLoading={rbac?.loading || false}
-      nsRBACError={rbac?.error?.message || null}
-      loadRBAC={manualLoaders.rbac}
-      nsRBACLoaded={rbac?.hasLoaded ?? false}
       // Storage data
-      nsStorage={storage?.data || []}
-      nsStorageLoading={storage?.loading || false}
-      nsStorageError={storage?.error?.message || null}
-      loadStorage={manualLoaders.storage}
-      nsStorageLoaded={storage?.hasLoaded ?? false}
       // Autoscaling data
-      nsAutoscaling={autoscaling?.data || []}
-      nsAutoscalingKinds={(autoscaling?.meta as { kinds?: string[] } | undefined)?.kinds}
-      nsAutoscalingLoading={autoscaling?.loading || false}
-      nsAutoscalingError={autoscaling?.error?.message || null}
-      loadAutoscaling={manualLoaders.autoscaling}
-      nsAutoscalingLoaded={autoscaling?.hasLoaded ?? false}
       // Quotas data
-      nsQuotas={quotas?.data || []}
-      nsQuotasKinds={(quotas?.meta as { kinds?: string[] } | undefined)?.kinds}
-      nsQuotasLoading={quotas?.loading || false}
-      nsQuotasError={quotas?.error?.message || null}
-      loadQuotas={manualLoaders.quotas}
-      nsQuotasLoaded={quotas?.hasLoaded ?? false}
       // Custom resources data
-      nsCustom={custom?.data || []}
-      nsCustomKinds={(custom?.meta as { kinds?: string[] } | undefined)?.kinds}
-      nsCustomLoading={custom?.loading || false}
-      nsCustomError={custom?.error?.message || null}
-      loadCustom={manualLoaders.custom}
-      nsCustomLoaded={custom?.hasLoaded ?? false}
       // Helm data
-      nsHelm={helm?.data || []}
-      nsHelmLoading={helm?.loading || false}
-      nsHelmError={helm?.error?.message || null}
-      loadHelm={manualLoaders.helm}
-      nsHelmLoaded={helm?.hasLoaded ?? false}
       // Events data
-      nsEvents={events?.data || []}
-      nsEventsLoading={events?.loading || false}
-      nsEventsError={events?.error?.message || null}
-      loadEvents={manualLoaders.events}
-      nsEventsLoaded={events?.hasLoaded ?? false}
       objectPanel={objectPanel}
     />
   );

@@ -18,6 +18,16 @@ workflow and that exception is documented.
   menu bugs.
 - Do not build CSS selectors from raw row or column keys; keys may contain
   characters that are not selector-safe.
+- Do not split pagination controls across unrelated parts of the view. For
+  query-backed tables, the control group belongs with the table footer and must
+  show page size, visible range, and honest total/page-count state.
+- Rows-per-page is persisted table state. Store it with the same
+  cluster/view/namespace persistence key as sort, filters, widths, and column
+  visibility, and validate it against the table's supported page-size options.
+- Filter inputs and pagination dropdowns are interaction contracts, not just
+  rendering details. Changes to them need tests proving controlled search keeps
+  focus across updates and rows-per-page menus open and dispatch supported
+  values.
 
 ## Ownership
 
@@ -49,14 +59,126 @@ cluster-scoped row keys.
 - Metadata filters that describe the object universe should come from catalog or
   query metadata, not a capped row slice.
 
+## Sorting
+
+- Sort keys emitted by `GridTable` must be visible column keys. Hidden data
+  fields such as timestamps may be used by a column `sortValue`, but must not be
+  published as active table sort keys.
+- Query-backed table columns may be `sortable: true` only when the backend
+  adapter supports that exact column key, or a documented alias for it, as a
+  global query sort.
+- Do not expose hydrated post-page fields as sortable query columns. If the
+  backend cannot sort the complete matching dataset by a field, the column must
+  be non-sortable or the backend contract must be expanded first.
+- Production query-backed resource views should be covered by a rendered-column
+  contract test that compares their sortable keys against the supported query
+  sort contract.
+
+## Table Modes And User Claims
+
+- `Local Complete` means the loaded rows are the complete bounded dataset for
+  this table scope.
+- `Local Partial` means the loaded rows are only a recent, capped, buffered, or
+  degraded window. UI text, counts, filters, export, selection, and object
+  actions must be scoped to that window.
+- `Query Backed Static` and `Query Backed Dynamic` mean the backend owns global
+  search, filters, sort, counts, facets, and pagination. `GridTable` renders the
+  current page/window and emits query changes.
+- A classified table is not automatically production-ready. The UI and actions
+  must match the mode.
+
+## Resource Inventory Tables
+
+Every production resource inventory table — cluster, namespace, Browse/catalog,
+and object-panel related-resource lists — renders through one controller, never a
+bespoke display path:
+
+- `ResourceInventoryTable`
+  (`frontend/src/modules/resource-grid/ResourceInventoryTable.tsx`) is the single
+  wrapper. It takes a normalized `source` plus `gridTableProps` and owns the
+  loading boundary, refresh overlay, settled-empty state, and partial banner. It
+  is the only sanctioned direct `GridTable` consumer for resource data.
+- `useResourceInventoryTable` / `deriveResourceInventoryRenderState`
+  (`useResourceInventoryTable.ts`) is the pure controller: it projects a source's
+  lifecycle into a display status (`initializing`, `loading`, `refreshing`,
+  `ready`, `empty`, `blocked`, `error`). **Empty is decided from lifecycle, never
+  from raw `rows.length`.** A refresh that transiently reports zero rows resolves
+  to `loading`, not empty — this is the structural fix for the "No X found"
+  false-empty flash, and it must not be reintroduced by checking `rows.length` in
+  a view.
+
+### Source adapters
+
+A table's `source` (`ResourceInventorySourceState`) comes from exactly one of two
+adapters; there is no third shape:
+
+- `boundedRowsSource` — bounded local data (a fully-resident `Local Complete`
+  set, or an explicitly `Local Partial` window). It never paginates, so a bounded
+  table cannot silently fan out to query scale; it carries `completeness` and an
+  optional `partialLabel`.
+- `backendQuerySource` — catalog/explicit backend query results (Browse, Custom).
+  The typed-resource query wrappers build their source inline from the same
+  `ResourceInventorySourceState` shape.
+
+The wrapper hooks (`useQueryBackedClusterResourceGridTable` /
+`useQueryBackedNamespaceResourceGridTable`) return `{ source, gridTableProps,
+favModal }`. Read rows/loading/error from `source` — there are no separate
+wrapper-level lifecycle fields.
+
+**Kind vocabulary is backend-owned:** the Kinds dropdown's option list is the
+family's `capabilities.kindVocabulary`, published on every query payload
+(`ResourceQueryCapabilities` in `backend/refresh/snapshot/resource_query_contract.go`,
+pinned per family by `TestTypedResourceProvidersPublishKindVocabulary`). Builders
+narrow it to the kinds whose backing resource can currently produce rows
+(`capabilitiesWithAvailableKinds` over the same source lists the issues channel
+uses), so e.g. Gateway API kinds are only offered on clusters that serve them.
+The kind FACETS on a result collapse to the active selection by design — they
+describe the matched rows and must never feed the dropdown. Do not reintroduce
+frontend kind lists or thread `availableKinds` from snapshot meta; the query
+wrapper supplies the vocabulary to the binding itself.
+
+**Quiet-refresh contract:** a server-backed source reports `loading: true` only
+before its first applied result for the current scope (cluster/namespace/base
+scope — the points where its rows reset). Filter, sort, page-size, manual, and
+background refetches must NOT raise `loading`: the table keeps the last applied
+rows (or the settled "no matches" state) until the new result lands. Raising
+`loading` mid-session dims the table (`refreshing`) or, with zero rows, swaps
+the whole surface — filter bar included — for the loading boundary, which
+unmounts the filter input and steals focus while the user is typing.
+
+### Building a new resource table
+
+1. Pick the source adapter: bounded local → `boundedRowsSource`; backend-owned
+   query → `backendQuerySource` or a typed-query wrapper. If neither fits, stop
+   and extend the backend contract rather than adding a new source shape.
+2. Render `<ResourceInventoryTable source={source} gridTableProps={gridTableProps} />`.
+   Do not hand-roll loading/empty/partial booleans, and do not call `GridTable`
+   directly.
+3. A producer-reported truncation must surface as `Local Partial` (completeness +
+   label) so it can never render as a complete table.
+
+### Enforcement
+
+`shared/components/tables/persistence/gridTableViewRegistry.contract.test.ts`
+rejects: any un-allowlisted direct `<GridTable>`, any resource-grid call missing a
+table mode, any `source` produced outside the sanctioned adapters, and any stale
+allowlist entry. The only classified non-resource exceptions are object-scoped
+events (`EventsTab`, whose display lifecycle is still controller-driven through
+`boundedRowsSource`) and parsed logs (`ParsedLogTable`).
+
 ## Change Checklist
 
 When changing table behavior:
 
 1. Check row key, column key, and persisted-state compatibility.
 2. Verify virtualization, keyboard focus, hover, context menu, and empty states.
-3. Keep shared behavior in focused table hooks rather than feature components.
-4. Add tests with enough rows and columns to exercise the shared path.
+3. Verify pagination placement, page-size behavior, visible range, and total
+   exactness for query-backed tables.
+4. Verify partial/degraded copy and action limits for Local Partial tables.
+5. Keep shared behavior in focused table hooks rather than feature components.
+6. Add tests with enough rows and columns to exercise the shared path.
+7. For filter or footer changes, add interaction tests for focus retention,
+   dropdown opening, and button disabled/loading behavior.
 
 ## Validation
 

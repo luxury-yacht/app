@@ -239,7 +239,7 @@ describe('GridTableFiltersBar', () => {
         namespaces: [],
         searchBehavior: 'query',
       },
-      resultCount: { displayed: 1000, total: 4200, capped: true },
+      resultCount: { filtered: 1000, unfiltered: 4200, capped: true },
     });
 
     const input = container.querySelector('#search') as HTMLInputElement | null;
@@ -247,6 +247,196 @@ describe('GridTableFiltersBar', () => {
     expect(
       container.querySelector('[data-gridtable-filter-role="search-hint"] .tooltip-trigger')
     ).toBeNull();
+  });
+
+  it('keeps search input focused across controlled filter updates', async () => {
+    const setInputValue = (input: HTMLInputElement, value: string) => {
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+      descriptor?.set?.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    const Harness = () => {
+      const [search, setSearch] = React.useState('');
+      return (
+        <ZoomProvider>
+          <GridTableFiltersBar
+            activeFilters={{
+              search,
+              kinds: [],
+              namespaces: [],
+              caseSensitive: false,
+              includeMetadata: false,
+            }}
+            resolvedFilterOptions={{
+              searchBehavior: 'query',
+              kinds: [],
+              namespaces: [],
+            }}
+            kindDropdownId="kinds"
+            namespaceDropdownId="namespaces"
+            searchInputId="search"
+            onKindsChange={vi.fn()}
+            onNamespacesChange={vi.fn()}
+            onSearchChange={setSearch}
+            onReset={vi.fn()}
+            onToggleCaseSensitive={vi.fn()}
+            renderOption={(option) => option.label}
+            renderKindsValue={() => 'Kinds'}
+            renderNamespacesValue={() => 'Namespaces'}
+          />
+        </ZoomProvider>
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    const input = container.querySelector<HTMLInputElement>('#search');
+    expect(input).not.toBeNull();
+
+    await act(async () => {
+      input?.focus();
+      setInputValue(input!, 'p');
+      await Promise.resolve();
+    });
+
+    const updatedInput = container.querySelector<HTMLInputElement>('#search');
+    expect(document.activeElement).toBe(updatedInput);
+    expect(updatedInput?.value).toBe('p');
+
+    await act(async () => {
+      setInputValue(updatedInput!, 'po');
+      await Promise.resolve();
+    });
+
+    const finalInput = container.querySelector<HTMLInputElement>('#search');
+    expect(document.activeElement).toBe(finalInput);
+    expect(finalInput?.value).toBe('po');
+  });
+
+  it('hides the case-sensitive toggle for query-backed search', async () => {
+    await renderFilters({
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [],
+        searchBehavior: 'query',
+      },
+    });
+
+    expect(container.querySelector('.icon-bar-button[title="Match case"]')).toBeNull();
+  });
+
+  it('marks approximate backend totals with visible copy', async () => {
+    vi.useFakeTimers();
+    await renderFilters({
+      activeFilters: {
+        search: 'web',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [],
+        searchBehavior: 'query',
+      },
+      resultCount: { filtered: 100, unfiltered: 100001, totalIsExact: false, capped: true },
+    });
+
+    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+    expect(resultCount?.textContent).toContain('showing 100 of 100001+ items due to filters');
+    const trigger = resultCount?.querySelector('.tooltip-trigger');
+    expect(trigger).not.toBeNull();
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    expect(document.body.textContent).toContain('The total count is approximate');
+    expect(document.body.textContent).toContain('current backend query page');
+  });
+
+  it('shows filtered-of-unfiltered totals for query-backed tables', async () => {
+    await renderFilters({
+      activeFilters: {
+        search: 'web',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [],
+        searchBehavior: 'query',
+      },
+      resultCount: { filtered: 250, unfiltered: 5000, totalIsExact: true, capped: true },
+    });
+
+    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+    expect(resultCount?.textContent).toContain('showing 250 of 5000 items due to filters');
+  });
+
+  it('hides the result count and tooltip when no narrowing filter is active', async () => {
+    // The filter-bar count is filter feedback, not pagination — pagination/total lives
+    // in the pagination footer. With no active filter, the count must not render.
+    await renderFilters({
+      resultCount: { filtered: 50, unfiltered: 100, capped: true },
+    });
+
+    expect(container.querySelector('[data-gridtable-filter-role="result-count"]')).toBeNull();
+  });
+
+  it('shows the result count once a narrowing filter is active', async () => {
+    await renderFilters({
+      activeFilters: {
+        search: 'web',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      resultCount: { filtered: 12, unfiltered: 100 },
+    });
+
+    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+    expect(resultCount).not.toBeNull();
+    expect(resultCount?.textContent).toContain('showing 12 of 100 items due to filters');
+  });
+
+  it('surfaces the partial-window note in the result-count tooltip', async () => {
+    vi.useFakeTimers();
+    await renderFilters({
+      activeFilters: {
+        search: 'web',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      resultCount: {
+        filtered: 50,
+        unfiltered: 500,
+        capped: true,
+        partialDataLabel: 'Only the recent local window is loaded.',
+      },
+    });
+
+    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+    expect(resultCount?.textContent).toContain('showing 50 of 500 items due to filters');
+    const trigger = resultCount?.querySelector('.tooltip-trigger');
+    expect(trigger).not.toBeNull();
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    expect(document.body.textContent).toContain('Only the recent local window is loaded.');
+    expect(document.body.textContent).toContain('current local row window');
   });
 
   it('registers search shortcut and focuses the input when invoked', async () => {

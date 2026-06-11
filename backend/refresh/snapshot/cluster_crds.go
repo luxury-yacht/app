@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apiextlisters "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -23,10 +25,22 @@ type ClusterCRDBuilder struct {
 	crdLister apiextlisters.CustomResourceDefinitionLister
 }
 
-// ClusterCRDSnapshot is returned to the frontend.
+// ClusterCRDSnapshot is returned to the frontend. It embeds the canonical
+// ResourceQueryEnvelope (flattened into top-level JSON) plus the domain-typed
+// rows.
 type ClusterCRDSnapshot struct {
 	ClusterMeta
-	Definitions []ClusterCRDEntry `json:"definitions"`
+	ResourceQueryEnvelope
+	Rows []ClusterCRDEntry `json:"rows"`
+}
+
+func clusterCRDQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "group", "scope", "details", "version", "age"},
+		[]string{"kinds"},
+		[]string{"kind", "typeAlias", "name", "group", "scope", "details", "storageVersion"},
+		[]string{"CustomResourceDefinition"},
+	)
 }
 
 // ClusterCRDEntry represents an individual CRD in the table.
@@ -46,6 +60,7 @@ type ClusterCRDEntry struct {
 	StorageVersion          string `json:"storageVersion,omitempty"`
 	ExtraServedVersionCount int    `json:"extraServedVersionCount,omitempty"`
 	Age                     string `json:"age"`
+	AgeTimestamp            int64  `json:"ageTimestamp,omitempty"`
 	TypeAlias               string `json:"typeAlias,omitempty"`
 }
 
@@ -72,6 +87,11 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 		return nil, fmt.Errorf("cluster crds: CRD lister unavailable")
 	}
 	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterCRDDomainName, "")
+	if err != nil {
+		return nil, err
+	}
 	crds, err := b.crdLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("cluster crds: failed to list CRDs: %w", err)
@@ -96,11 +116,33 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 		return entries[i].Name < entries[j].Name
 	})
 
+	resolved := resolveTypedSnapshotPage(
+		clusterCRDDomainName,
+		entries,
+		query,
+		clusterCRDTableQueryAdapter(),
+		clusterCRDQueryCapabilities(),
+		config.SnapshotClusterCRDEntryLimit,
+		"CRDs",
+		func(ClusterCRDEntry) string { return "CustomResourceDefinition" },
+		nil,
+	)
+	// The window snapshot is the canonical unscoped refresh payload; only the
+	// query page publishes the request scope.
+	snapshotScope := ""
+	if query.Enabled {
+		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
+	}
 	return &refresh.Snapshot{
 		Domain:  clusterCRDDomainName,
+		Scope:   snapshotScope,
 		Version: version,
-		Payload: ClusterCRDSnapshot{ClusterMeta: meta, Definitions: entries},
-		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
+		Payload: ClusterCRDSnapshot{
+			ClusterMeta:           meta,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
+		},
+		Stats: resolved.Stats,
 	}, nil
 }
 

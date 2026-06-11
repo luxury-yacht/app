@@ -14,17 +14,18 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { NamespaceQuotasSnapshotPayload } from '@/core/refresh/types';
 
 // Data interface for quota resources (ResourceQuotas, LimitRanges, PodDisruptionBudgets)
 export interface QuotaData {
@@ -55,10 +56,6 @@ export interface QuotaData {
 
 interface QuotasViewProps {
   namespace: string;
-  data: QuotaData[];
-  availableKinds?: string[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
 
@@ -67,17 +64,11 @@ interface QuotasViewProps {
  * Aggregates ResourceQuotas, LimitRanges, and PodDisruptionBudgets
  */
 const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    availableKinds: kindOptions,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-  }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<QuotaData>('quotas');
 
@@ -186,14 +177,24 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
     const diagnosticsLabel =
       namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Quotas' : 'Namespace Quotas';
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<QuotaData>({
+    const selectRows = useCallback(
+      (payload: NamespaceQuotasSnapshotPayload) => payload.rows ?? [],
+      []
+    );
+    const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceQuotasSnapshotPayload,
+      QuotaData
+    >({
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-quotas',
+      label: diagnosticsLabel,
+      selectRows,
       viewId: 'namespace-quotas',
       namespace,
       columns,
-      data,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       diagnosticsLabel,
@@ -233,15 +234,13 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
           spinnerMessage="Loading quotas..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
-          loading={loading}
           onRowClick={handleResourceClick}
           tableClassName="ns-quotas-table"
           enableContextMenu={true}

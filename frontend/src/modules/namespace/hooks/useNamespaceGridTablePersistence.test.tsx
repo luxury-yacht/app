@@ -41,11 +41,11 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 const { useNamespaceGridTablePersistence } = await import('./useNamespaceGridTablePersistence');
 
 describe('useNamespaceGridTablePersistence', () => {
-  const columns: GridColumnDefinition<{ id: string }>[] = [
-    { key: 'name', header: 'Name', render: (row) => row.id },
+  const columns: GridColumnDefinition<{ name: string }>[] = [
+    { key: 'name', header: 'Name', render: (row) => row.name },
   ];
-  const data = [{ id: 'a' }];
-  const keyExtractor = (row: { id: string }) => row.id;
+  const data = [{ name: 'a' }];
+  const keyExtractor = (row: { name: string }) => row.name;
 
   beforeEach(() => {
     capturedParams.length = 0;

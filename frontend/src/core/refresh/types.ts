@@ -192,6 +192,7 @@ export interface ClusterNodeSnapshotEntry extends ClusterMeta {
   statusReason?: string;
   roles: string;
   age: string;
+  ageTimestamp?: number;
   version: string;
   internalIP?: string;
   externalIP?: string;
@@ -228,8 +229,8 @@ export interface NodeMetricsInfo {
   failureCount: number;
 }
 
-export interface ClusterNodeSnapshotPayload extends ClusterMeta {
-  nodes: ClusterNodeSnapshotEntry[];
+export interface ClusterNodeSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: ClusterNodeSnapshotEntry[];
   metrics?: NodeMetricsInfo;
   metricsByCluster?: Record<string, NodeMetricsInfo>;
 }
@@ -326,12 +327,12 @@ export interface ClusterRBACEntry extends ClusterMeta {
   name: string;
   details: string;
   age: string;
+  ageTimestamp?: number;
   typeAlias?: string;
 }
 
-export interface ClusterRBACSnapshotPayload extends ClusterMeta {
-  resources: ClusterRBACEntry[];
-  kinds?: string[];
+export interface ClusterRBACSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: ClusterRBACEntry[];
 }
 
 export interface ClusterStorageEntry extends ClusterMeta {
@@ -346,10 +347,11 @@ export interface ClusterStorageEntry extends ClusterMeta {
   statusReason?: string;
   claim: string;
   age: string;
+  ageTimestamp?: number;
 }
 
-export interface ClusterStorageSnapshotPayload extends ClusterMeta {
-  volumes: ClusterStorageEntry[];
+export interface ClusterStorageSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: ClusterStorageEntry[];
 }
 
 export interface ClusterConfigEntry extends ClusterMeta {
@@ -358,11 +360,11 @@ export interface ClusterConfigEntry extends ClusterMeta {
   details: string;
   isDefault?: boolean;
   age: string;
+  ageTimestamp?: number;
 }
 
-export interface ClusterConfigSnapshotPayload extends ClusterMeta {
-  resources: ClusterConfigEntry[];
-  kinds?: string[];
+export interface ClusterConfigSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: ClusterConfigEntry[];
 }
 
 export interface ClusterCRDEntry extends ClusterMeta {
@@ -386,11 +388,12 @@ export interface ClusterCRDEntry extends ClusterMeta {
    */
   extraServedVersionCount?: number;
   age: string;
+  ageTimestamp?: number;
   typeAlias?: string;
 }
 
-export interface ClusterCRDSnapshotPayload extends ClusterMeta {
-  definitions: ClusterCRDEntry[];
+export interface ClusterCRDSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: ClusterCRDEntry[];
 }
 
 export interface ClusterCustomEntry extends ClusterMeta {
@@ -445,8 +448,8 @@ export interface ClusterEventEntry extends ClusterMeta {
   ageTimestamp?: number;
 }
 
-export interface ClusterEventsSnapshotPayload extends ClusterMeta {
-  events: ClusterEventEntry[];
+export interface ClusterEventsSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: ClusterEventEntry[];
 }
 
 export type CatalogItemScope = 'Cluster' | 'Namespace';
@@ -490,13 +493,30 @@ export interface CatalogNamespaceGroup extends ClusterMeta {
   selectedNamespaces?: string[];
 }
 
+// The catalog is the ResourceQueryProviderCatalog member of the resource-query
+// contract. It cannot extend ResourceQueryEnvelopeFields because its `kinds`
+// facet is the richer KindInfo[] (not string[]) and it carries a keyset
+// pagination model; instead it surfaces the envelope's provider/completeness/
+// capabilities contract fields directly. See backend CatalogSnapshot.
 export interface CatalogSnapshotPayload extends ClusterMeta {
+  provider?: string;
+  completeness?: 'complete' | 'partial';
+  capabilities?: ResourceQueryCapabilities;
   items: CatalogItem[];
   continue?: string;
+  previous?: string;
+  cursorInvalid?: boolean;
   total: number;
+  /** In-scope item count before filters — the "of M" in "showing N of M items due to filters". */
+  unfilteredTotal?: number;
+  totalIsExact?: boolean;
   resourceCount: number;
   kinds?: KindInfo[];
   namespaces?: string[];
+  facetsExact?: boolean;
+  issues?: ResourceQueryIssue[];
+  hasNext?: boolean;
+  hasPrevious?: boolean;
   namespaceGroups?: CatalogNamespaceGroup[];
   parity?: CatalogParity | null;
   batchIndex: number;
@@ -504,6 +524,129 @@ export interface CatalogSnapshotPayload extends ClusterMeta {
   totalBatches: number;
   isFinal: boolean;
   firstBatchLatencyMs?: number;
+}
+
+export interface ResourceQueryRequest {
+  clusterId: string;
+  table: string;
+  namespaces?: string[];
+  kinds?: string[];
+  search?: string;
+  predicates?: ResourceQueryPredicate[];
+  sortField?: string;
+  sortDirection?: string;
+  limit?: number;
+  continue?: string;
+}
+
+export interface ResourceQueryPredicate {
+  field: string;
+  op: string;
+  value?: string;
+}
+
+export interface ResourceQueryResult {
+  rows: ResourceQueryRow[];
+  continue?: string;
+  cursorInvalid?: boolean;
+  total: number;
+  totalIsExact: boolean;
+  facets: ResourceQueryFacets;
+  facetsExact: boolean;
+  partial?: ResourceQueryIssue[];
+  dynamic?: ResourceQueryDynamicRef;
+}
+
+export interface ResourceQueryCapabilities {
+  sortableFields?: string[];
+  filterableFields?: string[];
+  searchableFields?: string[];
+  /**
+   * The family's closed set of kinds — the option list the Kinds dropdown
+   * renders. Backend-owned (see ResourceQueryCapabilities in
+   * backend/refresh/snapshot/resource_query_contract.go); the kind FACETS
+   * collapse to the active selection by design and must never be used as the
+   * dropdown options. Absent for open kind sets (events).
+   */
+  kindVocabulary?: string[];
+}
+
+/**
+ * Flattened canonical query envelope shared by every backend-query resource
+ * inventory payload. Migrated domain payloads extend this and add a typed
+ * `rows` field. Mirrors the backend `ResourceQueryEnvelope` (Go JSON inlining
+ * flattens it to the top level), using flat facet fields to match the wire.
+ */
+export interface ResourceQueryEnvelopeFields {
+  provider?: string;
+  table?: string;
+  queryIdentity?: string;
+  continue?: string;
+  previous?: string;
+  cursorInvalid?: boolean;
+  total?: number;
+  totalIsExact?: boolean;
+  kinds?: string[];
+  namespaces?: string[];
+  statuses?: string[];
+  nodes?: string[];
+  facetsExact?: boolean;
+  completeness?: 'complete' | 'partial';
+  issues?: ResourceQueryIssue[];
+  dynamic?: ResourceQueryDynamicRef;
+  capabilities?: ResourceQueryCapabilities;
+}
+
+export interface ResourceQueryRow {
+  clusterId: string;
+  group: string;
+  version: string;
+  kind: string;
+  resource: string;
+  namespace?: string;
+  name: string;
+  uid?: string;
+  status?: string;
+  ready?: string;
+  details?: string;
+  age?: string;
+  restarts?: number;
+  owner?: string;
+  node?: string;
+  crdName?: string;
+  crdGroup?: string;
+  crdScope?: string;
+  storageVersion?: string;
+  storageClass?: string;
+  capacity?: string;
+  claim?: string;
+  chartVersion?: string;
+  appVersion?: string;
+  helmRevision?: string;
+  helmUpdated?: string;
+  autoscalingTarget?: string;
+  autoscalingCurrent?: string;
+  autoscalingDesired?: string;
+  cpu?: string;
+  memory?: string;
+}
+
+export interface ResourceQueryFacets {
+  kinds?: string[];
+  namespaces?: string[];
+  statuses?: string[];
+  nodes?: string[];
+}
+
+export interface ResourceQueryIssue {
+  kind: string;
+  message: string;
+}
+
+export interface ResourceQueryDynamicRef {
+  source: string;
+  revision: string;
+  policy: string;
 }
 
 // Indicates whether the catalog stream payload is a full replacement or a partial update.
@@ -532,6 +675,7 @@ export interface PodSnapshotEntry extends ClusterMeta {
   ready: string;
   restarts: number;
   age: string;
+  ageTimestamp?: number;
   ownerKind: string;
   ownerName: string;
   portForwardAvailable?: boolean;
@@ -560,8 +704,8 @@ export interface PodMetricsInfo {
   failureCount: number;
 }
 
-export interface PodSnapshotPayload extends ClusterMeta {
-  pods: PodSnapshotEntry[];
+export interface PodSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: PodSnapshotEntry[];
   metrics?: PodMetricsInfo;
 }
 
@@ -692,6 +836,7 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
   statusReason?: string;
   restarts: number;
   age: string;
+  ageTimestamp?: number;
   portForwardAvailable?: boolean;
   hpaManaged?: boolean | null;
   cpuUsage?: string;
@@ -703,9 +848,8 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
   desiredReplicas?: number;
 }
 
-export interface NamespaceWorkloadSnapshotPayload extends ClusterMeta {
-  workloads: NamespaceWorkloadSummary[];
-  kinds?: string[];
+export interface NamespaceWorkloadSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: NamespaceWorkloadSummary[];
 }
 
 export interface NamespaceConfigSummary extends ClusterMeta {
@@ -715,11 +859,11 @@ export interface NamespaceConfigSummary extends ClusterMeta {
   namespace: string;
   data: number;
   age: string;
+  ageTimestamp?: number;
 }
 
-export interface NamespaceConfigSnapshotPayload extends ClusterMeta {
-  resources: NamespaceConfigSummary[];
-  kinds?: string[];
+export interface NamespaceConfigSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: NamespaceConfigSummary[];
 }
 
 export interface NamespaceNetworkSummary extends ClusterMeta {
@@ -728,11 +872,11 @@ export interface NamespaceNetworkSummary extends ClusterMeta {
   namespace: string;
   details: string;
   age: string;
+  ageTimestamp?: number;
 }
 
-export interface NamespaceNetworkSnapshotPayload extends ClusterMeta {
-  resources: NamespaceNetworkSummary[];
-  kinds?: string[];
+export interface NamespaceNetworkSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: NamespaceNetworkSummary[];
 }
 
 export interface NamespaceRBACSummary extends ClusterMeta {
@@ -741,11 +885,11 @@ export interface NamespaceRBACSummary extends ClusterMeta {
   namespace: string;
   details: string;
   age: string;
+  ageTimestamp?: number;
 }
 
-export interface NamespaceRBACSnapshotPayload extends ClusterMeta {
-  resources: NamespaceRBACSummary[];
-  kinds?: string[];
+export interface NamespaceRBACSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: NamespaceRBACSummary[];
 }
 
 export interface NamespaceStorageSummary extends ClusterMeta {
@@ -759,10 +903,11 @@ export interface NamespaceStorageSummary extends ClusterMeta {
   statusReason?: string;
   storageClass: string;
   age: string;
+  ageTimestamp?: number;
 }
 
-export interface NamespaceStorageSnapshotPayload extends ClusterMeta {
-  resources: NamespaceStorageSummary[];
+export interface NamespaceStorageSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: NamespaceStorageSummary[];
 }
 
 export interface NamespaceAutoscalingSummary extends ClusterMeta {
@@ -783,11 +928,12 @@ export interface NamespaceAutoscalingSummary extends ClusterMeta {
   max: number;
   current: number;
   age: string;
+  ageTimestamp?: number;
 }
 
-export interface NamespaceAutoscalingSnapshotPayload extends ClusterMeta {
-  resources: NamespaceAutoscalingSummary[];
-  kinds?: string[];
+export interface NamespaceAutoscalingSnapshotPayload
+  extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: NamespaceAutoscalingSummary[];
 }
 
 export interface NamespaceQuotaSummary extends ClusterMeta {
@@ -796,6 +942,7 @@ export interface NamespaceQuotaSummary extends ClusterMeta {
   namespace: string;
   details: string;
   age: string;
+  ageTimestamp?: number;
   // PDB-only fields used by the quotas view.
   minAvailable?: string;
   maxUnavailable?: string;
@@ -806,9 +953,8 @@ export interface NamespaceQuotaSummary extends ClusterMeta {
   };
 }
 
-export interface NamespaceQuotasSnapshotPayload extends ClusterMeta {
-  resources: NamespaceQuotaSummary[];
-  kinds?: string[];
+export interface NamespaceQuotasSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: NamespaceQuotaSummary[];
 }
 
 export interface NamespaceEventSummary extends ClusterMeta {
@@ -831,8 +977,8 @@ export interface NamespaceEventSummary extends ClusterMeta {
   ageTimestamp?: number;
 }
 
-export interface NamespaceEventsSnapshotPayload extends ClusterMeta {
-  events: NamespaceEventSummary[];
+export interface NamespaceEventsSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: NamespaceEventSummary[];
 }
 
 export interface NamespaceCustomSummary extends ClusterMeta {
@@ -880,10 +1026,11 @@ export interface NamespaceHelmSummary extends ClusterMeta {
   updated: string;
   description?: string;
   age: string;
+  ageTimestamp?: number;
 }
 
-export interface NamespaceHelmSnapshotPayload extends ClusterMeta {
-  releases: NamespaceHelmSummary[];
+export interface NamespaceHelmSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: NamespaceHelmSummary[];
 }
 
 export interface ContainerLogsEntry {

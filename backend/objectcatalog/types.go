@@ -48,6 +48,10 @@ type HealthStatus struct {
 	LastError           string      `json:"lastError,omitempty"`       // error message from the last sync attempt
 	Stale               bool        `json:"stale"`                     // indicates if the catalog is serving stale data
 	FailedResources     int         `json:"failedResources,omitempty"` // optional number of resources that failed to sync
+	// DeniedResources lists resource types (kubectl-style `resource[.group]`)
+	// whose lists were RBAC-forbidden during the last sync — so an RBAC-blocked
+	// catalog is distinguishable from an empty cluster. Sorted.
+	DeniedResources []string `json:"deniedResources,omitempty"`
 }
 
 // Summary represents the lightweight metadata captured for each Kubernetes object.
@@ -142,24 +146,28 @@ type Telemetry interface {
 
 // Options tunes catalog behaviour; zero values fall back to sensible defaults.
 type Options struct {
-	ResyncInterval             time.Duration // interval between resyncs
-	PageSize                   int           // number of items per page
-	ListWorkers                int           // number of workers for listing resources
-	NamespaceWorkers           int           // number of workers for processing namespaces
-	InformerPromotionThreshold int           // threshold for promoting informers
-	EvictionTTL                time.Duration // time-to-live for evicted items
-	StreamingBatchSize         int           // number of items per streaming batch
-	StreamingFlushInterval     time.Duration // interval between streaming flushes
-	EnableReactiveUpdates      bool          // enables informer-driven incremental updates (default true)
+	ResyncInterval             time.Duration     // interval between resyncs
+	PageSize                   int               // number of items per page
+	ListWorkers                int               // number of workers for listing resources
+	NamespaceWorkers           int               // number of workers for processing namespaces
+	InformerPromotionThreshold int               // threshold for promoting informers
+	EvictionTTL                time.Duration     // time-to-live for evicted items
+	StreamingBatchSize         int               // number of items per streaming batch
+	StreamingFlushInterval     time.Duration     // interval between streaming flushes
+	EnableReactiveUpdates      bool              // enables informer-driven incremental updates (default true)
+	QueryStore                 CatalogQueryStore // optional query execution backend; defaults to in-memory catalog index
 }
 
 // QueryOptions controls catalog queries executed against the in-memory cache.
 type QueryOptions struct {
-	Kinds      []string // resource kinds to filter
-	Namespaces []string // namespaces to filter
-	Search     string   // search term for filtering
-	Limit      int      // maximum number of items to return
-	Continue   string   // token for continuing a paginated query
+	Kinds         []string // resource kinds to filter
+	Namespaces    []string // namespaces to filter
+	Search        string   // search term for filtering
+	SortField     string   // backend-owned sort field; empty uses the catalog default
+	SortDirection string   // backend-owned sort direction; empty uses ascending
+	Limit         int      // maximum number of items to return
+	Continue      string   // token for continuing a paginated query
+	CustomOnly    bool     // restricts results to non-built-in discovered resources
 }
 
 // KindInfo captures metadata about a resource kind for filtering.
@@ -170,12 +178,19 @@ type KindInfo struct {
 
 // QueryResult summarises the outcome of a catalog query.
 type QueryResult struct {
-	Items         []Summary  // items returned by the query
-	ContinueToken string     // token for continuing a paginated query
-	TotalItems    int        // total number of items matching the query
-	ResourceCount int        // total number of resources matching the query
-	Kinds         []KindInfo // resource kinds included in the query
-	Namespaces    []string   // namespaces included in the query
+	Items         []Summary // items returned by the query
+	ContinueToken string    // token for continuing a paginated query
+	PreviousToken string    // token for fetching the previous page
+	CursorInvalid bool      // indicates the supplied cursor was malformed or incompatible
+	TotalItems    int       // total number of items matching the query
+	// UnfilteredTotal is the in-scope item count before the query's filters (the "of M" in
+	// "showing N of M items due to filters"); equals TotalItems when no filter is active.
+	UnfilteredTotal int        // in-scope count before the query's filters
+	TotalIsExact    bool       // indicates TotalItems is exact for the query
+	ResourceCount   int        // total number of resources matching the query
+	Kinds           []KindInfo // resource kinds included in the query
+	Namespaces      []string   // namespaces included in the query
+	FacetsExact     bool       // indicates Kinds and Namespaces describe the matching universe exactly
 }
 
 // PartialSyncError reports that a sync completed with partial failures.

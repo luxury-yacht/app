@@ -60,13 +60,7 @@ describe('GridTableBody', () => {
       virtualOffset: 0,
       renderRowContent: defaultRenderRowContent as RenderRowContentFn<any>,
       paginationEnabled: true,
-      paginationStatus: 'More rows',
-      showPaginationStatus: true,
-      showLoadMoreButton: true,
-      loadMoreLabel: 'Load more',
       hasMore: true,
-      isRequestingMore: false,
-      onManualLoadMore: vi.fn(),
       sentinelRef,
       onWrapperFocus: vi.fn(),
       onWrapperBlur: vi.fn(),
@@ -93,21 +87,15 @@ describe('GridTableBody', () => {
     };
   };
 
-  it('renders static rows and pagination controls', async () => {
-    const { container, props } = await renderTableBody();
+  it('renders static rows and pagination sentinel', async () => {
+    const { container } = await renderTableBody();
 
     const rows = container.querySelectorAll('[data-index]');
     expect(rows.length).toBe(2);
     expect(rows[0]?.textContent).toContain('Row 1');
 
-    const button = container.querySelector<HTMLButtonElement>('.gridtable-pagination-button');
-    expect(button).not.toBeNull();
-
-    await act(async () => {
-      button!.click();
-    });
-
-    expect(props.onManualLoadMore).toHaveBeenCalled();
+    expect(container.querySelector('.gridtable-pagination-sentinel')).not.toBeNull();
+    expect(container.querySelector('.gridtable-pagination-button')).toBeNull();
   });
 
   it('renders virtualization body when enabled', async () => {

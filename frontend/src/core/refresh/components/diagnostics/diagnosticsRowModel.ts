@@ -47,6 +47,59 @@ const STREAM_LABELS: Record<string, string> = {
 
 type ActiveDomainRow = Pick<DiagnosticsRow, 'domain' | 'label' | 'scope'>;
 
+const diagnosticsRowIdentity = (row: DiagnosticsRow): string =>
+  [row.domain, row.label, row.namespace, row.scope, row.role].join('\u0000');
+
+const rowHealthRank = (row: DiagnosticsRow): number => {
+  const normalized = row.healthStatus.toLowerCase();
+  if (normalized.startsWith('healthy')) {
+    return 3;
+  }
+  if (normalized.startsWith('degraded')) {
+    return 2;
+  }
+  if (normalized.startsWith('unhealthy')) {
+    return 1;
+  }
+  return 0;
+};
+
+const rowStatusRank = (row: DiagnosticsRow): number => {
+  switch (row.status) {
+    case 'ready':
+      return 5;
+    case 'updating':
+      return 4;
+    case 'loading':
+    case 'initialising':
+      return 3;
+    case 'idle':
+      return 2;
+    case 'error':
+      return 1;
+    default:
+      return 0;
+  }
+};
+
+const rowQualityRank = (row: DiagnosticsRow): number =>
+  rowHealthRank(row) * 100 +
+  rowStatusRank(row) * 10 +
+  (row.error === '—' ? 2 : 0) +
+  (row.stale ? 0 : 1);
+
+export const dedupeDiagnosticsRows = (rows: DiagnosticsRow[]): DiagnosticsRow[] => {
+  const byIdentity = new Map<string, DiagnosticsRow>();
+  rows.forEach((row) => {
+    const identity = diagnosticsRowIdentity(row);
+    const existing = byIdentity.get(identity);
+    if (!existing || rowQualityRank(row) > rowQualityRank(existing)) {
+      byIdentity.set(identity, row);
+    }
+  });
+  return Array.from(byIdentity.values());
+};
+
 export const buildDiagnosticsStreamRows = (
   telemetrySummary: TelemetrySummary | null,
   filteredRows: ActiveDomainRow[],

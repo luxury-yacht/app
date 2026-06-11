@@ -84,6 +84,23 @@ describe('gridTableFilterEngine', () => {
     expect(options.namespaces).toEqual([]);
   });
 
+  it('does not derive query-backed filter options from the loaded page', () => {
+    const options = buildGridTableFilterOptions({
+      filteringEnabled: true,
+      options: {
+        searchBehavior: 'query',
+        kinds: ['Pod'],
+      },
+      data: rows,
+      accessors,
+      defaultGetKind,
+      defaultGetNamespace,
+    });
+
+    expect(options.kinds.map((option) => option.value)).toEqual(['Pod']);
+    expect(options.namespaces).toEqual([]);
+  });
+
   it('treats null and em-dash namespaces as cluster-scoped for filtering', () => {
     const clusterScopedAccessors = resolveGridTableFilterAccessors({
       accessors: {
@@ -108,5 +125,25 @@ describe('gridTableFilterEngine', () => {
     });
 
     expect(filtered.map((row) => row.id)).toEqual(['4']);
+  });
+
+  it('does not locally filter query-backed rows', () => {
+    const filtered = applyGridTableFilters({
+      filteringEnabled: true,
+      searchBehavior: 'query',
+      data: rows,
+      activeFilters: {
+        ...defaultState,
+        search: 'frontend',
+        kinds: ['Pod'],
+        namespaces: ['default'],
+      },
+      accessors,
+      defaultGetKind,
+      defaultGetNamespace,
+      defaultGetSearchText,
+    });
+
+    expect(filtered).toBe(rows);
   });
 });

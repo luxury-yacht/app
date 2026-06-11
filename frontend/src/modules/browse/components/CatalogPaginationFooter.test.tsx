@@ -1,0 +1,151 @@
+import ReactDOM from 'react-dom/client';
+import { act } from 'react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import CatalogPaginationFooter from './CatalogPaginationFooter';
+import type { BrowseCatalogPagination } from '@modules/browse/hooks/useBrowseCatalog';
+
+const pagination = (overrides: Partial<BrowseCatalogPagination> = {}): BrowseCatalogPagination => ({
+  pageIndex: 1,
+  pageLimit: 100,
+  pageLimitOptions: [25, 50, 100, 250, 500, 1000],
+  setPageLimit: vi.fn(),
+  totalCount: 0,
+  totalIsExact: true,
+  previousToken: null,
+  continueToken: null,
+  queryPending: false,
+  hasMore: false,
+  hasPrevious: false,
+  isRequestingMore: false,
+  onRequestMore: vi.fn(),
+  onRequestPrevious: vi.fn(),
+  loadMoreLabel: 'Next page',
+  previousPageLabel: 'Previous page',
+  autoLoadMore: false,
+  ...overrides,
+});
+
+describe('CatalogPaginationFooter', () => {
+  let container: HTMLDivElement;
+  let root: ReactDOM.Root;
+
+  beforeAll(() => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('shows an exact visible range when the backend total is exact', () => {
+    act(() => {
+      root.render(
+        <CatalogPaginationFooter
+          idPrefix="browse"
+          visibleItemCount={75}
+          pagination={pagination({
+            pageIndex: 2,
+            totalCount: 175,
+            hasPrevious: true,
+          })}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Rows per page');
+    expect(container.textContent).toContain('101-175 of 175');
+    expect(container.textContent).not.toContain('Page');
+  });
+
+  it('does not invent total pages for approximate totals', () => {
+    act(() => {
+      root.render(
+        <CatalogPaginationFooter
+          idPrefix="browse"
+          visibleItemCount={100}
+          pagination={pagination({
+            pageIndex: 2,
+            totalCount: 10000,
+            totalIsExact: false,
+            hasPrevious: true,
+            hasMore: true,
+          })}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('101-200 of 10,000+');
+    expect(container.textContent).not.toContain('Page');
+  });
+
+  it('dispatches previous, next, and page-size changes from one control group', () => {
+    const onPrevious = vi.fn();
+    const onNext = vi.fn();
+    const onPageSizeChange = vi.fn();
+
+    act(() => {
+      root.render(
+        <CatalogPaginationFooter
+          idPrefix="browse"
+          visibleItemCount={100}
+          pagination={pagination({
+            totalCount: 1000,
+            hasPrevious: true,
+            hasMore: true,
+            onRequestPrevious: onPrevious,
+            onRequestMore: onNext,
+            setPageLimit: onPageSizeChange,
+          })}
+        />
+      );
+    });
+
+    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('button'));
+    act(() => {
+      buttons.find((button) => button.getAttribute('aria-label') === 'Previous page')?.click();
+      buttons.find((button) => button.getAttribute('aria-label') === 'Next page')?.click();
+      container.querySelector<HTMLElement>('[role="combobox"]')?.click();
+    });
+    act(() => {
+      Array.from(container.querySelectorAll<HTMLElement>('[role="option"]'))
+        .find((option) => option.textContent?.includes('250'))
+        ?.click();
+    });
+
+    expect(onPrevious).toHaveBeenCalledTimes(1);
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(onPageSizeChange).toHaveBeenCalledWith(250);
+  });
+
+  it('keeps pagination loading state out of visible button text', () => {
+    act(() => {
+      root.render(
+        <CatalogPaginationFooter
+          idPrefix="browse"
+          visibleItemCount={100}
+          pagination={pagination({
+            totalCount: 1000,
+            hasMore: true,
+            isRequestingMore: true,
+          })}
+        />
+      );
+    });
+
+    expect(container.textContent).not.toContain('Loading');
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')?.disabled
+    ).toBe(true);
+    expect(container.querySelector('[aria-label="Page request in progress"]')).not.toBeNull();
+  });
+});

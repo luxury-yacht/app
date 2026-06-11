@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -110,6 +111,7 @@ func TestPodBuilderNodeScope(t *testing.T) {
 		Spec: appsv1.ReplicaSetSpec{},
 	}
 
+	collectedAt := time.Now().Add(-10 * time.Second)
 	builder := &PodBuilder{
 		podLister: testsupport.NewPodLister(t, podA, podB),
 		rsLister:  testsupport.NewReplicaSetLister(t, rs),
@@ -121,7 +123,7 @@ func TestPodBuilderNodeScope(t *testing.T) {
 				},
 			},
 			metadata: metrics.Metadata{
-				CollectedAt:         time.Now().Add(-10 * time.Second),
+				CollectedAt:         collectedAt,
 				SuccessCount:        5,
 				FailureCount:        1,
 				LastError:           "",
@@ -134,13 +136,13 @@ func TestPodBuilderNodeScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "node:node-1", snapshot.Scope)
-	require.Equal(t, uint64(15), snapshot.Version)
+	require.Equal(t, snapshotVersionWithDynamicRevision(15, fmt.Sprint(collectedAt.UnixNano())), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Pods, 2)
+	require.Len(t, payload.Rows, 2)
 
-	first := payload.Pods[0]
+	first := payload.Rows[0]
 	require.Equal(t, "pod-a", first.Name)
 	require.Equal(t, "Deployment", first.OwnerKind)
 	require.Equal(t, "deploy-a", first.OwnerName)
@@ -202,11 +204,11 @@ func TestPodBuilderWorkloadScope(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Pods, 1)
-	require.Equal(t, "pod-workload", payload.Pods[0].Name)
-	require.Equal(t, "Deployment", payload.Pods[0].OwnerKind)
-	require.Equal(t, "orders", payload.Pods[0].OwnerName)
-	require.Equal(t, "apps/v1", payload.Pods[0].OwnerAPIVersion)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "pod-workload", payload.Rows[0].Name)
+	require.Equal(t, "Deployment", payload.Rows[0].OwnerKind)
+	require.Equal(t, "orders", payload.Rows[0].OwnerName)
+	require.Equal(t, "apps/v1", payload.Rows[0].OwnerAPIVersion)
 }
 
 // TestResolvePodOwnerThreadsCRDOwnerAPIVersion verifies that the snapshot
@@ -353,17 +355,16 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:team-a", snapshot.Scope)
-	// Highest resource version between pods (101)
-	require.Equal(t, uint64(101), snapshot.Version)
+	require.Equal(t, snapshotVersionWithDynamicRevision(101, fmt.Sprint(now.UnixNano())), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Pods, 2)
-	require.Equal(t, "team-a", payload.Pods[0].Namespace)
-	require.Equal(t, "team-a-pod-1", payload.Pods[0].Name)
-	require.Equal(t, "25m", payload.Pods[0].CPUUsage)
-	require.Equal(t, "32 MB", payload.Pods[0].MemUsage)
-	require.Equal(t, "team-a-pod-2", payload.Pods[1].Name)
+	require.Len(t, payload.Rows, 2)
+	require.Equal(t, "team-a", payload.Rows[0].Namespace)
+	require.Equal(t, "team-a-pod-1", payload.Rows[0].Name)
+	require.Equal(t, "25m", payload.Rows[0].CPUUsage)
+	require.Equal(t, "32 MB", payload.Rows[0].MemUsage)
+	require.Equal(t, "team-a-pod-2", payload.Rows[1].Name)
 }
 
 func TestPodBuilderAllNamespacesScope(t *testing.T) {
@@ -400,12 +401,130 @@ func TestPodBuilderAllNamespacesScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:all", snapshot.Scope)
-	require.Equal(t, uint64(25), snapshot.Version)
+	require.Equal(t, snapshotVersionWithDynamicRevision(25, fmt.Sprint(now.UnixNano())), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Pods, 2)
-	require.Equal(t, []string{"team-a", "team-b"}, []string{payload.Pods[0].Namespace, payload.Pods[1].Namespace})
+	require.Len(t, payload.Rows, 2)
+	require.Equal(t, []string{"team-a", "team-b"}, []string{payload.Rows[0].Namespace, payload.Rows[1].Namespace})
+}
+
+func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T) {
+	now := time.Now()
+	pods := []*corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "alpha",
+				Namespace:         "team-a",
+				ResourceVersion:   "20",
+				CreationTimestamp: metav1.NewTime(now.Add(-20 * time.Minute)),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "bravo",
+				Namespace:         "team-b",
+				ResourceVersion:   "25",
+				CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "charlie",
+				Namespace:         "team-b",
+				ResourceVersion:   "26",
+				CreationTimestamp: metav1.NewTime(now.Add(-5 * time.Minute)),
+			},
+		},
+	}
+
+	builder := &PodBuilder{
+		podLister: testsupport.NewPodLister(t, pods...),
+		rsLister:  testsupport.NewReplicaSetLister(t),
+		metrics: fakePodMetricsProvider{
+			usage: map[string]metrics.PodUsage{
+				"team-a/alpha":   {CPUUsageMilli: 25},
+				"team-b/bravo":   {CPUUsageMilli: 300},
+				"team-b/charlie": {CPUUsageMilli: 100},
+			},
+			metadata: metrics.Metadata{CollectedAt: now},
+		},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=cpu&sortDirection=desc&limit=1")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(PodSnapshot)
+	require.Equal(t, 2, payload.Total)
+	require.True(t, payload.TotalIsExact)
+	require.Equal(t, []string{"team-b"}, payload.Namespaces)
+	require.Equal(t, []string{"Pod"}, payload.Kinds)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "bravo", payload.Rows[0].Name)
+	require.NotEmpty(t, payload.Continue)
+
+	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=cpu&sortDirection=desc&limit=1&continue="+payload.Continue)
+	require.NoError(t, err)
+	nextPayload := next.Payload.(PodSnapshot)
+	require.Len(t, nextPayload.Rows, 1)
+	require.Equal(t, "charlie", nextPayload.Rows[0].Name)
+	require.Empty(t, nextPayload.Continue)
+}
+
+func TestPodBuilderAllNamespacesMetricCursorContinuesAcrossMetricsRefresh(t *testing.T) {
+	now := time.Now()
+	pods := []*corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "bravo",
+				Namespace:         "team-b",
+				ResourceVersion:   "25",
+				CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "charlie",
+				Namespace:         "team-b",
+				ResourceVersion:   "26",
+				CreationTimestamp: metav1.NewTime(now.Add(-5 * time.Minute)),
+			},
+		},
+	}
+
+	builder := &PodBuilder{
+		podLister: testsupport.NewPodLister(t, pods...),
+		rsLister:  testsupport.NewReplicaSetLister(t),
+		metrics: fakePodMetricsProvider{
+			usage: map[string]metrics.PodUsage{
+				"team-b/bravo":   {CPUUsageMilli: 300},
+				"team-b/charlie": {CPUUsageMilli: 100},
+			},
+			metadata: metrics.Metadata{CollectedAt: now},
+		},
+	}
+
+	first, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=cpu&sortDirection=desc&limit=1")
+	require.NoError(t, err)
+	firstPayload := first.Payload.(PodSnapshot)
+	require.Len(t, firstPayload.Rows, 1)
+	require.Equal(t, "bravo", firstPayload.Rows[0].Name)
+	require.NotEmpty(t, firstPayload.Continue)
+
+	builder.metrics = fakePodMetricsProvider{
+		usage: map[string]metrics.PodUsage{
+			"team-b/bravo":   {CPUUsageMilli: 320},
+			"team-b/charlie": {CPUUsageMilli: 110},
+		},
+		metadata: metrics.Metadata{CollectedAt: now.Add(5 * time.Second)},
+	}
+
+	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=cpu&sortDirection=desc&limit=1&continue="+firstPayload.Continue)
+	require.NoError(t, err)
+	nextPayload := next.Payload.(PodSnapshot)
+	require.False(t, nextPayload.CursorInvalid)
+	require.Len(t, nextPayload.Rows, 1)
+	require.Equal(t, "charlie", nextPayload.Rows[0].Name)
+	require.Empty(t, nextPayload.Continue)
 }
 
 func boolPtr(v bool) *bool {

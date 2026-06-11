@@ -22,6 +22,12 @@ import {
 } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
 import {
+  DEFAULT_TABLE_PAGE_SIZE,
+  TABLE_PAGE_SIZE_OPTIONS,
+  normalizeTablePageSize,
+  type TablePageSize,
+} from '@shared/components/tables/pageSizeOptions';
+import {
   APPEARANCE_BOOTSTRAP_STORAGE_KEY,
   saveAppearanceBootstrapToLocalStorage,
 } from '@/utils/appearanceBootstrap';
@@ -43,7 +49,6 @@ export interface AppPreferences {
   autoRefreshEnabled: boolean;
   refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
-  maxTableRows: number;
   kubernetesClientQPS: number;
   kubernetesClientBurst: number;
   permissionSSRRFetchConcurrency: number;
@@ -53,6 +58,7 @@ export interface AppPreferences {
   objPanelLogsTargetPerScopeLimit: number;
   objPanelLogsTargetGlobalLimit: number;
   gridTablePersistenceMode: GridTablePersistenceMode;
+  defaultTablePageSize: TablePageSize;
   defaultObjectPanelPosition: ObjectPanelPosition;
   objectPanelDockedRightWidth: number;
   objectPanelDockedBottomHeight: number;
@@ -134,7 +140,6 @@ interface AppSettingsPayload {
   autoRefreshEnabled?: boolean;
   refreshBackgroundClustersEnabled?: boolean;
   metricsRefreshIntervalMs?: number;
-  maxTableRows?: number;
   kubernetesClientQPS?: number;
   kubernetesClientBurst?: number;
   permissionSSRRFetchConcurrency?: number;
@@ -144,6 +149,7 @@ interface AppSettingsPayload {
   objPanelLogsTargetPerScopeLimit?: number;
   objPanelLogsTargetGlobalLimit?: number;
   gridTablePersistenceMode?: string;
+  defaultTablePageSize?: number;
   defaultObjectPanelPosition?: string;
   objectPanelDockedRightWidth?: number;
   objectPanelDockedBottomHeight?: number;
@@ -185,9 +191,6 @@ const PALETTE_BRIGHTNESS_MAX = 50;
 export const OBJ_PANEL_LOGS_BUFFER_MIN_SIZE = 100;
 export const OBJ_PANEL_LOGS_BUFFER_MAX_SIZE = 10000;
 export const OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE = 1000;
-export const MAX_TABLE_ROWS_MIN = 100;
-export const MAX_TABLE_ROWS_MAX = 10000;
-export const MAX_TABLE_ROWS_DEFAULT = 1000;
 export const KUBERNETES_CLIENT_QPS_MIN = 1;
 export const KUBERNETES_CLIENT_QPS_MAX = 5000;
 export const KUBERNETES_CLIENT_QPS_DEFAULT = 200;
@@ -212,7 +215,6 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   autoRefreshEnabled: true,
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
-  maxTableRows: MAX_TABLE_ROWS_DEFAULT,
   kubernetesClientQPS: KUBERNETES_CLIENT_QPS_DEFAULT,
   kubernetesClientBurst: KUBERNETES_CLIENT_BURST_DEFAULT,
   permissionSSRRFetchConcurrency: PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT,
@@ -234,6 +236,7 @@ const DEFAULT_PREFERENCES: AppPreferences = {
 
   // Used only before backend schema metadata is available.
   gridTablePersistenceMode: 'shared',
+  defaultTablePageSize: DEFAULT_TABLE_PAGE_SIZE,
   defaultObjectPanelPosition: 'right',
   objectPanelDockedRightWidth: 600,
   objectPanelDockedBottomHeight: 400,
@@ -290,11 +293,6 @@ const FALLBACK_PREFERENCE_METADATA: {
     min: 1,
     runtimeSideEffect: true,
   }),
-  maxTableRows: createPreferenceMetadata('maxTableRows', 'integer', {
-    min: MAX_TABLE_ROWS_MIN,
-    max: MAX_TABLE_ROWS_MAX,
-    runtimeSideEffect: false,
-  }),
   kubernetesClientQPS: createPreferenceMetadata('kubernetesClientQPS', 'integer', {
     min: KUBERNETES_CLIENT_QPS_MIN,
     max: KUBERNETES_CLIENT_QPS_MAX,
@@ -349,6 +347,11 @@ const FALLBACK_PREFERENCE_METADATA: {
   ),
   gridTablePersistenceMode: createPreferenceMetadata('gridTablePersistenceMode', 'enum', {
     enumOptions: ['shared', 'namespaced'],
+    runtimeSideEffect: false,
+  }),
+  defaultTablePageSize: createPreferenceMetadata('defaultTablePageSize', 'integer', {
+    min: 1,
+    max: TABLE_PAGE_SIZE_OPTIONS[TABLE_PAGE_SIZE_OPTIONS.length - 1],
     runtimeSideEffect: false,
   }),
   defaultObjectPanelPosition: createPreferenceMetadata('defaultObjectPanelPosition', 'enum', {
@@ -599,9 +602,6 @@ const normalizeMetricsIntervalMs = (value?: number): number =>
     defaultOnNonPositive: true,
   });
 
-const normalizeMaxTableRows = (value?: number): number =>
-  normalizeIntegerPreferenceValue('maxTableRows', value, { defaultOnNonPositive: true });
-
 const normalizeKubernetesClientQPS = (value?: number): number =>
   normalizeIntegerPreferenceValue('kubernetesClientQPS', value, {
     defaultOnNonPositive: true,
@@ -654,9 +654,6 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   if (previous.metricsRefreshIntervalMs !== next.metricsRefreshIntervalMs) {
     eventBus.emit('settings:metrics-interval', next.metricsRefreshIntervalMs);
   }
-  if (previous.maxTableRows !== next.maxTableRows) {
-    eventBus.emit('settings:max-table-rows', next.maxTableRows);
-  }
   if (previous.kubernetesClientQPS !== next.kubernetesClientQPS) {
     eventBus.emit('settings:kubernetes-client-qps', next.kubernetesClientQPS);
   }
@@ -701,6 +698,9 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   }
   if (previous.gridTablePersistenceMode !== next.gridTablePersistenceMode) {
     eventBus.emit('gridtable:persistence-mode', next.gridTablePersistenceMode);
+  }
+  if (previous.defaultTablePageSize !== next.defaultTablePageSize) {
+    eventBus.emit('settings:default-table-page-size', next.defaultTablePageSize);
   }
   // Emit per-mode palette changes separately for light and dark.
   if (
@@ -953,7 +953,6 @@ export const hydrateAppPreferences = async (options?: {
       backendSettings?.refreshBackgroundClustersEnabled
     ),
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
-    maxTableRows: normalizeMaxTableRows(backendSettings?.maxTableRows),
     kubernetesClientQPS: normalizeKubernetesClientQPS(backendSettings?.kubernetesClientQPS),
     kubernetesClientBurst: normalizeKubernetesClientBurst(backendSettings?.kubernetesClientBurst),
     permissionSSRRFetchConcurrency: normalizePermissionSSRRFetchConcurrency(
@@ -976,6 +975,7 @@ export const hydrateAppPreferences = async (options?: {
       backendSettings?.objPanelLogsTargetGlobalLimit
     ),
     gridTablePersistenceMode: normalizeGridTableMode(backendSettings?.gridTablePersistenceMode),
+    defaultTablePageSize: normalizeTablePageSize(backendSettings?.defaultTablePageSize),
     defaultObjectPanelPosition: normalizeObjectPanelPosition(
       backendSettings?.defaultObjectPanelPosition
     ),
@@ -1084,10 +1084,6 @@ export const getMetricsRefreshIntervalMs = (): number => {
   return preferenceCache.metricsRefreshIntervalMs;
 };
 
-export const getMaxTableRows = (): number => {
-  return preferenceCache.maxTableRows;
-};
-
 export const getKubernetesClientQPS = (): number => {
   return preferenceCache.kubernetesClientQPS;
 };
@@ -1126,6 +1122,10 @@ export const getGridTablePersistenceMode = (): GridTablePersistenceMode => {
 
 export const getDefaultObjectPanelPosition = (): ObjectPanelPosition => {
   return preferenceCache.defaultObjectPanelPosition;
+};
+
+export const getDefaultTablePageSize = (): TablePageSize => {
+  return normalizeTablePageSize(preferenceCache.defaultTablePageSize);
 };
 
 export interface ObjectPanelLayoutDefaults {
@@ -1263,14 +1263,6 @@ export const setObjPanelLogsBufferMaxSize = (size: number): void => {
   );
 };
 
-export const setMaxTableRows = (size: number): void => {
-  const normalized = normalizeMaxTableRows(size);
-  commitPreferenceMutation(
-    'Failed to persist max table rows:',
-    singlePreferenceMutation('maxTableRows', normalized)
-  );
-};
-
 export const setKubernetesClientQPS = (qps: number): void => {
   const normalized = normalizeKubernetesClientQPS(qps);
   commitPreferenceMutation(
@@ -1335,6 +1327,14 @@ export const setGridTablePersistenceMode = (mode: GridTablePersistenceMode): voi
   commitPreferenceMutation(
     'Failed to persist grid table persistence mode:',
     singlePreferenceMutation('gridTablePersistenceMode', normalized)
+  );
+};
+
+export const setDefaultTablePageSize = (size: number): void => {
+  const normalized = normalizeTablePageSize(size);
+  commitPreferenceMutation(
+    'Failed to persist default table page size:',
+    singlePreferenceMutation('defaultTablePageSize', normalized)
   );
 };
 

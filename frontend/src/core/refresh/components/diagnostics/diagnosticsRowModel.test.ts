@@ -9,9 +9,10 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { getPermissionKey, PERMISSION_FEATURES } from '@/core/capabilities';
 import type { PermissionQueryDiagnostics, PermissionStatus } from '@/core/capabilities';
 import type { TelemetrySummary } from '../../types';
-import type { DiagnosticsStreamRow } from './diagnosticsPanelTypes';
+import type { DiagnosticsRow, DiagnosticsStreamRow } from './diagnosticsPanelTypes';
 import {
   buildCapabilityBatchRows,
+  dedupeDiagnosticsRows,
   buildDiagnosticsStreamRows,
   buildDiagnosticsStreamSummary,
   buildBrokerReadRows,
@@ -40,6 +41,55 @@ const telemetry = (streams: TelemetrySummary['streams']): TelemetrySummary => ({
 describe('diagnosticsRowModel', () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  const diagnosticsRow = (overrides: Partial<DiagnosticsRow>): DiagnosticsRow => ({
+    rowKey: overrides.rowKey ?? 'nodes:cluster-a|',
+    domain: overrides.domain ?? 'nodes',
+    label: overrides.label ?? 'Nodes',
+    status: overrides.status ?? 'ready',
+    version: overrides.version ?? '1',
+    interval: overrides.interval ?? '5s',
+    lastUpdated: overrides.lastUpdated ?? '1s',
+    lastUpdatedTooltip: overrides.lastUpdatedTooltip ?? '1 second ago',
+    metricsStatus: overrides.metricsStatus ?? '—',
+    metricsTooltip: overrides.metricsTooltip ?? 'Not applicable',
+    dropped: overrides.dropped ?? 0,
+    stale: overrides.stale ?? false,
+    error: overrides.error ?? '—',
+    hasMetrics: overrides.hasMetrics ?? false,
+    count: overrides.count ?? 1,
+    countDisplay: overrides.countDisplay ?? '1',
+    namespace: overrides.namespace ?? '-',
+    scope: overrides.scope ?? 'cluster-a (active)',
+    role: overrides.role ?? 'Live Scope',
+    mode: overrides.mode ?? 'snapshot',
+    healthStatus: overrides.healthStatus ?? 'healthy (ready)',
+    pollingStatus: overrides.pollingStatus ?? 'enabled',
+    ...overrides,
+  });
+
+  test('dedupes equivalent visible refresh-domain rows and keeps the healthier row', () => {
+    const unhealthyAlias = diagnosticsRow({
+      rowKey: 'nodes:cluster-a|cluster',
+      healthStatus: 'unhealthy (inactive)',
+      error: 'stream inactive',
+    });
+    const healthyCanonical = diagnosticsRow({
+      rowKey: 'nodes:cluster-a|',
+      healthStatus: 'healthy (ready)',
+      error: '—',
+    });
+    const queryRow = diagnosticsRow({
+      rowKey: 'nodes:cluster-a|?limit=50',
+      scope: 'cluster-a (active) - limit=50',
+      mode: 'snapshot',
+    });
+
+    expect(dedupeDiagnosticsRows([unhealthyAlias, healthyCanonical, queryRow])).toEqual([
+      healthyCanonical,
+      queryRow,
+    ]);
   });
 
   test('returns empty stream rows when telemetry is unavailable', () => {

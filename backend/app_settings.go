@@ -35,7 +35,6 @@ const (
 	appPreferenceAutoRefreshEnabled                       = "autoRefreshEnabled"
 	appPreferenceRefreshBackgroundClustersEnabled         = "refreshBackgroundClustersEnabled"
 	appPreferenceMetricsRefreshIntervalMs                 = "metricsRefreshIntervalMs"
-	appPreferenceMaxTableRows                             = "maxTableRows"
 	appPreferenceKubernetesClientQPS                      = "kubernetesClientQPS"
 	appPreferenceKubernetesClientBurst                    = "kubernetesClientBurst"
 	appPreferencePermissionSSRRFetchConcurrency           = "permissionSSRRFetchConcurrency"
@@ -45,6 +44,7 @@ const (
 	appPreferenceObjPanelLogsTargetPerScopeLimit          = "objPanelLogsTargetPerScopeLimit"
 	appPreferenceObjPanelLogsTargetGlobalLimit            = "objPanelLogsTargetGlobalLimit"
 	appPreferenceGridTablePersistenceMode                 = "gridTablePersistenceMode"
+	appPreferenceDefaultTablePageSize                     = "defaultTablePageSize"
 	appPreferenceDefaultObjectPanelPosition               = "defaultObjectPanelPosition"
 	appPreferenceObjectPanelDockedRightWidth              = "objectPanelDockedRightWidth"
 	appPreferenceObjectPanelDockedBottomHeight            = "objectPanelDockedBottomHeight"
@@ -80,10 +80,10 @@ type settingsPreferences struct {
 	DimInactiveNamespaces         *bool                  `json:"dimInactiveNamespaces,omitempty"`
 	ExclusiveNamespaces           *bool                  `json:"exclusiveNamespaces,omitempty"`
 	Refresh                       *settingsRefresh       `json:"refresh"`
-	MaxTableRows                  int                    `json:"maxTableRows"`
 	KubernetesAPI                 *settingsKubernetesAPI `json:"kubernetesAPI,omitempty"`
 	ObjPanelLogs                  *settingsObjPanelLogs  `json:"objPanelLogs,omitempty"`
 	GridTablePersistenceMode      string                 `json:"gridTablePersistenceMode"`
+	DefaultTablePageSize          int                    `json:"defaultTablePageSize"`
 	DefaultObjectPanelPosition    string                 `json:"defaultObjectPanelPosition"`
 	ObjectPanelDockedRightWidth   int                    `json:"objectPanelDockedRightWidth"`
 	ObjectPanelDockedBottomHeight int                    `json:"objectPanelDockedBottomHeight"`
@@ -167,9 +167,6 @@ const (
 	defaultObjPanelLogsBufferMaxSize       = 1000
 	minObjPanelLogsBufferMaxSize           = 100
 	maxObjPanelLogsBufferMaxSize           = 10000
-	defaultMaxTableRows                    = 1000
-	minMaxTableRows                        = 100
-	maxMaxTableRows                        = 10000
 	defaultObjPanelLogsAPITimestampFormat  = "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
 	defaultObjPanelLogsTargetPerScopeLimit = containerlogs.DefaultPerScopeTargetLimit
 	minObjPanelLogsTargetPerScopeLimit     = containerlogs.MinPerScopeTargetLimit
@@ -186,6 +183,12 @@ const (
 	defaultPermissionSSRRFetchConcurrency  = config.PermissionSSRRFetchConcurrency
 	minPermissionSSRRFetchConcurrency      = 1
 	maxPermissionSSRRFetchConcurrency      = config.PermissionSSRRFetchConcurrency * 8
+	// Sanity bounds only — the selectable page-size values are owned by the
+	// frontend's shared TABLE_PAGE_SIZE_OPTIONS list (one source for the
+	// pagination footers and the Settings dropdown).
+	defaultTablePageSize                   = 50
+	minTablePageSize                       = 1
+	maxTablePageSize                       = 1000
 	defaultObjectPanelPosition             = "right"
 	defaultObjectPanelDockedRightWidth     = 600
 	defaultObjectPanelDockedBottomHeight   = 400
@@ -207,16 +210,6 @@ const (
 	minPaletteBrightness                   = -50
 	maxPaletteBrightness                   = 50
 )
-
-func clampMaxTableRows(size int) int {
-	if size < minMaxTableRows {
-		return minMaxTableRows
-	}
-	if size > maxMaxTableRows {
-		return maxMaxTableRows
-	}
-	return size
-}
 
 func clampKubernetesClientQPS(qps int) int {
 	if qps < minKubernetesClientQPS {
@@ -302,7 +295,6 @@ func defaultSettingsFile() *settingsFile {
 			DimInactiveNamespaces: boolPtr(true),
 			ExclusiveNamespaces:   boolPtr(true),
 			Refresh:               &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
-			MaxTableRows:          defaultMaxTableRows,
 			KubernetesAPI: &settingsKubernetesAPI{
 				ClientQPS:                      defaultKubernetesClientQPS,
 				ClientBurst:                    defaultKubernetesClientBurst,
@@ -316,6 +308,7 @@ func defaultSettingsFile() *settingsFile {
 			},
 
 			GridTablePersistenceMode:      "shared",
+			DefaultTablePageSize:          defaultTablePageSize,
 			DefaultObjectPanelPosition:    defaultObjectPanelPosition,
 			ObjectPanelDockedRightWidth:   defaultObjectPanelDockedRightWidth,
 			ObjectPanelDockedBottomHeight: defaultObjectPanelDockedBottomHeight,
@@ -353,11 +346,6 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.Refresh.MetricsIntervalMs <= 0 {
 		settings.Preferences.Refresh.MetricsIntervalMs = defaultMetricsIntervalMs()
-	}
-	if settings.Preferences.MaxTableRows <= 0 {
-		settings.Preferences.MaxTableRows = defaultMaxTableRows
-	} else {
-		settings.Preferences.MaxTableRows = clampMaxTableRows(settings.Preferences.MaxTableRows)
 	}
 	if settings.Preferences.KubernetesAPI == nil {
 		settings.Preferences.KubernetesAPI = &settingsKubernetesAPI{
@@ -413,6 +401,11 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.DefaultObjectPanelPosition == "" {
 		settings.Preferences.DefaultObjectPanelPosition = defaultObjectPanelPosition
+	}
+	if settings.Preferences.DefaultTablePageSize <= 0 {
+		settings.Preferences.DefaultTablePageSize = defaultTablePageSize
+	} else {
+		settings.Preferences.DefaultTablePageSize = clampInt(settings.Preferences.DefaultTablePageSize, minTablePageSize, maxTablePageSize)
 	}
 	if settings.Preferences.ObjectPanelDockedRightWidth <= 0 {
 		settings.Preferences.ObjectPanelDockedRightWidth = defaultObjectPanelDockedRightWidth
@@ -675,7 +668,6 @@ func getDefaultAppSettings() *AppSettings {
 		AutoRefreshEnabled:                       true,
 		RefreshBackgroundClustersEnabled:         true,
 		MetricsRefreshIntervalMs:                 defaultMetricsIntervalMs(),
-		MaxTableRows:                             defaultMaxTableRows,
 		KubernetesClientQPS:                      defaultKubernetesClientQPS,
 		KubernetesClientBurst:                    defaultKubernetesClientBurst,
 		PermissionSSRRFetchConcurrency:           defaultPermissionSSRRFetchConcurrency,
@@ -685,6 +677,7 @@ func getDefaultAppSettings() *AppSettings {
 		ObjPanelLogsAPITimestampFormat:           defaultObjPanelLogsAPITimestampFormat,
 		ObjPanelLogsAPITimestampUseLocalTimeZone: false,
 		GridTablePersistenceMode:                 "shared",
+		DefaultTablePageSize:                     defaultTablePageSize,
 		DefaultObjectPanelPosition:               defaultObjectPanelPosition,
 		ObjectPanelDockedRightWidth:              defaultObjectPanelDockedRightWidth,
 		ObjectPanelDockedBottomHeight:            defaultObjectPanelDockedBottomHeight,
@@ -707,7 +700,6 @@ func (a *App) loadAppSettings() error {
 	objPanelLogsTargetGlobalLimit := defaultObjPanelLogsTargetGlobalLimit
 	logAPITimestampFormat := defaultObjPanelLogsAPITimestampFormat
 	logAPITimestampUseLocalTimeZone := false
-	maxTableRows := defaultMaxTableRows
 	dimInactiveNamespaces := true
 	if settings.Preferences.DimInactiveNamespaces != nil {
 		dimInactiveNamespaces = *settings.Preferences.DimInactiveNamespaces
@@ -715,9 +707,6 @@ func (a *App) loadAppSettings() error {
 	exclusiveNamespaces := true
 	if settings.Preferences.ExclusiveNamespaces != nil {
 		exclusiveNamespaces = *settings.Preferences.ExclusiveNamespaces
-	}
-	if settings.Preferences.MaxTableRows > 0 {
-		maxTableRows = clampMaxTableRows(settings.Preferences.MaxTableRows)
 	}
 	if settings.Preferences.ObjPanelLogs != nil && settings.Preferences.ObjPanelLogs.BufferMaxSize > 0 {
 		objPanelLogsBufferMaxSize = clampObjPanelLogsBufferMaxSize(settings.Preferences.ObjPanelLogs.BufferMaxSize)
@@ -758,7 +747,6 @@ func (a *App) loadAppSettings() error {
 		AutoRefreshEnabled:                       settings.Preferences.Refresh.Auto,
 		RefreshBackgroundClustersEnabled:         settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:                 settings.Preferences.Refresh.MetricsIntervalMs,
-		MaxTableRows:                             maxTableRows,
 		KubernetesClientQPS:                      kubernetesClientQPS,
 		KubernetesClientBurst:                    kubernetesClientBurst,
 		PermissionSSRRFetchConcurrency:           permissionSSRRFetchConcurrency,
@@ -768,6 +756,7 @@ func (a *App) loadAppSettings() error {
 		ObjPanelLogsAPITimestampFormat:           logAPITimestampFormat,
 		ObjPanelLogsAPITimestampUseLocalTimeZone: logAPITimestampUseLocalTimeZone,
 		GridTablePersistenceMode:                 settings.Preferences.GridTablePersistenceMode,
+		DefaultTablePageSize:                     settings.Preferences.DefaultTablePageSize,
 		DefaultObjectPanelPosition:               settings.Preferences.DefaultObjectPanelPosition,
 		ObjectPanelDockedRightWidth:              settings.Preferences.ObjectPanelDockedRightWidth,
 		ObjectPanelDockedBottomHeight:            settings.Preferences.ObjectPanelDockedBottomHeight,
@@ -814,7 +803,6 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.Refresh.Auto = a.appSettings.AutoRefreshEnabled
 	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
 	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
-	settings.Preferences.MaxTableRows = clampMaxTableRows(a.appSettings.MaxTableRows)
 	if settings.Preferences.KubernetesAPI == nil {
 		settings.Preferences.KubernetesAPI = &settingsKubernetesAPI{}
 	}
@@ -834,6 +822,7 @@ func (a *App) saveAppSettings() error {
 	}
 	settings.Preferences.ObjPanelLogs.UseLocalTimeZone = a.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
+	settings.Preferences.DefaultTablePageSize = a.appSettings.DefaultTablePageSize
 	settings.Preferences.DefaultObjectPanelPosition = a.appSettings.DefaultObjectPanelPosition
 	settings.Preferences.ObjectPanelDockedRightWidth = a.appSettings.ObjectPanelDockedRightWidth
 	settings.Preferences.ObjectPanelDockedBottomHeight = a.appSettings.ObjectPanelDockedBottomHeight
@@ -953,7 +942,6 @@ func buildAppSettingsSchema(settings *AppSettings) *AppSettingsSchema {
 		appPreferenceSchema(appPreferenceAutoRefreshEnabled, "boolean", true, settings.AutoRefreshEnabled, nil, nil, nil, "", true),
 		appPreferenceSchema(appPreferenceRefreshBackgroundClustersEnabled, "boolean", true, settings.RefreshBackgroundClustersEnabled, nil, nil, nil, "", true),
 		appPreferenceSchema(appPreferenceMetricsRefreshIntervalMs, "integer", defaultMetricsIntervalMs(), settings.MetricsRefreshIntervalMs, intPtr(1), nil, nil, "", true),
-		appPreferenceSchema(appPreferenceMaxTableRows, "integer", defaultMaxTableRows, settings.MaxTableRows, intPtr(minMaxTableRows), intPtr(maxMaxTableRows), nil, "", false),
 		appPreferenceSchema(appPreferenceKubernetesClientQPS, "integer", defaultKubernetesClientQPS, settings.KubernetesClientQPS, intPtr(minKubernetesClientQPS), intPtr(maxKubernetesClientQPS), nil, "", true),
 		appPreferenceSchema(appPreferenceKubernetesClientBurst, "integer", defaultKubernetesClientBurst, settings.KubernetesClientBurst, intPtr(minKubernetesClientBurst), intPtr(maxKubernetesClientBurst), nil, "", true),
 		appPreferenceSchema(appPreferencePermissionSSRRFetchConcurrency, "integer", defaultPermissionSSRRFetchConcurrency, settings.PermissionSSRRFetchConcurrency, intPtr(minPermissionSSRRFetchConcurrency), intPtr(maxPermissionSSRRFetchConcurrency), nil, "", false),
@@ -963,6 +951,7 @@ func buildAppSettingsSchema(settings *AppSettings) *AppSettingsSchema {
 		appPreferenceSchema(appPreferenceObjPanelLogsTargetPerScopeLimit, "integer", defaultObjPanelLogsTargetPerScopeLimit, settings.ObjPanelLogsTargetPerScopeLimit, intPtr(minObjPanelLogsTargetPerScopeLimit), intPtr(maxObjPanelLogsTargetPerScopeLimit), nil, "", true),
 		appPreferenceSchema(appPreferenceObjPanelLogsTargetGlobalLimit, "integer", defaultObjPanelLogsTargetGlobalLimit, settings.ObjPanelLogsTargetGlobalLimit, intPtr(minObjPanelLogsTargetGlobalLimit), intPtr(maxObjPanelLogsTargetGlobalLimit), nil, "", true),
 		appPreferenceSchema(appPreferenceGridTablePersistenceMode, "enum", "shared", settings.GridTablePersistenceMode, nil, nil, []string{"shared", "namespaced"}, "", false),
+		appPreferenceSchema(appPreferenceDefaultTablePageSize, "integer", defaultTablePageSize, settings.DefaultTablePageSize, intPtr(minTablePageSize), intPtr(maxTablePageSize), nil, "", false),
 		appPreferenceSchema(appPreferenceDefaultObjectPanelPosition, "enum", defaultObjectPanelPosition, settings.DefaultObjectPanelPosition, nil, nil, []string{"right", "bottom", "floating"}, "", false),
 		appPreferenceSchema(appPreferenceObjectPanelDockedRightWidth, "integer", defaultObjectPanelDockedRightWidth, settings.ObjectPanelDockedRightWidth, intPtr(minObjectPanelDockedRightWidth), intPtr(maxObjectPanelLayoutValue), nil, "", false),
 		appPreferenceSchema(appPreferenceObjectPanelDockedBottomHeight, "integer", defaultObjectPanelDockedBottomHeight, settings.ObjectPanelDockedBottomHeight, intPtr(minObjectPanelDockedBottomHeight), intPtr(maxObjectPanelLayoutValue), nil, "", false),
@@ -1100,12 +1089,6 @@ func applyAppPreferenceChange(settings *AppSettings, change AppPreferenceChange,
 			value = defaultMetricsIntervalMs()
 		}
 		settings.MetricsRefreshIntervalMs = value
-	case appPreferenceMaxTableRows:
-		value, err := intPreferenceValue(change.Value)
-		if err != nil {
-			return fmt.Errorf("%s: %w", change.Key, err)
-		}
-		settings.MaxTableRows = clampMaxTableRows(value)
 	case appPreferenceKubernetesClientQPS:
 		value, err := intPreferenceValue(change.Value)
 		if err != nil {
@@ -1170,6 +1153,12 @@ func applyAppPreferenceChange(settings *AppSettings, change AppPreferenceChange,
 			return fmt.Errorf("invalid grid table persistence mode: %s", mode)
 		}
 		settings.GridTablePersistenceMode = mode
+	case appPreferenceDefaultTablePageSize:
+		value, err := intPreferenceValue(change.Value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.Key, err)
+		}
+		settings.DefaultTablePageSize = clampInt(value, minTablePageSize, maxTablePageSize)
 	case appPreferenceDefaultObjectPanelPosition:
 		position, err := stringPreferenceValue(change.Value)
 		if err != nil {
@@ -1306,7 +1295,6 @@ func appPreferenceKeys() []string {
 		appPreferenceAutoRefreshEnabled,
 		appPreferenceRefreshBackgroundClustersEnabled,
 		appPreferenceMetricsRefreshIntervalMs,
-		appPreferenceMaxTableRows,
 		appPreferenceKubernetesClientQPS,
 		appPreferenceKubernetesClientBurst,
 		appPreferencePermissionSSRRFetchConcurrency,
@@ -1316,6 +1304,7 @@ func appPreferenceKeys() []string {
 		appPreferenceObjPanelLogsTargetPerScopeLimit,
 		appPreferenceObjPanelLogsTargetGlobalLimit,
 		appPreferenceGridTablePersistenceMode,
+		appPreferenceDefaultTablePageSize,
 		appPreferenceDefaultObjectPanelPosition,
 		appPreferenceObjectPanelDockedRightWidth,
 		appPreferenceObjectPanelDockedBottomHeight,
@@ -1353,8 +1342,6 @@ func logPreferenceChange(logger *Logger, key string, value any) {
 		logger.Info(fmt.Sprintf("Auto refresh enabled changed to: %v", value), logsources.Settings)
 	case appPreferenceRefreshBackgroundClustersEnabled:
 		logger.Info(fmt.Sprintf("Background refresh enabled changed to: %v", value), logsources.Settings)
-	case appPreferenceMaxTableRows:
-		logger.Info(fmt.Sprintf("Max table rows changed to: %v", value), logsources.Settings)
 	case appPreferenceKubernetesClientQPS:
 		logger.Info(fmt.Sprintf("Kubernetes client QPS changed to: %v", value), logsources.Settings)
 	case appPreferenceKubernetesClientBurst:
@@ -1373,6 +1360,8 @@ func logPreferenceChange(logger *Logger, key string, value any) {
 		logger.Info(fmt.Sprintf("Object Panel Logs Tab API timestamp local timezone changed to: %v", value), logsources.Settings)
 	case appPreferenceGridTablePersistenceMode:
 		logger.Info(fmt.Sprintf("Grid table persistence mode changed to: %v", value), logsources.Settings)
+	case appPreferenceDefaultTablePageSize:
+		logger.Info(fmt.Sprintf("Default table page size changed to: %v", value), logsources.Settings)
 	case appPreferenceDefaultObjectPanelPosition:
 		logger.Info(fmt.Sprintf("Default object panel position changed to: %v", value), logsources.Settings)
 	default:
@@ -1460,8 +1449,6 @@ func preferenceValueForLog(settings *AppSettings, key string) any {
 		return settings.RefreshBackgroundClustersEnabled
 	case appPreferenceMetricsRefreshIntervalMs:
 		return settings.MetricsRefreshIntervalMs
-	case appPreferenceMaxTableRows:
-		return settings.MaxTableRows
 	case appPreferenceKubernetesClientQPS:
 		return settings.KubernetesClientQPS
 	case appPreferenceKubernetesClientBurst:
@@ -1480,6 +1467,8 @@ func preferenceValueForLog(settings *AppSettings, key string) any {
 		return settings.ObjPanelLogsTargetGlobalLimit
 	case appPreferenceGridTablePersistenceMode:
 		return settings.GridTablePersistenceMode
+	case appPreferenceDefaultTablePageSize:
+		return settings.DefaultTablePageSize
 	case appPreferenceDefaultObjectPanelPosition:
 		return settings.DefaultObjectPanelPosition
 	default:
@@ -1548,13 +1537,6 @@ func (a *App) SetAutoRefreshEnabled(enabled bool) error {
 // SetBackgroundRefreshEnabled persists the background refresh preference.
 func (a *App) SetBackgroundRefreshEnabled(enabled bool) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceRefreshBackgroundClustersEnabled, Value: enabled}}})
-	return err
-}
-
-// SetMaxTableRows persists the max number of rows shown in a data table.
-// Values are clamped to [minMaxTableRows, maxMaxTableRows].
-func (a *App) SetMaxTableRows(size int) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceMaxTableRows, Value: size}}})
 	return err
 }
 

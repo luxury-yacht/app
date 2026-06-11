@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
@@ -15,6 +16,11 @@ import (
 	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	informers "k8s.io/client-go/informers"
 )
 
@@ -63,6 +69,12 @@ type CatalogHealth struct {
 	LastError           string `json:"lastError,omitempty"`
 	Stale               bool   `json:"stale"`
 	FailedResources     int    `json:"failedResources,omitempty"`
+}
+
+// CatalogQueryCSVExport describes a file-backed catalog query export.
+type CatalogQueryCSVExport struct {
+	Path  string `json:"path"`
+	Bytes int64  `json:"bytes"`
 }
 
 type objectCatalogEntry struct {
@@ -528,4 +540,166 @@ func (a *App) FindCatalogObjectByUID(clusterID, uid string) (*objectcatalog.Summ
 	}
 
 	return &match, nil
+}
+
+const catalogCustomHydrationConcurrency = 16
+
+// HydrateCatalogCustomRows fetches rich custom-resource row facts for the
+// current catalog page. It intentionally works only on caller-provided page
+// rows so production Custom tables keep catalog-backed paging without starting
+// the legacy full CRD fanout domains.
+func (a *App) HydrateCatalogCustomRows(clusterID string, rows []snapshot.ResourceQueryRow) ([]snapshot.CustomResourceSummary, error) {
+	if a == nil {
+		return nil, fmt.Errorf("app is not initialised")
+	}
+	trimmedClusterID := strings.TrimSpace(clusterID)
+	if trimmedClusterID == "" {
+		return nil, fmt.Errorf("cluster ID is required")
+	}
+	clients := a.clusterClientsForID(trimmedClusterID)
+	if clients == nil || clients.dynamicClient == nil {
+		return nil, fmt.Errorf("dynamic client unavailable for cluster %q", trimmedClusterID)
+	}
+	meta := snapshot.ClusterMeta{ClusterID: clients.meta.ID, ClusterName: clients.meta.Name}
+	ctx := a.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	type hydrationRequest struct {
+		row  snapshot.ResourceQueryRow
+		gvr  schema.GroupVersionResource
+		name string
+	}
+	requests := make([]hydrationRequest, 0, len(rows))
+	for _, row := range rows {
+		// Every object reference crossing this boundary must carry clusterId. The
+		// catalog page rows always populate it, so a blank value is a programming
+		// error rather than a case to paper over with the request clusterId.
+		rowClusterID := strings.TrimSpace(row.ClusterID)
+		if rowClusterID == "" {
+			return nil, fmt.Errorf("custom row %q is missing clusterId", row.Name)
+		}
+		if rowClusterID != trimmedClusterID {
+			return nil, fmt.Errorf("row clusterId %q does not match request clusterId %q", row.ClusterID, trimmedClusterID)
+		}
+		if strings.TrimSpace(row.Kind) == "" || strings.TrimSpace(row.Version) == "" || strings.TrimSpace(row.Resource) == "" {
+			return nil, fmt.Errorf("custom row %q is missing kind, version, or resource", row.Name)
+		}
+		gvr := schema.GroupVersionResource{
+			Group:    strings.TrimSpace(row.Group),
+			Version:  strings.TrimSpace(row.Version),
+			Resource: strings.TrimSpace(row.Resource),
+		}
+		name := strings.TrimSpace(row.Name)
+		if name == "" {
+			return nil, fmt.Errorf("custom row is missing name")
+		}
+		requests = append(requests, hydrationRequest{row: row, gvr: gvr, name: name})
+	}
+
+	result := make([]snapshot.CustomResourceSummary, len(requests))
+	included := make([]bool, len(requests))
+	sem := make(chan struct{}, catalogCustomHydrationConcurrency)
+	var wg sync.WaitGroup
+	for index, req := range requests {
+		index := index
+		req := req
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				return
+			}
+			summary, ok := hydrateCatalogCustomRow(ctx, clients.dynamicClient, meta, req.row, req.gvr, req.name)
+			if !ok {
+				return
+			}
+			result[index] = summary
+			included[index] = true
+		}()
+	}
+	wg.Wait()
+	// A canceled request leaves rows un-hydrated; report the cancellation
+	// instead of returning a silently partial "complete" result.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	compacted := make([]snapshot.CustomResourceSummary, 0, len(result))
+	for index, summary := range result {
+		if included[index] {
+			compacted = append(compacted, summary)
+		}
+	}
+	return compacted, nil
+}
+
+func hydrateCatalogCustomRow(
+	ctx context.Context,
+	client dynamic.Interface,
+	meta snapshot.ClusterMeta,
+	row snapshot.ResourceQueryRow,
+	gvr schema.GroupVersionResource,
+	name string,
+) (snapshot.CustomResourceSummary, bool) {
+	resource := client.Resource(gvr)
+	var (
+		obj *unstructured.Unstructured
+		err error
+	)
+	if namespace := strings.TrimSpace(row.Namespace); namespace != "" {
+		obj, err = resource.Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	} else {
+		obj, err = resource.Get(ctx, name, metav1.GetOptions{})
+	}
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return snapshot.CustomResourceSummary{}, false
+		}
+		return failedCatalogCustomHydrationSummary(meta, row), true
+	}
+	crdName := row.Resource
+	if row.Group != "" {
+		crdName = row.Resource + "." + row.Group
+	}
+	if row.Namespace != "" {
+		return snapshot.CustomResourceSummaryFromNamespace(snapshot.BuildNamespaceCustomSummary(
+			meta,
+			obj,
+			row.Group,
+			row.Version,
+			row.Kind,
+			crdName,
+			row.Namespace,
+		)), true
+	}
+	return snapshot.CustomResourceSummaryFromCluster(snapshot.BuildClusterCustomSummary(
+		meta,
+		obj,
+		row.Group,
+		row.Version,
+		row.Kind,
+		crdName,
+	)), true
+}
+
+func failedCatalogCustomHydrationSummary(meta snapshot.ClusterMeta, row snapshot.ResourceQueryRow) snapshot.CustomResourceSummary {
+	crdName := row.Resource
+	if row.Group != "" {
+		crdName = row.Resource + "." + row.Group
+	}
+	return snapshot.CustomResourceSummary{
+		ClusterMeta:        meta,
+		Kind:               row.Kind,
+		Name:               row.Name,
+		Namespace:          row.Namespace,
+		APIGroup:           row.Group,
+		APIVersion:         row.Version,
+		CRDName:            crdName,
+		Status:             "Hydration failed",
+		StatusState:        "warning",
+		StatusPresentation: "warning",
+	}
 }

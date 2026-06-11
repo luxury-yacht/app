@@ -22,10 +22,7 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
-} from '@/core/settings/appPreferences';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 import GridTable, {
   GridColumnDefinition,
@@ -94,6 +91,8 @@ const defaultColumns: GridColumnDefinition<SimpleRow>[] = [
 type RenderOptions = Partial<{
   data: SimpleRow[];
   columns: GridColumnDefinition<SimpleRow>[];
+  fetchAllRows: () => Promise<SimpleRow[]>;
+  exportFilename: string;
   virtualization: {
     enabled?: boolean;
     threshold?: number;
@@ -221,19 +220,123 @@ describe('GridTable virtualization', () => {
     expect(renderedRows[0]?.textContent).toContain('Row 0');
   });
 
-  it('caps rendered rows using the max table rows setting', () => {
-    setAppPreferencesForTesting({ maxTableRows: 3 });
+  it('does not cap local rows through a user preference', () => {
     const { container, cleanup } = renderGridTable({
       data: createRows(8),
-      virtualization: { enabled: true, threshold: 1, overscan: 1, estimateRowHeight: 40 },
+      virtualization: { enabled: false },
     });
     cleanupRoot = cleanup;
 
     const renderedRows = container.querySelectorAll('.gridtable-row');
-    expect(renderedRows).toHaveLength(3);
+    expect(renderedRows).toHaveLength(8);
     expect(container.textContent).toContain('Row 0');
-    expect(container.textContent).toContain('Row 2');
-    expect(container.textContent).not.toContain('Row 3');
+    expect(container.textContent).toContain('Row 7');
+  });
+
+  it('renders backend query windows without an extra client cap', () => {
+    const { container, cleanup } = renderGridTable({
+      data: createRows(8),
+      virtualization: { enabled: false },
+      filters: {
+        enabled: true,
+        // The result count only renders with an active filter; the search here matches
+        // the page and leaves the window (8 of a backend total of 20) unchanged.
+        initial: { search: 'Row' },
+        options: {
+          searchBehavior: 'query',
+          totalCount: 20,
+          totalIsExact: true,
+        },
+      },
+    });
+    cleanupRoot = cleanup;
+
+    const renderedRows = container.querySelectorAll('.gridtable-row');
+    expect(renderedRows).toHaveLength(8);
+    expect(container.textContent).toContain('Row 7');
+    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+    expect(resultCount?.textContent).toBe('showing 20 of 20 items due to filters');
+  });
+
+  it('renders the Copy · Export pair acting on all matching rows (no scope toggle)', () => {
+    const { container, cleanup } = renderGridTable({
+      data: createRows(3),
+      virtualization: { enabled: false },
+      fetchAllRows: () => Promise.resolve(createRows(9)),
+      exportFilename: 'rows',
+      filters: {
+        enabled: true,
+        accessors: {
+          getKind: (row) => row.label,
+          getNamespace: () => '',
+          getSearchText: (row) => [row.label],
+        },
+      },
+    });
+    cleanupRoot = cleanup;
+
+    expect(
+      container.querySelector(
+        '[aria-label="Toggle copy and export scope between current page and all matching rows"]'
+      )
+    ).toBeNull();
+    const copy = container.querySelector('[aria-label="Copy all matching rows to clipboard"]');
+    const exportBtn = container.querySelector('[aria-label="Export all matching rows to file"]');
+    expect(copy).toBeTruthy();
+    expect(exportBtn).toBeTruthy();
+    // Order: Copy · Export.
+    expect(
+      Boolean(copy!.compareDocumentPosition(exportBtn!) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ).toBe(true);
+
+    cleanup();
+  });
+
+  it('Copy fetches every matching row, not just the visible page', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    const fetchAllRows = vi.fn().mockResolvedValue(createRows(9));
+
+    try {
+      const { container, cleanup } = renderGridTable({
+        data: createRows(3),
+        virtualization: { enabled: false },
+        fetchAllRows,
+        filters: {
+          enabled: true,
+          accessors: {
+            getKind: (row) => row.label,
+            getNamespace: () => '',
+            getSearchText: (row) => [row.label],
+          },
+        },
+      });
+      cleanupRoot = cleanup;
+
+      const copy = container.querySelector(
+        '[aria-label="Copy all matching rows to clipboard"]'
+      ) as HTMLElement;
+      expect(copy).toBeTruthy();
+
+      await act(async () => {
+        copy.click();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(fetchAllRows).toHaveBeenCalledTimes(1);
+      expect(writeText).toHaveBeenCalledTimes(1);
+      const csv = writeText.mock.calls[0][0] as string;
+      // Row 8 only exists in the full fetched set, not the 3 visible rows.
+      expect(csv).toContain('Row 8');
+
+      cleanup();
+    } finally {
+      Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    }
   });
 
   it('updates the rendered slice when scrolling', async () => {
@@ -1105,10 +1208,11 @@ describe('GridTable interactions (non-virtualized)', () => {
 
     await flushAsync();
 
-    const loadMoreButton = container.querySelector<HTMLButtonElement>(
+    const paginationButtons = container.querySelectorAll<HTMLButtonElement>(
       '.gridtable-pagination-button'
     );
-    expect(loadMoreButton).not.toBeNull();
+    const loadMoreButton = paginationButtons[paginationButtons.length - 1];
+    expect(loadMoreButton).toBeDefined();
     act(() => {
       loadMoreButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1117,7 +1221,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     await flushAsync();
 
     expect(container.querySelector('.gridtable-pagination-status')?.textContent).toContain(
-      'Scroll or click to load more results'
+      'More pages available'
     );
 
     rerender({ hasMore: false });
@@ -1125,7 +1229,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     await flushAsync();
 
     expect(container.querySelector('.gridtable-pagination-status')?.textContent).toContain(
-      'No additional pages'
+      'All results loaded'
     );
   });
 });
@@ -1171,6 +1275,8 @@ function renderGridTable(options: RenderOptions = {}) {
     hideHeader: options.hideHeader ?? false,
     onRowClick: options.onRowClick,
     onSort: options.onSortOverride ?? options.onSort,
+    fetchAllRows: options.fetchAllRows,
+    exportFilename: options.exportFilename,
     filters: options.filters,
     enableContextMenu: options.enableContextMenu ?? false,
     enableColumnVisibilityMenu: options.enableColumnVisibilityMenu ?? false,
@@ -1261,8 +1367,11 @@ it('invokes manual pagination when the Load more button is clicked', () => {
     autoLoadMore: false,
   });
 
-  const loadMoreButton = container.querySelector<HTMLButtonElement>('.gridtable-pagination-button');
-  expect(loadMoreButton).not.toBeNull();
+  const paginationButtons = container.querySelectorAll<HTMLButtonElement>(
+    '.gridtable-pagination-button'
+  );
+  const loadMoreButton = paginationButtons[paginationButtons.length - 1];
+  expect(loadMoreButton).toBeDefined();
   expect(loadMoreButton!.disabled).toBe(false);
 
   act(() => {
@@ -1286,8 +1395,11 @@ it('disables the Load more button while a request is pending', () => {
     autoLoadMore: false,
   });
 
-  const loadMoreButton = container.querySelector<HTMLButtonElement>('.gridtable-pagination-button');
-  expect(loadMoreButton).not.toBeNull();
+  const paginationButtons = container.querySelectorAll<HTMLButtonElement>(
+    '.gridtable-pagination-button'
+  );
+  const loadMoreButton = paginationButtons[paginationButtons.length - 1];
+  expect(loadMoreButton).toBeDefined();
   expect(loadMoreButton!.disabled).toBe(true);
 
   act(() => {
@@ -1380,7 +1492,7 @@ it('updates pagination status messaging as pagination state evolves', async () =
 
   const statusNode = () => container.querySelector<HTMLDivElement>('.gridtable-pagination-status');
   expect(statusNode()).not.toBeNull();
-  expect(statusNode()!.textContent?.trim()).toBe('Scroll or click to load more results');
+  expect(statusNode()!.textContent?.trim()).toBe('More pages available');
 
   await act(async () => {
     rerender({ isRequestingMore: true });
@@ -1392,7 +1504,7 @@ it('updates pagination status messaging as pagination state evolves', async () =
     rerender({ isRequestingMore: false, hasMore: false });
     await Promise.resolve();
   });
-  expect(statusNode()!.textContent?.trim()).toBe('No additional pages');
+  expect(statusNode()!.textContent?.trim()).toBe('All results loaded');
 
   await act(async () => {
     rerender({ showPaginationStatus: false });
@@ -1500,7 +1612,7 @@ it('copies the current visible table contents as CSV from the filter icon bar', 
   await flushAsync();
 
   const copyButton = container.querySelector<HTMLButtonElement>(
-    '.icon-bar-button[aria-label="Copy table as CSV"]'
+    '.icon-bar-button[aria-label="Copy visible rows as CSV"]'
   );
   expect(copyButton).not.toBeNull();
 
@@ -1570,7 +1682,7 @@ it('copies resource-bar columns using their displayed CPU and memory values', as
   await flushAsync();
 
   const copyButton = container.querySelector<HTMLButtonElement>(
-    '.icon-bar-button[aria-label="Copy table as CSV"]'
+    '.icon-bar-button[aria-label="Copy visible rows as CSV"]'
   );
   expect(copyButton).not.toBeNull();
 
@@ -1741,7 +1853,7 @@ it('does not hide locked columns through visibility menu', async () => {
   const onColumnVisibilityChange = vi.fn();
   const columns: GridColumnDefinition<SimpleRow>[] = [
     { key: 'name', header: 'Name', render: (row) => row.name ?? row.id },
-    { key: 'extra', header: 'Extra', render: (row) => row.id },
+    { key: 'extra', header: 'Extra', sortable: false, render: (row) => row.id },
   ];
 
   const { container, cleanup } = renderGridTable({
@@ -1924,13 +2036,15 @@ it('shows a filter-specific empty state when active filters exclude all rows', (
   cleanup();
 });
 
-it('shows displayed and total item counts when the table is capped', () => {
-  setAppPreferencesForTesting({ maxTableRows: 3 });
+it('shows the full local item count without a user-preference cap', () => {
   const { container, cleanup } = renderGridTable({
     data: createRows(8),
     virtualization: { enabled: false },
     filters: {
       enabled: true,
+      // The count only renders with an active filter; 'Row' matches all 8 local rows,
+      // so the displayed count is still the full, un-capped total.
+      initial: { search: 'Row' },
       accessors: {
         getKind: (row) => row.label,
         getNamespace: () => '',
@@ -1940,14 +2054,13 @@ it('shows displayed and total item counts when the table is capped', () => {
   });
 
   const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-  expect(resultCount?.textContent).toBe('3 of 8 items');
-  expect(resultCount?.querySelector('.tooltip-trigger')).not.toBeNull();
+  expect(resultCount?.textContent).toBe('showing 8 of 8 items due to filters');
+  expect(resultCount?.querySelector('.tooltip-trigger')).toBeNull();
 
   cleanup();
 });
 
-it('applies local search before the table cap so matches beyond the first page stay reachable', () => {
-  setAppPreferencesForTesting({ maxTableRows: 3 });
+it('applies local search across the full provided local dataset', () => {
   const { container, cleanup } = renderGridTable({
     data: createRows(8),
     virtualization: { enabled: false },
@@ -1966,7 +2079,7 @@ it('applies local search before the table cap so matches beyond the first page s
   expect(container.textContent).not.toContain('Row 0');
 
   const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-  expect(resultCount?.textContent).toBe('1 of 8 items');
+  expect(resultCount?.textContent).toBe('showing 1 of 8 items due to filters');
 
   cleanup();
 });
@@ -1977,6 +2090,9 @@ it('does not show the capped-results tooltip when the table is not capped', () =
     virtualization: { enabled: false },
     filters: {
       enabled: true,
+      // The count only renders with an active filter; 'Row' matches all 3 rows, so the
+      // count is the full (un-capped) total and carries no capped-results tooltip.
+      initial: { search: 'Row' },
       accessors: {
         getKind: (row) => row.label,
         getNamespace: () => '',
@@ -1986,7 +2102,7 @@ it('does not show the capped-results tooltip when the table is not capped', () =
   });
 
   const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-  expect(resultCount?.textContent).toBe('3 items');
+  expect(resultCount?.textContent).toBe('showing 3 of 3 items due to filters');
   expect(resultCount?.querySelector('.tooltip-trigger')).toBeNull();
 
   cleanup();

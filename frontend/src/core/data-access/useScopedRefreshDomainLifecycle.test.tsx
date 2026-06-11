@@ -1,7 +1,7 @@
 /**
  * frontend/src/core/data-access/useScopedRefreshDomainLifecycle.test.tsx
  *
- * Verifies scoped refresh-domain enablement, initial fetch, and cleanup.
+ * Verifies scoped refresh-domain leasing, initial fetch, and release-on-unmount.
  */
 
 import React from 'react';
@@ -13,14 +13,16 @@ import { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecyc
 import type { RefreshDomain } from '@/core/refresh/types';
 
 const mocks = vi.hoisted(() => ({
-  setScopedDomainEnabled: vi.fn(),
+  acquireScopedDomainLease: vi.fn(),
+  releaseScopedDomainLease: vi.fn(),
   fetchScopedDomain: vi.fn((..._args: unknown[]) => Promise.resolve()),
   getAutoRefreshEnabled: vi.fn(() => true),
 }));
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: {
-    setScopedDomainEnabled: (...args: unknown[]) => mocks.setScopedDomainEnabled(...args),
+    acquireScopedDomainLease: (...args: unknown[]) => mocks.acquireScopedDomainLease(...args),
+    releaseScopedDomainLease: (...args: unknown[]) => mocks.releaseScopedDomainLease(...args),
     fetchScopedDomain: (...args: unknown[]) => mocks.fetchScopedDomain(...args),
   },
 }));
@@ -75,35 +77,51 @@ describe('useScopedRefreshDomainLifecycle', () => {
   });
 
   beforeEach(() => {
-    mocks.setScopedDomainEnabled.mockClear();
+    mocks.acquireScopedDomainLease.mockClear();
+    mocks.releaseScopedDomainLease.mockClear();
     mocks.fetchScopedDomain.mockClear();
     mocks.fetchScopedDomain.mockResolvedValue(undefined);
     mocks.getAutoRefreshEnabled.mockReturnValue(true);
   });
 
-  it('enables the current scope and disables it on unmount', () => {
+  it('acquires a lease for the current scope and releases it on unmount', () => {
     const hook = renderHook({
       domain: 'catalog',
       scope: 'cluster:test|catalog',
       enabled: true,
     });
 
-    expect(mocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(mocks.acquireScopedDomainLease).toHaveBeenCalledWith(
       'catalog',
       'cluster:test|catalog',
-      true
+      undefined
     );
+    expect(mocks.releaseScopedDomainLease).not.toHaveBeenCalled();
 
     hook.unmount();
 
-    expect(mocks.setScopedDomainEnabled).toHaveBeenLastCalledWith(
+    expect(mocks.releaseScopedDomainLease).toHaveBeenCalledWith(
       'catalog',
       'cluster:test|catalog',
-      false
+      undefined
     );
   });
 
-  it('preserves state when disabling a replaced scope', () => {
+  it('does not acquire a lease while disabled', () => {
+    const hook = renderHook({
+      domain: 'catalog',
+      scope: 'cluster:test|catalog',
+      enabled: false,
+    });
+
+    expect(mocks.acquireScopedDomainLease).not.toHaveBeenCalled();
+
+    hook.unmount();
+
+    expect(mocks.releaseScopedDomainLease).not.toHaveBeenCalled();
+  });
+
+  it('releases the replaced scope lease and acquires the new one on scope change', () => {
     const hook = renderHook({
       domain: 'namespace-workloads',
       scope: 'cluster:test|namespace:team-a',
@@ -118,23 +136,21 @@ describe('useScopedRefreshDomainLifecycle', () => {
       preserveState: true,
     });
 
-    expect(mocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(mocks.releaseScopedDomainLease).toHaveBeenCalledWith(
       'namespace-workloads',
       'cluster:test|namespace:team-a',
-      false,
       { preserveState: true }
     );
-    expect(mocks.setScopedDomainEnabled).toHaveBeenLastCalledWith(
+    expect(mocks.acquireScopedDomainLease).toHaveBeenLastCalledWith(
       'namespace-workloads',
       'cluster:test|namespace:team-b',
-      true,
       { preserveState: true }
     );
 
     hook.unmount();
   });
 
-  it('preserves state when enabling so streaming domains keep cached snapshots', () => {
+  it('passes preserveState so streaming domains keep cached snapshots', () => {
     const hook = renderHook({
       domain: 'object-details',
       scope: 'cluster:test|namespace:team-a|deployment:api',
@@ -142,17 +158,16 @@ describe('useScopedRefreshDomainLifecycle', () => {
       preserveState: true,
     });
 
-    expect(mocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(mocks.acquireScopedDomainLease).toHaveBeenCalledWith(
       'object-details',
       'cluster:test|namespace:team-a|deployment:api',
-      true,
       { preserveState: true }
     );
 
     hook.unmount();
   });
 
-  it('fetches after enabling when the caller requests a startup fetch', async () => {
+  it('fetches after acquiring when the caller requests a startup fetch', async () => {
     const hook = renderHook({
       domain: 'object-map',
       scope: 'cluster:test|namespace:team-a|deployment:api',
@@ -165,10 +180,9 @@ describe('useScopedRefreshDomainLifecycle', () => {
       await Promise.resolve();
     });
 
-    expect(mocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(mocks.acquireScopedDomainLease).toHaveBeenCalledWith(
       'object-map',
       'cluster:test|namespace:team-a|deployment:api',
-      true,
       { preserveState: true }
     );
     expect(mocks.fetchScopedDomain).toHaveBeenCalledWith(
@@ -180,7 +194,7 @@ describe('useScopedRefreshDomainLifecycle', () => {
     hook.unmount();
   });
 
-  it('blocks startup fetches while auto-refresh is paused but still preserves lifecycle cleanup', async () => {
+  it('blocks startup fetches while auto-refresh is paused but still releases on unmount', async () => {
     mocks.getAutoRefreshEnabled.mockReturnValue(false);
 
     const hook = renderHook({
@@ -199,10 +213,9 @@ describe('useScopedRefreshDomainLifecycle', () => {
 
     hook.unmount();
 
-    expect(mocks.setScopedDomainEnabled).toHaveBeenLastCalledWith(
+    expect(mocks.releaseScopedDomainLease).toHaveBeenLastCalledWith(
       'object-helm-values',
       'cluster:test|namespace:team-a|helm:api',
-      false,
       { preserveState: true }
     );
   });

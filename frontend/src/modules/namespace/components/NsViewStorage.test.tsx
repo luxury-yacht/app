@@ -210,20 +210,10 @@ describe('NsViewStorage', () => {
   });
 
   const renderStorageView = async (
-    rows: StorageData[] = [baseStorage()],
     overrides: Partial<React.ComponentProps<typeof NsViewStorage>> = {}
   ) => {
     await act(async () => {
-      root.render(
-        <NsViewStorage
-          namespace="team-a"
-          data={rows}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-          {...overrides}
-        />
-      );
+      root.render(<NsViewStorage namespace="team-a" showNamespaceColumn={true} {...overrides} />);
       await Promise.resolve();
     });
     return gridTablePropsRef.current;
@@ -236,7 +226,7 @@ describe('NsViewStorage', () => {
 
   it('invokes object panel for resource actions', async () => {
     const entry = baseStorage();
-    const props = await renderStorageView([entry]);
+    const props = await renderStorageView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
     const openItem = menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
@@ -275,21 +265,25 @@ describe('NsViewStorage', () => {
     );
   });
 
-  it('uses explicit kind metadata instead of deriving kinds from rows', async () => {
-    const props = await renderStorageView([], { namespace: 'team-a' });
-    expect(props.filters?.options?.kinds).toEqual(['PersistentVolumeClaim']);
+  it('leaves the kind options to the backend-published vocabulary (no frontend list)', async () => {
+    const props = await renderStorageView({ namespace: 'team-a' });
+    // No query payload applies in this harness, so there is no vocabulary yet
+    // (only the empty row-derived fallback): the kind options come ONLY from
+    // the backend capabilities on the payload (see the NsViewWorkloads
+    // end-to-end pin), never from a frontend constant.
+    expect(props.filters?.options?.kinds).toEqual([]);
   });
 
   it('uses canonical object identity for row keys', async () => {
     const entry = baseStorage();
-    const props = await renderStorageView([entry]);
+    const props = await renderStorageView();
 
     expect(props.keyExtractor(entry)).toBe('alpha:ctx|/v1/PersistentVolumeClaim/team-a/pvc-data');
   });
 
   it('exposes delete action and calls backend on confirmation', async () => {
     const entry = baseStorage();
-    const props = await renderStorageView([entry]);
+    const props = await renderStorageView();
 
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
@@ -319,7 +313,7 @@ describe('NsViewStorage', () => {
 
   it('navigates to storage class when storage column is activated', async () => {
     const entry = baseStorage();
-    const props = await renderStorageView([entry]);
+    const props = await renderStorageView();
 
     const storageColumn = props.columns.find((column: any) => column.key === 'storageClass');
     expect(storageColumn).toBeTruthy();
@@ -343,7 +337,7 @@ describe('NsViewStorage', () => {
   it('falls back to the selected cluster for defensive rows without clusterId', async () => {
     const { clusterId: _clusterId, ...entryWithoutCluster } = baseStorage();
     const entry = entryWithoutCluster as unknown as StorageData;
-    const props = await renderStorageView([entry]);
+    const props = await renderStorageView();
 
     expect(props.keyExtractor(entry)).toBe('cluster-a|/v1/PersistentVolumeClaim/team-a/pvc-data');
 
@@ -376,7 +370,7 @@ describe('NsViewStorage', () => {
       statusPresentation: 'error',
       capacity: undefined,
     });
-    await renderStorageView([pending, failed], { showNamespaceColumn: true });
+    await renderStorageView({ showNamespaceColumn: true });
 
     const statusColumn = getColumn('status');
     expect(statusColumn).toBeTruthy();
@@ -398,7 +392,7 @@ describe('NsViewStorage', () => {
 
   it('renders default storage class when absent without triggering navigation', async () => {
     const entry = baseStorage({ storageClass: undefined });
-    await renderStorageView([entry]);
+    await renderStorageView();
     const storageColumn = getColumn('storageClass');
     const renderedCell = storageColumn.render(entry);
 
@@ -416,7 +410,7 @@ describe('NsViewStorage', () => {
   it('handles delete failure with errorHandler', async () => {
     runObjectActionMock.mockRejectedValueOnce(new Error('boom'));
     const entry = baseStorage();
-    const props = await renderStorageView([entry]);
+    const props = await renderStorageView();
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
       .find((item: any) => item.label === 'Delete');

@@ -9,12 +9,21 @@ import (
 	"unsafe"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic/fake"
 	informers "k8s.io/client-go/informers"
 	cgofake "k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
@@ -236,6 +245,173 @@ func TestFindCatalogObjectByUIDUsesCatalogIdentity(t *testing.T) {
 	noMatch, err := app.FindCatalogObjectByUID("cluster-b", "missing-uid")
 	require.NoError(t, err)
 	require.Nil(t, noMatch)
+}
+
+func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
+	clusterID := "cluster-b"
+	gvrObject := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "example.com/v1",
+			"kind":       "Widget",
+			"status": map[string]any{
+				"phase":              "Ready",
+				"ready":              true,
+				"observedGeneration": int64(7),
+				"conditions": []any{
+					map[string]any{
+						"type":    "Ready",
+						"status":  "True",
+						"reason":  "Reconciled",
+						"message": "ready",
+					},
+				},
+			},
+		},
+	}
+	gvrObject.SetName("alpha")
+	gvrObject.SetNamespace("apps")
+	gvrObject.SetUID(types.UID("alpha-uid"))
+	gvrObject.SetResourceVersion("12")
+	gvrObject.SetCreationTimestamp(metav1.Now())
+	gvrObject.SetLabels(map[string]string{"env": "prod"})
+	gvrObject.SetAnnotations(map[string]string{"owner": "platform"})
+
+	app := NewApp()
+	app.clusterClients[clusterID] = &clusterClients{
+		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
+		dynamicClient: fake.NewSimpleDynamicClient(runtime.NewScheme(), gvrObject),
+	}
+
+	rows, err := app.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
+		{
+			ClusterID: clusterID,
+			Group:     "example.com",
+			Version:   "v1",
+			Kind:      "Widget",
+			Resource:  "widgets",
+			Namespace: "apps",
+			Name:      "alpha",
+			UID:       "alpha-uid",
+		},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, clusterID, rows[0].ClusterID)
+	require.Equal(t, "Cluster B", rows[0].ClusterName)
+	require.Equal(t, "Widget", rows[0].Kind)
+	require.Equal(t, "apps", rows[0].Namespace)
+	require.Equal(t, "example.com", rows[0].APIGroup)
+	require.Equal(t, "v1", rows[0].APIVersion)
+	require.Equal(t, "widgets.example.com", rows[0].CRDName)
+	require.Equal(t, "Ready", rows[0].Status)
+	require.Equal(t, "ready", rows[0].StatusPresentation)
+	require.Equal(t, map[string]string{"env": "prod"}, rows[0].Labels)
+	require.Equal(t, map[string]string{"owner": "platform"}, rows[0].Annotations)
+	require.NotNil(t, rows[0].Ready)
+	require.True(t, *rows[0].Ready)
+	require.NotNil(t, rows[0].ObservedGeneration)
+	require.EqualValues(t, 7, *rows[0].ObservedGeneration)
+	require.Len(t, rows[0].Conditions, 1)
+	require.Equal(t, "Ready", rows[0].Conditions[0].Type)
+}
+
+// A canceled context must surface as an error, never as a silently partial
+// (or empty) "complete" result.
+func TestHydrateCatalogCustomRowsReportsCanceledContext(t *testing.T) {
+	clusterID := "cluster-b"
+	app := NewApp()
+	app.clusterClients[clusterID] = &clusterClients{
+		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
+		dynamicClient: fake.NewSimpleDynamicClient(runtime.NewScheme()),
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	app.Ctx = canceled
+
+	_, err := app.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
+		{
+			ClusterID: clusterID,
+			Group:     "example.com",
+			Version:   "v1",
+			Kind:      "Widget",
+			Resource:  "widgets",
+			Namespace: "apps",
+			Name:      "alpha",
+			UID:       "alpha-uid",
+		},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestHydrateCatalogCustomRowsKeepsPageOnRowFailure(t *testing.T) {
+	clusterID := "cluster-b"
+	gvrObject := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "example.com/v1",
+			"kind":       "Widget",
+			"status": map[string]any{
+				"phase": "Ready",
+			},
+		},
+	}
+	gvrObject.SetName("alpha")
+	gvrObject.SetNamespace("apps")
+
+	dynamicClient := fake.NewSimpleDynamicClient(runtime.NewScheme(), gvrObject)
+	dynamicClient.PrependReactor("get", "widgets", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		getAction, ok := action.(cgotesting.GetAction)
+		if !ok || getAction.GetName() != "beta" {
+			return false, nil, nil
+		}
+		return true, nil, apierrors.NewForbidden(
+			schema.GroupResource{Group: "example.com", Resource: "widgets"},
+			"beta",
+			errors.New("forbidden"),
+		)
+	})
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	app.clusterClients[clusterID] = &clusterClients{
+		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
+		dynamicClient: dynamicClient,
+	}
+
+	rows, err := app.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
+		{
+			ClusterID: clusterID,
+			Group:     "example.com",
+			Version:   "v1",
+			Kind:      "Widget",
+			Resource:  "widgets",
+			Namespace: "apps",
+			Name:      "alpha",
+		},
+		{
+			ClusterID: clusterID,
+			Group:     "example.com",
+			Version:   "v1",
+			Kind:      "Widget",
+			Resource:  "widgets",
+			Namespace: "apps",
+			Name:      "beta",
+		},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+
+	byName := make(map[string]snapshot.CustomResourceSummary, len(rows))
+	for _, row := range rows {
+		byName[row.Name] = row
+	}
+	require.Equal(t, "Ready", byName["alpha"].Status)
+	require.Equal(t, "Hydration failed", byName["beta"].Status)
+	require.Equal(t, "warning", byName["beta"].StatusState)
+	require.Equal(t, "warning", byName["beta"].StatusPresentation)
+	require.Equal(t, "widgets.example.com", byName["beta"].CRDName)
 }
 
 func TestWaitForFactorySyncHandlesNilFactory(t *testing.T) {

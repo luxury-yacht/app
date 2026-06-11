@@ -16,6 +16,28 @@ type healthStatus struct {
 	LastError           string
 	Stale               bool
 	FailedResources     int
+	// DeniedResources tracks RBAC-forbidden list targets for the current sync.
+	DeniedResources map[string]struct{}
+}
+
+// recordDeniedResource notes that listing the resource type was RBAC-forbidden.
+// Per-namespace collection workers can report the same type repeatedly; the
+// set dedupes.
+func (s *Service) recordDeniedResource(resource string) {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	if s.health.DeniedResources == nil {
+		s.health.DeniedResources = make(map[string]struct{})
+	}
+	s.health.DeniedResources[resource] = struct{}{}
+}
+
+// resetDeniedResources clears the denial set at the start of a sync so a
+// permission grant clears the warning on the next pass.
+func (s *Service) resetDeniedResources() {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	s.health.DeniedResources = nil
 }
 
 func (s *Service) updateHealth(success bool, stale bool, err error, failedCount int) {

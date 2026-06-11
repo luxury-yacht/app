@@ -34,6 +34,14 @@ You MUST follow these at all times.
   level, and free of dead code or temporary compatibility paths. Do not expand
   scope into unrelated cleanup unless it is required for a correct fix. If the
   correct fix is materially larger than requested, explain the tradeoff and ask.
+- **PRACTICE RED/GREEN/REFACTOR TDD FOR EVERY BEHAVIOR CHANGE.** Write a
+  failing test that specifies the behavior first, run it, and confirm it fails
+  for the right reason (red) — a test that passes before the change is written
+  is invalid. Then write the minimum code to make it pass (green), then
+  refactor under green. Work in tight cycles, one behavior at a time. Never
+  change logic from a mental model and defer verification to the user or a
+  later manual check; the test must prove the behavior before anyone reviews
+  it. Documentation-only, comment-only, and trivial mechanical edits are exempt.
 - **NEVER RUN STATE-MODIFYING GIT COMMANDS OR CREATE PRS UNLESS EXPLICITLY
   DIRECTED.** Read-only git commands are fine.
 

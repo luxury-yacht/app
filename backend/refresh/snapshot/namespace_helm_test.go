@@ -1,10 +1,13 @@
 package snapshot
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"io"
-	"sync"
+	"strconv"
 	"testing"
 	"time"
 
@@ -12,95 +15,117 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/kube"
 	"helm.sh/helm/v3/pkg/release"
-	"helm.sh/helm/v3/pkg/storage"
-	"helm.sh/helm/v3/pkg/storage/driver"
 	releasetime "helm.sh/helm/v3/pkg/time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
+
+func newHelmRelease(name, namespace string, version int, status release.Status, now time.Time) *release.Release {
+	return &release.Release{
+		Name:      name,
+		Namespace: namespace,
+		Version:   version,
+		Chart: &chart.Chart{
+			Metadata: &chart.Metadata{
+				Name:       "nginx",
+				Version:    "1.2.3",
+				AppVersion: "2.0.0",
+			},
+		},
+		Info: &release.Info{
+			Status:        status,
+			FirstDeployed: releasetime.Time{Time: now.Add(-2 * time.Hour)},
+			LastDeployed:  releasetime.Time{Time: now.Add(-30 * time.Minute)},
+			Description:   "Deployed successfully",
+		},
+	}
+}
+
+// helmReleaseSecret encodes a release the way helm's secrets storage driver
+// does: json → gzip → base64 text under Data["release"], with the driver's
+// type and labels.
+func helmReleaseSecret(t *testing.T, rls *release.Release) *corev1.Secret {
+	t.Helper()
+	payload, err := json.Marshal(rls)
+	require.NoError(t, err)
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	_, err = gz.Write(payload)
+	require.NoError(t, err)
+	require.NoError(t, gz.Close())
+	encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("sh.helm.release.v1.%s.v%d", rls.Name, rls.Version),
+			Namespace: rls.Namespace,
+			Labels: map[string]string{
+				"owner":   "helm",
+				"name":    rls.Name,
+				"version": strconv.Itoa(rls.Version),
+				"status":  rls.Info.Status.String(),
+			},
+		},
+		Type: helmReleaseSecretType,
+		Data: map[string][]byte{"release": []byte(encoded)},
+	}
+}
+
+func corruptHelmSecret(name, namespace string, version int, status release.Status) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("sh.helm.release.v1.%s.v%d", name, version),
+			Namespace: namespace,
+			Labels: map[string]string{
+				"owner":   "helm",
+				"name":    name,
+				"version": strconv.Itoa(version),
+				"status":  status.String(),
+			},
+		},
+		Type: helmReleaseSecretType,
+		Data: map[string][]byte{"release": []byte("not-base64!!!")},
+	}
+}
+
+func syncedHelmBuilder(t *testing.T, secrets ...*corev1.Secret) *NamespaceHelmBuilder {
+	t.Helper()
+	return &NamespaceHelmBuilder{
+		secretLister:  testsupport.NewSecretLister(t, secrets...),
+		secretsSynced: func() bool { return true },
+	}
+}
 
 func TestNamespaceHelmBuilder(t *testing.T) {
 	now := time.Now()
 
-	memory := driver.NewMemory()
-	memory.SetNamespace("")
-	store := storage.Init(memory)
-
-	releaseChart := &chart.Chart{
-		Metadata: &chart.Metadata{
-			Name:       "nginx",
-			Version:    "1.2.3",
-			AppVersion: "2.0.0",
+	builder := syncedHelmBuilder(t,
+		// Older revision is corrupt on purpose: only the latest revision per
+		// release may be decoded.
+		corruptHelmSecret("app", "default", 1, release.StatusSuperseded),
+		helmReleaseSecret(t, newHelmRelease("app", "default", 2, release.StatusDeployed, now)),
+		// A release in another namespace must not leak into the scope.
+		helmReleaseSecret(t, newHelmRelease("other", "staging", 1, release.StatusDeployed, now)),
+		// Non-helm secrets are ignored.
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "plain", Namespace: "default"},
+			Type:       corev1.SecretTypeOpaque,
 		},
-	}
-
-	releaseInfo := &release.Info{
-		Status:        release.StatusDeployed,
-		FirstDeployed: releasetime.Time{Time: now.Add(-2 * time.Hour)},
-		LastDeployed:  releasetime.Time{Time: now.Add(-30 * time.Minute)},
-		Description:   "Deployed successfully",
-		Notes:         "Follow the notes",
-	}
-
-	hRelease := &release.Release{
-		Name:      "app",
-		Namespace: "default",
-		Version:   2,
-		Chart:     releaseChart,
-		Info:      releaseInfo,
-	}
-	require.NoError(t, store.Create(hRelease))
-	memory.SetNamespace("")
-
-	factoryInvocations := 0
-	factory := func(namespace string) (*action.Configuration, error) {
-		factoryInvocations++
-		if namespace != "default" {
-			return nil, fmt.Errorf("unexpected namespace %s", namespace)
-		}
-		memDriver := driver.NewMemory()
-		memDriver.SetNamespace(namespace)
-		copyStore := storage.Init(memDriver)
-		releases, err := store.List(func(rel *release.Release) bool {
-			return rel.Namespace == namespace
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, rel := range releases {
-			if rel == nil {
-				continue
-			}
-			if err := copyStore.Create(rel); err != nil {
-				return nil, err
-			}
-		}
-		cfg := &action.Configuration{
-			Releases:   copyStore,
-			KubeClient: stubKubeClient{},
-		}
-		return cfg, nil
-	}
-
-	builder := &NamespaceHelmBuilder{
-		factory: factory,
-	}
+	)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	require.Equal(t, namespaceHelmDomainName, snapshot.Domain)
 	require.Equal(t, uint64(2), snapshot.Version)
-	require.Equal(t, 1, factoryInvocations)
 
 	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Releases, 1)
+	require.Len(t, payload.Rows, 1)
 
-	entry := payload.Releases[0]
+	entry := payload.Rows[0]
 	require.Equal(t, "app", entry.Name)
 	require.Equal(t, "nginx-1.2.3", entry.Chart)
 	require.Equal(t, "2.0.0", entry.AppVersion)
@@ -117,149 +142,101 @@ func TestNamespaceHelmBuilder(t *testing.T) {
 func TestNamespaceHelmBuilderAllNamespaces(t *testing.T) {
 	now := time.Now()
 
-	memory := driver.NewMemory()
-	memory.SetNamespace("")
-	store := storage.Init(memory)
-
-	baseChart := &chart.Chart{
-		Metadata: &chart.Metadata{
-			Name:       "example",
-			Version:    "1.0.0",
-			AppVersion: "3.2.1",
-		},
-	}
-
-	makeRelease := func(name, namespace string, version int) *release.Release {
-		return &release.Release{
-			Name:      name,
-			Namespace: namespace,
-			Version:   version,
-			Chart:     baseChart,
-			Info: &release.Info{
-				Status:        release.StatusDeployed,
-				FirstDeployed: releasetime.Time{Time: now.Add(-time.Duration(version) * time.Hour)},
-				LastDeployed:  releasetime.Time{Time: now.Add(-30 * time.Minute)},
-				Description:   fmt.Sprintf("%s deployed", name),
-				Notes:         fmt.Sprintf("notes for %s", name),
-			},
-		}
-	}
-
-	releaseDefault := makeRelease("app-default", "default", 3)
-	releaseStaging := makeRelease("app-staging", "staging", 5)
-
-	require.NoError(t, store.Create(releaseDefault))
-	require.NoError(t, store.Create(releaseStaging))
-	memory.SetNamespace("")
-
-	// Factory runs concurrently per namespace, so guard the invocation counter.
-	invocations := make(map[string]int)
-	var invocationsMu sync.Mutex
-	factory := func(namespace string) (*action.Configuration, error) {
-		switch namespace {
-		case "default", "staging":
-			invocationsMu.Lock()
-			invocations[namespace]++
-			invocationsMu.Unlock()
-			memDriver := driver.NewMemory()
-			memDriver.SetNamespace(namespace)
-			copyStore := storage.Init(memDriver)
-			releases, err := store.List(func(rel *release.Release) bool {
-				return rel.Namespace == namespace
-			})
-			if err != nil {
-				return nil, err
-			}
-			for _, rel := range releases {
-				if rel == nil {
-					continue
-				}
-				if err := copyStore.Create(rel); err != nil {
-					return nil, err
-				}
-			}
-			cfg := &action.Configuration{
-				Releases:   copyStore,
-				KubeClient: stubKubeClient{},
-			}
-			return cfg, nil
-		default:
-			return nil, fmt.Errorf("unexpected namespace %s", namespace)
-		}
-	}
-
-	nsDefault := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-	nsStaging := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "staging"}}
-
-	allList := action.NewList(&action.Configuration{
-		Releases:   store,
-		KubeClient: stubKubeClient{},
-	})
-	allList.All = true
-	allList.AllNamespaces = true
-	allReleases, err := allList.Run()
-	require.NoError(t, err)
-	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "cluster-a"}
-	allSummaries, _ := mapHelmReleases(allReleases, "", meta)
-	require.Len(t, allSummaries, 2)
-	defaultSummaries, _ := mapHelmReleases(allReleases, "default", meta)
-	require.Len(t, defaultSummaries, 1)
-	stagingSummaries, _ := mapHelmReleases(allReleases, "staging", meta)
-	require.Len(t, stagingSummaries, 1)
-
-	builder := &NamespaceHelmBuilder{
-		factory:         factory,
-		namespaceLister: testsupport.NewNamespaceLister(t, nsDefault, nsStaging),
-	}
+	builder := syncedHelmBuilder(t,
+		helmReleaseSecret(t, newHelmRelease("app-default", "default", 1, release.StatusDeployed, now)),
+		// In-flight operations are current state and must appear.
+		helmReleaseSecret(t, newHelmRelease("app-staging", "staging", 2, release.StatusPendingUpgrade, now)),
+		// A release whose LATEST record is uninstalled (kept history) is gone.
+		helmReleaseSecret(t, newHelmRelease("app-gone", "staging", 3, release.StatusUninstalled, now)),
+	)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
-	require.Equal(t, namespaceHelmDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:all", snapshot.Scope)
 
 	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Releases, 2)
+	require.Len(t, payload.Rows, 2)
 
-	namespaces := make(map[string]struct{})
-	names := make(map[string]struct{})
-	for _, entry := range payload.Releases {
-		require.NotEmpty(t, entry.Namespace)
-		require.NotEmpty(t, entry.Age)
-		namespaces[entry.Namespace] = struct{}{}
-		names[entry.Name] = struct{}{}
+	// Sorted namespace-then-name.
+	require.Equal(t, "app-default", payload.Rows[0].Name)
+	require.Equal(t, "default", payload.Rows[0].Namespace)
+	require.Equal(t, "app-staging", payload.Rows[1].Name)
+	require.Equal(t, "staging", payload.Rows[1].Namespace)
+	require.Equal(t, "pending-upgrade", payload.Rows[1].Status)
+}
+
+func TestNamespaceHelmBuilderAllNamespacesCapsRows(t *testing.T) {
+	now := time.Now()
+	secrets := make([]*corev1.Secret, 0, config.SnapshotNamespaceHelmEntryLimit+1)
+	for i := 0; i < config.SnapshotNamespaceHelmEntryLimit+1; i++ {
+		rls := newHelmRelease(fmt.Sprintf("app-%04d", i), fmt.Sprintf("ns-%04d", i), 1, release.StatusDeployed, now)
+		secrets = append(secrets, helmReleaseSecret(t, rls))
 	}
 
-	require.Len(t, namespaces, 2)
-	require.Contains(t, names, "app-default")
-	require.Contains(t, names, "app-staging")
-	getInvocation := func(namespace string) int {
-		invocationsMu.Lock()
-		defer invocationsMu.Unlock()
-		return invocations[namespace]
+	builder := syncedHelmBuilder(t, secrets...)
+
+	snapshot, err := builder.Build(context.Background(), "namespace:all")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
+	require.True(t, ok)
+	require.Len(t, payload.Rows, config.SnapshotNamespaceHelmEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotNamespaceHelmEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "Helm releases")
+}
+
+func TestNamespaceHelmBuilderQueryPage(t *testing.T) {
+	now := time.Now()
+
+	builder := syncedHelmBuilder(t,
+		helmReleaseSecret(t, newHelmRelease("alpha", "default", 1, release.StatusDeployed, now)),
+		helmReleaseSecret(t, newHelmRelease("beta", "default", 1, release.StatusDeployed, now)),
+	)
+
+	snapshot, err := builder.Build(
+		context.Background(),
+		"namespace:default?limit=1&sort=name&sortDirection=asc",
+	)
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
+	require.True(t, ok)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "alpha", payload.Rows[0].Name)
+}
+
+func TestNamespaceHelmBuilderSkipsCorruptLatestRecord(t *testing.T) {
+	now := time.Now()
+
+	builder := syncedHelmBuilder(t,
+		corruptHelmSecret("broken", "default", 1, release.StatusDeployed),
+		helmReleaseSecret(t, newHelmRelease("healthy", "default", 1, release.StatusDeployed, now)),
+	)
+
+	snapshot, err := builder.Build(context.Background(), "namespace:default")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
+	require.True(t, ok)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "healthy", payload.Rows[0].Name)
+}
+
+// See TestClusterEventsBuilderWaitsForCacheSync: an unsynced secrets informer
+// must not produce a confident empty page; the build waits and errors on
+// deadline.
+func TestNamespaceHelmBuilderWaitsForCacheSync(t *testing.T) {
+	builder := &NamespaceHelmBuilder{
+		secretLister:  testsupport.NewSecretLister(t),
+		secretsSynced: func() bool { return false },
 	}
-	require.Equal(t, 1, getInvocation("default"))
-	require.Equal(t, 1, getInvocation("staging"))
-}
 
-type stubKubeClient struct{}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
 
-func (stubKubeClient) Create(kube.ResourceList) (*kube.Result, error) { return &kube.Result{}, nil }
-func (stubKubeClient) Wait(kube.ResourceList, time.Duration) error    { return nil }
-func (stubKubeClient) WaitWithJobs(kube.ResourceList, time.Duration) error {
-	return nil
+	snapshot, err := builder.Build(ctx, "namespace:default")
+	require.Error(t, err)
+	require.Nil(t, snapshot)
 }
-func (stubKubeClient) Delete(kube.ResourceList) (*kube.Result, []error) { return &kube.Result{}, nil }
-func (stubKubeClient) WatchUntilReady(kube.ResourceList, time.Duration) error {
-	return nil
-}
-func (stubKubeClient) Update(kube.ResourceList, kube.ResourceList, bool) (*kube.Result, error) {
-	return &kube.Result{}, nil
-}
-func (stubKubeClient) Build(io.Reader, bool) (kube.ResourceList, error) {
-	return kube.ResourceList{}, nil
-}
-func (stubKubeClient) WaitAndGetCompletedPodPhase(string, time.Duration) (corev1.PodPhase, error) {
-	return corev1.PodSucceeded, nil
-}
-func (stubKubeClient) IsReachable() error { return nil }

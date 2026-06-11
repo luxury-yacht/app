@@ -163,15 +163,7 @@ describe('NsViewAutoscaling', () => {
     const entry = baseHpa();
 
     await act(async () => {
-      root.render(
-        <NsViewAutoscaling
-          namespace="team-a"
-          data={[entry]}
-          loading={false}
-          loaded={true}
-          showNamespaceColumn={true}
-        />
-      );
+      root.render(<NsViewAutoscaling namespace="team-a" showNamespaceColumn={true} />);
       await Promise.resolve();
     });
 

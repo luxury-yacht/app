@@ -394,15 +394,12 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		directRegistration("namespace-events", func() error {
 			return snapshot.RegisterNamespaceEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory())
 		}),
-		withRequire(directRegistration("namespace-helm", func() error {
+		directRegistration("namespace-helm", func() error {
 			return snapshot.RegisterNamespaceHelmDomain(
 				deps.registry,
 				deps.informerFactory.SharedInformerFactory(),
-				deps.cfg.HelmFactory,
 			)
-		}), requireAvailable("helm factory must be provided for namespace helm domain", func() bool {
-			return deps.cfg.HelmFactory != nil
-		})),
+		}),
 		accessListRegistration(runtimeAccess, listDomainConfig{
 			name: "namespace-network",
 			register: func(allowed domainpermissions.AllowedResources) error {

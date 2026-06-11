@@ -17,6 +17,7 @@ import React, {
 } from 'react';
 import { errorHandler } from '@/utils/errorHandler';
 import { type ResourceDataReturn } from '@hooks/resources';
+import type { SnapshotStats } from '@/core/refresh/client';
 import { useRefreshDomainHandle } from '@/core/data-access';
 import {
   ALL_NAMESPACE_PERMISSIONS,
@@ -49,6 +50,8 @@ import {
   namespaceResourceDescriptors,
   type NamespaceResourceDescriptor,
 } from './namespaceResourceDescriptors';
+import { createCatalogBackedCustomResourceHandle } from '@modules/browse/catalogBackedCustomResourceHandle';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
 export interface PodsResourceDataReturn extends ResourceDataReturn<PodSnapshotEntry[]> {
   metrics: PodMetricsInfo | null;
@@ -80,6 +83,19 @@ const NamespaceResourcesContext = createContext<NamespaceResourcesContextType | 
 
 const DEFAULT_NAMESPACE_VIEW: NamespaceViewType = 'workloads';
 
+const QUERY_BACKED_ALL_NAMESPACE_VIEWS = new Set<NamespaceViewType>([
+  'pods',
+  'workloads',
+  'config',
+  'network',
+  'rbac',
+  'storage',
+  'autoscaling',
+  'quotas',
+  'helm',
+  'events',
+]);
+
 const DOMAIN_BY_RESOURCE: Partial<Record<NamespaceViewType, RefreshDomain | null>> = {
   pods: null,
   workloads: 'namespace-workloads',
@@ -89,7 +105,7 @@ const DOMAIN_BY_RESOURCE: Partial<Record<NamespaceViewType, RefreshDomain | null
   storage: 'namespace-storage',
   autoscaling: 'namespace-autoscaling',
   quotas: 'namespace-quotas',
-  custom: 'namespace-custom',
+  custom: null,
   helm: 'namespace-helm',
   events: 'namespace-events',
 };
@@ -137,6 +153,16 @@ const getCapabilityNamespace = (value?: string | null): string | null => {
   return trimmed === 'all' ? null : trimmed;
 };
 
+const withSnapshotStatsMeta = (base: unknown, stats?: SnapshotStats | null): unknown => {
+  if (!stats) {
+    return base;
+  }
+  if (base && typeof base === 'object' && !Array.isArray(base)) {
+    return { ...base, tableStats: stats };
+  }
+  return { tableStats: stats };
+};
+
 const useNamespacePodsResource = (
   enabled: boolean,
   namespace?: string | null,
@@ -176,11 +202,11 @@ const useNamespacePodsResource = (
   }, [resetPodsDomain, scope]);
 
   const data = useMemo<PodSnapshotEntry[]>(() => {
-    if (!domainState?.data?.pods) {
+    if (!domainState?.data?.rows) {
       return [];
     }
-    return domainState.data.pods;
-  }, [domainState?.data?.pods]);
+    return domainState.data.rows;
+  }, [domainState?.data?.rows]);
   const stableData = useStableKeyedArray(
     data,
     (pod) => `${pod.clusterId ?? clusterId ?? ''}::${pod.namespace}::${pod.name}`
@@ -334,10 +360,10 @@ function useRefreshBackedResource<T>(
 
   const selectedMeta = useMemo(() => {
     if (!domainData || !metaSelector) {
-      return undefined;
+      return withSnapshotStatsMeta(undefined, domainState.stats);
     }
-    return metaSelector(domainData);
-  }, [domainData, metaSelector]);
+    return withSnapshotStatsMeta(metaSelector(domainData), domainState.stats);
+  }, [domainData, domainState.stats, metaSelector]);
   const meta = useStableSelectedValue(selectedMeta);
 
   const initialising =
@@ -478,8 +504,15 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
 
   const activeNamespaceView = activeResourceType ?? DEFAULT_NAMESPACE_VIEW;
 
+  const isAllNamespacesQueryBackedView =
+    currentNamespace === ALL_NAMESPACES_SCOPE &&
+    QUERY_BACKED_ALL_NAMESPACE_VIEWS.has(activeNamespaceView);
+
   const isResourceActive = (resourceKey: NamespaceRefresherKey) =>
-    Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === resourceKey;
+    Boolean(currentNamespace) &&
+    isNamespaceView &&
+    activeNamespaceView === resourceKey &&
+    !isAllNamespacesQueryBackedView;
 
   const workloads = useDescriptorBackedResource<any[]>(
     namespaceResourceDescriptors.workloads,
@@ -554,7 +587,10 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   );
 
   const podsEnabled =
-    Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === 'pods';
+    Boolean(currentNamespace) &&
+    currentNamespace !== ALL_NAMESPACES_SCOPE &&
+    isNamespaceView &&
+    activeNamespaceView === 'pods';
   const pods = useNamespacePodsResource(
     podsEnabled,
     currentNamespace,
@@ -563,14 +599,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     isManualRefreshActive
   );
 
-  const custom = useDescriptorBackedResource<any[]>(
-    namespaceResourceDescriptors.custom,
-    isResourceActive('custom'),
-    currentNamespace,
-    namespaceClusterId,
-    isPaused,
-    isManualRefreshActive
-  );
+  const custom = useMemo(() => createCatalogBackedCustomResourceHandle<any>(), []);
 
   const helm = useDescriptorBackedResource<any[]>(
     namespaceResourceDescriptors.helm,
@@ -707,7 +736,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
               res.autoscaling.load(false);
               break;
             case 'custom':
-              res.custom.load(false);
+              // Custom resource rows are catalog-backed; do not start the
+              // namespace-custom fanout domain for the Custom table.
               break;
             case 'helm':
               res.helm.load(false);
@@ -748,6 +778,13 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     const activeKey = activeResourceType ?? DEFAULT_NAMESPACE_VIEW;
     const podsResource = resourcesRef.current.pods;
 
+    if (
+      currentNamespace === ALL_NAMESPACES_SCOPE &&
+      QUERY_BACKED_ALL_NAMESPACE_VIEWS.has(activeKey)
+    ) {
+      return;
+    }
+
     if (activeKey === 'pods') {
       if (!podsResource.hasLoaded && !podsResource.loading) {
         void podsResource.load?.(false);
@@ -756,6 +793,10 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     }
 
     if (activeKey === 'browse' || activeKey === 'map') {
+      return;
+    }
+
+    if (activeKey === 'custom') {
       return;
     }
 
@@ -851,7 +892,6 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
             storage.data,
             autoscaling.data,
             quotas.data,
-            custom.data,
             events.data,
           ]
         : [
@@ -864,7 +904,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
               storage: storage.data,
               autoscaling: autoscaling.data,
               quotas: quotas.data,
-              custom: custom.data,
+              custom: [],
               helm: helm.data,
               events: events.data,
             }[activeKey],

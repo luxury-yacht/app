@@ -25,21 +25,23 @@ describe('ClusterRefreshRuntime', () => {
     ]);
 
     expect(
-      runtime.applyScopedDomainEnabled('cluster-config', 'cluster-a|namespace:default', true)
+      runtime.applyScopedDomainEnabled('cluster-overview', 'cluster-a|namespace:default', true)
     ).toEqual({
       previous: undefined,
       changed: true,
       staleScopes: [],
     });
     expect(
-      runtime.applyScopedDomainEnabled('cluster-config', 'cluster-a|namespace:kube-system', true)
+      runtime.applyScopedDomainEnabled('cluster-overview', 'cluster-a|namespace:kube-system', true)
     ).toEqual({
       previous: undefined,
       changed: true,
       staleScopes: ['cluster-a|namespace:default'],
     });
-    expect(runtime.getEnabledScopes('cluster-config')).toEqual(['cluster-a|namespace:kube-system']);
-    expect(runtime.isScopedDomainEnabled('cluster-config', 'cluster-a|namespace:default')).toBe(
+    expect(runtime.getEnabledScopes('cluster-overview')).toEqual([
+      'cluster-a|namespace:kube-system',
+    ]);
+    expect(runtime.isScopedDomainEnabled('cluster-overview', 'cluster-a|namespace:default')).toBe(
       false
     );
 
@@ -53,6 +55,47 @@ describe('ClusterRefreshRuntime', () => {
       'cluster-a|namespace:kube-system',
       'cluster-a|namespace:prod',
     ]);
+  });
+
+  it('keeps live resource-stream table scopes enabled while typed query scopes run', () => {
+    const runtime = new ClusterRefreshRuntime('cluster-a');
+
+    expect(runtime.applyScopedDomainEnabled('nodes', 'cluster-a|', true)).toEqual({
+      previous: undefined,
+      changed: true,
+      staleScopes: [],
+    });
+    expect(
+      runtime.applyScopedDomainEnabled(
+        'nodes',
+        'cluster-a|?limit=50&sort=name&sortDirection=asc',
+        true
+      )
+    ).toEqual({
+      previous: undefined,
+      changed: true,
+      staleScopes: [],
+    });
+
+    expect(runtime.getEnabledScopes('nodes')).toEqual([
+      'cluster-a|',
+      'cluster-a|?limit=50&sort=name&sortDirection=asc',
+    ]);
+    expect(runtime.isScopedDomainEnabled('nodes', 'cluster-a|')).toBe(true);
+
+    expect(
+      runtime.applyScopedDomainEnabled(
+        'nodes',
+        'cluster-a|?limit=50&sort=name&sortDirection=asc',
+        false
+      )
+    ).toEqual({
+      previous: true,
+      changed: true,
+      staleScopes: [],
+    });
+
+    expect(runtime.getEnabledScopes('nodes')).toEqual(['cluster-a|']);
   });
 
   it('owns async streaming lifecycle bookkeeping', async () => {
@@ -119,5 +162,48 @@ describe('ClusterRefreshRuntime', () => {
 
     expect(runtime.isStreamingBlocked('cluster-config', 'cluster-a|')).toBe(false);
     expect(runtime.getEnabledScopes('cluster-config')).toEqual(['cluster-a|']);
+  });
+
+  it('reference-counts scoped leases so concurrent holders share one enable', () => {
+    const runtime = new ClusterRefreshRuntime('cluster-a');
+
+    expect(runtime.hasScopedLease('nodes', 'cluster-a|')).toBe(false);
+    expect(runtime.getScopedLeaseCount('nodes', 'cluster-a|')).toBe(0);
+
+    // Old table instance acquires the first lease.
+    expect(runtime.acquireScopedLease('nodes', 'cluster-a|')).toEqual({
+      count: 1,
+      firstLease: true,
+    });
+    // New instance mounts before the old one unmounts: shares the lease.
+    expect(runtime.acquireScopedLease('nodes', 'cluster-a|')).toEqual({
+      count: 2,
+      firstLease: false,
+    });
+    expect(runtime.hasScopedLease('nodes', 'cluster-a|')).toBe(true);
+
+    // Old instance unmounts: a holder remains, so this is not the last lease.
+    expect(runtime.releaseScopedLease('nodes', 'cluster-a|')).toEqual({
+      count: 1,
+      lastLease: false,
+      hadLease: true,
+    });
+    expect(runtime.hasScopedLease('nodes', 'cluster-a|')).toBe(true);
+
+    // New instance unmounts: the final lease is gone.
+    expect(runtime.releaseScopedLease('nodes', 'cluster-a|')).toEqual({
+      count: 0,
+      lastLease: true,
+      hadLease: true,
+    });
+    expect(runtime.hasScopedLease('nodes', 'cluster-a|')).toBe(false);
+
+    // Over-release is a no-op and never produces a negative count.
+    expect(runtime.releaseScopedLease('nodes', 'cluster-a|')).toEqual({
+      count: 0,
+      lastLease: false,
+      hadLease: false,
+    });
+    expect(runtime.getScopedLeaseCount('nodes', 'cluster-a|')).toBe(0);
   });
 });

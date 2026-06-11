@@ -1,0 +1,146 @@
+/**
+ * frontend/src/modules/resource-grid/QueryPaginationControls.tsx
+ *
+ * Shared cursor pagination controls for query-backed resource tables.
+ */
+
+import React, { useMemo } from 'react';
+import './QueryPaginationControls.css';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+
+interface QueryPaginationControlsProps {
+  idPrefix: string;
+  pageIndex: number;
+  pageSize: number;
+  visibleItemCount: number;
+  pageSizeOptions: readonly number[];
+  totalCount: number;
+  totalIsExact: boolean;
+  hasPrevious: boolean;
+  hasNext: boolean;
+  loading: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+  onPageSizeChange: (value: number) => void;
+}
+
+const formatCount = (value: number): string => Math.max(0, value).toLocaleString();
+
+const PaginationArrowIcon: React.FC<{ direction: 'previous' | 'next' }> = ({ direction }) => (
+  <svg
+    className="query-pagination-button-icon"
+    viewBox="0 0 16 16"
+    width="16"
+    height="16"
+    aria-hidden="true"
+    focusable="false"
+  >
+    {direction === 'previous' ? (
+      <path d="M10.4 3.2 5.6 8l4.8 4.8-1.2 1.2L4 8l5.2-6z" />
+    ) : (
+      <path d="m5.6 3.2 4.8 4.8-4.8 4.8 1.2 1.2L12 8 6.8 2z" />
+    )}
+  </svg>
+);
+
+const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
+  idPrefix,
+  pageIndex,
+  pageSize,
+  visibleItemCount,
+  pageSizeOptions,
+  totalCount,
+  totalIsExact,
+  hasPrevious,
+  hasNext,
+  loading,
+  onPrevious,
+  onNext,
+  onPageSizeChange,
+}) => {
+  const pageOptions = useMemo<DropdownOption[]>(
+    () =>
+      pageSizeOptions.map((value) => ({
+        value: String(value),
+        label: String(value),
+      })),
+    [pageSizeOptions]
+  );
+  const rangeStart =
+    totalCount === 0 || visibleItemCount === 0 ? 0 : (pageIndex - 1) * pageSize + 1;
+  const rawRangeEnd = (pageIndex - 1) * pageSize + visibleItemCount;
+  const rangeEnd =
+    totalCount === 0 || visibleItemCount === 0
+      ? 0
+      : totalIsExact
+        ? Math.min(rawRangeEnd, Math.max(totalCount, 0))
+        : rawRangeEnd;
+  const rangeLabel =
+    rangeStart > 0 && rangeEnd >= rangeStart
+      ? `${formatCount(rangeStart)}-${formatCount(rangeEnd)}`
+      : '0';
+  const totalLabel = totalIsExact ? formatCount(totalCount) : `${formatCount(totalCount)}+`;
+
+  return (
+    <div className="query-pagination-controls" aria-label="Table pagination">
+      <div className="query-pagination-page-size">
+        <span className="query-pagination-page-size-label">Rows per page</span>
+        <Dropdown
+          id={`${idPrefix}-page-size`}
+          name={`${idPrefix}-page-size`}
+          size="compact"
+          variant="outlined"
+          ariaLabel="Rows per page"
+          value={String(pageSize)}
+          options={pageOptions}
+          onChange={(value) => {
+            const rawValue = Array.isArray(value) ? value[0] : value;
+            const next = Number(rawValue);
+            if (pageSizeOptions.includes(next)) {
+              onPageSizeChange(next);
+            }
+          }}
+          renderValue={(value, options) => {
+            const selected = options.find((option) => option.value === value);
+            return selected?.label ?? String(pageSize);
+          }}
+        />
+      </div>
+      <div className="query-pagination-status" aria-live="polite">
+        <span className="query-pagination-range">
+          {rangeLabel} of {totalLabel}
+        </span>
+        <span
+          className="query-pagination-progress"
+          aria-label={loading ? 'Page request in progress' : undefined}
+          aria-hidden={loading ? undefined : true}
+        />
+      </div>
+      <div className="query-pagination-buttons">
+        <button
+          type="button"
+          className="query-pagination-button"
+          onClick={onPrevious}
+          disabled={!hasPrevious || loading}
+          aria-label="Previous page"
+          title="Previous page"
+        >
+          <PaginationArrowIcon direction="previous" />
+        </button>
+        <button
+          type="button"
+          className="query-pagination-button"
+          onClick={onNext}
+          disabled={!hasNext || loading}
+          aria-label="Next page"
+          title="Next page"
+        >
+          <PaginationArrowIcon direction="next" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default QueryPaginationControls;

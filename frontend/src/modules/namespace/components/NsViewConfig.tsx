@@ -13,14 +13,16 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
+import type { NamespaceConfigSnapshotPayload } from '@/core/refresh/types';
 
 // Data interface for configuration resources (ConfigMaps, Secrets)
 export interface ConfigData {
@@ -36,10 +38,6 @@ export interface ConfigData {
 
 interface ConfigViewProps {
   namespace: string;
-  data: ConfigData[];
-  availableKinds?: string[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
 
@@ -48,17 +46,11 @@ interface ConfigViewProps {
  * Aggregates ConfigMaps and Secrets
  */
 const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    availableKinds: kindOptions,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-  }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<ConfigData>('config');
 
@@ -141,14 +133,20 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         ? 'All Namespaces Configuration'
         : 'Namespace Configuration';
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<ConfigData>({
+    const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceConfigSnapshotPayload,
+      ConfigData
+    >({
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-config',
+      label: diagnosticsLabel,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-config',
       namespace,
       columns,
-      data,
       objectIdentity: resourceIdentity,
       defaultSort: { key: 'name', direction: 'asc' },
-      availableKinds: kindOptions,
       showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       diagnosticsLabel,
@@ -178,15 +176,13 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={loading}
-          loaded={loaded}
           spinnerMessage="Loading configuration resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={diagnosticsLabel}
-          loading={loading}
           onRowClick={openResource}
           tableClassName="ns-config-table"
           enableContextMenu={true}

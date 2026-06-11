@@ -21,7 +21,8 @@ import React, { useCallback, useMemo } from 'react';
 import './BrowseView.css';
 import { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
+import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -32,6 +33,7 @@ import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNa
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
+import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import {
   useBrowseColumns,
   toTableRows,
@@ -43,6 +45,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import CatalogPaginationFooter from './CatalogPaginationFooter';
 
 const VIRTUALIZATION_THRESHOLD = 80;
 
@@ -272,6 +275,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     data: [], // We'll populate this after we have catalog data
     keyExtractor,
     filterOptions: { kinds: [], namespaces: [], isNamespaceScoped: false },
+    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     enabled: !isNamespaceScoped,
   });
 
@@ -283,46 +287,28 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     data: [], // We'll populate this after we have catalog data
     keyExtractor,
     filterOptions: { kinds: [], namespaces: [], isNamespaceScoped: true },
+    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+    enabled: isNamespaceScoped,
   });
 
-  // Select the appropriate persistence based on scope
-  const persistence = isNamespaceScoped
-    ? {
-        sortConfig: namespacePersistence.sortConfig,
-        setSortConfig: namespacePersistence.onSortChange,
-        columnWidths: namespacePersistence.columnWidths,
-        setColumnWidths: namespacePersistence.setColumnWidths,
-        columnVisibility: namespacePersistence.columnVisibility,
-        setColumnVisibility: namespacePersistence.setColumnVisibility,
-        filters: namespacePersistence.filters,
-        setFilters: namespacePersistence.setFilters,
-        resetState: namespacePersistence.resetState,
-        hydrated: namespacePersistence.hydrated,
-      }
-    : {
-        sortConfig: clusterPersistence.sortConfig,
-        setSortConfig: clusterPersistence.setSortConfig,
-        columnWidths: clusterPersistence.columnWidths,
-        setColumnWidths: clusterPersistence.setColumnWidths,
-        columnVisibility: clusterPersistence.columnVisibility,
-        setColumnVisibility: clusterPersistence.setColumnVisibility,
-        filters: clusterPersistence.filters,
-        setFilters: clusterPersistence.setFilters,
-        resetState: clusterPersistence.resetState,
-        hydrated: clusterPersistence.hydrated,
-      };
+  // Select the appropriate persistence based on scope. The cluster hook already
+  // returns the standard shape; the namespace hook exposes it as `persistence`.
+  const persistence = isNamespaceScoped ? namespacePersistence.persistence : clusterPersistence;
 
   // Get catalog data
   const {
     items,
     loading,
     hasLoadedOnce,
-    continueToken,
-    isRequestingMore,
-    handleLoadMore,
+    error: catalogError,
     filterOptions,
     totalCount,
+    unfilteredTotal,
+    totalIsExact,
+    pagination,
+    fetchAllRows: fetchAllCatalogItems,
   } = useBrowseCatalog({
+    enabled: persistence.hydrated,
     clusterId: selectedClusterId,
     pinnedNamespaces,
     clusterScopedOnly,
@@ -331,6 +317,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       kinds: persistence.filters.kinds ?? [],
       namespaces: persistence.filters.namespaces ?? [],
     },
+    sort: persistence.sortConfig,
+    pageLimit: persistence.pageSize ?? undefined,
+    onPageLimitChange: persistence.setPageSize,
     diagnosticLabel: scope === 'namespace' ? 'Namespace Browse' : 'Browse',
   });
 
@@ -338,6 +327,24 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   const rows = useMemo(
     () => toTableRows(items, useShortResourceNames),
     [items, useShortResourceNames]
+  );
+
+  // Export source: every matching catalog item (all pages) mapped to table rows, so the
+  // Copy/Export "all matching rows" scope produces the same columns shown on screen.
+  const fetchAllTableRows = useCallback(
+    async () => toTableRows(await fetchAllCatalogItems(), useShortResourceNames),
+    [fetchAllCatalogItems, useShortResourceNames]
+  );
+
+  const paginationControls = useMemo(
+    () => (
+      <CatalogPaginationFooter
+        idPrefix={resolvedViewId}
+        visibleItemCount={rows.length}
+        pagination={pagination}
+      />
+    ),
+    [pagination, resolvedViewId, rows.length]
   );
 
   const gridFilterOptions = useMemo(
@@ -351,12 +358,26 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       kindDropdownBulkActions: true,
       namespaceDropdownSearchable: true,
       includeClusterScopedSyntheticNamespace: false,
+      // Show the "showing N of M items due to filters" banner like every other view (the bar only
+      // renders it while a narrowing filter is active). totalCount is N; unfilteredTotal is M.
       totalCount,
+      unfilteredTotal,
+      totalIsExact,
+      partialDataLabel: filterOptions.partialDataLabel,
     }),
-    [filterOptions.kinds, filterOptions.namespaces, showNamespaceColumn, totalCount]
+    [
+      filterOptions.kinds,
+      filterOptions.namespaces,
+      filterOptions.partialDataLabel,
+      showNamespaceColumn,
+      totalCount,
+      unfilteredTotal,
+      totalIsExact,
+    ]
   );
 
   const { gridTableProps, favModal } = useQueryResourceGridTable<BrowseTableRow>({
+    tableMode: 'Query Backed Static',
     data: rows,
     columns,
     persistence,
@@ -366,6 +387,18 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     filterOptions: gridFilterOptions,
     keyExtractor,
     virtualization: virtualizationOptions,
+  });
+
+  // Catalog provider → the shared controller contract; the catalog pagination
+  // footer stays on gridTableProps below.
+  const source = backendQuerySource<BrowseTableRow>({
+    enabled: true,
+    rows,
+    loading,
+    loaded: hasLoadedOnce,
+    error: catalogError,
+    // Per-view identity so a revisit replays the last browse page instead of a spinner.
+    cacheKey: `${resolvedViewId}|${selectedClusterId ?? ''}|${namespace ?? ''}`,
   });
 
   // Resolve class names and messages
@@ -381,10 +414,13 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   return (
     <>
-      <ResourceGridTableView
-        gridTableProps={gridTableProps}
-        boundaryLoading={loading}
-        loaded={hasLoadedOnce}
+      <ResourceInventoryTable
+        source={source}
+        gridTableProps={{
+          ...gridTableProps,
+          fetchAllRows: fetchAllTableRows,
+          exportFilename: 'browse',
+        }}
         spinnerMessage={resolvedLoadingMessage}
         allowPartial
         suppressEmptyWarning
@@ -398,9 +434,10 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         enableContextMenu
         getCustomContextMenuItems={getContextMenuItems}
         emptyMessage={resolvedEmptyMessage}
-        hasMore={Boolean(continueToken)}
-        isRequestingMore={isRequestingMore}
-        onRequestMore={continueToken ? handleLoadMore : undefined}
+        {...pagination}
+        paginationControls={paginationControls}
+        showLoadMoreButton={false}
+        showPaginationStatus={false}
       />
       {objectActions.modals}
     </>

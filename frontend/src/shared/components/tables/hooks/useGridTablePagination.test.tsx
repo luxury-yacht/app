@@ -83,6 +83,7 @@ const Harness = forwardRef<HarnessHandle, { requestMock: (trigger: 'manual' | 'a
       paginationEnabled: true,
       autoLoadMore: true,
       hasMore,
+      hasPrevious: false,
       isRequestingMore,
       onRequestMore: requestMock,
       tableDataLength: 5,
@@ -205,7 +206,7 @@ describe('useGridTablePagination', () => {
     const harness = await renderHarness(requestMock);
     const handle = harness.handle();
 
-    expect(handle.getStatus()).toBe('Scroll or click to load more results');
+    expect(handle.getStatus()).toBe('More results available');
 
     await act(async () => {
       handle.setRequesting(true);
@@ -218,7 +219,7 @@ describe('useGridTablePagination', () => {
       handle.setHasMore(false);
       await Promise.resolve();
     });
-    expect(harness.handle().getStatus()).toBe('No additional pages');
+    expect(harness.handle().getStatus()).toBe('All results loaded');
 
     await harness.unmount();
   });

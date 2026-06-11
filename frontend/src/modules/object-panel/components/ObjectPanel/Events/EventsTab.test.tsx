@@ -51,8 +51,13 @@ vi.mock('@/core/refresh/clusterScope', () => ({
 
 const hoistedSnapshot = vi.hoisted(() => ({
   data: null as any,
+  stats: null as any,
   status: 'ready' as string,
   error: null as string | null,
+}));
+
+const gridTableState = vi.hoisted(() => ({
+  lastProps: null as any,
 }));
 
 const autoRefreshLoadingState = vi.hoisted(() => ({
@@ -96,13 +101,17 @@ vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
-  default: ({ data, onRowClick }: { data: any[]; onRowClick: (item: any) => void }) => (
-    <div data-testid="grid-table">
-      {data.map((item: any, i: number) => (
-        <button key={i} data-testid={`row-${i}`} onClick={() => onRowClick(item)} />
-      ))}
-    </div>
-  ),
+  default: (props: { data: any[]; onRowClick: (item: any) => void }) => {
+    gridTableState.lastProps = props;
+    const { data, onRowClick } = props;
+    return (
+      <div data-testid="grid-table">
+        {data.map((item: any, i: number) => (
+          <button key={i} data-testid={`row-${i}`} onClick={() => onRowClick(item)} />
+        ))}
+      </div>
+    );
+  },
   GRIDTABLE_VIRTUALIZATION_DEFAULT: {},
 }));
 
@@ -158,6 +167,7 @@ describe('EventsTab', () => {
     autoRefreshLoadingState.isManualRefreshActive = false;
     autoRefreshLoadingState.suppressPassiveLoading = false;
     appPreferencesMocks.getAutoRefreshEnabled.mockReturnValue(true);
+    gridTableState.lastProps = null;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -167,6 +177,7 @@ describe('EventsTab', () => {
     act(() => root.unmount());
     container.remove();
     hoistedSnapshot.data = null;
+    hoistedSnapshot.stats = null;
     hoistedSnapshot.status = 'ready';
     hoistedSnapshot.error = null;
   });
@@ -178,6 +189,25 @@ describe('EventsTab', () => {
     clusterId: PARENT_CLUSTER_ID,
     clusterName: PARENT_CLUSTER_NAME,
   };
+
+  it('defaults the visible Age column to newest-event sorting', async () => {
+    hoistedSnapshot.data = {
+      events: [makeEvent()],
+    };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          isActive={true}
+          eventsScope="parent-cluster|default:Deployment:my-deploy"
+        />
+      );
+    });
+
+    expect(gridTableState.lastProps?.sortConfig).toEqual({ key: 'age', direction: 'desc' });
+  });
 
   it('prefers per-event clusterId over parent panel cluster when opening related objects', async () => {
     // Event has its own cluster identity distinct from the parent panel.
@@ -208,6 +238,33 @@ describe('EventsTab', () => {
     const call = mockOpenWithObject.mock.calls[0][0];
     expect(call.clusterId).toBe(EVENT_CLUSTER_ID);
     expect(call.clusterName).toBe(EVENT_CLUSTER_NAME);
+  });
+
+  it('renders backend truncation stats for the object-events Local Partial window', async () => {
+    hoistedSnapshot.data = {
+      events: [makeEvent()],
+    };
+    hoistedSnapshot.stats = {
+      itemCount: 1,
+      buildDurationMs: 0,
+      truncated: true,
+      totalItems: 9,
+      warnings: ['Showing most recent 1 of 9 events'],
+    };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          isActive={true}
+          eventsScope="parent-cluster|default:Deployment:my-deploy"
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Showing most recent 1 of 9 events');
+    expect(container.textContent).toContain('visible rows');
   });
 
   it('passes isManual flag through to fetchScopedDomain without inversion', async () => {

@@ -1392,8 +1392,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
   const hasActiveResultFilter = selectedFilters.length > 0 || textFilter.trim().length > 0;
   const displayedLogCount = filteredEntries.length;
-  const countLabel = `${displayedLogCount} matching log${displayedLogCount === 1 ? '' : 's'}`;
-  const countTitle = countLabel;
+  const countLabel = `${displayedLogCount} matching log${
+    displayedLogCount === 1 ? '' : 's'
+  } in current buffer`;
+  const countTitle = `${countLabel}. Filtering and copy actions apply only to the current log buffer.`;
 
   useEffect(() => {
     if (displayMode !== 'raw' && !canParseContainerLogs) {
@@ -2211,7 +2213,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                       id: 'copy',
                       icon: <CopyIcon width={18} height={18} />,
                       onClick: handleCopyContainerLogs,
-                      title: 'Copy to clipboard (Shift+C)',
+                      title: 'Copy current log buffer to clipboard (Shift+C)',
                       ariaLabel: 'Copy to clipboard',
                       disabled: !hasCopyableContent,
                       feedback:

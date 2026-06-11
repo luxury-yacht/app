@@ -4,14 +4,13 @@
  * Coordinates shared resource-grid table state, identity, and context menus.
  */
 
-import { useCallback, useMemo } from 'react';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useCallback, useEffect, useMemo } from 'react';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
-import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridTableFilterConfig,
+  type GridTableFilterState,
 } from '@shared/components/tables/GridTable';
 import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
 import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
@@ -19,15 +18,26 @@ import { useGridTablePersistence } from '@shared/components/tables/persistence/u
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useGridTableBinding } from './useGridTableBinding';
+import {
+  normalizeQueryBackedNamespaceFilters,
+  queryBackedFacetFilterOptions,
+} from './queryBackedTableState';
 import type {
   ClusterResourceGridTableParams,
   NamespaceResourceGridTableParams,
   ObjectPanelResourceGridTableParams,
   QueryResourceGridTableParams,
   ResourceGridCommonParams,
+  ResourceGridTableMode,
   ResourceGridTableResult,
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
+import { isQueryBackedResourceGridTableMode } from './resourceGridTableTypes';
+
+const resourceGridPartialDataLabel = (tableMode: ResourceGridTableMode) =>
+  tableMode === 'Local Partial'
+    ? 'This table is showing a bounded or recent local window. Search, filters, sort, export, and selection apply only to the visible dataset.'
+    : undefined;
 
 const useDefaultResourceGridKey = <T extends ResourceGridTableRow>(
   fallbackClusterId?: string | null
@@ -38,36 +48,22 @@ const useDefaultResourceGridKey = <T extends ResourceGridTableRow>(
   );
 
 export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
-  viewId,
+  tableMode,
   data,
-  persistenceData,
   columns,
   keyExtractor,
-  filterOptions,
+  persistenceOverride: persistence,
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   showNamespaceFilters = false,
   ...common
 }: ClusterResourceGridTableParams<T>): ResourceGridTableResult<T> {
-  const { selectedClusterId } = useKubeconfig();
-  const defaultKeyExtractor = useDefaultResourceGridKey<T>(selectedClusterId);
-  const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key ?? defaultKeyExtractor;
-  const persistence = useGridTablePersistence<T>({
-    viewId,
-    clusterIdentity: selectedClusterId,
-    namespace: null,
-    isNamespaceScoped: false,
-    columns,
-    data: persistenceData ?? data,
-    keyExtractor: resolvedKeyExtractor,
-    filterOptions: { ...(filterOptions ?? {}), isNamespaceScoped: false },
-  });
-
-  return useResourceGridTableCommon({
+  const table = useResourceGridTableCommon({
     ...common,
+    tableMode,
     data,
     columns,
-    keyExtractor: resolvedKeyExtractor,
+    keyExtractor,
     rowIdentity: common.rowIdentity ?? common.objectIdentity?.rowIdentity,
     persistence,
     defaultSortKey,
@@ -75,54 +71,39 @@ export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
     namespace: showNamespaceFilters ? ALL_NAMESPACES_SCOPE : undefined,
     showNamespaceFilters,
   });
+  return { ...table, persistence };
 }
 
 export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
-  viewId,
+  tableMode,
   namespace,
   data,
-  persistenceData,
   columns,
   keyExtractor,
-  filterOptions,
+  persistenceOverride: persistence,
   defaultSort = { key: 'name', direction: 'asc' },
   showNamespaceFilters = false,
   ...common
 }: NamespaceResourceGridTableParams<T>): ResourceGridTableResult<T> {
-  const { selectedClusterId } = useKubeconfig();
-  const defaultKeyExtractor = useDefaultResourceGridKey<T>(selectedClusterId);
-  const resolvedKeyExtractor = keyExtractor ?? common.objectIdentity?.key ?? defaultKeyExtractor;
-  const persistence = useNamespaceGridTablePersistence<T>({
-    viewId,
-    namespace,
-    columns,
-    data: persistenceData ?? data,
-    keyExtractor: resolvedKeyExtractor,
-    defaultSort,
-    filterOptions: {
-      ...(filterOptions ?? {}),
-      isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
-    },
-  });
-
-  return useResourceGridTableCommon({
+  const table = useResourceGridTableCommon({
     ...common,
+    tableMode,
     data,
     columns,
-    keyExtractor: resolvedKeyExtractor,
+    keyExtractor,
     rowIdentity: common.rowIdentity ?? common.objectIdentity?.rowIdentity,
-    persistence: {
-      ...persistence,
-      setSortConfig: persistence.onSortChange,
-    },
+    persistence,
+    defaultSortKey: defaultSort.key,
     defaultSortDirection: defaultSort.direction ?? 'asc',
     namespace,
     showNamespaceFilters,
   });
+  return { ...table, persistence };
 }
 
 export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>({
   viewId,
+  tableMode,
   clusterIdentity,
   enabled = true,
   data,
@@ -130,6 +111,7 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
   keyExtractor,
   filterAccessors,
   filterOptions,
+  pageSizeOptions,
   defaultSort = { key: 'name', direction: 'asc' },
   diagnosticsLabel,
   rowIdentity,
@@ -147,10 +129,12 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
     data,
     keyExtractor: resolvedKeyExtractor,
     filterOptions: { ...(filterOptions ?? {}), isNamespaceScoped: false },
+    pageSizeOptions,
   });
 
   const binding = useGridTableBinding({
     data,
+    tableMode,
     columns,
     keyExtractor: resolvedKeyExtractor,
     defaultSortKey: defaultSort.key,
@@ -167,9 +151,17 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
       accessors: filterAccessors,
       onChange: persistence.setFilters,
       onReset: persistence.resetState,
-      options: {},
+      options: {
+        partialDataLabel: resourceGridPartialDataLabel(tableMode),
+      },
     }),
-    [filterAccessors, persistence.filters, persistence.resetState, persistence.setFilters]
+    [
+      filterAccessors,
+      persistence.filters,
+      persistence.resetState,
+      persistence.setFilters,
+      tableMode,
+    ]
   );
 
   const gridTableProps = useMemo(
@@ -180,10 +172,12 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
   return {
     gridTableProps,
     favModal: null,
+    persistence,
   };
 }
 
 export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
+  tableMode,
   data,
   columns,
   persistence,
@@ -200,6 +194,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
   const resolvedKeyExtractor = keyExtractor ?? defaultKeyExtractor;
   const binding = useGridTableBinding({
     data,
+    tableMode,
     columns,
     keyExtractor: resolvedKeyExtractor,
     defaultSortKey,
@@ -232,6 +227,10 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
       onReset: persistence.resetState,
       options: {
         ...filterOptions,
+        searchBehavior: isQueryBackedResourceGridTableMode(tableMode)
+          ? 'query'
+          : (filterOptions.searchBehavior ?? 'local'),
+        partialDataLabel: filterOptions.partialDataLabel ?? resourceGridPartialDataLabel(tableMode),
         preActions: [...(filterOptions.preActions ?? []), favToggle],
       },
     }),
@@ -239,6 +238,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
       favToggle,
       filterAccessors,
       filterOptions,
+      tableMode,
       persistence.filters,
       persistence.resetState,
       persistence.setFilters,
@@ -253,19 +253,23 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
   return {
     gridTableProps,
     favModal,
+    persistence,
   };
 }
 
 function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   data,
+  tableMode,
   columns,
   availableKinds: kindOptions,
   diagnosticsLabel,
   filterAccessors,
   leadingFilterActions = [],
+  filterOptionOverrides,
   kindDropdownBulkActions = false,
   kindDropdownSearchable = false,
   metadataSearch,
+  onTableStateChange,
   rowIdentity,
   keyExtractor,
   persistence,
@@ -279,6 +283,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
 }: ResourceGridCommonParams<T>): ResourceGridTableResult<T> {
   const binding = useGridTableBinding({
     data,
+    tableMode,
     columns,
     keyExtractor,
     defaultSortKey,
@@ -296,6 +301,61 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     [data]
   );
   const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
+  const persistenceFilters = persistence.filters;
+  const setPersistenceFilters = persistence.setFilters;
+  const namespaceFilterOptions = queryBackedFacetFilterOptions(
+    availableFilterNamespaces,
+    filterOptionOverrides?.namespaces,
+    fallbackNamespaces
+  );
+  // The static per-view kind vocabulary (the prop, when supplied) must survive
+  // collapsed post-filter facets the same way namespace metadata does.
+  const kindFilterOptions = queryBackedFacetFilterOptions(
+    kindOptions,
+    filterOptionOverrides?.kinds,
+    fallbackKinds
+  );
+  const normalizeTableFilters = useCallback(
+    (next: GridTableFilterState) =>
+      isQueryBackedResourceGridTableMode(tableMode) && showNamespaceFilters
+        ? normalizeQueryBackedNamespaceFilters(next, availableFilterNamespaces)
+        : next,
+    [availableFilterNamespaces, showNamespaceFilters, tableMode]
+  );
+  const filterValue = useMemo(
+    () => normalizeTableFilters(persistenceFilters),
+    [normalizeTableFilters, persistenceFilters]
+  );
+  const handleFiltersChange = useCallback(
+    (next: GridTableFilterState) => {
+      setPersistenceFilters(normalizeTableFilters(next));
+    },
+    [normalizeTableFilters, setPersistenceFilters]
+  );
+
+  const persistenceHydrated = persistence.hydrated;
+  useEffect(() => {
+    const filters = normalizeTableFilters(persistenceFilters);
+    if (filters !== persistenceFilters) {
+      setPersistenceFilters(filters);
+    }
+    onTableStateChange?.({
+      filters,
+      sortConfig: sortConfig ?? null,
+    });
+    // persistenceHydrated is a deliberate dependency: hydration may commit
+    // WITHOUT changing the filters object identity, and the query lifecycle
+    // only arms itself on a post-hydration publish. Re-publishing the same
+    // value is safe (consumers dedupe by value).
+  }, [
+    normalizeTableFilters,
+    onTableStateChange,
+    persistenceFilters,
+    persistenceHydrated,
+    setPersistenceFilters,
+    sortConfig,
+  ]);
+
   const useMetadata = Boolean(metadataSearch);
   const getDefaultMetadataSearchValues = useCallback(
     (row: T) => metadataSearch?.getDefaultValues(row) ?? [],
@@ -342,12 +402,14 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     () => getTrailingFilterActions?.(sortedData) ?? [],
     [getTrailingFilterActions, sortedData]
   );
+  // Filter-related actions and the favorite (save) toggle all live on the left, separate
+  // from the right-side copy/export cluster (the scope toggle + Copy + Export).
   const filterPreActions = useMemo(
     () => [
       ...(metadataToggle ? [metadataToggle] : []),
       ...leadingFilterActions,
-      favToggle,
       ...trailingFilterActions,
+      favToggle,
     ],
     [favToggle, leadingFilterActions, metadataToggle, trailingFilterActions]
   );
@@ -359,34 +421,41 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   const filters = useMemo<GridTableFilterConfig<T>>(
     () => ({
       enabled: true,
-      value: persistence.filters,
+      value: filterValue,
       accessors: effectiveFilterAccessors,
-      onChange: persistence.setFilters,
+      onChange: handleFiltersChange,
       onReset: persistence.resetState,
       options: {
-        kinds: availableKinds,
-        namespaces: showNamespaceFilters ? availableFilterNamespaces : undefined,
+        ...filterOptionOverrides,
+        kinds: kindFilterOptions ?? availableKinds,
+        namespaces: showNamespaceFilters ? namespaceFilterOptions : undefined,
+        searchBehavior: isQueryBackedResourceGridTableMode(tableMode) ? 'query' : 'local',
         showKindDropdown,
         kindDropdownSearchable,
         kindDropdownBulkActions,
         showNamespaceDropdown: showNamespaceFilters,
         namespaceDropdownSearchable: showNamespaceFilters,
         namespaceDropdownBulkActions: showNamespaceFilters,
+        partialDataLabel:
+          filterOptionOverrides?.partialDataLabel ?? resourceGridPartialDataLabel(tableMode),
         preActions: filterPreActions,
       },
     }),
     [
-      availableFilterNamespaces,
       availableKinds,
       effectiveFilterAccessors,
+      filterValue,
+      handleFiltersChange,
+      filterOptionOverrides,
       filterPreActions,
       kindDropdownBulkActions,
       kindDropdownSearchable,
-      persistence.filters,
+      kindFilterOptions,
       persistence.resetState,
-      persistence.setFilters,
       showKindDropdown,
       showNamespaceFilters,
+      namespaceFilterOptions,
+      tableMode,
     ]
   );
 

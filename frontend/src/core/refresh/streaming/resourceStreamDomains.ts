@@ -426,12 +426,12 @@ const rowSorter =
     sortRows(rows as T[]);
 
 const podCollection = {
-  getRows: (payload: PodSnapshotPayload) => payload.pods ?? [],
+  getRows: (payload: PodSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: PodSnapshotPayload, rows: PodSnapshotEntry[]) => ({
     ...payload,
-    pods: rows,
+    rows: rows,
   }),
-  emptyPayload: (clusterId: string): PodSnapshotPayload => ({ pods: [], clusterId }),
+  emptyPayload: (clusterId: string): PodSnapshotPayload => ({ rows: [], clusterId }),
   buildRowKey: (row: PodSnapshotEntry, fallbackClusterId: string) =>
     buildPodKey(row.clusterId ?? fallbackClusterId, row.namespace, row.name),
   buildUpdateKey: (update: ResourceStreamRowUpdate, _fallbackClusterId: string) => {
@@ -445,13 +445,13 @@ const podCollection = {
 } satisfies ResourceStreamRowCollection<PodSnapshotEntry, PodSnapshotPayload>;
 
 const workloadCollection = {
-  getRows: (payload: NamespaceWorkloadSnapshotPayload) => payload.workloads ?? [],
+  getRows: (payload: NamespaceWorkloadSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: NamespaceWorkloadSnapshotPayload, rows: NamespaceWorkloadSummary[]) => ({
     ...payload,
-    workloads: rows,
+    rows: rows,
   }),
   emptyPayload: (clusterId: string): NamespaceWorkloadSnapshotPayload => ({
-    workloads: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: NamespaceWorkloadSummary, fallbackClusterId: string) =>
@@ -472,13 +472,13 @@ const workloadCollection = {
 } satisfies ResourceStreamRowCollection<NamespaceWorkloadSummary, NamespaceWorkloadSnapshotPayload>;
 
 const namespaceConfigCollection = {
-  getRows: (payload: NamespaceConfigSnapshotPayload) => payload.resources ?? [],
+  getRows: (payload: NamespaceConfigSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: NamespaceConfigSnapshotPayload, rows: NamespaceConfigSummary[]) => ({
     ...payload,
-    resources: rows,
+    rows,
   }),
   emptyPayload: (clusterId: string): NamespaceConfigSnapshotPayload => ({
-    resources: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: NamespaceConfigSummary, fallbackClusterId: string) =>
@@ -493,13 +493,13 @@ const namespaceConfigCollection = {
 } satisfies ResourceStreamRowCollection<NamespaceConfigSummary, NamespaceConfigSnapshotPayload>;
 
 const namespaceNetworkCollection = {
-  getRows: (payload: NamespaceNetworkSnapshotPayload) => payload.resources ?? [],
+  getRows: (payload: NamespaceNetworkSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: NamespaceNetworkSnapshotPayload, rows: NamespaceNetworkSummary[]) => ({
     ...payload,
-    resources: rows,
+    rows: rows,
   }),
   emptyPayload: (clusterId: string): NamespaceNetworkSnapshotPayload => ({
-    resources: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: NamespaceNetworkSummary, fallbackClusterId: string) =>
@@ -519,13 +519,13 @@ const namespaceNetworkCollection = {
 } satisfies ResourceStreamRowCollection<NamespaceNetworkSummary, NamespaceNetworkSnapshotPayload>;
 
 const namespaceRBACCollection = {
-  getRows: (payload: NamespaceRBACSnapshotPayload) => payload.resources ?? [],
+  getRows: (payload: NamespaceRBACSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: NamespaceRBACSnapshotPayload, rows: NamespaceRBACSummary[]) => ({
     ...payload,
-    resources: rows,
+    rows: rows,
   }),
   emptyPayload: (clusterId: string): NamespaceRBACSnapshotPayload => ({
-    resources: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: NamespaceRBACSummary, fallbackClusterId: string) =>
@@ -575,13 +575,13 @@ const namespaceCustomCollection = {
 } satisfies ResourceStreamRowCollection<NamespaceCustomSummary, NamespaceCustomSnapshotPayload>;
 
 const namespaceHelmCollection = {
-  getRows: (payload: NamespaceHelmSnapshotPayload) => payload.releases ?? [],
+  getRows: (payload: NamespaceHelmSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: NamespaceHelmSnapshotPayload, rows: NamespaceHelmSummary[]) => ({
     ...payload,
-    releases: rows,
+    rows: rows,
   }),
   emptyPayload: (clusterId: string): NamespaceHelmSnapshotPayload => ({
-    releases: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: NamespaceHelmSummary, fallbackClusterId: string) =>
@@ -596,16 +596,16 @@ const namespaceHelmCollection = {
 } satisfies ResourceStreamRowCollection<NamespaceHelmSummary, NamespaceHelmSnapshotPayload>;
 
 const namespaceAutoscalingCollection = {
-  getRows: (payload: NamespaceAutoscalingSnapshotPayload) => payload.resources ?? [],
+  getRows: (payload: NamespaceAutoscalingSnapshotPayload) => payload.rows ?? [],
   withRows: (
     payload: NamespaceAutoscalingSnapshotPayload,
     rows: NamespaceAutoscalingSummary[]
   ) => ({
     ...payload,
-    resources: rows,
+    rows: rows,
   }),
   emptyPayload: (clusterId: string): NamespaceAutoscalingSnapshotPayload => ({
-    resources: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: NamespaceAutoscalingSummary, fallbackClusterId: string) =>
@@ -628,13 +628,13 @@ const namespaceAutoscalingCollection = {
 >;
 
 const namespaceQuotaCollection = {
-  getRows: (payload: NamespaceQuotasSnapshotPayload) => payload.resources ?? [],
+  getRows: (payload: NamespaceQuotasSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: NamespaceQuotasSnapshotPayload, rows: NamespaceQuotaSummary[]) => ({
     ...payload,
-    resources: rows,
+    rows: rows,
   }),
   emptyPayload: (clusterId: string): NamespaceQuotasSnapshotPayload => ({
-    resources: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: NamespaceQuotaSummary, fallbackClusterId: string) =>
@@ -649,13 +649,13 @@ const namespaceQuotaCollection = {
 } satisfies ResourceStreamRowCollection<NamespaceQuotaSummary, NamespaceQuotasSnapshotPayload>;
 
 const namespaceStorageCollection = {
-  getRows: (payload: NamespaceStorageSnapshotPayload) => payload.resources ?? [],
+  getRows: (payload: NamespaceStorageSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: NamespaceStorageSnapshotPayload, rows: NamespaceStorageSummary[]) => ({
     ...payload,
-    resources: rows,
+    rows: rows,
   }),
   emptyPayload: (clusterId: string): NamespaceStorageSnapshotPayload => ({
-    resources: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: NamespaceStorageSummary, fallbackClusterId: string) =>
@@ -675,13 +675,13 @@ const namespaceStorageCollection = {
 } satisfies ResourceStreamRowCollection<NamespaceStorageSummary, NamespaceStorageSnapshotPayload>;
 
 const clusterRBACCollection = {
-  getRows: (payload: ClusterRBACSnapshotPayload) => payload.resources ?? [],
+  getRows: (payload: ClusterRBACSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: ClusterRBACSnapshotPayload, rows: ClusterRBACEntry[]) => ({
     ...payload,
-    resources: rows,
+    rows,
   }),
   emptyPayload: (clusterId: string): ClusterRBACSnapshotPayload => ({
-    resources: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: ClusterRBACEntry, fallbackClusterId: string) =>
@@ -694,13 +694,13 @@ const clusterRBACCollection = {
 } satisfies ResourceStreamRowCollection<ClusterRBACEntry, ClusterRBACSnapshotPayload>;
 
 const clusterStorageCollection = {
-  getRows: (payload: ClusterStorageSnapshotPayload) => payload.volumes ?? [],
+  getRows: (payload: ClusterStorageSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: ClusterStorageSnapshotPayload, rows: ClusterStorageEntry[]) => ({
     ...payload,
-    volumes: rows,
+    rows,
   }),
   emptyPayload: (clusterId: string): ClusterStorageSnapshotPayload => ({
-    volumes: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: ClusterStorageEntry, fallbackClusterId: string) =>
@@ -713,13 +713,13 @@ const clusterStorageCollection = {
 } satisfies ResourceStreamRowCollection<ClusterStorageEntry, ClusterStorageSnapshotPayload>;
 
 const clusterConfigCollection = {
-  getRows: (payload: ClusterConfigSnapshotPayload) => payload.resources ?? [],
+  getRows: (payload: ClusterConfigSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: ClusterConfigSnapshotPayload, rows: ClusterConfigEntry[]) => ({
     ...payload,
-    resources: rows,
+    rows,
   }),
   emptyPayload: (clusterId: string): ClusterConfigSnapshotPayload => ({
-    resources: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: ClusterConfigEntry, fallbackClusterId: string) =>
@@ -732,13 +732,13 @@ const clusterConfigCollection = {
 } satisfies ResourceStreamRowCollection<ClusterConfigEntry, ClusterConfigSnapshotPayload>;
 
 const clusterCRDCollection = {
-  getRows: (payload: ClusterCRDSnapshotPayload) => payload.definitions ?? [],
+  getRows: (payload: ClusterCRDSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: ClusterCRDSnapshotPayload, rows: ClusterCRDEntry[]) => ({
     ...payload,
-    definitions: rows,
+    rows,
   }),
   emptyPayload: (clusterId: string): ClusterCRDSnapshotPayload => ({
-    definitions: [],
+    rows: [],
     clusterId,
   }),
   buildRowKey: (row: ClusterCRDEntry, fallbackClusterId: string) =>
@@ -784,12 +784,12 @@ const clusterCustomCollection = {
 } satisfies ResourceStreamRowCollection<ClusterCustomEntry, ClusterCustomSnapshotPayload>;
 
 const nodeCollection = {
-  getRows: (payload: ClusterNodeSnapshotPayload) => payload.nodes ?? [],
+  getRows: (payload: ClusterNodeSnapshotPayload) => payload.rows ?? [],
   withRows: (payload: ClusterNodeSnapshotPayload, rows: ClusterNodeSnapshotEntry[]) => ({
     ...payload,
-    nodes: rows,
+    rows: rows,
   }),
-  emptyPayload: (clusterId: string): ClusterNodeSnapshotPayload => ({ nodes: [], clusterId }),
+  emptyPayload: (clusterId: string): ClusterNodeSnapshotPayload => ({ rows: [], clusterId }),
   buildRowKey: (row: ClusterNodeSnapshotEntry, fallbackClusterId: string) =>
     buildNodeKey(row.clusterId ?? fallbackClusterId, row.name),
   buildUpdateKey: (update: ResourceStreamRowUpdate, _fallbackClusterId: string) => {

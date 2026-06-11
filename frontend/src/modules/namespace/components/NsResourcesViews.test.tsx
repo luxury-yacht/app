@@ -101,9 +101,6 @@ describe('NamespaceResourcesViews', () => {
       namespace: 'team-a',
       activeTab: 'pods',
       nsPods: [{ name: 'api', namespace: 'team-a' }],
-      nsPodsLoading: true,
-      nsPodsLoaded: true,
-      nsPodsError: 'oops',
       objectPanel: <div data-testid="object-panel" />,
     });
 
@@ -114,9 +111,6 @@ describe('NamespaceResourcesViews', () => {
     expect(podsCall).toMatchObject({
       namespace: 'team-a',
       data: [{ name: 'api', namespace: 'team-a' }],
-      loading: true,
-      loaded: true,
-      error: 'oops',
     });
     expect(container.querySelector('[data-testid="object-panel"]')).toBeTruthy();
   });
@@ -132,165 +126,81 @@ describe('NamespaceResourcesViews', () => {
     },
     {
       tab: 'workloads' as const,
-      props: {
-        nsWorkloads: [{ name: 'deploy', namespace: 'team-a' }],
-        nsWorkloadsKinds: ['Deployment', 'StatefulSet'],
-        nsWorkloadsLoading: true,
-        nsWorkloadsLoaded: false,
-      },
+      props: {},
       mock: workloadsViewMock,
       expected: {
         namespace: 'team-a',
-        data: [{ name: 'deploy', namespace: 'team-a' }],
-        availableKinds: ['Deployment', 'StatefulSet'],
-        loading: true,
-        loaded: false,
       },
     },
     {
       tab: 'config' as const,
-      props: {
-        nsConfig: [{ name: 'cm' }],
-        nsConfigKinds: ['ConfigMap', 'Secret'],
-        nsConfigLoading: false,
-        nsConfigLoaded: true,
-      },
+      props: {},
       mock: configViewMock,
       expected: {
         namespace: 'team-a',
-        data: [{ name: 'cm' }],
-        availableKinds: ['ConfigMap', 'Secret'],
-        loading: false,
-        loaded: true,
       },
     },
     {
       tab: 'network' as const,
-      props: {
-        nsNetwork: [{ name: 'np' }],
-        nsNetworkKinds: ['Ingress', 'NetworkPolicy', 'Service'],
-        nsNetworkLoading: false,
-        nsNetworkLoaded: true,
-      },
+      props: {},
       mock: networkViewMock,
       expected: {
         namespace: 'team-a',
-        data: [{ name: 'np' }],
-        availableKinds: ['Ingress', 'NetworkPolicy', 'Service'],
-        loading: false,
-        loaded: true,
       },
     },
     {
       tab: 'rbac' as const,
-      props: {
-        nsRBAC: [{ name: 'role' }],
-        nsRBACKinds: ['Role', 'RoleBinding', 'ServiceAccount'],
-        nsRBACLoading: true,
-        nsRBACLoaded: false,
-      },
+      props: {},
       mock: rbacViewMock,
       expected: {
         namespace: 'team-a',
-        data: [{ name: 'role' }],
-        availableKinds: ['Role', 'RoleBinding', 'ServiceAccount'],
-        loading: true,
-        loaded: false,
       },
     },
     {
       tab: 'storage' as const,
-      props: {
-        nsStorage: [{ name: 'pvc' }],
-        nsStorageLoading: true,
-        nsStorageLoaded: true,
-      },
+      props: {},
       mock: storageViewMock,
       expected: {
         namespace: 'team-a',
-        data: [{ name: 'pvc' }],
-        loading: true,
-        loaded: true,
       },
     },
     {
       tab: 'autoscaling' as const,
-      props: {
-        nsAutoscaling: [{ name: 'hpa' }],
-        nsAutoscalingKinds: ['HorizontalPodAutoscaler'],
-        nsAutoscalingLoading: false,
-        nsAutoscalingLoaded: true,
-      },
+      props: {},
       mock: autoscalingViewMock,
       expected: {
         namespace: 'team-a',
-        data: [{ name: 'hpa' }],
-        availableKinds: ['HorizontalPodAutoscaler'],
-        loading: false,
-        loaded: true,
       },
     },
     {
       tab: 'quotas' as const,
-      props: {
-        nsQuotas: [{ name: 'rq' }],
-        nsQuotasKinds: ['LimitRange', 'PodDisruptionBudget', 'ResourceQuota'],
-        nsQuotasLoading: true,
-        nsQuotasLoaded: true,
-      },
+      props: {},
       mock: quotasViewMock,
       expected: {
         namespace: 'team-a',
-        data: [{ name: 'rq' }],
-        availableKinds: ['LimitRange', 'PodDisruptionBudget', 'ResourceQuota'],
-        loading: true,
-        loaded: true,
       },
     },
     {
       tab: 'custom' as const,
-      props: {
-        nsCustom: [{ name: 'crd' }],
-        nsCustomKinds: ['DBCluster', 'Widget'],
-        nsCustomLoading: false,
-        nsCustomLoaded: true,
-      },
+      props: {},
       mock: customViewMock,
       expected: {
         namespace: 'team-a',
-        data: [{ name: 'crd' }],
-        availableKinds: ['DBCluster', 'Widget'],
-        loading: false,
-        loaded: true,
       },
     },
     {
       tab: 'helm' as const,
-      props: {
-        nsHelm: [{ name: 'release', namespace: 'team-a' }],
-        nsHelmLoading: false,
-        nsHelmLoaded: true,
-      },
+      props: {},
       mock: helmViewMock,
       expected: {
         namespace: 'team-a',
-        data: [{ name: 'release', namespace: 'team-a' }],
-        loading: false,
-        loaded: true,
       },
     },
     {
       tab: 'events' as const,
-      props: {
-        nsEvents: [{ message: 'Pod restarted' }],
-        nsEventsLoading: false,
-        nsEventsLoaded: true,
-      },
+      props: {},
       mock: eventsViewMock,
       expected: {
-        data: [{ message: 'Pod restarted' }],
-        loading: false,
-        loaded: true,
         namespace: 'team-a',
       },
     },
@@ -314,9 +224,6 @@ describe('NamespaceResourcesViews', () => {
     await renderView({
       namespace: 'team-a',
       activeTab: 'custom',
-      nsCustom: [{ name: 'crd' }],
-      nsCustomLoading: false,
-      nsCustomLoaded: true,
       objectPanel: <aside data-testid="panel" />,
     });
 

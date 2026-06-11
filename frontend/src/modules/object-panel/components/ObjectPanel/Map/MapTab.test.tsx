@@ -11,6 +11,8 @@ import type { PanelObjectData } from '../types';
 
 const refreshMocks = vi.hoisted(() => ({
   setScopedDomainEnabled: vi.fn(),
+  acquireScopedDomainLease: vi.fn(),
+  releaseScopedDomainLease: vi.fn(),
   fetchScopedDomain: vi.fn(() => Promise.resolve()),
 }));
 

@@ -17,7 +17,10 @@ import type {
 import { useSearchShortcutTarget } from '@ui/shortcuts';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
-import { hasNonDefaultGridTableFilters } from '@shared/components/tables/gridTableFilterState';
+import {
+  hasNarrowingGridTableFilters,
+  hasNonDefaultGridTableFilters,
+} from '@shared/components/tables/gridTableFilterState';
 
 interface GridTableFiltersBarProps {
   activeFilters: GridTableFilterState;
@@ -51,8 +54,25 @@ interface GridTableFiltersBarProps {
   postActions?: IconBarItem[];
   /** Arbitrary content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
-  /** Displayed vs total item count shown to the right of actions. */
-  resultCount?: { displayed: number; total: number; capped?: boolean };
+  /** Filter feedback shown to the right of actions: N matching of M in scope, due to filters. */
+  resultCount?: {
+    /** N — items matching the active filters (a total, not the current page). */
+    filtered: number;
+    /** M — items in scope before the active filters. */
+    unfiltered: number;
+    totalIsExact?: boolean;
+    partialDataLabel?: string;
+    capped?: boolean;
+  };
+}
+
+function formatResultCountLabel(
+  resultCount: NonNullable<GridTableFiltersBarProps['resultCount']>
+): string {
+  // Only rendered while a narrowing filter is active, so this is always the filtered view.
+  // `+` marks an approximate total (a capped/inexact backend count).
+  const approximate = resultCount.totalIsExact === false ? '+' : '';
+  return `showing ${resultCount.filtered} of ${resultCount.unfiltered}${approximate} items due to filters`;
 }
 
 const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
@@ -87,6 +107,11 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const hasActiveFilters = hasNonDefaultGridTableFilters(activeFilters);
+  // The result count is filter feedback (how many rows match the active filter), not
+  // pagination/total info — that lives in the pagination footer. So it shows only when
+  // a narrowing filter (search/kind/namespace) is active.
+  const hasNarrowingFilters = hasNarrowingGridTableFilters(activeFilters);
+  const showCaseSensitiveToggle = resolvedFilterOptions.searchBehavior !== 'query';
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
@@ -119,16 +144,17 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         title: 'Reset filters',
         disabled: !hasActiveFilters,
       },
-      // Case-sensitive toggle is built into the filter bar so every view gets it.
-      {
+    ];
+    if (showCaseSensitiveToggle) {
+      items.push({
         type: 'toggle',
         id: 'case-sensitive',
         icon: <CaseSensitiveIcon width={18} height={18} />,
         active: activeFilters.caseSensitive,
         onClick: onToggleCaseSensitive,
         title: 'Match case',
-      },
-    ];
+      });
+    }
     if (preActions && preActions.length > 0) {
       items.push(...preActions);
     }
@@ -142,6 +168,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     hasActiveFilters,
     activeFilters.caseSensitive,
     onToggleCaseSensitive,
+    showCaseSensitiveToggle,
     preActions,
     postActions,
   ]);
@@ -215,26 +242,37 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 {customActions}
               </div>
             )}
-            {resultCount && (
+            {resultCount && hasNarrowingFilters && (
               <span
                 className="gridtable-filter-result-count"
                 data-gridtable-filter-role="result-count"
               >
-                {resultCount.displayed === resultCount.total
-                  ? `${resultCount.total} items`
-                  : `${resultCount.displayed} of ${resultCount.total} items`}
+                {formatResultCountLabel(resultCount)}
                 {resultCount.capped && (
                   <Tooltip
                     content={
                       <>
+                        {resultCount.totalIsExact === false && (
+                          <p className="gridtable-filter-result-tooltip-paragraph">
+                            The total count is approximate because the backend stopped counting
+                            after the configured exact-count budget.
+                          </p>
+                        )}
+                        {resultCount.partialDataLabel && (
+                          <p className="gridtable-filter-result-tooltip-paragraph">
+                            {resultCount.partialDataLabel}
+                          </p>
+                        )}
                         <p className="gridtable-filter-result-tooltip-paragraph">
-                          The total number of objects exceeds the max table size. Use search filters
-                          to reduce the size of the data set.
+                          {resolvedFilterOptions.searchBehavior === 'query'
+                            ? 'This table is showing the current backend query page.'
+                            : 'This table is showing the current local row window.'}
                         </p>
-                        <p className="gridtable-filter-result-tooltip-paragraph">
-                          You can change the max table size in Settings, but larger values can
-                          impact the app&apos;s performance.
-                        </p>
+                        {resolvedFilterOptions.searchBehavior === 'query' && (
+                          <p className="gridtable-filter-result-tooltip-paragraph">
+                            Use page controls to inspect additional matching rows.
+                          </p>
+                        )}
                       </>
                     }
                   />

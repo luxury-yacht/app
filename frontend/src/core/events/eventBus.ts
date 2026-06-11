@@ -55,6 +55,8 @@ export interface AppEvents {
   'favorites:changed': unknown[];
 
   // Refresh events
+  /** A cluster's refresh runtime was torn down (cluster closed/deselected). */
+  'refresh:cluster-pruned': { clusterId: string };
   'refresh:state-change': { name: string; state: RefresherState };
   'refresh:registered': { name: string };
   'refresh:start': { name: string; isManual: boolean };
@@ -86,8 +88,8 @@ export interface AppEvents {
   'settings:exclusive-namespaces': boolean;
   'settings:appearance-mode': 'light' | 'dark' | 'system';
   'settings:metrics-interval': number;
-  'settings:max-table-rows': number;
   'settings:kubernetes-client-qps': number;
+  'settings:default-table-page-size': number;
   'settings:kubernetes-client-burst': number;
   'settings:permission-ssrr-fetch-concurrency': number;
   'settings:obj-panel-logs-buffer-size': number;

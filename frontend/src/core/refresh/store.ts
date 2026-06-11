@@ -19,6 +19,13 @@ export interface DomainSnapshotState<TPayload> {
   version?: number;
   checksum?: string;
   etag?: string;
+  /**
+   * Monotonic counter bumped by the resource stream manager whenever streamed
+   * row updates change the data WITHOUT a new backend snapshot version. Part of
+   * the live-data identity (see liveDomainVersion) so typed queries refetch on
+   * streamed changes.
+   */
+  streamRevision?: number;
   lastUpdated?: number;
   lastManualRefresh?: number;
   lastAutoRefresh?: number;

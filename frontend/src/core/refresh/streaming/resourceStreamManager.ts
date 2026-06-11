@@ -735,6 +735,10 @@ export class ResourceStreamManager {
         subscription.preserveMetrics
       );
 
+      if (!previous.data && nextRows.length === 0) {
+        return previous;
+      }
+
       if (previous.data && nextRows === existingRows) {
         return previous;
       }
@@ -747,6 +751,10 @@ export class ResourceStreamManager {
             ? currentPayload
             : collection.withRows(currentPayload, nextRows),
         stats: updateStats(previous.stats, nextRows.length),
+        // Streamed changes carry no new backend snapshot version/checksum, so
+        // bump the stream revision — the third component of the live-data
+        // identity — or query-backed views never refetch on streamed changes.
+        streamRevision: (previous.streamRevision ?? 0) + 1,
         lastUpdated: now,
         lastAutoRefresh: now,
         error: null,

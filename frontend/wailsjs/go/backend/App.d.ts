@@ -5,6 +5,7 @@ import {context} from '../models';
 import {types} from '../models';
 import {objectcatalog} from '../models';
 import {json} from '../models';
+import {snapshot} from '../models';
 import {capabilities} from '../models';
 
 export function AddFavorite(arg1:backend.Favorite):Promise<backend.Favorite>;
@@ -193,6 +194,8 @@ export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promi
 
 export function GetZoomLevel():Promise<number>;
 
+export function HydrateCatalogCustomRows(arg1:string,arg2:Array<snapshot.ResourceQueryRow>):Promise<Array<snapshot.CustomResourceSummary>>;
+
 export function IsAppLogsPanelVisible():Promise<boolean>;
 
 export function IsDiagnosticsPanelVisible():Promise<boolean>;
@@ -230,6 +233,8 @@ export function RetryAuth():Promise<void>;
 export function RetryClusterAuth(arg1:string):Promise<void>;
 
 export function RunObjectAction(arg1:backend.ObjectActionRequest):Promise<backend.ObjectActionResponse>;
+
+export function SaveCsvFile(arg1:string,arg2:string):Promise<backend.CatalogQueryCSVExport>;
 
 export function SaveTheme(arg1:types.Theme):Promise<void>;
 
@@ -270,8 +275,6 @@ export function SetKubernetesClientBurst(arg1:number):Promise<void>;
 export function SetKubernetesClientQPS(arg1:number):Promise<void>;
 
 export function SetLinkColor(arg1:string,arg2:string):Promise<void>;
-
-export function SetMaxTableRows(arg1:number):Promise<void>;
 
 export function SetObjPanelLogsAPITimestampFormat(arg1:string):Promise<void>;
 

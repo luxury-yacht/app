@@ -7,21 +7,23 @@
 
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import type { NamespaceHelmSnapshotPayload, NamespaceHelmSummary } from '@/core/refresh/types';
 
 // Data interface for Helm releases
 export interface HelmData {
@@ -53,14 +55,12 @@ export interface HelmData {
   lastDeployed?: string;
   description?: string;
   age?: string;
+  ageTimestamp?: number;
   [key: string]: any; // Allow additional fields
 }
 
 interface HelmViewProps {
   namespace: string;
-  data: HelmData[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
 
@@ -68,9 +68,11 @@ interface HelmViewProps {
  * GridTable component for namespace Helm releases
  */
 const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
-  ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
+    const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<HelmData>('helm');
     const objectActions = useObjectActionController({
@@ -219,6 +221,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
             return '-';
           },
           {
+            sortValue: (resource) =>
+              resource.updated || resource.info?.last_deployed || resource.lastDeployed,
             getClassName: (resource) =>
               resource.updated || resource.info?.last_deployed || resource.lastDeployed
                 ? 'last-updated'
@@ -277,18 +281,46 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<HelmData>({
+    const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
+    const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Helm' : 'Namespace Helm';
+
+    const selectRows = useCallback(
+      (payload: NamespaceHelmSnapshotPayload) =>
+        (payload.rows ?? []).map((release: NamespaceHelmSummary) => ({
+          kind: 'HelmRelease',
+          name: release.name,
+          namespace: release.namespace,
+          clusterId: release.clusterId,
+          clusterName: release.clusterName,
+          chart: release.chart,
+          appVersion: release.appVersion,
+          status: release.status,
+          revision: release.revision,
+          updated: release.updated,
+          description: release.description,
+          age: release.age,
+          ageTimestamp: release.ageTimestamp,
+        })),
+      []
+    );
+    const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceHelmSnapshotPayload,
+      HelmData
+    >({
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-helm',
+      label: diagnosticsLabel,
+      selectRows,
       viewId: 'namespace-helm',
       namespace,
-      data,
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm',
+      diagnosticsLabel,
       showKindDropdown: true,
       showNamespaceFilters: showNamespaceColumn,
-      filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
+      filterOptions: { isNamespaceScoped: !isAllNamespaces },
     });
 
     const getContextMenuItems = useCallback(
@@ -322,17 +354,15 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
           spinnerMessage="Loading Helm releases..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel={
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm'
           }
-          loading={loading}
           onRowClick={handleResourceClick}
           tableClassName="ns-helm-table"
           enableContextMenu={true}

@@ -61,6 +61,7 @@ import {
   buildMetricsSummary,
   buildOrchestratorSummary,
   buildPermissionRows,
+  dedupeDiagnosticsRows,
   formatInterval,
   formatLastUpdated,
   STALE_THRESHOLD_MS,
@@ -141,6 +142,57 @@ const DIAGNOSTICS_TAB_DESCRIPTORS: TabDescriptor[] = [
 // Diagnostics helpers for scope, error, and health labels.
 type ScopeEntry = { label: 'Active' | 'Background'; clusterName: string };
 
+const MAX_SCOPE_QUERY_PARTS = 4;
+const MAX_SCOPE_QUERY_VALUE_LENGTH = 48;
+
+const formatScopeQueryValue = (value: string): string => {
+  if (value.length <= MAX_SCOPE_QUERY_VALUE_LENGTH) {
+    return value;
+  }
+  return `${value.slice(0, MAX_SCOPE_QUERY_VALUE_LENGTH)}...`;
+};
+
+const formatScopeQuery = (query: string): string => {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return '';
+  }
+  try {
+    const params = new URLSearchParams(trimmed);
+    const entries = Array.from(params.entries());
+    if (entries.length === 0) {
+      return trimmed;
+    }
+    const visibleEntries = entries
+      .slice(0, MAX_SCOPE_QUERY_PARTS)
+      .map(([key, value]) => `${key}=${formatScopeQueryValue(value)}`);
+    if (entries.length > MAX_SCOPE_QUERY_PARTS) {
+      visibleEntries.push(`+${entries.length - MAX_SCOPE_QUERY_PARTS} more`);
+    }
+    return visibleEntries.join(', ');
+  } catch {
+    return trimmed;
+  }
+};
+
+const formatScopeTail = (scope: string): string => {
+  const trimmed = scope.trim();
+  const normalized = trimmed.toLowerCase();
+  if (!trimmed || normalized === CLUSTER_SCOPE || normalized === 'cluster') {
+    return '';
+  }
+  const queryIndex = trimmed.indexOf('?');
+  if (queryIndex >= 0) {
+    const base = trimmed.slice(0, queryIndex).trim();
+    const query = formatScopeQuery(trimmed.slice(queryIndex + 1));
+    return [base, query].filter(Boolean).join(' ? ');
+  }
+  if (trimmed.includes('=') || trimmed.includes('&')) {
+    return formatScopeQuery(trimmed);
+  }
+  return trimmed;
+};
+
 const resolveScopeDetails = (
   scope: string | undefined,
   activeClusterId: string,
@@ -150,10 +202,11 @@ const resolveScopeDetails = (
   if (!trimmed) {
     return { display: '-', tooltip: 'No active scope' };
   }
-  const { clusterIds } = parseClusterScopeList(trimmed);
+  const { clusterIds, scope: scopeTail } = parseClusterScopeList(trimmed);
   if (clusterIds.length === 0) {
     return { display: trimmed, tooltip: trimmed };
   }
+  const tailDisplay = formatScopeTail(scopeTail);
   // Build structured entries sorted with active cluster first.
   const entries: ScopeEntry[] = clusterIds
     .map((id) => {
@@ -174,7 +227,90 @@ const resolveScopeDetails = (
   const display = entries
     .map((e) => (e.label === 'Active' ? `${e.clusterName} (active)` : e.clusterName))
     .join(', ');
+  if (tailDisplay) {
+    return { display: `${display} - ${tailDisplay}`, tooltip: trimmed };
+  }
   return { display, tooltip: trimmed, entries };
+};
+
+const parseScopeQueryParams = (scopeTail: string): URLSearchParams => {
+  const trimmed = scopeTail.trim();
+  const queryIndex = trimmed.indexOf('?');
+  const query = queryIndex >= 0 ? trimmed.slice(queryIndex + 1) : trimmed;
+  return new URLSearchParams(query);
+};
+
+const resolveScopeRole = (
+  domain: RefreshDomain,
+  scope: string | undefined
+): { label: string; tooltip?: string } => {
+  const trimmed = (scope ?? '').trim();
+  const { scope: scopeTail } = parseClusterScopeList(trimmed);
+  const normalizedTail = scopeTail.trim().toLowerCase();
+  const hasQueryScope =
+    scopeTail.includes('?') || scopeTail.includes('=') || scopeTail.includes('&');
+
+  if (domain === 'catalog') {
+    const params = parseScopeQueryParams(scopeTail);
+    if (params.get('limit') === '1') {
+      return {
+        label: 'Metadata',
+        tooltip: 'Catalog metadata/facet support query for the current Browse view',
+      };
+    }
+    return {
+      label: 'Page Query',
+      tooltip: 'Current Browse table page query',
+    };
+  }
+
+  if (domain === 'catalog-diff') {
+    return { label: 'Object Diff', tooltip: 'Object diff modal catalog query' };
+  }
+
+  if (domain === 'container-logs') {
+    return { label: 'Log Stream', tooltip: 'Object panel log stream scope' };
+  }
+
+  if (
+    domain === 'object-details' ||
+    domain === 'object-events' ||
+    domain === 'object-yaml' ||
+    domain === 'object-helm-manifest' ||
+    domain === 'object-helm-values' ||
+    domain === 'pods'
+  ) {
+    return { label: 'Object Panel', tooltip: 'Scoped object panel data' };
+  }
+
+  if (domain === 'object-maintenance') {
+    return { label: 'Operation', tooltip: 'Node maintenance operation state' };
+  }
+
+  if (DOMAIN_STREAM_MAP[domain] === 'resources') {
+    if (hasQueryScope) {
+      return {
+        label: 'Table Query',
+        tooltip: 'Query-backed GridTable snapshot for filters, sorting, or pagination',
+      };
+    }
+    if (!normalizedTail || normalizedTail === 'cluster') {
+      return {
+        label: 'Live Scope',
+        tooltip: 'Base resource-stream scope retained for live data and metrics',
+      };
+    }
+    return {
+      label: 'Live Scope',
+      tooltip: 'Resource-stream scope retained for live data and metrics',
+    };
+  }
+
+  if (domain === 'namespaces' || domain === 'cluster-overview') {
+    return { label: 'System', tooltip: 'System refresh scope' };
+  }
+
+  return { label: 'Snapshot', tooltip: 'Snapshot refresh scope' };
 };
 
 const resolveErrorReason = (error?: string | null): string | null => {
@@ -644,6 +780,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           const messageInfo = formatLastUpdated(streamHealth.lastMessageAt);
           tooltipParts.push(`Last message: ${messageInfo.tooltip}`);
         }
+        if (streamHealth.reason === 'inactive' && status !== 'idle') {
+          return {
+            label: formatHealthLabel('degraded', 'inactive'),
+            tooltip: ['Retained snapshot is ready; stream is inactive for this scope.']
+              .concat(tooltipParts)
+              .join('\n'),
+            status: 'degraded',
+          };
+        }
         return {
           label: formatHealthLabel(streamHealth.status, streamHealth.reason),
           tooltip: tooltipParts.join('\n'),
@@ -746,6 +891,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const isResourceStreamDomain = streamName === 'resources';
         const streamMode = streamName ? (STREAM_MODE_BY_NAME[streamName] ?? 'streaming') : null;
         const scopeDetails = resolveScopeDetails(effectiveScope, selectedClusterId, getClusterMeta);
+        const roleDetails = resolveScopeRole(domain, effectiveScope);
         const streamLastEvent = isResourceStreamDomain ? streamTelemetry?.lastEvent : 0;
         const baseLastUpdated =
           state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
@@ -800,7 +946,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           isResourceStreamDomain && effectiveScope
             ? toStreamHealthSummary(resourceStreamManager.getHealthSnapshot(domain, effectiveScope))
             : resolveStreamTelemetryHealth(streamTelemetry);
-        const streamHealthStatus = streamHealth ? `Stream ${streamHealth.status}` : null;
+        const streamHealthStatus = streamHealth
+          ? streamHealth.reason === 'inactive'
+            ? 'Stream inactive'
+            : `Stream ${streamHealth.status}`
+          : null;
         const telemetryStatus = [snapshotTelemetryStatus, streamTelemetryStatus, streamHealthStatus]
           .filter(Boolean)
           .join(' • ');
@@ -885,43 +1035,43 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             case 'cluster-overview':
               return data.overview?.totalNodes ?? 0;
             case 'nodes':
-              return Array.isArray(data.nodes) ? data.nodes.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'object-maintenance':
               return Array.isArray(data.drains) ? data.drains.length : 0;
             case 'cluster-rbac':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'cluster-storage':
-              return Array.isArray(data.volumes) ? data.volumes.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'cluster-config':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'cluster-crds':
-              return Array.isArray(data.definitions) ? data.definitions.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'cluster-custom':
               return Array.isArray(data.resources) ? data.resources.length : 0;
             case 'cluster-events':
-              return Array.isArray(data.events) ? data.events.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'catalog':
               return Array.isArray(data.items) ? data.items.length : 0;
             case 'namespace-workloads':
-              return Array.isArray(data.workloads) ? data.workloads.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-config':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-network':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-rbac':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-storage':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-autoscaling':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-quotas':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-events':
-              return Array.isArray(data.events) ? data.events.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'namespace-custom':
               return Array.isArray(data.resources) ? data.resources.length : 0;
             case 'namespace-helm':
-              return Array.isArray(data.releases) ? data.releases.length : 0;
+              return Array.isArray(data.rows) ? data.rows.length : 0;
             default:
               return 0;
           }
@@ -1025,6 +1175,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           namespace: namespaceLabel,
           scope: scopeDetails.display,
           scopeTooltip: scopeDetails.tooltip,
+          role: roleDetails.label,
+          roleTooltip: roleDetails.tooltip,
           scopeEntries: scopeDetails.entries,
           mode: modeDetails.label,
           modeTooltip: modeDetails.tooltip,
@@ -1047,7 +1199,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         refresherName ? refreshManager.getRefresherInterval(refresherName) : null
       );
       const namespaceLabel = resolveDomainNamespace('pods', scope);
-      const count = payload?.pods?.length ?? 0;
+      const count = payload?.rows?.length ?? 0;
       const stats = state.stats;
       const truncated = Boolean(stats?.truncated);
       const totalItems = stats?.totalItems ?? (truncated ? count : undefined);
@@ -1084,6 +1236,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const streamHealth = toStreamHealthSummary(
         resourceStreamManager.getHealthSnapshot('pods', scope)
       );
+      const roleDetails = resolveScopeRole('pods', scope);
       const streamActive = Boolean(streamHealth && streamHealth.reason !== 'inactive');
       const streamHealthy = streamHealth?.status === 'healthy';
       const pollingDetails = resolvePollingDetails({
@@ -1182,6 +1335,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         namespace: namespaceLabel,
         scope: scopeDetails.display,
         scopeTooltip: scopeDetails.tooltip,
+        role: roleDetails.label,
+        roleTooltip: roleDetails.tooltip,
         scopeEntries: scopeDetails.entries,
         mode: modeDetails.label,
         modeTooltip: modeDetails.tooltip,
@@ -1225,6 +1380,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const name = parts.slice(2).join(':');
       const namespaceLabel = namespace && namespace !== CLUSTER_SCOPE ? namespace : '-';
       const label = name ? `ObjPanel - Logs - ${name}` : scope;
+      const roleDetails = resolveScopeRole('container-logs', scope);
       const resetCount = payload?.resetCount ?? 0;
       const count = payload?.entries?.length ?? 0;
       const stats = state.stats;
@@ -1280,6 +1436,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         namespace: namespaceLabel,
         scope: scopeDetails.display,
         scopeTooltip: scopeDetails.tooltip,
+        role: roleDetails.label,
+        roleTooltip: roleDetails.tooltip,
         scopeEntries: scopeDetails.entries,
         mode: logModeDetails.label,
         modeTooltip: logModeDetails.tooltip,
@@ -1309,6 +1467,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const label = name ? `ObjPanel - ${tabName} - ${name}` : `ObjPanel - ${tabName}`;
         const version = state.version != null ? String(state.version) : '—';
         const scopeDetails = resolveScopeDetails(scope, selectedClusterId, getClusterMeta);
+        const roleDetails = resolveScopeRole(domain, scope);
         const healthDetails = resolveHealthDetails({
           domain,
           status: state.status,
@@ -1344,6 +1503,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           namespace: namespaceLabel,
           scope: scopeDetails.display,
           scopeTooltip: scopeDetails.tooltip,
+          role: roleDetails.label,
+          roleTooltip: roleDetails.tooltip,
           scopeEntries: scopeDetails.entries,
           mode: 'polling',
           modeTooltip: 'Polling via object panel refresher',
@@ -1389,7 +1550,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     );
 
     // Sort all rows alphabetically by the Domain label.
-    return [
+    const sortedRows = [
       ...sortedPriorityRows,
       ...orderedPodRows,
       ...orderedLogRows,
@@ -1406,6 +1567,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       }
       return a.rowKey.localeCompare(b.rowKey);
     });
+    return dedupeDiagnosticsRows(sortedRows);
   }, [
     domainScopedStates,
     podScopeEntries,

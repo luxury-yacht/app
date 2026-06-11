@@ -4,36 +4,35 @@ import type { ReactNode } from 'react';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
 
 const COPY_FEEDBACK_RESET_MS = 750;
 
-const escapeCsvCell = (value: string): string => {
-  const normalized = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  return /[",\n]/.test(normalized) ? `"${normalized.replace(/"/g, '""')}"` : normalized;
-};
-
 interface UseGridTableCsvExportOptions<T> {
   data: T[];
-  maxDisplayRows?: number;
   columns?: GridColumnDefinition<T>[];
   getTextContent?: (node: ReactNode) => string;
+  /**
+   * Fetch every matching row (all pages). When provided, Copy ALWAYS copies the
+   * full matching set (filters respected); without it, Copy takes the visible
+   * rows — which on non-paginated tables is already everything.
+   */
+  fetchAllRows?: () => Promise<T[]>;
 }
 
 export function useGridTableCsvExport<T>({
   data,
-  maxDisplayRows,
   columns,
   getTextContent,
+  fetchAllRows,
 }: UseGridTableCsvExportOptions<T>): IconBarItem {
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<'success' | 'error' | null>(null);
+  const [copying, setCopying] = useState(false);
 
   const canCopyToClipboard =
     typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function';
-  const visibleRowCount =
-    typeof maxDisplayRows === 'number' && maxDisplayRows > 0
-      ? Math.min(data.length, maxDisplayRows)
-      : data.length;
+  const visibleRowCount = data.length;
   const hasCopyableContent = visibleRowCount > 0 && Boolean(columns?.length);
 
   const scheduleCopyReset = useCallback(() => {
@@ -53,43 +52,33 @@ export function useGridTableCsvExport<T>({
     };
   }, []);
 
-  const buildCsvText = useCallback((): string => {
-    if (!columns?.length || !getTextContent) {
-      return '';
-    }
-    const rows =
-      typeof maxDisplayRows === 'number' && maxDisplayRows > 0
-        ? data.slice(0, maxDisplayRows)
-        : data;
-
-    const headerRow = columns.map((column) =>
-      escapeCsvCell(getTextContent(column.header).trim() || column.key)
-    );
-    const dataRows = rows.map((item) =>
-      columns.map((column) => escapeCsvCell(getTextContent(column.render(item)).trim()))
-    );
-
-    return [headerRow, ...dataRows].map((row) => row.join(',')).join('\n');
-  }, [columns, data, getTextContent, maxDisplayRows]);
-
   const handleCopyCsv = useCallback(async () => {
-    const csvText = buildCsvText();
-    if (!canCopyToClipboard || !csvText) {
+    if (!canCopyToClipboard || !columns?.length || !getTextContent) {
       setCopyFeedback('error');
       scheduleCopyReset();
       return;
     }
-
+    setCopying(true);
     try {
+      // With a fetcher, copy every matching row; otherwise copy the rows on screen.
+      const rows = fetchAllRows ? await fetchAllRows() : data;
+      const csvText = buildGridTableCsv(rows, columns, getTextContent);
+      if (!csvText) {
+        setCopyFeedback('error');
+        return;
+      }
       await navigator.clipboard.writeText(csvText);
       setCopyFeedback('success');
-      scheduleCopyReset();
     } catch (error) {
       console.error('Failed to copy GridTable CSV', error);
       setCopyFeedback('error');
+    } finally {
+      setCopying(false);
       scheduleCopyReset();
     }
-  }, [buildCsvText, canCopyToClipboard, scheduleCopyReset]);
+  }, [canCopyToClipboard, columns, data, fetchAllRows, getTextContent, scheduleCopyReset]);
+
+  const title = fetchAllRows ? 'Copy all matching rows to clipboard' : 'Copy visible rows as CSV';
 
   return useMemo<IconBarItem>(
     () => ({
@@ -99,11 +88,11 @@ export function useGridTableCsvExport<T>({
       onClick: () => {
         void handleCopyCsv();
       },
-      title: 'Copy table as CSV',
-      ariaLabel: 'Copy table as CSV',
-      disabled: !canCopyToClipboard || !hasCopyableContent,
+      title,
+      ariaLabel: title,
+      disabled: !canCopyToClipboard || !hasCopyableContent || copying,
       feedback: copyFeedback,
     }),
-    [canCopyToClipboard, copyFeedback, handleCopyCsv, hasCopyableContent]
+    [canCopyToClipboard, copyFeedback, copying, handleCopyCsv, hasCopyableContent, title]
   );
 }

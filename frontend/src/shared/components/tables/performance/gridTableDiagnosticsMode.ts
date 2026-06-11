@@ -24,7 +24,7 @@ export interface GridTableDiagnosticsModeContract {
 
 const GRID_TABLE_ROW_COUNT_LABELS: Record<GridTableDiagnosticsRowCountKind, string> = {
   input: 'Input',
-  source: 'Post-Cap',
+  source: 'Source',
   displayed: 'Visible',
 };
 
@@ -50,11 +50,10 @@ const GRID_TABLE_DIAGNOSTICS_MODE_CONTRACTS: Record<
     label: 'Local',
     title: 'Local table behavior: search/filter/sort run over the loaded row set.',
     rowCountTitles: {
-      input: 'Local table: Input is the incoming row count before the shared cap is applied.',
-      source:
-        'Local table: Post-Cap is the row count after the shared cap is applied and before local filtering.',
+      input: 'Local table: Input is the incoming row count handed to GridTable.',
+      source: 'Local table: Source is the row count used for local filtering.',
       displayed:
-        'Local table: Visible is the post-cap row count after local filters run in GridTable.',
+        'Local table: Visible is the source row count after local filters run in GridTable.',
     },
     classifyReferenceChurn: ({ inputReferenceChanges, updates }) => {
       if (updates < 3) {
@@ -78,12 +77,10 @@ const GRID_TABLE_DIAGNOSTICS_MODE_CONTRACTS: Record<
     title:
       'Query-backed table behavior: search and/or filtering narrow the upstream dataset before it reaches the table.',
     rowCountTitles: {
-      input:
-        'Query-backed table: Input is the upstream query result size before the shared cap is applied.',
-      source:
-        'Query-backed table: Post-Cap is the query result size after the shared max-row cap is applied.',
+      input: 'Query-backed table: Input is the upstream query result size returned by the backend.',
+      source: 'Query-backed table: Source is the query page row count handed to GridTable.',
       displayed:
-        'Query-backed table: Visible is the post-cap row count after any remaining local filters run in GridTable.',
+        'Query-backed table: Visible is the source row count after any remaining local filters run in GridTable.',
     },
     classifyReferenceChurn: ({ inputReferenceChanges, updates }) => {
       if (updates < 3) {
@@ -108,11 +105,10 @@ const GRID_TABLE_DIAGNOSTICS_MODE_CONTRACTS: Record<
       'Live table behavior: rows are expected to update frequently because key fields are time-varying or stream-driven.',
     rowCountTitles: {
       input:
-        'Live table: Input is the incoming row count before the shared cap is applied. Frequent updates are expected.',
-      source:
-        'Live table: Post-Cap is the row count after the shared cap is applied and before local filtering.',
+        'Live table: Input is the incoming live row count handed to GridTable. Frequent updates are expected.',
+      source: 'Live table: Source is the row count used for local filtering.',
       displayed:
-        'Live table: Visible is the post-cap row count after local filters run in GridTable.',
+        'Live table: Visible is the source row count after local filters run in GridTable.',
     },
     classifyReferenceChurn: ({ inputReferenceChanges, updates }) => {
       if (updates < 3) {

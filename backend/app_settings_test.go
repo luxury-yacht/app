@@ -128,7 +128,6 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		AutoRefreshEnabled:                       false,
 		RefreshBackgroundClustersEnabled:         false,
 		MetricsRefreshIntervalMs:                 7000,
-		MaxTableRows:                             2500,
 		KubernetesClientQPS:                      250,
 		KubernetesClientBurst:                    500,
 		PermissionSSRRFetchConcurrency:           16,
@@ -156,6 +155,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(savedBytes), `"appearanceMode":"dark"`)
 	require.NotContains(t, string(savedBytes), `"theme":"dark"`)
+	require.NotContains(t, string(savedBytes), `"max`+"TableRows"+`"`)
 
 	app.appSettings = nil
 	require.NoError(t, app.loadAppSettings())
@@ -167,7 +167,6 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.False(t, app.appSettings.AutoRefreshEnabled)
 	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
 	require.Equal(t, 7000, app.appSettings.MetricsRefreshIntervalMs)
-	require.Equal(t, 2500, app.appSettings.MaxTableRows)
 	require.Equal(t, 250, app.appSettings.KubernetesClientQPS)
 	require.Equal(t, 500, app.appSettings.KubernetesClientBurst)
 	require.Equal(t, 16, app.appSettings.PermissionSSRRFetchConcurrency)
@@ -348,32 +347,18 @@ func TestAppSetObjPanelLogsBufferMaxSizePersistsAndClamps(t *testing.T) {
 	require.False(t, settings.ObjPanelLogsAPITimestampUseLocalTimeZone)
 }
 
-func TestAppSetMaxTableRowsPersistsAndClamps(t *testing.T) {
+func TestAppRetiredTableRowCapPreferenceIsRejected(t *testing.T) {
 	setTestConfigEnv(t)
 
 	app := newTestAppWithDefaults(t)
-	require.NoError(t, app.SetMaxTableRows(2500))
-	require.Equal(t, 2500, app.appSettings.MaxTableRows)
-
-	app.appSettings = nil
-	require.NoError(t, app.loadAppSettings())
-	require.Equal(t, 2500, app.appSettings.MaxTableRows)
-
-	entries := app.logger.GetEntries()
-	require.NotEmpty(t, entries)
-	require.Contains(t, entries[len(entries)-1].Message, "Max table rows changed to: 2500")
-
-	require.NoError(t, app.SetMaxTableRows(50))
-	require.Equal(t, minMaxTableRows, app.appSettings.MaxTableRows)
-
-	require.NoError(t, app.SetMaxTableRows(50000))
-	require.Equal(t, maxMaxTableRows, app.appSettings.MaxTableRows)
-
-	setTestConfigEnv(t)
-	freshApp := newTestAppWithDefaults(t)
-	settings, err := freshApp.GetAppSettings()
+	err := app.loadAppSettings()
 	require.NoError(t, err)
-	require.Equal(t, defaultMaxTableRows, settings.MaxTableRows)
+
+	_, err = app.UpdateAppPreferences(UpdateAppPreferencesRequest{
+		Changes: []AppPreferenceChange{{Key: "max" + "TableRows", Value: 2500}},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown preference key")
 }
 
 func TestAppSetKubernetesAPISettingsPersistAndClamp(t *testing.T) {
@@ -980,4 +965,46 @@ func TestAppSetAccentColorValidation(t *testing.T) {
 	// Empty string is accepted (reset).
 	require.NoError(t, app.SetAccentColor("dark", ""))
 	require.Equal(t, "", app.appSettings.AccentColorDark)
+}
+
+func TestAppSettingsDefaultTablePageSize(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	// Defaults: a fresh settings file carries the backend-owned default.
+	configPath, err := app.getSettingsFilePath()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(configPath, []byte(`{"schemaVersion":0}`), 0o644))
+	settings, err := app.loadSettingsFile()
+	require.NoError(t, err)
+	require.Equal(t, defaultTablePageSize, settings.Preferences.DefaultTablePageSize)
+
+	// Schema: integer preference with the default and sanity bounds.
+	schema, err := app.GetAppSettingsSchema()
+	require.NoError(t, err)
+	byKey := make(map[string]AppPreferenceSchema, len(schema.Preferences))
+	for _, pref := range schema.Preferences {
+		byKey[pref.Key] = pref
+	}
+	require.Equal(t, "integer", byKey[appPreferenceDefaultTablePageSize].Type)
+	require.Equal(t, defaultTablePageSize, byKey[appPreferenceDefaultTablePageSize].DefaultValue)
+	require.Equal(t, minTablePageSize, *byKey[appPreferenceDefaultTablePageSize].Min)
+	require.Equal(t, maxTablePageSize, *byKey[appPreferenceDefaultTablePageSize].Max)
+
+	// Updates persist, clamp to the sanity bounds, and survive a reload.
+	response, err := app.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
+		{Key: appPreferenceDefaultTablePageSize, Value: 250},
+	}})
+	require.NoError(t, err)
+	require.Equal(t, 250, response.Settings.DefaultTablePageSize)
+
+	response, err = app.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
+		{Key: appPreferenceDefaultTablePageSize, Value: 999999},
+	}})
+	require.NoError(t, err)
+	require.Equal(t, maxTablePageSize, response.Settings.DefaultTablePageSize)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, maxTablePageSize, app.appSettings.DefaultTablePageSize)
 }

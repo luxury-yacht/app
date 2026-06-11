@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -12,6 +13,7 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 	rbaclisters "k8s.io/client-go/listers/rbac/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -36,18 +38,28 @@ type NamespaceRBACBuilder struct {
 // NamespaceRBACSnapshot payload for RBAC view.
 type NamespaceRBACSnapshot struct {
 	ClusterMeta
-	Resources []RBACSummary `json:"resources"`
-	Kinds     []string      `json:"kinds,omitempty"`
+	ResourceQueryEnvelope
+	Rows []RBACSummary `json:"rows"`
+}
+
+func namespaceRBACQueryCapabilities() ResourceQueryCapabilities {
+	return newTypedResourceCapabilities(
+		[]string{"name", "kind", "namespace", "details", "age"},
+		[]string{"kinds", "namespaces"},
+		[]string{"kind", "name", "namespace", "details"},
+		[]string{"Role", "RoleBinding", "ServiceAccount"},
+	)
 }
 
 // RBACSummary describes a Role/RoleBinding/ServiceAccount entry.
 type RBACSummary struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Details   string `json:"details"`
-	Age       string `json:"age"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Namespace    string `json:"namespace"`
+	Details      string `json:"details"`
+	Age          string `json:"age"`
+	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
 }
 
 // RegisterNamespaceRBACDomain registers the namespace RBAC domain.
@@ -81,7 +93,12 @@ func RegisterNamespaceRBACDomain(
 func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	_ = ctx
 	meta := ClusterMetaFromContext(ctx)
-	parsedScope, err := parseNamespaceSnapshotScope(scope, "namespace scope is required")
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceRBACDomainName, "")
+	if err != nil {
+		return nil, err
+	}
+	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), "namespace scope is required")
 	if err != nil {
 		return nil, err
 	}
@@ -93,40 +110,43 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 		bindings        []*rbacv1.RoleBinding
 		serviceAccounts []*corev1.ServiceAccount
 	)
+	rolesAvailable := b.roleLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "roles")
+	bindingsAvailable := b.bindingLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "rolebindings")
+	serviceAccountsAvailable := b.saLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "", "serviceaccounts")
 
 	if isAll {
-		if b.roleLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "roles") {
+		if rolesAvailable {
 			roles, err = b.roleLister.List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.bindingLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "rolebindings") {
+		if bindingsAvailable {
 			bindings, err = b.bindingLister.List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.saLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "", "serviceaccounts") {
+		if serviceAccountsAvailable {
 			serviceAccounts, err = b.saLister.List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
 	} else {
-		if b.roleLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "roles") {
+		if rolesAvailable {
 			roles, err = b.roleLister.Roles(namespace).List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.bindingLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "rbac.authorization.k8s.io", "rolebindings") {
+		if bindingsAvailable {
 			bindings, err = b.bindingLister.RoleBindings(namespace).List(labels.Everything())
 			if err != nil {
 				return nil, err
 			}
 		}
-		if b.saLister != nil && runtimeResourceAllowed(ctx, namespaceRBACDomainName, "", "serviceaccounts") {
+		if serviceAccountsAvailable {
 			serviceAccounts, err = b.saLister.ServiceAccounts(namespace).List(labels.Everything())
 			if err != nil {
 				return nil, err
@@ -134,15 +154,24 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 		}
 	}
 
-	return buildNamespaceRBACSnapshot(meta, parsedScope.CanonicalScope, roles, bindings, serviceAccounts)
+	sources := []typedTableResourceSource{
+		{Kind: "Role", Group: "rbac.authorization.k8s.io", Resource: "roles", Available: rolesAvailable},
+		{Kind: "RoleBinding", Group: "rbac.authorization.k8s.io", Resource: "rolebindings", Available: bindingsAvailable},
+		{Kind: "ServiceAccount", Group: "", Resource: "serviceaccounts", Available: serviceAccountsAvailable},
+	}
+	issues := typedTableQueryResourceIssues(ctx, namespaceRBACDomainName, query, sources)
+	return buildNamespaceRBACSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, roles, bindings, serviceAccounts, issues, capabilitiesWithAvailableKinds(namespaceRBACQueryCapabilities(), sources))
 }
 
 func buildNamespaceRBACSnapshot(
 	meta ClusterMeta,
 	scope string,
+	query typedTableQuery,
 	roles []*rbacv1.Role,
 	bindings []*rbacv1.RoleBinding,
 	serviceAccounts []*corev1.ServiceAccount,
+	issues []ResourceQueryIssue,
+	capabilities ResourceQueryCapabilities,
 ) (*refresh.Snapshot, error) {
 	resources := make([]RBACSummary, 0, len(roles)+len(bindings)+len(serviceAccounts))
 	var version uint64
@@ -182,19 +211,27 @@ func buildNamespaceRBACSnapshot(
 	}
 
 	sortRBACSummaries(resources)
-
+	resolved := resolveTypedSnapshotPage(
+		namespaceRBACDomainName,
+		resources,
+		query,
+		rbacTableQueryAdapter(),
+		capabilities,
+		config.SnapshotNamespaceRBACEntryLimit,
+		"RBAC resources",
+		func(resource RBACSummary) string { return resource.Kind },
+		issues,
+	)
 	return &refresh.Snapshot{
 		Domain:  namespaceRBACDomainName,
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceRBACSnapshot{
-			ClusterMeta: meta,
-			Resources:   resources,
-			Kinds:       snapshotSortedKinds(resources, func(resource RBACSummary) string { return resource.Kind }),
+			ClusterMeta:           meta,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: refresh.SnapshotStats{
-			ItemCount: len(resources),
-		},
+		Stats: resolved.Stats,
 	}, nil
 }
 

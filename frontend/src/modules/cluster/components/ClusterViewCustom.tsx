@@ -15,55 +15,33 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
+import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import CatalogPaginationFooter from '@modules/browse/components/CatalogPaginationFooter';
+import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
+import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import {
-  buildRequiredCanonicalObjectRowKey,
-  buildRequiredObjectReference,
-} from '@shared/utils/objectIdentity';
+  customCatalogCRDReference,
+  customCatalogObjectReference,
+  customCatalogRowKey,
+  type CatalogBackedCustomResourceRow,
+} from '@modules/browse/hooks/customCatalogRowAdapter';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Define the data structure for cluster custom resources
-interface ClusterCustomData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  clusterId: string;
-  clusterName?: string;
-  apiGroup?: string;
-  /** API version for the owning CRD. Paired with apiGroup so the object
-   * panel can disambiguate colliding Kinds across API groups.
-   */
-  apiVersion?: string;
-  /**
-   * Canonical CRD name (`<plural>.<group>`) for the CustomResourceDefinition
-   * that defines this resource's Kind. Threaded from the backend
-   * ClusterCustomSummary so the CRD column can render a clickable cell
-   * that opens the owning CRD in the object panel.
-   */
-  crdName?: string;
-  status?: string;
-  statusState?: string;
-  statusPresentation?: string;
-  ready?: boolean;
-  observedGeneration?: number;
-  conditions?: Array<{
-    type: string;
-    status: string;
-    reason?: string;
-    message?: string;
-  }>;
-  age?: string;
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
-}
+type ClusterCustomData = CatalogBackedCustomResourceRow;
+
+// The binding's header arrow and the catalog query must agree on the default
+// order. NsViewCustom gets this from useNamespaceGridTablePersistence's
+// defaultSort seed; this view seeds the same default onto its raw persistence.
+const CLUSTER_CUSTOM_DEFAULT_SORT = { key: 'name', direction: 'asc' } as const;
 
 // Define props for ClusterViewCustom component
 interface ClusterCustomViewProps {
-  data: ClusterCustomData[];
-  availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
   error?: string | null;
@@ -74,7 +52,7 @@ interface ClusterCustomViewProps {
  * Displays various custom resources in the cluster
  */
 const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
-  ({ data, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
+  ({ loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -83,27 +61,9 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (resource: ClusterCustomData) => {
         // Preserve metadata and age so the object panel shows labels/annotations and Age.
-        // CRITICAL: pass apiGroup/apiVersion so downstream scope/capability
-        // resolution can disambiguate colliding Kinds. See
-        //  step 1.
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: resource.kind,
-              name: resource.name,
-              group: resource.apiGroup,
-              version: resource.apiVersion,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId },
-            {
-              age: resource.age,
-              labels: resource.labels,
-              annotations: resource.annotations,
-            }
-          )
-        );
+        // CRITICAL: pass group/version so downstream scope/capability
+        // resolution can disambiguate colliding Kinds.
+        openWithObject(customCatalogObjectReference(resource, selectedClusterId));
       },
       [openWithObject, selectedClusterId]
     );
@@ -114,43 +74,19 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     // built-in lookup table, not from row data. Mirrors NsViewCustom.
     const handleCRDClick = useCallback(
       (resource: ClusterCustomData) => {
-        if (!resource.crdName) {
+        const ref = customCatalogCRDReference(resource, selectedClusterId, {
+          includeRowMetadata: true,
+        });
+        if (!ref) {
           return;
         }
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: 'CustomResourceDefinition',
-              name: resource.crdName,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId },
-            {
-              age: resource.age,
-              labels: resource.labels,
-              annotations: resource.annotations,
-              requiresExplicitVersion: true,
-              explicitVersionProvided: Boolean(resource.apiVersion),
-            }
-          )
-        );
+        openWithObject(ref);
       },
       [openWithObject, selectedClusterId]
     );
 
     const keyExtractor = useCallback(
-      (resource: ClusterCustomData) =>
-        buildRequiredCanonicalObjectRowKey(
-          {
-            kind: resource.kind,
-            name: resource.name,
-            clusterId: resource.clusterId,
-            group: resource.apiGroup,
-            version: resource.apiVersion,
-          },
-          { fallbackClusterId: selectedClusterId }
-        ),
+      (resource: ClusterCustomData) => customCatalogRowKey(resource, selectedClusterId),
       [selectedClusterId]
     );
 
@@ -164,37 +100,13 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: resource.kind,
-                  name: resource.name,
-                  clusterId: resource.clusterId,
-                  clusterName: resource.clusterName,
-                  group: resource.apiGroup,
-                  version: resource.apiVersion,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
+            navigateToView(customCatalogObjectReference(resource, selectedClusterId)),
         }),
         cf.createTextColumn<ClusterCustomData>('name', 'Name', {
           sortable: true,
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: resource.kind,
-                  name: resource.name,
-                  clusterId: resource.clusterId,
-                  clusterName: resource.clusterName,
-                  group: resource.apiGroup,
-                  version: resource.apiVersion,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
+            navigateToView(customCatalogObjectReference(resource, selectedClusterId)),
           getClassName: () => 'object-panel-link',
         }),
         // CRD column: each cell is a clickable link back to the CRD
@@ -202,32 +114,26 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         // column — `<plural>.<group>` is a strict superset of the group
         // alone (the group is the right-hand side of the dot), and the
         // clickable link adds a navigation path the old column lacked.
-        // The column key is "crd" but the data field is "crdName", so
-        // we attach an explicit `sortValue` — without it, useTableSort
-        // would fall back to `row["crd"]` (undefined) and silently
-        // fail to sort. Matches NsViewCustom's CRD column exactly.
+        // Catalog-backed custom-resource queries only support global sorting
+        // on catalog fields. CRD/status are hydrated after the catalog page is
+        // selected, so exposing them as sortable would imply a global sort the
+        // backend cannot perform.
         (() => {
           const crdColumn = cf.createTextColumn<ClusterCustomData>(
             'crd',
             'CRD',
             (resource) => resource.crdName ?? undefined,
             {
+              sortable: false,
               onClick: handleCRDClick,
               onAltClick: (resource) => {
                 if (!resource.crdName) {
                   return;
                 }
-                navigateToView(
-                  buildRequiredObjectReference(
-                    {
-                      kind: 'CustomResourceDefinition',
-                      name: resource.crdName,
-                      clusterId: resource.clusterId,
-                      clusterName: resource.clusterName,
-                    },
-                    { fallbackClusterId: selectedClusterId }
-                  )
-                );
+                const ref = customCatalogCRDReference(resource, selectedClusterId);
+                if (ref) {
+                  navigateToView(ref);
+                }
               },
               isInteractive: (resource) => Boolean(resource.crdName),
               getClassName: (resource) => (resource.crdName ? 'object-panel-link' : undefined),
@@ -242,6 +148,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           'Status',
           (resource) => resource.status || 'Unknown',
           {
+            sortable: false,
             getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
           }
         ),
@@ -266,16 +173,64 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
-    const { gridTableProps, favModal } = useClusterResourceGridTable<ClusterCustomData>({
+    const basePersistence = useGridTablePersistence<ClusterCustomData>({
       viewId: 'cluster-custom',
-      data,
+      clusterIdentity: selectedClusterId,
+      namespace: null,
+      isNamespaceScoped: false,
       columns,
       keyExtractor,
-      availableKinds: kindOptions ?? [],
-      showKindDropdown: true,
-      kindDropdownSearchable: true,
-      kindDropdownBulkActions: true,
+      data: [],
       filterOptions: { isNamespaceScoped: false },
+      pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+    });
+    const persistence = useMemo(
+      () => ({
+        ...basePersistence,
+        sortConfig: basePersistence.sortConfig ?? CLUSTER_CUSTOM_DEFAULT_SORT,
+      }),
+      [basePersistence]
+    );
+
+    const {
+      rows,
+      loading: catalogLoading,
+      hasLoadedOnce: catalogLoaded,
+      error: catalogError,
+      filterOptions: catalogFilterOptions,
+      totalCount,
+      unfilteredTotal,
+      totalIsExact,
+      fetchAllRows,
+      pagination,
+    } = useCatalogBackedCustomResourceRows({
+      clusterId: selectedClusterId,
+      clusterScopedOnly: true,
+      persistence,
+      diagnosticLabel: 'Cluster Custom',
+    });
+
+    const { gridTableProps, favModal } = useQueryResourceGridTable<ClusterCustomData>({
+      tableMode: 'Query Backed Static',
+      data: rows,
+      columns,
+      persistence,
+      keyExtractor,
+      defaultSortKey: 'name',
+      defaultSortDirection: 'asc',
+      diagnosticsLabel: 'Cluster Custom',
+      filterOptions: {
+        searchBehavior: 'query',
+        kinds: catalogFilterOptions.kinds,
+        namespaces: undefined,
+        showKindDropdown: true,
+        kindDropdownSearchable: true,
+        kindDropdownBulkActions: true,
+        totalCount,
+        unfilteredTotal,
+        totalIsExact,
+        partialDataLabel: catalogFilterOptions.partialDataLabel,
+      },
     });
 
     const objectActions = useObjectActionController({
@@ -288,24 +243,9 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (resource: ClusterCustomData): ContextMenuItem[] => {
         return objectActions.getMenuItems(
-          buildRequiredObjectReference(
-            {
-              kind: resource.kind,
-              name: resource.name,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-              group: resource.apiGroup ?? undefined,
-              version: resource.apiVersion ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId },
-            {
-              age: resource.age,
-              labels: resource.labels,
-              annotations: resource.annotations,
-              requiresExplicitVersion: true,
-              explicitVersionProvided: Boolean(resource.apiVersion),
-            }
-          )
+          customCatalogObjectReference(resource, selectedClusterId, {
+            requiresExplicitVersion: true,
+          })
         );
       },
       [objectActions, selectedClusterId]
@@ -316,24 +256,53 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       () => resolveEmptyStateMessage(error, 'No cluster-scoped custom objects found'),
       [error]
     );
+    const paginationControls = useMemo(
+      () => (
+        <CatalogPaginationFooter
+          idPrefix="cluster-custom"
+          visibleItemCount={rows.length}
+          pagination={pagination}
+        />
+      ),
+      [pagination, rows.length]
+    );
+
+    // Catalog provider → the shared controller contract. The rich catalog
+    // pagination footer stays on gridTableProps (below), so the source carries
+    // only the lifecycle the controller needs for boundary/empty/overlay.
+    const source = backendQuerySource<ClusterCustomData>({
+      enabled: true,
+      rows,
+      loading: catalogLoading || (loading ?? false),
+      loaded: catalogLoaded || loaded,
+      error: catalogError ?? error ?? null,
+      // Per-view identity so a revisit replays the last page instead of a spinner.
+      cacheKey: `cluster-custom|${selectedClusterId ?? ''}|`,
+    });
 
     return (
       <>
-        <ResourceGridTableView
-          gridTableProps={gridTableProps}
-          boundaryLoading={loading ?? false}
-          loaded={loaded}
+        <ResourceInventoryTable
+          source={source}
+          gridTableProps={{
+            ...gridTableProps,
+            fetchAllRows,
+            exportFilename: 'cluster-custom-resources',
+          }}
           spinnerMessage="Loading cluster custom resources..."
           favModal={favModal}
           columns={columns}
           diagnosticsLabel="Cluster Custom"
-          loading={loading}
           onRowClick={handleResourceClick}
           tableClassName="cluster-custom-table"
           enableContextMenu={true}
           getCustomContextMenuItems={getContextMenuItems}
           useShortNames={useShortResourceNames}
           emptyMessage={emptyMessage}
+          {...pagination}
+          paginationControls={paginationControls}
+          showLoadMoreButton={false}
+          showPaginationStatus={false}
         />
 
         {objectActions.modals}

@@ -33,7 +33,6 @@ import { useObjectPanelCapabilities } from '@modules/object-panel/components/Obj
 import { useObjectPanelActions } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelActions';
 import { useObjectPanelRefresh } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh';
 import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs';
-import { useObjectPanelPods } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods';
 import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
 import { ObjectPanelHeader } from '@modules/object-panel/components/ObjectPanel/ObjectPanelHeader';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
@@ -274,13 +273,6 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     [activeTab, availableTabs]
   );
 
-  const podsState = useObjectPanelPods({
-    objectData,
-    objectKind,
-    isOpen,
-    activeTab: visibleActiveTab,
-  });
-
   const {
     handleAction,
     setScaleReplicas,
@@ -489,7 +481,6 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           deletedResourceName={state.deletedResourceName}
           onClosePanel={close}
           onRefreshDetails={fetchResourceDetails}
-          podsState={podsState}
           panelId={panelId}
         />
       </DockablePanel>

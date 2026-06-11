@@ -28,6 +28,17 @@ func resourceVersionOrTimestamp(obj metav1.Object) uint64 {
 	return uint64(ts.UnixNano())
 }
 
+func creationTimestampMillis(obj metav1.Object) int64 {
+	if obj == nil {
+		return 0
+	}
+	ts := obj.GetCreationTimestamp()
+	if ts.IsZero() {
+		return 0
+	}
+	return ts.UnixMilli()
+}
+
 func snapshotSortedUniqueStrings(values []string) []string {
 	seen := make(map[string]struct{}, len(values))
 	out := make([]string, 0, len(values))

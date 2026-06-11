@@ -167,7 +167,7 @@ func TestHandlerStreamsEvents(t *testing.T) {
 	initialSnapshot := &refresh.Snapshot{
 		Domain: "cluster-events",
 		Payload: snapshot.ClusterEventsSnapshot{
-			Events: []snapshot.ClusterEventEntry{{
+			Rows: []snapshot.ClusterEventEntry{{
 				Kind:            "Event",
 				Name:            "initial",
 				ObjectNamespace: "default",
@@ -263,7 +263,7 @@ func TestHandlerResumesFromSince(t *testing.T) {
 		return &refresh.Snapshot{
 			Domain: "cluster-events",
 			Payload: snapshot.ClusterEventsSnapshot{
-				Events: []snapshot.ClusterEventEntry{{
+				Rows: []snapshot.ClusterEventEntry{{
 					Kind:            "Event",
 					Name:            "snapshot",
 					ObjectNamespace: "default",
@@ -333,7 +333,7 @@ func TestHandlerFallsBackToSnapshotWhenResumeTooOld(t *testing.T) {
 		return &refresh.Snapshot{
 			Domain: "cluster-events",
 			Payload: snapshot.ClusterEventsSnapshot{
-				Events: []snapshot.ClusterEventEntry{{
+				Rows: []snapshot.ClusterEventEntry{{
 					Kind:            "Event",
 					Name:            "snapshot",
 					ObjectNamespace: "default",

@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import BrowseView from '@/modules/browse/components/BrowseView';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -77,8 +78,8 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
 }));
 
 vi.mock('@/core/settings/appPreferences', () => ({
-  getMaxTableRows: () => 1000,
   getAutoRefreshEnabled: () => true,
+  getDefaultTablePageSize: () => 50,
 }));
 
 vi.mock('@core/contexts/ViewStateContext', () => ({
@@ -131,6 +132,8 @@ const refreshMocks = vi.hoisted(() => ({
   orchestrator: {
     setDomainEnabled: vi.fn(),
     setScopedDomainEnabled: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
   },
   useRefreshScopedDomain: vi.fn(),
@@ -140,6 +143,12 @@ const refreshMocks = vi.hoisted(() => ({
     scope: undefined as string | undefined,
   },
   scopedDomains: new Map<string, any>(),
+}));
+
+const persistenceMocks = vi.hoisted(() => ({
+  clusterSortConfig: { current: { key: 'kind', direction: 'asc' } as any },
+  clusterSetSortConfig: vi.fn(),
+  namespaceOnSortChange: vi.fn(),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -152,14 +161,16 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
   useGridTablePersistence: (params: any) => {
     persistenceArgsRef.cluster = params;
     return {
-      sortConfig: { key: 'kind', direction: 'asc' },
-      setSortConfig: vi.fn(),
+      sortConfig: persistenceMocks.clusterSortConfig.current,
+      setSortConfig: persistenceMocks.clusterSetSortConfig,
       columnWidths: null,
       setColumnWidths: vi.fn(),
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
       filters: persistenceFiltersRef.current,
       setFilters: vi.fn(),
+      pageSize: null,
+      setPageSize: vi.fn(),
       resetState: vi.fn(),
       hydrated: true,
       storageKey: 'gridtable:v1:test',
@@ -170,20 +181,80 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
   useNamespaceGridTablePersistence: (params: any) => {
     persistenceArgsRef.namespace = params;
-    return {
+    const persistence = {
       sortConfig: { key: 'kind', direction: 'asc' },
-      onSortChange: vi.fn(),
+      setSortConfig: persistenceMocks.namespaceOnSortChange,
       columnWidths: null,
       setColumnWidths: vi.fn(),
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
       filters: persistenceFiltersRef.current,
       setFilters: vi.fn(),
-      isNamespaceScoped: true,
+      pageSize: null,
+      setPageSize: vi.fn(),
       resetState: vi.fn(),
+      hydrated: true,
+    };
+    return {
+      ...persistence,
+      onSortChange: persistenceMocks.namespaceOnSortChange,
+      isNamespaceScoped: true,
+      persistence,
     };
   },
 }));
+
+const catalogItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
+  clusterId: 'cluster-1',
+  clusterName: 'Cluster 1',
+  kind: 'Pod',
+  group: '',
+  version: 'v1',
+  resource: 'pods',
+  namespace: 'default',
+  name: 'pod-a',
+  uid: 'pod-a',
+  resourceVersion: '1',
+  creationTimestamp: '2026-01-01T00:00:00Z',
+  scope: 'Namespace',
+  ...overrides,
+});
+
+const sortableKeys = (): string[] =>
+  (gridTablePropsRef.current?.columns ?? [])
+    .filter((column: any) => column.sortable !== false)
+    .map((column: any) => column.key)
+    .sort((left: string, right: string) => left.localeCompare(right));
+
+const catalogPayload = (
+  items: CatalogItem[],
+  overrides: Partial<CatalogSnapshotPayload> = {}
+): CatalogSnapshotPayload => ({
+  clusterId: 'cluster-1',
+  clusterName: 'Cluster 1',
+  items,
+  continue: '',
+  total: items.length,
+  totalIsExact: true,
+  resourceCount: items.length,
+  kinds: [
+    { kind: 'Node', namespaced: false },
+    { kind: 'Pod', namespaced: true },
+  ],
+  namespaces: Array.from(
+    new Set(
+      items
+        .map((item) => item.namespace)
+        .filter((namespace): namespace is string => Boolean(namespace))
+    )
+  ),
+  facetsExact: true,
+  batchIndex: 0,
+  batchSize: items.length,
+  totalBatches: 1,
+  isFinal: true,
+  ...overrides,
+});
 
 describe('BrowseView', () => {
   let container: HTMLDivElement;
@@ -200,6 +271,8 @@ describe('BrowseView', () => {
     gridTablePropsRef.current = null;
     refreshMocks.orchestrator.setDomainEnabled.mockReset();
     refreshMocks.orchestrator.setScopedDomainEnabled.mockReset();
+    refreshMocks.orchestrator.acquireScopedDomainLease.mockReset();
+    refreshMocks.orchestrator.releaseScopedDomainLease.mockReset();
     refreshMocks.orchestrator.fetchScopedDomain.mockReset().mockResolvedValue(undefined);
     refreshMocks.manager.disable.mockReset();
     refreshMocks.useRefreshScopedDomain.mockReset();
@@ -213,6 +286,9 @@ describe('BrowseView', () => {
     });
     persistenceArgsRef.cluster = null;
     persistenceArgsRef.namespace = null;
+    persistenceMocks.clusterSortConfig.current = { key: 'kind', direction: 'asc' };
+    persistenceMocks.clusterSetSortConfig.mockReset();
+    persistenceMocks.namespaceOnSortChange.mockReset();
     persistenceFiltersRef.current = { search: '', kinds: [], namespaces: [], caseSensitive: false };
   });
 
@@ -224,20 +300,58 @@ describe('BrowseView', () => {
   });
 
   describe('Cluster scope (namespace=undefined)', () => {
+    it('renders the first cluster-scoped page directly from the catalog query payload', async () => {
+      const node = catalogItem({
+        kind: 'Node',
+        resource: 'nodes',
+        namespace: undefined,
+        name: 'query-node',
+        uid: 'node-1',
+        scope: 'Cluster',
+      });
+      refreshMocks.catalogDomain.status = 'ready';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
+      refreshMocks.catalogDomain.data = catalogPayload([node], {
+        kinds: [
+          { kind: 'Node', namespaced: false },
+          { kind: 'Pod', namespaced: true },
+        ],
+      });
+
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      expect(gridTablePropsRef.current?.data).toEqual([
+        expect.objectContaining({
+          name: 'query-node',
+          scope: 'Cluster',
+          item: expect.objectContaining({
+            clusterId: 'cluster-1',
+            group: '',
+            version: 'v1',
+            kind: 'Node',
+            name: 'query-node',
+          }),
+        }),
+      ]);
+    });
+
     it('sets the catalog scope and triggers a manual refresh on mount', async () => {
       await act(async () => {
         root.render(<BrowseView />);
         await Promise.resolve();
       });
 
-      expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      expect(refreshMocks.orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=1000&namespace=cluster',
-        true
+        'cluster-1|limit=50&namespace=cluster',
+        undefined
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=1000&namespace=cluster',
+        'cluster-1|limit=50&namespace=cluster',
         expect.objectContaining({ isManual: false })
       );
     });
@@ -252,6 +366,33 @@ describe('BrowseView', () => {
       const columns = gridTablePropsRef.current?.columns ?? [];
       const hasNamespaceColumn = columns.some((col: any) => col.key === 'namespace');
       expect(hasNamespaceColumn).toBe(false);
+    });
+
+    it('publishes only catalog-backed sortable keys for cluster scope', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      expect(sortableKeys()).toEqual(['age', 'kind', 'name']);
+    });
+
+    it('publishes header sort changes to cluster browse persistence when no sort is hydrated', async () => {
+      persistenceMocks.clusterSortConfig.current = null;
+
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      act(() => {
+        gridTablePropsRef.current?.onSort?.('name');
+      });
+
+      expect(persistenceMocks.clusterSetSortConfig).toHaveBeenCalledWith({
+        key: 'name',
+        direction: 'asc',
+      });
     });
 
     it('hides namespace filtering for cluster scope (cluster-scoped objects only)', async () => {
@@ -281,9 +422,51 @@ describe('BrowseView', () => {
 
       expect(persistenceArgsRef.cluster?.viewId).toBe('browse');
     });
+
+    it('enables only cluster persistence for cluster browse', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      expect(persistenceArgsRef.cluster?.enabled).toBe(true);
+      expect(persistenceArgsRef.namespace?.enabled).toBe(false);
+    });
   });
 
   describe('Namespace scope (namespace=specific)', () => {
+    it('renders the first namespace page directly from the catalog query payload', async () => {
+      refreshMocks.catalogDomain.status = 'ready';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=team-a';
+      refreshMocks.catalogDomain.data = catalogPayload([
+        catalogItem({
+          namespace: 'team-a',
+          name: 'query-pod',
+          uid: 'pod-1',
+        }),
+      ]);
+
+      await act(async () => {
+        root.render(<BrowseView namespace="team-a" />);
+        await Promise.resolve();
+      });
+
+      expect(gridTablePropsRef.current?.data).toEqual([
+        expect.objectContaining({
+          name: 'query-pod',
+          namespaceDisplay: 'team-a',
+          item: expect.objectContaining({
+            clusterId: 'cluster-1',
+            group: '',
+            version: 'v1',
+            kind: 'Pod',
+            namespace: 'team-a',
+            name: 'query-pod',
+          }),
+        }),
+      ]);
+    });
+
     it('hides namespace column for namespace scope', async () => {
       await act(async () => {
         root.render(<BrowseView namespace="default" />);
@@ -312,15 +495,57 @@ describe('BrowseView', () => {
       });
 
       // The scope should include the pinned namespace
-      expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      expect(refreshMocks.orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=1000&namespace=kube-system',
-        true
+        'cluster-1|limit=50&namespace=kube-system',
+        undefined
       );
+    });
+
+    it('enables only namespace persistence for namespace browse', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace="default" />);
+        await Promise.resolve();
+      });
+
+      expect(persistenceArgsRef.cluster?.enabled).toBe(false);
+      expect(persistenceArgsRef.namespace?.enabled).toBe(true);
     });
   });
 
   describe('All Namespaces scope', () => {
+    it('renders the first all-namespaces page directly from the catalog query payload', async () => {
+      refreshMocks.catalogDomain.status = 'ready';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50';
+      refreshMocks.catalogDomain.data = catalogPayload([
+        catalogItem({
+          namespace: 'team-b',
+          name: 'query-all-pod',
+          uid: 'pod-all-1',
+        }),
+      ]);
+
+      await act(async () => {
+        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
+        await Promise.resolve();
+      });
+
+      expect(gridTablePropsRef.current?.data).toEqual([
+        expect.objectContaining({
+          name: 'query-all-pod',
+          namespaceDisplay: 'team-b',
+          item: expect.objectContaining({
+            clusterId: 'cluster-1',
+            group: '',
+            version: 'v1',
+            kind: 'Pod',
+            namespace: 'team-b',
+            name: 'query-all-pod',
+          }),
+        }),
+      ]);
+    });
+
     it('uses a distinct persistence id from cluster browse', async () => {
       await act(async () => {
         root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
@@ -328,6 +553,16 @@ describe('BrowseView', () => {
       });
 
       expect(persistenceArgsRef.cluster?.viewId).toBe('all-namespaces-browse');
+    });
+
+    it('enables only cluster persistence for all-namespaces browse', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
+        await Promise.resolve();
+      });
+
+      expect(persistenceArgsRef.cluster?.enabled).toBe(true);
+      expect(persistenceArgsRef.namespace?.enabled).toBe(false);
     });
 
     it('shows namespace column for all-namespaces scope', async () => {
@@ -340,6 +575,15 @@ describe('BrowseView', () => {
       const columns = gridTablePropsRef.current?.columns ?? [];
       const hasNamespaceColumn = columns.some((col: any) => col.key === 'namespace');
       expect(hasNamespaceColumn).toBe(true);
+    });
+
+    it('publishes only catalog-backed sortable keys for all-namespaces scope', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
+        await Promise.resolve();
+      });
+
+      expect(sortableKeys()).toEqual(['age', 'kind', 'name', 'namespace']);
     });
 
     it('enables namespace filtering for all-namespaces scope', async () => {
@@ -358,14 +602,14 @@ describe('BrowseView', () => {
         namespaces: ['default'],
         caseSensitive: false,
       };
-      refreshMocks.scopedDomains.set('cluster-1|limit=1000&search=api&kind=Pod&namespace=default', {
+      refreshMocks.scopedDomains.set('cluster-1|limit=50&search=api&kind=Pod&namespace=default', {
         status: 'ready',
         data: {
           items: [],
           kinds: [{ kind: 'Pod', namespaced: true }],
           namespaces: ['default'],
         },
-        scope: 'cluster-1|limit=1000&search=api&kind=Pod&namespace=default',
+        scope: 'cluster-1|limit=50&search=api&kind=Pod&namespace=default',
       });
       refreshMocks.scopedDomains.set('cluster-1|limit=1', {
         status: 'ready',
@@ -394,8 +638,8 @@ describe('BrowseView', () => {
   });
 
   describe('Row cap UI', () => {
-    it('does not expose a load-more action when a catalog response is truncated', async () => {
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=1000&namespace=cluster';
+    it('renders query pagination in the table footer with the filter-feedback banner enabled', async () => {
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [
           {
@@ -414,6 +658,7 @@ describe('BrowseView', () => {
         ],
         continue: '200',
         batchSize: 200,
+        total: 1200,
       };
       refreshMocks.catalogDomain.status = 'ready';
 
@@ -423,12 +668,32 @@ describe('BrowseView', () => {
       });
 
       expect(gridTablePropsRef.current.data).toHaveLength(1);
-      expect(gridTablePropsRef.current.filters.options.postActions ?? []).toEqual([]);
+      expect(
+        (gridTablePropsRef.current.filters.options.postActions ?? []).some(
+          (item: any) => item.title === 'Load more'
+        )
+      ).toBe(false);
+      expect(gridTablePropsRef.current.showLoadMoreButton).toBe(false);
+      expect(gridTablePropsRef.current.showPaginationStatus).toBe(false);
+      expect(gridTablePropsRef.current.filters.options.customActions).toBeUndefined();
+      // Pagination totals live in the footer; the filter bar's "showing N of M due to filters"
+      // banner renders only while a narrowing filter is active (complementary, not
+      // a duplicate top count) — consistent with every other view.
+      expect(gridTablePropsRef.current.paginationControls?.props).toMatchObject({
+        pagination: {
+          pageIndex: 1,
+          pageLimit: 50,
+          totalCount: 1200,
+          totalIsExact: true,
+          hasPrevious: false,
+          hasMore: true,
+        },
+      });
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledTimes(2);
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
         1,
         'catalog',
-        'cluster-1|limit=1000&namespace=cluster',
+        'cluster-1|limit=50&namespace=cluster',
         expect.objectContaining({ isManual: false })
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
@@ -438,11 +703,39 @@ describe('BrowseView', () => {
         expect.objectContaining({ isManual: false })
       );
     });
+
+    it('surfaces catalog degraded reasons in table filter state', async () => {
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
+      refreshMocks.catalogDomain.data = {
+        items: [],
+        batchSize: 0,
+        total: 150000,
+        totalIsExact: false,
+        facetsExact: false,
+        issues: [
+          {
+            kind: 'Catalog health',
+            message: 'Catalog data may be stale because one resource sync failed.',
+          },
+        ],
+      };
+      refreshMocks.catalogDomain.status = 'ready';
+
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      const label = gridTablePropsRef.current.filters.options.partialDataLabel;
+      expect(label).toContain('Catalog health');
+      expect(label).toContain('Facet options are approximate');
+      expect(label).toContain('total result count is approximate');
+    });
   });
 
   describe('Action facts', () => {
     it('threads catalog action facts into shared context-menu actions', async () => {
-      refreshMocks.scopedDomains.set('cluster-1|limit=1000&namespace=default', {
+      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
         status: 'ready',
         data: {
           items: [
@@ -481,7 +774,7 @@ describe('BrowseView', () => {
           ],
           namespaces: ['default'],
         },
-        scope: 'cluster-1|limit=1000&namespace=default',
+        scope: 'cluster-1|limit=50&namespace=default',
       });
 
       await act(async () => {
@@ -506,6 +799,32 @@ describe('BrowseView', () => {
       expect(cronMenu.some((item: any) => item.actionId === OBJECT_ACTION_IDS.resume)).toBe(true);
       const trigger = cronMenu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.triggerNow);
       expect(trigger?.disabled).toBe(true);
+    });
+  });
+
+  describe('All-matching export', () => {
+    it('threads fetchAllRows so the table offers the all-matching-rows scope', async () => {
+      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
+        status: 'ready',
+        data: {
+          items: [],
+          kinds: [{ kind: 'Pod', namespaced: true }],
+          namespaces: ['default'],
+          total: 1,
+        },
+        scope: 'cluster-1|limit=50&namespace=default',
+      });
+
+      await act(async () => {
+        root.render(<BrowseView namespace="default" />);
+        await Promise.resolve();
+      });
+
+      // Export is now the unified frontend Copy/Export cluster (wired by the GridTable filter
+      // bar from this fetcher), not a server-side per-action catalog export.
+      expect(typeof gridTablePropsRef.current?.fetchAllRows).toBe('function');
+      const postActions = gridTablePropsRef.current?.filters?.options?.postActions ?? [];
+      expect(postActions.some((item: any) => item.id === 'copy-browse-query-csv')).toBe(false);
     });
   });
 });

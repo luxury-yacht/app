@@ -8,8 +8,9 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
-const { useTableSortMock } = vi.hoisted(() => ({
+const { useTableSortMock, requestRefreshDomainStateMock } = vi.hoisted(() => ({
   useTableSortMock: vi.fn(
     (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
       sortedData: data,
@@ -17,6 +18,7 @@ const { useTableSortMock } = vi.hoisted(() => ({
       handleSort: vi.fn(),
     })
   ),
+  requestRefreshDomainStateMock: vi.fn(),
 }));
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
@@ -103,8 +105,17 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+    filters: {
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    },
     setFilters: vi.fn(),
+    pageSize: null,
+    setPageSize: vi.fn(),
+    hydrated: true,
     resetState: vi.fn(),
   }),
 }));
@@ -117,9 +128,18 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+    filters: {
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    },
     setFilters: vi.fn(),
+    pageSize: null,
+    setPageSize: vi.fn(),
     resetState: vi.fn(),
+    hydrated: true,
     isNamespaceScoped: true,
   })),
 }));
@@ -134,6 +154,11 @@ vi.mock('@/core/refresh', () => ({
     };
   },
   refreshManager: { triggerManualRefresh: vi.fn() },
+}));
+
+vi.mock('@/core/data-access', () => ({
+  requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...args),
+  useScopedRefreshDomainLifecycle: vi.fn(),
 }));
 
 vi.mock('@/hooks/useShortNames', () => ({
@@ -181,6 +206,21 @@ describe('NsViewWorkloads', () => {
     openWithObjectMock.mockReset();
     navigateToViewMock.mockReset();
     useTableSortMock.mockClear();
+    requestRefreshDomainStateMock.mockReset();
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [],
+          total: 0,
+          totalIsExact: true,
+          namespaces: ['team-a', 'team-b'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
   });
 
   afterEach(() => {
@@ -192,15 +232,7 @@ describe('NsViewWorkloads', () => {
 
   it('passes persisted state to GridTable', async () => {
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={[]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
@@ -212,22 +244,236 @@ describe('NsViewWorkloads', () => {
       kinds: [],
       namespaces: [],
       caseSensitive: false,
+      includeMetadata: false,
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
   });
 
-  it('resolves node metrics from the active cluster scope only', async () => {
+  it('issues a namespace-scoped typed query for a single namespace and renders the query rows', async () => {
+    const workload = {
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '5m',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+    };
+
+    // Single-namespace workload tables are query-backed now (not local-complete): the table
+    // renders the typed query rows scoped to the namespace, not the local `data` prop. Feed the
+    // query the same rows so the table shows them.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [workload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.data).toEqual([workload]);
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: 'namespace-workloads',
+        scope: 'path:context|namespace:team-a?limit=50&sort=name&sortDirection=asc',
+        // The label feeds user-facing error copy ("<label> returned no data");
+        // a single namespace must not claim "All Namespaces".
+        label: 'Namespace Workloads',
+      })
+    );
+  });
+
+  it('uses the typed query result for all-namespaces workloads on first render', async () => {
+    const localWorkload = {
+      kind: 'Deployment',
+      name: 'local-provider-row',
+      namespace: 'team-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '5m',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+    };
+    const queryWorkload = {
+      ...localWorkload,
+      name: 'query-row',
+      namespace: 'team-b',
+    };
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [queryWorkload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a', 'team-b'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
     await act(async () => {
       root.render(
         <NsViewWorkloads
-          namespace="team-a"
-          data={[]}
-          loading={false}
-          loaded={true}
+          namespace={ALL_NAMESPACES_SCOPE}
+          showNamespaceColumn={true}
           metrics={null}
         />
       );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.data).toEqual([queryWorkload]);
+    expect(gridTablePropsRef.current?.paginationControls?.props).toMatchObject({
+      pageIndex: 1,
+      pageSize: 50,
+      totalCount: 1,
+      totalIsExact: true,
+      hasPrevious: false,
+      hasNext: false,
+    });
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: 'namespace-workloads',
+        scope: 'path:context|namespace:all?limit=50&sort=name&sortDirection=asc',
+      })
+    );
+  });
+
+  it('renders the backend-published kind vocabulary even when facets collapse to the selection', async () => {
+    // The Kinds dropdown options are the family's capabilities-published
+    // vocabulary. Facets collapse to the active selection by design; selecting
+    // a kind must never remove the other options.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [],
+          total: 0,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+          capabilities: {
+            kindVocabulary: ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob'],
+          },
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace={ALL_NAMESPACES_SCOPE}
+          showNamespaceColumn={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.filters?.options?.kinds).toEqual([
+      'Pod',
+      'Deployment',
+      'StatefulSet',
+      'DaemonSet',
+      'Job',
+      'CronJob',
+    ]);
+  });
+
+  it('renders a settled-empty query on remount without retaining stale rows (dynamic table)', async () => {
+    // The second dynamic query-backed table covered by the remount lifecycle
+    // regression (Nodes is the first). The controller trusts a settled query, so
+    // a definitive empty result on remount renders empty rather than resurrecting
+    // stale rows; the transient empty-while-loading protection lives in the
+    // controller (see useResourceInventoryTable / backendQuerySource tests).
+    const queryRow = {
+      kind: 'Deployment',
+      name: 'web',
+      namespace: 'team-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '1h',
+      clusterId: 'path:context',
+      clusterName: 'ctx',
+    };
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [queryRow],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(gridTablePropsRef.current?.data).toHaveLength(1);
+
+    // Remount with the query now settling empty.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [],
+          total: 0,
+          totalIsExact: true,
+          namespaces: [],
+          kinds: [],
+          facetsExact: true,
+        },
+      },
+    });
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(gridTablePropsRef.current?.data).toEqual([]);
+  });
+
+  it('resolves node metrics from the active cluster scope only', async () => {
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
@@ -239,46 +485,15 @@ describe('NsViewWorkloads', () => {
   });
 
   it('preserves the column definitions across rerenders with unchanged inputs', async () => {
-    const workload = {
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      status: 'Running',
-      ready: '1/1',
-      restarts: 0,
-      cpuUsage: '10m',
-      memUsage: '20Mi',
-      age: '5m',
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
-    };
-    const data = [workload];
-
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={data as any}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
     const firstColumnsRef = gridTablePropsRef.current?.columns;
 
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={data as any}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
@@ -294,15 +509,7 @@ describe('NsViewWorkloads', () => {
     } as any;
 
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={[workload]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
@@ -311,7 +518,7 @@ describe('NsViewWorkloads', () => {
     expect(options.rowIdentity(workload, 0)).toBe('alpha:ctx|apps/v1/Deployment/team-a/api');
   });
 
-  it('passes numeric CPU and memory sort values into useTableSort', async () => {
+  it('passes numeric Ready, CPU, and memory sort values into useTableSort', async () => {
     const workload = {
       kind: 'Deployment',
       name: 'api',
@@ -326,15 +533,7 @@ describe('NsViewWorkloads', () => {
     } as any;
 
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={[workload]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
@@ -343,9 +542,11 @@ describe('NsViewWorkloads', () => {
       key: string;
       sortValue?: (item: typeof workload) => unknown;
     }>;
+    const readyColumn = columns.find((column) => column.key === 'ready');
     const cpuColumn = columns.find((column) => column.key === 'cpu');
     const memoryColumn = columns.find((column) => column.key === 'memory');
 
+    expect(readyColumn?.sortValue?.({ ...workload, ready: '2/10' })).toBe(2000010);
     expect(cpuColumn?.sortValue?.(workload)).toBe(10);
     expect(memoryColumn?.sortValue?.(workload)).toBe(20);
   });
@@ -365,16 +566,25 @@ describe('NsViewWorkloads', () => {
       clusterName: 'alpha',
     };
 
+    // Query-backed single-namespace table: feed the typed query the row so it renders in the table.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [workload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="team-a"
-          data={[workload as any]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
       await Promise.resolve();
     });
 
@@ -412,16 +622,25 @@ describe('NsViewWorkloads', () => {
       clusterName: 'test',
     };
 
+    // Query-backed single-namespace table: feed the typed query the row so it renders in the table.
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [workload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['default'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
     await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace="default"
-          data={[workload as any]}
-          loading={false}
-          loaded={true}
-          metrics={null}
-        />
-      );
+      root.render(<NsViewWorkloads namespace="default" metrics={null} />);
+      await Promise.resolve();
       await Promise.resolve();
     });
 
@@ -450,15 +669,7 @@ describe('NsViewWorkloads', () => {
 
     it('includes Trigger Now and Suspend items for CronJob', async () => {
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={[cronjob as any]}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 
@@ -476,15 +687,7 @@ describe('NsViewWorkloads', () => {
       const suspendedCronjob = { ...cronjob, status: 'Suspended' };
 
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={[suspendedCronjob as any]}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 
@@ -502,15 +705,7 @@ describe('NsViewWorkloads', () => {
       const suspendedCronjob = { ...cronjob, status: 'Suspended' };
 
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={[suspendedCronjob as any]}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 
@@ -535,15 +730,7 @@ describe('NsViewWorkloads', () => {
       };
 
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={[deployment as any]}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 
@@ -565,15 +752,7 @@ describe('NsViewWorkloads', () => {
       ];
 
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={workloads as any}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 
@@ -605,15 +784,7 @@ describe('NsViewWorkloads', () => {
       ];
 
       await act(async () => {
-        root.render(
-          <NsViewWorkloads
-            namespace="default"
-            data={workloads as any}
-            loading={false}
-            loaded={true}
-            metrics={null}
-          />
-        );
+        root.render(<NsViewWorkloads namespace="default" metrics={null} />);
         await Promise.resolve();
       });
 

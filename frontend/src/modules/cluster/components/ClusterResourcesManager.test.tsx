@@ -127,29 +127,21 @@ describe('ClusterResourcesManager', () => {
     });
   };
 
-  it('loads the active tab data and passes props downstream', async () => {
-    clusterResourceStates.storage.meta = { kinds: ['PersistentVolume'] };
-    clusterResourceStates.config.meta = {
-      kinds: ['IngressClass', 'MutatingWebhookConfiguration', 'StorageClass'],
-    };
-    clusterResourceStates.custom.meta = { kinds: ['DBCluster', 'Widget'] };
-    clusterResourceStates.rbac.meta = { kinds: ['ClusterRole', 'ClusterRoleBinding'] };
-
+  it('sets the active resource type and forwards per-view errors downstream', async () => {
     await renderManager('storage');
 
     expect(setActiveResourceTypeMock).toHaveBeenCalledWith('storage');
 
     const props = viewPropsRef.current;
-    expect(props.storage).toEqual([]);
-    expect(props.storageLoaded).toBe(false);
-    expect(props.nodes).toEqual(['nodes-row']);
-    expect(props.configKinds).toEqual([
-      'IngressClass',
-      'MutatingWebhookConfiguration',
-      'StorageClass',
-    ]);
-    expect(props.customKinds).toEqual(['DBCluster', 'Widget']);
-    expect(props.rbacKinds).toEqual(['ClusterRole', 'ClusterRoleBinding']);
+    // Query-backed views source their own rows and the Kinds dropdown vocabulary
+    // is backend-owned (query capabilities); the manager forwards only the
+    // per-view error — not live-snapshot rows/stats/loading/loaded or kind lists.
+    expect(props.configKinds).toBeUndefined();
+    expect(props.rbacKinds).toBeUndefined();
+    expect(props.nodes).toBeUndefined();
+    expect(props.storage).toBeUndefined();
+    expect(props.nodesStats).toBeUndefined();
+    expect(props.storageLoaded).toBeUndefined();
   });
 
   it('respects permission denials and avoids loading', async () => {

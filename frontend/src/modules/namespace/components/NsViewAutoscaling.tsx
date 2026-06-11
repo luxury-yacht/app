@@ -13,20 +13,23 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
-
-const NAMESPACE_AUTOSCALING_KIND_OPTIONS = ['HorizontalPodAutoscaler'];
+import type {
+  NamespaceAutoscalingSnapshotPayload,
+  NamespaceAutoscalingSummary,
+} from '@/core/refresh/types';
+import { parseAutoscalingTarget } from '@shared/resources/resourceDescriptorSelectors';
 
 // Data interface for autoscaling resources
 export interface AutoscalingData {
@@ -66,15 +69,12 @@ export interface AutoscalingData {
   };
   status?: string;
   age?: string;
+  ageTimestamp?: number;
   [key: string]: any; // Allow additional fields
 }
 
 interface AutoscalingViewProps {
   namespace: string;
-  data: AutoscalingData[];
-  availableKinds?: string[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
 
@@ -83,17 +83,11 @@ interface AutoscalingViewProps {
  * Aggregates HorizontalPodAutoscalers and VerticalPodAutoscalers
  */
 const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    availableKinds: kindOptions,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-  }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<AutoscalingData>('autoscaling');
 
@@ -322,19 +316,50 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
+    const diagnosticsLabel =
+      namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Autoscaling' : 'Namespace Autoscaling';
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<AutoscalingData>({
+    const selectRows = useCallback(
+      (payload: NamespaceAutoscalingSnapshotPayload) =>
+        (payload.rows ?? []).map((item: NamespaceAutoscalingSummary) => {
+          const scaleTargetRef = parseAutoscalingTarget(item.target, item.targetApiVersion);
+          return {
+            kind: item.kind,
+            kindAlias: item.kind,
+            name: item.name,
+            namespace: item.namespace,
+            clusterId: item.clusterId,
+            clusterName: item.clusterName,
+            scaleTargetRef,
+            target: item.target,
+            min: item.min,
+            max: item.max,
+            current: item.current,
+            minReplicas: item.min,
+            maxReplicas: item.max,
+            currentReplicas: item.current,
+            age: item.age,
+            ageTimestamp: item.ageTimestamp,
+          };
+        }),
+      []
+    );
+    const { gridTableProps, favModal, source } = useQueryBackedNamespaceResourceGridTable<
+      NamespaceAutoscalingSnapshotPayload,
+      AutoscalingData
+    >({
+      queryTableMode: 'Query Backed Static',
+      clusterId: queryClusterId,
+      domain: 'namespace-autoscaling',
+      label: diagnosticsLabel,
+      selectRows,
       viewId: 'namespace-autoscaling',
       namespace,
-      data,
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Autoscaling' : 'Namespace Autoscaling',
-      availableKinds:
-        kindOptions && kindOptions.length > 0 ? kindOptions : NAMESPACE_AUTOSCALING_KIND_OPTIONS,
+      diagnosticsLabel,
       showKindDropdown: true,
       showNamespaceFilters: showNamespaceFilter,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
@@ -375,20 +400,14 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
 
     return (
       <>
-        <ResourceGridTableView
+        <ResourceInventoryTable
+          source={source}
           gridTableProps={gridTableProps}
-          boundaryLoading={loading}
-          loaded={loaded}
           spinnerMessage="Loading autoscaling resources..."
           favModal={favModal}
           columns={columns}
-          diagnosticsLabel={
-            namespace === ALL_NAMESPACES_SCOPE
-              ? 'All Namespaces Autoscaling'
-              : 'Namespace Autoscaling'
-          }
+          diagnosticsLabel={diagnosticsLabel}
           diagnosticsMode="live"
-          loading={loading}
           onRowClick={handleResourceClick}
           tableClassName="ns-autoscaling-table"
           enableContextMenu={true}

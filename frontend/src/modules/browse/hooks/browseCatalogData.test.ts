@@ -57,6 +57,7 @@ describe('browseCatalogData', () => {
     expect(plan.catalogScope).toBe('cluster-1|limit=200&search=api&kind=Pod&namespace=default');
     expect(plan.metadataScope).toBe('cluster-1|limit=1&namespace=default');
     expect(plan.metadataUsesActiveScope).toBe(false);
+    expect(plan.hasUserNamespaceScope).toBe(true);
     expect(plan.namespacesToQuery).toEqual(['default']);
     expect(
       buildBrowseCatalogPageScope(
@@ -70,6 +71,49 @@ describe('browseCatalogData', () => {
         '200'
       )
     ).toBe('cluster-1|limit=200&search=api&kind=Pod&namespace=default&continue=200');
+  });
+
+  it('separates user namespace scope from backend namespace expansion', () => {
+    const plan = buildBrowseCatalogPlan({
+      clusterId: 'cluster-1',
+      clusterScopedOnly: false,
+      pinnedNamespaces: [],
+      filters: { search: '', kinds: [], namespaces: [] },
+      availableNamespaces: ['default', 'kube-system'],
+      pageLimit: 200,
+    });
+
+    expect(plan.namespacesToQuery).toEqual(['default', 'kube-system']);
+    expect(plan.hasUserNamespaceScope).toBe(false);
+  });
+
+  it('includes backend sort in catalog scopes when the sort is not the default', () => {
+    const plan = buildBrowseCatalogPlan({
+      clusterId: 'cluster-1',
+      clusterScopedOnly: false,
+      pinnedNamespaces: ['default'],
+      filters: { search: '', kinds: [], namespaces: [] },
+      sort: { key: 'name', direction: 'desc' },
+      availableNamespaces: ['default'],
+      pageLimit: 200,
+    });
+
+    expect(plan.catalogScope).toBe(
+      'cluster-1|limit=200&sort=name&sortDirection=desc&namespace=default'
+    );
+    expect(
+      buildBrowseCatalogPageScope(
+        plan,
+        {
+          clusterId: 'cluster-1',
+          filters: { search: '', kinds: [], namespaces: [] },
+          sort: { key: 'name', direction: 'desc' },
+          pageLimit: 200,
+          pinnedNamespaces: ['default'],
+        },
+        'cursor'
+      )
+    ).toBe('cluster-1|limit=200&sort=name&sortDirection=desc&namespace=default&continue=cursor');
   });
 
   it('rejects stale pinned-namespace snapshots', () => {
@@ -107,7 +151,7 @@ describe('browseCatalogData', () => {
     expect(next.totalCount).toBe(1);
   });
 
-  it('applies page snapshots as append-only pagination', () => {
+  it('applies page snapshots as current-window replacement pagination', () => {
     const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
     const second = makeItem({ uid: 'pod-b', name: 'pod-b' });
     const existing = applyCatalogBaseline(
@@ -120,7 +164,7 @@ describe('browseCatalogData', () => {
       makePayload({ items: [second], continue: '', total: 2 })
     );
 
-    expect(next.items.map((item) => item.name)).toEqual(['pod-a', 'pod-b']);
+    expect(next.items.map((item) => item.name)).toEqual(['pod-b']);
     expect(next.continueToken).toBeNull();
     expect(next.totalCount).toBe(2);
   });
@@ -145,6 +189,7 @@ describe('browseCatalogData', () => {
       kinds: ['Deployment', 'Pod'],
       namespaces: ['default', 'kube-system'],
       isNamespaceScoped: false,
+      partialDataLabel: undefined,
     });
 
     expect(
@@ -154,5 +199,28 @@ describe('browseCatalogData', () => {
         isNamespaceScoped: false,
       }).kinds
     ).toEqual(['Node']);
+  });
+
+  it('derives reason-bearing degraded copy from catalog query metadata', () => {
+    const payload = makePayload({
+      totalIsExact: false,
+      facetsExact: false,
+      issues: [
+        {
+          kind: 'Catalog health',
+          message: 'Catalog data may be stale because one resource sync failed.',
+        },
+      ],
+    });
+
+    const options = deriveBrowseFilterOptions({
+      payload,
+      clusterScopedOnly: false,
+      isNamespaceScoped: false,
+    });
+
+    expect(options.partialDataLabel).toContain('Catalog health');
+    expect(options.partialDataLabel).toContain('Facet options are approximate');
+    expect(options.partialDataLabel).toContain('total result count is approximate');
   });
 });

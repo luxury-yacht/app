@@ -15,10 +15,10 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useShortNames } from '@/hooks/useShortNames';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import React, { useCallback, useMemo } from 'react';
-import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import type { PodMetricsInfo } from '@/core/refresh/types';
+import type { NamespaceWorkloadSnapshotPayload, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
 import {
@@ -26,19 +26,16 @@ import {
   appendWorkloadTokens,
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useNamespaceResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import { buildWorkloadActionReference } from './workloadActionReference';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 
 interface WorkloadsViewProps {
   namespace: string;
-  data: WorkloadData[];
-  availableKinds?: string[];
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
 }
@@ -47,15 +44,7 @@ interface WorkloadsViewProps {
  * GridTable component for namespace workloads without nested pod expansion
  */
 const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
-  ({
-    namespace,
-    data,
-    availableKinds: kindOptions,
-    loading = false,
-    loaded = false,
-    showNamespaceColumn = false,
-    metrics = null,
-  }) => {
+  ({ namespace, showNamespaceColumn = false, metrics = null }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
@@ -169,7 +158,9 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       metrics: metricsInfo ?? null,
     });
 
-    const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
+    const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
+    const showNamespaceFilter = isAllNamespaces;
+    const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Workloads' : 'Namespace Workloads';
 
     const getRowSearchValues = useCallback((row: WorkloadData) => {
       const tokens: string[] = [];
@@ -177,15 +168,22 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       return tokens;
     }, []);
 
-    const { gridTableProps, favModal } = useNamespaceResourceGridTable<WorkloadData>({
+    const {
+      gridTableProps: resolvedGridTableProps,
+      favModal,
+      source,
+    } = useQueryBackedNamespaceResourceGridTable<NamespaceWorkloadSnapshotPayload, WorkloadData>({
+      queryTableMode: 'Query Backed Dynamic',
+      clusterId: selectedClusterId,
+      domain: 'namespace-workloads',
+      label: diagnosticsLabel,
+      selectRows: selectPayloadRows,
       viewId: 'namespace-workloads',
       namespace,
-      data,
       columns: tableColumns as unknown as GridColumnDefinition<WorkloadData>[],
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
       rowIdentity: keyExtractor,
-      availableKinds: kindOptions,
       showKindDropdown: true,
       filterAccessors: {
         getKind: (row) => row.kind,
@@ -193,11 +191,9 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         getSearchText: (row) => getRowSearchValues(row),
       },
       showNamespaceFilters: showNamespaceFilter,
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Workloads' : 'Namespace Workloads',
+      diagnosticsLabel,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
-    const sortedWorkloads = gridTableProps.data;
 
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {
@@ -215,8 +211,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       [namespace]
     );
 
-    const boundaryLoading = Boolean(loading) || !(Boolean(loaded) || sortedWorkloads.length > 0);
-
     return (
       <>
         {metricsBanner && (
@@ -225,11 +219,11 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             {metricsBanner.message}
           </div>
         )}
-        <ResourceGridTableView
-          gridTableProps={gridTableProps}
-          boundaryLoading={boundaryLoading}
-          loaded={Boolean(loaded) || sortedWorkloads.length > 0}
+        <ResourceInventoryTable
+          source={source}
+          gridTableProps={resolvedGridTableProps}
           spinnerMessage="Loading workloads..."
+          updatingMessage="Updating workloads…"
           allowPartial
           favModal={favModal}
           columns={tableColumns}
@@ -237,7 +231,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Workloads' : 'Namespace Workloads'
           }
           diagnosticsMode="live"
-          loading={loading && sortedWorkloads.length === 0}
           onRowClick={handleWorkloadClick}
           tableClassName="gridtable-workloads"
           enableContextMenu={true}
@@ -245,10 +238,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           emptyMessage={emptyMessage}
           enableColumnVisibilityMenu
           allowHorizontalOverflow={true}
-          loadingOverlay={{
-            show: Boolean(loading) && sortedWorkloads.length > 0,
-            message: 'Updating workloads…',
-          }}
         />
 
         {objectActions.modals}

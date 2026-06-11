@@ -79,17 +79,16 @@ func (a *streamingAggregator) complete(_ int) {
 	}
 }
 
-// cloneChunksLocked creates a deep copy of the aggregator's chunks.
+// cloneChunksLocked snapshots the aggregator's chunk list. Chunks are
+// immutable once appended (their items are never mutated after creation), so
+// only the pointer slice is copied — deep-copying every item made each emit
+// cost O(total items), quadratic across an initial sync.
 func (a *streamingAggregator) cloneChunksLocked() []*summaryChunk {
 	if len(a.chunks) == 0 {
 		return nil
 	}
 	result := make([]*summaryChunk, len(a.chunks))
-	for i, chunk := range a.chunks {
-		items := make([]Summary, len(chunk.items))
-		copy(items, chunk.items)
-		result[i] = &summaryChunk{items: items}
-	}
+	copy(result, a.chunks)
 	return result
 }
 

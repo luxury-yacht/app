@@ -12,7 +12,9 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
@@ -22,6 +24,27 @@ import (
 
 func testClusterMeta() ClusterMeta {
 	return ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
+}
+
+type fakeInformerHub struct {
+	mu     sync.RWMutex
+	synced bool
+}
+
+func (h *fakeInformerHub) Start(context.Context) error { return nil }
+
+func (h *fakeInformerHub) HasSynced(context.Context) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.synced
+}
+
+func (h *fakeInformerHub) Shutdown() error { return nil }
+
+func (h *fakeInformerHub) setSynced(synced bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.synced = synced
 }
 
 func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
@@ -62,6 +85,100 @@ func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	}
 	if summary.Snapshots[0].LastStatus != "success" || summary.Snapshots[0].LastError != "" {
 		t.Fatalf("expected successful snapshot telemetry, got %+v", summary.Snapshots[0])
+	}
+}
+
+func TestServiceBuildWaitsForInformerSyncBeforeBuilding(t *testing.T) {
+	reg := domain.New()
+	built := make(chan struct{})
+	if err := reg.Register(refresh.DomainConfig{
+		Name: "nodes",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			close(built)
+			return &refresh.Snapshot{
+				Domain:  "nodes",
+				Scope:   scope,
+				Payload: map[string][]string{"nodes": {"node-a"}},
+			}, nil
+		},
+	}); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	hub := &fakeInformerHub{}
+	service := NewService(reg, nil, testClusterMeta()).WithInformerHub(hub)
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.Build(context.Background(), "nodes", "")
+		done <- err
+	}()
+
+	select {
+	case <-built:
+		t.Fatal("snapshot built before informer caches synced")
+	case err := <-done:
+		t.Fatalf("Build returned before informer caches synced: %v", err)
+	case <-time.After(config.RefreshInformerSyncPollInterval * 2):
+	}
+
+	hub.setSynced(true)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Build returned error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Build did not complete after informer caches synced")
+	}
+}
+
+func TestServiceBuildFailsWhenInformerSyncTimesOut(t *testing.T) {
+	reg := domain.New()
+	built := false
+	if err := reg.Register(refresh.DomainConfig{
+		Name: "nodes",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			built = true
+			return &refresh.Snapshot{Domain: "nodes", Scope: scope}, nil
+		},
+	}); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	rec := telemetry.NewRecorder()
+	hub := &fakeInformerHub{}
+	service := NewService(reg, rec, testClusterMeta()).WithInformerHub(hub)
+	service.informerSyncTimeout = 50 * time.Millisecond
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.Build(context.Background(), "nodes", "")
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected informer sync timeout error")
+		}
+		if !errors.Is(err, errInformerSyncTimeout) {
+			t.Fatalf("expected informer sync timeout error, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Build hung past the informer sync timeout")
+	}
+
+	if built {
+		t.Fatal("snapshot builder must not run when informer caches never sync")
+	}
+
+	summary := rec.SnapshotSummary()
+	if len(summary.Snapshots) != 1 {
+		t.Fatalf("expected one telemetry entry for the sync timeout, got %d", len(summary.Snapshots))
+	}
+	if summary.Snapshots[0].LastStatus != "error" || summary.Snapshots[0].LastError == "" {
+		t.Fatalf("expected error telemetry for the sync timeout, got %+v", summary.Snapshots[0])
 	}
 }
 

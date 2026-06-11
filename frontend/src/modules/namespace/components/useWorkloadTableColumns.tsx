@@ -27,6 +27,32 @@ interface UseWorkloadTableColumnsParams {
   } | null;
 }
 
+const parseReadyCounts = (value?: string | null): { ready: number; total: number } | null => {
+  if (!value) {
+    return null;
+  }
+  const match = value.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (!match) {
+    return null;
+  }
+  return {
+    ready: Number(match[1]),
+    total: Number(match[2]),
+  };
+};
+
+const getReadySortValue = (value?: string | null): number | string => {
+  const counts = parseReadyCounts(value);
+  if (counts) {
+    return counts.ready * 1000000 + counts.total;
+  }
+  if (!value) {
+    return -1;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : value.toLowerCase();
+};
+
 const useWorkloadTableColumns = ({
   handleWorkloadClick,
   onAltClick,
@@ -38,12 +64,9 @@ const useWorkloadTableColumns = ({
 
   return useMemo<GridColumnDefinition<WorkloadData>[]>(() => {
     const getReadyClassName = (workload: WorkloadData) => {
-      const ready = workload.ready;
-      if (ready && ready.includes('/')) {
-        const [readyCount, total] = ready.split('/').map((value) => value.trim());
-        if (readyCount && total && readyCount !== total) {
-          return 'status-text warning';
-        }
+      const counts = parseReadyCounts(workload.ready);
+      if (counts && counts.ready !== counts.total) {
+        return 'status-text warning';
       }
       return undefined;
     };
@@ -105,21 +128,7 @@ const useWorkloadTableColumns = ({
         getClassName: (row) => getReadyClassName(row),
       }
     );
-    readyColumn.sortValue = (row) => {
-      const value = row.ready;
-      if (!value) {
-        return -1;
-      }
-      if (!value.includes('/')) {
-        const numeric = Number(value);
-        return Number.isFinite(numeric) ? numeric : value.toLowerCase();
-      }
-      const [a, b] = value.split('/').map((part) => Number(part.trim()));
-      if (Number.isFinite(a) && Number.isFinite(b) && b !== 0) {
-        return a / b;
-      }
-      return value.toLowerCase();
-    };
+    readyColumn.sortValue = (row) => getReadySortValue(row.ready);
     columns.push(readyColumn);
 
     const restartsColumn = cf.createTextColumn<WorkloadData>(

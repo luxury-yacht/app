@@ -137,7 +137,7 @@ describe('ClusterViewRBAC', () => {
 
   it('passes persisted state to GridTable', async () => {
     await act(async () => {
-      root.render(<ClusterViewRBAC data={[baseRBAC]} loaded={true} />);
+      root.render(<ClusterViewRBAC />);
       await Promise.resolve();
     });
 
@@ -161,7 +161,7 @@ describe('ClusterViewRBAC', () => {
     const row = { ...baseRBAC, kind, name };
 
     await act(async () => {
-      root.render(<ClusterViewRBAC data={[row]} loaded={true} />);
+      root.render(<ClusterViewRBAC />);
       await Promise.resolve();
     });
 

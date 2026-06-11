@@ -28,6 +28,8 @@ const {
     resetDomain: vi.fn(),
     resetScopedDomain: vi.fn(),
     setScopedDomainEnabled: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
     isStreamingDomain: vi.fn().mockReturnValue(false),
   };
@@ -228,10 +230,9 @@ describe('NamespaceResourcesProvider', () => {
       selectedNamespace: 'team-a',
       selectedNamespaceClusterId: testClusterId,
     });
-    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
       'namespace-config',
       `${testClusterId}|namespace:team-a`,
-      true,
       { preserveState: true }
     );
     expect(orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
@@ -282,17 +283,16 @@ describe('NamespaceResourcesProvider', () => {
     expect(context).toBeTruthy();
 
     orchestrator.setDomainEnabled.mockClear();
-    orchestrator.setScopedDomainEnabled.mockClear();
+    orchestrator.acquireScopedDomainLease.mockClear();
 
     await act(async () => {
       context?.setActiveResourceType('pods');
       await Promise.resolve();
     });
 
-    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
       'pods',
       `${testClusterId}|namespace:team-a`,
-      true,
       { preserveState: true }
     );
 
@@ -301,11 +301,24 @@ describe('NamespaceResourcesProvider', () => {
       await Promise.resolve();
     });
 
-    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
       'namespace-network',
       `${testClusterId}|namespace:team-a`,
-      true,
       { preserveState: true }
+    );
+  });
+
+  it('does not provider-start all-namespaces query-backed table domains', async () => {
+    await render(
+      <NamespaceResourcesProvider namespace="namespace:all" activeView="pods">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    expect(orchestrator.acquireScopedDomainLease).not.toHaveBeenCalledWith(
+      'pods',
+      `${testClusterId}|namespace:all`,
+      expect.anything()
     );
   });
 
@@ -356,12 +369,8 @@ describe('NamespaceResourcesProvider', () => {
       `${testClusterId}|namespace:team-b`,
       expect.objectContaining({ isManual: false })
     );
-    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'pods',
-      `${testClusterId}|namespace:team-b`,
-      false,
-      { preserveState: true }
-    );
+    // pods stays disabled for a workloads view, so the lease lifecycle never
+    // leases or releases it — only the active workloads domain reloads.
   });
 
   it('switches active resource when the tab changes', async () => {
@@ -378,14 +387,13 @@ describe('NamespaceResourcesProvider', () => {
     expect(getActiveResource()).toBe('workloads');
 
     const initialEnabledDomains = new Set(
-      orchestrator.setScopedDomainEnabled.mock.calls
-        .filter(([, , enabled]) => enabled)
-        .map(([domain]) => domain)
+      orchestrator.acquireScopedDomainLease.mock.calls.map(([domain]) => domain)
     );
     expect(Array.from(initialEnabledDomains)).toEqual(['namespace-workloads']);
 
     orchestrator.fetchScopedDomain.mockClear();
-    orchestrator.setScopedDomainEnabled.mockClear();
+    orchestrator.acquireScopedDomainLease.mockClear();
+    orchestrator.releaseScopedDomainLease.mockClear();
 
     await render(
       <NamespaceResourcesProvider namespace="alpha" activeView="config">
@@ -398,18 +406,15 @@ describe('NamespaceResourcesProvider', () => {
     expect(getActiveResource()).toBe('config');
 
     const reenabledDomains = new Set(
-      orchestrator.setScopedDomainEnabled.mock.calls
-        .filter(([, , enabled]) => enabled)
-        .map(([domain]) => domain)
+      orchestrator.acquireScopedDomainLease.mock.calls.map(([domain]) => domain)
     );
     expect(Array.from(reenabledDomains)).toEqual(['namespace-config']);
 
     const invokedDomains = orchestrator.fetchScopedDomain.mock.calls.map((call) => call[0]);
     expect(invokedDomains).toContain('namespace-config');
-    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(orchestrator.releaseScopedDomainLease).toHaveBeenCalledWith(
       'namespace-workloads',
       `${testClusterId}|namespace:alpha`,
-      false,
       { preserveState: true }
     );
   });
@@ -421,25 +426,20 @@ describe('NamespaceResourcesProvider', () => {
       </NamespaceResourcesProvider>
     );
 
-    orchestrator.setScopedDomainEnabled.mockClear();
+    orchestrator.releaseScopedDomainLease.mockClear();
 
     await act(async () => {
       root.unmount();
       await Promise.resolve();
     });
 
-    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(orchestrator.releaseScopedDomainLease).toHaveBeenCalledWith(
       'namespace-config',
       `${testClusterId}|namespace:team-a`,
-      false,
       { preserveState: true }
     );
-    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'pods',
-      `${testClusterId}|namespace:team-a`,
-      false,
-      { preserveState: true }
-    );
+    // pods is not the active view here, so it was never leased and needs no
+    // release on unmount.
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -874,7 +874,7 @@ describe('NamespaceResourcesProvider', () => {
     expect(contextRef.current?.autoscaling.data?.[0]).toBe(firstRow);
   });
 
-  it('preserves custom resource row references when refreshed rows are rebuilt with unchanged fields', async () => {
+  it('does not expose namespace-custom fanout rows to the catalog-backed custom view', async () => {
     const scope = `${testClusterId}|namespace:team-a`;
 
     scopedStates[scope] = {
@@ -915,51 +915,18 @@ describe('NamespaceResourcesProvider', () => {
       </NamespaceResourcesProvider>
     );
 
-    const firstDataRef = contextRef.current?.custom.data;
-    const firstRdsRow = firstDataRef?.[0];
-    const firstDocDbRow = firstDataRef?.[1];
-
-    scopedStates[scope] = {
-      status: 'ready',
-      data: {
-        resources: [
-          {
-            kind: 'DBInstance',
-            name: 'orders-db',
-            namespace: 'team-a',
-            clusterId: testClusterId,
-            apiGroup: 'rds.services.k8s.aws',
-            apiVersion: 'v1alpha1',
-            crdName: 'dbinstances.rds.services.k8s.aws',
-            age: '1h',
-            labels: { team: 'payments' },
-          },
-          {
-            kind: 'DBInstance',
-            name: 'orders-db',
-            namespace: 'team-a',
-            clusterId: testClusterId,
-            apiGroup: 'documentdb.services.k8s.aws',
-            apiVersion: 'v1alpha1',
-            crdName: 'dbinstances.documentdb.services.k8s.aws',
-            age: '1h',
-            labels: { team: 'analytics' },
-          },
-        ],
-      },
-      error: null,
-      lastUpdated: null,
-    };
-
-    await render(
-      <NamespaceResourcesProvider namespace="team-a" activeView="custom">
-        <TestConsumer />
-      </NamespaceResourcesProvider>
+    expect(contextRef.current?.custom.data).toEqual([]);
+    expect(contextRef.current?.custom.hasLoaded).toBe(false);
+    expect(orchestrator.acquireScopedDomainLease).not.toHaveBeenCalledWith(
+      'namespace-custom',
+      scope,
+      expect.anything()
     );
-
-    expect(contextRef.current?.custom.data).toBe(firstDataRef);
-    expect(contextRef.current?.custom.data?.[0]).toBe(firstRdsRow);
-    expect(contextRef.current?.custom.data?.[1]).toBe(firstDocDbRow);
+    expect(orchestrator.fetchScopedDomain).not.toHaveBeenCalledWith(
+      'namespace-custom',
+      scope,
+      expect.anything()
+    );
   });
 
   it('preserves helm row references when refreshed rows are rebuilt with unchanged fields', async () => {

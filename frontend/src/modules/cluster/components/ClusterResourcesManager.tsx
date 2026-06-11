@@ -30,16 +30,17 @@ export function ClusterResourcesManager({
   onTabChange,
   objectPanel,
 }: ClusterResourceManagerProps) {
-  const { nodes, rbac, storage, config, crds, custom, events, setActiveResourceType } =
+  const { nodes, rbac, storage, config, crds, events, setActiveResourceType } =
     useClusterResources();
 
-  const { data: nodesData, loading: nodesLoading, error: nodesError } = nodes;
-  const { data: configData, loading: configLoading, error: configError } = config;
-  const { data: crdsData, loading: crdsLoading, error: crdsError } = crds;
-  const { data: customData, loading: customLoading, error: customError } = custom;
-  const { data: eventsData, loading: eventsLoading, error: eventsError } = events;
-  const { data: rbacData, loading: rbacLoading, error: rbacError } = rbac;
-  const { data: storageData, loading: storageLoading, error: storageError } = storage;
+  // Only the per-view error is consumed downstream now (each view is query-backed and
+  // sources its own rows); the live domains stay subscribed for those errors + kinds.
+  const { error: nodesError } = nodes;
+  const { error: configError } = config;
+  const { error: crdsError } = crds;
+  const { error: eventsError } = events;
+  const { error: rbacError } = rbac;
+  const { error: storageError } = storage;
 
   const { selectedClusterId } = useKubeconfig();
   // Scope permission lookups to the active cluster to avoid cache collisions.
@@ -127,7 +128,7 @@ export function ClusterResourcesManager({
   const nodesErrorMessage = nodesError?.message || permissionToMessage(nodesListPermission) || null;
   const configErrorMessage = configError?.message || configPermissionMessage || null;
   const crdsErrorMessage = crdsError?.message || permissionToMessage(crdListPermission) || null;
-  const customErrorMessage = customError?.message || permissionToMessage(crdListPermission) || null;
+  const customErrorMessage = permissionToMessage(crdListPermission) || null;
   const eventsErrorMessage =
     eventsError?.message || permissionToMessage(eventsListPermission) || null;
   const rbacErrorMessage = rbacError?.message || permissionToMessage(rbacListPermission) || null;
@@ -145,48 +146,20 @@ export function ClusterResourcesManager({
 
   return (
     <ClusterResourcesViews
-      // Tabs
       activeTab={activeTab}
       onTabChange={onTabChange}
-      // Nodes
-      nodes={nodesData || []}
-      nodesLoading={nodesLoading || false}
+      // Each view is query-backed and sources its own rows; the manager supplies
+      // only the per-view error (+ kinds for filtered views) derived from the live
+      // domain and permissions. Custom is catalog-backed and takes loading/loaded.
       nodesError={nodesErrorMessage}
-      nodesLoaded={(nodes?.hasLoaded ?? false) || Boolean(nodesErrorMessage)}
-      // Config
-      config={configData || []}
-      configKinds={(config?.meta as { kinds?: string[] } | undefined)?.kinds}
-      configLoading={configLoading || false}
       configError={configErrorMessage}
-      configLoaded={(config?.hasLoaded ?? false) || Boolean(configErrorMessage)}
-      // CRDs
-      crds={crdsData || []}
-      crdsLoading={crdsLoading || false}
       crdsError={crdsErrorMessage}
-      crdsLoaded={(crds?.hasLoaded ?? false) || Boolean(crdsErrorMessage)}
-      // Custom
-      custom={customData || []}
-      customKinds={(custom?.meta as { kinds?: string[] } | undefined)?.kinds}
-      customLoading={customLoading || false}
+      customLoading={false}
       customError={customErrorMessage}
-      customLoaded={(custom?.hasLoaded ?? false) || Boolean(customErrorMessage)}
-      // Events
-      events={eventsData || []}
-      eventsLoading={eventsLoading || false}
+      customLoaded={Boolean(customErrorMessage)}
       eventsError={eventsErrorMessage}
-      eventsLoaded={(events?.hasLoaded ?? false) || Boolean(eventsErrorMessage)}
-      // RBAC
-      rbac={rbacData || []}
-      rbacKinds={(rbac?.meta as { kinds?: string[] } | undefined)?.kinds}
-      rbacLoading={rbacLoading || false}
       rbacError={rbacErrorMessage}
-      rbacLoaded={(rbac?.hasLoaded ?? false) || Boolean(rbacErrorMessage)}
-      // Storage
-      storage={storageData || []}
-      storageLoading={storageLoading || false}
       storageError={storageErrorMessage}
-      storageLoaded={(storage?.hasLoaded ?? false) || Boolean(storageErrorMessage)}
-      // Object panel
       objectPanel={objectPanel}
     />
   );

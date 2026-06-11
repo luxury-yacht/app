@@ -51,7 +51,9 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   const registerCatalogDomain = () => {
     registerRefreshDomain('catalog', {
       start: (scope) => catalogStreamManager.start(scope),
-      stop: (_scope, options) => catalogStreamManager.stop(options?.reset ?? false),
+      // Pass the scope through: the manager must only reset the scope it is
+      // asked to stop, never whichever scope its singleton stream holds.
+      stop: (scope, options) => catalogStreamManager.stop(options?.reset ?? false, scope),
       refreshOnce: (scope) => catalogStreamManager.refreshOnce(scope),
       pauseRefresherWhenStreaming: true,
     });

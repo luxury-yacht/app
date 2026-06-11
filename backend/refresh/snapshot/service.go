@@ -10,6 +10,7 @@ package snapshot
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -27,18 +28,25 @@ import (
 
 // Service builds snapshots through registered domain builders and applies short-lived caching via singleflight.
 type Service struct {
-	registry          *domain.Registry
-	telemetry         *telemetry.Recorder
-	group             singleflight.Group
-	sequence          uint64
-	cluster           ClusterMeta
-	cacheMu           sync.RWMutex
-	cache             map[string]cacheEntry
-	cacheTTL          time.Duration
-	permissionChecker *permissions.Checker
-	runtimeAccess     domainpermissions.RuntimeAccess
-	requestSerial     uint64
+	registry            *domain.Registry
+	telemetry           *telemetry.Recorder
+	group               singleflight.Group
+	sequence            uint64
+	cluster             ClusterMeta
+	informerHub         refresh.InformerHub
+	informerSyncTimeout time.Duration
+	cacheMu             sync.RWMutex
+	cache               map[string]cacheEntry
+	cacheTTL            time.Duration
+	permissionChecker   *permissions.Checker
+	runtimeAccess       domainpermissions.RuntimeAccess
+	requestSerial       uint64
 }
+
+// errInformerSyncTimeout marks snapshot builds rejected because the refresh
+// informer caches never reported synced within the configured deadline — for
+// example when one informer's watch is RBAC-forbidden and can never complete.
+var errInformerSyncTimeout = errors.New("refresh informer caches not synced")
 
 type cacheEntry struct {
 	snapshot  *refresh.Snapshot
@@ -78,14 +86,26 @@ func newService(
 		access = domainpermissions.NewRuntimeAccess()
 	}
 	return &Service{
-		registry:          reg,
-		telemetry:         recorder,
-		cluster:           meta,
-		cache:             make(map[string]cacheEntry),
-		cacheTTL:          config.SnapshotCacheTTL,
-		permissionChecker: checker,
-		runtimeAccess:     access,
+		registry:            reg,
+		telemetry:           recorder,
+		cluster:             meta,
+		cache:               make(map[string]cacheEntry),
+		cacheTTL:            config.SnapshotCacheTTL,
+		informerSyncTimeout: config.RefreshInformerSyncTimeout,
+		permissionChecker:   checker,
+		runtimeAccess:       access,
 	}
+}
+
+// WithInformerHub makes snapshot builds wait until the refresh informer caches
+// are synced. Without this guard, early table requests can cache empty lister
+// results before the first authoritative Kubernetes list has completed.
+func (s *Service) WithInformerHub(hub refresh.InformerHub) *Service {
+	if s == nil {
+		return s
+	}
+	s.informerHub = hub
+	return s
 }
 
 // Build returns a snapshot for the requested domain/scope.
@@ -109,6 +129,12 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 	var err error
 	ctx, permissionCacheKey, err = s.ensurePermissions(ctx, domainName, scope)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.waitForInformerSync(ctx); err != nil {
+		if errors.Is(err, errInformerSyncTimeout) {
+			s.recordTelemetry(domainName, scope, 0, err, false, 0, nil, 0, 0, 0, true, 0)
+		}
 		return nil, err
 	}
 	cacheKey := s.cacheKey(domainName, scope)
@@ -187,6 +213,35 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 		return nil, err
 	}
 	return value.(*refresh.Snapshot), nil
+}
+
+func (s *Service) waitForInformerSync(ctx context.Context) error {
+	if s == nil || s.informerHub == nil || s.informerHub.HasSynced(ctx) {
+		return nil
+	}
+	timeout := s.informerSyncTimeout
+	if timeout <= 0 {
+		timeout = config.RefreshInformerSyncTimeout
+	}
+	// Bound the wait: a single informer whose watch can never complete (for
+	// example an RBAC-forbidden resource) keeps the factory-wide sync flag
+	// false forever, and the caller's context may carry no deadline.
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(config.RefreshInformerSyncPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("refresh informer caches not synced: %w", ctx.Err())
+		case <-deadline.C:
+			return fmt.Errorf("%w after %s; the cluster API may be unreachable or a watch may be unauthorized", errInformerSyncTimeout, timeout)
+		case <-ticker.C:
+			if s.informerHub.HasSynced(ctx) {
+				return nil
+			}
+		}
+	}
 }
 
 // ensurePermissions blocks snapshot builds when the current identity no longer has list access.

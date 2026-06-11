@@ -1,0 +1,117 @@
+/**
+ * frontend/src/modules/resource-grid/ResourceInventoryTable.test.tsx
+ *
+ * The wrapper must SURFACE the controller's error: a failed source renders a
+ * visible error banner — never just the generic "No data available" empty
+ * table (which is indistinguishable from a healthy empty result).
+ */
+import type React from 'react';
+import ReactDOM from 'react-dom/client';
+import { act } from 'react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const gridTablePropsRef: { current: any } = { current: null };
+
+vi.mock('@shared/components/tables/GridTable', () => ({
+  __esModule: true,
+  default: (props: any) => {
+    gridTablePropsRef.current = props;
+    return (
+      <div data-testid="grid-table">
+        {props.data.length === 0
+          ? (props.emptyMessage ?? 'No data available')
+          : props.data.map((row: { name: string }) => <div key={row.name}>{row.name}</div>)}
+      </div>
+    );
+  },
+}));
+
+vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
+  __esModule: true,
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+import ResourceInventoryTable from './ResourceInventoryTable';
+import {
+  resetResourceInventoryRowCache,
+  type ResourceInventorySourceState,
+} from './useResourceInventoryTable';
+
+interface Row {
+  name: string;
+}
+
+const columns = [{ key: 'name', header: 'Name', render: (row: Row) => row.name }];
+
+let container: HTMLDivElement;
+let root: ReactDOM.Root;
+
+const src = (o: Partial<ResourceInventorySourceState<Row>>): ResourceInventorySourceState<Row> => ({
+  rows: [],
+  loading: false,
+  loaded: true,
+  error: null,
+  completeness: 'complete',
+  ...o,
+});
+
+const renderTable = (source: ResourceInventorySourceState<Row>) => {
+  act(() => {
+    root.render(
+      <ResourceInventoryTable<Row>
+        source={source}
+        gridTableProps={{ keyExtractor: (row: Row) => row.name }}
+        spinnerMessage="Loading..."
+        emptyMessage="No rows found"
+        columns={columns}
+      />
+    );
+  });
+};
+
+beforeAll(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+beforeEach(() => {
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = ReactDOM.createRoot(container);
+  gridTablePropsRef.current = null;
+  resetResourceInventoryRowCache();
+});
+
+afterEach(() => {
+  act(() => {
+    root.unmount();
+  });
+  container.remove();
+});
+
+describe('ResourceInventoryTable error surface', () => {
+  it('renders the errored empty state without any in-table banner', () => {
+    // Error details belong to the refresh error toasts; the table only
+    // distinguishes an errored empty from a genuine empty.
+    renderTable(src({ error: 'pods is forbidden: User cannot list resource' }));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain('Unable to load data');
+    expect(container.textContent).not.toContain('No data available');
+  });
+
+  it('does not show the settled-empty message while errored', () => {
+    renderTable(src({ error: 'boom' }));
+    expect(container.textContent).not.toContain('No rows found');
+  });
+
+  it('shows no banner on a healthy result', () => {
+    renderTable(src({ rows: [{ name: 'row-1' }] }));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain('row-1');
+  });
+
+  it('keeps rows visible when an error arrives with rows present', () => {
+    renderTable(src({ rows: [{ name: 'row-1' }], error: 'refresh failed' }));
+    expect(container.textContent).toContain('row-1');
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+});

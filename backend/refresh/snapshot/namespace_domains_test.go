@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -18,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -57,9 +59,9 @@ func TestNamespaceConfigBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceConfigSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 2)
+	require.Len(t, payload.Rows, 2)
 	require.Equal(t, []string{"ConfigMap", "Secret"}, payload.Kinds)
-	for _, entry := range payload.Resources {
+	for _, entry := range payload.Rows {
 		require.NotEmpty(t, entry.Age)
 	}
 }
@@ -99,9 +101,56 @@ func TestNamespaceConfigBuilderHonorsRuntimeAllowedResources(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceConfigSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 1)
-	require.Equal(t, "Secret", payload.Resources[0].Kind)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "Secret", payload.Rows[0].Kind)
 	require.Equal(t, []string{"Secret"}, payload.Kinds)
+}
+
+func TestNamespaceConfigBuilderQueryReportsPartialAllowedResources(t *testing.T) {
+	now := time.Now()
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "settings",
+			Namespace:         "default",
+			ResourceVersion:   "35",
+			CreationTimestamp: metav1.NewTime(now.Add(-45 * time.Minute)),
+		},
+		Data: map[string]string{"foo": "bar"},
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "creds",
+			Namespace:         "default",
+			ResourceVersion:   "36",
+			CreationTimestamp: metav1.NewTime(now.Add(-30 * time.Minute)),
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{"user": []byte("alice")},
+	}
+	builder := &NamespaceConfigBuilder{
+		configMaps: testsupport.NewConfigMapLister(t, configMap),
+		secrets:    testsupport.NewSecretLister(t, secret),
+	}
+	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceConfigDomainName, domainpermissions.AllowedResources{
+		"core/configmaps": false,
+		"core/secrets":    true,
+	})
+
+	snapshot, err := builder.Build(ctx, "cluster-a|namespace:default?limit=10")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceConfigSnapshot)
+	require.False(t, payload.TotalIsExact)
+	require.False(t, payload.FacetsExact)
+	require.Len(t, payload.Issues, 1)
+	require.Equal(t, "ConfigMap", payload.Issues[0].Kind)
+	require.Contains(t, payload.Issues[0].Message, "partial")
+
+	secretOnly, err := builder.Build(ctx, "cluster-a|namespace:default?limit=10&kinds=Secret")
+	require.NoError(t, err)
+	secretOnlyPayload := secretOnly.Payload.(NamespaceConfigSnapshot)
+	require.True(t, secretOnlyPayload.TotalIsExact)
+	require.True(t, secretOnlyPayload.FacetsExact)
+	require.Empty(t, secretOnlyPayload.Issues)
 }
 
 func TestNamespaceConfigBuilderAllNamespaces(t *testing.T) {
@@ -160,11 +209,11 @@ func TestNamespaceConfigBuilderAllNamespaces(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceConfigSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 4)
+	require.Len(t, payload.Rows, 4)
 	require.Equal(t, []string{"ConfigMap", "Secret"}, payload.Kinds)
 
 	namespaces := make(map[string]struct{})
-	for _, entry := range payload.Resources {
+	for _, entry := range payload.Rows {
 		require.NotEmpty(t, entry.Namespace)
 		require.NotEmpty(t, entry.Age)
 		namespaces[entry.Namespace] = struct{}{}
@@ -204,10 +253,10 @@ func TestNamespaceConfigBuilderStableOrdering(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceConfigSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 2)
+	require.Len(t, payload.Rows, 2)
 	require.Equal(t, []string{"ConfigMap", "Secret"}, []string{
-		payload.Resources[0].Kind,
-		payload.Resources[1].Kind,
+		payload.Rows[0].Kind,
+		payload.Rows[1].Kind,
 	})
 }
 
@@ -248,9 +297,9 @@ func TestNamespaceEventsBuilderUsesEventTimestampOrdering(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceEventsSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Events, 2)
-	require.Equal(t, "event-a", payload.Events[0].Name)
-	require.Equal(t, "event-b", payload.Events[1].Name)
+	require.Len(t, payload.Rows, 2)
+	require.Equal(t, "event-a", payload.Rows[0].Name)
+	require.Equal(t, "event-b", payload.Rows[1].Name)
 }
 
 func TestNamespaceNetworkBuilder(t *testing.T) {
@@ -335,12 +384,12 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceNetworkSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 4)
+	require.Len(t, payload.Rows, 4)
 	require.Equal(t, []string{"EndpointSlice", "Ingress", "NetworkPolicy", "Service"}, payload.Kinds)
-	endpointSliceSummary, ok := findNetworkSummary(payload.Resources, "EndpointSlice", "api-abcde")
+	endpointSliceSummary, ok := findNetworkSummary(payload.Rows, "EndpointSlice", "api-abcde")
 	require.True(t, ok)
 	require.Equal(t, "default", endpointSliceSummary.Namespace)
-	for _, entry := range payload.Resources {
+	for _, entry := range payload.Rows {
 		require.NotEmpty(t, entry.Age)
 	}
 }
@@ -432,11 +481,11 @@ func TestNamespaceNetworkBuilderAllNamespaces(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceNetworkSnapshot)
 	require.True(t, ok)
-	require.True(t, len(payload.Resources) >= 4)
+	require.True(t, len(payload.Rows) >= 4)
 	require.Equal(t, []string{"EndpointSlice", "Ingress", "NetworkPolicy", "Service"}, payload.Kinds)
 
 	namespaces := make(map[string]struct{})
-	for _, entry := range payload.Resources {
+	for _, entry := range payload.Rows {
 		require.NotEmpty(t, entry.Namespace)
 		namespaces[entry.Namespace] = struct{}{}
 	}
@@ -479,9 +528,9 @@ func TestNamespaceStorageBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceStorageSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 1)
+	require.Len(t, payload.Rows, 1)
 
-	entry := payload.Resources[0]
+	entry := payload.Rows[0]
 	require.Equal(t, "PersistentVolumeClaim", entry.Kind)
 	require.Equal(t, "2Gi", entry.Capacity)
 	require.Equal(t, string(corev1.ClaimBound), entry.Status)
@@ -523,10 +572,10 @@ func TestNamespaceStorageBuilderAllNamespaces(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceStorageSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 2)
+	require.Len(t, payload.Rows, 2)
 
 	namespaces := make(map[string]struct{})
-	for _, entry := range payload.Resources {
+	for _, entry := range payload.Rows {
 		require.NotEmpty(t, entry.Namespace)
 		namespaces[entry.Namespace] = struct{}{}
 	}
@@ -587,15 +636,15 @@ func TestNamespaceQuotasBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceQuotasSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 3)
+	require.Len(t, payload.Rows, 3)
 	require.Equal(t, []string{"LimitRange", "PodDisruptionBudget", "ResourceQuota"}, payload.Kinds)
-	for _, summary := range payload.Resources {
+	for _, summary := range payload.Rows {
 		require.NotEmpty(t, summary.Age)
 	}
 	var pdbSummary *QuotaSummary
-	for i := range payload.Resources {
-		if payload.Resources[i].Kind == "PodDisruptionBudget" {
-			pdbSummary = &payload.Resources[i]
+	for i := range payload.Rows {
+		if payload.Rows[i].Kind == "PodDisruptionBudget" {
+			pdbSummary = &payload.Rows[i]
 			break
 		}
 	}
@@ -660,11 +709,11 @@ func TestNamespaceQuotasBuilderAllNamespaces(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceQuotasSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 4)
+	require.Len(t, payload.Rows, 4)
 	require.Equal(t, []string{"LimitRange", "PodDisruptionBudget", "ResourceQuota"}, payload.Kinds)
 
 	namespaces := make(map[string]struct{})
-	for _, entry := range payload.Resources {
+	for _, entry := range payload.Rows {
 		require.NotEmpty(t, entry.Namespace)
 		namespaces[entry.Namespace] = struct{}{}
 	}
@@ -701,10 +750,10 @@ func TestNamespaceAutoscalingBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceAutoscalingSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 1)
+	require.Len(t, payload.Rows, 1)
 	require.Equal(t, []string{"HorizontalPodAutoscaler"}, payload.Kinds)
 
-	entry := payload.Resources[0]
+	entry := payload.Rows[0]
 	require.Equal(t, "HorizontalPodAutoscaler", entry.Kind)
 	require.Equal(t, "Deployment/api", entry.Target)
 	require.Equal(t, int32(2), entry.Current)
@@ -759,11 +808,11 @@ func TestNamespaceAutoscalingBuilderAllNamespaces(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceAutoscalingSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 2)
+	require.Len(t, payload.Rows, 2)
 	require.Equal(t, []string{"HorizontalPodAutoscaler"}, payload.Kinds)
 
 	namespaces := make(map[string]struct{})
-	for _, entry := range payload.Resources {
+	for _, entry := range payload.Rows {
 		require.NotEmpty(t, entry.Namespace)
 		require.NotEmpty(t, entry.Age)
 		namespaces[entry.Namespace] = struct{}{}
@@ -824,14 +873,14 @@ func TestNamespaceEventsBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceEventsSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Events, 2)
+	require.Len(t, payload.Rows, 2)
 
-	first := payload.Events[0]
+	first := payload.Rows[0]
 	require.Equal(t, "event-new", first.Name)
 	require.Equal(t, "Pod/api-0", first.Object)
 	require.Equal(t, "scheduler", first.Source)
 
-	second := payload.Events[1]
+	second := payload.Rows[1]
 	require.Equal(t, "event-old", second.Name)
 	require.Contains(t, second.Source, "kubelet")
 	require.Equal(t, "Pod/api-0", second.Object)
@@ -893,10 +942,10 @@ func TestNamespaceEventsBuilderAllNamespaces(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceEventsSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Events, 2)
+	require.Len(t, payload.Rows, 2)
 
 	namespaces := map[string]struct{}{}
-	for _, evt := range payload.Events {
+	for _, evt := range payload.Rows {
 		require.NotEmpty(t, evt.Namespace)
 		namespaces[evt.Namespace] = struct{}{}
 	}
@@ -951,11 +1000,11 @@ func TestNamespaceRBACBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceRBACSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 3)
+	require.Len(t, payload.Rows, 3)
 	require.Equal(t, []string{"Role", "RoleBinding", "ServiceAccount"}, payload.Kinds)
 
 	resources := map[string]RBACSummary{}
-	for _, summary := range payload.Resources {
+	for _, summary := range payload.Rows {
 		resources[summary.Kind] = summary
 	}
 
@@ -1015,15 +1064,65 @@ func TestNamespaceRBACBuilderAllNamespaces(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceRBACSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 4)
+	require.Len(t, payload.Rows, 4)
 	require.Equal(t, []string{"Role", "RoleBinding", "ServiceAccount"}, payload.Kinds)
 
 	namespaces := make(map[string]struct{})
-	for _, entry := range payload.Resources {
+	for _, entry := range payload.Rows {
 		require.NotEmpty(t, entry.Namespace)
 		namespaces[entry.Namespace] = struct{}{}
 	}
 	require.True(t, len(namespaces) >= 2)
+}
+
+func TestNamespaceRBACBuilderAllNamespacesCapsLargeSnapshots(t *testing.T) {
+	roles := make([]*rbacv1.Role, 0, config.SnapshotNamespaceRBACEntryLimit+1)
+	for i := 0; i < config.SnapshotNamespaceRBACEntryLimit+1; i++ {
+		roles = append(roles, &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            fmt.Sprintf("role-%04d", i),
+				Namespace:       fmt.Sprintf("ns-%04d", i),
+				ResourceVersion: "1",
+			},
+		})
+	}
+
+	builder := &NamespaceRBACBuilder{
+		roleLister: testsupport.NewRoleLister(t, roles...),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:all")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceRBACSnapshot)
+	require.Len(t, payload.Rows, config.SnapshotNamespaceRBACEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotNamespaceRBACEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "RBAC resources")
+}
+
+func TestNamespaceRBACBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T) {
+	roles := make([]*rbacv1.Role, 0, config.SnapshotNamespaceRBACEntryLimit+1)
+	for i := 0; i < config.SnapshotNamespaceRBACEntryLimit+1; i++ {
+		roles = append(roles, &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            fmt.Sprintf("role-%04d", i),
+				Namespace:       "team-a",
+				ResourceVersion: "1",
+			},
+		})
+	}
+
+	builder := &NamespaceRBACBuilder{
+		roleLister: testsupport.NewRoleLister(t, roles...),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceRBACSnapshot)
+	require.Len(t, payload.Rows, config.SnapshotNamespaceRBACEntryLimit)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotNamespaceRBACEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "RBAC resources")
 }
 
 func TestNamespaceRBACBuilderStableOrdering(t *testing.T) {
@@ -1072,10 +1171,10 @@ func TestNamespaceRBACBuilderStableOrdering(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceRBACSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 4)
+	require.Len(t, payload.Rows, 4)
 
 	var ordered []string
-	for _, entry := range payload.Resources {
+	for _, entry := range payload.Rows {
 		ordered = append(ordered, fmt.Sprintf("%s:%s:%s", entry.Namespace, entry.Kind, entry.Name))
 	}
 
@@ -1131,10 +1230,12 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 		},
 	}
 
+	collectedAt := time.Unix(1000, 0)
 	provider := &workloadMetricsProvider{
 		pods: map[string]metrics.PodUsage{
 			"default/web-abc123": {CPUUsageMilli: 80, MemoryUsageBytes: 150 * 1024 * 1024},
 		},
+		metadata: metrics.Metadata{CollectedAt: collectedAt},
 	}
 
 	builder := &NamespaceWorkloadsBuilder{
@@ -1150,14 +1251,15 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	require.Equal(t, namespaceWorkloadsDomainName, snapshot.Domain)
+	require.Equal(t, snapshotVersionWithDynamicRevision(10, fmt.Sprint(collectedAt.UnixNano())), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Workloads, 1)
+	require.Len(t, payload.Rows, 1)
 	require.Equal(t, []string{"Deployment"}, payload.Kinds)
 
 	summaries := map[string]WorkloadSummary{}
-	for _, summary := range payload.Workloads {
+	for _, summary := range payload.Rows {
 		summaries[summary.Kind+"-"+summary.Name] = summary
 	}
 
@@ -1170,6 +1272,38 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 	require.False(t, deploySummary.PortForwardAvailable)
 	require.NotEmpty(t, deploySummary.Age)
 
+}
+
+func TestNamespaceWorkloadsBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T) {
+	deployments := make([]*appsv1.Deployment, 0, config.SnapshotNamespaceWorkloadsEntryLimit+1)
+	for i := 0; i < config.SnapshotNamespaceWorkloadsEntryLimit+1; i++ {
+		deployments = append(deployments, &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            fmt.Sprintf("deploy-%04d", i),
+				Namespace:       "team-a",
+				ResourceVersion: "1",
+			},
+		})
+	}
+
+	builder := &NamespaceWorkloadsBuilder{
+		podLister:        testsupport.NewPodLister(t),
+		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
+		statefulLister:   testsupport.NewStatefulSetLister(t),
+		daemonLister:     testsupport.NewDaemonSetLister(t),
+		jobLister:        testsupport.NewJobLister(t),
+		cronJobLister:    testsupport.NewCronJobLister(t),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
+	require.Len(t, payload.Rows, config.SnapshotNamespaceWorkloadsEntryLimit)
+	require.Equal(t, config.SnapshotNamespaceWorkloadsEntryLimit+1, payload.Total)
+	require.False(t, payload.TotalIsExact)
+	require.True(t, snapshot.Stats.Truncated)
+	require.Equal(t, config.SnapshotNamespaceWorkloadsEntryLimit+1, snapshot.Stats.TotalItems)
+	require.Contains(t, snapshot.Stats.Warnings[0], "workloads")
 }
 
 func TestNamespaceWorkloadsBuilderMarksHPAManagedByFullGVK(t *testing.T) {
@@ -1220,24 +1354,24 @@ func TestNamespaceWorkloadsBuilderMarksHPAManagedByFullGVK(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
-	require.Len(t, payload.Workloads, 1)
-	require.NotNil(t, payload.Workloads[0].HPAManaged)
-	require.False(t, *payload.Workloads[0].HPAManaged)
+	require.Len(t, payload.Rows, 1)
+	require.NotNil(t, payload.Rows[0].HPAManaged)
+	require.False(t, *payload.Rows[0].HPAManaged)
 
 	builder.hpaLister = nil
 	snapshot, err = builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	payload = snapshot.Payload.(NamespaceWorkloadsSnapshot)
-	require.Len(t, payload.Workloads, 1)
-	require.Nil(t, payload.Workloads[0].HPAManaged)
+	require.Len(t, payload.Rows, 1)
+	require.Nil(t, payload.Rows[0].HPAManaged)
 
 	builder.hpaLister = testsupport.NewHorizontalPodAutoscalerLister(t, customTargetHPA, appsTargetHPA)
 	snapshot, err = builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	payload = snapshot.Payload.(NamespaceWorkloadsSnapshot)
-	require.Len(t, payload.Workloads, 1)
-	require.NotNil(t, payload.Workloads[0].HPAManaged)
-	require.True(t, *payload.Workloads[0].HPAManaged)
+	require.Len(t, payload.Rows, 1)
+	require.NotNil(t, payload.Rows[0].HPAManaged)
+	require.True(t, *payload.Rows[0].HPAManaged)
 }
 
 func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {
@@ -1339,15 +1473,272 @@ func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Workloads, 2)
+	require.Len(t, payload.Rows, 2)
 	require.Equal(t, []string{"Deployment"}, payload.Kinds)
 
 	namespaces := map[string]struct{}{}
-	for _, summary := range payload.Workloads {
+	for _, summary := range payload.Rows {
 		require.NotEmpty(t, summary.Namespace)
 		namespaces[summary.Namespace] = struct{}{}
 	}
 	require.Len(t, namespaces, 2)
+}
+
+func TestNamespaceWorkloadsBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T) {
+	now := time.Now()
+	replicas := int32(1)
+	deployments := []*appsv1.Deployment{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "alpha",
+				Namespace:         "team-a",
+				ResourceVersion:   "101",
+				CreationTimestamp: metav1.NewTime(now.Add(-30 * time.Minute)),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "alpha"}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "bravo",
+				Namespace:         "team-b",
+				ResourceVersion:   "102",
+				CreationTimestamp: metav1.NewTime(now.Add(-20 * time.Minute)),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "bravo"}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "charlie",
+				Namespace:         "team-b",
+				ResourceVersion:   "103",
+				CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "charlie"}},
+			},
+		},
+	}
+	ownerController := true
+	pods := []*corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "alpha-pod",
+				Namespace: "team-a",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "Deployment",
+					Name:       "alpha",
+					Controller: &ownerController,
+				}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "bravo-pod",
+				Namespace: "team-b",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "Deployment",
+					Name:       "bravo",
+					Controller: &ownerController,
+				}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "charlie-pod",
+				Namespace: "team-b",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "Deployment",
+					Name:       "charlie",
+					Controller: &ownerController,
+				}},
+			},
+		},
+	}
+
+	builder := &NamespaceWorkloadsBuilder{
+		podLister:        testsupport.NewPodLister(t, pods...),
+		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
+		statefulLister:   testsupport.NewStatefulSetLister(t),
+		daemonLister:     testsupport.NewDaemonSetLister(t),
+		jobLister:        testsupport.NewJobLister(t),
+		cronJobLister:    testsupport.NewCronJobLister(t),
+		metrics: &workloadMetricsProvider{pods: map[string]metrics.PodUsage{
+			"team-a/alpha-pod":   {MemoryUsageBytes: 64 * 1024 * 1024},
+			"team-b/bravo-pod":   {MemoryUsageBytes: 512 * 1024 * 1024},
+			"team-b/charlie-pod": {MemoryUsageBytes: 128 * 1024 * 1024},
+		}},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=memory&sortDirection=desc&limit=1")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
+	require.Equal(t, 2, payload.Total)
+	require.True(t, payload.TotalIsExact)
+	require.Equal(t, []string{"Deployment"}, payload.Kinds)
+	require.Equal(t, []string{"team-b"}, payload.Namespaces)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "bravo", payload.Rows[0].Name)
+	require.NotEmpty(t, payload.Continue)
+
+	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=memory&sortDirection=desc&limit=1&continue="+payload.Continue)
+	require.NoError(t, err)
+	nextPayload := next.Payload.(NamespaceWorkloadsSnapshot)
+	require.Len(t, nextPayload.Rows, 1)
+	require.Equal(t, "charlie", nextPayload.Rows[0].Name)
+	require.Empty(t, nextPayload.Continue)
+}
+
+func TestNamespaceWorkloadsBuilderMetricCursorContinuesAcrossMetricsRefresh(t *testing.T) {
+	now := time.Now()
+	replicas := int32(1)
+	deployments := []*appsv1.Deployment{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "bravo",
+				Namespace:         "team-b",
+				ResourceVersion:   "102",
+				CreationTimestamp: metav1.NewTime(now.Add(-20 * time.Minute)),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "bravo"}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "charlie",
+				Namespace:         "team-b",
+				ResourceVersion:   "103",
+				CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "charlie"}},
+			},
+		},
+	}
+	ownerController := true
+	pods := []*corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "bravo-pod",
+				Namespace: "team-b",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "Deployment",
+					Name:       "bravo",
+					Controller: &ownerController,
+				}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "charlie-pod",
+				Namespace: "team-b",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "Deployment",
+					Name:       "charlie",
+					Controller: &ownerController,
+				}},
+			},
+		},
+	}
+
+	provider := &workloadMetricsProvider{
+		pods: map[string]metrics.PodUsage{
+			"team-b/bravo-pod":   {MemoryUsageBytes: 512 * 1024 * 1024},
+			"team-b/charlie-pod": {MemoryUsageBytes: 128 * 1024 * 1024},
+		},
+		metadata: metrics.Metadata{CollectedAt: now},
+	}
+	builder := &NamespaceWorkloadsBuilder{
+		podLister:        testsupport.NewPodLister(t, pods...),
+		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
+		statefulLister:   testsupport.NewStatefulSetLister(t),
+		daemonLister:     testsupport.NewDaemonSetLister(t),
+		jobLister:        testsupport.NewJobLister(t),
+		cronJobLister:    testsupport.NewCronJobLister(t),
+		metrics:          provider,
+	}
+
+	first, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=memory&sortDirection=desc&limit=1")
+	require.NoError(t, err)
+	firstPayload := first.Payload.(NamespaceWorkloadsSnapshot)
+	require.Len(t, firstPayload.Rows, 1)
+	require.Equal(t, "bravo", firstPayload.Rows[0].Name)
+	require.NotEmpty(t, firstPayload.Continue)
+
+	provider.pods = map[string]metrics.PodUsage{
+		"team-b/bravo-pod":   {MemoryUsageBytes: 640 * 1024 * 1024},
+		"team-b/charlie-pod": {MemoryUsageBytes: 256 * 1024 * 1024},
+	}
+	provider.metadata = metrics.Metadata{CollectedAt: now.Add(5 * time.Second)}
+
+	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=memory&sortDirection=desc&limit=1&continue="+firstPayload.Continue)
+	require.NoError(t, err)
+	nextPayload := next.Payload.(NamespaceWorkloadsSnapshot)
+	require.False(t, nextPayload.CursorInvalid)
+	require.Len(t, nextPayload.Rows, 1)
+	require.Equal(t, "charlie", nextPayload.Rows[0].Name)
+	require.Empty(t, nextPayload.Continue)
+}
+
+func TestNamespaceWorkloadsQueryMarksDeniedKindsPartial(t *testing.T) {
+	now := time.Now()
+	replicas := int32(1)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "api",
+			Namespace:         "team-a",
+			ResourceVersion:   "101",
+			CreationTimestamp: metav1.NewTime(now.Add(-20 * time.Minute)),
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api"}},
+		},
+	}
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "migration",
+			Namespace:         "team-a",
+			ResourceVersion:   "102",
+			CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+		},
+	}
+	builder := &NamespaceWorkloadsBuilder{
+		podLister:        testsupport.NewPodLister(t),
+		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
+		statefulLister:   testsupport.NewStatefulSetLister(t),
+		daemonLister:     testsupport.NewDaemonSetLister(t),
+		jobLister:        testsupport.NewJobLister(t, job),
+		cronJobLister:    testsupport.NewCronJobLister(t),
+	}
+	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceWorkloadsDomainName, domainpermissions.AllowedResources{
+		"core/pods":         true,
+		"apps/deployments":  true,
+		"apps/statefulsets": true,
+		"apps/daemonsets":   true,
+		"batch/jobs":        false,
+		"batch/cronjobs":    true,
+	})
+
+	snapshot, err := builder.Build(ctx, "cluster-a|namespace:all?limit=10")
+	require.NoError(t, err)
+	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
+	require.False(t, payload.TotalIsExact)
+	require.False(t, payload.FacetsExact)
+	require.Len(t, payload.Issues, 1)
+	require.Equal(t, "Job", payload.Issues[0].Kind)
+	require.Contains(t, payload.Issues[0].Message, "partial")
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "Deployment", payload.Rows[0].Kind)
 }
 
 func mustQuantity(t testing.TB, value string) resource.Quantity {
@@ -1369,7 +1760,8 @@ func findNetworkSummary(resources []NetworkSummary, kind, name string) (NetworkS
 }
 
 type workloadMetricsProvider struct {
-	pods map[string]metrics.PodUsage
+	pods     map[string]metrics.PodUsage
+	metadata metrics.Metadata
 }
 
 func (f *workloadMetricsProvider) LatestNodeUsage() map[string]metrics.NodeUsage {
@@ -1381,5 +1773,5 @@ func (f *workloadMetricsProvider) LatestPodUsage() map[string]metrics.PodUsage {
 }
 
 func (f *workloadMetricsProvider) Metadata() metrics.Metadata {
-	return metrics.Metadata{}
+	return f.metadata
 }

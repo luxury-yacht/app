@@ -15,6 +15,7 @@ import GridTableBody from '@shared/components/tables/GridTableBody';
 import GridTableLayout from '@shared/components/tables/GridTableLayout';
 import GridTableHeader from '@shared/components/tables/GridTableHeader';
 import GridTableInitialLoading from '@shared/components/tables/GridTableInitialLoading';
+import GridTablePagination from '@shared/components/tables/GridTablePagination';
 import type { GridTableProps } from '@shared/components/tables/GridTable.types';
 import { useGridTableController } from '@shared/components/tables/hooks/useGridTableController';
 
@@ -44,10 +45,13 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     useShortNames = false,
     emptyMessage = 'No data available',
     hasMore = false,
+    hasPrevious = false,
     isRequestingMore = false,
     loadMoreLabel = 'Load more',
+    previousPageLabel = 'Previous page',
     showLoadMoreButton = true,
     showPaginationStatus = true,
+    paginationControls,
     allowHorizontalOverflow = true,
     showTrailingColumnBoundary = true,
     keyExtractor,
@@ -80,6 +84,7 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     resolvedPaginationStatus,
     loadMoreSentinelRef,
     handleManualLoadMore,
+    handleManualLoadPrevious,
     showLoadingOverlay,
     loadingOverlayMessage,
     hasActiveFilters,
@@ -125,13 +130,7 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       virtualOffset={virtualOffset}
       renderRowContent={renderRowContent}
       paginationEnabled={paginationEnabled}
-      paginationStatus={resolvedPaginationStatus}
-      showPaginationStatus={showPaginationStatus}
-      showLoadMoreButton={showLoadMoreButton}
-      loadMoreLabel={loadMoreLabel}
       hasMore={hasMore}
-      isRequestingMore={isRequestingMore}
-      onManualLoadMore={handleManualLoadMore}
       sentinelRef={loadMoreSentinelRef}
       onWrapperFocus={handleWrapperFocus}
       onWrapperBlur={handleWrapperBlur}
@@ -144,6 +143,22 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       onClearFilters={onClearFilters}
     />
   );
+
+  const footerNode = paginationEnabled ? (
+    <GridTablePagination
+      hasMore={hasMore}
+      hasPrevious={hasPrevious}
+      isRequestingMore={isRequestingMore}
+      showLoadMoreButton={showLoadMoreButton}
+      showPaginationStatus={showPaginationStatus}
+      paginationControls={paginationControls}
+      loadMoreLabel={loadMoreLabel}
+      previousPageLabel={previousPageLabel}
+      paginationStatus={resolvedPaginationStatus}
+      onManualLoadMore={handleManualLoadMore}
+      onManualLoadPrevious={handleManualLoadPrevious}
+    />
+  ) : null;
 
   const loadingOverlayNode = showLoadingOverlay ? (
     <div className="gridtable-loading-overlay" role="status" aria-live="polite">
@@ -170,6 +185,7 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       filters={filtersNode}
       header={headerNode}
       body={bodyNode}
+      footer={footerNode}
       contextMenu={
         <>
           {contextMenuNode}
