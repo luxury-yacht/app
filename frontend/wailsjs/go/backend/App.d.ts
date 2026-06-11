@@ -16,6 +16,8 @@ export function ApplyTheme(arg1:string):Promise<void>;
 
 export function CancelDrainNodeJob(arg1:string,arg2:string):Promise<void>;
 
+export function CheckObjectYamlOwnership(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLOwnershipCheckResponse>;
+
 export function ClearAllSSRRCaches():Promise<void>;
 
 export function ClearAppLogs():Promise<void>;

@@ -18,6 +18,10 @@ export function CancelDrainNodeJob(arg1, arg2) {
   return window['go']['backend']['App']['CancelDrainNodeJob'](arg1, arg2);
 }
 
+export function CheckObjectYamlOwnership(arg1, arg2) {
+  return window['go']['backend']['App']['CheckObjectYamlOwnership'](arg1, arg2);
+}
+
 export function ClearAllSSRRCaches() {
   return window['go']['backend']['App']['ClearAllSSRRCaches']();
 }

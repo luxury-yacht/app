@@ -45,6 +45,20 @@
   a table's footer still overrides it for that table. The dropdown offers the same values as
   every pagination footer — they share one list in the app.
 
+### Added
+
+- The YAML editor now warns before a save takes ownership of fields that are
+  managed by another controller. When your edit changes a field owned by an
+  operator, controller, Helm, or a GitOps tool, a confirmation dialog lists
+  each field and its current manager — those managers may revert or fight the
+  change — and offers three choices: save anyway, keep editing, or cancel the
+  edit entirely (discarding the draft). Fields owned by kubectl or
+  by this app's own previous edits don't prompt (those are routine human
+  edits), and the check never blocks saving on clusters where it can't run.
+  Saving still uses the same kubectl-edit-style patch as before; the warning
+  is computed with a server-side-apply dry run, which changes nothing on the
+  cluster.
+
 ### Fixed
 
 - Cut, Copy, Paste, and Select All now work correctly in the YAML editor (and

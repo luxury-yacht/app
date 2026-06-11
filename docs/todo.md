@@ -1,8 +1,5 @@
 - Can't copy data from errors. Need to be able to select/copy and also need a "copy error" button
 
-- YAML editor
-  - Talk about SSA vs CSA and potential conflicts
-
 - Missing permissions in Workloads Pods tab
 - Missing permissions in Object Details actions menu for pods
 

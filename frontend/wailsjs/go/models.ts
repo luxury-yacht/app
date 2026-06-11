@@ -516,6 +516,53 @@ export namespace backend {
 	        this.resourceVersion = source["resourceVersion"];
 	    }
 	}
+	export class ObjectYAMLOwnershipConflict {
+	    field: string;
+	    manager: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ObjectYAMLOwnershipConflict(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.field = source["field"];
+	        this.manager = source["manager"];
+	        this.message = source["message"];
+	    }
+	}
+	export class ObjectYAMLOwnershipCheckResponse {
+	    conflicts: ObjectYAMLOwnershipConflict[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ObjectYAMLOwnershipCheckResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.conflicts = this.convertValues(source["conflicts"], ObjectYAMLOwnershipConflict);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class ObjectYAMLReloadMergeRequest {
 	    baseYAML: string;
 	    draftYAML: string;
