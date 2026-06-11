@@ -81,8 +81,6 @@ export const getUserPermission = (
 // Initialization
 // ---------------------------------------------------------------------------
 
-let initialized = false;
-
 export const initializeUserPermissionsBootstrap = (
   clusterId?: string | null,
   options: { ready?: boolean } = {}
@@ -91,22 +89,23 @@ export const initializeUserPermissionsBootstrap = (
   const ready = options.ready ?? true;
   setCurrentClusterId(cid);
 
-  if (!cid || !ready) {
+  if (!cid) {
     resetPermissionStore();
-    if (!cid) {
-      initialized = false;
-    }
     return;
   }
 
-  if (initialized) {
-    // Cluster changed — re-query cluster permissions.
-    initializePermissionStore(cid);
+  if (!ready) {
+    // Defer querying until the cluster can answer, but keep existing
+    // permission state: a not-ready ACTIVE cluster must not invalidate
+    // other clusters' (or other namespaces') entries, and one-shot
+    // consumers such as open object panels have no re-query path after
+    // a wipe. Stale-allowed is safe — the backend re-validates every
+    // action — and the store re-queries on the cluster:lifecycle ready
+    // event and the periodic TTL refresh.
     return;
   }
 
   initializePermissionStore(cid);
-  initialized = true;
 };
 
 // ---------------------------------------------------------------------------
@@ -116,5 +115,4 @@ export const initializeUserPermissionsBootstrap = (
 /** @internal Used by bootstrap.test.ts via dynamic import */
 export const __resetCapabilitiesStateForTests = (): void => {
   resetPermissionStore();
-  initialized = false;
 };

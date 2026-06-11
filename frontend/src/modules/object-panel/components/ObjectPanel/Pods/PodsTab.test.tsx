@@ -22,6 +22,8 @@ const {
   requestRefreshDomainStateMock,
   useGridTablePersistenceMock,
   clusterMetricsRef,
+  queryNamespacesPermissionsMock,
+  POD_PERMISSIONS_SENTINEL,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   mockOpenWithObject: vi.fn(),
@@ -31,6 +33,8 @@ const {
   requestRefreshDomainStateMock: vi.fn(),
   useGridTablePersistenceMock: vi.fn(),
   clusterMetricsRef: { current: null as any },
+  queryNamespacesPermissionsMock: vi.fn(),
+  POD_PERMISSIONS_SENTINEL: { feature: 'namespace-pods', specs: [] },
 }));
 
 const PANEL_CLUSTER_ID = 'panel-cluster-A';
@@ -160,8 +164,15 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 
 vi.mock('@/core/capabilities', () => ({
   getPermissionKey: (kind: string, verb: string, ns?: string) => `${kind}:${verb}:${ns ?? ''}`,
-  queryNamespacesPermissions: vi.fn().mockResolvedValue(new Map()),
-  useUserPermissions: () => new Map(),
+  queryNamespacesPermissions: (...args: unknown[]) => queryNamespacesPermissionsMock(...args),
+  POD_PERMISSIONS: POD_PERMISSIONS_SENTINEL,
+  useUserPermissions: () => {
+    // Grant every permission so menu assertions exercise handler wiring,
+    // not permission state.
+    const map = new Map();
+    map.get = () => ({ allowed: true, pending: false });
+    return map;
+  },
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -241,6 +252,8 @@ describe('PodsTab (query-backed)', () => {
     requestRefreshDomainStateMock.mockReset();
     useTableSortMock.mockReset();
     useGridTablePersistenceMock.mockReset();
+    queryNamespacesPermissionsMock.mockReset();
+    queryNamespacesPermissionsMock.mockResolvedValue(undefined);
 
     useTableSortMock.mockImplementation((data: unknown[]) => ({
       sortedData: data,
@@ -375,6 +388,51 @@ describe('PodsTab (query-backed)', () => {
         version: 'v1',
       }),
       { initialTab: 'map' }
+    );
+  });
+
+  it('shows enabled Port Forward and Delete in the pod row context menu when permitted', async () => {
+    const pod = createPod({ name: 'api', namespace: 'team-a', portForwardAvailable: true });
+    mockQueryRows([pod]);
+
+    await renderPods();
+
+    const items = gridTablePropsRef.current.getCustomContextMenuItems(
+      gridTablePropsRef.current.data[0]
+    );
+    const portForwardItem = items.find(
+      (item: any) => item.actionId === OBJECT_ACTION_IDS.portForward
+    );
+    const deleteItem = items.find((item: any) => item.actionId === OBJECT_ACTION_IDS.delete);
+
+    expect(portForwardItem).toBeTruthy();
+    expect(portForwardItem.disabled).toBeFalsy();
+    expect(deleteItem).toBeTruthy();
+  });
+
+  it('shows Port Forward disabled when the pod has no forwardable ports', async () => {
+    const pod = createPod({ name: 'api', namespace: 'team-a', portForwardAvailable: false });
+    mockQueryRows([pod]);
+
+    await renderPods();
+
+    const portForwardItem = gridTablePropsRef.current
+      .getCustomContextMenuItems(gridTablePropsRef.current.data[0])
+      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.portForward);
+
+    expect(portForwardItem).toBeTruthy();
+    expect(portForwardItem.disabled).toBe(true);
+  });
+
+  it('queries pod permissions for the namespaces of visible pods using the pod cluster', async () => {
+    const pod = createPod({ name: 'api', namespace: 'team-a' });
+    mockQueryRows([pod]);
+
+    await renderPods();
+
+    expect(queryNamespacesPermissionsMock).toHaveBeenCalledWith(
+      [{ namespace: 'team-a', clusterId: PANEL_CLUSTER_ID }],
+      { specLists: [POD_PERMISSIONS_SENTINEL] }
     );
   });
 

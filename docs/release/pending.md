@@ -149,6 +149,27 @@
   fail the browser console shows the real status and message instead of an
   opaque "not allowed by Access-Control-Allow-Origin" error.
 
+- Pod action menus in the object panel no longer lose their permission-gated
+  entries. Three fixes: the Pods tab of a workload or node panel now offers the
+  full pod context menu — Port Forward and Delete appear there (with their
+  confirmation and port-forward dialogs) just like on the main Pods views,
+  instead of only Open/Map/Diff. An object opened into an existing panel tab
+  group (for example a pod opened from a workload's Pods tab) no longer reads
+  the group's first panel for its cluster/API identity — previously the pod's
+  actions menu checked pod permissions under the workload's API group, found
+  nothing, and silently dropped Delete while greying out Port Forward; this
+  also corrects every other place a grouped panel tab used the wrong panel's
+  identity. And a pod's Details actions menu no longer permanently loses Port
+  Forward and Delete after a cluster reconnects or the active cluster is
+  switched while connecting: any moment the selected cluster wasn't ready
+  erased the app's cached permission answers for every cluster, and open
+  panels never re-asked. The permission cache now survives reconnects, no
+  longer records a still-connecting cluster's "not active" responses as
+  denials (which blocked retries for two minutes), and re-checks a cluster's
+  namespaces the moment it becomes ready. The Pods tab also now checks pod
+  permissions for the namespaces of the pods it actually shows, so a node
+  panel's pods — which span many namespaces — get correct menus too.
+
 - The Helm view now loads as fast as every other view. It previously made live
   Kubernetes API calls through the Helm SDK on every load — one full client
   bootstrap and list call per namespace, plus a cluster-wide re-scan for every

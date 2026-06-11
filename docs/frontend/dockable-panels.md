@@ -18,6 +18,14 @@ cluster/object scoped.
   clusters or groups.
 - Transient unmounts such as cluster-tab switches should preserve object-panel
   refresh/cache state. Actual panel close is the cache-eviction boundary.
+- **Tab-group content renders in the group LEADER's React subtree.** The
+  leader renders every tab's captured children, so React context resolves
+  against the leader's tree, not the originating panel's. Any per-panel
+  context provider (e.g. `CurrentObjectPanelContext`) must wrap the children
+  passed INTO `DockablePanel` so the provider travels with the content.
+  Wrapping `DockablePanel` itself silently feeds grouped tabs the leader
+  panel's context (regression test:
+  `ObjectPanel.groupLeaderContext.test.tsx`).
 - Layout CSS and measured group geometry are part of behavior; do not remove
   geometry transfer without replacing it.
 
