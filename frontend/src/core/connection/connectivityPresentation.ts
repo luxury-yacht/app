@@ -80,18 +80,14 @@ export const buildConnectivityPresentation = ({
   }
 
   if (authState.hasError && authState.isRecovering) {
-    const attemptLabel =
-      authState.currentAttempt > 0 && authState.maxAttempts > 0
-        ? ` Attempt ${authState.currentAttempt} of ${authState.maxAttempts}.`
-        : '';
     const retryLabel =
       authState.secondsUntilRetry > 0
         ? ` Next retry in ${authState.secondsUntilRetry}s.`
-        : ' Retrying now.';
+        : ' Rechecking now.';
     return {
       status: 'degraded',
       summary: 'Retrying authentication',
-      detail: `${clusterLabel} is recovering from an authentication failure.${attemptLabel}${retryLabel}`,
+      detail: `${clusterLabel} is recovering from an authentication failure.${retryLabel}`,
     };
   }
 

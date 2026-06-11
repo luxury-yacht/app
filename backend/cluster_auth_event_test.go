@@ -230,8 +230,6 @@ func TestHandleClusterAuthRecoveryProgress_CarriesErrorClass(t *testing.T) {
 	}
 
 	app.handleClusterAuthRecoveryProgress("cluster-p", authstate.RecoveryProgress{
-		CurrentAttempt:    1,
-		MaxAttempts:       4,
 		SecondsUntilRetry: 10,
 		ErrorClass:        authstate.ErrorClassConnectivity,
 	})

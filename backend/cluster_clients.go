@@ -226,9 +226,6 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 		if a.clusterLifecycle != nil {
 			a.clusterLifecycle.Remove(id)
 		}
-		a.clusterAuthAutoRetryMu.Lock()
-		delete(a.clusterAuthAutoRetry, id)
-		a.clusterAuthAutoRetryMu.Unlock()
 	}
 
 	return nil
@@ -465,6 +462,7 @@ func (a *App) createClusterAuthManager(meta ClusterMeta) *authstate.Manager {
 		BackoffSchedule:           authstate.DefaultBackoffSchedule,
 		ClassifyError:             classifyRecoveryError,
 		ConnectivityRetryInterval: appconfig.ClusterAuthConnectivityRetryInterval,
+		SteadyRetryInterval:       appconfig.ClusterAuthSteadyRetryInterval,
 		OnStateChange: func(state authstate.State, reason string) {
 			a.handleClusterAuthStateChange(meta.ID, state, reason)
 		},

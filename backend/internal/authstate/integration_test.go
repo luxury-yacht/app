@@ -236,20 +236,15 @@ func TestManualRetryFromInvalid(t *testing.T) {
 	state, _ = manager.State()
 	require.Equal(t, StateValid, state, "should be Valid after manual retry")
 
-	// Verify we went through Recovering.
+	// TriggerRetry restarts the probe loop without touching the state: the
+	// settled invalid verdict holds until a probe result contradicts it, so
+	// the only transitions are Recovering → Invalid → Valid.
 	stateChangesMu.Lock()
 	transitions := append([]State(nil), stateChanges...)
 	stateChangesMu.Unlock()
 
-	// Find the sequence: should see Recovering (from initial), Invalid, Recovering (from retry), Valid.
-	var foundRecoveringAfterInvalid bool
-	for i := 0; i < len(transitions)-1; i++ {
-		if transitions[i] == StateInvalid && transitions[i+1] == StateRecovering {
-			foundRecoveringAfterInvalid = true
-			break
-		}
-	}
-	require.True(t, foundRecoveringAfterInvalid, "should transition from Invalid to Recovering on TriggerRetry")
+	require.Equal(t, []State{StateRecovering, StateInvalid, StateValid}, transitions,
+		"manual retry must not bounce the state through Recovering")
 }
 
 // TestConcurrentRequestsBlockedDuringRecovery tests that concurrent requests

@@ -467,10 +467,11 @@ const (
 	// ClusterAuthRecoveryProbeTimeout bounds a single auth recovery probe request.
 	ClusterAuthRecoveryProbeTimeout = 10 * time.Second
 
-	// ClusterAuthAutoRetryInterval is the minimum gap between automatic recovery
-	// retries for clusters whose auth state is invalid. This lets the app notice
-	// externally fixed credentials (e.g. a fresh SSO login) without user action.
-	ClusterAuthAutoRetryInterval = time.Minute
+	// ClusterAuthSteadyRetryInterval is the delay between recovery probes after
+	// the auth verdict has settled to invalid. The recovery loop never stops,
+	// so externally fixed credentials (e.g. a fresh SSO login) are noticed
+	// without user action.
+	ClusterAuthSteadyRetryInterval = time.Minute
 )
 
 // ClusterAuthRecoveryBackoffSchedule is the default delay schedule between auth recovery attempts.

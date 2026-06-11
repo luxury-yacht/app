@@ -77,8 +77,6 @@ let mockAuthState = {
   reason: '',
   clusterName: '',
   isRecovering: false,
-  currentAttempt: 0,
-  maxAttempts: 0,
   secondsUntilRetry: 0,
   errorClass: '' as const,
 };
@@ -270,8 +268,6 @@ describe('ClusterOverview', () => {
       reason: '',
       clusterName: '',
       isRecovering: false,
-      currentAttempt: 0,
-      maxAttempts: 0,
       secondsUntilRetry: 0,
       errorClass: '' as const,
     };

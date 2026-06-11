@@ -17,8 +17,6 @@ let mockAuthState: ClusterAuthState = {
   isRecovering: false,
   reason: '',
   clusterName: '',
-  currentAttempt: 0,
-  maxAttempts: 0,
   secondsUntilRetry: 0,
   errorClass: '',
 };
@@ -124,8 +122,6 @@ describe('ConnectivityStatus', () => {
       isRecovering: false,
       reason: '',
       clusterName: '',
-      currentAttempt: 0,
-      maxAttempts: 0,
       secondsUntilRetry: 0,
       errorClass: '',
     };
@@ -174,8 +170,6 @@ describe('ConnectivityStatus', () => {
       isRecovering: false,
       reason: 'token expired',
       clusterName: 'alpha',
-      currentAttempt: 0,
-      maxAttempts: 0,
       secondsUntilRetry: 0,
       errorClass: 'auth',
     };

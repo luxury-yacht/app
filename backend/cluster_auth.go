@@ -346,8 +346,6 @@ func (a *App) GetAllClusterAuthStates() map[string]map[string]any {
 			"state":             state.String(),
 			"reason":            reason,
 			"clusterName":       clients.meta.Name,
-			"currentAttempt":    info.CurrentAttempt,
-			"maxAttempts":       info.MaxAttempts,
 			"secondsUntilRetry": info.SecondsUntilRetry,
 			"errorClass":        string(info.ErrorClass),
 		}
@@ -374,8 +372,6 @@ func (a *App) handleClusterAuthRecoveryProgress(clusterID string, progress auths
 	a.emitEvent("cluster:auth:progress", map[string]any{
 		"clusterId":         clusterID,
 		"clusterName":       clusterName,
-		"currentAttempt":    progress.CurrentAttempt,
-		"maxAttempts":       progress.MaxAttempts,
 		"secondsUntilRetry": progress.SecondsUntilRetry,
 		"errorClass":        string(progress.ErrorClass),
 	})

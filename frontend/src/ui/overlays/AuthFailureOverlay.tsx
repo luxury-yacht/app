@@ -32,45 +32,27 @@ const AuthFailureOverlayContent: React.FC<AuthFailureOverlayContentProps> = ({
   onRetry,
 }) => {
   const clusterName = authState.clusterName || clusterId;
-  const { isRecovering, currentAttempt, maxAttempts, secondsUntilRetry } = authState;
+  const { secondsUntilRetry } = authState;
 
-  // Build the retry status message
-  const getRetryStatusMessage = () => {
-    if (!isRecovering) {
-      return 'Auto-retry attempts failed. The app keeps rechecking in the background, so the cluster reconnects once the problem is resolved — or click Retry Now to recheck immediately.';
-    }
-
-    if (secondsUntilRetry > 0) {
-      return `Retrying in ${secondsUntilRetry} second${secondsUntilRetry !== 1 ? 's' : ''}...`;
-    }
-
-    return 'Retrying now...';
-  };
-
-  // Build the attempt counter text
-  const getAttemptText = () => {
-    if (!isRecovering || maxAttempts === 0) {
-      return null;
-    }
-    return `Attempt ${currentAttempt} of ${maxAttempts}`;
-  };
-
-  const attemptText = getAttemptText();
+  // The recovery loop never stops, so the message is the same throughout:
+  // the cluster reconnects on its own once the problem is resolved, and the
+  // countdown says when the next automatic recheck happens.
+  const recheckMessage =
+    secondsUntilRetry > 0
+      ? `Next retry in ${secondsUntilRetry} second${secondsUntilRetry !== 1 ? 's' : ''}.`
+      : 'Rechecking now…';
 
   return (
     <div className="auth-failure-overlay-content">
       <div className="auth-failure-icon">⚠️</div>
       <h2 className="auth-failure-title">Authentication Failure</h2>
       <p className="auth-failure-cluster">Cluster: {clusterName}</p>
-
-      <p className={`auth-failure-message ${isRecovering ? 'auth-failure-recovering' : ''}`}>
-        {getRetryStatusMessage()}
-      </p>
-
-      {attemptText && <p className="auth-failure-attempts">{attemptText}</p>}
-
       {authState.reason && <p className="auth-failure-reason">{authState.reason}</p>}
-
+      <p className="auth-failure-message">
+        The app will attempt to reconnect automatically, but you may need to refresh your
+        credentials.
+      </p>
+      <p className="auth-failure-message">{recheckMessage}</p>
       <button className="button generic" onClick={onRetry}>
         Retry Now
       </button>

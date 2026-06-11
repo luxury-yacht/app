@@ -43,33 +43,38 @@ Recovery must prove both sides of the gate:
 
 ### Recovery error classification
 
-Recovery probes classify failures (`authstate.ErrorClass`, classifier in
-`backend/cluster_clients.go`):
+One continuous recovery loop owns the retry cadence; it exits only on a
+successful probe or cancellation. Probe failures are classified
+(`authstate.ErrorClass`, classifier in `backend/cluster_clients.go`):
 
 - **auth** — the cluster rejected the credentials (HTTP 401/403) or the exec
-  credential plugin failed. Only these consume the bounded recovery attempts;
-  exhausting them yields the terminal `invalid` state.
+  credential plugin failed. The initial burst probes on the backoff schedule;
+  `MaxAttempts` auth verdicts settle the state to `invalid` — a settled
+  verdict, **not** a stop: the loop continues probing at
+  `ClusterAuthSteadyRetryInterval`, so externally fixed credentials (a fresh
+  SSO login) are picked up without user action.
 - **connectivity** — the cluster could not be reached (refused, timeout, DNS,
-  TLS). These say nothing about credential validity, so the recovery loop keeps
-  probing at `ClusterAuthConnectivityRetryInterval` without consuming attempts;
-  the cluster reconnects on its own when it answers. This is what keeps a
-  cluster upgrade (multi-minute outage, often with transient 401s) from
-  stranding the cluster in `invalid`.
+  TLS). These say nothing about credential validity, so they never consume
+  attempts; the loop probes at `ClusterAuthConnectivityRetryInterval` and the
+  cluster reconnects on its own when it answers. This is what keeps a cluster
+  upgrade (multi-minute outage, often with transient 401s) from stranding the
+  cluster in `invalid`.
 
-The latest probe verdict travels on `cluster:auth:progress` events and the auth
-state RPCs as `errorClass`, and is sticky across retries. The frontend shows
-the blocking auth overlay only for confirmed auth verdicts (terminal `invalid`,
-or a probe rejected by the cluster); connectivity-class recovery presents as
+State transitions are driven only by probe results: `ReportFailure` moves
+valid → recovering; the loop settles recovering → invalid and recovers any
+non-valid state → valid. `TriggerRetry` restarts the loop (immediate probe)
+without touching the state. There is no attempt counter in the public surface —
+progress events and the auth state RPCs carry `secondsUntilRetry` (live in both
+recovering and invalid) and the sticky `errorClass` verdict.
+
+The frontend shows the blocking auth overlay only for confirmed auth verdicts
+(settled `invalid`, or a probe rejected by the cluster) with a single message
+and a next-recheck countdown; connectivity-class recovery presents as
 "Reconnecting" in the connectivity indicator instead.
 
-### Invalid is not terminal for the app
-
-The heartbeat auto-retries clusters parked in `invalid` at
-`ClusterAuthAutoRetryInterval` (`maybeAutoRetryClusterAuth`), so externally
-fixed credentials (fresh SSO login) or a recovered cluster are noticed without
-user action. Recovery probes always build a fresh client from kubeconfig — they
-must never run through the cluster's wrapped transport, which blocks requests
-while auth is not valid.
+Recovery probes always build a fresh client from kubeconfig — they must never
+run through the cluster's wrapped transport, which blocks requests while auth
+is not valid.
 
 ### Rebuild wiring invariant
 

@@ -233,8 +233,6 @@ describe('auth error state transitions', () => {
     let map = applyAuthRecoveringEvent(empty(), { clusterId: 'c1', reason: '401' });
     map = applyAuthProgressEvent(map, {
       clusterId: 'c1',
-      currentAttempt: 1,
-      maxAttempts: 4,
       secondsUntilRetry: 15,
       errorClass: 'connectivity',
     });
@@ -248,8 +246,6 @@ describe('auth error state transitions', () => {
     let map = applyAuthRecoveringEvent(empty(), { clusterId: 'c1', reason: '401' });
     map = applyAuthProgressEvent(map, {
       clusterId: 'c1',
-      currentAttempt: 2,
-      maxAttempts: 4,
       secondsUntilRetry: 5,
       errorClass: 'auth',
     });
@@ -262,8 +258,6 @@ describe('auth error state transitions', () => {
     map = applyAuthRecoveringEvent(map, { clusterId: 'c1' });
     map = applyAuthProgressEvent(map, {
       clusterId: 'c1',
-      currentAttempt: 1,
-      maxAttempts: 4,
       secondsUntilRetry: 0,
       errorClass: '',
     });
@@ -290,8 +284,6 @@ describe('auth error state transitions', () => {
     map = applyAuthRecoveringEvent(map, { clusterId: 'c1' });
     map = applyAuthProgressEvent(map, {
       clusterId: 'c1',
-      currentAttempt: 1,
-      maxAttempts: 4,
       secondsUntilRetry: 15,
       errorClass: 'connectivity',
     });
@@ -302,8 +294,6 @@ describe('auth error state transitions', () => {
   it('ignores progress for clusters without an active error', () => {
     const map = applyAuthProgressEvent(empty(), {
       clusterId: 'c1',
-      currentAttempt: 1,
-      maxAttempts: 4,
       secondsUntilRetry: 0,
       errorClass: 'auth',
     });

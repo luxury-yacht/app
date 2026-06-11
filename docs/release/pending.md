@@ -59,7 +59,10 @@
   "Reconnecting" instead of a misleading authentication-failure overlay. Genuine
   credential failures still show the authentication overlay — and the app now
   rechecks those once a minute too, so fixing credentials externally (for example
-  `aws sso login`) reconnects the cluster without needing the Retry button.
+  `aws sso login`) reconnects the cluster without needing the Retry button. The
+  overlay itself now shows one steady message with a live "next automatic recheck
+  in Ns" countdown, replacing the old "Attempt X of 4" counter that ended in
+  "auto-retry attempts failed" even though rechecking never actually stops.
 
 - Fixed a wiring bug where any rebuild of a cluster's clients (after auth recovery,
   a kubeconfig file change, or a transport rebuild) attached the new connections to

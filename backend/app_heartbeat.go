@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -50,15 +49,12 @@ func (a *App) runHeartbeatIteration() {
 		}
 
 		// Skip health checks while auth is not valid: requests through the
-		// cluster's transport are blocked in that state. For clusters parked
-		// in invalid, schedule a rate-limited recovery retry instead — the
-		// recovery probe uses fresh credentials on an unwrapped client, so it
-		// notices externally fixed credentials and recovered clusters.
+		// cluster's transport are blocked in that state, and the auth
+		// manager's recovery loop keeps probing on its own cadence.
 		if cc.authManager != nil && !cc.authManager.IsValid() {
 			if a.logger != nil {
 				a.logger.Debug("Skipping heartbeat for cluster "+cc.meta.Name+" (auth invalid)", logsources.Heartbeat, clusterID, cc.meta.Name)
 			}
-			a.maybeAutoRetryClusterAuth(clusterID, cc)
 			continue
 		}
 
@@ -102,36 +98,6 @@ func (a *App) runHeartbeatIteration() {
 			// Do NOT report to auth manager — this is a network issue, not an auth issue.
 		}
 	}
-}
-
-// maybeAutoRetryClusterAuth triggers a recovery retry for a cluster whose auth
-// state is invalid, at most once per config.ClusterAuthAutoRetryInterval.
-// Recovering clusters are left alone — they already have an active cycle.
-func (a *App) maybeAutoRetryClusterAuth(clusterID string, cc *clusterClients) {
-	if a == nil || cc == nil || cc.authManager == nil {
-		return
-	}
-	if state, _ := cc.authManager.State(); state != authstate.StateInvalid {
-		return
-	}
-
-	a.clusterAuthAutoRetryMu.Lock()
-	if a.clusterAuthAutoRetry == nil {
-		a.clusterAuthAutoRetry = make(map[string]time.Time)
-	}
-	now := time.Now()
-	last := a.clusterAuthAutoRetry[clusterID]
-	if !last.IsZero() && now.Sub(last) < config.ClusterAuthAutoRetryInterval {
-		a.clusterAuthAutoRetryMu.Unlock()
-		return
-	}
-	a.clusterAuthAutoRetry[clusterID] = now
-	a.clusterAuthAutoRetryMu.Unlock()
-
-	if a.logger != nil {
-		a.logger.Info("Auto-retrying auth recovery for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
-	}
-	cc.authManager.TriggerRetry()
 }
 
 // checkClusterHealth checks if a cluster is healthy by calling the /readyz endpoint.

@@ -29,10 +29,6 @@ export interface ClusterAuthState {
   clusterName: string;
   /** Whether auth recovery is in progress. */
   isRecovering: boolean;
-  /** Current retry attempt number (1-based). */
-  currentAttempt: number;
-  /** Maximum number of retry attempts. */
-  maxAttempts: number;
   /** Seconds until next retry attempt (0 if retry in progress). */
   secondsUntilRetry: number;
   /** Latest recovery verdict; sticky until a probe result contradicts it. */
@@ -47,8 +43,6 @@ const DEFAULT_AUTH_STATE: ClusterAuthState = {
   reason: '',
   clusterName: '',
   isRecovering: false,
-  currentAttempt: 0,
-  maxAttempts: 0,
   secondsUntilRetry: 0,
   errorClass: '',
 };
@@ -68,8 +62,6 @@ interface AuthEventPayload {
 interface AuthProgressPayload {
   clusterId?: string;
   clusterName?: string;
-  currentAttempt?: number;
-  maxAttempts?: number;
   secondsUntilRetry?: number;
   errorClass?: string;
 }
@@ -101,15 +93,14 @@ export const applyAuthFailedEvent = (
   if (!payload.clusterId) {
     return prev;
   }
+  const existing = prev.get(payload.clusterId);
   const next = new Map(prev);
   next.set(payload.clusterId, {
     hasError: true,
     reason: payload.reason || 'Authentication failed',
     clusterName: payload.clusterName || payload.clusterId,
     isRecovering: false,
-    currentAttempt: 0,
-    maxAttempts: 0,
-    secondsUntilRetry: 0,
+    secondsUntilRetry: existing?.secondsUntilRetry || 0,
     errorClass: 'auth',
   });
   return next;
@@ -134,8 +125,6 @@ export const applyAuthRecoveringEvent = (
     reason: existing?.reason || payload.reason || 'Authentication failed',
     clusterName: existing?.clusterName || payload.clusterName || payload.clusterId,
     isRecovering: true,
-    currentAttempt: existing?.currentAttempt || 1,
-    maxAttempts: existing?.maxAttempts || 4,
     secondsUntilRetry: existing?.secondsUntilRetry || 0,
     errorClass: existing?.errorClass ?? '',
   });
@@ -163,8 +152,6 @@ export const applyAuthProgressEvent = (
   next.set(payload.clusterId, {
     ...existing,
     clusterName: payload.clusterName || existing.clusterName,
-    currentAttempt: payload.currentAttempt ?? existing.currentAttempt,
-    maxAttempts: payload.maxAttempts ?? existing.maxAttempts,
     secondsUntilRetry: payload.secondsUntilRetry ?? existing.secondsUntilRetry,
     errorClass: normalizeAuthErrorClass(payload.errorClass) || existing.errorClass,
   });
@@ -227,8 +214,6 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const state = stateInfo.state as string;
           const reason = (stateInfo.reason as string) || '';
           const clusterName = (stateInfo.clusterName as string) || clusterId;
-          const currentAttempt = (stateInfo.currentAttempt as number) || 0;
-          const maxAttempts = (stateInfo.maxAttempts as number) || 0;
           const secondsUntilRetry = (stateInfo.secondsUntilRetry as number) || 0;
 
           // Only add clusters that are in error or recovering state
@@ -238,8 +223,6 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               reason: reason || 'Authentication failed',
               clusterName,
               isRecovering: true,
-              currentAttempt,
-              maxAttempts,
               secondsUntilRetry,
               errorClass: normalizeAuthErrorClass(stateInfo.errorClass),
             });
@@ -249,9 +232,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               reason: reason || 'Authentication failed',
               clusterName,
               isRecovering: false,
-              currentAttempt: 0,
-              maxAttempts: 0,
-              secondsUntilRetry: 0,
+              // The recovery loop keeps probing while invalid, so the
+              // countdown is live here too.
+              secondsUntilRetry,
               // Invalid is only reached by exhausting auth-class failures.
               errorClass: 'auth',
             });
