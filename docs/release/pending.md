@@ -47,6 +47,17 @@
 
 ### Fixed
 
+- Cut, Copy, Paste, and Select All now work correctly in the YAML editor (and
+  the Helm Manifest/Values tabs) with the standard keyboard shortcuts and the
+  editor's right-click menu, in both read and edit modes. Previously Cmd/Ctrl+C
+  and Cmd/Ctrl+A did nothing in read mode (or selected the whole window), there
+  was no Cut menu command at all so Cmd/Ctrl+X never worked, Select All only
+  covered the visible part of large manifests, and the right-click Paste could
+  fail silently. The read-mode editor is now focusable: clicking it focuses the
+  YAML so clipboard shortcuts apply to it, and single-key app shortcuts (like
+  `m` for managedFields) still work while it is focused. The application Edit
+  menu also gained the standard Cut command.
+
 - Selected text in the YAML editor (and the Helm Manifest/Values tabs) now
   uses the same highlight color whether the editor is in read or edit mode,
   and the highlight is translucent so the syntax-colored text stays readable.

@@ -293,7 +293,7 @@ describe('keyboard handling edge cases', () => {
     input.remove();
   });
 
-  it('registers Wails menu bridge events for copy/selectAll', async () => {
+  it('registers Wails menu bridge events for cut/copy/paste/selectAll', async () => {
     await act(async () => {
       root.render(
         <KeyboardProvider>
@@ -305,7 +305,7 @@ describe('keyboard handling edge cases', () => {
 
     const registeredEvents = runtimeMocks.eventsOn.mock.calls.map(([event]) => event);
     expect(registeredEvents).toEqual(
-      expect.arrayContaining(['menu:copy', 'menu:paste', 'menu:selectAll'])
+      expect.arrayContaining(['menu:cut', 'menu:copy', 'menu:paste', 'menu:selectAll'])
     );
 
     act(() => {
@@ -314,7 +314,98 @@ describe('keyboard handling edge cases', () => {
 
     const unregisteredEvents = runtimeMocks.eventsOff.mock.calls.map(([event]) => event);
     expect(unregisteredEvents).toEqual(
-      expect.arrayContaining(['menu:copy', 'menu:paste', 'menu:selectAll'])
+      expect.arrayContaining(['menu:cut', 'menu:copy', 'menu:paste', 'menu:selectAll'])
     );
+  });
+
+  it('routes menu cut to the surface containing the focused element', async () => {
+    const onNativeAction = vi.fn(() => true);
+    const surfaceRoot = document.createElement('div');
+    const focusable = document.createElement('button');
+    surfaceRoot.appendChild(focusable);
+    document.body.appendChild(surfaceRoot);
+    const rootRef = { current: surfaceRoot };
+
+    const Harness = () => {
+      const ctx = useKeyboardContext();
+      useEffect(() => {
+        const id = ctx.registerSurface({ kind: 'editor', rootRef, onNativeAction });
+        return () => ctx.unregisterSurface(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return null;
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    focusable.focus();
+
+    // Mock calls accumulate across this describe block; take the handler from
+    // the provider rendered by this test.
+    const cutRegistrations = runtimeMocks.eventsOn.mock.calls.filter(
+      ([event]) => event === 'menu:cut'
+    );
+    const cutHandler = cutRegistrations[cutRegistrations.length - 1]?.[1] as
+      | (() => void)
+      | undefined;
+    expect(typeof cutHandler).toBe('function');
+
+    act(() => {
+      cutHandler?.();
+    });
+
+    expect(onNativeAction).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'cut', activeElement: focusable })
+    );
+
+    surfaceRoot.remove();
+  });
+
+  it('cuts the focused input selection through the menu bridge fallback', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <div />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const input = document.createElement('input');
+    input.value = 'kind: ConfigMap';
+    document.body.appendChild(input);
+    input.focus();
+    input.setSelectionRange(0, 4);
+
+    const inputEvents = vi.fn();
+    input.addEventListener('input', inputEvents);
+
+    const cutRegistrations = runtimeMocks.eventsOn.mock.calls.filter(
+      ([event]) => event === 'menu:cut'
+    );
+    const cutHandler = cutRegistrations[cutRegistrations.length - 1]?.[1] as
+      | (() => void)
+      | undefined;
+    expect(typeof cutHandler).toBe('function');
+
+    act(() => {
+      cutHandler?.();
+    });
+
+    expect(writeText).toHaveBeenCalledWith('kind');
+    expect(input.value).toBe(': ConfigMap');
+    expect(inputEvents).toHaveBeenCalled();
+
+    input.remove();
   });
 });

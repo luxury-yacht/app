@@ -95,6 +95,62 @@ func TestCreateDebugMenuBuildsDebugOverlayEntries(t *testing.T) {
 	}
 }
 
+func TestEditMenuOffersStandardClipboardCommands(t *testing.T) {
+	app := &App{}
+	m := menu.NewMenu()
+
+	createEditMenu(m, app)
+
+	editMenu := findSubmenu(t, m, "Edit")
+	expected := []string{"Cut", "Copy", "Paste", "Select All"}
+	got := menuLabels(editMenu)
+	if len(got) != len(expected) {
+		t.Fatalf("expected edit menu labels %#v, got %#v", expected, got)
+	}
+	for i, want := range expected {
+		if got[i] != want {
+			t.Fatalf("edit menu item %d label = %q, want %q", i, got[i], want)
+		}
+	}
+}
+
+func TestEditMenuItemsEmitFrontendEvents(t *testing.T) {
+	app := &App{Ctx: context.Background()}
+	events := []string{}
+	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+		events = append(events, name)
+	}
+	m := menu.NewMenu()
+
+	createEditMenu(m, app)
+
+	editMenu := findSubmenu(t, m, "Edit")
+	// Paste is skipped: its click handler reads the OS clipboard through the
+	// Wails runtime, which needs a real Wails context.
+	for _, label := range []string{"Cut", "Copy", "Select All"} {
+		clicked := false
+		for _, item := range editMenu.Items {
+			if item.Label == label && item.Click != nil {
+				item.Click(nil)
+				clicked = true
+			}
+		}
+		if !clicked {
+			t.Fatalf("expected edit menu item %q with click handler", label)
+		}
+	}
+
+	expected := []string{"menu:cut", "menu:copy", "menu:selectAll"}
+	if len(events) != len(expected) {
+		t.Fatalf("expected events %#v, got %#v", expected, events)
+	}
+	for i, want := range expected {
+		if events[i] != want {
+			t.Fatalf("event %d = %q, want %q", i, events[i], want)
+		}
+	}
+}
+
 func TestViewMenuKeepsApplicationLogsAndDiagnosticsEntries(t *testing.T) {
 	app := &App{}
 	m := menu.NewMenu()

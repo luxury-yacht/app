@@ -1,10 +1,6 @@
 - Can't copy data from errors. Need to be able to select/copy and also need a "copy error" button
 
 - YAML editor
-  - Fix text selection colors
-    - Make them consistent whether read or edit mode
-    - Make sure they are readable when selected
-  - cmd+c does not work in yaml editor
   - Talk about SSA vs CSA and potential conflicts
 
 - Missing permissions in Workloads Pods tab

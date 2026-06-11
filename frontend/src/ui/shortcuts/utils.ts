@@ -78,9 +78,15 @@ export function isInputElement(target: EventTarget | null): boolean {
   const contentEditable = element.contentEditable;
   const isContentEditable = contentEditable === 'true' || contentEditable === 'plaintext-only';
   const isInput = tagName === 'input' || tagName === 'textarea' || tagName === 'select';
-  const isCodeMirror = !!element.closest('.cm-editor');
+  // Descendants of the CodeMirror content report contentEditable 'inherit',
+  // so check the editor root — but only an editable editor accepts typing.
+  // Read-only editors are focusable for selection/clipboard shortcuts and
+  // must not swallow single-key app shortcuts.
+  const isEditableCodeMirror = !!element
+    .closest('.cm-editor')
+    ?.querySelector('.cm-content[contenteditable="true"]');
 
-  return isInput || isContentEditable || isCodeMirror;
+  return isInput || isContentEditable || isEditableCodeMirror;
 }
 
 export function hasNativeTabHandling(target: EventTarget | null): boolean {

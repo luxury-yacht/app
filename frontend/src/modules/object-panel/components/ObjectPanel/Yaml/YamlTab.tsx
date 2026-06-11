@@ -237,10 +237,14 @@ const YamlTab: React.FC<YamlTabProps> = ({
   useEffect(() => {
     if (!isEditing) {
       setExpandedDiffs({});
+    }
+    if (!isActive) {
       return;
     }
+    // Focus the editor in read mode too: clipboard and select-all shortcuts
+    // route to the surface that contains the focused element.
     window.requestAnimationFrame(() => yamlEditorRef.current?.focus());
-  }, [isEditing]);
+  }, [isActive, isEditing]);
 
   useShortcut({
     key: 'm',

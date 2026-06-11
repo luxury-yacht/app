@@ -165,6 +165,10 @@ vi.mock('@codemirror/view', () => ({
       }),
     };
 
+    static contentAttributes = {
+      of: (attrs: unknown) => ({ type: 'contentAttributes', attrs }),
+    };
+
     static domEventHandlers(handlers: unknown) {
       return handlers;
     }
@@ -629,6 +633,29 @@ describe('YamlTab', () => {
     expect(copyItem?.getAttribute('aria-disabled')).toBe('false');
 
     await unmount();
+  });
+
+  it('focuses the editor when the tab is active in read mode', async () => {
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((callback: FrameRequestCallback) => {
+        callback(0);
+        return 0;
+      });
+
+    // Clipboard and select-all shortcuts route to the surface that contains
+    // the focused element, so the read-mode editor must take focus when the
+    // tab becomes active.
+    const { unmount } = await renderYamlTab();
+    expect(codeMirrorState.editorView.focus).toHaveBeenCalled();
+    await unmount();
+
+    codeMirrorState.editorView.focus.mockClear();
+    const inactive = await renderYamlTab({ isActive: false });
+    expect(codeMirrorState.editorView.focus).not.toHaveBeenCalled();
+    await inactive.unmount();
+
+    rafSpy.mockRestore();
   });
 
   it('pastes native menu text into the editor while editing', async () => {

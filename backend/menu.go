@@ -133,6 +133,14 @@ func createApplicationMenu(appMenu *menu.Menu, app *App) {
 func createEditMenu(appMenu *menu.Menu, app *App) {
 	editMenu := appMenu.AddSubmenu("Edit")
 
+	// Cut
+	editMenu.AddText("Cut", keys.CmdOrCtrl("x"), func(_ *menu.CallbackData) {
+		// This will be handled by the frontend
+		if app.Ctx != nil {
+			app.emitEvent("menu:cut")
+		}
+	})
+
 	// Copy
 	editMenu.AddText("Copy", keys.CmdOrCtrl("c"), func(_ *menu.CallbackData) {
 		// This will be handled by the frontend

@@ -17,17 +17,33 @@ export function selectCodeMirrorContent(view: EditorView | null): boolean {
     return false;
   }
 
-  const selection = window.getSelection();
-  const content = view.contentDOM;
+  // Select through editor state, not a DOM range: CodeMirror virtualizes
+  // long documents, so the DOM only contains the rendered viewport.
+  view.dispatch({
+    selection: { anchor: 0, head: view.state.doc.length },
+    userEvent: 'select',
+  });
+  view.focus();
+  return true;
+}
 
-  if (!selection || !content) {
+export function cutCodeMirrorSelection(view: EditorView | null): boolean {
+  if (!view || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
     return false;
   }
 
-  selection.removeAllRanges();
-  const range = document.createRange();
-  range.selectNodeContents(content);
-  selection.addRange(range);
+  const text = getCodeMirrorSelectedText(view);
+  if (!text) {
+    return false;
+  }
+
+  void navigator.clipboard.writeText(text);
+  view.dispatch({
+    changes: view.state.selection.ranges
+      .filter((range) => range.from !== range.to)
+      .map((range) => ({ from: range.from, to: range.to, insert: '' })),
+    userEvent: 'delete.cut',
+  });
   view.focus();
   return true;
 }

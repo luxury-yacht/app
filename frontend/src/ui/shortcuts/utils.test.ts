@@ -70,6 +70,10 @@ describe('shortcut utilities', () => {
 
     const codemirror = document.createElement('div');
     codemirror.className = 'cm-editor';
+    const codemirrorContent = document.createElement('div');
+    codemirrorContent.className = 'cm-content';
+    codemirrorContent.setAttribute('contenteditable', 'true');
+    codemirror.appendChild(codemirrorContent);
     expect(isInputElement(codemirror)).toBe(true);
   });
 
@@ -111,12 +115,33 @@ describe('isInputElement', () => {
     expect(isInputElement(div)).toBe(false);
   });
 
-  it('returns true for descendants inside CodeMirror editors', () => {
+  it('returns true for descendants inside editable CodeMirror editors', () => {
     const editor = document.createElement('div');
     editor.className = 'cm-editor';
     const content = document.createElement('div');
+    content.className = 'cm-content';
+    content.setAttribute('contenteditable', 'true');
     editor.appendChild(content);
+    const line = document.createElement('div');
+    line.className = 'cm-line';
+    content.appendChild(line);
     document.body.appendChild(editor);
-    expect(isInputElement(content)).toBe(true);
+    expect(isInputElement(line)).toBe(true);
+  });
+
+  it('returns false for descendants inside read-only CodeMirror editors', () => {
+    // Read-only editors are focusable for selection and clipboard shortcuts,
+    // but typing is impossible, so single-key app shortcuts must keep working.
+    const editor = document.createElement('div');
+    editor.className = 'cm-editor';
+    const content = document.createElement('div');
+    content.className = 'cm-content';
+    content.setAttribute('contenteditable', 'false');
+    editor.appendChild(content);
+    const line = document.createElement('div');
+    line.className = 'cm-line';
+    content.appendChild(line);
+    document.body.appendChild(editor);
+    expect(isInputElement(line)).toBe(false);
   });
 });

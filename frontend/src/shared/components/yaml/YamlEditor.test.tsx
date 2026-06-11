@@ -10,8 +10,13 @@ const shortcutMocks = vi.hoisted(() => ({
 
 const nativeActionMocks = vi.hoisted(() => ({
   copyCodeMirrorSelection: vi.fn(() => true),
+  cutCodeMirrorSelection: vi.fn(() => true),
   getCodeMirrorSelectedText: vi.fn(() => 'selected'),
   selectCodeMirrorContent: vi.fn(() => true),
+}));
+
+const wailsRuntimeMocks = vi.hoisted(() => ({
+  ClipboardGetText: vi.fn(() => Promise.resolve('clipboard-text')),
 }));
 
 const searchMocks = vi.hoisted(() => {
@@ -149,6 +154,10 @@ vi.mock('@codemirror/view', () => ({
       }),
     };
 
+    static contentAttributes = {
+      of: (attrs: unknown) => ({ type: 'contentAttributes', attrs }),
+    };
+
     static domEventHandlers(handlers: unknown) {
       return handlers;
     }
@@ -193,6 +202,8 @@ vi.mock('@/core/codemirror/search', () => ({
 
 vi.mock('@/core/codemirror/nativeActions', () => nativeActionMocks);
 
+vi.mock('@wailsjs/runtime/runtime', () => wailsRuntimeMocks);
+
 vi.mock('@ui/shortcuts', () => ({
   useKeyboardSurface: (config: unknown) => shortcutMocks.useKeyboardSurface(config),
   useSearchShortcutTarget: (config: unknown) => shortcutMocks.useSearchShortcutTarget(config),
@@ -232,8 +243,10 @@ describe('YamlEditor', () => {
     shortcutMocks.useKeyboardSurface.mockClear();
     shortcutMocks.useSearchShortcutTarget.mockClear();
     nativeActionMocks.copyCodeMirrorSelection.mockClear();
+    nativeActionMocks.cutCodeMirrorSelection.mockClear();
     nativeActionMocks.getCodeMirrorSelectedText.mockClear();
     nativeActionMocks.selectCodeMirrorContent.mockClear();
+    wailsRuntimeMocks.ClipboardGetText.mockClear();
     searchMocks.findNext.mockClear();
     searchMocks.findPrevious.mockClear();
     codeMirrorState.props = null;
@@ -345,6 +358,50 @@ describe('YamlEditor', () => {
     await unmount();
   });
 
+  it('handles native cut through the editor surface only when editable', async () => {
+    const editableEditor = await renderYamlEditor({ editable: true });
+    let surfaceCalls = shortcutMocks.useKeyboardSurface.mock.calls;
+    let surfaceConfig = surfaceCalls[surfaceCalls.length - 1]?.[0] as {
+      onNativeAction: (event: { action: string }) => boolean;
+    };
+
+    expect(surfaceConfig.onNativeAction({ action: 'cut' })).toBe(true);
+    expect(nativeActionMocks.cutCodeMirrorSelection).toHaveBeenCalledWith(
+      codeMirrorState.editorView
+    );
+    await editableEditor.unmount();
+
+    nativeActionMocks.cutCodeMirrorSelection.mockClear();
+    const readOnlyEditor = await renderYamlEditor({ editable: false });
+    surfaceCalls = shortcutMocks.useKeyboardSurface.mock.calls;
+    surfaceConfig = surfaceCalls[surfaceCalls.length - 1]?.[0] as {
+      onNativeAction: (event: { action: string }) => boolean;
+    };
+
+    expect(surfaceConfig.onNativeAction({ action: 'cut' })).toBe(false);
+    expect(nativeActionMocks.cutCodeMirrorSelection).not.toHaveBeenCalled();
+    await readOnlyEditor.unmount();
+  });
+
+  it('makes read-only editor content focusable for selection and clipboard shortcuts', async () => {
+    const readOnlyEditor = await renderYamlEditor({ editable: false });
+
+    expect(codeMirrorState.props.extensions).toContainEqual(
+      expect.objectContaining({
+        type: 'contentAttributes',
+        attrs: expect.objectContaining({ tabindex: '0' }),
+      })
+    );
+    await readOnlyEditor.unmount();
+
+    const editableEditor = await renderYamlEditor({ editable: true });
+
+    expect(codeMirrorState.props.extensions).not.toContainEqual(
+      expect.objectContaining({ type: 'contentAttributes' })
+    );
+    await editableEditor.unmount();
+  });
+
   it('suppresses paste when disabled', async () => {
     const { unmount } = await renderYamlEditor({ editable: true, disabled: true });
     const surfaceCalls = shortcutMocks.useKeyboardSurface.mock.calls;
@@ -409,6 +466,65 @@ describe('YamlEditor', () => {
     expect(document.body.textContent).toContain('Cut');
     expect(document.body.textContent).toContain('Paste');
     await editable.unmount();
+  });
+
+  it('cuts through the shared CodeMirror helper from the context menu', async () => {
+    const { container, unmount } = await renderYamlEditor({ editable: true });
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="code-mirror"]')
+        ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    });
+
+    const cutItem = Array.from(document.querySelectorAll('.context-menu-item')).find(
+      (candidate) => candidate.querySelector('.context-menu-label')?.textContent === 'Cut'
+    );
+    expect(cutItem).toBeTruthy();
+
+    await act(async () => {
+      cutItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(nativeActionMocks.cutCodeMirrorSelection).toHaveBeenCalledWith(
+      codeMirrorState.editorView
+    );
+
+    await unmount();
+  });
+
+  it('pastes from the Wails clipboard in the context menu', async () => {
+    const { container, unmount } = await renderYamlEditor({ editable: true });
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="code-mirror"]')
+        ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    });
+
+    const pasteItem = Array.from(document.querySelectorAll('.context-menu-item')).find(
+      (candidate) => candidate.querySelector('.context-menu-label')?.textContent === 'Paste'
+    );
+    expect(pasteItem).toBeTruthy();
+
+    codeMirrorState.editorView.dispatch.mockClear();
+
+    await act(async () => {
+      pasteItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    // navigator.clipboard.readText is permission-gated inside the Wails
+    // WebView; paste must read through the Go-side clipboard instead.
+    expect(wailsRuntimeMocks.ClipboardGetText).toHaveBeenCalled();
+    expect(navigator.clipboard.readText).not.toHaveBeenCalled();
+    expect(codeMirrorState.editorView.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        changes: { from: 0, to: 0, insert: 'clipboard-text' },
+      })
+    );
+
+    await unmount();
   });
 
   it('decorates protected ranges and rejects edits that touch them', async () => {
