@@ -141,6 +141,10 @@ vi.mock('@codemirror/lang-yaml', () => ({
 
 vi.mock('@codemirror/view', () => ({
   EditorView: class {
+    static contentAttributes = {
+      of: (attrs: unknown) => ({ type: 'contentAttributes', attrs }),
+    };
+
     static domEventHandlers(handlers: unknown) {
       return handlers;
     }

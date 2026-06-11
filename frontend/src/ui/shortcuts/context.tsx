@@ -40,7 +40,7 @@ interface KeyboardProviderValue {
   dispatchNativeAction: (action: KeyboardNativeAction, text?: string) => boolean;
 }
 
-export type KeyboardNativeAction = 'copy' | 'selectAll' | 'paste';
+export type KeyboardNativeAction = 'copy' | 'cut' | 'selectAll' | 'paste';
 
 export interface KeyboardSurfaceNativeActionContext {
   action: KeyboardNativeAction;
@@ -345,6 +345,37 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     [getTargetSurface]
   );
 
+  const applyNativeCutFallback = useCallback((): boolean => {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+      if (activeElement.readOnly || activeElement.disabled) {
+        return false;
+      }
+      const start = activeElement.selectionStart;
+      const end = activeElement.selectionEnd;
+      if (start === null || end === null || start === end) {
+        return false;
+      }
+      void navigator.clipboard.writeText(activeElement.value.slice(start, end));
+      activeElement.setRangeText('', start, end, 'end');
+      activeElement.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    }
+
+    if (activeElement instanceof HTMLElement && activeElement.isContentEditable) {
+      const text = deriveCopyText(window.getSelection());
+      if (!text) {
+        return false;
+      }
+      void navigator.clipboard.writeText(text);
+      if (typeof document.execCommand === 'function') {
+        return document.execCommand('delete');
+      }
+    }
+
+    return false;
+  }, []);
+
   const applyNativePasteFallback = useCallback((text: string): boolean => {
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
@@ -524,6 +555,13 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       }
     };
 
+    const handleMenuCut = () => {
+      if (dispatchNativeAction('cut')) {
+        return;
+      }
+      applyNativeCutFallback();
+    };
+
     const handleMenuSelectAll = () => {
       if (dispatchNativeAction('selectAll')) {
         return;
@@ -540,17 +578,19 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     };
 
     // Register event listeners
+    EventsOn('menu:cut', handleMenuCut);
     EventsOn('menu:copy', handleMenuCopy);
     EventsOn('menu:paste', handleMenuPaste);
     EventsOn('menu:selectAll', handleMenuSelectAll);
 
     // Cleanup
     return () => {
+      EventsOff('menu:cut');
       EventsOff('menu:copy');
       EventsOff('menu:paste');
       EventsOff('menu:selectAll');
     };
-  }, [applyNativePasteFallback, dispatchNativeAction]);
+  }, [applyNativeCutFallback, applyNativePasteFallback, dispatchNativeAction]);
 
   // Get available shortcuts for current context
   const getAvailableShortcuts = useCallback((): ShortcutGroup[] => {

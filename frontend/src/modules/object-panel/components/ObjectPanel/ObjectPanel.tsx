@@ -447,42 +447,51 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         onClose={close}
         contentClassName="object-panel-body"
       >
-        {/* Kind badge + name toolbar */}
-        <div onMouseDown={(e) => e.stopPropagation()}>
-          <ObjectPanelHeader
-            kind={objectData?.kind ?? null}
-            kindAlias={objectData?.kindAlias ?? null}
-            name={objectData?.name ?? null}
+        {/* The provider must wrap the CHILDREN handed to DockablePanel, not
+            just this component's subtree: in a tab group, the group LEADER
+            renders every tab's captured children inside the leader's own
+            React tree, and context resolves at the render site. Without this
+            inner provider, a tab's content would read the leader panel's
+            objectData (wrong GVK → wrong permission keys → gated actions
+            silently disappear from grouped panels). */}
+        <CurrentObjectPanelContext.Provider value={currentObjectPanelValue}>
+          {/* Kind badge + name toolbar */}
+          <div onMouseDown={(e) => e.stopPropagation()}>
+            <ObjectPanelHeader
+              kind={objectData?.kind ?? null}
+              kindAlias={objectData?.kindAlias ?? null}
+              name={objectData?.name ?? null}
+            />
+          </div>
+
+          <ObjectPanelTabs
+            tabs={availableTabs}
+            activeTab={visibleActiveTab}
+            onSelect={handleTabSelect}
           />
-        </div>
 
-        <ObjectPanelTabs
-          tabs={availableTabs}
-          activeTab={visibleActiveTab}
-          onSelect={handleTabSelect}
-        />
-
-        <ObjectPanelContent
-          activeTab={visibleActiveTab}
-          detailTabProps={detailTabProps}
-          isPanelOpen={isOpen && isActiveTab}
-          capabilities={capabilities}
-          capabilityReasons={capabilityReasons}
-          nodeLogsState={nodeLogsState}
-          nodeLogSources={nodeLogSources}
-          detailScope={detailScope}
-          eventsScope={eventsScope}
-          containerLogsScope={containerLogsScope}
-          mapScope={mapScope}
-          helmScope={helmScope}
-          objectData={objectData}
-          objectKind={objectKind}
-          resourceDeleted={state.resourceDeleted}
-          deletedResourceName={state.deletedResourceName}
-          onClosePanel={close}
-          onRefreshDetails={fetchResourceDetails}
-          panelId={panelId}
-        />
+          <ObjectPanelContent
+            activeTab={visibleActiveTab}
+            detailTabProps={detailTabProps}
+            isPanelOpen={isOpen && isActiveTab}
+            capabilities={capabilities}
+            capabilityReasons={capabilityReasons}
+            nodeLogsState={nodeLogsState}
+            nodeLogSources={nodeLogSources}
+            detailScope={detailScope}
+            eventsScope={eventsScope}
+            containerLogsScope={containerLogsScope}
+            mapScope={mapScope}
+            helmScope={helmScope}
+            objectData={objectData}
+            objectKind={objectKind}
+            resourceDeleted={state.resourceDeleted}
+            deletedResourceName={state.deletedResourceName}
+            onClosePanel={close}
+            onRefreshDetails={fetchResourceDetails}
+            panelId={panelId}
+          />
+        </CurrentObjectPanelContext.Provider>
       </DockablePanel>
 
       {/* Confirmation Modals */}

@@ -22,11 +22,18 @@ import { LINT_DEBOUNCE_MS } from './yamlTabConfig';
 import {
   applyResourceVersionToYaml,
   applyYamlOnServer,
+  checkYamlOwnershipOnServer,
   mergeYamlWithLatestOnServer,
   normalizeYamlString,
   sanitizeYamlForSemanticCompare,
+  type ObjectYamlOwnershipConflict,
 } from './yamlTabUtils';
-import { parseObjectIdentity, validateYamlDraft, type ObjectIdentity } from './yamlValidation';
+import {
+  parseObjectIdentity,
+  validateYamlDraft,
+  type ObjectIdentity,
+  type ValidationSuccess,
+} from './yamlValidation';
 
 export type YamlTransactionDiffResult = {
   lines: DiffLine[];
@@ -53,6 +60,15 @@ type RecentVerifiedSemanticEntry = {
 type ManualYamlOverride = {
   yaml: string;
   resourceVersion: string | null;
+};
+
+// A save held back by the ownership warning. The dialog is modal, so the
+// captured validated payload cannot go stale while it is open.
+type PendingOwnershipWarning = {
+  conflicts: ObjectYamlOwnershipConflict[];
+  identity: ObjectIdentity;
+  validation: ValidationSuccess;
+  baselineYaml: string;
 };
 
 export interface UseYamlTransactionArgs {
@@ -87,6 +103,9 @@ export interface UseYamlTransactionResult {
   handleCancelClick: () => void;
   handleReloadAndMerge: () => Promise<void>;
   handleSaveClick: () => Promise<void>;
+  pendingOwnershipConflicts: ObjectYamlOwnershipConflict[] | null;
+  confirmOwnershipAndSave: () => Promise<void>;
+  cancelOwnershipWarning: () => void;
 }
 
 const isSameObjectReference = (left: ObjectIdentity, right: ObjectIdentity): boolean =>
@@ -165,6 +184,8 @@ export const useYamlTransaction = ({
   const [driftForced, setDriftForced] = useState(false);
   const [backendDriftCurrentYaml, setBackendDriftCurrentYaml] = useState<string | null>(null);
   const [postApplyNotice, setPostApplyNotice] = useState<YamlPostApplyNotice | null>(null);
+  const [pendingOwnershipWarning, setPendingOwnershipWarning] =
+    useState<PendingOwnershipWarning | null>(null);
   const [verifiedPostApply, setVerifiedPostApply] = useState<VerifiedPostApplyState | null>(null);
   const [pendingSnapshotAdoptionYaml, setPendingSnapshotAdoptionYaml] = useState<string | null>(
     null
@@ -475,6 +496,7 @@ export const useYamlTransaction = ({
     setIsSaving(false);
     setHasServerYamlError(false);
     setPendingSnapshotAdoptionYaml(null);
+    setPendingOwnershipWarning(null);
   }, []);
 
   useEffect(() => {
@@ -658,6 +680,129 @@ export const useYamlTransaction = ({
     yamlContent,
   ]);
 
+  const performSave = useCallback(
+    async (identity: ObjectIdentity, validation: ValidationSuccess, baselineYaml: string) => {
+      setIsSaving(true);
+      setActionError(null);
+      setProtectedEditMessage(null);
+
+      try {
+        const snapshotYamlBeforeSave = normalizeYamlString(yamlContent);
+        setPendingSnapshotAdoptionYaml(snapshotYamlBeforeSave);
+        const applyResponse = await applyYamlOnServer(
+          resolvedClusterId,
+          baselineYaml,
+          validation.normalizedYAML,
+          identity,
+          baselineResourceVersion ?? identity.resourceVersion ?? ''
+        );
+        const appliedResourceVersion =
+          applyResponse?.resourceVersion ??
+          validation.resourceVersion ??
+          baselineResourceVersion ??
+          identity.resourceVersion ??
+          '';
+        const immediateYaml = applyResourceVersionToYaml(
+          validation.normalizedYAML,
+          appliedResourceVersion
+        );
+        setLatestObjectIdentity({
+          ...identity,
+          resourceVersion: appliedResourceVersion,
+        });
+        setManualYamlOverride({
+          yaml: immediateYaml,
+          resourceVersion: appliedResourceVersion,
+        });
+
+        try {
+          const { latestIdentity, normalizedYaml } = await hydrateLatestObject(identity);
+          const submittedYaml = sanitizeYamlForSemanticCompare(immediateYaml);
+          const storedYaml = sanitizeYamlForSemanticCompare(normalizedYaml);
+          if (verifiedPostApply?.semanticYaml) {
+            recentVerifiedSemanticYamlsRef.current = [
+              {
+                reference: buildObjectReferenceKey(verifiedPostApply.identity),
+                semanticYaml: verifiedPostApply.semanticYaml,
+              },
+              ...recentVerifiedSemanticYamlsRef.current.filter(
+                (entry) =>
+                  !(
+                    entry.reference === buildObjectReferenceKey(verifiedPostApply.identity) &&
+                    entry.semanticYaml === verifiedPostApply.semanticYaml
+                  )
+              ),
+            ].slice(0, 4);
+          }
+          setVerifiedPostApply({
+            identity: latestIdentity,
+            semanticYaml: storedYaml,
+          });
+          if (submittedYaml !== storedYaml) {
+            setPostApplyNotice({
+              kind: 'diff',
+              message:
+                'Your changes were applied to the latest live object, which also included other changes made while you were editing. Review the diff below to see how the final stored object differs from the exact YAML you submitted.',
+              diff: buildYamlTransactionDiff(submittedYaml, storedYaml),
+            });
+          } else {
+            setPostApplyNotice(null);
+          }
+        } catch (fetchErr) {
+          setVerifiedPostApply(null);
+          setPostApplyNotice({
+            kind: 'warning',
+            message:
+              'YAML applied, but the editor could not reload the final live object. The manifest shown here is the submitted YAML with the returned resourceVersion, not a verified live read.',
+            diff: null,
+          });
+          errorHandler.handle(fetchErr, { action: 'loadLatestObjectYAML' });
+        }
+        exitEditMode();
+        setPendingSnapshotAdoptionYaml(snapshotYamlBeforeSave);
+        if (scope) {
+          await requestRefreshDomain({
+            domain: 'object-yaml',
+            scope,
+            reason: 'user',
+          });
+        }
+        setActionDetails([]);
+      } catch (err) {
+        const parsed = parseObjectYamlError(err);
+        if (parsed) {
+          setActionError(parsed.message);
+          setActionDetails(parsed.causes ?? []);
+          setHasServerYamlError(true);
+          errorHandler.handle(err, { action: 'saveObjectYAML' });
+          setPendingSnapshotAdoptionYaml(null);
+          setIsSaving(false);
+          return;
+        }
+
+        const message = err instanceof Error ? err.message : 'Failed to save YAML changes.';
+        setActionError(message);
+        setActionDetails([]);
+        setPostApplyNotice(null);
+        setVerifiedPostApply(null);
+        setPendingSnapshotAdoptionYaml(null);
+        setHasServerYamlError(false);
+        errorHandler.handle(err, { action: 'saveObjectYAML' });
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [
+      baselineResourceVersion,
+      exitEditMode,
+      hydrateLatestObject,
+      resolvedClusterId,
+      scope,
+      yamlContent,
+      verifiedPostApply,
+    ]
+  );
+
   const handleSaveClick = useCallback(async () => {
     if (!isEditing || isSaving) {
       return;
@@ -678,131 +823,61 @@ export const useYamlTransaction = ({
       baselineMergeYaml ||
       prepareVisibleDraftYaml(normalizeYamlString(manualYamlOverride?.yaml ?? yamlContent));
 
+    // Advisory ownership check: warn before taking ownership of fields that
+    // controllers or operators manage. Never let a failed check block saving.
     setIsSaving(true);
-    setActionError(null);
-    setProtectedEditMessage(null);
-
+    let ownershipConflicts: ObjectYamlOwnershipConflict[] = [];
     try {
-      const snapshotYamlBeforeSave = normalizeYamlString(yamlContent);
-      setPendingSnapshotAdoptionYaml(snapshotYamlBeforeSave);
-      const applyResponse = await applyYamlOnServer(
+      const ownership = await checkYamlOwnershipOnServer(
         resolvedClusterId,
         baselineYaml,
         validation.normalizedYAML,
         identity,
         baselineResourceVersion ?? identity.resourceVersion ?? ''
       );
-      const appliedResourceVersion =
-        applyResponse?.resourceVersion ??
-        validation.resourceVersion ??
-        baselineResourceVersion ??
-        identity.resourceVersion ??
-        '';
-      const immediateYaml = applyResourceVersionToYaml(
-        validation.normalizedYAML,
-        appliedResourceVersion
-      );
-      setLatestObjectIdentity({
-        ...identity,
-        resourceVersion: appliedResourceVersion,
-      });
-      setManualYamlOverride({
-        yaml: immediateYaml,
-        resourceVersion: appliedResourceVersion,
-      });
-
-      try {
-        const { latestIdentity, normalizedYaml } = await hydrateLatestObject(identity);
-        const submittedYaml = sanitizeYamlForSemanticCompare(immediateYaml);
-        const storedYaml = sanitizeYamlForSemanticCompare(normalizedYaml);
-        if (verifiedPostApply?.semanticYaml) {
-          recentVerifiedSemanticYamlsRef.current = [
-            {
-              reference: buildObjectReferenceKey(verifiedPostApply.identity),
-              semanticYaml: verifiedPostApply.semanticYaml,
-            },
-            ...recentVerifiedSemanticYamlsRef.current.filter(
-              (entry) =>
-                !(
-                  entry.reference === buildObjectReferenceKey(verifiedPostApply.identity) &&
-                  entry.semanticYaml === verifiedPostApply.semanticYaml
-                )
-            ),
-          ].slice(0, 4);
-        }
-        setVerifiedPostApply({
-          identity: latestIdentity,
-          semanticYaml: storedYaml,
-        });
-        if (submittedYaml !== storedYaml) {
-          setPostApplyNotice({
-            kind: 'diff',
-            message:
-              'Your changes were applied to the latest live object, which also included other changes made while you were editing. Review the diff below to see how the final stored object differs from the exact YAML you submitted.',
-            diff: buildYamlTransactionDiff(submittedYaml, storedYaml),
-          });
-        } else {
-          setPostApplyNotice(null);
-        }
-      } catch (fetchErr) {
-        setVerifiedPostApply(null);
-        setPostApplyNotice({
-          kind: 'warning',
-          message:
-            'YAML applied, but the editor could not reload the final live object. The manifest shown here is the submitted YAML with the returned resourceVersion, not a verified live read.',
-          diff: null,
-        });
-        errorHandler.handle(fetchErr, { action: 'loadLatestObjectYAML' });
-      }
-      exitEditMode();
-      setPendingSnapshotAdoptionYaml(snapshotYamlBeforeSave);
-      if (scope) {
-        await requestRefreshDomain({
-          domain: 'object-yaml',
-          scope,
-          reason: 'user',
-        });
-      }
-      setActionDetails([]);
+      ownershipConflicts = ownership?.conflicts ?? [];
     } catch (err) {
-      const parsed = parseObjectYamlError(err);
-      if (parsed) {
-        setActionError(parsed.message);
-        setActionDetails(parsed.causes ?? []);
-        setHasServerYamlError(true);
-        errorHandler.handle(err, { action: 'saveObjectYAML' });
-        setPendingSnapshotAdoptionYaml(null);
-        setIsSaving(false);
-        return;
-      }
-
-      const message = err instanceof Error ? err.message : 'Failed to save YAML changes.';
-      setActionError(message);
-      setActionDetails([]);
-      setPostApplyNotice(null);
-      setVerifiedPostApply(null);
-      setPendingSnapshotAdoptionYaml(null);
-      setHasServerYamlError(false);
-      errorHandler.handle(err, { action: 'saveObjectYAML' });
-    } finally {
-      setIsSaving(false);
+      errorHandler.handle(err, { action: 'checkYamlOwnership' });
     }
+
+    if (ownershipConflicts.length > 0) {
+      setIsSaving(false);
+      setPendingOwnershipWarning({
+        conflicts: ownershipConflicts,
+        identity,
+        validation,
+        baselineYaml,
+      });
+      return;
+    }
+
+    await performSave(identity, validation, baselineYaml);
   }, [
     baselineMergeYaml,
     baselineResourceVersion,
     draftYaml,
     effectiveIdentity,
-    exitEditMode,
-    hydrateLatestObject,
     isEditing,
     isSaving,
     manualYamlOverride,
+    performSave,
     prepareVisibleDraftYaml,
     resolvedClusterId,
-    scope,
     yamlContent,
-    verifiedPostApply,
   ]);
+
+  const confirmOwnershipAndSave = useCallback(async () => {
+    if (!pendingOwnershipWarning || isSaving) {
+      return;
+    }
+    const { identity, validation, baselineYaml } = pendingOwnershipWarning;
+    setPendingOwnershipWarning(null);
+    await performSave(identity, validation, baselineYaml);
+  }, [isSaving, pendingOwnershipWarning, performSave]);
+
+  const cancelOwnershipWarning = useCallback(() => {
+    setPendingOwnershipWarning(null);
+  }, []);
 
   const dismissPostApplyNotice = useCallback(() => {
     setPostApplyNotice(null);
@@ -830,5 +905,8 @@ export const useYamlTransaction = ({
     handleCancelClick,
     handleReloadAndMerge,
     handleSaveClick,
+    pendingOwnershipConflicts: pendingOwnershipWarning?.conflicts ?? null,
+    confirmOwnershipAndSave,
+    cancelOwnershipWarning,
   };
 };

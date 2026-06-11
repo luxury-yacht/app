@@ -7,7 +7,7 @@
  * table. The query is gated to the active pods tab.
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   applyColumnSizing,
@@ -25,6 +25,11 @@ import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import {
+  POD_PERMISSIONS,
+  queryNamespacesPermissions,
+  type PermissionSpecList,
+} from '@/core/capabilities';
 import '../shared.css';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
@@ -91,7 +96,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     openWithObject,
     navigateToView,
   });
-  const { ref: podRef, open: openPod, navigate: navigatePod } = podIdentity;
+  const { open: openPod, navigate: navigatePod } = podIdentity;
   // Ensure pod navigation keeps the active cluster context for object detail scopes.
   const getPodClusterMeta = useCallback(
     (pod: PodSnapshotEntry) => ({
@@ -273,12 +278,59 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   metricsRef.current = effectiveMetrics;
   const metricsBanner = useMemo(() => getMetricsBannerInfo(effectiveMetrics), [effectiveMetrics]);
 
+  // Query pod-action permissions for every (cluster, namespace) pair visible
+  // in this tab. Workload-scoped pods share the panel object's namespace, but
+  // node-scoped pods span arbitrary namespaces that the panel-level namespace
+  // query never covers. Keyed off the visible rows so permissions also
+  // self-heal after a permission-store reset; the store's TTL and in-flight
+  // dedup keep repeat calls cheap.
+  const visiblePermissionTargets = useMemo(() => {
+    const seen = new Set<string>();
+    const targets: Array<{ namespace: string; clusterId: string }> = [];
+    source.rows.forEach((pod) => {
+      const podNamespace = pod.namespace?.trim();
+      const podClusterId = pod.clusterId?.trim() || objectData?.clusterId?.trim();
+      if (!podNamespace || !podClusterId) {
+        return;
+      }
+      const key = `${podClusterId}|${podNamespace.toLowerCase()}`;
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      targets.push({ namespace: podNamespace, clusterId: podClusterId });
+    });
+    return targets;
+  }, [source.rows, objectData?.clusterId]);
+
+  useEffect(() => {
+    if (visiblePermissionTargets.length === 0) {
+      return;
+    }
+    void queryNamespacesPermissions(visiblePermissionTargets, {
+      specLists: [POD_PERMISSIONS] satisfies PermissionSpecList[],
+    });
+  }, [visiblePermissionTargets]);
+
   const objectActions = useObjectActionController({
     context: 'gridtable',
-    useDefaultHandlers: false,
     onOpen: (object) => openWithObject(object),
     onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
   });
+
+  // Context-menu references carry row facts (forwardable ports) on top of
+  // the shared identity so the action policy can gate Port Forward per pod.
+  const getContextMenuItems = useCallback(
+    (pod: PodSnapshotEntry) =>
+      objectActions.getMenuItems(
+        buildRequiredObjectReference(
+          getPodIdentity(pod),
+          { fallbackClusterId: objectData?.clusterId },
+          { portForwardAvailable: pod.portForwardAvailable }
+        )
+      ),
+    [getPodIdentity, objectActions, objectData?.clusterId]
+  );
 
   return (
     <div className="object-panel-pods">
@@ -297,7 +349,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
           diagnosticsMode="live"
           onRowClick={handlePodOpen}
           enableContextMenu
-          getCustomContextMenuItems={(pod) => objectActions.getMenuItems(podRef(pod))}
+          getCustomContextMenuItems={getContextMenuItems}
           tableClassName="gridtable-pods gridtable-pods--namespaced"
           spinnerMessage="Loading pods..."
           updatingMessage="Updating pods..."

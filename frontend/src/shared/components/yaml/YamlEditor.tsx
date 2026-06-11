@@ -34,9 +34,11 @@ import { useKeyboardSurface, useSearchShortcutTarget } from '@ui/shortcuts';
 import { buildCodeTheme } from '@/core/codemirror/theme';
 import {
   copyCodeMirrorSelection,
+  cutCodeMirrorSelection,
   getCodeMirrorSelectedText,
   selectCodeMirrorContent,
 } from '@/core/codemirror/nativeActions';
+import { ClipboardGetText } from '@wailsjs/runtime/runtime';
 import { closeSearchPanel, createSearchExtensions } from '@/core/codemirror/search';
 import './YamlEditor.css';
 
@@ -482,12 +484,7 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
                 label: 'Cut',
                 disabled: !hasSelection,
                 onClick: () => {
-                  if (!selectedText) return;
-                  void navigator.clipboard.writeText(selectedText);
-                  const { from, to } = view.state.selection.main;
-                  if (from !== to) {
-                    view.dispatch({ changes: { from, to, insert: '' } });
-                  }
+                  cutCodeMirrorSelection(view);
                 },
               });
             }
@@ -506,8 +503,10 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
               items.push({
                 label: 'Paste',
                 onClick: () => {
-                  void navigator.clipboard
-                    .readText()
+                  // The browser clipboard-read API is permission-gated inside
+                  // the Wails WebView; read through the Go-side clipboard, the
+                  // same source the Edit menu paste uses.
+                  void ClipboardGetText()
                     .then((text) => {
                       if (!text) return;
                       insertTextAtSelection(view, text);
@@ -533,6 +532,15 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
       [canEdit]
     );
 
+    // Read-only content is not editable and would otherwise be unfocusable,
+    // which keeps document.activeElement outside the editor — clipboard and
+    // select-all shortcuts route to the surface that contains the focused
+    // element, so the read-mode editor must be able to take focus.
+    const readModeFocusExtensions = useMemo<Extension[]>(
+      () => (canEdit ? [] : [EditorView.contentAttributes.of({ tabindex: '0' })]),
+      [canEdit]
+    );
+
     const editorExtensions = useMemo<Extension[]>(
       () => [
         yamlLang(),
@@ -540,6 +548,7 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
         highlightExtension,
         ...searchExtensions,
         ...protectedExtensions,
+        ...readModeFocusExtensions,
         keymap.of(editorKeyBindings),
         contextMenuExtension,
         ...extraExtensions,
@@ -550,6 +559,7 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
         extraExtensions,
         highlightExtension,
         protectedExtensions,
+        readModeFocusExtensions,
         searchExtensions,
       ]
     );
@@ -595,6 +605,9 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
       onNativeAction: ({ action, text }) => {
         if (action === 'copy') {
           return copyCodeMirrorSelection(editorViewRef.current);
+        }
+        if (action === 'cut') {
+          return canEdit ? cutCodeMirrorSelection(editorViewRef.current) : false;
         }
         if (action === 'selectAll') {
           return selectCodeMirrorContent(editorViewRef.current);

@@ -70,6 +70,7 @@ const yamlErrorsMocks = vi.hoisted(() => ({
 const wailsMocks = vi.hoisted(() => ({
   ValidateObjectYaml: vi.fn(),
   ApplyObjectYaml: vi.fn(),
+  CheckObjectYamlOwnership: vi.fn(),
   GetObjectYAMLByGVK: vi.fn(),
   MergeObjectYamlWithLatest: vi.fn(),
 }));
@@ -165,6 +166,10 @@ vi.mock('@codemirror/view', () => ({
       }),
     };
 
+    static contentAttributes = {
+      of: (attrs: unknown) => ({ type: 'contentAttributes', attrs }),
+    };
+
     static domEventHandlers(handlers: unknown) {
       return handlers;
     }
@@ -221,6 +226,7 @@ vi.mock('@utils/errorHandler', () => ({
 vi.mock('@wailsjs/go/backend/App', () => ({
   ValidateObjectYaml: wailsMocks.ValidateObjectYaml,
   ApplyObjectYaml: wailsMocks.ApplyObjectYaml,
+  CheckObjectYamlOwnership: wailsMocks.CheckObjectYamlOwnership,
   GetObjectYAMLByGVK: wailsMocks.GetObjectYAMLByGVK,
   MergeObjectYamlWithLatest: wailsMocks.MergeObjectYamlWithLatest,
 }));
@@ -466,6 +472,8 @@ describe('YamlTab', () => {
     searchModuleMocks.closeSearchPanel.mockClear();
     wailsMocks.ValidateObjectYaml.mockReset();
     wailsMocks.ApplyObjectYaml.mockReset();
+    wailsMocks.CheckObjectYamlOwnership.mockReset();
+    wailsMocks.CheckObjectYamlOwnership.mockResolvedValue({ conflicts: [] });
     wailsMocks.GetObjectYAMLByGVK.mockReset();
     wailsMocks.MergeObjectYamlWithLatest.mockReset();
     yamlErrorsMocks.parseObjectYamlError.mockReset();
@@ -631,6 +639,29 @@ describe('YamlTab', () => {
     await unmount();
   });
 
+  it('focuses the editor when the tab is active in read mode', async () => {
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((callback: FrameRequestCallback) => {
+        callback(0);
+        return 0;
+      });
+
+    // Clipboard and select-all shortcuts route to the surface that contains
+    // the focused element, so the read-mode editor must take focus when the
+    // tab becomes active.
+    const { unmount } = await renderYamlTab();
+    expect(codeMirrorState.editorView.focus).toHaveBeenCalled();
+    await unmount();
+
+    codeMirrorState.editorView.focus.mockClear();
+    const inactive = await renderYamlTab({ isActive: false });
+    expect(codeMirrorState.editorView.focus).not.toHaveBeenCalled();
+    await inactive.unmount();
+
+    rafSpy.mockRestore();
+  });
+
   it('pastes native menu text into the editor while editing', async () => {
     const { container, unmount } = await renderYamlTab();
 
@@ -713,6 +744,7 @@ describe('YamlTab', () => {
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).toContain('image: demo:v2');
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).not.toContain('managedFields');
     expect(wailsMocks.ValidateObjectYaml).not.toHaveBeenCalled();
+    expect(wailsMocks.CheckObjectYamlOwnership).toHaveBeenCalledTimes(1);
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
@@ -721,6 +753,183 @@ describe('YamlTab', () => {
 
     const editButtonAfterSave = getIconButton(container, 'Edit YAML');
     expect(editButtonAfterSave).toBeTruthy();
+
+    await unmount();
+  });
+
+  it('asks for confirmation before saving fields owned by another manager', async () => {
+    wailsMocks.CheckObjectYamlOwnership.mockResolvedValue({
+      conflicts: [
+        {
+          field: '.spec.replicas',
+          manager: 'flux',
+          message: 'conflict with "flux" using apps/v1',
+        },
+      ],
+    });
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
+
+    const { container, unmount } = await renderYamlTab();
+
+    await act(async () => {
+      getIconButton(container, 'Edit YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+    await act(async () => {
+      getIconButton(container, 'Save YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+    await waitForUpdates();
+
+    expect(wailsMocks.ApplyObjectYaml).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('flux');
+    expect(document.body.textContent).toContain('spec.replicas');
+
+    const confirmButton = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Save anyway'
+    );
+    expect(confirmButton).toBeTruthy();
+
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await waitForUpdates();
+
+    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).toContain('image: demo:v2');
+
+    await unmount();
+  });
+
+  it('keeps editing without saving when the ownership warning is cancelled', async () => {
+    wailsMocks.CheckObjectYamlOwnership.mockResolvedValue({
+      conflicts: [
+        {
+          field: '.spec.replicas',
+          manager: 'kube-controller-manager',
+          message: 'conflict with "kube-controller-manager" using apps/v1',
+        },
+      ],
+    });
+
+    const { container, unmount } = await renderYamlTab();
+
+    await act(async () => {
+      getIconButton(container, 'Edit YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+    await act(async () => {
+      getIconButton(container, 'Save YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+    await waitForUpdates();
+
+    const cancelButton = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Keep editing'
+    );
+    expect(cancelButton).toBeTruthy();
+
+    await act(async () => {
+      cancelButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await waitForUpdates();
+
+    expect(wailsMocks.ApplyObjectYaml).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain('Save anyway');
+    // Still editing: the save action remains available.
+    expect(getIconButton(container, 'Save YAML')).toBeTruthy();
+
+    await unmount();
+  });
+
+  it('discards the draft and exits edit mode via the ownership warning cancel action', async () => {
+    wailsMocks.CheckObjectYamlOwnership.mockResolvedValue({
+      conflicts: [
+        {
+          field: '.spec.replicas',
+          manager: 'flux',
+          message: 'conflict with "flux" using apps/v1',
+        },
+      ],
+    });
+
+    const { container, unmount } = await renderYamlTab();
+
+    await act(async () => {
+      getIconButton(container, 'Edit YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+    await act(async () => {
+      getIconButton(container, 'Save YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+    await waitForUpdates();
+
+    const discardButton = document.querySelector(
+      '.confirmation-modal-secondary-action'
+    ) as HTMLButtonElement | null;
+    expect(discardButton).toBeTruthy();
+    expect(discardButton?.textContent).toBe('Cancel');
+
+    await act(async () => {
+      discardButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await waitForUpdates();
+
+    expect(wailsMocks.ApplyObjectYaml).not.toHaveBeenCalled();
+    expect(document.querySelector('.confirmation-modal')).toBeNull();
+    // Edit mode exited: the Edit action is back and Save is gone.
+    expect(getIconButton(container, 'Edit YAML')).toBeTruthy();
+    expect(getIconButton(container, 'Save YAML')).toBeNull();
+
+    await unmount();
+  });
+
+  it('saves without prompting when the ownership check fails', async () => {
+    wailsMocks.CheckObjectYamlOwnership.mockRejectedValue(
+      new Error('server-side apply not supported')
+    );
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
+
+    const { container, unmount } = await renderYamlTab();
+
+    await act(async () => {
+      getIconButton(container, 'Edit YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+    await act(async () => {
+      getIconButton(container, 'Save YAML')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+    });
+    await waitForUpdates();
+
+    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
+    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ action: 'checkYamlOwnership' })
+    );
 
     await unmount();
   });

@@ -9,6 +9,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as YAML from 'yaml';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
@@ -172,6 +173,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
     handleCancelClick,
     handleReloadAndMerge,
     handleSaveClick,
+    pendingOwnershipConflicts,
+    confirmOwnershipAndSave,
+    cancelOwnershipWarning,
   } = useYamlTransaction({
     scope,
     isActive,
@@ -237,10 +241,14 @@ const YamlTab: React.FC<YamlTabProps> = ({
   useEffect(() => {
     if (!isEditing) {
       setExpandedDiffs({});
+    }
+    if (!isActive) {
       return;
     }
+    // Focus the editor in read mode too: clipboard and select-all shortcuts
+    // route to the surface that contains the focused element.
     window.requestAnimationFrame(() => yamlEditorRef.current?.focus());
-  }, [isEditing]);
+  }, [isActive, isEditing]);
 
   useShortcut({
     key: 'm',
@@ -554,6 +562,27 @@ const YamlTab: React.FC<YamlTabProps> = ({
             handleCancelClick();
             return true;
           }}
+        />
+        <ConfirmationModal
+          isOpen={Boolean(pendingOwnershipConflicts?.length)}
+          title="Take ownership of managed fields?"
+          message="Your changes modify fields that are currently managed by other controllers. Saving will take ownership of these fields, which could cause ownership conflicts that will have to be resolved."
+          detailsTable={{
+            columns: [{ header: 'Owner' }, { header: 'Path', monospace: true }],
+            rows: (pendingOwnershipConflicts ?? []).map((conflict) => [
+              conflict.manager || 'unknown manager',
+              conflict.field.replace(/^\./, '') || 'unknown field',
+            ]),
+          }}
+          confirmText="Save anyway"
+          cancelText="Keep editing"
+          confirmButtonClass="danger"
+          secondaryActionText="Cancel"
+          onSecondaryAction={handleCancelClick}
+          onConfirm={() => {
+            void confirmOwnershipAndSave();
+          }}
+          onCancel={cancelOwnershipWarning}
         />
       </div>
     </div>

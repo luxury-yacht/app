@@ -151,6 +151,67 @@ describe('ConfirmationModal', () => {
     expect(cancelButton.textContent).toBe('Never mind');
   });
 
+  it('renders an optional details table with monospace columns', async () => {
+    await renderModal({
+      detailsTable: {
+        columns: [{ header: 'Owner' }, { header: 'Path', monospace: true }],
+        rows: [
+          ['flux', 'spec.replicas'],
+          ['kube-controller-manager', 'spec.strategy.rollingUpdate.maxSurge'],
+        ],
+      },
+      warning: 'Their managers may revert your changes.',
+    });
+
+    const headers = Array.from(
+      document.querySelectorAll('.confirmation-modal-details-table th')
+    ).map((cell) => cell.textContent);
+    expect(headers).toEqual(['Owner', 'Path']);
+
+    const rows = Array.from(
+      document.querySelectorAll('.confirmation-modal-details-table tbody tr')
+    ).map((row) => Array.from(row.querySelectorAll('td')).map((cell) => cell.textContent));
+    expect(rows).toEqual([
+      ['flux', 'spec.replicas'],
+      ['kube-controller-manager', 'spec.strategy.rollingUpdate.maxSurge'],
+    ]);
+
+    const firstRowCells = document.querySelectorAll(
+      '.confirmation-modal-details-table tbody tr td'
+    );
+    expect(firstRowCells[0]?.classList.contains('monospace')).toBe(false);
+    expect(firstRowCells[1]?.classList.contains('monospace')).toBe(true);
+  });
+
+  it('omits the details table when not provided', async () => {
+    await renderModal({});
+    expect(document.querySelector('.confirmation-modal-details-table')).toBeNull();
+  });
+
+  it('renders an optional secondary action on the left of the footer', async () => {
+    const onSecondaryAction = vi.fn();
+    await renderModal({
+      secondaryActionText: 'Discard changes',
+      onSecondaryAction,
+    });
+
+    const secondaryButton = document.querySelector(
+      '.confirmation-modal-footer .confirmation-modal-secondary-action'
+    ) as HTMLButtonElement;
+    expect(secondaryButton).toBeTruthy();
+    expect(secondaryButton.textContent).toBe('Discard changes');
+
+    act(() => {
+      secondaryButton.click();
+    });
+    expect(onSecondaryAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits the secondary action when not provided', async () => {
+    await renderModal({});
+    expect(document.querySelector('.confirmation-modal-secondary-action')).toBeNull();
+  });
+
   it('returns null when modal is closed', async () => {
     await act(async () => {
       root.render(

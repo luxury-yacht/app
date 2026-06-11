@@ -137,7 +137,20 @@ describe('capabilities bootstrap helpers', () => {
 
     expect(mockSetCurrentClusterId).toHaveBeenCalledWith('cluster-a');
     expect(mockInitializePermissionStore).not.toHaveBeenCalled();
+    // A not-ready ACTIVE cluster must not wipe the store: other clusters'
+    // and other namespaces' permissions stay valid, and one-shot consumers
+    // (open object panels) have no re-query path after a wipe.
+    expect(mockResetPermissionStore).not.toHaveBeenCalled();
+  });
+
+  it('initializeUserPermissionsBootstrap resets the store when no cluster is selected', async () => {
+    const bootstrap = await loadBootstrap();
+
+    mockResetPermissionStore.mockClear();
+    bootstrap.initializeUserPermissionsBootstrap('');
+
     expect(mockResetPermissionStore).toHaveBeenCalledTimes(1);
+    expect(mockInitializePermissionStore).not.toHaveBeenCalled();
   });
 
   it('initializeUserPermissionsBootstrap queries after a previously waiting cluster becomes ready', async () => {

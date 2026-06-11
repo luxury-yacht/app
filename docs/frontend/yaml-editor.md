@@ -12,8 +12,26 @@ editor.
 - Protected ranges and read-only modes are caller policy, not Kubernetes
   semantics embedded in the editor.
 - Keyboard behavior should register as an editor surface when it needs ownership.
+- Read-only editors must stay focusable (the content carries a tabindex):
+  clipboard and select-all shortcuts route to the surface containing the
+  focused element, so an unfocusable editor silently loses Cmd/Ctrl+C/A. Only
+  an *editable* CodeMirror counts as an input for shortcut suppression — see
+  `isInputElement` in `frontend/src/ui/shortcuts/utils.ts` — so single-key app
+  shortcuts keep working in focused read-only editors.
+- Clipboard semantics come from the Wails Edit menu (`menu:cut/copy/paste/
+  selectAll` events), not browser defaults. Clipboard *reads* must go through
+  the Go-side clipboard (`ClipboardGetText`); `navigator.clipboard.readText`
+  is permission-gated in the WebView and fails silently.
+- Select All must set the selection on editor state, not a DOM range —
+  CodeMirror virtualizes long documents, so DOM ranges cover only the
+  rendered viewport.
+- Selection styling must match CodeMirror's focused-selection selector
+  specificity (`&.cm-focused > .cm-scroller > .cm-selectionLayer
+  .cm-selectionBackground` in `core/codemirror/theme.ts`), or focused editors
+  silently fall back to CodeMirror's hardcoded colors.
 - Diff, apply, merge, and live-object refresh behavior belongs to the workflow
-  layer, not the text editor core.
+  layer, not the text editor core — see
+  [../architecture/yaml-editing.md](../architecture/yaml-editing.md).
 - Do not route YAML reads or applies around the documented data-access/action
   boundaries.
 

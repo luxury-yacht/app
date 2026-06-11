@@ -266,6 +266,116 @@ describe('queryNamespacesPermissions', () => {
   });
 });
 
+describe('queryNamespacesPermissions transient errors', () => {
+  const mockTransientThenSuccess = (): void => {
+    hoisted.requestData.mockImplementation(async (options: any) => ({
+      status: 'executed',
+      data: await options.read(),
+    }));
+    hoisted.readQueryPermissions
+      .mockImplementationOnce(async (queries: any[]) => ({
+        results: queries.map((query) => ({
+          ...query,
+          allowed: false,
+          source: 'error',
+          reason: '',
+          error: 'failed to resolve resource kind "Pod": cluster cluster-1:cluster-1 not active',
+        })),
+        diagnostics: [],
+      }))
+      .mockImplementation(async (queries: any[]) => ({
+        results: queries.map((query) => ({
+          ...query,
+          allowed: true,
+          source: 'ssrr',
+          reason: '',
+          error: '',
+        })),
+        diagnostics: [],
+      }));
+  };
+
+  it('does not cache cluster-not-active responses as namespace permission denials', async () => {
+    mockTransientThenSuccess();
+
+    await queryNamespacesPermissions([{ namespace: 'team-a', clusterId: 'cluster-1' }], {
+      specLists: [POD_PERMISSIONS],
+    });
+
+    expect(
+      getUserPermissionMap().get(getPermissionKey('Pod', 'delete', 'team-a', null, 'cluster-1'))
+    ).toBeUndefined();
+  });
+
+  it('does not TTL-block a retry after a transient failure', async () => {
+    mockTransientThenSuccess();
+
+    await queryNamespacesPermissions([{ namespace: 'team-a', clusterId: 'cluster-1' }], {
+      specLists: [POD_PERMISSIONS],
+    });
+    await queryNamespacesPermissions([{ namespace: 'team-a', clusterId: 'cluster-1' }], {
+      specLists: [POD_PERMISSIONS],
+    });
+
+    expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(2);
+    expect(
+      getUserPermissionMap().get(getPermissionKey('Pod', 'delete', 'team-a', null, 'cluster-1'))
+    ).toMatchObject({ allowed: true, pending: false });
+  });
+
+  it('re-issues recorded namespace queries when their cluster becomes ready', async () => {
+    hoisted.requestData.mockImplementation(async (options: any) => ({
+      status: 'executed',
+      data: await options.read(),
+    }));
+    // The cluster-scoped init query for the active cluster succeeds; the
+    // FIRST namespace batch hits a still-connecting cluster (transient),
+    // later namespace batches succeed.
+    let namespaceBatchCalls = 0;
+    hoisted.readQueryPermissions.mockImplementation(async (queries: any[]) => {
+      const isNamespaceBatch = queries.some((query) => query.namespace === 'team-a');
+      const transient = isNamespaceBatch && namespaceBatchCalls++ === 0;
+      return {
+        results: queries.map((query) => ({
+          ...query,
+          allowed: !transient,
+          source: transient ? 'error' : 'ssrr',
+          reason: '',
+          error: transient
+            ? 'failed to resolve resource kind "Pod": cluster cluster-1:cluster-1 not active'
+            : '',
+        })),
+        diagnostics: [],
+      };
+    });
+
+    // The lifecycle subscription is owned by the store and registered on
+    // initialize. The active cluster is a DIFFERENT cluster — the panel's
+    // cluster readiness must heal its own namespace queries regardless.
+    initializePermissionStore('cluster-active');
+    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
+
+    await queryNamespacesPermissions([{ namespace: 'team-a', clusterId: 'cluster-1' }], {
+      specLists: [POD_PERMISSIONS],
+    });
+    expect(
+      getUserPermissionMap().get(getPermissionKey('Pod', 'delete', 'team-a', null, 'cluster-1'))
+    ).toBeUndefined();
+
+    eventBus.emit('cluster:lifecycle', {
+      clusterId: 'cluster-1',
+      state: 'ready',
+      previousState: 'loading',
+    });
+
+    await vi.waitFor(() =>
+      expect(
+        getUserPermissionMap().get(getPermissionKey('Pod', 'delete', 'team-a', null, 'cluster-1'))
+      ).toMatchObject({ allowed: true, pending: false })
+    );
+  });
+});
+
 describe('queryClusterPermissions', () => {
   it('does not cache cluster-not-active responses as permission errors', async () => {
     hoisted.requestData.mockImplementation(async (options: any) => ({

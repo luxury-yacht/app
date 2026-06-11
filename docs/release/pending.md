@@ -45,7 +45,32 @@
   a table's footer still overrides it for that table. The dropdown offers the same values as
   every pagination footer — they share one list in the app.
 
+### Added
+
+- The YAML editor now warns before a save takes ownership of fields that are
+  managed by another controller. When your edit changes a field owned by an
+  operator, controller, Helm, or a GitOps tool, a confirmation dialog lists
+  each field and its current manager — those managers may revert or fight the
+  change — and offers three choices: save anyway, keep editing, or cancel the
+  edit entirely (discarding the draft). Fields owned by kubectl or
+  by this app's own previous edits don't prompt (those are routine human
+  edits), and the check never blocks saving on clusters where it can't run.
+  Saving still uses the same kubectl-edit-style patch as before; the warning
+  is computed with a server-side-apply dry run, which changes nothing on the
+  cluster.
+
 ### Fixed
+
+- Cut, Copy, Paste, and Select All now work correctly in the YAML editor (and
+  the Helm Manifest/Values tabs) with the standard keyboard shortcuts and the
+  editor's right-click menu, in both read and edit modes. Previously Cmd/Ctrl+C
+  and Cmd/Ctrl+A did nothing in read mode (or selected the whole window), there
+  was no Cut menu command at all so Cmd/Ctrl+X never worked, Select All only
+  covered the visible part of large manifests, and the right-click Paste could
+  fail silently. The read-mode editor is now focusable: clicking it focuses the
+  YAML so clipboard shortcuts apply to it, and single-key app shortcuts (like
+  `m` for managedFields) still work while it is focused. The application Edit
+  menu also gained the standard Cut command.
 
 - Selected text in the YAML editor (and the Helm Manifest/Values tabs) now
   uses the same highlight color whether the editor is in read or edit mode,
@@ -123,6 +148,27 @@
 - Failed live-stream requests now return proper CORS headers, so when one does
   fail the browser console shows the real status and message instead of an
   opaque "not allowed by Access-Control-Allow-Origin" error.
+
+- Pod action menus in the object panel no longer lose their permission-gated
+  entries. Three fixes: the Pods tab of a workload or node panel now offers the
+  full pod context menu — Port Forward and Delete appear there (with their
+  confirmation and port-forward dialogs) just like on the main Pods views,
+  instead of only Open/Map/Diff. An object opened into an existing panel tab
+  group (for example a pod opened from a workload's Pods tab) no longer reads
+  the group's first panel for its cluster/API identity — previously the pod's
+  actions menu checked pod permissions under the workload's API group, found
+  nothing, and silently dropped Delete while greying out Port Forward; this
+  also corrects every other place a grouped panel tab used the wrong panel's
+  identity. And a pod's Details actions menu no longer permanently loses Port
+  Forward and Delete after a cluster reconnects or the active cluster is
+  switched while connecting: any moment the selected cluster wasn't ready
+  erased the app's cached permission answers for every cluster, and open
+  panels never re-asked. The permission cache now survives reconnects, no
+  longer records a still-connecting cluster's "not active" responses as
+  denials (which blocked retries for two minutes), and re-checks a cluster's
+  namespaces the moment it becomes ready. The Pods tab also now checks pod
+  permissions for the namespaces of the pods it actually shows, so a node
+  panel's pods — which span many namespaces — get correct menus too.
 
 - The Helm view now loads as fast as every other view. It previously made live
   Kubernetes API calls through the Helm SDK on every load — one full client
