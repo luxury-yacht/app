@@ -99,10 +99,6 @@ type RenderOptions = Partial<{
     overscan?: number;
     estimateRowHeight?: number;
   };
-  hasMore: boolean;
-  onRequestMore: (trigger: 'manual' | 'auto') => void;
-  isRequestingMore: boolean;
-  autoLoadMore: boolean;
   onSortOverride: (key: string) => void;
   filters: GridTableFilterConfig<SimpleRow>;
   className: string;
@@ -113,9 +109,6 @@ type RenderOptions = Partial<{
   loading: boolean;
   loadingOverlay: { show: boolean; message?: string };
   emptyMessage: string;
-  showLoadMoreButton: boolean;
-  showPaginationStatus: boolean;
-  loadMoreLabel: string;
   onRowClick: (item: SimpleRow) => void;
   onSort: (key: string) => void;
   enableContextMenu: boolean;
@@ -129,6 +122,7 @@ type RenderOptions = Partial<{
   columnWidths: Record<string, any>;
   allowHorizontalOverflow: boolean;
   keyExtractor: (item: SimpleRow, index: number) => string;
+  paginationControls: React.ReactNode;
 }>;
 
 let cleanupRoot: (() => void) | null = null;
@@ -361,60 +355,6 @@ describe('GridTable virtualization', () => {
     expect(renderedRows.length).toBe(12);
     expect(renderedRows[0]).toContain('Row 9');
     expect(renderedRows[renderedRows.length - 1]).toContain('Row 20');
-  });
-
-  it('fires the auto-load sentinel via IntersectionObserver when rows finish', () => {
-    const mockRequestMore = vi.fn();
-    const observedEntries: Array<{ trigger: (isIntersecting: boolean) => void }> = [];
-
-    class MockIntersectionObserver implements IntersectionObserver {
-      callback: IntersectionObserverCallback;
-      readonly root: Element | Document | null = null;
-      readonly rootMargin: string = '0px';
-      readonly scrollMargin: string = '0px';
-      readonly thresholds: ReadonlyArray<number> = [0];
-      observe = vi.fn((target: Element) => {
-        observedEntries.push({
-          trigger: (isIntersecting: boolean) =>
-            this.callback([{ isIntersecting, target }] as IntersectionObserverEntry[], this),
-        });
-      });
-      disconnect = vi.fn();
-      takeRecords = vi.fn(() => [] as IntersectionObserverEntry[]);
-      unobserve = vi.fn();
-
-      constructor(callback: IntersectionObserverCallback) {
-        this.callback = callback;
-      }
-    }
-
-    const originalIntersectionObserver = globalThis.IntersectionObserver;
-    globalThis.IntersectionObserver = MockIntersectionObserver as any;
-
-    try {
-      const { cleanup } = renderGridTable({
-        data: createRows(50),
-        virtualization: { enabled: true, threshold: 1, overscan: 1, estimateRowHeight: 40 },
-        hasMore: true,
-        autoLoadMore: true,
-        onRequestMore: mockRequestMore,
-      });
-      cleanupRoot = cleanup;
-
-      expect(observedEntries.length).toBeGreaterThan(0);
-
-      act(() => {
-        observedEntries.forEach((entry) => entry.trigger(true));
-      });
-
-      expect(mockRequestMore).toHaveBeenCalledWith('auto');
-    } finally {
-      if (originalIntersectionObserver) {
-        globalThis.IntersectionObserver = originalIntersectionObserver;
-      } else {
-        delete (globalThis as any).IntersectionObserver;
-      }
-    }
   });
 
   it('maintains focus on focused row content while the virtual window shifts', () => {
@@ -1192,46 +1132,6 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(overlay).not.toBeNull();
     expect(overlay?.textContent).toContain('Syncing…');
   });
-
-  it('supports manual pagination with load more button and status updates', async () => {
-    const requestMore = vi.fn();
-    const { container, cleanup, rerender } = renderGridTable({
-      data: createRows(5),
-      virtualization: { enabled: false },
-      hasMore: true,
-      autoLoadMore: false,
-      onRequestMore: requestMore,
-      showLoadMoreButton: true,
-      showPaginationStatus: true,
-    });
-    cleanupRoot = cleanup;
-
-    await flushAsync();
-
-    const paginationButtons = container.querySelectorAll<HTMLButtonElement>(
-      '.gridtable-pagination-button'
-    );
-    const loadMoreButton = paginationButtons[paginationButtons.length - 1];
-    expect(loadMoreButton).toBeDefined();
-    act(() => {
-      loadMoreButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(requestMore).toHaveBeenCalledWith('manual');
-
-    await flushAsync();
-
-    expect(container.querySelector('.gridtable-pagination-status')?.textContent).toContain(
-      'More pages available'
-    );
-
-    rerender({ hasMore: false });
-
-    await flushAsync();
-
-    expect(container.querySelector('.gridtable-pagination-status')?.textContent).toContain(
-      'All results loaded'
-    );
-  });
 });
 
 function createRows(count: number): SimpleRow[] {
@@ -1258,13 +1158,6 @@ function renderGridTable(options: RenderOptions = {}) {
       estimateRowHeight: 40,
       ...options.virtualization,
     },
-    hasMore: options.hasMore ?? false,
-    onRequestMore: options.onRequestMore,
-    isRequestingMore: options.isRequestingMore ?? false,
-    autoLoadMore: options.autoLoadMore ?? true,
-    showLoadMoreButton: options.showLoadMoreButton ?? true,
-    showPaginationStatus: options.showPaginationStatus ?? true,
-    loadMoreLabel: options.loadMoreLabel,
     emptyMessage: options.emptyMessage,
     loading: options.loading ?? false,
     loadingOverlay: options.loadingOverlay,
@@ -1288,6 +1181,7 @@ function renderGridTable(options: RenderOptions = {}) {
     onColumnWidthsChange: options.onColumnWidthsChange,
     columnWidths: options.columnWidths ?? {},
     allowHorizontalOverflow: options.allowHorizontalOverflow ?? false,
+    paginationControls: options.paginationControls,
   };
 
   let currentProps = initialProps;
@@ -1357,56 +1251,16 @@ it('renders the full dataset when virtualization is disabled', () => {
   cleanup();
 });
 
-it('invokes manual pagination when the Load more button is clicked', () => {
-  const mockRequestMore = vi.fn();
+it('renders paginationControls in the footer without any pagination callbacks', () => {
   const { container, cleanup } = renderGridTable({
-    data: createRows(10),
+    data: createRows(3),
     virtualization: { enabled: false },
-    hasMore: true,
-    onRequestMore: mockRequestMore,
-    autoLoadMore: false,
+    paginationControls: <div data-testid="cursor-pagination-controls">controls</div>,
   });
+  cleanupRoot = cleanup;
 
-  const paginationButtons = container.querySelectorAll<HTMLButtonElement>(
-    '.gridtable-pagination-button'
-  );
-  const loadMoreButton = paginationButtons[paginationButtons.length - 1];
-  expect(loadMoreButton).toBeDefined();
-  expect(loadMoreButton!.disabled).toBe(false);
-
-  act(() => {
-    loadMoreButton!.click();
-  });
-
-  expect(mockRequestMore).toHaveBeenCalledTimes(1);
-  expect(mockRequestMore).toHaveBeenCalledWith('manual');
-
-  cleanup();
-});
-
-it('disables the Load more button while a request is pending', () => {
-  const mockRequestMore = vi.fn();
-  const { container, cleanup } = renderGridTable({
-    data: createRows(5),
-    virtualization: { enabled: false },
-    hasMore: true,
-    onRequestMore: mockRequestMore,
-    isRequestingMore: true,
-    autoLoadMore: false,
-  });
-
-  const paginationButtons = container.querySelectorAll<HTMLButtonElement>(
-    '.gridtable-pagination-button'
-  );
-  const loadMoreButton = paginationButtons[paginationButtons.length - 1];
-  expect(loadMoreButton).toBeDefined();
-  expect(loadMoreButton!.disabled).toBe(true);
-
-  act(() => {
-    loadMoreButton!.click();
-  });
-
-  expect(mockRequestMore).not.toHaveBeenCalled();
+  expect(container.querySelector('.gridtable-pagination')).not.toBeNull();
+  expect(container.querySelector('[data-testid="cursor-pagination-controls"]')).not.toBeNull();
 
   cleanup();
 });
@@ -1478,41 +1332,6 @@ it('toggles hover suppression on the body only while focused', async () => {
 
   // Focus/blur cycle completed without hanging
   expect(wrapper).toBeTruthy();
-});
-
-it('updates pagination status messaging as pagination state evolves', async () => {
-  const { container, cleanup, rerender } = renderGridTable({
-    data: createRows(8),
-    virtualization: { enabled: false },
-    hasMore: true,
-    onRequestMore: vi.fn(),
-    autoLoadMore: false,
-  });
-  cleanupRoot = cleanup;
-
-  const statusNode = () => container.querySelector<HTMLDivElement>('.gridtable-pagination-status');
-  expect(statusNode()).not.toBeNull();
-  expect(statusNode()!.textContent?.trim()).toBe('More pages available');
-
-  await act(async () => {
-    rerender({ isRequestingMore: true });
-    await Promise.resolve();
-  });
-  expect(statusNode()!.textContent?.trim()).toBe('Loading more…');
-
-  await act(async () => {
-    rerender({ isRequestingMore: false, hasMore: false });
-    await Promise.resolve();
-  });
-  expect(statusNode()!.textContent?.trim()).toBe('All results loaded');
-
-  await act(async () => {
-    rerender({ showPaginationStatus: false });
-    await Promise.resolve();
-  });
-  expect(statusNode()).toBeNull();
-
-  cleanup();
 });
 
 it('ignores wrapper context menus when no empty-area items are exposed', async () => {
@@ -1732,55 +1551,6 @@ it('shows cell-level context menu items for the targeted row', async () => {
   expect(menu!.textContent).toContain('Inspect Row 0');
 
   cleanup();
-});
-
-it('triggers auto pagination via the load more sentinel', async () => {
-  const originalIntersectionObserver = globalThis.IntersectionObserver;
-  const observeMock = vi.fn();
-  const disconnectMock = vi.fn();
-
-  class MockIntersectionObserver implements IntersectionObserver {
-    private readonly callback: IntersectionObserverCallback;
-    readonly root: Element | Document | null = null;
-    readonly rootMargin = '0px';
-    readonly scrollMargin = '0px';
-    readonly thresholds = [0];
-
-    constructor(callback: IntersectionObserverCallback) {
-      this.callback = callback;
-    }
-
-    observe = observeMock.mockImplementation((element: Element) => {
-      this.callback(
-        [{ isIntersecting: true, target: element } as IntersectionObserverEntry],
-        this as unknown as IntersectionObserver
-      );
-    });
-
-    disconnect = disconnectMock;
-    takeRecords = vi.fn(() => [] as IntersectionObserverEntry[]);
-    unobserve = vi.fn();
-  }
-
-  (globalThis as any).IntersectionObserver = MockIntersectionObserver;
-
-  const onRequestMore = vi.fn();
-  const { cleanup } = renderGridTable({
-    data: createRows(4),
-    virtualization: { enabled: false },
-    hasMore: true,
-    autoLoadMore: true,
-    onRequestMore,
-  });
-  cleanupRoot = cleanup;
-
-  await flushAsync();
-
-  expect(observeMock).toHaveBeenCalled();
-  expect(onRequestMore).toHaveBeenCalledWith('auto');
-
-  cleanup();
-  (globalThis as any).IntersectionObserver = originalIntersectionObserver;
 });
 
 it('triggers onSort when a sortable header is clicked', () => {

@@ -18,7 +18,7 @@
 }
 
 .query-pagination-page-size-label {
-  color: var(--color-text-secondary, #9ba4b1);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-sm, 0.875rem);
   line-height: 1.2;
   white-space: nowrap;
@@ -49,7 +49,7 @@
   gap: var(--space-1, 0.25rem);
   flex: 0 1 auto;
   min-width: 8.5rem;
-  color: var(--color-text-secondary, #9ba4b1);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-sm, 0.875rem);
   line-height: 1.2;
   white-space: nowrap;
@@ -64,8 +64,8 @@
   width: 0.875rem;
   height: 0.875rem;
   flex: 0 0 0.875rem;
-  border: 1.5px solid var(--color-border, #2f343c);
-  border-top-color: var(--color-accent, #3b82f6);
+  border: 1.5px solid var(--color-border);
+  border-top-color: var(--color-accent);
   border-radius: 999px;
   opacity: 0;
 }
@@ -87,11 +87,11 @@
   align-items: center;
   justify-content: center;
   width: 2rem;
-  height: 2rem;
-  border: 1px solid var(--color-border, #2f343c);
+  height: 1.5rem;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: var(--color-bg, #1a1d23);
-  color: var(--color-text, #f7fafc);
+  background: var(--color-bg);
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -102,8 +102,8 @@
 
 .query-pagination-button:hover:not(:disabled),
 .query-pagination-button:focus-visible:not(:disabled) {
-  border-color: var(--color-accent, #3b82f6);
-  background: var(--color-bg-secondary, #22272e);
+  border-color: var(--color-accent);
+  background: var(--color-bg-secondary);
 }
 
 .query-pagination-button:focus-visible {

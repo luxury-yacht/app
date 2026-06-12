@@ -673,8 +673,6 @@ describe('BrowseView', () => {
           (item: any) => item.title === 'Load more'
         )
       ).toBe(false);
-      expect(gridTablePropsRef.current.showLoadMoreButton).toBe(false);
-      expect(gridTablePropsRef.current.showPaginationStatus).toBe(false);
       expect(gridTablePropsRef.current.filters.options.customActions).toBeUndefined();
       // Pagination totals live in the footer; the filter bar's "showing N of M due to filters"
       // banner renders only while a narrowing filter is active (complementary, not

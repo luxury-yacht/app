@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logclassify"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -49,7 +48,7 @@ func (a *App) Startup(ctx context.Context) {
 	a.logger.Info("Application startup initiated", logsources.App)
 
 	errorcapture.Init()
-	errorcapture.InstallUnhandledErrorDedup(config.UnhandledErrorLogInterval)
+	errorcapture.InstallUnhandledErrorDedup()
 	errorcapture.SetEventEmitter(func(message string) {
 		// Note: Auth state management is now per-cluster via transport wrappers.
 		// Stderr errors don't have cluster context, so we only emit to frontend

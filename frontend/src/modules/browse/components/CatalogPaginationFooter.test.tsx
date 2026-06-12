@@ -19,9 +19,6 @@ const pagination = (overrides: Partial<BrowseCatalogPagination> = {}): BrowseCat
   isRequestingMore: false,
   onRequestMore: vi.fn(),
   onRequestPrevious: vi.fn(),
-  loadMoreLabel: 'Next page',
-  previousPageLabel: 'Previous page',
-  autoLoadMore: false,
   ...overrides,
 });
 

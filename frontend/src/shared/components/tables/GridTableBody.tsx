@@ -34,9 +34,6 @@ interface GridTableBodyProps<T> {
   totalVirtualHeight: number;
   virtualOffset: number;
   renderRowContent: RenderRowContentFn<T>;
-  paginationEnabled: boolean;
-  hasMore: boolean;
-  sentinelRef: RefObject<HTMLDivElement | null>;
   onWrapperFocus: (event: React.FocusEvent<HTMLDivElement>) => void;
   onWrapperBlur: (event: React.FocusEvent<HTMLDivElement>) => void;
   contentWidth: number;
@@ -68,9 +65,6 @@ function GridTableBody<T>({
   totalVirtualHeight,
   virtualOffset,
   renderRowContent,
-  paginationEnabled,
-  hasMore,
-  sentinelRef,
   onWrapperFocus,
   onWrapperBlur,
   contentWidth,
@@ -226,13 +220,6 @@ function GridTableBody<T>({
         role="rowgroup"
       >
         {renderRows()}
-        {paginationEnabled && (
-          <div
-            ref={hasMore ? sentinelRef : null}
-            className="gridtable-pagination-sentinel"
-            aria-hidden="true"
-          />
-        )}
       </div>
     </div>
   );

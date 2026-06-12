@@ -39,13 +39,6 @@ const (
 	// RBAC-forbidden resource) would otherwise hang every snapshot for the cluster forever.
 	RefreshInformerSyncTimeout = 30 * time.Second
 
-	// UnhandledErrorLogInterval is the cooldown between log lines for a Kubernetes
-	// client error that keeps recurring unchanged. Reflectors retry broken watches
-	// every few seconds forever (for example a resource the server never serves), so
-	// without the cooldown the same failure floods the logs. The first occurrence and
-	// any change of error always log.
-	UnhandledErrorLogInterval = 10 * time.Minute
-
 	// RefreshMetricsInterval determines the cadence for the metrics poller (node/pod metrics).
 	RefreshMetricsInterval = 5 * time.Second
 

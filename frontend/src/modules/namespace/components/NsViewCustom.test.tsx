@@ -206,9 +206,6 @@ const browseCatalogResult = (items: CatalogItem[] = []) => ({
     isRequestingMore: false,
     onRequestMore: () => {},
     onRequestPrevious: () => {},
-    loadMoreLabel: 'Next page',
-    previousPageLabel: 'Previous page',
-    autoLoadMore: false,
   },
 });
 

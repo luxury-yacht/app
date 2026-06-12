@@ -31,11 +31,7 @@ import {
   isTablePageSize,
   type TablePageSize,
 } from '@shared/components/tables/pageSizeOptions';
-import {
-  mergeQueryBackedFilterOptions,
-  queryBackedPaginationProps,
-  useQueryBackedTableState,
-} from './queryBackedTableState';
+import { mergeQueryBackedFilterOptions, useQueryBackedTableState } from './queryBackedTableState';
 import type { QueryBackedTableState } from './queryBackedTableState';
 
 // The namespace prop is the raw name for a single namespace but the `namespace:all` sentinel for
@@ -306,10 +302,9 @@ function useQueryBackedGridResult<
   const fetchAllRows = useCallback((): Promise<TRow[]> => query.fetchAllRows(), [query]);
 
   const gridTableProps = useMemo(() => {
-    const base = queryBackedPaginationProps(
-      table.gridTableProps,
-      query,
-      React.createElement(QueryPaginationControls, {
+    const base = {
+      ...table.gridTableProps,
+      paginationControls: React.createElement(QueryPaginationControls, {
         idPrefix: viewId,
         pageIndex: query.pageIndex,
         pageSize: query.pageSize,
@@ -327,8 +322,8 @@ function useQueryBackedGridResult<
             persistence.setPageSize(value);
           }
         },
-      })
-    );
+      }),
+    };
     return { ...base, fetchAllRows, exportFilename: viewId };
   }, [data.length, fetchAllRows, persistence, query, table.gridTableProps, viewId]);
 

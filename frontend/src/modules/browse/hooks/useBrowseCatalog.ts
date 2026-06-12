@@ -104,9 +104,6 @@ export interface BrowseCatalogPagination {
   isRequestingMore: boolean;
   onRequestMore: () => void;
   onRequestPrevious: () => void;
-  loadMoreLabel: string;
-  previousPageLabel: string;
-  autoLoadMore: boolean;
 }
 
 /**
@@ -658,12 +655,6 @@ export function useBrowseCatalog({
       isRequestingMore,
       onRequestMore: handleLoadMore,
       onRequestPrevious: handleLoadPrevious,
-      loadMoreLabel: 'Next page',
-      previousPageLabel: 'Previous page',
-      // Cursor pages REPLACE the row window; the scroll sentinel must never
-      // auto-advance them (it chains pages and fires without scroll on short
-      // pages). Spread targets (the views' `{...pagination}`) inherit this.
-      autoLoadMore: false,
     }),
     [
       continueToken,

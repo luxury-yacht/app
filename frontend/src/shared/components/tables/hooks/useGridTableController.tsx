@@ -24,7 +24,6 @@ import { useGridTableHeaderRow } from '@shared/components/tables/hooks/useGridTa
 import { useColumnVisibilityController } from '@shared/components/tables/hooks/useColumnVisibilityController';
 import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
 import { useGridTableCellCache } from '@shared/components/tables/hooks/useGridTableCellCache';
-import { useGridTablePagination } from '@shared/components/tables/hooks/useGridTablePagination';
 import { useGridTableHeaderSyncEffects } from '@shared/components/tables/hooks/useGridTableHeaderSyncEffects';
 import { useGridTableExternalWidths } from '@shared/components/tables/hooks/useGridTableExternalWidths';
 import { useGridTableFiltersWiring } from '@shared/components/tables/hooks/useGridTableFiltersWiring';
@@ -90,13 +89,6 @@ export interface GridTableControllerResult<T> {
   renderRowContent: RenderRowContentFn<T>;
   headerRow: ReactNode;
 
-  // Pagination
-  paginationEnabled: boolean;
-  resolvedPaginationStatus: string;
-  loadMoreSentinelRef: RefObject<HTMLDivElement | null>;
-  handleManualLoadMore: () => void;
-  handleManualLoadPrevious: () => void;
-
   // Loading
   showLoadingOverlay: boolean;
   loadingOverlayMessage: string;
@@ -135,13 +127,6 @@ export function useGridTableController<T>({
   onColumnVisibilityChange,
   nonHideableColumns = DEFAULT_NON_HIDEABLE_COLUMNS,
   enableColumnVisibilityMenu = true,
-  hasMore = false,
-  hasPrevious = false,
-  onRequestMore,
-  onRequestPrevious,
-  isRequestingMore = false,
-  autoLoadMore = true,
-  showPaginationStatus = true,
   virtualization,
   loadingOverlay,
   filters,
@@ -159,10 +144,8 @@ export function useGridTableController<T>({
   );
   const wrapperRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
-  const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
   const headerInnerRef = useRef<HTMLDivElement | null>(null);
   const previousInputDataRef = useRef(inputData);
-  const paginationEnabled = Boolean(onRequestMore || onRequestPrevious);
   const contextMenuActiveRef = useRef(false);
   const clusterKeyCheckRef = useRef(false);
   const keyExtractorRef = useRef(keyExtractor);
@@ -449,26 +432,6 @@ export function useGridTableController<T>({
     measureRowRef,
   });
 
-  const { loadMoreSentinelRef, handleManualLoadMore, handleManualLoadPrevious, paginationStatus } =
-    useGridTablePagination({
-      paginationEnabled,
-      autoLoadMore,
-      hasMore,
-      hasPrevious,
-      isRequestingMore,
-      onRequestMore,
-      onRequestPrevious,
-      tableDataLength: tableData.length,
-      tableRef: tableRefMutable,
-    });
-
-  const resolvedPaginationStatus = useMemo(() => {
-    if (!showPaginationStatus) {
-      return '';
-    }
-    return paginationStatus;
-  }, [paginationStatus, showPaginationStatus]);
-
   const headerRow = useGridTableHeaderRow({
     renderedColumns,
     enableColumnResizing,
@@ -505,11 +468,6 @@ export function useGridTableController<T>({
     tableViewportWidth,
     renderRowContent,
     headerRow,
-    paginationEnabled,
-    resolvedPaginationStatus,
-    loadMoreSentinelRef,
-    handleManualLoadMore,
-    handleManualLoadPrevious,
     showLoadingOverlay,
     loadingOverlayMessage,
     hasActiveFilters,

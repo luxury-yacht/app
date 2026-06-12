@@ -310,10 +310,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           getCustomContextMenuItems={getContextMenuItems}
           useShortNames={useShortResourceNames}
           emptyMessage={emptyMessage}
-          {...pagination}
           paginationControls={paginationControls}
-          showLoadMoreButton={false}
-          showPaginationStatus={false}
         />
 
         {objectActions.modals}

@@ -35,7 +35,6 @@ describe('GridTableBody', () => {
 
     const wrapperRef = { current: wrapper };
     const tableRef = { current: table };
-    const sentinelRef = { current: document.createElement('div') };
 
     const defaultRenderRowContent: RenderRowContentFn<TestRow> = (item, index) => (
       <div key={item.id} data-index={index}>
@@ -59,9 +58,6 @@ describe('GridTableBody', () => {
       totalVirtualHeight: 0,
       virtualOffset: 0,
       renderRowContent: defaultRenderRowContent as RenderRowContentFn<any>,
-      paginationEnabled: true,
-      hasMore: true,
-      sentinelRef,
       onWrapperFocus: vi.fn(),
       onWrapperBlur: vi.fn(),
       contentWidth: 0,
@@ -87,15 +83,12 @@ describe('GridTableBody', () => {
     };
   };
 
-  it('renders static rows and pagination sentinel', async () => {
+  it('renders static rows', async () => {
     const { container } = await renderTableBody();
 
     const rows = container.querySelectorAll('[data-index]');
     expect(rows.length).toBe(2);
     expect(rows[0]?.textContent).toContain('Row 1');
-
-    expect(container.querySelector('.gridtable-pagination-sentinel')).not.toBeNull();
-    expect(container.querySelector('.gridtable-pagination-button')).toBeNull();
   });
 
   it('renders virtualization body when enabled', async () => {

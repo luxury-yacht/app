@@ -4,9 +4,9 @@
  * Deduplicates the Kubernetes client libraries' unhandled-error log output.
  * Reflectors retry a broken watch every few seconds forever (for example a
  * resource type the cluster does not serve), and each retry logs the same
- * "Failed to watch" error. The deduper lets the first occurrence through,
- * suppresses identical repeats until a cooldown elapses, and logs any change
- * of error immediately.
+ * "Failed to watch" error. The deduper lets the first occurrence of an error
+ * through and suppresses identical repeats for the rest of the session; a
+ * different error always logs immediately.
  */
 
 package errorcapture
@@ -20,21 +20,18 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// unhandledErrorPruneThreshold bounds the dedup map: once it grows past this
-// size, entries older than the cooldown are swept on the next insert.
-const unhandledErrorPruneThreshold = 256
+// unhandledErrorSeenLimit bounds the dedup map: once it grows past this size,
+// the oldest entries are evicted. An evicted error would log again if it ever
+// recurs, which is acceptable; unbounded growth from churning error text is not.
+const unhandledErrorSeenLimit = 256
 
 type unhandledErrorDeduper struct {
-	cooldown   time.Duration
-	mu         sync.Mutex
-	lastLogged map[string]time.Time
+	mu   sync.Mutex
+	seen map[string]time.Time
 }
 
-func newUnhandledErrorDeduper(cooldown time.Duration) *unhandledErrorDeduper {
-	return &unhandledErrorDeduper{
-		cooldown:   cooldown,
-		lastLogged: make(map[string]time.Time),
-	}
+func newUnhandledErrorDeduper() *unhandledErrorDeduper {
+	return &unhandledErrorDeduper{seen: make(map[string]time.Time)}
 }
 
 // unhandledErrorKey builds the dedup key from the same parameters a logging
@@ -47,27 +44,31 @@ func unhandledErrorKey(err error, msg string, keysAndValues ...interface{}) stri
 func (d *unhandledErrorDeduper) shouldLog(key string, now time.Time) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if last, ok := d.lastLogged[key]; ok && now.Sub(last) < d.cooldown {
+	if _, ok := d.seen[key]; ok {
 		return false
 	}
-	if len(d.lastLogged) > unhandledErrorPruneThreshold {
-		for k, last := range d.lastLogged {
-			if now.Sub(last) >= d.cooldown {
-				delete(d.lastLogged, k)
+	d.seen[key] = now
+	for len(d.seen) > unhandledErrorSeenLimit {
+		oldestKey := ""
+		var oldest time.Time
+		for k, at := range d.seen {
+			if oldestKey == "" || at.Before(oldest) {
+				oldestKey, oldest = k, at
 			}
 		}
+		delete(d.seen, oldestKey)
 	}
-	d.lastLogged[key] = now
 	return true
 }
 
 // InstallUnhandledErrorDedup replaces the Kubernetes libraries' global
-// unhandled-error handlers with a deduplicating logger. The replacement
-// renders exactly like the default handler (logger name "UnhandledError",
-// caller location of the reporting site), so suppression is the only
-// observable difference. Call once at startup, before clients are built.
-func InstallUnhandledErrorDedup(cooldown time.Duration) {
-	deduper := newUnhandledErrorDeduper(cooldown)
+// unhandled-error handlers with a deduplicating logger: each distinct error
+// logs once per session. The replacement renders exactly like the default
+// handler (logger name "UnhandledError", caller location of the reporting
+// site), so suppression is the only observable difference. Call once at
+// startup, before clients are built.
+func InstallUnhandledErrorDedup() {
+	deduper := newUnhandledErrorDeduper()
 	utilruntime.ErrorHandlers = []utilruntime.ErrorHandler{
 		func(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
 			if !deduper.shouldLog(unhandledErrorKey(err, msg, keysAndValues...), time.Now()) {

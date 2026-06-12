@@ -199,9 +199,6 @@ const browseCatalogResult = (items: CatalogItem[] = []) => ({
     isRequestingMore: false,
     onRequestMore: () => {},
     onRequestPrevious: () => {},
-    loadMoreLabel: 'Next page',
-    previousPageLabel: 'Previous page',
-    autoLoadMore: false,
   },
 });
 
@@ -290,17 +287,6 @@ describe('ClusterViewCustom', () => {
     // data" instead of the generic empty message.
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(gridTablePropsRef.current?.emptyMessage).toBe('Unable to load data');
-  });
-
-  it('disarms scroll auto-load for page-replacing cursor pagination', async () => {
-    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
-
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current?.autoLoadMore).toBe(false);
   });
 
   it('passes the unfiltered total through to the filter options', async () => {

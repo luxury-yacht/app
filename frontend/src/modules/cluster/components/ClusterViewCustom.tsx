@@ -299,10 +299,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           getCustomContextMenuItems={getContextMenuItems}
           useShortNames={useShortResourceNames}
           emptyMessage={emptyMessage}
-          {...pagination}
           paginationControls={paginationControls}
-          showLoadMoreButton={false}
-          showPaginationStatus={false}
         />
 
         {objectActions.modals}

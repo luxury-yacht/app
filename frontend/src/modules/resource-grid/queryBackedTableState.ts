@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import type React from 'react';
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type {
@@ -12,18 +11,6 @@ import type { SortConfig } from '@hooks/useTableSort';
 export interface QueryBackedTableState {
   filters: GridTableFilterState;
   sortConfig: SortConfig | null;
-}
-
-export interface QueryBackedPageController {
-  continueToken: string | null;
-  hasPrevious: boolean;
-  isRequestingMore: boolean;
-  loadMore: () => void;
-  loadPrevious: () => void;
-  pageIndex: number;
-  pageSize: number;
-  totalCount: number;
-  totalIsExact: boolean;
 }
 
 export function useQueryBackedTableState(defaultSort: SortConfig): {
@@ -125,39 +112,6 @@ export function normalizeQueryBackedNamespaceFilters(
   return {
     ...withoutSentinels,
     namespaces: [],
-  };
-}
-
-export function queryBackedPaginationProps<TGridProps extends { data: unknown[] }>(
-  gridTableProps: TGridProps,
-  query: QueryBackedPageController,
-  paginationControls?: React.ReactNode
-): TGridProps & {
-  autoLoadMore: boolean;
-  hasMore: boolean;
-  hasPrevious: boolean;
-  onRequestMore: () => void;
-  onRequestPrevious: () => void;
-  isRequestingMore: boolean;
-  loadMoreLabel: string;
-  previousPageLabel: string;
-  paginationControls?: React.ReactNode;
-  showLoadMoreButton: boolean;
-  showPaginationStatus: boolean;
-} {
-  return {
-    ...gridTableProps,
-    autoLoadMore: false,
-    hasMore: Boolean(query.continueToken),
-    hasPrevious: query.hasPrevious,
-    onRequestMore: () => query.loadMore(),
-    onRequestPrevious: () => query.loadPrevious(),
-    isRequestingMore: query.isRequestingMore,
-    loadMoreLabel: 'Next page',
-    previousPageLabel: 'Previous page',
-    paginationControls,
-    showLoadMoreButton: !paginationControls,
-    showPaginationStatus: !paginationControls,
   };
 }
 

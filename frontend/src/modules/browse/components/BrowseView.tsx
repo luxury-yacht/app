@@ -434,10 +434,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         enableContextMenu
         getCustomContextMenuItems={getContextMenuItems}
         emptyMessage={resolvedEmptyMessage}
-        {...pagination}
         paginationControls={paginationControls}
-        showLoadMoreButton={false}
-        showPaginationStatus={false}
       />
       {objectActions.modals}
     </>

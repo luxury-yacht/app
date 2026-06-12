@@ -3,7 +3,6 @@ import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridT
 import {
   normalizeQueryBackedNamespaceFilters,
   queryBackedFacetFilterOptions,
-  queryBackedPaginationProps,
 } from './queryBackedTableState';
 
 describe('queryBackedTableState', () => {
@@ -77,22 +76,5 @@ describe('queryBackedTableState', () => {
     };
 
     expect(normalizeQueryBackedNamespaceFilters(filters, ['team-a', 'team-b'])).toBe(filters);
-  });
-
-  it('disables scroll auto-load for query-backed cursor pages', () => {
-    const gridProps = { data: [{ name: 'one' }] };
-    const query = {
-      continueToken: 'cursor-2',
-      hasPrevious: false,
-      isRequestingMore: false,
-      loadMore: () => undefined,
-      loadPrevious: () => undefined,
-      pageIndex: 1,
-      pageSize: 250,
-      totalCount: 500,
-      totalIsExact: true,
-    };
-
-    expect(queryBackedPaginationProps(gridProps, query, 'pagination').autoLoadMore).toBe(false);
   });
 });
