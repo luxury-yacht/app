@@ -68,3 +68,10 @@ kbd {
     0 1px 0 rgba(255, 255, 255, 0.05),
     inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
+
+/* Icon glyphs inside keycaps (e.g. arrow keys in the shortcut help modal)
+   match the keycap font size instead of the icon component's px default. */
+kbd svg {
+  width: 1em;
+  height: 1em;
+}
