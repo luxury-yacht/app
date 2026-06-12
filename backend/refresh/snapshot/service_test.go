@@ -27,8 +27,9 @@ func testClusterMeta() ClusterMeta {
 }
 
 type fakeInformerHub struct {
-	mu     sync.RWMutex
-	synced bool
+	mu      sync.RWMutex
+	synced  bool
+	pending map[string]bool
 }
 
 func (h *fakeInformerHub) Start(context.Context) error { return nil }
@@ -39,12 +40,34 @@ func (h *fakeInformerHub) HasSynced(context.Context) bool {
 	return h.synced
 }
 
+// ResourcesSettled mirrors the factory semantics: a key blocks only while
+// explicitly marked pending; unknown keys are settled.
+func (h *fakeInformerHub) ResourcesSettled(keys []string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, key := range keys {
+		if h.pending[key] {
+			return false
+		}
+	}
+	return true
+}
+
 func (h *fakeInformerHub) Shutdown() error { return nil }
 
 func (h *fakeInformerHub) setSynced(synced bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.synced = synced
+}
+
+func (h *fakeInformerHub) setPending(key string, pending bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.pending == nil {
+		h.pending = make(map[string]bool)
+	}
+	h.pending[key] = pending
 }
 
 func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
@@ -179,6 +202,82 @@ func TestServiceBuildFailsWhenInformerSyncTimesOut(t *testing.T) {
 	}
 	if summary.Snapshots[0].LastStatus != "error" || summary.Snapshots[0].LastError == "" {
 		t.Fatalf("expected error telemetry for the sync timeout, got %+v", summary.Snapshots[0])
+	}
+}
+
+func registerEchoDomain(t *testing.T, reg *domain.Registry, name string) {
+	t.Helper()
+	if err := reg.Register(refresh.DomainConfig{
+		Name: name,
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			return &refresh.Snapshot{Domain: name, Scope: scope, Payload: map[string]string{"domain": name}}, nil
+		},
+	}); err != nil {
+		t.Fatalf("register %s failed: %v", name, err)
+	}
+}
+
+func TestServiceBuildGatesOnDeclaredDomainResources(t *testing.T) {
+	reg := domain.New()
+	registerEchoDomain(t, reg, "nodes")
+	registerEchoDomain(t, reg, "pods")
+	registerEchoDomain(t, reg, "catalog")
+
+	hub := &fakeInformerHub{}
+	hub.setPending("core/pods", true)
+	// Factory-wide flag stays false the whole test: mapped domains must not
+	// consult it.
+	service := NewService(reg, nil, testClusterMeta()).
+		WithInformerHub(hub).
+		WithDomainReadiness(map[string][]string{
+			"nodes":   {"core/nodes"},
+			"pods":    {"core/pods"},
+			"catalog": {},
+		})
+	service.informerSyncTimeout = 50 * time.Millisecond
+
+	// A domain whose declared resources are settled builds immediately even
+	// while an unrelated informer is pending and the factory-wide flag is false.
+	if _, err := service.Build(context.Background(), "nodes", ""); err != nil {
+		t.Fatalf("nodes build should not wait on unrelated informers: %v", err)
+	}
+
+	// A mapped domain with no informer dependencies never waits.
+	if _, err := service.Build(context.Background(), "catalog", ""); err != nil {
+		t.Fatalf("catalog build with no declared resources should not wait: %v", err)
+	}
+
+	// A domain whose own resource is pending still times out.
+	if _, err := service.Build(context.Background(), "pods", ""); !errors.Is(err, errInformerSyncTimeout) {
+		t.Fatalf("expected pods build to fail with informer sync timeout, got %v", err)
+	}
+
+	// Once its own resource settles, the domain builds.
+	hub.setPending("core/pods", false)
+	if _, err := service.Build(context.Background(), "pods", ""); err != nil {
+		t.Fatalf("pods build should succeed once its resource settles: %v", err)
+	}
+}
+
+func TestServiceBuildUnmappedDomainKeepsFactoryWideGate(t *testing.T) {
+	reg := domain.New()
+	registerEchoDomain(t, reg, "object-yaml")
+
+	hub := &fakeInformerHub{}
+	service := NewService(reg, nil, testClusterMeta()).
+		WithInformerHub(hub).
+		WithDomainReadiness(map[string][]string{"nodes": {"core/nodes"}})
+	service.informerSyncTimeout = 50 * time.Millisecond
+
+	// Domains without a readiness declaration keep today's conservative
+	// factory-wide gate.
+	if _, err := service.Build(context.Background(), "object-yaml", ""); !errors.Is(err, errInformerSyncTimeout) {
+		t.Fatalf("expected unmapped domain to keep the factory-wide gate, got %v", err)
+	}
+
+	hub.setSynced(true)
+	if _, err := service.Build(context.Background(), "object-yaml", ""); err != nil {
+		t.Fatalf("unmapped domain should build once the factory reports synced: %v", err)
 	}
 }
 

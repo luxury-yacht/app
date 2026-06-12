@@ -44,6 +44,10 @@ type DomainConfig struct {
 type InformerHub interface {
 	Start(ctx context.Context) error
 	HasSynced(ctx context.Context) bool
+	// ResourcesSettled reports whether the informers backing the supplied
+	// canonical resource keys (permissions.ResourceKey format) have synced or
+	// terminally failed. Keys with no informer are settled.
+	ResourcesSettled(keys []string) bool
 	Shutdown() error
 }
 

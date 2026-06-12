@@ -34,6 +34,7 @@ type Service struct {
 	sequence            uint64
 	cluster             ClusterMeta
 	informerHub         refresh.InformerHub
+	domainReadiness     map[string][]string
 	informerSyncTimeout time.Duration
 	cacheMu             sync.RWMutex
 	cache               map[string]cacheEntry
@@ -108,6 +109,19 @@ func (s *Service) WithInformerHub(hub refresh.InformerHub) *Service {
 	return s
 }
 
+// WithDomainReadiness narrows the informer sync gate per domain: a declared
+// domain waits only on its own resources' informers (canonical
+// permissions.ResourceKey format), so one slow watch no longer delays every
+// other domain's first snapshot. Domains absent from the map keep the
+// conservative factory-wide gate.
+func (s *Service) WithDomainReadiness(readiness map[string][]string) *Service {
+	if s == nil {
+		return s
+	}
+	s.domainReadiness = readiness
+	return s
+}
+
 // Build returns a snapshot for the requested domain/scope.
 func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh.Snapshot, error) {
 	return s.BuildRequest(BuildRequest{
@@ -131,7 +145,7 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := s.waitForInformerSync(ctx); err != nil {
+	if err := s.waitForInformerSync(ctx, domainName); err != nil {
 		if errors.Is(err, errInformerSyncTimeout) {
 			s.recordTelemetry(domainName, scope, 0, err, false, 0, nil, 0, 0, 0, true, 0)
 		}
@@ -215,8 +229,20 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 	return value.(*refresh.Snapshot), nil
 }
 
-func (s *Service) waitForInformerSync(ctx context.Context) error {
-	if s == nil || s.informerHub == nil || s.informerHub.HasSynced(ctx) {
+func (s *Service) waitForInformerSync(ctx context.Context, domainName string) error {
+	if s == nil || s.informerHub == nil {
+		return nil
+	}
+	// A domain with declared readiness resources waits only on those informers;
+	// undeclared domains keep the conservative factory-wide gate.
+	keys, scoped := s.domainReadiness[domainName]
+	settled := func() bool {
+		if scoped {
+			return s.informerHub.ResourcesSettled(keys)
+		}
+		return s.informerHub.HasSynced(ctx)
+	}
+	if settled() {
 		return nil
 	}
 	timeout := s.informerSyncTimeout
@@ -224,8 +250,8 @@ func (s *Service) waitForInformerSync(ctx context.Context) error {
 		timeout = config.RefreshInformerSyncTimeout
 	}
 	// Bound the wait: a single informer whose watch can never complete (for
-	// example an RBAC-forbidden resource) keeps the factory-wide sync flag
-	// false forever, and the caller's context may carry no deadline.
+	// example an RBAC-forbidden resource) keeps the sync gate closed forever,
+	// and the caller's context may carry no deadline.
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	ticker := time.NewTicker(config.RefreshInformerSyncPollInterval)
@@ -237,7 +263,7 @@ func (s *Service) waitForInformerSync(ctx context.Context) error {
 		case <-deadline.C:
 			return fmt.Errorf("%w after %s; the cluster API may be unreachable or a watch may be unauthorized", errInformerSyncTimeout, timeout)
 		case <-ticker.C:
-			if s.informerHub.HasSynced(ctx) {
+			if settled() {
 				return nil
 			}
 		}

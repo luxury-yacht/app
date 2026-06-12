@@ -779,3 +779,38 @@ func registrationKind(registration domainRegistration) string {
 		return ""
 	}
 }
+
+func TestDomainReadinessResourcesUnionsDeclaredContracts(t *testing.T) {
+	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	readiness := domainReadinessResources(registrations)
+
+	// Registration gate checks beyond the permission policy are included:
+	// cluster-overview checks nodes+pods+namespaces while its policy declares
+	// only nodes.
+	require.ElementsMatch(t,
+		[]string{"core/namespaces", "core/nodes", "core/pods"},
+		readiness["cluster-overview"])
+
+	// Composition runtime AND stream resources are included: namespace-workloads
+	// streams replicasets and HPAs beyond its runtime workload kinds.
+	require.Contains(t, readiness["namespace-workloads"], "apps/replicasets")
+	require.Contains(t, readiness["namespace-workloads"], "autoscaling/horizontalpodautoscalers")
+
+	// Direct registrations with a policy entry still get their resources.
+	require.Equal(t, []string{"core/namespaces"}, readiness["namespaces"])
+	require.Equal(t, []string{"core/pods"}, readiness["pods"])
+
+	// Domains with no declaration anywhere stay absent and keep the
+	// conservative factory-wide gate.
+	require.NotContains(t, readiness, "object-yaml")
+	require.NotContains(t, readiness, "object-details")
+	require.NotContains(t, readiness, "catalog")
+
+	// Every mapped domain has a non-empty, canonical (group/resource) key set.
+	for domainName, keys := range readiness {
+		require.NotEmptyf(t, keys, "domain %q mapped with an empty readiness set", domainName)
+		for _, key := range keys {
+			require.Containsf(t, key, "/", "domain %q key %q is not canonical", domainName, key)
+		}
+	}
+}
