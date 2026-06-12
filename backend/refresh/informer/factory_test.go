@@ -2,15 +2,85 @@ package informer
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
+
+// brokenInformer returns an informer whose initial list always fails with err,
+// so its cache can never sync. Mirrors a Gateway API informer watching a
+// version the server does not serve, or an RBAC-forbidden resource.
+func brokenInformer(err error) cache.SharedIndexInformer {
+	return cache.NewSharedIndexInformer(&cache.ListWatch{
+		ListFunc: func(metav1.ListOptions) (runtime.Object, error) {
+			return nil, err
+		},
+		WatchFunc: func(metav1.ListOptions) (watch.Interface, error) {
+			return nil, err
+		},
+	}, &corev1.Pod{}, 0, cache.Indexers{})
+}
+
+func newStartedFactory(t *testing.T) *Factory {
+	t.Helper()
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+		return true, nil
+	})
+	return New(fake.NewClientset(), nil, time.Minute, checker)
+}
+
+func TestStartSettlesWhenInformerCanNeverSync(t *testing.T) {
+	factory := newStartedFactory(t)
+
+	notFound := apierrors.NewNotFound(schema.GroupResource{Group: "gateway.networking.k8s.io", Resource: "tlsroutes"}, "")
+	broken := brokenInformer(notFound)
+	factory.registerInformer(broken)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	go broken.Run(ctx.Done())
+
+	if err := factory.Start(ctx); err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("Start only returned because the test context expired")
+	}
+	if !factory.HasSynced(context.Background()) {
+		t.Fatalf("expected factory to report synced when the only unsynced informer can never sync")
+	}
+}
+
+func TestStartKeepsBlockingOnTransientFailures(t *testing.T) {
+	factory := newStartedFactory(t)
+
+	broken := brokenInformer(errors.New("connection refused"))
+	factory.registerInformer(broken)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	go broken.Run(ctx.Done())
+
+	if err := factory.Start(ctx); err == nil {
+		t.Fatalf("expected Start to keep blocking while a transiently failing informer is unsynced")
+	}
+	if factory.HasSynced(context.Background()) {
+		t.Fatalf("expected factory to stay unsynced when failures are transient")
+	}
+}
 
 func TestNewFactoryRegistersPodNodeIndex(t *testing.T) {
 	client := fake.NewClientset()
@@ -94,10 +164,10 @@ func TestProcessPendingClusterInformersSkipsWithoutPermissions(t *testing.T) {
 
 	factory := newMinimalFactory(checker)
 
-	// Replace syncedFns to track registrations.
-	factory.syncedFnsMu.Lock()
-	factory.syncedFns = nil
-	factory.syncedFnsMu.Unlock()
+	// Replace syncStates to track registrations.
+	factory.syncStatesMu.Lock()
+	factory.syncStates = nil
+	factory.syncStatesMu.Unlock()
 
 	called := false
 	factory.pendingClusterInformers = []clusterInformerRegistration{
@@ -117,6 +187,28 @@ func TestProcessPendingClusterInformersSkipsWithoutPermissions(t *testing.T) {
 	}
 	if called {
 		t.Fatalf("expected informer factory to be skipped when permissions denied")
+	}
+}
+
+func TestIsTerminalWatchError(t *testing.T) {
+	notFound := apierrors.NewNotFound(schema.GroupResource{Group: "gateway.networking.k8s.io", Resource: "tlsroutes"}, "")
+	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("denied"))
+	cases := []struct {
+		name     string
+		err      error
+		terminal bool
+	}{
+		{"not found", notFound, true},
+		{"forbidden", forbidden, true},
+		{"wrapped not found (reflector list error)", fmt.Errorf("failed to list *v1.TLSRoute: %w", notFound), true},
+		{"unauthorized stays transient for auth recovery", apierrors.NewUnauthorized("expired"), false},
+		{"timeout", apierrors.NewServerTimeout(schema.GroupResource{Resource: "pods"}, "list", 1), false},
+		{"plain network error", errors.New("connection refused"), false},
+	}
+	for _, tc := range cases {
+		if got := isTerminalWatchError(tc.err); got != tc.terminal {
+			t.Errorf("%s: isTerminalWatchError = %v, want %v", tc.name, got, tc.terminal)
+		}
 	}
 }
 

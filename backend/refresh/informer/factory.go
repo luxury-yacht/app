@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	"k8s.io/client-go/informers"
@@ -34,8 +36,8 @@ type Factory struct {
 	synced   bool
 	syncedMu sync.RWMutex
 
-	syncedFns   []cache.InformerSynced
-	syncedFnsMu sync.Mutex
+	syncStates   []*informerSyncState
+	syncStatesMu sync.Mutex
 
 	pendingClusterInformers []clusterInformerRegistration
 
@@ -44,6 +46,14 @@ type Factory struct {
 	permissionMu      sync.RWMutex
 
 	runtimePermissions *permissions.Checker
+}
+
+// informerSyncState tracks one informer's progress toward its initial sync.
+// terminal flips when the watch fails with an error that can never succeed,
+// so the informer stops blocking the factory-wide sync gate.
+type informerSyncState struct {
+	hasSynced cache.InformerSynced
+	terminal  atomic.Bool
 }
 
 const podNodeIndexName = "pods:node"
@@ -227,7 +237,7 @@ func (f *Factory) Start(ctx context.Context) error {
 			go f.gatewayFactory.Start(ctx.Done())
 		}
 
-		synced := cache.WaitForCacheSync(ctx.Done(), f.syncedFns...)
+		synced := f.waitForCachesToSettle(ctx)
 		f.syncedMu.Lock()
 		f.synced = synced
 		f.syncedMu.Unlock()
@@ -236,6 +246,50 @@ func (f *Factory) Start(ctx context.Context) error {
 		}
 	})
 	return startErr
+}
+
+// waitForCachesToSettle blocks until every registered informer has either
+// synced or terminally failed, returning false only when ctx ends first.
+// Waiting on a watch that can never complete would otherwise keep the
+// factory unsynced forever and block cluster readiness (issue #225).
+func (f *Factory) waitForCachesToSettle(ctx context.Context) bool {
+	ticker := time.NewTicker(config.RefreshInformerSyncPollInterval)
+	defer ticker.Stop()
+	for {
+		if f.cachesSettled() {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+		}
+	}
+}
+
+func (f *Factory) cachesSettled() bool {
+	f.syncStatesMu.Lock()
+	states := make([]*informerSyncState, len(f.syncStates))
+	copy(states, f.syncStates)
+	f.syncStatesMu.Unlock()
+	for _, state := range states {
+		if state.terminal.Load() {
+			continue
+		}
+		if !state.hasSynced() {
+			return false
+		}
+	}
+	return true
+}
+
+// isTerminalWatchError reports whether a reflector failure can never succeed:
+// the server does not serve the resource (for example a Gateway API kind
+// watched at a version the cluster does not have) or the identity is not
+// allowed to watch it. Transient failures — network errors, throttling,
+// expired auth — must keep blocking the sync gate, so anything else is false.
+func isTerminalWatchError(err error) bool {
+	return apierrors.IsNotFound(err) || apierrors.IsForbidden(err)
 }
 
 // SharedInformerFactory exposes the underlying factory once started.
@@ -268,17 +322,17 @@ func (f *Factory) HasSynced(ctx context.Context) bool {
 // references ensures memory is reclaimed during transport rebuilds.
 func (f *Factory) Shutdown() error {
 	// Ensure any in-progress Start has completed before clearing fields.
-	// The context should already be cancelled by the caller, so
-	// WaitForCacheSync inside Start will return quickly.
+	// The context should already be cancelled by the caller, so the settle
+	// loop inside Start will return quickly.
 	f.once.Do(func() {})
 
 	f.syncedMu.Lock()
 	f.synced = false
 	f.syncedMu.Unlock()
 
-	f.syncedFnsMu.Lock()
-	f.syncedFns = nil
-	f.syncedFnsMu.Unlock()
+	f.syncStatesMu.Lock()
+	f.syncStates = nil
+	f.syncStatesMu.Unlock()
 
 	f.permissionMu.Lock()
 	f.permissionAllowed = nil
@@ -297,9 +351,21 @@ func (f *Factory) registerInformer(inf cache.SharedIndexInformer) {
 	if inf == nil {
 		return
 	}
-	f.syncedFnsMu.Lock()
-	f.syncedFns = append(f.syncedFns, inf.HasSynced)
-	f.syncedFnsMu.Unlock()
+	state := &informerSyncState{hasSynced: inf.HasSynced}
+	err := inf.SetWatchErrorHandlerWithContext(func(ctx context.Context, r *cache.Reflector, watchErr error) {
+		cache.DefaultWatchErrorHandler(ctx, r, watchErr)
+		if isTerminalWatchError(watchErr) && state.terminal.CompareAndSwap(false, true) {
+			klog.V(2).Infof("informer excluded from initial cache sync; its watch can never complete: %v", watchErr)
+		}
+	})
+	if err != nil {
+		// Handlers can only be set before the informer starts; a started
+		// informer keeps the default handler and must sync as before.
+		klog.V(2).Infof("informer watch error handler not installed: %v", err)
+	}
+	f.syncStatesMu.Lock()
+	f.syncStates = append(f.syncStates, state)
+	f.syncStatesMu.Unlock()
 }
 
 type informerFactoryFunc func() cache.SharedIndexInformer
