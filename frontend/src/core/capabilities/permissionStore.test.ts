@@ -25,6 +25,7 @@ import {
   queryClusterPermissions,
   queryNamespacesPermissions,
   resetPermissionStore,
+  setActivePermissionCluster,
   subscribeUserPermissions,
 } from './permissionStore';
 import { eventBus } from '@/core/events';
@@ -489,5 +490,75 @@ describe('permission store notifications', () => {
 
     unsubscribe();
     vi.useRealTimers();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// setActivePermissionCluster
+// ---------------------------------------------------------------------------
+
+describe('setActivePermissionCluster', () => {
+  it('initializes and queries cluster permissions when the cluster is ready', async () => {
+    mockSuccessfulQueryPermissions();
+
+    setActivePermissionCluster('cluster-a');
+
+    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(
+        getUserPermissionMap().get(getPermissionKey('Node', 'patch', null, null, 'cluster-a'))
+      ).toMatchObject({ allowed: true, pending: false })
+    );
+  });
+
+  it('trims the cluster id before initializing', async () => {
+    mockSuccessfulQueryPermissions();
+
+    setActivePermissionCluster('  cluster-a  ');
+
+    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
+    const queries = hoisted.readQueryPermissions.mock.calls[0][0] as { clusterId: string }[];
+    expect(queries.length).toBeGreaterThan(0);
+    expect(queries.every((query) => query.clusterId === 'cluster-a')).toBe(true);
+  });
+
+  it('keeps existing entries and issues no query for a not-ready cluster', async () => {
+    mockSuccessfulQueryPermissions();
+    setActivePermissionCluster('cluster-a');
+    await vi.waitFor(() => expect(getUserPermissionMap().size).toBeGreaterThan(0));
+    const sizeBefore = getUserPermissionMap().size;
+    hoisted.readQueryPermissions.mockClear();
+
+    setActivePermissionCluster('cluster-b', { ready: false });
+
+    // A not-ready ACTIVE cluster must not wipe the store: other clusters'
+    // and other namespaces' permissions stay valid, and one-shot consumers
+    // (open object panels) have no re-query path after a wipe.
+    expect(hoisted.readQueryPermissions).not.toHaveBeenCalled();
+    expect(getUserPermissionMap().size).toBe(sizeBefore);
+    // The id is still recorded as the fallback for key building.
+    expect(getPermissionKey('Pod', 'get', 'ns')).toMatch(/^cluster-b\|/);
+  });
+
+  it('queries after a previously waiting cluster becomes ready', async () => {
+    mockSuccessfulQueryPermissions();
+
+    setActivePermissionCluster('cluster-a', { ready: false });
+    expect(hoisted.readQueryPermissions).not.toHaveBeenCalled();
+
+    setActivePermissionCluster('cluster-a', { ready: true });
+    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
+  });
+
+  it('resets the store when no cluster is selected', async () => {
+    mockSuccessfulQueryPermissions();
+    setActivePermissionCluster('cluster-a');
+    await vi.waitFor(() => expect(getUserPermissionMap().size).toBeGreaterThan(0));
+    hoisted.readQueryPermissions.mockClear();
+
+    setActivePermissionCluster('   ');
+
+    expect(getUserPermissionMap().size).toBe(0);
+    expect(hoisted.readQueryPermissions).not.toHaveBeenCalled();
   });
 });

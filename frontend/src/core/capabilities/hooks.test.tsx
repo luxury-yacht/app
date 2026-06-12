@@ -13,8 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 import type { CapabilityDescriptor } from './types';
-import type { PermissionQueryDiagnostics } from './permissionTypes';
-import type { PermissionStatus } from './bootstrap';
+import type { PermissionQueryDiagnostics, PermissionStatus } from './permissionTypes';
 import { useCapabilities, type UseCapabilitiesOptions, useCapabilityDiagnostics } from './hooks';
 import { eventBus } from '@/core/events';
 
@@ -44,29 +43,6 @@ const emitDiagnosticsUpdate = () => {
   diagnosticListeners.forEach((listener) => listener());
 };
 
-vi.mock('./bootstrap', () => {
-  const getPermissionKey = (
-    resourceKind: string,
-    verb: string,
-    namespace?: string | null,
-    subresource?: string | null
-  ) => {
-    const kind = resourceKind.toLowerCase();
-    const action = verb.toLowerCase();
-    const ns = namespace ? namespace.toLowerCase() : 'cluster';
-    const sub = subresource ? subresource.toLowerCase() : '';
-    return `${kind}|${action}|${ns}|${sub}`;
-  };
-
-  const useUserPermissions = () => permissionStore.map;
-
-  return {
-    __esModule: true,
-    useUserPermissions,
-    getPermissionKey,
-  };
-});
-
 vi.mock('./permissionStore', () => {
   const subscribeDiagnostics = vi.fn((listener: () => void) => {
     diagnosticListeners.add(listener);
@@ -89,11 +65,18 @@ vi.mock('./permissionStore', () => {
     return `${kind}|${action}|${ns}|${sub}`;
   };
 
+  // useUserPermissions reads the store via useSyncExternalStore; tests drive
+  // updates by swapping the map and re-rendering, so subscribe is inert.
+  const subscribeUserPermissions = vi.fn(() => () => {});
+  const getUserPermissionMap = vi.fn(() => permissionStore.map);
+
   return {
     __esModule: true,
     subscribeDiagnostics,
     getPermissionQueryDiagnosticsSnapshot,
     getPermissionKey,
+    subscribeUserPermissions,
+    getUserPermissionMap,
   };
 });
 

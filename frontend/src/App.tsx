@@ -13,7 +13,7 @@ import { KeyboardProvider, GlobalShortcuts } from '@ui/shortcuts';
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
 import { eventBus } from '@/core/events';
 import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
-import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
+import { setActivePermissionCluster } from '@/core/capabilities';
 import { requestContextRefresh } from '@/core/data-access';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
@@ -88,9 +88,9 @@ function AppContent() {
   const selectedClusterReady = selectedClusterId ? isClusterReady(selectedClusterId) : false;
   const themeApplyRunRef = useRef(0);
 
-  // Initialize permissions bootstrap
+  // Track the selected cluster in the permission store.
   useEffect(() => {
-    initializeUserPermissionsBootstrap(selectedClusterId, { ready: selectedClusterReady });
+    setActivePermissionCluster(selectedClusterId, { ready: selectedClusterReady });
   }, [selectedClusterId, selectedClusterReady]);
 
   // main.ts hydrates preferences before first render. This effect only replays

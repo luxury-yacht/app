@@ -1,8 +1,8 @@
 /**
  * frontend/src/core/capabilities/index.ts
  *
- * Public API for the permission/capability system.
- * Exports the SSRR-backed permission store and compatibility shims.
+ * Public API for the permission/capability system, backed by the
+ * SSRR-based permission store.
  */
 
 export type {
@@ -12,38 +12,31 @@ export type {
   CapabilityState,
 } from './types';
 
-// New types.
 export type {
   PermissionSpec,
   PermissionEntry,
   PermissionQueryDiagnostics,
   PermissionKey,
   PermissionMap,
+  PermissionStatus,
 } from './permissionTypes';
-export type { PermissionStatus } from './bootstrap';
 
 // Hooks.
-export { useCapabilities, useCapabilityDiagnostics } from './hooks';
-
-// Bootstrap — public API surface (same signatures, delegates to new store).
 export {
-  initializeUserPermissionsBootstrap,
-  subscribeUserPermissions,
+  useCapabilities,
+  useCapabilityDiagnostics,
   useUserPermissions,
   useUserPermission,
-  getUserPermission,
-  getUserPermissionMap,
-  getPermissionKey,
-} from './bootstrap';
+} from './hooks';
 
-// New store — direct access for consumers that need it.
+// Permission store.
 export {
+  setActivePermissionCluster,
+  getPermissionKey,
   queryNamespacePermissions,
   queryNamespacesPermissions,
   queryClusterPermissions,
   queryKindPermissions,
-  initializePermissionStore,
-  resetPermissionStore,
 } from './permissionStore';
 
 // Permission spec lists.

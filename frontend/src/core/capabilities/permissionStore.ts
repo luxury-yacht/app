@@ -1160,10 +1160,36 @@ export const initializePermissionStore = (clusterId: string): void => {
 };
 
 /**
- * Updates the module-level cluster ID used as a fallback in getPermissionKey.
+ * Makes a cluster the active one for permission tracking. This is the single
+ * lifecycle entry point for selection changes:
+ *
+ * - no cluster selected → clear all permission state;
+ * - selected but not ready → record the id (key-building fallback) and keep
+ *   existing state: a not-ready ACTIVE cluster must not invalidate other
+ *   clusters' (or other namespaces') entries, and one-shot consumers such as
+ *   open object panels have no re-query path after a wipe. Stale-allowed is
+ *   safe — the backend re-validates every action — and the store re-queries
+ *   on the cluster:lifecycle ready event and the periodic TTL refresh;
+ * - selected and ready → initialize and query cluster-scoped permissions.
  */
-export const setCurrentClusterId = (clusterId: string): void => {
-  currentClusterId = clusterId;
+export const setActivePermissionCluster = (
+  clusterId?: string | null,
+  options: { ready?: boolean } = {}
+): void => {
+  const cid = clusterId?.trim() || '';
+  const ready = options.ready ?? true;
+  currentClusterId = cid;
+
+  if (!cid) {
+    resetPermissionStore();
+    return;
+  }
+
+  if (!ready) {
+    return;
+  }
+
+  initializePermissionStore(cid);
 };
 
 /**

@@ -14,11 +14,16 @@ import type { CapabilityDescriptor, CapabilityState } from './types';
 import { normalizeDescriptor } from './utils';
 import {
   getPermissionKey,
+  getUserPermissionMap,
   subscribeDiagnostics,
+  subscribeUserPermissions,
   getPermissionQueryDiagnosticsSnapshot,
 } from './permissionStore';
-import { useUserPermissions } from './bootstrap';
-import type { PermissionQueryDiagnostics } from './permissionTypes';
+import type {
+  PermissionMap,
+  PermissionQueryDiagnostics,
+  PermissionStatus,
+} from './permissionTypes';
 import {
   getPermissionResultErrorMessage,
   isTransientClusterInactivePermissionError,
@@ -47,6 +52,37 @@ export interface UseCapabilitiesResult {
   getState: (id: string) => CapabilityState;
   isAllowed: (id: string) => boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Permission map hooks
+// ---------------------------------------------------------------------------
+
+/** Subscribes to the permission store and returns the current permission map. */
+export const useUserPermissions = (): PermissionMap =>
+  useSyncExternalStore(subscribeUserPermissions, getUserPermissionMap, getUserPermissionMap);
+
+/** Returns the permission status for a single resource/verb, if known. */
+export const useUserPermission = (
+  resourceKind: string,
+  verb: string,
+  namespace?: string | null,
+  subresource?: string | null,
+  clusterId?: string | null,
+  group?: string | null,
+  version?: string | null
+): PermissionStatus | undefined => {
+  const map = useUserPermissions();
+  const key = getPermissionKey(
+    resourceKind,
+    verb,
+    namespace,
+    subresource,
+    clusterId,
+    group,
+    version
+  );
+  return map.get(key);
+};
 
 // ---------------------------------------------------------------------------
 // useCapabilities hook
