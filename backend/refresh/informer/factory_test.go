@@ -47,7 +47,7 @@ func TestStartSettlesWhenInformerCanNeverSync(t *testing.T) {
 
 	notFound := apierrors.NewNotFound(schema.GroupResource{Group: "gateway.networking.k8s.io", Resource: "tlsroutes"}, "")
 	broken := brokenInformer(notFound)
-	factory.registerInformer(broken)
+	factory.registerInformer("gateway.networking.k8s.io", "tlsroutes", broken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -68,7 +68,7 @@ func TestStartKeepsBlockingOnTransientFailures(t *testing.T) {
 	factory := newStartedFactory(t)
 
 	broken := brokenInformer(errors.New("connection refused"))
-	factory.registerInformer(broken)
+	factory.registerInformer("gateway.networking.k8s.io", "tlsroutes", broken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -79,6 +79,75 @@ func TestStartKeepsBlockingOnTransientFailures(t *testing.T) {
 	}
 	if factory.HasSynced(context.Background()) {
 		t.Fatalf("expected factory to stay unsynced when failures are transient")
+	}
+}
+
+func TestResourcesSettledIsolatesPendingKeys(t *testing.T) {
+	factory := newStartedFactory(t)
+
+	transient := brokenInformer(errors.New("connection refused"))
+	factory.registerInformer("gateway.networking.k8s.io", "tlsroutes", transient)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	go transient.Run(ctx.Done())
+	go func() { _ = factory.Start(ctx) }()
+
+	// The fake-client informers settle while the transient one stays pending —
+	// the per-domain win in miniature.
+	deadline := time.Now().Add(5 * time.Second)
+	for !factory.ResourcesSettled([]string{"core/pods"}) {
+		if time.Now().After(deadline) {
+			t.Fatalf("expected core/pods to settle while an unrelated informer is pending")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if factory.ResourcesSettled([]string{"gateway.networking.k8s.io/tlsroutes"}) {
+		t.Fatalf("expected the pending informer to block its own key")
+	}
+	if factory.ResourcesSettled([]string{"core/pods", "gateway.networking.k8s.io/tlsroutes"}) {
+		t.Fatalf("expected one pending key to block the combined set")
+	}
+}
+
+func TestResourcesSettledTreatsTerminalAsSettled(t *testing.T) {
+	factory := newStartedFactory(t)
+
+	notFound := apierrors.NewNotFound(schema.GroupResource{Group: "gateway.networking.k8s.io", Resource: "tlsroutes"}, "")
+	broken := brokenInformer(notFound)
+	factory.registerInformer("gateway.networking.k8s.io", "tlsroutes", broken)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	go broken.Run(ctx.Done())
+
+	deadline := time.Now().Add(10 * time.Second)
+	for !factory.ResourcesSettled([]string{"gateway.networking.k8s.io/tlsroutes"}) {
+		if time.Now().After(deadline) {
+			t.Fatalf("expected a terminally failed informer to settle its key")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestResourcesSettledUnknownKeyIsSettled(t *testing.T) {
+	factory := newStartedFactory(t)
+	// A resource with no registered informer (skipped for permissions or never
+	// present) has nothing to wait for.
+	if !factory.ResourcesSettled([]string{"gateway.networking.k8s.io/grpcroutes"}) {
+		t.Fatalf("expected a key with no registered informer to be settled")
+	}
+}
+
+func TestResourcesSettledFalseAfterShutdown(t *testing.T) {
+	factory := newStartedFactory(t)
+	if err := factory.Shutdown(); err != nil {
+		t.Fatalf("Shutdown returned error: %v", err)
+	}
+	// Mirror HasSynced: a shut-down factory must block, not default open.
+	if factory.ResourcesSettled([]string{"core/pods"}) {
+		t.Fatalf("expected a shut-down factory to report unsettled")
 	}
 }
 

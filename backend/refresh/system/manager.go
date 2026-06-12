@@ -219,7 +219,8 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		telemetryRecorder,
 		clusterMeta,
 		runtimePerms,
-	).WithInformerHub(informerFactory)
+	).WithInformerHub(informerFactory).
+		WithDomainReadiness(domainReadinessResources(registrations))
 	queue := refresh.NewInMemoryQueue()
 
 	manager := refresh.NewManager(registry, informerFactory, snapshotService, metricsPoller, queue)

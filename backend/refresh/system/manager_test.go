@@ -121,4 +121,6 @@ func (h fakeInformerHub) Start(context.Context) error { return nil }
 
 func (h fakeInformerHub) HasSynced(context.Context) bool { return h.synced }
 
+func (h fakeInformerHub) ResourcesSettled([]string) bool { return h.synced }
+
 func (fakeInformerHub) Shutdown() error { return nil }

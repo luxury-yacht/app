@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -169,6 +170,58 @@ func preflightRequests(registrations []domainRegistration, extra []informer.Perm
 	}
 
 	return requests
+}
+
+// domainReadinessResources returns, per registered domain, the canonical
+// resource keys (permissions.ResourceKey format) whose informers must settle
+// before the domain's snapshots build. The set is the union of the shared
+// permission composition (runtime + stream) and the registration's own
+// gate/preflight checks — every place a domain already declares the resources
+// it reads. Domains with no declaration anywhere are omitted and keep the
+// conservative factory-wide sync gate.
+func domainReadinessResources(registrations []domainRegistration) map[string][]string {
+	compositions := domainpermissions.CompositionByDomain()
+	result := make(map[string][]string, len(registrations))
+	for _, registration := range registrations {
+		seen := make(map[string]struct{})
+		add := func(group, resource string) {
+			seen[permissions.ResourceKey(group, resource)] = struct{}{}
+		}
+		if composition, ok := compositions[registration.name]; ok {
+			for _, resource := range composition.Runtime {
+				add(resource.Group, resource.Resource)
+			}
+			for _, resource := range composition.Stream {
+				add(resource.Group, resource.Resource)
+			}
+		}
+		if registration.list != nil {
+			for _, check := range registration.list.checks {
+				add(check.group, check.resource)
+			}
+		}
+		if registration.listWatch != nil {
+			for _, check := range registration.listWatch.checks {
+				add(check.group, check.resource)
+			}
+		}
+		for _, check := range registration.preflightList {
+			add(check.group, check.resource)
+		}
+		for _, check := range registration.preflightListWatch {
+			add(check.group, check.resource)
+		}
+		if len(seen) == 0 {
+			continue
+		}
+		keys := make([]string, 0, len(seen))
+		for key := range seen {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		result[registration.name] = keys
+	}
+	return result
 }
 
 // domainRegistrations returns the ordered domain registration table.
