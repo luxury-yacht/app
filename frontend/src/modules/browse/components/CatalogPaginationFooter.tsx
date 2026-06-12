@@ -11,6 +11,21 @@ interface CatalogPaginationFooterProps {
 }
 
 /**
+ * GridTable props that map ArrowLeft/ArrowRight to catalog page navigation,
+ * mirroring the footer buttons' disabled logic. Kept beside the footer for
+ * the same reason the footer exists: so the three catalog views cannot drift.
+ */
+export const catalogPaginationPageKeyProps = (pagination: BrowseCatalogPagination) => {
+  const busy = pagination.isRequestingMore || pagination.queryPending;
+  return {
+    onPagePrevious: pagination.onRequestPrevious,
+    onPageNext: pagination.onRequestMore,
+    canPagePrevious: pagination.hasPrevious && !busy,
+    canPageNext: pagination.hasMore && !busy,
+  };
+};
+
+/**
  * The one catalog pagination footer. Renders the shared QueryPaginationControls
  * straight from useBrowseCatalog's assembled pagination object so Browse and
  * the two Custom views cannot drift on the footer wiring.

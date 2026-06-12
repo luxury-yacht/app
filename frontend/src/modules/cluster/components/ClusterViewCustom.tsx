@@ -21,7 +21,9 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import CatalogPaginationFooter from '@modules/browse/components/CatalogPaginationFooter';
+import CatalogPaginationFooter, {
+  catalogPaginationPageKeyProps,
+} from '@modules/browse/components/CatalogPaginationFooter';
 import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import {
@@ -300,6 +302,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           useShortNames={useShortResourceNames}
           emptyMessage={emptyMessage}
           paginationControls={paginationControls}
+          {...catalogPaginationPageKeyProps(pagination)}
         />
 
         {objectActions.modals}

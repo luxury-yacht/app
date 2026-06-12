@@ -22,7 +22,9 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
-import CatalogPaginationFooter from '@modules/browse/components/CatalogPaginationFooter';
+import CatalogPaginationFooter, {
+  catalogPaginationPageKeyProps,
+} from '@modules/browse/components/CatalogPaginationFooter';
 import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import {
@@ -311,6 +313,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           useShortNames={useShortResourceNames}
           emptyMessage={emptyMessage}
           paginationControls={paginationControls}
+          {...catalogPaginationPageKeyProps(pagination)}
         />
 
         {objectActions.modals}

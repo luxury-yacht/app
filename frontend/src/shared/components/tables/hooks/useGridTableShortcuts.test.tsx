@@ -164,4 +164,76 @@ describe('useGridTableShortcuts', () => {
     expect(f10).toBeDefined();
     expect(f10!.enabled).toBe(false);
   });
+
+  const renderWithPagination = async (pagination: {
+    onPagePrevious?: () => void;
+    onPageNext?: () => void;
+    canPagePrevious?: boolean;
+    canPageNext?: boolean;
+  }) => {
+    const Harness: React.FC = () => {
+      useGridTableShortcuts({
+        shortcutsActive: true,
+        enableContextMenu: false,
+        onOpenFocusedRow: () => false,
+        onOpenContextMenu: () => false,
+        moveSelectionByDelta: () => false,
+        jumpToIndex: () => false,
+        getPageSizeRef: { current: 10 },
+        tableDataLength: 25,
+        isContextMenuVisible: false,
+        ...pagination,
+      });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    return {
+      findShortcut: (key: string) => capturedShortcuts.shortcuts.find((s) => s.key === key),
+    };
+  };
+
+  it('pages with ArrowLeft/ArrowRight when pagination is wired and possible', async () => {
+    const onPagePrevious = vi.fn();
+    const onPageNext = vi.fn();
+    const { findShortcut } = await renderWithPagination({
+      onPagePrevious,
+      onPageNext,
+      canPagePrevious: true,
+      canPageNext: true,
+    });
+
+    expect(findShortcut('ArrowLeft')!.handler()).toBe(true);
+    expect(onPagePrevious).toHaveBeenCalledTimes(1);
+
+    expect(findShortcut('ArrowRight')!.handler()).toBe(true);
+    expect(onPageNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves ArrowLeft/ArrowRight unhandled at page boundaries so native behavior survives', async () => {
+    const onPagePrevious = vi.fn();
+    const onPageNext = vi.fn();
+    const { findShortcut } = await renderWithPagination({
+      onPagePrevious,
+      onPageNext,
+      canPagePrevious: false,
+      canPageNext: false,
+    });
+
+    expect(findShortcut('ArrowLeft')!.handler()).toBe(false);
+    expect(findShortcut('ArrowRight')!.handler()).toBe(false);
+    expect(onPagePrevious).not.toHaveBeenCalled();
+    expect(onPageNext).not.toHaveBeenCalled();
+  });
+
+  it('does not claim ArrowLeft/ArrowRight for tables without pagination', async () => {
+    const { findShortcut } = await renderWithPagination({});
+
+    expect(findShortcut('ArrowLeft')!.enabled).toBe(false);
+    expect(findShortcut('ArrowRight')!.enabled).toBe(false);
+  });
 });

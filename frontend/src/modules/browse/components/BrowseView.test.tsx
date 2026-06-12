@@ -687,6 +687,11 @@ describe('BrowseView', () => {
           hasMore: true,
         },
       });
+      // ArrowLeft/ArrowRight page navigation mirrors the footer's gating.
+      expect(typeof gridTablePropsRef.current.onPagePrevious).toBe('function');
+      expect(typeof gridTablePropsRef.current.onPageNext).toBe('function');
+      expect(gridTablePropsRef.current.canPagePrevious).toBe(false);
+      expect(gridTablePropsRef.current.canPageNext).toBe(true);
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledTimes(2);
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
         1,

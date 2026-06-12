@@ -49,6 +49,13 @@ type UseGridTableShortcutsOptions = {
   getPageSizeRef: React.RefObject<number>;
   tableDataLength: number;
   isContextMenuVisible: boolean;
+  // Page navigation for paginated tables. Absent handlers leave the arrow
+  // keys unclaimed; false can-flags leave the key unhandled (native behavior
+  // such as horizontal scrolling survives at page boundaries).
+  onPagePrevious?: () => void;
+  onPageNext?: () => void;
+  canPagePrevious?: boolean;
+  canPageNext?: boolean;
 };
 
 // Centralizes keyboard shortcut wiring and related side effects (hover
@@ -63,6 +70,10 @@ export function useGridTableShortcuts({
   getPageSizeRef,
   tableDataLength,
   isContextMenuVisible,
+  onPagePrevious,
+  onPageNext,
+  canPagePrevious = false,
+  canPageNext = false,
 }: UseGridTableShortcutsOptions) {
   // Stable identity for this hook instance, used by the hover suppression Set.
   const suppressionIdRef = useRef<symbol | null>(null);
@@ -137,6 +148,30 @@ export function useGridTableShortcuts({
         },
         description: 'Open row context menu',
         enabled: enableContextMenu,
+      },
+      {
+        key: 'ArrowLeft',
+        handler: () => {
+          if (!onPagePrevious || !canPagePrevious) {
+            return false;
+          }
+          onPagePrevious();
+          return true;
+        },
+        description: 'Previous page',
+        enabled: Boolean(onPagePrevious),
+      },
+      {
+        key: 'ArrowRight',
+        handler: () => {
+          if (!onPageNext || !canPageNext) {
+            return false;
+          }
+          onPageNext();
+          return true;
+        },
+        description: 'Next page',
+        enabled: Boolean(onPageNext),
       },
     ],
     {

@@ -304,6 +304,12 @@ function useQueryBackedGridResult<
   const gridTableProps = useMemo(() => {
     const base = {
       ...table.gridTableProps,
+      // Mirrors the footer buttons' disabled logic so ArrowLeft/ArrowRight
+      // page exactly when the buttons are clickable.
+      onPagePrevious: query.loadPrevious,
+      onPageNext: query.loadMore,
+      canPagePrevious: query.hasPrevious && !query.isRequestingMore,
+      canPageNext: Boolean(query.continueToken) && !query.isRequestingMore,
       paginationControls: React.createElement(QueryPaginationControls, {
         idPrefix: viewId,
         pageIndex: query.pageIndex,
