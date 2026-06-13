@@ -10,6 +10,7 @@ package autoscaling
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -60,7 +61,5 @@ func (s *Service) buildHorizontalPodAutoscalerDetails(hpa *autoscalingv2.Horizon
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Logger != nil {
-		s.deps.Logger.Error(msg, logsources.ResourceLoader)
-	}
+	applog.Error(s.deps.Logger, msg, logsources.ResourceLoader)
 }

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -205,7 +206,5 @@ func (s *Service) ensureClient(resource string) error {
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Logger != nil {
-		s.deps.Logger.Error(msg, logsources.ResourceLoader)
-	}
+	applog.Error(s.deps.Logger, msg, logsources.ResourceLoader)
 }

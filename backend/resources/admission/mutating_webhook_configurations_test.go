@@ -131,3 +131,12 @@ func TestMutatingWebhookConfigurationLogsErrorOnFailure(t *testing.T) {
 	require.Equal(t, "ERROR", last.level)
 	require.Contains(t, last.message, "Failed to get mutating webhook configuration hook-one: boom")
 }
+
+func TestMutatingWebhookConfigurationRequiresClient(t *testing.T) {
+	service := NewService(common.Dependencies{})
+
+	_, err := service.MutatingWebhookConfiguration("hook-one")
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "kubernetes client not initialized")
+}

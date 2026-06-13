@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
@@ -24,7 +25,7 @@ func metricSpecsFromFacts(facts []resourcemodel.MetricFacts) []types.MetricSpec 
 	for _, fact := range facts {
 		result = append(result, types.MetricSpec{
 			Kind:   fact.Kind,
-			Target: copyStringMap(fact.Target),
+			Target: common.CopyStringMap(fact.Target),
 		})
 	}
 	return result
@@ -38,7 +39,7 @@ func metricStatusesFromFacts(facts []resourcemodel.MetricStatusFacts) []types.Me
 	for _, fact := range facts {
 		result = append(result, types.MetricStatus{
 			Kind:    fact.Kind,
-			Current: copyStringMap(fact.Current),
+			Current: common.CopyStringMap(fact.Current),
 		})
 	}
 	return result
@@ -119,15 +120,4 @@ func scaleTargetAPIVersion(link resourcemodel.ResourceLink) string {
 		return link.Display.Group + "/" + link.Display.Version
 	}
 	return ""
-}
-
-func copyStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	result := make(map[string]string, len(values))
-	for key, value := range values {
-		result[key] = value
-	}
-	return result
 }

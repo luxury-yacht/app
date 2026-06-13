@@ -3,17 +3,14 @@ package containerlogsstream
 import (
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/refresh"
 )
 
-// Logger represents the minimal logging interface required by the container logs streaming subsystem.
-type Logger interface {
-	Debug(message string, source ...string)
-	Info(message string, source ...string)
-	Warn(message string, source ...string)
-	Error(message string, source ...string)
-}
+// Logger represents the minimal logging interface required by the container
+// logs streaming subsystem, aliased to the canonical internal/applog.Logger.
+type Logger = applog.Logger
 
 type noopLogger struct{}
 

@@ -9,12 +9,10 @@ package admission
 
 import (
 	"fmt"
-	"testing"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
-	"github.com/stretchr/testify/require"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -77,13 +75,4 @@ func (s *Service) buildMutatingWebhookConfigurationDetails(config *admissionregi
 	}
 
 	return details
-}
-
-func TestMutatingWebhookConfigurationRequiresClient(t *testing.T) {
-	service := NewService(common.Dependencies{})
-
-	_, err := service.MutatingWebhookConfiguration("hook-one")
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "kubernetes client not initialized")
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
@@ -128,13 +129,9 @@ type Dependencies struct {
 	ClusterName                  string                                 // display name for the source cluster
 }
 
-// Logger is the minimal logging contract required by the catalog.
-type Logger interface {
-	Debug(msg string, source ...string)
-	Info(msg string, source ...string)
-	Warn(msg string, source ...string)
-	Error(msg string, source ...string)
-}
+// Logger is the minimal logging contract required by the catalog, aliased to
+// the canonical internal/applog.Logger.
+type Logger = applog.Logger
 
 // CapabilityFactory builds capability evaluation services on-demand.
 type CapabilityFactory func() *capabilities.Service

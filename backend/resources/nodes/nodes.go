@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
@@ -781,13 +782,9 @@ func formatMemoryBytes(bytes int64) string {
 }
 
 func (s *Service) logInfo(msg string) {
-	if s.deps.Logger != nil {
-		s.deps.Logger.Info(msg, "NodeOperations")
-	}
+	applog.Info(s.deps.Logger, msg, "NodeOperations")
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Logger != nil {
-		s.deps.Logger.Error(msg, "NodeOperations")
-	}
+	applog.Error(s.deps.Logger, msg, "NodeOperations")
 }

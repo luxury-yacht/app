@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"k8s.io/client-go/dynamic"
 )
@@ -41,13 +42,9 @@ func (s *Service) context() context.Context {
 }
 
 func (s *Service) logInfo(msg string) {
-	if s.deps.Logger != nil {
-		s.deps.Logger.Info(msg, "GenericResource")
-	}
+	applog.Info(s.deps.Logger, msg, "GenericResource")
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Logger != nil {
-		s.deps.Logger.Error(msg, "GenericResource")
-	}
+	applog.Error(s.deps.Logger, msg, "GenericResource")
 }

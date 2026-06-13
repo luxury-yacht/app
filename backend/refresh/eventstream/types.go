@@ -4,17 +4,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
-// Logger represents the minimal interface required for streaming telemetry.
-type Logger interface {
-	Debug(message string, source ...string)
-	Info(message string, source ...string)
-	Warn(message string, source ...string)
-	Error(message string, source ...string)
-}
+// Logger represents the minimal interface required for streaming telemetry,
+// aliased to the canonical internal/applog.Logger.
+type Logger = applog.Logger
 
 type noopLogger struct{}
 

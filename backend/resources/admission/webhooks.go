@@ -12,8 +12,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
@@ -76,7 +78,7 @@ func webhookSelectorFromFacts(selector *resourcemodel.LabelSelectorFacts) *types
 		return nil
 	}
 	converted := &types.WebhookSelector{}
-	converted.MatchLabels = copyStringMap(selector.MatchLabels)
+	converted.MatchLabels = common.CopyStringMap(selector.MatchLabels)
 	for _, expr := range selector.MatchExpressions {
 		converted.MatchExpressions = append(converted.MatchExpressions, types.WebhookSelectorExpression{
 			Key:      expr.Key,
@@ -106,20 +108,7 @@ func summarizeWebhookConfiguration(count int, selector *resourcemodel.LabelSelec
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Logger != nil {
-		s.deps.Logger.Error(msg, logsources.ResourceLoader)
-	}
-}
-
-func copyStringMap(input map[string]string) map[string]string {
-	if len(input) == 0 {
-		return nil
-	}
-	output := make(map[string]string, len(input))
-	for key, value := range input {
-		output[key] = value
-	}
-	return output
+	applog.Error(s.deps.Logger, msg, logsources.ResourceLoader)
 }
 
 func copyStringPtr(value *string) *string {

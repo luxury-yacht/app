@@ -1,16 +1,16 @@
 /*
  * backend/resources/common/logger.go
  *
- * Logger interface for resource handlers.
- * - Defines the logger methods used by services.
+ * Logger interface alias for resource handlers.
+ * - Re-exports the canonical internal/applog.Logger contract.
  */
 
 package common
 
-// Logger captures the logging operations needed by resource handlers.
-type Logger interface {
-	Debug(message string, source ...string)
-	Info(message string, source ...string)
-	Warn(message string, source ...string)
-	Error(message string, source ...string)
-}
+import "github.com/luxury-yacht/app/backend/internal/applog"
+
+// Logger is the shared application-log contract, defined canonically in
+// internal/applog. It is aliased here so resource handlers keep a local name
+// while the interface lives in exactly one place. Resource services consume it
+// via Dependencies.Logger.
+type Logger = applog.Logger
