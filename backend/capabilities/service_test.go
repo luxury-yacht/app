@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -12,13 +13,6 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	cgotesting "k8s.io/client-go/testing"
 )
-
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}
 
 type captureLogger struct {
 	debugs []string
@@ -61,7 +55,7 @@ func TestEvaluateAllowed(t *testing.T) {
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           noopLogger{},
+			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},
 	})
@@ -110,7 +104,7 @@ func TestEvaluateDenied(t *testing.T) {
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           noopLogger{},
+			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},
 	})
@@ -153,7 +147,7 @@ func TestEvaluateHandlesAPIError(t *testing.T) {
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           noopLogger{},
+			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},
 	})
@@ -199,7 +193,7 @@ func TestEvaluateRetriesTransientAuthorizationError(t *testing.T) {
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           noopLogger{},
+			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},
 		WorkerCount: 1,
@@ -236,7 +230,7 @@ func TestEvaluateUsesRateLimiter(t *testing.T) {
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           noopLogger{},
+			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},
 		RateLimiter: limiter,
@@ -337,7 +331,7 @@ func TestEvaluateSkipsAPICallWhenRateLimiterErrors(t *testing.T) {
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           noopLogger{},
+			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},
 		RateLimiter: limiter,

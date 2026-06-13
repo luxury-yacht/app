@@ -26,6 +26,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	cgotesting "k8s.io/client-go/testing"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -371,7 +372,7 @@ func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(ctx),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
+		testsupport.WithDepsLogger(applog.Noop),
 	)
 
 	service := nodes.NewService(deps)

@@ -16,8 +16,8 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 func TestCustomResourceDefinition(t *testing.T) {
@@ -60,7 +60,7 @@ func TestCustomResourceDefinition(t *testing.T) {
 	var ensureCalled bool
 	svc := NewService(common.Dependencies{
 		Context:             context.Background(),
-		Logger:              testsupport.NoopLogger{},
+		Logger:              applog.Noop,
 		APIExtensionsClient: client,
 		EnsureAPIExtensions: func(resource string) error {
 			ensureCalled = true
@@ -125,7 +125,7 @@ func TestCustomResourceDefinitionsList(t *testing.T) {
 	client := fake.NewClientset(crd1, crd2)
 	svc := NewService(common.Dependencies{
 		Context:             context.Background(),
-		Logger:              testsupport.NoopLogger{},
+		Logger:              applog.Noop,
 		APIExtensionsClient: client,
 	})
 

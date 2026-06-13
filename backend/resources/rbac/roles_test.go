@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/testsupport"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -54,7 +54,7 @@ func TestManagerRoleIncludesBindings(t *testing.T) {
 	client := fake.NewClientset(role, rb)
 	manager := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 		ClusterID:        "cluster-a",
 	})
@@ -93,7 +93,7 @@ func TestManagerRoleSkipsBindingsOnListFailure(t *testing.T) {
 
 	manager := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 		ClusterID:        "cluster-a",
 	})

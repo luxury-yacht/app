@@ -209,10 +209,10 @@ func (m *Manager) Resume(scope string, since uint64) ([]StreamEvent, bool) {
 }
 
 func (m *Manager) logWarn(message string) {
-	if m == nil || m.logger == nil {
+	if m == nil {
 		return
 	}
-	m.logger.Warn(message, logsources.EventStream, m.clusterID)
+	applog.Warn(m.logger, message, logsources.EventStream, m.clusterID)
 }
 
 // NextSequence reserves a sequence for non-event payloads (for example, initial snapshots).

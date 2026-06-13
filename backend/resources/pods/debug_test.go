@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +31,7 @@ func TestCreateDebugContainerSuccess(t *testing.T) {
 
 	svc := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -79,7 +79,7 @@ func TestCreateDebugContainerPollTimeout(t *testing.T) {
 	client := fake.NewClientset(pod)
 	svc := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -92,7 +92,7 @@ func TestCreateDebugContainerValidation(t *testing.T) {
 	client := fake.NewClientset()
 	svc := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -112,7 +112,7 @@ func TestCreateDebugContainerValidation(t *testing.T) {
 func TestCreateDebugContainerNilClient(t *testing.T) {
 	svc := NewService(common.Dependencies{
 		Context: context.Background(),
-		Logger:  testsupport.NoopLogger{},
+		Logger:  applog.Noop,
 	})
 
 	_, err := svc.CreateDebugContainer("team-a", "demo-pod", "busybox", "app")

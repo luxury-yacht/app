@@ -11,9 +11,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
-	"github.com/luxury-yacht/app/backend/testsupport"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -21,7 +21,7 @@ import (
 func newManagerWithClient(client kubernetes.Interface) *Service {
 	return NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 		ClusterID:        "cluster-a",
 	})

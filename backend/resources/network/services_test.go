@@ -19,8 +19,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 )
 
@@ -300,7 +300,7 @@ func TestManagerServiceErrors(t *testing.T) {
 
 	manager := NewService(common.Dependencies{
 		KubernetesClient: client,
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 	})
 
 	_, err := manager.GetService("default", "web")

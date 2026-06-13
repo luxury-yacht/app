@@ -305,17 +305,17 @@ func (m *Manager) Stop() {
 }
 
 func (m *Manager) logWarn(message string) {
-	if m == nil || m.logger == nil {
+	if m == nil {
 		return
 	}
-	m.logger.Warn(message, logsources.ResourceStream, m.clusterMeta.ClusterID, m.clusterMeta.ClusterName)
+	applog.Warn(m.logger, message, logsources.ResourceStream, m.clusterMeta.ClusterID, m.clusterMeta.ClusterName)
 }
 
 func (m *Manager) logInfo(message string) {
-	if m == nil || m.logger == nil {
+	if m == nil {
 		return
 	}
-	m.logger.Info(message, logsources.ResourceStream, m.clusterMeta.ClusterID, m.clusterMeta.ClusterName)
+	applog.Info(m.logger, message, logsources.ResourceStream, m.clusterMeta.ClusterID, m.clusterMeta.ClusterName)
 }
 
 // SetCustomResourceCacheInvalidator registers a cache eviction callback for custom resources.

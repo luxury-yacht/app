@@ -13,15 +13,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
-
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}
 
 func TestSortNamespaceCustomSummaries(t *testing.T) {
 	items := []NamespaceCustomSummary{
@@ -90,7 +84,7 @@ func TestNamespaceCustomBuilderPublishesKindsFromDiscoveredCRDs(t *testing.T) {
 	builder := &NamespaceCustomBuilder{
 		dynamic:   testsupport.NewDynamicClient(t, scheme, resource),
 		crdLister: testsupport.NewCRDLister(t, namespacedCRD, otherNamespacedCRD),
-		logger:    noopLogger{},
+		logger:    applog.Noop,
 	}
 
 	snapshot, err := builder.Build(context.Background(), "cluster-a::namespace:team-a")
@@ -142,7 +136,7 @@ func TestNamespaceCustomBuilderSkipsFirstClassGatewayCRDs(t *testing.T) {
 	builder := &NamespaceCustomBuilder{
 		dynamic:   testsupport.NewDynamicClient(t, scheme),
 		crdLister: testsupport.NewCRDLister(t, widgetCRD, gatewayCRD),
-		logger:    noopLogger{},
+		logger:    applog.Noop,
 	}
 
 	snapshot, err := builder.Build(context.Background(), "cluster-a::namespace:team-a")

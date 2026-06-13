@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -29,13 +30,12 @@ import (
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
-	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 func TestFetchContainerLogsRequiresNamespace(t *testing.T) {
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: fake.NewClientset(),
 	})
 
@@ -47,7 +47,7 @@ func TestFetchContainerLogsUnsupportedWorkload(t *testing.T) {
 	pods := fake.NewClientset()
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: pods,
 	})
 
@@ -67,7 +67,7 @@ func TestPodContainersPropagatesError(t *testing.T) {
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -148,7 +148,7 @@ func TestPodsForCronJobContinuesOnPodListError(t *testing.T) {
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -161,7 +161,7 @@ func TestFetchContainerLogsForPodPropagatesGetError(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -193,7 +193,7 @@ func TestPodContainersSuccess(t *testing.T) {
 func TestPodContainersRequiresTargetIdentity(t *testing.T) {
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: fake.NewClientset(),
 	})
 
@@ -349,7 +349,7 @@ func TestResolveTargetPodsCronJob(t *testing.T) {
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -454,7 +454,7 @@ func TestFetchContainerLogsAggregatesWorkloadPods(t *testing.T) {
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -531,7 +531,7 @@ func TestFetchContainerLogsSwallowsCommonErrors(t *testing.T) {
 
 			service := NewService(common.Dependencies{
 				Context:          context.Background(),
-				Logger:           testsupport.NoopLogger{},
+				Logger:           applog.Noop,
 				KubernetesClient: client,
 			})
 
@@ -556,7 +556,7 @@ func TestFetchContainerLogsUnexpectedErrorPropagates(t *testing.T) {
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -599,7 +599,7 @@ func TestFetchContainerLogsAggregatesAndSortsEntries(t *testing.T) {
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -646,7 +646,7 @@ func TestResolveTargetPodsOtherWorkloads(t *testing.T) {
 	}
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -693,7 +693,7 @@ func TestFetchContainerLogsScannerError(t *testing.T) {
 	}
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -716,7 +716,7 @@ func TestFetchContainerLogsHandlesOversizedLine(t *testing.T) {
 	}
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -746,7 +746,7 @@ func TestFetchContainerLogsForPodSpecificContainer(t *testing.T) {
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -781,7 +781,7 @@ func TestFetchContainerLogsForPodIncludesEphemeralInAllContainers(t *testing.T) 
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -817,7 +817,7 @@ func TestFetchContainerLogsForPodMatchesSharedContainerEnumeration(t *testing.T)
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -846,7 +846,7 @@ func TestFetchContainerLogsReturnsErrorWhenAllFetchesFail(t *testing.T) {
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -878,7 +878,7 @@ func TestFetchContainerLogsAllowsPartialSuccessAcrossContainers(t *testing.T) {
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -910,7 +910,7 @@ func TestFetchContainerLogsWarnsWhenTargetLimitExceeded(t *testing.T) {
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -975,7 +975,7 @@ func TestFetchContainerLogsUsesSharedCappedTargetSelection(t *testing.T) {
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
@@ -1054,7 +1054,7 @@ func TestFetchContainerLogsAppliesSelectedFiltersBeforeTargetLimit(t *testing.T)
 
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
+		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 

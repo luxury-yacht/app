@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	cgofake "k8s.io/client-go/kubernetes/fake"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/workloads"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -371,7 +372,7 @@ func newDeps(t testing.TB, client *cgofake.Clientset) common.Dependencies {
 	return testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
+		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
 }

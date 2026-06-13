@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 )
@@ -367,10 +368,11 @@ func countSSARItems(itemsByCluster map[string][]ssarItem) int {
 }
 
 func (a *App) logQueryPermissionsBatch(batch queryPermissionsBatchLog) {
-	if a == nil || a.logger == nil {
+	if a == nil {
 		return
 	}
-	a.logger.Debug(
+	applog.Debug(
+		a.logger,
 		fmt.Sprintf(
 			"QueryPermissions batch checks=%d uniqueGVKs=%d namespaces=%d ssarFallbacks=%d diagnostics=%d total=%s resolve=%s ssrr=%s ssar=%s",
 			batch.checkCount,

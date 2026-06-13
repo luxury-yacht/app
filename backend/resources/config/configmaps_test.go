@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -91,7 +92,7 @@ func newConfigService(t testing.TB, client *fake.Clientset) *Service {
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
+		testsupport.WithDepsLogger(applog.Noop),
 	)
 	deps.ClusterID = "cluster-a"
 	deps.ClusterName = "Cluster A"

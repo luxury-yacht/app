@@ -13,6 +13,7 @@ import (
 
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -46,7 +47,7 @@ func newStorageService(t testing.TB, client *fake.Clientset) *Service {
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
+		testsupport.WithDepsLogger(applog.Noop),
 	)
 	return NewService(deps)
 }

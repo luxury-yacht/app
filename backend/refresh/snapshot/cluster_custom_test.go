@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -61,7 +62,7 @@ func TestClusterCustomBuilder(t *testing.T) {
 	builder := &ClusterCustomBuilder{
 		dynamic:   dynamicClient,
 		crdLister: testsupport.NewCRDLister(t, crd),
-		logger:    noopLogger{},
+		logger:    applog.Noop,
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -136,7 +137,7 @@ func TestClusterCustomBuilderMultipleCRDs(t *testing.T) {
 	builder := &ClusterCustomBuilder{
 		dynamic:   dynamicClient,
 		crdLister: testsupport.NewCRDLister(t, clusterCRD, namespacedCRD),
-		logger:    noopLogger{},
+		logger:    applog.Noop,
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -196,7 +197,7 @@ func TestClusterCustomBuilderSkipsFirstClassGatewayCRDs(t *testing.T) {
 	builder := &ClusterCustomBuilder{
 		dynamic:   testsupport.NewDynamicClient(t, scheme),
 		crdLister: testsupport.NewCRDLister(t, widgetCRD, gatewayClassCRD),
-		logger:    noopLogger{},
+		logger:    applog.Noop,
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")

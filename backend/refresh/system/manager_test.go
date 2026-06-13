@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
@@ -30,7 +31,7 @@ func TestNewSubsystemRequiresDynamicClient(t *testing.T) {
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
-		Logger: noopLogger{},
+		Logger: applog.Noop,
 	}
 
 	manager, handler, recorder, _, cache, _, err := NewSubsystem(cfg)
@@ -62,7 +63,7 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
-		Logger: noopLogger{},
+		Logger: applog.Noop,
 	}
 
 	manager, handler, recorder, issues, cache, factory, err := NewSubsystem(cfg)
@@ -105,13 +106,6 @@ type noopObjectDetailProvider struct {
 func (p noopObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (interface{}, string, error) {
 	return nil, "", p.err
 }
-
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}
 
 type fakeInformerHub struct {
 	synced bool
