@@ -105,11 +105,56 @@ func (c *Capture) start() {
 	go c.readPipe()
 }
 
-// readPipe continuously reads from the stderr pipe.
+// maxPendingLineBytes bounds the partial-line buffer in readPipe so an
+// unterminated, over-long line is flushed rather than accumulated without bound.
+// A var (not const) so tests can exercise the valve without a 1 MiB write.
+var maxPendingLineBytes = 1 << 20 // 1 MiB
+
+// readPipe continuously reads from the stderr pipe, reassembling complete lines
+// across reads. A single Read returns up to 4096 bytes and can end mid-line, so
+// processing each raw chunk independently would tear lines and miss auth keywords
+// that straddle the split. The trailing partial line is held in pending until its
+// newline (or EOF, or the size valve) arrives.
 func (c *Capture) readPipe() {
-	scanner := make([]byte, 4096)
+	buf := make([]byte, 4096)
+	var pending []byte
+
+	flush := func(lines []byte) {
+		if len(lines) == 0 {
+			return
+		}
+		// Process auth-related errors FIRST so state transitions happen before
+		// logSink decides whether to suppress the message. This ensures the
+		// auth manager knows about failures before logs are emitted.
+		c.captureIfInteresting(string(lines))
+
+		if getLogSink() != nil {
+			c.emitToLogSink(lines)
+		}
+	}
+
 	for {
-		n, err := c.pipeReader.Read(scanner)
+		n, err := c.pipeReader.Read(buf)
+		if n > 0 {
+			chunk := buf[:n]
+
+			c.mu.Lock()
+			c.buffer.Write(chunk)
+			trimBuffer(c.buffer, 100000, 50000)
+			c.mu.Unlock()
+
+			pending = append(pending, chunk...)
+			// Flush through the last newline; keep the trailing partial line.
+			if idx := bytes.LastIndexByte(pending, '\n'); idx >= 0 {
+				flush(pending[:idx+1])
+				pending = append(pending[:0], pending[idx+1:]...)
+			}
+			// Valve: never buffer an unterminated line without bound.
+			if len(pending) > maxPendingLineBytes {
+				flush(pending)
+				pending = pending[:0]
+			}
+		}
 		if err != nil {
 			if err != io.EOF {
 				if sink := getLogSink(); sink != nil {
@@ -118,27 +163,10 @@ func (c *Capture) readPipe() {
 			}
 			break
 		}
-
-		if n == 0 {
-			continue
-		}
-
-		chunk := scanner[:n]
-
-		c.mu.Lock()
-		c.buffer.Write(chunk)
-		trimBuffer(c.buffer, 100000, 50000)
-		c.mu.Unlock()
-
-		// Process auth-related errors FIRST so state transitions happen before
-		// logSink decides whether to suppress the message. This ensures the
-		// auth manager knows about failures before logs are emitted.
-		c.captureIfInteresting(string(chunk))
-
-		if getLogSink() != nil {
-			c.emitToLogSink(chunk)
-		}
 	}
+
+	// Flush a final line that arrived without a trailing newline.
+	flush(pending)
 }
 
 // isAuthRelated determines if a log message is related to authentication or token issues.

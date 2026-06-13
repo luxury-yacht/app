@@ -296,3 +296,78 @@ func TestCaptureWithClusterNoOpWhenGlobalNil(t *testing.T) {
 		t.Fatalf("expected no event emission when global is nil")
 	}
 }
+
+// TestReadPipeDetectsAuthKeywordSplitAcrossReads guards finding #2: readPipe
+// reads stderr in 4096-byte chunks, so a single Read can end mid-line. An auth
+// keyword that straddles the boundary must still be detected — the line has to be
+// reassembled across reads rather than processed per raw chunk.
+func TestReadPipeDetectsAuthKeywordSplitAcrossReads(t *testing.T) {
+	c := &Capture{buffer: &bytes.Buffer{}}
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	c.pipeReader = r
+
+	const keyword = "unauthorized"
+	// Pad so the keyword spans byte 4096: the first 4096-byte Read ends mid-keyword
+	// ("...unauth"), the next Read begins with the rest ("orized\n"). The space
+	// before the keyword gives \bunauthorized\b a word boundary to match once the
+	// line is reassembled.
+	prefix := strings.Repeat("x", 4089) + " " // 4090 bytes; keyword then starts at offset 4090
+	line := prefix + keyword + "\n"
+	_, err = w.WriteString(line)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	c.readPipe() // drains the pipe then returns at EOF
+
+	require.Contains(t, c.last(), keyword,
+		"auth keyword straddling the 4096-byte read boundary must still be detected")
+}
+
+// TestReadPipeFlushesUnterminatedFinalLine ensures reassembly never drops a final
+// line that arrives without a trailing newline; it must be flushed at EOF.
+func TestReadPipeFlushesUnterminatedFinalLine(t *testing.T) {
+	c := &Capture{buffer: &bytes.Buffer{}}
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	c.pipeReader = r
+
+	_, err = w.WriteString("token has expired") // no trailing newline
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	c.readPipe()
+
+	require.Contains(t, c.last(), "token has expired",
+		"a final line without a trailing newline must still be processed at EOF")
+}
+
+// TestReadPipeValveFlushesOverlongUnterminatedLine ensures an unterminated line
+// exceeding maxPendingLineBytes is flushed mid-stream — before any newline or
+// EOF — rather than buffered without bound. The pipe stays open during the
+// assertion, so only the size valve (not EOF) can trigger detection.
+func TestReadPipeValveFlushesOverlongUnterminatedLine(t *testing.T) {
+	old := maxPendingLineBytes
+	maxPendingLineBytes = 32
+	t.Cleanup(func() { maxPendingLineBytes = old })
+
+	c := &Capture{buffer: &bytes.Buffer{}}
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	c.pipeReader = r
+	t.Cleanup(func() { _ = r.Close() })
+
+	done := make(chan struct{})
+	go func() { c.readPipe(); close(done) }()
+
+	_, err = w.WriteString("unauthorized access " + strings.Repeat("y", 64))
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(c.last(), "unauthorized")
+	}, time.Second, 5*time.Millisecond,
+		"valve should flush an over-cap unterminated line before EOF")
+
+	require.NoError(t, w.Close())
+	<-done
+}
