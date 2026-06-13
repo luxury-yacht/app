@@ -221,9 +221,7 @@ func executeWithRetry[T any](ctx context.Context, a *App, clusterID, resourceKin
 				backoff = config.ResourceFetchRetryMaxDelay
 			}
 			if a != nil {
-				if a.logger != nil {
-					a.logger.Warn(fmt.Sprintf("Retrying %s %s due to %s (attempt %d/%d)", resourceKind, target, reason, attempt+1, config.ResourceFetchMaxAttempts-1), logsources.ResourceLoader, clusterID, a.clusterNameForID(clusterID))
-				}
+				a.logger.Warn(fmt.Sprintf("Retrying %s %s due to %s (attempt %d/%d)", resourceKind, target, reason, attempt+1, config.ResourceFetchMaxAttempts-1), logsources.ResourceLoader, clusterID, a.clusterNameForID(clusterID))
 				if a.telemetryRecorder != nil {
 					a.telemetryRecorder.RecordRetryAttempt(err)
 				}

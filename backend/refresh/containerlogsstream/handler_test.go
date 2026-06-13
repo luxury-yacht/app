@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -257,7 +258,7 @@ func TestMatchContainerFilter(t *testing.T) {
 
 func TestServeHTTPRequiresFlusher(t *testing.T) {
 	client := fake.NewClientset()
-	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
 	if err != nil {
 		t.Fatalf("NewHandler returned error: %v", err)
 	}
@@ -289,7 +290,7 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 		},
 	}
 	client := fake.NewClientset(pod)
-	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
 	if err != nil {
 		t.Fatalf("NewHandler returned error: %v", err)
 	}
@@ -355,7 +356,7 @@ func TestServeHTTPEmitsPermissionDeniedPayload(t *testing.T) {
 		)
 	})
 
-	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/?scope=default:batch/v1:job:my-job", nil)
@@ -407,7 +408,7 @@ func TestServeHTTPStreamsUpdates(t *testing.T) {
 		},
 	}
 
-	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -481,7 +482,7 @@ func TestServeHTTPEmitsErrorEvent(t *testing.T) {
 		},
 	}
 
-	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
@@ -173,9 +174,7 @@ func (a *App) restartWorkloadInternal(clusterID, namespace, group, version, work
 		return fmt.Errorf("failed to restart %s/%s (%s): %w", namespace, name, workloadKind, err)
 	}
 
-	if deps.Logger != nil {
-		deps.Logger.Info(fmt.Sprintf("Restarted %s %s/%s", workloadKind, namespace, name), "restartWorkload")
-	}
+	applog.Info(deps.Logger, fmt.Sprintf("Restarted %s %s/%s", workloadKind, namespace, name), "restartWorkload")
 	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
 	return nil
 }
@@ -319,12 +318,11 @@ func (a *App) scaleWorkloadInternal(clusterID, namespace, group, version, worklo
 		return fmt.Errorf("scaling not supported for workload kind %q", workloadKind)
 	}
 
-	if deps.Logger != nil {
-		deps.Logger.Info(
-			fmt.Sprintf("Scaled %s %s/%s to %d replicas", workloadKind, namespace, name, replicas),
-			"scaleWorkload",
-		)
-	}
+	applog.Info(
+		deps.Logger,
+		fmt.Sprintf("Scaled %s %s/%s to %d replicas", workloadKind, namespace, name, replicas),
+		"scaleWorkload",
+	)
 	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
 	return nil
 }
@@ -492,9 +490,7 @@ func (a *App) triggerCronJobInternal(clusterID, namespace, name string) (string,
 		return "", fmt.Errorf("failed to create job from cronjob %s/%s: %w", namespace, name, err)
 	}
 
-	if deps.Logger != nil {
-		deps.Logger.Info(fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", namespace, name, createdJob.Name), "triggerCronJob")
-	}
+	applog.Info(deps.Logger, fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", namespace, name, createdJob.Name), "triggerCronJob")
 	a.invalidateResponseCache(selectionKey, "CronJob", namespace, name)
 	return createdJob.Name, nil
 }
@@ -581,9 +577,7 @@ func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend 
 	if !suspend {
 		action = "Resumed"
 	}
-	if deps.Logger != nil {
-		deps.Logger.Info(fmt.Sprintf("%s CronJob %s/%s", action, namespace, name), "suspendCronJob")
-	}
+	applog.Info(deps.Logger, fmt.Sprintf("%s CronJob %s/%s", action, namespace, name), "suspendCronJob")
 	a.invalidateResponseCache(selectionKey, "CronJob", namespace, name)
 	return nil
 }

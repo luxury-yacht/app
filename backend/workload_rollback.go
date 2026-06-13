@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	sigsyaml "sigs.k8s.io/yaml"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
@@ -427,12 +428,11 @@ func (a *App) rollbackWorkloadInternal(clusterID, namespace, group, version, wor
 		return fmt.Errorf("rollback not supported for workload kind %q", workloadKind)
 	}
 
-	if deps.Logger != nil {
-		deps.Logger.Info(
-			fmt.Sprintf("Rolled back %s %s/%s to revision %d", workloadKind, namespace, name, toRevision),
-			"rollbackWorkload",
-		)
-	}
+	applog.Info(
+		deps.Logger,
+		fmt.Sprintf("Rolled back %s %s/%s to revision %d", workloadKind, namespace, name, toRevision),
+		"rollbackWorkload",
+	)
 	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
 	return nil
 }

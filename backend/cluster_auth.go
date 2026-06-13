@@ -38,9 +38,7 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 
 	switch state {
 	case authstate.StateValid:
-		if a.logger != nil {
-			a.logger.Info(fmt.Sprintf("Cluster %s: auth recovered", clusterName), logsources.Auth, clusterID, clusterName)
-		}
+		a.logger.Info(fmt.Sprintf("Cluster %s: auth recovered", clusterName), logsources.Auth, clusterID, clusterName)
 		// Emit per-cluster recovery event for the frontend
 		a.emitEvent("cluster:auth:recovered", map[string]any{
 			"clusterId":   clusterID,
@@ -58,9 +56,7 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 		})
 
 	case authstate.StateRecovering:
-		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Cluster %s: auth recovering - %s", clusterName, reason), logsources.Auth, clusterID, clusterName)
-		}
+		a.logger.Warn(fmt.Sprintf("Cluster %s: auth recovering - %s", clusterName, reason), logsources.Auth, clusterID, clusterName)
 		// Emit per-cluster recovering event for the frontend
 		a.emitEvent("cluster:auth:recovering", map[string]any{
 			"clusterId":   clusterID,
@@ -79,9 +75,7 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 		})
 
 	case authstate.StateInvalid:
-		if a.logger != nil {
-			a.logger.Error(fmt.Sprintf("Cluster %s: auth failed - %s", clusterName, reason), logsources.Auth, clusterID, clusterName)
-		}
+		a.logger.Error(fmt.Sprintf("Cluster %s: auth failed - %s", clusterName, reason), logsources.Auth, clusterID, clusterName)
 		// Capture the auth failure with cluster context for error enhancement
 		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("auth failed: %s", reason))
 		// Emit per-cluster failure event for the frontend
@@ -112,9 +106,7 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 		return
 	}
 
-	if a.logger != nil {
-		a.logger.Info(fmt.Sprintf("Tearing down subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
-	}
+	a.logger.Info(fmt.Sprintf("Tearing down subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
 
 	// Stop the resource stream if present
 	if subsystem.ResourceStream != nil {
@@ -126,7 +118,7 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 			defer cancel()
-			if err := subsystem.Manager.Shutdown(ctx); err != nil && a.logger != nil {
+			if err := subsystem.Manager.Shutdown(ctx); err != nil {
 				a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterID)
 			}
 			close(done)
@@ -134,9 +126,7 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 		select {
 		case <-done:
 		case <-time.After(config.RefreshShutdownTimeout):
-			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Timed out waiting for refresh manager shutdown for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
-			}
+			a.logger.Warn(fmt.Sprintf("Timed out waiting for refresh manager shutdown for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
 		}
 	}
 
@@ -154,16 +144,12 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		return
 	}
 
-	if a.logger != nil {
-		a.logger.Info(fmt.Sprintf("Rebuilding subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
-	}
+	a.logger.Info(fmt.Sprintf("Rebuilding subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
 
 	// Get the old cluster clients to preserve the auth manager
 	oldClients := a.clusterClientsForID(clusterID)
 	if oldClients == nil {
-		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: clients not found", clusterID), logsources.Auth, clusterID, clusterID)
-		}
+		a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: clients not found", clusterID), logsources.Auth, clusterID, clusterID)
 		return
 	}
 	clusterName := oldClients.meta.Name
@@ -171,9 +157,7 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 	// Find the selection for this cluster
 	selections, err := a.selectedKubeconfigSelections()
 	if err != nil {
-		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
-		}
+		a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
 		return
 	}
 
@@ -187,9 +171,7 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 	}
 
 	if selection.Path == "" {
-		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: selection not found", clusterID), logsources.Auth, clusterID, clusterName)
-		}
+		a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: selection not found", clusterID), logsources.Auth, clusterID, clusterName)
 		return
 	}
 
@@ -201,9 +183,7 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 	// transports pointing at a discarded manager that can never recover.
 	newClients, err := a.buildClusterClientsWithManager(context.Background(), selection, oldClients.meta, oldClients.authManager)
 	if err != nil {
-		if a.logger != nil {
-			a.logger.Error(fmt.Sprintf("Failed to rebuild clients for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
-		}
+		a.logger.Error(fmt.Sprintf("Failed to rebuild clients for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
 		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("client rebuild failed: %v", err))
 		return
 	}
@@ -216,18 +196,14 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 	// If the preflight reported an auth failure, stop here: the auth manager's
 	// recovery cycle owns the next rebuild attempt once credentials are valid.
 	if newClients.authFailedOnInit || (newClients.authManager != nil && !newClients.authManager.IsValid()) {
-		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Skipping subsystem rebuild for cluster %s: auth not valid after client rebuild", clusterID), logsources.Auth, clusterID, clusterName)
-		}
+		a.logger.Warn(fmt.Sprintf("Skipping subsystem rebuild for cluster %s: auth not valid after client rebuild", clusterID), logsources.Auth, clusterID, clusterName)
 		return
 	}
 
 	// Build the subsystem with the new clients
 	subsystem, err := a.buildRefreshSubsystemForSelection(selection, newClients, newClients.meta)
 	if err != nil {
-		if a.logger != nil {
-			a.logger.Error(fmt.Sprintf("Failed to rebuild subsystem for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
-		}
+		a.logger.Error(fmt.Sprintf("Failed to rebuild subsystem for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
 		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("subsystem rebuild failed: %v", err))
 		return
 	}
@@ -235,7 +211,7 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 	// Start the subsystem
 	if a.refreshCtx != nil && subsystem.Manager != nil {
 		go func() {
-			if err := subsystem.Manager.Start(a.refreshCtx); err != nil && a.logger != nil {
+			if err := subsystem.Manager.Start(a.refreshCtx); err != nil {
 				a.logger.Warn(fmt.Sprintf("Refresh manager for cluster %s stopped: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
 			}
 		}()
@@ -257,27 +233,19 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 	if a.refreshHTTPServer == nil || a.refreshAggregates == nil {
 		mux, aggregates, muxErr := a.buildRefreshMux(subsystems, clusterOrder)
 		if muxErr != nil {
-			if a.logger != nil {
-				a.logger.Error(fmt.Sprintf("Failed to build refresh mux after cluster %s recovery: %v", clusterID, muxErr), logsources.Auth, clusterID, clusterName)
-			}
+			a.logger.Error(fmt.Sprintf("Failed to build refresh mux after cluster %s recovery: %v", clusterID, muxErr), logsources.Auth, clusterID, clusterName)
 			return
 		}
 		a.refreshAggregates = aggregates
 		if srvErr := a.startRefreshHTTPServer(mux, subsystems); srvErr != nil {
-			if a.logger != nil {
-				a.logger.Error(fmt.Sprintf("Failed to start refresh HTTP server after cluster %s recovery: %v", clusterID, srvErr), logsources.Auth, clusterID, clusterName)
-			}
+			a.logger.Error(fmt.Sprintf("Failed to start refresh HTTP server after cluster %s recovery: %v", clusterID, srvErr), logsources.Auth, clusterID, clusterName)
 			return
 		}
-		if a.logger != nil {
-			a.logger.Info(fmt.Sprintf("Started refresh HTTP server after cluster %s recovery", clusterID), logsources.Auth, clusterID, clusterName)
-		}
+		a.logger.Info(fmt.Sprintf("Started refresh HTTP server after cluster %s recovery", clusterID), logsources.Auth, clusterID, clusterName)
 	} else {
 		// Update the aggregate handlers so they know about the new subsystem.
 		if err := a.refreshAggregates.Update(clusterOrder, subsystems); err != nil {
-			if a.logger != nil {
-				a.logger.Error(fmt.Sprintf("Failed to update aggregates for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
-			}
+			a.logger.Error(fmt.Sprintf("Failed to update aggregates for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
 		}
 	}
 
@@ -286,13 +254,11 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		selection: selection,
 		meta:      newClients.meta,
 	}
-	if err := a.startObjectCatalogForTarget(target); err != nil && a.logger != nil {
+	if err := a.startObjectCatalogForTarget(target); err != nil {
 		a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
 	}
 
-	if a.logger != nil {
-		a.logger.Info(fmt.Sprintf("Successfully rebuilt subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterName)
-	}
+	a.logger.Info(fmt.Sprintf("Successfully rebuilt subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterName)
 }
 
 // RetryClusterAuth triggers a manual authentication recovery attempt for a specific cluster.

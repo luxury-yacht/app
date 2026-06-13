@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -409,11 +410,11 @@ func newTestHandler(t testing.TB, build func(scope string) (*refresh.Snapshot, e
 		subscribers: make(map[string]map[uint64]*subscription),
 		buffers:     make(map[string]*eventBuffer),
 		sequences:   make(map[string]uint64),
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		telemetry:   recorder,
 	}
 
-	handler, err := NewHandler(service, manager, noopLogger{})
+	handler, err := NewHandler(service, manager, applog.Noop)
 	require.NoError(t, err)
 	return handler, manager, recorder
 }

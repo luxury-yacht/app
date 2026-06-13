@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/k8sretry"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -227,21 +228,15 @@ func (s *Service) ensureClient() error {
 }
 
 func (s *Service) logError(message string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(message, "Capabilities")
-	}
+	applog.Error(s.deps.Common.Logger, message, "Capabilities")
 }
 
 func (s *Service) logWarn(message string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Warn(message, "Capabilities")
-	}
+	applog.Warn(s.deps.Common.Logger, message, "Capabilities")
 }
 
 func (s *Service) logDebug(message string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Debug(message, "Capabilities")
-	}
+	applog.Debug(s.deps.Common.Logger, message, "Capabilities")
 }
 
 func (s *Service) resolveWorkerCount(requestCount int) int {

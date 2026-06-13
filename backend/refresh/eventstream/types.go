@@ -13,13 +13,6 @@ import (
 // aliased to the canonical internal/applog.Logger.
 type Logger = applog.Logger
 
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}
-
 // Entry represents a single Kubernetes event emitted to streaming subscribers.
 type Entry struct {
 	ClusterID        string                      `json:"clusterId,omitempty"`

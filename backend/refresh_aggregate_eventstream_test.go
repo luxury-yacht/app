@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
@@ -90,7 +91,7 @@ func TestAggregateEventStreamHandlerStreamsSingleCluster(t *testing.T) {
 		meta,
 		[]string{"cluster-a", "cluster-b"},
 		nil,
-		noopLogger{},
+		applog.Noop,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -159,7 +160,7 @@ func TestAggregateEventStreamHandlerRejectsMultiClusterScope(t *testing.T) {
 		},
 		[]string{"cluster-a", "cluster-b"},
 		nil,
-		noopLogger{},
+		applog.Noop,
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/events?scope=clusters=cluster-a,cluster-b|cluster", nil)
@@ -249,7 +250,7 @@ func TestAggregateEventStreamResumesFromBuffer(t *testing.T) {
 		meta,
 		[]string{"cluster-a"},
 		nil,
-		noopLogger{},
+		applog.Noop,
 	)
 
 	scopeKey := "clusters=cluster-a|cluster"
@@ -309,7 +310,7 @@ func TestAggregateEventStreamFallsBackToSnapshotWhenResumeTooOld(t *testing.T) {
 		meta,
 		[]string{"cluster-a"},
 		nil,
-		noopLogger{},
+		applog.Noop,
 	)
 
 	scopeKey := "clusters=cluster-a|cluster"
@@ -373,7 +374,7 @@ func TestWriteEventPayloadEmitsSSE(t *testing.T) {
 }
 
 func TestNoopLoggerDoesNothing(t *testing.T) {
-	logger := noopLogger{}
+	logger := applog.Noop
 	logger.Debug("debug")
 	logger.Info("info")
 	logger.Warn("warn")

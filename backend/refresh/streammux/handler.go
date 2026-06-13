@@ -77,7 +77,7 @@ func NewHandler(cfg Config) (*Handler, error) {
 		return nil, errors.New("stream adapter is required")
 	}
 	if cfg.Logger == nil {
-		cfg.Logger = noopLogger{}
+		cfg.Logger = applog.Noop
 	}
 	cfg.Logger = applog.ClusterScoped(cfg.Logger, cfg.ClusterID, cfg.ClusterName)
 	if cfg.StreamName == "" {

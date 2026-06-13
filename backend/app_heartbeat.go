@@ -52,9 +52,7 @@ func (a *App) runHeartbeatIteration() {
 		// cluster's transport are blocked in that state, and the auth
 		// manager's recovery loop keeps probing on its own cadence.
 		if cc.authManager != nil && !cc.authManager.IsValid() {
-			if a.logger != nil {
-				a.logger.Debug("Skipping heartbeat for cluster "+cc.meta.Name+" (auth invalid)", logsources.Heartbeat, clusterID, cc.meta.Name)
-			}
+			a.logger.Debug("Skipping heartbeat for cluster "+cc.meta.Name+" (auth invalid)", logsources.Heartbeat, clusterID, cc.meta.Name)
 			continue
 		}
 
@@ -71,17 +69,13 @@ func (a *App) runHeartbeatIteration() {
 		case healthOK:
 			a.emitEvent("cluster:health:healthy", eventData)
 
-			if a.logger != nil {
-				a.logger.Debug("Heartbeat healthy for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
-			}
+			a.logger.Debug("Heartbeat healthy for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
 
 		case healthAuthFailure:
 			eventData["reason"] = "auth"
 			a.emitEvent("cluster:health:degraded", eventData)
 
-			if a.logger != nil {
-				a.logger.Warn("Heartbeat auth failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
-			}
+			a.logger.Warn("Heartbeat auth failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
 
 			// Only report to auth manager for genuine auth failures.
 			if cc.authManager != nil {
@@ -92,9 +86,7 @@ func (a *App) runHeartbeatIteration() {
 			eventData["reason"] = "connectivity"
 			a.emitEvent("cluster:health:degraded", eventData)
 
-			if a.logger != nil {
-				a.logger.Warn("Heartbeat connectivity failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
-			}
+			a.logger.Warn("Heartbeat connectivity failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
 			// Do NOT report to auth manager — this is a network issue, not an auth issue.
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resourcecontract"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -186,9 +187,7 @@ func (r *resourceIdentityResolver) resolveCRD(ctx context.Context, gvk schema.Gr
 	}
 	crds, err := r.deps.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		if r.logger != nil {
-			r.logger.Debug(fmt.Sprintf("catalog resource identity CRD fallback failed: %v", err), componentName)
-		}
+		applog.Debug(r.logger, fmt.Sprintf("catalog resource identity CRD fallback failed: %v", err), componentName)
 		return resourceDescriptor{}, false, err
 	}
 	for _, crd := range crds.Items {

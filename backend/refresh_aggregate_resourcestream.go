@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/streammux"
@@ -26,7 +27,7 @@ func newAggregateResourceStreamHandler(
 	recorder *telemetry.Recorder,
 ) (*aggregateResourceStreamHandler, error) {
 	if logger == nil {
-		logger = noopLogger{}
+		logger = applog.Noop
 	}
 
 	managers := make(map[string]*resourcestream.Manager)

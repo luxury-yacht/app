@@ -336,15 +336,13 @@ func (a *App) buildClusterClientsWithManager(
 	var metrics *metricsclient.Clientset
 	metricsClient, err := metricsclient.NewForConfig(config)
 	if err != nil {
-		if a.logger != nil {
-			a.logger.Info(fmt.Sprintf("Metrics client not available for cluster %s: %v", meta.ID, err), logsources.KubernetesClient, meta.ID, meta.Name)
-		}
+		a.logger.Info(fmt.Sprintf("Metrics client not available for cluster %s: %v", meta.ID, err), logsources.KubernetesClient, meta.ID, meta.Name)
 	} else {
 		metrics = metricsClient
 	}
 
 	gatewayPresence, gatewayDiscoverErr := gatewayapi.DiscoverViaDiscovery(ctx, clientset.Discovery())
-	if gatewayDiscoverErr != nil && a.logger != nil {
+	if gatewayDiscoverErr != nil {
 		a.logger.Warn(fmt.Sprintf("Gateway API discovery failed for cluster %s: %v", meta.Name, gatewayDiscoverErr), logsources.KubernetesClient, meta.ID, meta.Name)
 	}
 	var gatewayClient gatewayversioned.Interface
@@ -396,22 +394,16 @@ func (a *App) buildClusterClientsWithManager(
 	// wrapper won't catch these errors - we must check them explicitly here.
 	var authFailedOnInit bool
 	if err := a.preflightClusterClientWithContext(ctx, clientset); err != nil {
-		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), logsources.Auth, meta.ID, meta.Name)
-		}
+		a.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), logsources.Auth, meta.ID, meta.Name)
 		if isCredentialError(err) {
-			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Detected credential error for cluster %s, reporting auth failure", meta.Name), logsources.Auth, meta.ID, meta.Name)
-			}
+			a.logger.Warn(fmt.Sprintf("Detected credential error for cluster %s, reporting auth failure", meta.Name), logsources.Auth, meta.ID, meta.Name)
 			clusterAuthMgr.ReportFailure(err.Error())
 			authFailedOnInit = true
 		}
 		// Don't return error - the cluster clients are valid, auth just needs recovery.
 		// The subsystem builder will check auth state before proceeding.
 	} else {
-		if a.logger != nil {
-			a.logger.Info(fmt.Sprintf("Pre-flight check passed for cluster %s", meta.Name), logsources.Auth, meta.ID, meta.Name)
-		}
+		a.logger.Info(fmt.Sprintf("Pre-flight check passed for cluster %s", meta.Name), logsources.Auth, meta.ID, meta.Name)
 	}
 
 	return &clusterClients{

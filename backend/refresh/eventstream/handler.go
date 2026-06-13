@@ -12,6 +12,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -36,7 +37,7 @@ func NewHandler(service refresh.SnapshotService, manager *Manager, logger Logger
 		return nil, errors.New("eventstream: manager required")
 	}
 	if logger == nil {
-		logger = noopLogger{}
+		logger = applog.Noop
 	}
 	return &Handler{service: service, manager: manager, logger: logger, telemetry: manager.telemetry}, nil
 }

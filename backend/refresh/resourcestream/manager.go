@@ -43,6 +43,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
@@ -247,7 +248,7 @@ func NewManager(
 	dynamicClient dynamic.Interface,
 ) *Manager {
 	if logger == nil {
-		logger = noopLogger{}
+		logger = applog.Noop
 	}
 	mgr := &Manager{
 		clusterMeta:     meta,

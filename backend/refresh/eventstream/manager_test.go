@@ -10,6 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
@@ -18,7 +19,7 @@ func TestManagerBroadcastsToSubscribers(t *testing.T) {
 	factory := informers.NewSharedInformerFactory(client, 0)
 	informer := factory.Core().V1().Events()
 
-	manager := NewManager(informer, noopLogger{}, telemetry.NewRecorder(), "cluster-a")
+	manager := NewManager(informer, applog.Noop, telemetry.NewRecorder(), "cluster-a")
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -89,7 +90,7 @@ func TestManagerOnlyBroadcastsClusterScopedEventsToClusterSubscribers(t *testing
 	factory := informers.NewSharedInformerFactory(client, 0)
 	informer := factory.Core().V1().Events()
 
-	manager := NewManager(informer, noopLogger{}, telemetry.NewRecorder(), "cluster-a")
+	manager := NewManager(informer, applog.Noop, telemetry.NewRecorder(), "cluster-a")
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -160,7 +161,7 @@ func TestManagerOnlyBroadcastsClusterScopedEventsToClusterSubscribers(t *testing
 
 func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 	manager := &Manager{
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[uint64]*subscription),
 		buffers:     make(map[string]*eventBuffer),
 		sequences:   make(map[string]uint64),
@@ -206,7 +207,7 @@ func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 
 func TestManagerSubscribeWithResumeReplaysAndSubscribes(t *testing.T) {
 	manager := &Manager{
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[uint64]*subscription),
 		buffers:     make(map[string]*eventBuffer),
 		sequences:   make(map[string]uint64),

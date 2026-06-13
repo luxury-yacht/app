@@ -533,12 +533,10 @@ func (a *App) executeSelectionChangeWork(
 		return err
 	}
 	if !a.isSelectionGenerationCurrent(intent.generation) {
-		if a.logger != nil {
-			a.logger.Debug(
-				fmt.Sprintf("Skipping superseded selection work (generation=%d)", intent.generation),
-				"KubeconfigManager",
-			)
-		}
+		a.logger.Debug(
+			fmt.Sprintf("Skipping superseded selection work (generation=%d)", intent.generation),
+			"KubeconfigManager",
+		)
 		return nil
 	}
 
@@ -725,7 +723,7 @@ func (a *App) handleKubeconfigChange(changedPaths []string) {
 	if err := a.runSelectionMutation("kubeconfig-watcher-change", func(mutation *selectionMutation) error {
 		a.handleKubeconfigChangeLocked(changedPaths, mutation.generation)
 		return nil
-	}); err != nil && a.logger != nil {
+	}); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to process kubeconfig file changes: %v", err), logsources.KubeconfigWatcher)
 	}
 }

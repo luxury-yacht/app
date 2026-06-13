@@ -210,7 +210,7 @@ func (a *App) cleanupClusterRuntimeOperations(clusterID, reason string) {
 		if entry.cleanup == nil {
 			continue
 		}
-		if err := entry.cleanup(reason); err != nil && a.logger != nil {
+		if err := entry.cleanup(reason); err != nil {
 			a.logger.Warn(fmt.Sprintf("Failed to clean up %s operation %s for cluster %s: %v", entry.operation.Type, entry.operation.ID, trimmedClusterID, err), logsources.App)
 		}
 	}

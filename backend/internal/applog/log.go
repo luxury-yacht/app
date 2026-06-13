@@ -16,3 +16,19 @@ func Info(l Logger, message string, source ...string) {
 		l.Info(message, source...)
 	}
 }
+
+// Warn logs a warning message under the given source(s), guarding against a nil
+// logger. See Error.
+func Warn(l Logger, message string, source ...string) {
+	if l != nil {
+		l.Warn(message, source...)
+	}
+}
+
+// Debug logs a debug message under the given source(s), guarding against a nil
+// logger. See Error.
+func Debug(l Logger, message string, source ...string) {
+	if l != nil {
+		l.Debug(message, source...)
+	}
+}

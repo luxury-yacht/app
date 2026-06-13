@@ -142,9 +142,7 @@ func (a *App) startObjectCatalog() {
 
 	for _, target := range targets {
 		if err := a.startObjectCatalogForTarget(target); err != nil {
-			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", target.meta.ID, err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
-			}
+			a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", target.meta.ID, err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 			continue
 		}
 	}
@@ -212,7 +210,7 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 	go func() {
 		defer close(done)
 		if err := a.waitForCatalogInformerCaches(ctx, subsystem.InformerFactory); err != nil {
-			if !errors.Is(err, context.Canceled) && a.logger != nil {
+			if !errors.Is(err, context.Canceled) {
 				a.logger.Warn(fmt.Sprintf("Object catalog waiting for informer caches failed: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 			}
 			if ctx.Err() != nil {

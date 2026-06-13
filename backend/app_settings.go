@@ -186,29 +186,29 @@ const (
 	// Sanity bounds only — the selectable page-size values are owned by the
 	// frontend's shared TABLE_PAGE_SIZE_OPTIONS list (one source for the
 	// pagination footers and the Settings dropdown).
-	defaultTablePageSize                   = 50
-	minTablePageSize                       = 1
-	maxTablePageSize                       = 1000
-	defaultObjectPanelPosition             = "right"
-	defaultObjectPanelDockedRightWidth     = 600
-	defaultObjectPanelDockedBottomHeight   = 400
-	defaultObjectPanelFloatingWidth        = 500
-	defaultObjectPanelFloatingHeight       = 400
-	defaultObjectPanelFloatingX            = 100
-	defaultObjectPanelFloatingY            = 100
-	minObjectPanelDockedRightWidth         = 500
-	minObjectPanelDockedBottomHeight       = 200
-	minObjectPanelFloatingWidth            = 450
-	minObjectPanelFloatingHeight           = 200
-	minObjectPanelFloatingX                = 1
-	minObjectPanelFloatingY                = 1
-	maxObjectPanelLayoutValue              = 9999
-	minPaletteHue                          = 0
-	maxPaletteHue                          = 360
-	minPaletteSaturation                   = 0
-	maxPaletteSaturation                   = 100
-	minPaletteBrightness                   = -50
-	maxPaletteBrightness                   = 50
+	defaultTablePageSize                 = 50
+	minTablePageSize                     = 1
+	maxTablePageSize                     = 1000
+	defaultObjectPanelPosition           = "right"
+	defaultObjectPanelDockedRightWidth   = 600
+	defaultObjectPanelDockedBottomHeight = 400
+	defaultObjectPanelFloatingWidth      = 500
+	defaultObjectPanelFloatingHeight     = 400
+	defaultObjectPanelFloatingX          = 100
+	defaultObjectPanelFloatingY          = 100
+	minObjectPanelDockedRightWidth       = 500
+	minObjectPanelDockedBottomHeight     = 200
+	minObjectPanelFloatingWidth          = 450
+	minObjectPanelFloatingHeight         = 200
+	minObjectPanelFloatingX              = 1
+	minObjectPanelFloatingY              = 1
+	maxObjectPanelLayoutValue            = 9999
+	minPaletteHue                        = 0
+	maxPaletteHue                        = 360
+	minPaletteSaturation                 = 0
+	maxPaletteSaturation                 = 100
+	minPaletteBrightness                 = -50
+	maxPaletteBrightness                 = 50
 )
 
 func clampKubernetesClientQPS(qps int) int {
@@ -1702,7 +1702,7 @@ func (a *App) SetPaletteTint(mode string, hue, saturation, brightness int) error
 		{Key: saturationKey, Value: saturation},
 		{Key: brightnessKey, Value: brightness},
 	}})
-	if err == nil && a.logger != nil {
+	if err == nil {
 		a.logger.Info(
 			fmt.Sprintf(
 				"Palette tint (%s) changed to hue=%d saturation=%d brightness=%d",
@@ -1734,7 +1734,7 @@ func (a *App) SetLinkColor(mode string, color string) error {
 	if err != nil && color != "" && !validHexColorRe.MatchString(color) {
 		return fmt.Errorf("invalid link color format: %s (expected #rrggbb)", color)
 	}
-	if err == nil && a.logger != nil {
+	if err == nil {
 		a.logger.Info(fmt.Sprintf("Link color (%s) changed to: %s", mode, color), logsources.Settings)
 	}
 	return err
@@ -1754,7 +1754,7 @@ func (a *App) SetAccentColor(mode string, color string) error {
 	if err != nil && color != "" && !validHexColorRe.MatchString(color) {
 		return fmt.Errorf("invalid accent color format: %s (expected #rrggbb)", color)
 	}
-	if err == nil && a.logger != nil {
+	if err == nil {
 		a.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", mode, color), logsources.Settings)
 	}
 	return err

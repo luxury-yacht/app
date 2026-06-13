@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/streammux"
@@ -21,7 +22,7 @@ func NewHandler(manager *Manager, logger containerlogsstream.Logger, recorder *t
 		return nil, errors.New("resource stream manager is required")
 	}
 	if logger == nil {
-		logger = noopLogger{}
+		logger = applog.Noop
 	}
 	mux, err := streammux.NewHandler(streammux.Config{
 		Adapter:     NewAdapter(manager),

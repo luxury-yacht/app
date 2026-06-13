@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -47,7 +48,7 @@ func TestFollowContainerStreamsBatches(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, noopLogger{}, nil)
+	streamer := NewStreamer(client, applog.Noop, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -126,7 +127,7 @@ func TestFollowContainerRecordsDroppedTelemetry(t *testing.T) {
 	}
 
 	recorder := telemetry.NewRecorder()
-	streamer := NewStreamer(client, noopLogger{}, recorder)
+	streamer := NewStreamer(client, applog.Noop, recorder)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -195,7 +196,7 @@ func TestFollowContainerRetriesAfterStreamFailure(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, noopLogger{}, nil)
+	streamer := NewStreamer(client, applog.Noop, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -262,7 +263,7 @@ func TestFollowContainerStopsAfterInitCompletes(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, noopLogger{}, nil)
+	streamer := NewStreamer(client, applog.Noop, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -344,7 +345,7 @@ func TestFollowContainerDeduplicatesMultipleLinesAtSameTimestamp(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, noopLogger{}, nil)
+	streamer := NewStreamer(client, applog.Noop, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -442,7 +443,7 @@ func TestFollowContainerStopsWhenPodTerminated(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, noopLogger{}, nil)
+	streamer := NewStreamer(client, applog.Noop, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

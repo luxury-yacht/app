@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 )
@@ -38,7 +39,7 @@ func (stubAdapter) Resume(Selector, uint64) ([]ServerMessage, bool) {
 }
 
 func TestSessionBackpressureKeepsSessionOpenAndResetsScope(t *testing.T) {
-	session := newSession(stubConn{}, nil, noopLogger{}, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
+	session := newSession(stubConn{}, nil, applog.Noop, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
 	// Match production buffer sizing for backpressure behavior.
 	for i := 0; i < config.StreamMuxOutgoingBufferSize; i++ {
 		session.outgoing <- ServerMessage{
@@ -78,7 +79,7 @@ func TestSessionBackpressureKeepsSessionOpenAndResetsScope(t *testing.T) {
 }
 
 func TestSessionSendErrorIncludesPermissionDetails(t *testing.T) {
-	session := newSession(stubConn{}, nil, noopLogger{}, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
+	session := newSession(stubConn{}, nil, applog.Noop, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
 	err := refresh.NewPermissionDeniedError("pods", "core/pods")
 	session.sendError("cluster-1", "pods", "namespace:default", err)
 
@@ -92,7 +93,7 @@ func TestSessionSendErrorIncludesPermissionDetails(t *testing.T) {
 }
 
 func TestSessionResolveClusterIDRejectsMultiClusterScope(t *testing.T) {
-	session := newSession(stubConn{}, stubAdapter{}, noopLogger{}, nil, "", "", "resources", true, true, nil)
+	session := newSession(stubConn{}, stubAdapter{}, applog.Noop, nil, "", "", "resources", true, true, nil)
 
 	_, err := session.resolveClusterID(ClientMessage{
 		ClusterID: "cluster-a",
@@ -105,7 +106,7 @@ func TestSessionResolveClusterIDRejectsMultiClusterScope(t *testing.T) {
 }
 
 func TestSessionResolveClusterIDRequiresScopeClusterToMatchMessageCluster(t *testing.T) {
-	session := newSession(stubConn{}, stubAdapter{}, noopLogger{}, nil, "", "", "resources", true, true, nil)
+	session := newSession(stubConn{}, stubAdapter{}, applog.Noop, nil, "", "", "resources", true, true, nil)
 
 	_, err := session.resolveClusterID(ClientMessage{
 		ClusterID: "cluster-a",
@@ -118,7 +119,7 @@ func TestSessionResolveClusterIDRequiresScopeClusterToMatchMessageCluster(t *tes
 }
 
 func TestSessionResolveClusterIDRejectsMismatchedScopeForSingleClusterHandler(t *testing.T) {
-	session := newSession(stubConn{}, stubAdapter{}, noopLogger{}, nil, "cluster-a", "", "resources", true, false, nil)
+	session := newSession(stubConn{}, stubAdapter{}, applog.Noop, nil, "cluster-a", "", "resources", true, false, nil)
 
 	_, err := session.resolveClusterID(ClientMessage{
 		Scope: "cluster-b|namespace:default",

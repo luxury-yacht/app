@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/internal/linescanner"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -34,7 +35,7 @@ type Streamer struct {
 // NewStreamer constructs a Streamer.
 func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder) *Streamer {
 	if logger == nil {
-		logger = noopLogger{}
+		logger = applog.Noop
 	}
 	return &Streamer{client: client, logger: logger, telemetry: recorder}
 }

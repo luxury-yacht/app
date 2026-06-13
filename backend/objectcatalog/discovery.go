@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,8 +35,8 @@ func discoverResourceDescriptors(ctx context.Context, deps common.Dependencies, 
 		cfgCopy.Timeout = config.ObjectCatalogDiscoveryRequestTimeout
 		if dc, err := discovery.NewDiscoveryClientForConfig(cfgCopy); err == nil {
 			discoveryClient = dc
-		} else if logger != nil {
-			logger.Debug(fmt.Sprintf("catalog discovery client fallback: %v", err), componentName)
+		} else {
+			applog.Debug(logger, fmt.Sprintf("catalog discovery client fallback: %v", err), componentName)
 		}
 	}
 	if discoveryClient == nil {

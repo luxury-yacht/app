@@ -23,6 +23,7 @@ import (
 	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -179,8 +180,8 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 			disabledLogDetail = fmt.Sprintf("metrics polling disabled: metrics API discovery failed (nodesErr=%v podsErr=%v)", metricsNodesErr, metricsPodsErr)
 		}
 
-		if cfg.Logger != nil && disabledLogDetail != "" {
-			cfg.Logger.Warn(disabledLogDetail, "Metrics")
+		if disabledLogDetail != "" {
+			applog.Warn(cfg.Logger, disabledLogDetail, "Metrics")
 		}
 
 		disabled := metrics.NewDisabledPoller(telemetryRecorder, disabledReasonUI)

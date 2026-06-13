@@ -11,6 +11,7 @@ import (
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
@@ -97,7 +98,7 @@ func NewManager(
 	clusterID string,
 ) *Manager {
 	if logger == nil {
-		logger = noopLogger{}
+		logger = applog.Noop
 	}
 	m := &Manager{
 		informer:    informer,

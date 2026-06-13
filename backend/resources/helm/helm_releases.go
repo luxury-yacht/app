@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -424,31 +425,21 @@ func helmRevisionUpdatedAge(facts resourcemodel.HelmRevisionFacts) string {
 }
 
 func (s *Service) logDebug(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Debug(msg, logsources.Helm)
-	}
+	applog.Debug(s.deps.Common.Logger, msg, logsources.Helm)
 }
 
 func (s *Service) logDebugf(format string, args ...interface{}) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Debug(fmt.Sprintf(format, args...), logsources.Helm)
-	}
+	applog.Debug(s.deps.Common.Logger, fmt.Sprintf(format, args...), logsources.Helm)
 }
 
 func (s *Service) logWarn(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Warn(msg, logsources.Helm)
-	}
+	applog.Warn(s.deps.Common.Logger, msg, logsources.Helm)
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, logsources.Helm)
-	}
+	applog.Error(s.deps.Common.Logger, msg, logsources.Helm)
 }
 
 func (s *Service) logInfo(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Info(msg, logsources.Helm)
-	}
+	applog.Info(s.deps.Common.Logger, msg, logsources.Helm)
 }

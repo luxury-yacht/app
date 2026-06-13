@@ -69,9 +69,7 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 		// This mirrors the logic in buildRefreshSubsystems to ensure auth-failed
 		// clusters don't block the addition of new healthy clusters.
 		if clients.authFailedOnInit {
-			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", metaByID[id].Name), logsources.Refresh, id, metaByID[id].Name)
-			}
+			a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", metaByID[id].Name), logsources.Refresh, id, metaByID[id].Name)
 			// Cluster is in clusterOrder but has no subsystem - this is expected for auth-failed clusters.
 			continue
 		}
@@ -107,7 +105,7 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 			selection: desired[id],
 			meta:      metaByID[id],
 		}
-		if err := a.startObjectCatalogForTarget(target); err != nil && a.logger != nil {
+		if err := a.startObjectCatalogForTarget(target); err != nil {
 			a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", id, err), logsources.ObjectCatalog, id, metaByID[id].Name)
 		}
 	}
@@ -140,7 +138,7 @@ func (a *App) stopRefreshSubsystem(subsystem *system.Subsystem) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 	defer cancel()
-	if err := subsystem.Manager.Shutdown(ctx); err != nil && a.logger != nil {
+	if err := subsystem.Manager.Shutdown(ctx); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh, subsystem.ClusterMeta.ClusterID, subsystem.ClusterMeta.ClusterName)
 	}
 }

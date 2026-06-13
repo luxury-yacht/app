@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,10 +59,10 @@ func DiscoverGVRByKind(ctx context.Context, deps Dependencies, resourceKind stri
 	discoveryClient := deps.KubernetesClient.Discovery()
 
 	apiResourceLists, err := discoveryClient.ServerPreferredResources()
-	if err != nil && deps.Logger != nil {
+	if err != nil {
 		// Partial discovery failures are common with aggregated APIs;
 		// continue with whatever lists we did get.
-		deps.Logger.Debug(fmt.Sprintf("ServerPreferredResources returned error: %v", err), "DiscoverGVRByKind")
+		applog.Debug(deps.Logger, fmt.Sprintf("ServerPreferredResources returned error: %v", err), "DiscoverGVRByKind")
 	}
 	if len(apiResourceLists) == 0 {
 		// Some fake discovery clients (client-go test fakes) leave

@@ -107,22 +107,16 @@ func (a *App) buildRefreshSubsystems(
 		// Skip subsystem creation if auth is not valid for this cluster.
 		// Check both the explicit flag (set during pre-flight check) and the auth state.
 		if clients.authFailedOnInit {
-			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", clusterMeta.Name), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
-			}
+			a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", clusterMeta.Name), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
 			// Still add to clusterOrder so the cluster appears in the UI.
 			clusterOrder = append(clusterOrder, clusterMeta.ID)
 			continue
 		}
 		if clients.authManager != nil {
 			state, reason := clients.authManager.State()
-			if a.logger != nil {
-				a.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", clusterMeta.Name, state.String(), reason), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
-			}
+			a.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", clusterMeta.Name, state.String(), reason), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
 			if !clients.authManager.IsValid() {
-				if a.logger != nil {
-					a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", clusterMeta.Name, state.String()), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
-				}
+				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", clusterMeta.Name, state.String()), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
 				// Still add to clusterOrder so the cluster appears in the UI.
 				clusterOrder = append(clusterOrder, clusterMeta.ID)
 				continue

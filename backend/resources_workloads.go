@@ -120,18 +120,14 @@ func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, cl
 	deps.RestConfig = clients.restConfig
 	deps.EnsureClient = func(resourceKind string) error {
 		if deps.KubernetesClient == nil {
-			if deps.Logger != nil {
-				deps.Logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
-			}
+			applog.Error(deps.Logger, fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
 			return fmt.Errorf("kubernetes client not initialized")
 		}
 		return nil
 	}
 	deps.EnsureAPIExtensions = func(resourceKind string) error {
 		if deps.APIExtensionsClient == nil {
-			if deps.Logger != nil {
-				deps.Logger.Error(fmt.Sprintf("API extensions client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
-			}
+			applog.Error(deps.Logger, fmt.Sprintf("API extensions client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
 			return fmt.Errorf("apiextensions client not initialized")
 		}
 		return nil

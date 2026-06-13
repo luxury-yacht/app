@@ -72,12 +72,10 @@ func (a *App) runSelectionMutation(reason string, fn func(*selectionMutation) er
 		}
 	})
 
-	if a.logger != nil {
-		a.logger.Debug(
-			fmt.Sprintf("Selection mutation start (reason=%s generation=%d)", mutation.reason, mutation.generation),
-			"KubeconfigManager",
-		)
-	}
+	a.logger.Debug(
+		fmt.Sprintf("Selection mutation start (reason=%s generation=%d)", mutation.reason, mutation.generation),
+		"KubeconfigManager",
+	)
 
 	err := fn(&mutation)
 	canceled := errors.Is(err, context.Canceled)
@@ -136,7 +134,7 @@ func (a *App) runSelectionMutationAsync(reason string, fn func(*selectionMutatio
 		return
 	}
 	go func() {
-		if err := a.runSelectionMutation(reason, fn); err != nil && a.logger != nil {
+		if err := a.runSelectionMutation(reason, fn); err != nil {
 			a.logger.Warn(
 				fmt.Sprintf("Selection mutation failed (reason=%s): %v", reason, err),
 				"KubeconfigManager",

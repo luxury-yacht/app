@@ -96,7 +96,7 @@ func (a *App) storeUpdateInfo(info *UpdateInfo) {
 	a.updateCheckMu.Lock()
 	a.updateInfo = info
 	a.updateCheckMu.Unlock()
-	if info.Error != "" && a.logger != nil {
+	if info.Error != "" {
 		a.logger.Warn(info.Error, logsources.UpdateCheck)
 	}
 	// Notify the frontend so views can update without polling.

@@ -109,7 +109,7 @@ func (w *kubeconfigWatcher) eventLoop() {
 			if !ok {
 				return
 			}
-			if w.app != nil && w.app.logger != nil {
+			if w.app != nil {
 				w.app.logger.Warn("kubeconfig watcher error", logsources.KubeconfigWatcher)
 			}
 
@@ -182,7 +182,7 @@ func (w *kubeconfigWatcher) updateWatchedPaths(paths []watchedPath) error {
 		if _, ok := currentDirs[dir]; ok {
 			continue
 		}
-		if err := w.watcher.Add(dir); err != nil && w.app != nil && w.app.logger != nil {
+		if err := w.watcher.Add(dir); err != nil && w.app != nil {
 			w.app.logger.Warn("Failed to watch directory: "+dir, logsources.KubeconfigWatcher)
 		}
 	}

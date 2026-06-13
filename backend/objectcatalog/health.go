@@ -6,7 +6,11 @@
 
 package objectcatalog
 
-import "time"
+import (
+	"time"
+
+	"github.com/luxury-yacht/app/backend/internal/applog"
+)
 
 type healthStatus struct {
 	State               HealthState
@@ -89,21 +93,15 @@ func (s *Service) pruneMissing(seen map[string]time.Time) {
 }
 
 func (s *Service) logInfo(msg string) {
-	if s.deps.Logger != nil {
-		s.deps.Logger.Info(msg, componentName)
-	}
+	applog.Info(s.deps.Logger, msg, componentName)
 }
 
 func (s *Service) logWarn(msg string) {
-	if s.deps.Logger != nil {
-		s.deps.Logger.Warn(msg, componentName)
-	}
+	applog.Warn(s.deps.Logger, msg, componentName)
 }
 
 func (s *Service) logDebug(msg string) {
-	if s.deps.Logger != nil {
-		s.deps.Logger.Debug(msg, componentName)
-	}
+	applog.Debug(s.deps.Logger, msg, componentName)
 }
 
 func (s *Service) rebuildCacheFromItems(items map[string]Summary, descriptors []Descriptor) {

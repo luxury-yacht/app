@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/internal/linescanner"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -516,7 +517,5 @@ func (s *Service) ctx() context.Context {
 }
 
 func (s *Service) logWarn(msg string) {
-	if s.deps.Logger != nil {
-		s.deps.Logger.Warn(msg, logsources.ContainerLogs)
-	}
+	applog.Warn(s.deps.Logger, msg, logsources.ContainerLogs)
 }

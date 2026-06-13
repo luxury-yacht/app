@@ -12,13 +12,6 @@ import (
 // logs streaming subsystem, aliased to the canonical internal/applog.Logger.
 type Logger = applog.Logger
 
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}
-
 // Options captures the parameters for a container logs streaming session.
 type Options struct {
 	ClusterID        string

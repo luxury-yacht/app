@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -59,7 +60,7 @@ func newAggregateEventStreamHandler(
 	logger eventstream.Logger,
 ) *aggregateEventStreamHandler {
 	if logger == nil {
-		logger = noopLogger{}
+		logger = applog.Noop
 	}
 	return &aggregateEventStreamHandler{
 		snapshotService: snapshotService,
@@ -643,10 +644,3 @@ func parseAggregateResumeID(r *http.Request) uint64 {
 	return parsed
 }
 
-// noopLogger is used when no logger is supplied.
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}

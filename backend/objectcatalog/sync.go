@@ -244,9 +244,7 @@ func (s *Service) sync(ctx context.Context) error {
 	if s.identity != nil {
 		s.identity.replaceDiscovered(descriptors)
 	}
-	if s.deps.Logger != nil {
-		s.logInfo(fmt.Sprintf("catalog discovered %d descriptor(s)", len(descriptors)))
-	}
+	s.logInfo(fmt.Sprintf("catalog discovered %d descriptor(s)", len(descriptors)))
 	if len(descriptors) == 0 {
 		s.mu.Lock()
 		s.catalogIndex.reset()
@@ -366,9 +364,7 @@ func (s *Service) sync(ctx context.Context) error {
 		}
 	}
 	descriptorCache := toDescriptorSlice(allowedDescriptors)
-	if s.deps.Logger != nil {
-		s.logInfo(fmt.Sprintf("catalog RBAC allowed %d/%d descriptor(s)", len(allowedDescriptors), len(descriptors)))
-	}
+	s.logInfo(fmt.Sprintf("catalog RBAC allowed %d/%d descriptor(s)", len(allowedDescriptors), len(descriptors)))
 
 	removeDisallowedEntries(newItems, newLastSeen, allowedSet)
 

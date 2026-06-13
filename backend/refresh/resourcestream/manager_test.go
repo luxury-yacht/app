@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -75,7 +76,7 @@ func resumeForTest(t *testing.T, manager *Manager, domain, scope string, since u
 func TestManagerPodUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -115,7 +116,7 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 func TestManagerConfigUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -151,7 +152,7 @@ func TestManagerConfigUpdateBroadcasts(t *testing.T) {
 func TestManagerRBACUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 		buffers:     make(map[string]*updateBuffer),
 		sequences:   make(map[string]uint64),
@@ -186,7 +187,7 @@ func TestManagerRBACUpdateBroadcasts(t *testing.T) {
 func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 		buffers:     make(map[string]*updateBuffer),
 		sequences:   make(map[string]uint64),
@@ -221,7 +222,7 @@ func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
 func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 		buffers:     make(map[string]*updateBuffer),
 		sequences:   make(map[string]uint64),
@@ -253,7 +254,7 @@ func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 func TestManagerClusterRBACUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -285,7 +286,7 @@ func TestManagerClusterRBACUpdateBroadcasts(t *testing.T) {
 func TestManagerQuotasUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -318,7 +319,7 @@ func TestManagerQuotasUpdateBroadcasts(t *testing.T) {
 func TestManagerNetworkUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -355,7 +356,7 @@ func TestManagerNetworkUpdateBroadcasts(t *testing.T) {
 func TestManagerClusterConfigUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -388,7 +389,7 @@ func TestManagerClusterConfigUpdateBroadcasts(t *testing.T) {
 func TestManagerStorageUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -424,7 +425,7 @@ func TestManagerStorageUpdateBroadcasts(t *testing.T) {
 func TestManagerClusterStorageUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -459,7 +460,7 @@ func TestManagerClusterStorageUpdateBroadcasts(t *testing.T) {
 func TestManagerCustomUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -504,7 +505,7 @@ func TestManagerCustomUpdateBroadcasts(t *testing.T) {
 func TestManagerCustomUpdateInvalidatesCache(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -546,7 +547,7 @@ func TestManagerSkipsCustomInformerForFirstClassGatewayCRD(t *testing.T) {
 	existingStopCh := make(chan struct{})
 	manager := &Manager{
 		clusterMeta:     snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:          noopLogger{},
+		logger:          applog.Noop,
 		dynamicClient:   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
 		customInformers: make(map[string]*customResourceInformer),
 		subscribers:     make(map[string]map[string]map[uint64]*subscription),
@@ -585,7 +586,7 @@ func TestManagerSkipsCustomInformerForFirstClassGatewayCRD(t *testing.T) {
 func TestManagerCRDSignatureChangeCompletesCustomDomain(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 	sub, err := subscribeForTest(t, manager, domainNamespaceCustom, "namespace:default")
@@ -615,7 +616,7 @@ func TestManagerCRDSignatureChangeCompletesCustomDomain(t *testing.T) {
 func TestManagerClusterCustomCRDSignatureChangeCompletesCustomDomain(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 	sub, err := subscribeForTest(t, manager, domainClusterCustom, "")
@@ -645,7 +646,7 @@ func TestManagerClusterCustomCRDSignatureChangeCompletesCustomDomain(t *testing.
 func TestManagerClusterCustomUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -689,7 +690,7 @@ func TestManagerClusterCustomUpdateBroadcasts(t *testing.T) {
 func TestManagerClusterCRDUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -735,7 +736,7 @@ func TestManagerClusterCRDUpdateBroadcasts(t *testing.T) {
 func TestManagerHelmUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -791,7 +792,7 @@ func TestManagerSecretUpdateRefreshesOldHelmReleaseWhenRelationChanges(t *testin
 	newSecret.Name = "ordinary-secret"
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 	sub, err := subscribeForTest(t, manager, domainNamespaceHelm, "namespace:default")
@@ -826,7 +827,7 @@ func TestManagerConfigMapUpdateRefreshesOldHelmReleaseWhenRelationChanges(t *tes
 	newConfigMap.Name = "ordinary-config"
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 	sub, err := subscribeForTest(t, manager, domainNamespaceHelm, "namespace:default")
@@ -848,7 +849,7 @@ func TestManagerConfigMapUpdateRefreshesOldHelmReleaseWhenRelationChanges(t *tes
 func TestManagerAutoscalingUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -912,7 +913,7 @@ func TestManagerWorkloadStreamRowsIncludeHPAContext(t *testing.T) {
 	}
 	manager := &Manager{
 		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:           noopLogger{},
+		logger:           applog.Noop,
 		podLister:        testsupport.NewPodLister(t),
 		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
 		hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t, hpa),
@@ -950,7 +951,7 @@ func TestManagerHPADeleteRefreshesTargetWorkloadRow(t *testing.T) {
 	}
 	manager := &Manager{
 		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:           noopLogger{},
+		logger:           applog.Noop,
 		podLister:        testsupport.NewPodLister(t),
 		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
 		hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t),
@@ -992,7 +993,7 @@ func TestManagerHPAUpdateRefreshesOldAndNewTargets(t *testing.T) {
 	newHPA.Spec.ScaleTargetRef.Name = "web-new"
 	manager := &Manager{
 		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:           noopLogger{},
+		logger:           applog.Noop,
 		podLister:        testsupport.NewPodLister(t),
 		deploymentLister: testsupport.NewDeploymentLister(t, oldDeployment, newDeployment),
 		hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t, newHPA),
@@ -1029,7 +1030,7 @@ func TestManagerPodMoveRefreshesOldAndNewNodeRows(t *testing.T) {
 	nodeB := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-b", UID: "node-b-uid", ResourceVersion: "6"}}
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		podLister:   testsupport.NewPodLister(t, newPod),
 		nodeLister:  testsupport.NewNodeLister(t, nodeA, nodeB),
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
@@ -1059,7 +1060,7 @@ func TestManagerPodMoveDeletesOldNodePodScope(t *testing.T) {
 	newPod.Spec.NodeName = "node-b"
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 	oldNodeSub, err := subscribeForTest(t, manager, domainPods, "node:node-a")
@@ -1096,7 +1097,7 @@ func TestManagerEndpointSliceRetargetRefreshesOldAndNewServices(t *testing.T) {
 	newService := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "new-svc", Namespace: "default", UID: "new-svc-uid"}}
 	manager := &Manager{
 		clusterMeta:   snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:        noopLogger{},
+		logger:        applog.Noop,
 		serviceLister: testsupport.NewServiceLister(t, oldService, newService),
 		sliceLister:   testsupport.NewEndpointSliceLister(t, newSlice),
 		subscribers:   make(map[string]map[string]map[uint64]*subscription),
@@ -1152,7 +1153,7 @@ func TestManagerReplicaSetUpdateRefreshesOldAndNewPodOwnerScopes(t *testing.T) {
 
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		podLister:   podListerWith(pod),
 		rsLister:    replicaSetListerWith(newRS),
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
@@ -1188,7 +1189,7 @@ func TestManagerReplicaSetUpdateRefreshesOldAndNewPodOwnerScopes(t *testing.T) {
 func TestManagerBackpressureTriggersReset(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -1255,7 +1256,7 @@ func TestManagerWorkloadUpdateFromPod(t *testing.T) {
 
 	manager := &Manager{
 		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:           noopLogger{},
+		logger:           applog.Noop,
 		podLister:        podListerWith(pod),
 		deploymentLister: deploymentListerWith(deployment),
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
@@ -1306,7 +1307,7 @@ func TestManagerWorkloadUpdateFromCompletedOwnedPod(t *testing.T) {
 
 	manager := &Manager{
 		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:           noopLogger{},
+		logger:           applog.Noop,
 		podLister:        podListerWith(pod),
 		deploymentLister: deploymentListerWith(deployment),
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
@@ -1343,7 +1344,7 @@ func TestManagerDeletesStandaloneWorkloadRowWhenPodCompletes(t *testing.T) {
 
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
 
@@ -1368,7 +1369,7 @@ func TestManagerDeletesStandaloneWorkloadRowWhenPodCompletes(t *testing.T) {
 func TestManagerNodeUpdateFromPod(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
+		logger:      applog.Noop,
 		nodeLister: nodeListerWith(&corev1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            "node-a",
