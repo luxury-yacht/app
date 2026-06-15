@@ -28,26 +28,28 @@ backend drove a final sweep of every cleanly-removable cluster:
 - namespace `list*` wrappers — a generic closure would just *be* the one-line typed-lister body.
 True "one descriptor entry per kind" beyond this needs codegen.
 
-## Phase 3a — codegen proof (2026-06-14, gate-green)
+## Phase 3a — codegen for ALL standard App.Get bindings (2026-06-14, gate-green)
 
-Built the codegen mechanism end-to-end on ONE self-contained subsystem: the gateway-API
-`App.Get<Kind>` bindings (the biggest remaining clone family, and a canonical "add-a-kind surface").
-- `backend/internal/gengatewaybindings` renders the 8 bindings from `resourcecontract.BuiltinResources`
-  — Kind + Namespaced come from the contract (GatewayClass→`FetchClusterResource`, rest→`FetchNamespacedResource`);
-  DTO=`<Kind>Details`, method=`<Kind>`, ctor=`gatewayapi.NewService(deps)`.
-- `//go:generate go run ./internal/gengatewaybindings/cmd -out resources_gatewayapi_generated.go`
-  (in `backend/generate.go`); hand-written `resources_gatewayapi.go` deleted.
-- A golden test (`TestGatewayBindingsGeneratedInSync`) fails if the file is hand-edited or a contract
-  kind is added without regenerating. Generation is idempotent; `models.ts` is byte-unchanged (the
-  binding surface is identical), proving behaviour preservation.
+The codegen mechanism is built and rolled out across every standard `App.Get<Kind>` binding (37):
+- `backend/internal/genappbindings` holds the binding descriptor table (`Bindings`) + `Render()`. Each
+  row declares only what varies: kind, namespaced, fetch key (HPA/PVC), service ctor, method (network
+  Service→GetService). `Render()` emits `backend/resources_generated.go` with all 37 wrappers.
+- `//go:generate go run ./internal/genappbindings/cmd -out resources_generated.go` (in `backend/generate.go`).
+- The 8 binding-only files (admission/config/constraints/namespaces/network/policy/rbac/storage) were
+  deleted; the 3 mixed files (autoscaling/nodes/workloads) had their Get binding surgically removed.
+- Two guard tests: `TestAppBindingsGeneratedInSync` (golden — fails if hand-edited or not regenerated)
+  and `TestAppBindingsMatchContract` (every binding names a real `BuiltinResources` kind with agreeing
+  Namespaced). Generation is idempotent; `models.ts` is byte-unchanged (Wails surface identical), proving
+  behaviour preservation.
+- **Kept hand-written (genuinely non-standard, VERIFIED):** apiextensions (extra client-nil guard), helm
+  (`helm.Dependencies{Common: deps}` + string/map return types), pods (extra `detailed` arg / custom bodies).
 
-**Honest scope/value of the proof:** it eliminates the *binding* boilerplate only. Adding a gateway kind
-still needs its typed `Service.<Kind>()` method + DTO (hand-written, genuinely per-kind) — but the App
-binding is now free and cannot drift. So codegen removes one of the ~13 add-a-kind surfaces for this group,
-not all of them. Whether to roll the same generator out to the other binding groups (rbac, storage,
-workloads, …) is now a reviewable decision with a concrete mechanism + diff in hand, rather than a
-speculative plan. The typed leaves (Service methods, model/summary builders, describe*Facts) remain
-hand-written; generating those would be a much larger generator with little gain over the current generics.
+**Value:** adding a standard kind's App binding is now one descriptor row + regenerate — the wrapper cannot
+drift (golden) and cannot disagree with identity (contract). This eliminates the *binding* surface (one of
+the ~13 add-a-kind surfaces). The typed leaves (Service methods, model/summary builders, describe*Facts)
+remain hand-written — generating those would be a far larger generator for little gain over the generics
+already in place, and would hide genuinely per-kind logic. So this is the correct stopping point for codegen:
+the mechanical wrapper is generated; the distinct typed code stays explicit.
 
 ## The problem (root cause)
 

@@ -18,16 +18,6 @@ import (
 	kubectldrain "k8s.io/kubectl/pkg/drain"
 )
 
-func (a *App) GetNode(clusterID, name string) (*NodeDetails, error) {
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return nil, err
-	}
-	return FetchClusterResource(a, deps, selectionKey, "Node", name, func() (*NodeDetails, error) {
-		return nodes.NewService(deps).Node(name)
-	})
-}
-
 func (a *App) cordonNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err

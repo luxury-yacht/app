@@ -1,5 +1,6 @@
 package backend
 
-// Gateway-API App.Get<Kind> bindings are generated from resourcecontract.BuiltinResources.
-// Regenerate with `go generate ./backend` after adding a gateway kind to the contract.
-//go:generate go run ./internal/gengatewaybindings/cmd -out resources_gatewayapi_generated.go
+// Standard App.Get<Kind> resource-detail bindings are generated from the binding
+// descriptor in internal/genappbindings. Regenerate with `go generate ./backend`
+// after adding a kind (one descriptor row + its typed service method/DTO).
+//go:generate go run ./internal/genappbindings/cmd -out resources_generated.go

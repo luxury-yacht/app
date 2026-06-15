@@ -15,19 +15,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/luxury-yacht/app/backend/resources/autoscaling"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
-
-func (a *App) GetHorizontalPodAutoscaler(clusterID, namespace, name string) (*HorizontalPodAutoscalerDetails, error) {
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return nil, err
-	}
-	return FetchNamespacedResource(a, deps, selectionKey, "HPA", namespace, name, func() (*HorizontalPodAutoscalerDetails, error) {
-		return autoscaling.NewService(deps).HorizontalPodAutoscaler(namespace, name)
-	})
-}
 
 // IsWorkloadHPAManaged checks whether any HorizontalPodAutoscaler in the given
 // namespace targets the specified workload GVK + name. Used by the object panel
