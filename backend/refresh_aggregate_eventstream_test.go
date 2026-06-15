@@ -128,8 +128,7 @@ func TestAggregateEventStreamHandlerStreamsSingleCluster(t *testing.T) {
 	var bufferedLinkClusterID string
 	handler.mu.Lock()
 	if buffer := handler.buffers["cluster-a|cluster"]; buffer != nil {
-		for i := 0; i < buffer.count; i++ {
-			item := buffer.items[(buffer.start+i)%buffer.max]
+		for _, item := range buffer.All() {
 			if item.Entry.Message != "event-a" {
 				continue
 			}
@@ -255,8 +254,8 @@ func TestAggregateEventStreamResumesFromBuffer(t *testing.T) {
 
 	scopeKey := "clusters=cluster-a|cluster"
 	handler.buffers[scopeKey] = newAggregateEventBuffer(config.AggregateEventStreamResumeBufferSize)
-	handler.buffers[scopeKey].add(aggregateBufferItem{Sequence: 1, Entry: eventstream.Entry{Message: "older"}})
-	handler.buffers[scopeKey].add(aggregateBufferItem{Sequence: 2, Entry: eventstream.Entry{Message: "buffered"}})
+	handler.buffers[scopeKey].Add(aggregateBufferItem{Sequence: 1, Entry: eventstream.Entry{Message: "older"}})
+	handler.buffers[scopeKey].Add(aggregateBufferItem{Sequence: 2, Entry: eventstream.Entry{Message: "buffered"}})
 	handler.sequences[scopeKey] = 2
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -315,7 +314,7 @@ func TestAggregateEventStreamFallsBackToSnapshotWhenResumeTooOld(t *testing.T) {
 
 	scopeKey := "clusters=cluster-a|cluster"
 	handler.buffers[scopeKey] = newAggregateEventBuffer(1)
-	handler.buffers[scopeKey].add(aggregateBufferItem{Sequence: 5, Entry: eventstream.Entry{Message: "buffered"}})
+	handler.buffers[scopeKey].Add(aggregateBufferItem{Sequence: 5, Entry: eventstream.Entry{Message: "buffered"}})
 	handler.sequences[scopeKey] = 5
 
 	ctx, cancel := context.WithCancel(context.Background())

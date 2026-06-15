@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
+	"github.com/luxury-yacht/app/backend/refresh/ringbuffer"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
@@ -38,56 +39,12 @@ type bufferedEvent struct {
 	entry    Entry
 }
 
-type eventBuffer struct {
-	items []bufferedEvent
-	start int
-	count int
-	max   int
-}
+// eventBuffer is the per-scope resume buffer; the ring + replay logic is shared
+// via ringbuffer.Buffer.
+type eventBuffer = ringbuffer.Buffer[bufferedEvent]
 
 func newEventBuffer(max int) *eventBuffer {
-	return &eventBuffer{
-		items: make([]bufferedEvent, max),
-		max:   max,
-	}
-}
-
-func (b *eventBuffer) add(event bufferedEvent) {
-	if b.max == 0 {
-		return
-	}
-	if b.count < b.max {
-		index := (b.start + b.count) % b.max
-		b.items[index] = event
-		b.count++
-		return
-	}
-	b.items[b.start] = event
-	b.start = (b.start + 1) % b.max
-}
-
-func (b *eventBuffer) since(sequence uint64) ([]bufferedEvent, bool) {
-	if b.count == 0 {
-		return nil, false
-	}
-	oldest := b.items[b.start].sequence
-	latestIndex := (b.start + b.count - 1) % b.max
-	latest := b.items[latestIndex].sequence
-	if sequence < oldest {
-		return nil, false
-	}
-	if sequence >= latest {
-		return []bufferedEvent{}, true
-	}
-	events := make([]bufferedEvent, 0, b.count)
-	for i := 0; i < b.count; i++ {
-		index := (b.start + i) % b.max
-		item := b.items[index]
-		if item.sequence > sequence {
-			events = append(events, item)
-		}
-	}
-	return events, true
+	return ringbuffer.New(max, func(e bufferedEvent) uint64 { return e.sequence })
 }
 
 // NewManager wires the event informer into a streaming manager.
@@ -159,7 +116,7 @@ func (m *Manager) SubscribeWithResume(
 		m.mu.Unlock()
 		return nil, nil, nil, false, false
 	}
-	items, ok := buffer.since(since)
+	items, ok := buffer.Since(since)
 	if !ok {
 		m.mu.Unlock()
 		return nil, nil, nil, false, false
@@ -193,7 +150,7 @@ func (m *Manager) Resume(scope string, since uint64) ([]StreamEvent, bool) {
 		m.mu.RUnlock()
 		return nil, false
 	}
-	items, ok := buffer.since(since)
+	items, ok := buffer.Since(since)
 	m.mu.RUnlock()
 	if !ok {
 		return nil, false
@@ -304,7 +261,7 @@ func (m *Manager) broadcast(scope string, entry Entry) {
 			buffer = newEventBuffer(config.EventStreamResumeBufferSize)
 			m.buffers[scope] = buffer
 		}
-		buffer.add(bufferedEvent{sequence: sequence, entry: entry})
+		buffer.Add(bufferedEvent{sequence: sequence, entry: entry})
 	}
 	items := make([]struct {
 		id  uint64

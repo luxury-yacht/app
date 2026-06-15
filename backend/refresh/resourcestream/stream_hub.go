@@ -114,7 +114,7 @@ func (h managerStreamHub) resume(selector StreamSelector, since uint64) ([]Updat
 		m.mu.RUnlock()
 		return nil, false
 	}
-	updates, ok := buffer.since(since)
+	updates, ok := buffer.Since(since)
 	m.mu.RUnlock()
 	if !ok {
 		return nil, false

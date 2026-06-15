@@ -16,6 +16,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	appslisters "k8s.io/client-go/listers/apps/v1"
@@ -24,6 +25,84 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
+
+// The new*Summary constructors fill the metadata fields every row of a given
+// summary type shares (name/namespace/age from the object, plus kind/details).
+// Each Build<Kind>Summary keeps its typed model + describe call and hands the
+// result here, so the common row skeleton is declared once per summary type.
+
+func newNetworkSummary(meta ClusterMeta, obj metav1.Object, kind, details string) NetworkSummary {
+	return NetworkSummary{
+		ClusterMeta:  meta,
+		Kind:         kind,
+		Name:         obj.GetName(),
+		Namespace:    obj.GetNamespace(),
+		Details:      details,
+		Age:          formatAge(obj.GetCreationTimestamp().Time),
+		AgeTimestamp: creationTimestampMillis(obj),
+	}
+}
+
+func newRBACSummary(meta ClusterMeta, obj metav1.Object, kind, details string) RBACSummary {
+	return RBACSummary{
+		ClusterMeta:  meta,
+		Kind:         kind,
+		Name:         obj.GetName(),
+		Namespace:    obj.GetNamespace(),
+		Details:      details,
+		Age:          formatAge(obj.GetCreationTimestamp().Time),
+		AgeTimestamp: creationTimestampMillis(obj),
+	}
+}
+
+func newQuotaSummary(meta ClusterMeta, obj metav1.Object, kind, details string) QuotaSummary {
+	return QuotaSummary{
+		ClusterMeta:  meta,
+		Kind:         kind,
+		Name:         obj.GetName(),
+		Namespace:    obj.GetNamespace(),
+		Details:      details,
+		Age:          formatAge(obj.GetCreationTimestamp().Time),
+		AgeTimestamp: creationTimestampMillis(obj),
+	}
+}
+
+func newClusterRBACEntry(meta ClusterMeta, obj metav1.Object, kind, details, typeAlias string) ClusterRBACEntry {
+	return ClusterRBACEntry{
+		ClusterMeta:  meta,
+		Kind:         kind,
+		Name:         obj.GetName(),
+		Details:      details,
+		Age:          formatAge(obj.GetCreationTimestamp().Time),
+		AgeTimestamp: creationTimestampMillis(obj),
+		TypeAlias:    typeAlias,
+	}
+}
+
+func newClusterConfigEntry(meta ClusterMeta, obj metav1.Object, kind, details string, isDefault bool) ClusterConfigEntry {
+	return ClusterConfigEntry{
+		ClusterMeta:  meta,
+		Kind:         kind,
+		Name:         obj.GetName(),
+		Details:      details,
+		IsDefault:    isDefault,
+		Age:          formatAge(obj.GetCreationTimestamp().Time),
+		AgeTimestamp: creationTimestampMillis(obj),
+	}
+}
+
+func newConfigSummary(meta ClusterMeta, obj metav1.Object, kind, typeAlias string, data int) ConfigSummary {
+	return ConfigSummary{
+		ClusterMeta:  meta,
+		Kind:         kind,
+		TypeAlias:    typeAlias,
+		Name:         obj.GetName(),
+		Namespace:    obj.GetNamespace(),
+		Data:         data,
+		Age:          formatAge(obj.GetCreationTimestamp().Time),
+		AgeTimestamp: creationTimestampMillis(obj),
+	}
+}
 
 // BuildPodSummary builds a pod row payload that matches snapshot formatting.
 func BuildPodSummary(meta ClusterMeta, pod *corev1.Pod, usage map[string]metrics.PodUsage, rsLister appslisters.ReplicaSetLister) PodSummary {
@@ -47,16 +126,7 @@ func BuildConfigMapSummary(meta ClusterMeta, cm *corev1.ConfigMap) ConfigSummary
 	if facts := model.Facts.ConfigMap; facts != nil {
 		dataCount = facts.DataCount
 	}
-	return ConfigSummary{
-		ClusterMeta:  meta,
-		Kind:         "ConfigMap",
-		TypeAlias:    "CM",
-		Name:         cm.Name,
-		Namespace:    cm.Namespace,
-		Data:         dataCount,
-		Age:          formatAge(cm.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(cm),
-	}
+	return newConfigSummary(meta, cm, "ConfigMap", "CM", dataCount)
 }
 
 // BuildSecretSummary builds a secret row payload that matches snapshot formatting.
@@ -69,16 +139,7 @@ func BuildSecretSummary(meta ClusterMeta, secret *corev1.Secret) ConfigSummary {
 	if facts := model.Facts.Secret; facts != nil {
 		dataCount = facts.DataCount
 	}
-	return ConfigSummary{
-		ClusterMeta:  meta,
-		Kind:         "Secret",
-		TypeAlias:    secretTypeAlias(secret),
-		Name:         secret.Name,
-		Namespace:    secret.Namespace,
-		Data:         dataCount,
-		Age:          formatAge(secret.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(secret),
-	}
+	return newConfigSummary(meta, secret, "Secret", secretTypeAlias(secret), dataCount)
 }
 
 // BuildRoleSummary builds a role row payload that matches snapshot formatting.
@@ -87,15 +148,7 @@ func BuildRoleSummary(meta ClusterMeta, role *rbacv1.Role) RBACSummary {
 		return RBACSummary{ClusterMeta: meta, Kind: "Role"}
 	}
 	model := resourcemodel.BuildRoleResourceModel(meta.ClusterID, role, nil)
-	return RBACSummary{
-		ClusterMeta:  meta,
-		Kind:         "Role",
-		Name:         role.Name,
-		Namespace:    role.Namespace,
-		Details:      describeRoleFacts(model.Facts.Role),
-		Age:          formatAge(role.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(role),
-	}
+	return newRBACSummary(meta, role, "Role", describeRoleFacts(model.Facts.Role))
 }
 
 // BuildRoleBindingSummary builds a role binding row payload that matches snapshot formatting.
@@ -104,15 +157,7 @@ func BuildRoleBindingSummary(meta ClusterMeta, binding *rbacv1.RoleBinding) RBAC
 		return RBACSummary{ClusterMeta: meta, Kind: "RoleBinding"}
 	}
 	model := resourcemodel.BuildRoleBindingResourceModel(meta.ClusterID, binding)
-	return RBACSummary{
-		ClusterMeta:  meta,
-		Kind:         "RoleBinding",
-		Name:         binding.Name,
-		Namespace:    binding.Namespace,
-		Details:      describeRoleBindingFacts(model.Facts.RoleBinding),
-		Age:          formatAge(binding.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(binding),
-	}
+	return newRBACSummary(meta, binding, "RoleBinding", describeRoleBindingFacts(model.Facts.RoleBinding))
 }
 
 // BuildServiceAccountSummary builds a service account row payload that matches snapshot formatting.
@@ -121,15 +166,7 @@ func BuildServiceAccountSummary(meta ClusterMeta, sa *corev1.ServiceAccount) RBA
 		return RBACSummary{ClusterMeta: meta, Kind: "ServiceAccount"}
 	}
 	model := resourcemodel.BuildServiceAccountResourceModel(meta.ClusterID, sa, nil)
-	return RBACSummary{
-		ClusterMeta:  meta,
-		Kind:         "ServiceAccount",
-		Name:         sa.Name,
-		Namespace:    sa.Namespace,
-		Details:      describeServiceAccountFacts(model.Facts.ServiceAccount),
-		Age:          formatAge(sa.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(sa),
-	}
+	return newRBACSummary(meta, sa, "ServiceAccount", describeServiceAccountFacts(model.Facts.ServiceAccount))
 }
 
 // BuildServiceNetworkSummary builds a service row payload that matches snapshot formatting.
@@ -142,15 +179,7 @@ func BuildServiceNetworkSummary(
 		return NetworkSummary{ClusterMeta: meta, Kind: "Service"}
 	}
 	model := resourcemodel.BuildServiceResourceModel(meta.ClusterID, svc, slices)
-	return NetworkSummary{
-		ClusterMeta:  meta,
-		Kind:         "Service",
-		Name:         svc.Name,
-		Namespace:    svc.Namespace,
-		Details:      describeServiceFacts(model.Facts.Service),
-		Age:          formatAge(svc.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(svc),
-	}
+	return newNetworkSummary(meta, svc, "Service", describeServiceFacts(model.Facts.Service))
 }
 
 // BuildIngressNetworkSummary builds an ingress row payload that matches snapshot formatting.
@@ -159,15 +188,7 @@ func BuildIngressNetworkSummary(meta ClusterMeta, ing *networkingv1.Ingress) Net
 		return NetworkSummary{ClusterMeta: meta, Kind: "Ingress"}
 	}
 	model := resourcemodel.BuildIngressResourceModel(meta.ClusterID, ing)
-	return NetworkSummary{
-		ClusterMeta:  meta,
-		Kind:         "Ingress",
-		Name:         ing.Name,
-		Namespace:    ing.Namespace,
-		Details:      describeIngressFacts(model.Facts.Ingress),
-		Age:          formatAge(ing.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(ing),
-	}
+	return newNetworkSummary(meta, ing, "Ingress", describeIngressFacts(model.Facts.Ingress))
 }
 
 // BuildNetworkPolicySummary builds a network policy row payload that matches snapshot formatting.
@@ -176,15 +197,7 @@ func BuildNetworkPolicySummary(meta ClusterMeta, policy *networkingv1.NetworkPol
 		return NetworkSummary{ClusterMeta: meta, Kind: "NetworkPolicy"}
 	}
 	model := resourcemodel.BuildNetworkPolicyResourceModel(meta.ClusterID, policy)
-	return NetworkSummary{
-		ClusterMeta:  meta,
-		Kind:         "NetworkPolicy",
-		Name:         policy.Name,
-		Namespace:    policy.Namespace,
-		Details:      describeNetworkPolicyFacts(model.Facts.NetworkPolicy),
-		Age:          formatAge(policy.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(policy),
-	}
+	return newNetworkSummary(meta, policy, "NetworkPolicy", describeNetworkPolicyFacts(model.Facts.NetworkPolicy))
 }
 
 func BuildGatewayNetworkSummary(meta ClusterMeta, gateway *gatewayv1.Gateway) NetworkSummary {
@@ -192,15 +205,7 @@ func BuildGatewayNetworkSummary(meta ClusterMeta, gateway *gatewayv1.Gateway) Ne
 		return NetworkSummary{ClusterMeta: meta, Kind: "Gateway"}
 	}
 	model := resourcemodel.BuildGatewayResourceModel(meta.ClusterID, gateway)
-	return NetworkSummary{
-		ClusterMeta:  meta,
-		Kind:         "Gateway",
-		Name:         gateway.Name,
-		Namespace:    gateway.Namespace,
-		Details:      describeGatewayFacts(model.Facts.Gateway),
-		Age:          formatAge(gateway.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(gateway),
-	}
+	return newNetworkSummary(meta, gateway, "Gateway", describeGatewayFacts(model.Facts.Gateway))
 }
 
 func BuildHTTPRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.HTTPRoute) NetworkSummary {
@@ -208,15 +213,7 @@ func BuildHTTPRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.HTTPRoute) 
 		return NetworkSummary{ClusterMeta: meta, Kind: "HTTPRoute"}
 	}
 	model := resourcemodel.BuildHTTPRouteResourceModel(meta.ClusterID, route)
-	return NetworkSummary{
-		ClusterMeta:  meta,
-		Kind:         "HTTPRoute",
-		Name:         route.Name,
-		Namespace:    route.Namespace,
-		Details:      describeGatewayRouteFacts(model.Facts.HTTPRoute.RouteCommonFacts),
-		Age:          formatAge(route.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(route),
-	}
+	return newNetworkSummary(meta, route, "HTTPRoute", describeGatewayRouteFacts(model.Facts.HTTPRoute.RouteCommonFacts))
 }
 
 func BuildGRPCRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.GRPCRoute) NetworkSummary {
@@ -224,15 +221,7 @@ func BuildGRPCRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.GRPCRoute) 
 		return NetworkSummary{ClusterMeta: meta, Kind: "GRPCRoute"}
 	}
 	model := resourcemodel.BuildGRPCRouteResourceModel(meta.ClusterID, route)
-	return NetworkSummary{
-		ClusterMeta:  meta,
-		Kind:         "GRPCRoute",
-		Name:         route.Name,
-		Namespace:    route.Namespace,
-		Details:      describeGatewayRouteFacts(model.Facts.GRPCRoute.RouteCommonFacts),
-		Age:          formatAge(route.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(route),
-	}
+	return newNetworkSummary(meta, route, "GRPCRoute", describeGatewayRouteFacts(model.Facts.GRPCRoute.RouteCommonFacts))
 }
 
 func BuildTLSRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.TLSRoute) NetworkSummary {
@@ -240,15 +229,7 @@ func BuildTLSRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.TLSRoute) Ne
 		return NetworkSummary{ClusterMeta: meta, Kind: "TLSRoute"}
 	}
 	model := resourcemodel.BuildTLSRouteResourceModel(meta.ClusterID, route)
-	return NetworkSummary{
-		ClusterMeta:  meta,
-		Kind:         "TLSRoute",
-		Name:         route.Name,
-		Namespace:    route.Namespace,
-		Details:      describeGatewayRouteFacts(model.Facts.TLSRoute.RouteCommonFacts),
-		Age:          formatAge(route.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(route),
-	}
+	return newNetworkSummary(meta, route, "TLSRoute", describeGatewayRouteFacts(model.Facts.TLSRoute.RouteCommonFacts))
 }
 
 func BuildListenerSetNetworkSummary(meta ClusterMeta, listenerSet *gatewayv1.ListenerSet) NetworkSummary {
@@ -256,15 +237,7 @@ func BuildListenerSetNetworkSummary(meta ClusterMeta, listenerSet *gatewayv1.Lis
 		return NetworkSummary{ClusterMeta: meta, Kind: "ListenerSet"}
 	}
 	model := resourcemodel.BuildListenerSetResourceModel(meta.ClusterID, listenerSet)
-	return NetworkSummary{
-		ClusterMeta:  meta,
-		Kind:         "ListenerSet",
-		Name:         listenerSet.Name,
-		Namespace:    listenerSet.Namespace,
-		Details:      describeListenerSetFacts(model.Facts.ListenerSet),
-		Age:          formatAge(listenerSet.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(listenerSet),
-	}
+	return newNetworkSummary(meta, listenerSet, "ListenerSet", describeListenerSetFacts(model.Facts.ListenerSet))
 }
 
 func BuildReferenceGrantNetworkSummary(meta ClusterMeta, grant *gatewayv1.ReferenceGrant) NetworkSummary {
@@ -272,15 +245,7 @@ func BuildReferenceGrantNetworkSummary(meta ClusterMeta, grant *gatewayv1.Refere
 		return NetworkSummary{ClusterMeta: meta, Kind: "ReferenceGrant"}
 	}
 	model := resourcemodel.BuildReferenceGrantResourceModel(meta.ClusterID, grant)
-	return NetworkSummary{
-		ClusterMeta:  meta,
-		Kind:         "ReferenceGrant",
-		Name:         grant.Name,
-		Namespace:    grant.Namespace,
-		Details:      describeReferenceGrantFacts(model.Facts.ReferenceGrant),
-		Age:          formatAge(grant.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(grant),
-	}
+	return newNetworkSummary(meta, grant, "ReferenceGrant", describeReferenceGrantFacts(model.Facts.ReferenceGrant))
 }
 
 func BuildBackendTLSPolicyNetworkSummary(meta ClusterMeta, policy *gatewayv1.BackendTLSPolicy) NetworkSummary {
@@ -288,15 +253,7 @@ func BuildBackendTLSPolicyNetworkSummary(meta ClusterMeta, policy *gatewayv1.Bac
 		return NetworkSummary{ClusterMeta: meta, Kind: "BackendTLSPolicy"}
 	}
 	model := resourcemodel.BuildBackendTLSPolicyResourceModel(meta.ClusterID, policy)
-	return NetworkSummary{
-		ClusterMeta:  meta,
-		Kind:         "BackendTLSPolicy",
-		Name:         policy.Name,
-		Namespace:    policy.Namespace,
-		Details:      describeBackendTLSPolicyFacts(model.Facts.BackendTLSPolicy),
-		Age:          formatAge(policy.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(policy),
-	}
+	return newNetworkSummary(meta, policy, "BackendTLSPolicy", describeBackendTLSPolicyFacts(model.Facts.BackendTLSPolicy))
 }
 
 // BuildNamespaceCustomSummary builds a custom resource row payload that
@@ -367,15 +324,7 @@ func BuildClusterRoleSummary(meta ClusterMeta, role *rbacv1.ClusterRole) Cluster
 		return ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRole"}
 	}
 	model := resourcemodel.BuildClusterRoleResourceModel(meta.ClusterID, role, nil)
-	return ClusterRBACEntry{
-		ClusterMeta:  meta,
-		Kind:         "ClusterRole",
-		Name:         role.Name,
-		Details:      describeClusterRoleFacts(model.Facts.ClusterRole),
-		Age:          formatAge(role.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(role),
-		TypeAlias:    "CR",
-	}
+	return newClusterRBACEntry(meta, role, "ClusterRole", describeClusterRoleFacts(model.Facts.ClusterRole), "CR")
 }
 
 // BuildClusterRoleBindingSummary builds a cluster role binding row payload that matches snapshot formatting.
@@ -384,15 +333,7 @@ func BuildClusterRoleBindingSummary(meta ClusterMeta, binding *rbacv1.ClusterRol
 		return ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRoleBinding"}
 	}
 	model := resourcemodel.BuildClusterRoleBindingResourceModel(meta.ClusterID, binding)
-	return ClusterRBACEntry{
-		ClusterMeta:  meta,
-		Kind:         "ClusterRoleBinding",
-		Name:         binding.Name,
-		Details:      describeClusterRoleBindingFacts(model.Facts.ClusterRoleBinding),
-		Age:          formatAge(binding.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(binding),
-		TypeAlias:    "CRB",
-	}
+	return newClusterRBACEntry(meta, binding, "ClusterRoleBinding", describeClusterRoleBindingFacts(model.Facts.ClusterRoleBinding), "CRB")
 }
 
 // BuildClusterStorageSummary builds a persistent volume row payload that matches snapshot formatting.
@@ -431,15 +372,7 @@ func BuildClusterStorageClassSummary(meta ClusterMeta, sc *storagev1.StorageClas
 		isDefault = facts.DefaultClass
 		provisioner = facts.Provisioner
 	}
-	return ClusterConfigEntry{
-		ClusterMeta:  meta,
-		Kind:         "StorageClass",
-		Name:         sc.Name,
-		Details:      provisioner,
-		IsDefault:    isDefault,
-		Age:          formatAge(sc.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(sc),
-	}
+	return newClusterConfigEntry(meta, sc, "StorageClass", provisioner, isDefault)
 }
 
 // BuildClusterIngressClassSummary builds an ingress class entry that matches snapshot formatting.
@@ -455,15 +388,7 @@ func BuildClusterIngressClassSummary(meta ClusterMeta, ic *networkingv1.IngressC
 		controller = facts.Controller
 		isDefault = facts.DefaultClass
 	}
-	return ClusterConfigEntry{
-		ClusterMeta:  meta,
-		Kind:         "IngressClass",
-		Name:         ic.Name,
-		Details:      controller,
-		IsDefault:    isDefault,
-		Age:          formatAge(ic.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(ic),
-	}
+	return newClusterConfigEntry(meta, ic, "IngressClass", controller, isDefault)
 }
 
 // BuildClusterGatewayClassSummary builds a gateway class entry that matches snapshot formatting.
@@ -476,14 +401,7 @@ func BuildClusterGatewayClassSummary(meta ClusterMeta, gc *gatewayv1.GatewayClas
 	if model.Facts.GatewayClass != nil {
 		details = model.Facts.GatewayClass.ControllerName
 	}
-	return ClusterConfigEntry{
-		ClusterMeta:  meta,
-		Kind:         "GatewayClass",
-		Name:         gc.Name,
-		Details:      details,
-		Age:          formatAge(gc.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(gc),
-	}
+	return newClusterConfigEntry(meta, gc, "GatewayClass", details, false)
 }
 
 // BuildClusterValidatingWebhookSummary builds a validating webhook entry that matches snapshot formatting.
@@ -713,15 +631,7 @@ func BuildResourceQuotaSummary(meta ClusterMeta, quota *corev1.ResourceQuota) Qu
 		return QuotaSummary{ClusterMeta: meta, Kind: "ResourceQuota"}
 	}
 	model := resourcemodel.BuildResourceQuotaResourceModel(meta.ClusterID, quota)
-	return QuotaSummary{
-		ClusterMeta:  meta,
-		Kind:         "ResourceQuota",
-		Name:         quota.Name,
-		Namespace:    quota.Namespace,
-		Details:      describeResourceQuotaFacts(model.Facts.ResourceQuota),
-		Age:          formatAge(quota.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(quota),
-	}
+	return newQuotaSummary(meta, quota, "ResourceQuota", describeResourceQuotaFacts(model.Facts.ResourceQuota))
 }
 
 // BuildLimitRangeSummary builds a limit range row payload that matches snapshot formatting.
@@ -730,15 +640,7 @@ func BuildLimitRangeSummary(meta ClusterMeta, limit *corev1.LimitRange) QuotaSum
 		return QuotaSummary{ClusterMeta: meta, Kind: "LimitRange"}
 	}
 	model := resourcemodel.BuildLimitRangeResourceModel(meta.ClusterID, limit)
-	return QuotaSummary{
-		ClusterMeta:  meta,
-		Kind:         "LimitRange",
-		Name:         limit.Name,
-		Namespace:    limit.Namespace,
-		Details:      describeLimitRangeFacts(model.Facts.LimitRange),
-		Age:          formatAge(limit.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(limit),
-	}
+	return newQuotaSummary(meta, limit, "LimitRange", describeLimitRangeFacts(model.Facts.LimitRange))
 }
 
 // BuildPodDisruptionBudgetSummary builds a PDB row payload that matches snapshot formatting.
@@ -748,19 +650,11 @@ func BuildPodDisruptionBudgetSummary(meta ClusterMeta, pdb *policyv1.PodDisrupti
 	}
 	model := resourcemodel.BuildPodDisruptionBudgetResourceModel(meta.ClusterID, pdb)
 	facts := model.Facts.PodDisruptionBudget
-	summary := QuotaSummary{
-		ClusterMeta:  meta,
-		Kind:         "PodDisruptionBudget",
-		Name:         pdb.Name,
-		Namespace:    pdb.Namespace,
-		Details:      describePodDisruptionBudgetFacts(facts),
-		Age:          formatAge(pdb.CreationTimestamp.Time),
-		AgeTimestamp: creationTimestampMillis(pdb),
-		Status: &QuotaStatus{
-			DisruptionsAllowed: facts.AllowedDisruptions,
-			CurrentHealthy:     facts.CurrentHealthy,
-			DesiredHealthy:     facts.DesiredHealthy,
-		},
+	summary := newQuotaSummary(meta, pdb, "PodDisruptionBudget", describePodDisruptionBudgetFacts(facts))
+	summary.Status = &QuotaStatus{
+		DisruptionsAllowed: facts.AllowedDisruptions,
+		CurrentHealthy:     facts.CurrentHealthy,
+		DesiredHealthy:     facts.DesiredHealthy,
 	}
 	if facts.MinAvailable != nil {
 		value := facts.MinAvailable.Value

@@ -10,215 +10,188 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-func (s *Service) GatewayClass(name string) (*types.GatewayClassDetails, error) {
-	if err := s.ensureKind("GatewayClass"); err != nil {
+// getGatewayResource runs the shared ensure-kind → fetch → build flow for a single
+// Gateway-API object. fetch returns the typed object; build projects it to a DTO.
+func getGatewayResource[T any, D any](
+	s *Service,
+	kind, noun string,
+	fetch func() (*T, error),
+	build func(*T) *D,
+) (*D, error) {
+	if err := s.ensureKind(kind); err != nil {
 		return nil, err
 	}
-	item, err := s.deps.GatewayClient.GatewayV1().GatewayClasses().Get(s.deps.Context, name, metav1.GetOptions{})
+	item, err := fetch()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get gateway class: %w", err)
+		return nil, fmt.Errorf("failed to get %s: %w", noun, err)
 	}
-	return s.buildGatewayClassDetails(item), nil
+	return build(item), nil
+}
+
+// listGatewayResources runs the shared ensure-kind → list → build flow for a
+// Gateway-API kind.
+func listGatewayResources[T any, D any](
+	s *Service,
+	kind, noun string,
+	list func() ([]T, error),
+	build func(*T) *D,
+) ([]*D, error) {
+	if err := s.ensureKind(kind); err != nil {
+		return nil, err
+	}
+	items, err := list()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list %s: %w", noun, err)
+	}
+	out := make([]*D, 0, len(items))
+	for i := range items {
+		out = append(out, build(&items[i]))
+	}
+	return out, nil
+}
+
+func (s *Service) GatewayClass(name string) (*types.GatewayClassDetails, error) {
+	return getGatewayResource(s, "GatewayClass", "gateway class",
+		func() (*gatewayv1.GatewayClass, error) {
+			return s.deps.GatewayClient.GatewayV1().GatewayClasses().Get(s.deps.Context, name, metav1.GetOptions{})
+		}, s.buildGatewayClassDetails)
 }
 
 func (s *Service) GatewayClasses() ([]*types.GatewayClassDetails, error) {
-	if err := s.ensureKind("GatewayClass"); err != nil {
-		return nil, err
-	}
-	list, err := s.deps.GatewayClient.GatewayV1().GatewayClasses().List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list gateway classes: %w", err)
-	}
-	out := make([]*types.GatewayClassDetails, 0, len(list.Items))
-	for i := range list.Items {
-		out = append(out, s.buildGatewayClassDetails(&list.Items[i]))
-	}
-	return out, nil
+	return listGatewayResources(s, "GatewayClass", "gateway classes",
+		func() ([]gatewayv1.GatewayClass, error) {
+			list, err := s.deps.GatewayClient.GatewayV1().GatewayClasses().List(s.deps.Context, metav1.ListOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return list.Items, nil
+		}, s.buildGatewayClassDetails)
 }
 
 func (s *Service) Gateway(namespace, name string) (*types.GatewayDetails, error) {
-	if err := s.ensureKind("Gateway"); err != nil {
-		return nil, err
-	}
-	item, err := s.deps.GatewayClient.GatewayV1().Gateways(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get gateway: %w", err)
-	}
-	return s.buildGatewayDetails(item), nil
+	return getGatewayResource(s, "Gateway", "gateway",
+		func() (*gatewayv1.Gateway, error) {
+			return s.deps.GatewayClient.GatewayV1().Gateways(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+		}, s.buildGatewayDetails)
 }
 
 func (s *Service) Gateways(namespace string) ([]*types.GatewayDetails, error) {
-	if err := s.ensureKind("Gateway"); err != nil {
-		return nil, err
-	}
-	list, err := s.deps.GatewayClient.GatewayV1().Gateways(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list gateways: %w", err)
-	}
-	out := make([]*types.GatewayDetails, 0, len(list.Items))
-	for i := range list.Items {
-		out = append(out, s.buildGatewayDetails(&list.Items[i]))
-	}
-	return out, nil
+	return listGatewayResources(s, "Gateway", "gateways",
+		func() ([]gatewayv1.Gateway, error) {
+			list, err := s.deps.GatewayClient.GatewayV1().Gateways(namespace).List(s.deps.Context, metav1.ListOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return list.Items, nil
+		}, s.buildGatewayDetails)
 }
 
 func (s *Service) HTTPRoute(namespace, name string) (*types.HTTPRouteDetails, error) {
-	if err := s.ensureKind("HTTPRoute"); err != nil {
-		return nil, err
-	}
-	item, err := s.deps.GatewayClient.GatewayV1().HTTPRoutes(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get http route: %w", err)
-	}
-	detail := s.buildHTTPRouteDetails(item)
-	return detail, nil
+	return getGatewayResource(s, "HTTPRoute", "http route",
+		func() (*gatewayv1.HTTPRoute, error) {
+			return s.deps.GatewayClient.GatewayV1().HTTPRoutes(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+		}, s.buildHTTPRouteDetails)
 }
 
 func (s *Service) HTTPRoutes(namespace string) ([]*types.HTTPRouteDetails, error) {
-	if err := s.ensureKind("HTTPRoute"); err != nil {
-		return nil, err
-	}
-	list, err := s.deps.GatewayClient.GatewayV1().HTTPRoutes(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list http routes: %w", err)
-	}
-	out := make([]*types.HTTPRouteDetails, 0, len(list.Items))
-	for i := range list.Items {
-		out = append(out, s.buildHTTPRouteDetails(&list.Items[i]))
-	}
-	return out, nil
+	return listGatewayResources(s, "HTTPRoute", "http routes",
+		func() ([]gatewayv1.HTTPRoute, error) {
+			list, err := s.deps.GatewayClient.GatewayV1().HTTPRoutes(namespace).List(s.deps.Context, metav1.ListOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return list.Items, nil
+		}, s.buildHTTPRouteDetails)
 }
 
 func (s *Service) GRPCRoute(namespace, name string) (*types.GRPCRouteDetails, error) {
-	if err := s.ensureKind("GRPCRoute"); err != nil {
-		return nil, err
-	}
-	item, err := s.deps.GatewayClient.GatewayV1().GRPCRoutes(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get grpc route: %w", err)
-	}
-	detail := s.buildGRPCRouteDetails(item)
-	return detail, nil
+	return getGatewayResource(s, "GRPCRoute", "grpc route",
+		func() (*gatewayv1.GRPCRoute, error) {
+			return s.deps.GatewayClient.GatewayV1().GRPCRoutes(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+		}, s.buildGRPCRouteDetails)
 }
 
 func (s *Service) GRPCRoutes(namespace string) ([]*types.GRPCRouteDetails, error) {
-	if err := s.ensureKind("GRPCRoute"); err != nil {
-		return nil, err
-	}
-	list, err := s.deps.GatewayClient.GatewayV1().GRPCRoutes(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list grpc routes: %w", err)
-	}
-	out := make([]*types.GRPCRouteDetails, 0, len(list.Items))
-	for i := range list.Items {
-		out = append(out, s.buildGRPCRouteDetails(&list.Items[i]))
-	}
-	return out, nil
+	return listGatewayResources(s, "GRPCRoute", "grpc routes",
+		func() ([]gatewayv1.GRPCRoute, error) {
+			list, err := s.deps.GatewayClient.GatewayV1().GRPCRoutes(namespace).List(s.deps.Context, metav1.ListOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return list.Items, nil
+		}, s.buildGRPCRouteDetails)
 }
 
 func (s *Service) TLSRoute(namespace, name string) (*types.TLSRouteDetails, error) {
-	if err := s.ensureKind("TLSRoute"); err != nil {
-		return nil, err
-	}
-	item, err := s.deps.GatewayClient.GatewayV1().TLSRoutes(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tls route: %w", err)
-	}
-	detail := s.buildTLSRouteDetails(item)
-	return detail, nil
+	return getGatewayResource(s, "TLSRoute", "tls route",
+		func() (*gatewayv1.TLSRoute, error) {
+			return s.deps.GatewayClient.GatewayV1().TLSRoutes(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+		}, s.buildTLSRouteDetails)
 }
 
 func (s *Service) TLSRoutes(namespace string) ([]*types.TLSRouteDetails, error) {
-	if err := s.ensureKind("TLSRoute"); err != nil {
-		return nil, err
-	}
-	list, err := s.deps.GatewayClient.GatewayV1().TLSRoutes(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list tls routes: %w", err)
-	}
-	out := make([]*types.TLSRouteDetails, 0, len(list.Items))
-	for i := range list.Items {
-		out = append(out, s.buildTLSRouteDetails(&list.Items[i]))
-	}
-	return out, nil
+	return listGatewayResources(s, "TLSRoute", "tls routes",
+		func() ([]gatewayv1.TLSRoute, error) {
+			list, err := s.deps.GatewayClient.GatewayV1().TLSRoutes(namespace).List(s.deps.Context, metav1.ListOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return list.Items, nil
+		}, s.buildTLSRouteDetails)
 }
 
 func (s *Service) ListenerSet(namespace, name string) (*types.ListenerSetDetails, error) {
-	if err := s.ensureKind("ListenerSet"); err != nil {
-		return nil, err
-	}
-	item, err := s.deps.GatewayClient.GatewayV1().ListenerSets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get listener set: %w", err)
-	}
-	return s.buildListenerSetDetails(item), nil
+	return getGatewayResource(s, "ListenerSet", "listener set",
+		func() (*gatewayv1.ListenerSet, error) {
+			return s.deps.GatewayClient.GatewayV1().ListenerSets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+		}, s.buildListenerSetDetails)
 }
 
 func (s *Service) ListenerSets(namespace string) ([]*types.ListenerSetDetails, error) {
-	if err := s.ensureKind("ListenerSet"); err != nil {
-		return nil, err
-	}
-	list, err := s.deps.GatewayClient.GatewayV1().ListenerSets(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list listener sets: %w", err)
-	}
-	out := make([]*types.ListenerSetDetails, 0, len(list.Items))
-	for i := range list.Items {
-		out = append(out, s.buildListenerSetDetails(&list.Items[i]))
-	}
-	return out, nil
+	return listGatewayResources(s, "ListenerSet", "listener sets",
+		func() ([]gatewayv1.ListenerSet, error) {
+			list, err := s.deps.GatewayClient.GatewayV1().ListenerSets(namespace).List(s.deps.Context, metav1.ListOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return list.Items, nil
+		}, s.buildListenerSetDetails)
 }
 
 func (s *Service) ReferenceGrant(namespace, name string) (*types.ReferenceGrantDetails, error) {
-	if err := s.ensureKind("ReferenceGrant"); err != nil {
-		return nil, err
-	}
-	item, err := s.deps.GatewayClient.GatewayV1().ReferenceGrants(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get reference grant: %w", err)
-	}
-	return s.buildReferenceGrantDetails(item), nil
+	return getGatewayResource(s, "ReferenceGrant", "reference grant",
+		func() (*gatewayv1.ReferenceGrant, error) {
+			return s.deps.GatewayClient.GatewayV1().ReferenceGrants(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+		}, s.buildReferenceGrantDetails)
 }
 
 func (s *Service) ReferenceGrants(namespace string) ([]*types.ReferenceGrantDetails, error) {
-	if err := s.ensureKind("ReferenceGrant"); err != nil {
-		return nil, err
-	}
-	list, err := s.deps.GatewayClient.GatewayV1().ReferenceGrants(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list reference grants: %w", err)
-	}
-	out := make([]*types.ReferenceGrantDetails, 0, len(list.Items))
-	for i := range list.Items {
-		out = append(out, s.buildReferenceGrantDetails(&list.Items[i]))
-	}
-	return out, nil
+	return listGatewayResources(s, "ReferenceGrant", "reference grants",
+		func() ([]gatewayv1.ReferenceGrant, error) {
+			list, err := s.deps.GatewayClient.GatewayV1().ReferenceGrants(namespace).List(s.deps.Context, metav1.ListOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return list.Items, nil
+		}, s.buildReferenceGrantDetails)
 }
 
 func (s *Service) BackendTLSPolicy(namespace, name string) (*types.BackendTLSPolicyDetails, error) {
-	if err := s.ensureKind("BackendTLSPolicy"); err != nil {
-		return nil, err
-	}
-	item, err := s.deps.GatewayClient.GatewayV1().BackendTLSPolicies(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get backend tls policy: %w", err)
-	}
-	return s.buildBackendTLSPolicyDetails(item), nil
+	return getGatewayResource(s, "BackendTLSPolicy", "backend tls policy",
+		func() (*gatewayv1.BackendTLSPolicy, error) {
+			return s.deps.GatewayClient.GatewayV1().BackendTLSPolicies(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+		}, s.buildBackendTLSPolicyDetails)
 }
 
 func (s *Service) BackendTLSPolicies(namespace string) ([]*types.BackendTLSPolicyDetails, error) {
-	if err := s.ensureKind("BackendTLSPolicy"); err != nil {
-		return nil, err
-	}
-	list, err := s.deps.GatewayClient.GatewayV1().BackendTLSPolicies(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list backend tls policies: %w", err)
-	}
-	out := make([]*types.BackendTLSPolicyDetails, 0, len(list.Items))
-	for i := range list.Items {
-		out = append(out, s.buildBackendTLSPolicyDetails(&list.Items[i]))
-	}
-	return out, nil
+	return listGatewayResources(s, "BackendTLSPolicy", "backend tls policies",
+		func() ([]gatewayv1.BackendTLSPolicy, error) {
+			list, err := s.deps.GatewayClient.GatewayV1().BackendTLSPolicies(namespace).List(s.deps.Context, metav1.ListOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return list.Items, nil
+		}, s.buildBackendTLSPolicyDetails)
 }
 
 func (s *Service) buildGatewayClassDetails(item *gatewayv1.GatewayClass) *types.GatewayClassDetails {
