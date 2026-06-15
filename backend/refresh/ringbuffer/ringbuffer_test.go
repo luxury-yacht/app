@@ -86,17 +86,6 @@ func TestAddEvictsOldestWhenFull(t *testing.T) {
 	}
 }
 
-func TestAllReturnsItemsInOrderAfterWraparound(t *testing.T) {
-	b := newSeqBuffer(3)
-	for _, s := range []uint64{1, 2, 3, 4, 5} {
-		b.Add(seqItem{seq: s})
-	}
-	// Capacity 3 after 5 adds: oldest-first is 3,4,5 regardless of internal start.
-	if got := seqs(b.All()); !reflect.DeepEqual(got, []uint64{3, 4, 5}) {
-		t.Fatalf("got %v, want [3 4 5]", got)
-	}
-}
-
 func TestZeroCapacityDropsEverything(t *testing.T) {
 	b := newSeqBuffer(0)
 	b.Add(seqItem{seq: 1})

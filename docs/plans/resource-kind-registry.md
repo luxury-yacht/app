@@ -26,7 +26,28 @@ backend drove a final sweep of every cleanly-removable cluster:
 - `static_table_query` adapters — per-type query CONFIG (SearchText/SortValue differ by columns).
 - `*ConditionFacts` (5) — distinct typed k8s condition structs, no shared interface.
 - namespace `list*` wrappers — a generic closure would just *be* the one-line typed-lister body.
-True "one descriptor entry per kind" beyond this needs codegen (Phase 3a), still deferred.
+True "one descriptor entry per kind" beyond this needs codegen.
+
+## Phase 3a — codegen proof (2026-06-14, gate-green)
+
+Built the codegen mechanism end-to-end on ONE self-contained subsystem: the gateway-API
+`App.Get<Kind>` bindings (the biggest remaining clone family, and a canonical "add-a-kind surface").
+- `backend/internal/gengatewaybindings` renders the 8 bindings from `resourcecontract.BuiltinResources`
+  — Kind + Namespaced come from the contract (GatewayClass→`FetchClusterResource`, rest→`FetchNamespacedResource`);
+  DTO=`<Kind>Details`, method=`<Kind>`, ctor=`gatewayapi.NewService(deps)`.
+- `//go:generate go run ./internal/gengatewaybindings/cmd -out resources_gatewayapi_generated.go`
+  (in `backend/generate.go`); hand-written `resources_gatewayapi.go` deleted.
+- A golden test (`TestGatewayBindingsGeneratedInSync`) fails if the file is hand-edited or a contract
+  kind is added without regenerating. Generation is idempotent; `models.ts` is byte-unchanged (the
+  binding surface is identical), proving behaviour preservation.
+
+**Honest scope/value of the proof:** it eliminates the *binding* boilerplate only. Adding a gateway kind
+still needs its typed `Service.<Kind>()` method + DTO (hand-written, genuinely per-kind) — but the App
+binding is now free and cannot drift. So codegen removes one of the ~13 add-a-kind surfaces for this group,
+not all of them. Whether to roll the same generator out to the other binding groups (rbac, storage,
+workloads, …) is now a reviewable decision with a concrete mechanism + diff in hand, rather than a
+speculative plan. The typed leaves (Service methods, model/summary builders, describe*Facts) remain
+hand-written; generating those would be a much larger generator with little gain over the current generics.
 
 ## The problem (root cause)
 

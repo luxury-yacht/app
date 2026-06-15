@@ -40,16 +40,6 @@ func (b *Buffer[T]) Add(item T) {
 	b.start = (b.start + 1) % b.max
 }
 
-// All returns the buffered items in insertion order (oldest first) as a snapshot
-// copy; mutating the result does not affect the buffer.
-func (b *Buffer[T]) All() []T {
-	out := make([]T, 0, b.count)
-	for i := 0; i < b.count; i++ {
-		out = append(out, b.items[(b.start+i)%b.max])
-	}
-	return out
-}
-
 // Since returns the items newer than sequence. ok is false when the buffer cannot
 // satisfy the resume token (it is empty, or sequence predates the oldest retained
 // item). An empty, non-nil slice with ok=true means the caller is already current.
