@@ -55,15 +55,11 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 	podsList []corev1.Pod,
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
 ) *restypes.StatefulSetDetails {
-	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
 	model := resourcemodel.BuildStatefulSetResourceModel(s.deps.ClusterID, statefulSet)
+	facts := model.Facts.StatefulSet
+	replicas, ready := workloadReplicaDisplay(facts.WorkloadCommonFacts)
 	podInfos := buildPodSummaries(s.deps.ClusterID, "StatefulSet", statefulSet.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
-
-	desiredReplicas := int32(0)
-	if statefulSet.Spec.Replicas != nil {
-		desiredReplicas = *statefulSet.Spec.Replicas
-	}
 
 	revisionHistory := int32(0)
 	if statefulSet.Spec.RevisionHistoryLimit != nil {
@@ -83,22 +79,14 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 		Kind:                                 "StatefulSet",
 		Name:                                 statefulSet.Name,
 		Namespace:                            statefulSet.Namespace,
-		Status:                               model.Status.Label,
-		StatusState:                          model.Status.State,
-		StatusPresentation:                   model.Status.Presentation,
-		StatusReason:                         model.Status.Reason,
-		Replicas:                             fmt.Sprintf("%d/%d", statefulSet.Status.Replicas, desiredReplicas),
-		Ready:                                fmt.Sprintf("%d/%d", statefulSet.Status.ReadyReplicas, statefulSet.Status.Replicas),
-		UpToDate:                             statefulSet.Status.UpdatedReplicas,
-		Available:                            statefulSet.Status.AvailableReplicas,
-		DesiredReplicas:                      desiredReplicas,
+		StatusProjection:                     restypes.NewStatusProjection(model.Status),
+		Replicas:                             replicas,
+		Ready:                                ready,
+		UpToDate:                             facts.UpdatedReplicas,
+		Available:                            facts.AvailableReplicas,
+		DesiredReplicas:                      facts.DesiredReplicas,
 		Age:                                  common.FormatAge(statefulSet.CreationTimestamp.Time),
-		CPURequest:                           common.FormatCPU(avgCPURequest),
-		CPULimit:                             common.FormatCPU(avgCPULimit),
-		CPUUsage:                             common.FormatCPU(avgCPUUsage),
-		MemRequest:                           common.FormatMemory(avgMemRequest),
-		MemLimit:                             common.FormatMemory(avgMemLimit),
-		MemUsage:                             common.FormatMemory(avgMemUsage),
+		ResourceUtilization:                  workloadUtilization(podsList, podMetrics),
 		UpdateStrategy:                       string(statefulSet.Spec.UpdateStrategy.Type),
 		Partition:                            partition,
 		MaxUnavailable:                       maxUnavailable,
@@ -113,7 +101,7 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 		Selector:                             statefulSet.Spec.Selector.MatchLabels,
 		Labels:                               statefulSet.Labels,
 		Annotations:                          statefulSet.Annotations,
-		Conditions:                           describeStatefulSetConditions(statefulSet),
+		Conditions:                           restypes.FormatConditions(facts.Conditions),
 		Containers:                           describeContainers(statefulSet.Spec.Template.Spec.Containers),
 		InitContainers:                       describeContainers(statefulSet.Spec.Template.Spec.InitContainers),
 		VolumeClaimTemplates:                 describeVolumeClaimTemplates(statefulSet.Spec.VolumeClaimTemplates),
@@ -143,42 +131,10 @@ func (s *StatefulSetService) getStatefulSetPods(statefulSet *appsv1.StatefulSet)
 		return nil, nil, err
 	}
 
-	filtered := filterPodsForStatefulSet(statefulSet, podList)
+	filtered := common.FilterPodsByControllerOwner(podList, "StatefulSet", statefulSet.Name)
 	metrics := pods.NewService(s.deps).GetPodMetricsForPods(statefulSet.Namespace, filtered)
 
 	return filtered, metrics, nil
-}
-
-func filterPodsForStatefulSet(statefulSet *appsv1.StatefulSet, podList *corev1.PodList) []corev1.Pod {
-	if podList == nil {
-		return nil
-	}
-
-	var filtered []corev1.Pod
-	for _, pod := range podList.Items {
-		for _, owner := range pod.OwnerReferences {
-			if owner.Controller != nil && *owner.Controller && owner.Kind == "StatefulSet" && owner.Name == statefulSet.Name {
-				filtered = append(filtered, pod)
-				break
-			}
-		}
-	}
-	return filtered
-}
-
-func describeStatefulSetConditions(statefulSet *appsv1.StatefulSet) []string {
-	conditions := make([]string, 0, len(statefulSet.Status.Conditions))
-	for _, cond := range statefulSet.Status.Conditions {
-		condStr := fmt.Sprintf("%s: %s", cond.Type, cond.Status)
-		if cond.Reason != "" {
-			condStr += fmt.Sprintf(" (%s)", cond.Reason)
-		}
-		if cond.Message != "" {
-			condStr += fmt.Sprintf(" - %s", cond.Message)
-		}
-		conditions = append(conditions, condStr)
-	}
-	return conditions
 }
 
 func describeVolumeClaimTemplates(templates []corev1.PersistentVolumeClaim) []restypes.VolumeClaimTemplateSummary {

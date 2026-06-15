@@ -54,22 +54,19 @@ func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discove
 	model := resourcemodel.BuildServiceResourceModel(s.deps.ClusterID, service, slices)
 	facts := model.Facts.Service
 	details := &types.ServiceDetails{
-		Kind:               "Service",
-		Name:               service.Name,
-		Namespace:          service.Namespace,
-		Age:                common.FormatAge(service.CreationTimestamp.Time),
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		ServiceType:        facts.Type,
-		ClusterIP:          facts.ClusterIP,
-		ClusterIPs:         facts.ClusterIPs,
-		ExternalIPs:        facts.ExternalIPs,
-		SessionAffinity:    facts.SessionAffinity,
-		Selector:           facts.Selector,
-		Labels:             service.Labels,
-		Annotations:        service.Annotations,
+		Kind:             "Service",
+		Name:             service.Name,
+		Namespace:        service.Namespace,
+		Age:              common.FormatAge(service.CreationTimestamp.Time),
+		StatusProjection: types.NewStatusProjection(model.Status),
+		ServiceType:      facts.Type,
+		ClusterIP:        facts.ClusterIP,
+		ClusterIPs:       facts.ClusterIPs,
+		ExternalIPs:      facts.ExternalIPs,
+		SessionAffinity:  facts.SessionAffinity,
+		Selector:         facts.Selector,
+		Labels:           service.Labels,
+		Annotations:      service.Annotations,
 	}
 
 	details.SessionAffinityTimeout = facts.SessionAffinityTimeout

@@ -60,18 +60,15 @@ func (s *Service) StorageClasses() ([]*types.StorageClassDetails, error) {
 func (s *Service) processStorageClassDetails(storageClass *storagev1.StorageClass, pvs *corev1.PersistentVolumeList) *types.StorageClassDetails {
 	model := resourcemodel.BuildStorageClassResourceModel(s.deps.ClusterID, storageClass)
 	details := &types.StorageClassDetails{
-		Kind:               "StorageClass",
-		Name:               storageClass.Name,
-		Age:                common.FormatAge(storageClass.CreationTimestamp.Time),
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Provisioner:        storageClass.Provisioner,
-		Parameters:         storageClass.Parameters,
-		MountOptions:       storageClass.MountOptions,
-		Labels:             storageClass.Labels,
-		Annotations:        storageClass.Annotations,
+		Kind:             "StorageClass",
+		Name:             storageClass.Name,
+		Age:              common.FormatAge(storageClass.CreationTimestamp.Time),
+		StatusProjection: types.NewStatusProjection(model.Status),
+		Provisioner:      storageClass.Provisioner,
+		Parameters:       storageClass.Parameters,
+		MountOptions:     storageClass.MountOptions,
+		Labels:           storageClass.Labels,
+		Annotations:      storageClass.Annotations,
 	}
 
 	if facts := model.Facts.StorageClass; facts != nil {

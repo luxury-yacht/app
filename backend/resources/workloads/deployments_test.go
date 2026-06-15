@@ -27,6 +27,7 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 	deployment.Status.Replicas = 2
 	deployment.Status.ReadyReplicas = 2
 	deployment.Status.AvailableReplicas = 2
+	deployment.Status.UpdatedReplicas = 2
 
 	replicaSet := &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -94,6 +95,11 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 	require.Equal(t, "Running", details.Status)
 	require.Equal(t, "2/2", details.StatusState)
 	require.Equal(t, "ready", details.StatusPresentation)
+	require.Equal(t, "2/2", details.Replicas)
+	require.Equal(t, "2/2", details.Ready)
+	require.Equal(t, int32(2), details.UpToDate)
+	require.Equal(t, int32(2), details.Available)
+	require.Equal(t, int32(2), details.DesiredReplicas)
 	if len(details.Pods) != 2 {
 		t.Fatalf("expected 2 pods, got %d", len(details.Pods))
 	}

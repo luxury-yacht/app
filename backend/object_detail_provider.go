@@ -297,53 +297,61 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 }
 
-// objectDetailFetcherGVKs maps typed detail fetchers to the exact GVK each
-// fetcher handles. It is fetcher capability metadata, not a resource identity
-// source; dynamic resource identity still resolves through the object catalog.
-var objectDetailFetcherGVKs = map[string]schema.GroupVersionKind{
-	"pod":                            builtinDetailGVK("", "v1", "Pod"),
-	"deployment":                     builtinDetailGVK("apps", "v1", "Deployment"),
-	"replicaset":                     builtinDetailGVK("apps", "v1", "ReplicaSet"),
-	"daemonset":                      builtinDetailGVK("apps", "v1", "DaemonSet"),
-	"statefulset":                    builtinDetailGVK("apps", "v1", "StatefulSet"),
-	"job":                            builtinDetailGVK("batch", "v1", "Job"),
-	"cronjob":                        builtinDetailGVK("batch", "v1", "CronJob"),
-	"configmap":                      builtinDetailGVK("", "v1", "ConfigMap"),
-	"secret":                         builtinDetailGVK("", "v1", "Secret"),
-	"service":                        builtinDetailGVK("", "v1", "Service"),
-	"ingress":                        builtinDetailGVK("networking.k8s.io", "v1", "Ingress"),
-	"gateway":                        builtinDetailGVK("gateway.networking.k8s.io", "v1", "Gateway"),
-	"httproute":                      builtinDetailGVK("gateway.networking.k8s.io", "v1", "HTTPRoute"),
-	"grpcroute":                      builtinDetailGVK("gateway.networking.k8s.io", "v1", "GRPCRoute"),
-	"tlsroute":                       builtinDetailGVK("gateway.networking.k8s.io", "v1", "TLSRoute"),
-	"listenerset":                    builtinDetailGVK("gateway.networking.k8s.io", "v1", "ListenerSet"),
-	"referencegrant":                 builtinDetailGVK("gateway.networking.k8s.io", "v1", "ReferenceGrant"),
-	"backendtlspolicy":               builtinDetailGVK("gateway.networking.k8s.io", "v1", "BackendTLSPolicy"),
-	"networkpolicy":                  builtinDetailGVK("networking.k8s.io", "v1", "NetworkPolicy"),
-	"endpointslice":                  builtinDetailGVK("discovery.k8s.io", "v1", "EndpointSlice"),
-	"persistentvolumeclaim":          builtinDetailGVK("", "v1", "PersistentVolumeClaim"),
-	"persistentvolume":               builtinDetailGVK("", "v1", "PersistentVolume"),
-	"storageclass":                   builtinDetailGVK("storage.k8s.io", "v1", "StorageClass"),
-	"serviceaccount":                 builtinDetailGVK("", "v1", "ServiceAccount"),
-	"role":                           builtinDetailGVK("rbac.authorization.k8s.io", "v1", "Role"),
-	"rolebinding":                    builtinDetailGVK("rbac.authorization.k8s.io", "v1", "RoleBinding"),
-	"clusterrole":                    builtinDetailGVK("rbac.authorization.k8s.io", "v1", "ClusterRole"),
-	"clusterrolebinding":             builtinDetailGVK("rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"),
-	"resourcequota":                  builtinDetailGVK("", "v1", "ResourceQuota"),
-	"limitrange":                     builtinDetailGVK("", "v1", "LimitRange"),
-	"horizontalpodautoscaler":        builtinDetailGVK("autoscaling", "v2", "HorizontalPodAutoscaler"),
-	"poddisruptionbudget":            builtinDetailGVK("policy", "v1", "PodDisruptionBudget"),
-	"namespace":                      builtinDetailGVK("", "v1", "Namespace"),
-	"node":                           builtinDetailGVK("", "v1", "Node"),
-	"ingressclass":                   builtinDetailGVK("networking.k8s.io", "v1", "IngressClass"),
-	"gatewayclass":                   builtinDetailGVK("gateway.networking.k8s.io", "v1", "GatewayClass"),
-	"customresourcedefinition":       builtinDetailGVK("apiextensions.k8s.io", "v1", "CustomResourceDefinition"),
-	"mutatingwebhookconfiguration":   builtinDetailGVK("admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration"),
-	"validatingwebhookconfiguration": builtinDetailGVK("admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration"),
+// detailFetcherVersionPins records the API version a typed detail fetcher
+// serves for kinds the built-in contract lists under more than one version. A
+// kind absent here must be unique in resourcecontract.BuiltinResources.
+var detailFetcherVersionPins = map[string]string{
+	"horizontalpodautoscaler": "v2",
 }
 
-func builtinDetailGVK(group, version, kind string) schema.GroupVersionKind {
-	return resourcecontract.MustBuiltin(group, version, kind).GVK()
+// objectDetailFetcherGVKs maps each typed detail fetcher to the exact GVK it
+// handles. It is fetcher capability metadata, not a resource identity source;
+// dynamic resource identity still resolves through the object catalog. The map
+// is derived from objectDetailFetchers and resourcecontract.BuiltinResources so
+// the GVK identity has a single source of truth.
+var objectDetailFetcherGVKs = buildObjectDetailFetcherGVKs()
+
+func buildObjectDetailFetcherGVKs() map[string]schema.GroupVersionKind {
+	gvks := make(map[string]schema.GroupVersionKind, len(objectDetailFetchers))
+	for kind := range objectDetailFetchers {
+		// HelmRelease uses the synthetic helm.sh identity (isHelmReleaseGVK), not a
+		// built-in contract entry, so it has no exact-GVK gate.
+		if kind == helmReleaseKind {
+			continue
+		}
+		gvks[kind] = resolveDetailFetcherGVK(kind)
+	}
+	return gvks
+}
+
+// resolveDetailFetcherGVK resolves a typed detail fetcher kind to its built-in
+// contract GVK, applying detailFetcherVersionPins when the contract lists the
+// kind under multiple versions. It panics at package initialization on a
+// missing or ambiguous-unpinned kind, mirroring the previous MustBuiltin
+// fail-loud contract.
+func resolveDetailFetcherGVK(kind string) schema.GroupVersionKind {
+	var matches []resourcecontract.BuiltinResource
+	for _, resource := range resourcecontract.BuiltinResources {
+		if strings.EqualFold(resource.Kind, kind) {
+			matches = append(matches, resource)
+		}
+	}
+	pin, pinned := detailFetcherVersionPins[kind]
+	switch {
+	case len(matches) == 0:
+		panic("object detail fetcher kind has no built-in contract entry: " + kind)
+	case pinned:
+		for _, resource := range matches {
+			if resource.Version == pin {
+				return resource.GVK()
+			}
+		}
+		panic("object detail fetcher version pin not in contract: " + kind + "/" + pin)
+	case len(matches) > 1:
+		panic("object detail fetcher kind is ambiguous in contract; add a version pin: " + kind)
+	default:
+		return matches[0].GVK()
+	}
 }
 
 // lookupObjectDetailFetcher returns the configured fetcher for the supplied

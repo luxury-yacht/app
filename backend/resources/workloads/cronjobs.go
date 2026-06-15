@@ -59,10 +59,7 @@ func buildCronJobDetails(clusterID string, cronJob *batchv1.CronJob, jobs *batch
 		Kind:                    "CronJob",
 		Name:                    cronJob.Name,
 		Namespace:               cronJob.Namespace,
-		Status:                  model.Status.Label,
-		StatusState:             model.Status.State,
-		StatusPresentation:      model.Status.Presentation,
-		StatusReason:            model.Status.Reason,
+		StatusProjection:        restypes.NewStatusProjection(model.Status),
 		Age:                     common.FormatAge(cronJob.CreationTimestamp.Time),
 		Schedule:                cronJob.Spec.Schedule,
 		Suspend:                 cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend,
@@ -278,19 +275,16 @@ func summarizeJobSimple(clusterID string, job *batchv1.Job) restypes.JobSimpleIn
 		completions = *job.Spec.Completions
 	}
 	info := restypes.JobSimpleInfo{
-		Kind:               "Job",
-		Name:               job.Name,
-		Namespace:          job.Namespace,
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Completions:        fmt.Sprintf("%d/%d", job.Status.Succeeded, completions),
-		Succeeded:          job.Status.Succeeded,
-		Failed:             job.Status.Failed,
-		Active:             job.Status.Active,
-		StartTime:          job.Status.StartTime,
-		Age:                common.FormatAge(job.CreationTimestamp.Time),
+		Kind:             "Job",
+		Name:             job.Name,
+		Namespace:        job.Namespace,
+		StatusProjection: restypes.NewStatusProjection(model.Status),
+		Completions:      fmt.Sprintf("%d/%d", job.Status.Succeeded, completions),
+		Succeeded:        job.Status.Succeeded,
+		Failed:           job.Status.Failed,
+		Active:           job.Status.Active,
+		StartTime:        job.Status.StartTime,
+		Age:              common.FormatAge(job.CreationTimestamp.Time),
 	}
 
 	// Duration: elapsed time from start to completion, or start to now if still running.

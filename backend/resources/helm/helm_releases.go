@@ -60,24 +60,21 @@ func (s *Service) ReleaseDetails(namespace, name string) (*types.HelmReleaseDeta
 	facts := model.Facts.HelmRelease
 
 	details := &types.HelmReleaseDetails{
-		Kind:               "helmrelease",
-		Name:               model.Ref.Name,
-		Namespace:          model.Ref.Namespace,
-		Age:                helmAge(model),
-		Chart:              facts.Chart,
-		Version:            facts.Version,
-		AppVersion:         facts.AppVersion,
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Revision:           facts.Revision,
-		Updated:            helmUpdatedAge(facts),
-		Description:        facts.Description,
-		Notes:              facts.Notes,
-		Values:             release.Config,
-		Labels:             model.Metadata.Labels,
-		Annotations:        model.Metadata.Annotations,
+		Kind:             "helmrelease",
+		Name:             model.Ref.Name,
+		Namespace:        model.Ref.Namespace,
+		Age:              helmAge(model),
+		Chart:            facts.Chart,
+		Version:          facts.Version,
+		AppVersion:       facts.AppVersion,
+		StatusProjection: types.NewStatusProjection(model.Status),
+		Revision:         facts.Revision,
+		Updated:          helmUpdatedAge(facts),
+		Description:      facts.Description,
+		Notes:            facts.Notes,
+		Values:           release.Config,
+		Labels:           model.Metadata.Labels,
+		Annotations:      model.Metadata.Annotations,
 	}
 
 	for _, h := range facts.History {
@@ -86,15 +83,12 @@ func (s *Service) ReleaseDetails(namespace, name string) (*types.HelmReleaseDeta
 			Description: h.Description,
 		})
 		details.History = append(details.History, types.HelmRevision{
-			Revision:           h.Revision,
-			Updated:            helmRevisionUpdatedAge(h),
-			Status:             status.Label,
-			StatusState:        status.State,
-			StatusPresentation: status.Presentation,
-			StatusReason:       status.Reason,
-			Chart:              h.Chart,
-			AppVersion:         h.AppVersion,
-			Description:        h.Description,
+			Revision:         h.Revision,
+			Updated:          helmRevisionUpdatedAge(h),
+			StatusProjection: types.NewStatusProjection(status),
+			Chart:            h.Chart,
+			AppVersion:       h.AppVersion,
+			Description:      h.Description,
 		})
 	}
 

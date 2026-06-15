@@ -59,9 +59,10 @@ func (s *DeploymentService) buildDeploymentDetails(
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
 	replicaSets *appsv1.ReplicaSetList,
 ) *restypes.DeploymentDetails {
-	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
 
 	model := resourcemodel.BuildDeploymentResourceModel(s.deps.ClusterID, deployment)
+	facts := model.Facts.Deployment
+	replicas, ready := workloadReplicaDisplay(facts.WorkloadCommonFacts)
 	podInfos := buildPodSummaries(s.deps.ClusterID, "Deployment", deployment.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 
@@ -80,55 +81,43 @@ func (s *DeploymentService) buildDeploymentDetails(
 		progressDeadline = *deployment.Spec.ProgressDeadlineSeconds
 	}
 
-	desiredReplicas := int32(0)
-	if deployment.Spec.Replicas != nil {
-		desiredReplicas = *deployment.Spec.Replicas
-	}
-
 	details := &restypes.DeploymentDetails{
-		Kind:               "Deployment",
-		Name:               deployment.Name,
-		Namespace:          deployment.Namespace,
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Replicas:           fmt.Sprintf("%d/%d", deployment.Status.Replicas, desiredReplicas),
-		Ready:              fmt.Sprintf("%d/%d", deployment.Status.ReadyReplicas, deployment.Status.Replicas),
-		UpToDate:           deployment.Status.UpdatedReplicas,
-		Available:          deployment.Status.AvailableReplicas,
-		DesiredReplicas:    desiredReplicas,
-		Age:                common.FormatAge(deployment.CreationTimestamp.Time),
-		CPURequest:         common.FormatCPU(avgCPURequest),
-		CPULimit:           common.FormatCPU(avgCPULimit),
-		CPUUsage:           common.FormatCPU(avgCPUUsage),
-		MemRequest:         common.FormatMemory(avgMemRequest),
-		MemLimit:           common.FormatMemory(avgMemLimit),
-		MemUsage:           common.FormatMemory(avgMemUsage),
-		Strategy:           string(deployment.Spec.Strategy.Type),
-		MaxSurge:           maxSurge,
-		MaxUnavailable:     maxUnavailable,
-		MinReadySeconds:    deployment.Spec.MinReadySeconds,
-		RevisionHistory:    revisionHistory,
-		ProgressDeadline:   progressDeadline,
-		ServiceAccount:     deployment.Spec.Template.Spec.ServiceAccountName,
-		NodeSelector:       deployment.Spec.Template.Spec.NodeSelector,
-		Tolerations:        pods.FormatPodTolerations(deployment.Spec.Template.Spec.Tolerations),
-		Selector:           deployment.Spec.Selector.MatchLabels,
-		Labels:             deployment.Labels,
-		Annotations:        deployment.Annotations,
-		Containers:         containers,
-		InitContainers:     initContainers,
-		Pods:               podInfos,
-		CurrentRevision:    currentRevision,
-		CurrentReplicaSet:  currentRSName,
-		ReplicaSets:        rsNames,
-		ObservedGeneration: deployment.Status.ObservedGeneration,
-		Paused:             deployment.Spec.Paused,
+		Kind:                "Deployment",
+		Name:                deployment.Name,
+		Namespace:           deployment.Namespace,
+		StatusProjection:    restypes.NewStatusProjection(model.Status),
+		Replicas:            replicas,
+		Ready:               ready,
+		UpToDate:            facts.UpdatedReplicas,
+		Available:           facts.AvailableReplicas,
+		DesiredReplicas:     facts.DesiredReplicas,
+		Age:                 common.FormatAge(deployment.CreationTimestamp.Time),
+		ResourceUtilization: workloadUtilization(podsList, podMetrics),
+		Strategy:            string(deployment.Spec.Strategy.Type),
+		MaxSurge:            maxSurge,
+		MaxUnavailable:      maxUnavailable,
+		MinReadySeconds:     deployment.Spec.MinReadySeconds,
+		RevisionHistory:     revisionHistory,
+		ProgressDeadline:    progressDeadline,
+		ServiceAccount:      deployment.Spec.Template.Spec.ServiceAccountName,
+		NodeSelector:        deployment.Spec.Template.Spec.NodeSelector,
+		Tolerations:         pods.FormatPodTolerations(deployment.Spec.Template.Spec.Tolerations),
+		Selector:            deployment.Spec.Selector.MatchLabels,
+		Labels:              deployment.Labels,
+		Annotations:         deployment.Annotations,
+		Containers:          containers,
+		InitContainers:      initContainers,
+		Pods:                podInfos,
+		CurrentRevision:     currentRevision,
+		CurrentReplicaSet:   currentRSName,
+		ReplicaSets:         rsNames,
+		ObservedGeneration:  deployment.Status.ObservedGeneration,
+		Paused:              facts.Paused,
 	}
 
-	details.Conditions, details.RolloutStatus, details.RolloutMessage = describeDeploymentConditions(deployment)
-	details.Details = summarizeDeployment(deployment, desiredReplicas)
+	details.Conditions = restypes.FormatConditions(facts.Conditions)
+	details.RolloutStatus, details.RolloutMessage = deploymentRollout(deployment)
+	details.Details = summarizeDeployment(deployment, facts.DesiredReplicas)
 	details.PodMetricsSummary = podSummary
 
 	return details
@@ -186,20 +175,11 @@ func summarizeReplicaSets(deployment *appsv1.Deployment, replicaSets *appsv1.Rep
 	return names, currentRevision, currentRSName
 }
 
-func describeDeploymentConditions(deployment *appsv1.Deployment) ([]string, string, string) {
-	conditions := make([]string, 0, len(deployment.Status.Conditions))
-	var rolloutStatus, rolloutMessage string
-
+// deploymentRollout derives the rollout status/message from a Deployment's
+// Progressing/Available conditions. Condition display strings come from
+// restypes.FormatConditions(facts.Conditions).
+func deploymentRollout(deployment *appsv1.Deployment) (rolloutStatus, rolloutMessage string) {
 	for _, cond := range deployment.Status.Conditions {
-		condStr := fmt.Sprintf("%s: %s", cond.Type, cond.Status)
-		if cond.Reason != "" {
-			condStr += fmt.Sprintf(" (%s)", cond.Reason)
-		}
-		if cond.Message != "" {
-			condStr += fmt.Sprintf(" - %s", cond.Message)
-		}
-		conditions = append(conditions, condStr)
-
 		if cond.Type == appsv1.DeploymentProgressing {
 			switch cond.Status {
 			case corev1.ConditionTrue:
@@ -213,8 +193,7 @@ func describeDeploymentConditions(deployment *appsv1.Deployment) ([]string, stri
 			rolloutStatus = "complete"
 		}
 	}
-
-	return conditions, rolloutStatus, rolloutMessage
+	return rolloutStatus, rolloutMessage
 }
 
 func summarizeDeployment(deployment *appsv1.Deployment, desired int32) string {

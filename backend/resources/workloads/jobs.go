@@ -59,10 +59,7 @@ func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, 
 		Kind:                    "Job",
 		Name:                    job.Name,
 		Namespace:               job.Namespace,
-		Status:                  model.Status.Label,
-		StatusState:             model.Status.State,
-		StatusPresentation:      model.Status.Presentation,
-		StatusReason:            model.Status.Reason,
+		StatusProjection:        restypes.NewStatusProjection(model.Status),
 		Age:                     common.FormatAge(job.CreationTimestamp.Time),
 		Succeeded:               job.Status.Succeeded,
 		Failed:                  job.Status.Failed,
@@ -111,13 +108,7 @@ func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, 
 		}
 	}
 
-	for _, condition := range job.Status.Conditions {
-		cond := fmt.Sprintf("%s: %s", condition.Type, condition.Status)
-		if condition.Reason != "" {
-			cond += fmt.Sprintf(" (%s)", condition.Reason)
-		}
-		details.Conditions = append(details.Conditions, cond)
-	}
+	details.Conditions = restypes.FormatConditions(model.Facts.Job.Conditions)
 
 	details.Details = summarizeJob(job, details)
 	return details

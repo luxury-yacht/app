@@ -14,24 +14,6 @@ func pdbIntOrStringValue(facts *resourcemodel.IntOrStringFacts) *string {
 	return &value
 }
 
-func pdbConditionStrings(facts []resourcemodel.ConditionFacts) []string {
-	if len(facts) == 0 {
-		return nil
-	}
-	result := make([]string, 0, len(facts))
-	for _, condition := range facts {
-		desc := fmt.Sprintf("%s: %s", condition.Type, condition.Status)
-		if condition.Reason != "" {
-			desc += fmt.Sprintf(" (%s)", condition.Reason)
-		}
-		if condition.Message != "" {
-			desc += fmt.Sprintf(" - %s", condition.Message)
-		}
-		result = append(result, desc)
-	}
-	return result
-}
-
 func pdbDetailsSummary(facts *resourcemodel.PodDisruptionBudgetFacts) string {
 	if facts == nil {
 		return ""

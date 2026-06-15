@@ -58,7 +58,6 @@ func (s *Service) fetchSinglePodFull(namespace, name string) (*types.PodDetailIn
 	}
 
 	// Add formatted fields
-	details.Conditions = formatPodConditions(pod.Status.Conditions)
 	details.Volumes = formatPodVolumes(pod.Spec.Volumes)
 	details.Tolerations = FormatPodTolerations(pod.Spec.Tolerations)
 	details.Affinity = buildAffinityMap(pod.Spec.Affinity)
@@ -219,21 +218,18 @@ func (s *Service) buildPodDetailInfo(pod corev1.Pod, podMetrics map[string]*metr
 
 	return &types.PodDetailInfo{
 		// Basic info
-		Name:               pod.Name,
-		Namespace:          pod.Namespace,
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Ready:              formatPodFactsReady(podFacts),
-		Restarts:           podFacts.RestartCount,
-		Age:                common.FormatAge(pod.CreationTimestamp.Time),
-		CPURequest:         common.FormatCPU(cpuRequest),
-		CPULimit:           common.FormatCPU(cpuLimit),
-		CPUUsage:           common.FormatCPU(cpuUsage),
-		MemRequest:         common.FormatMemory(memRequest),
-		MemLimit:           common.FormatMemory(memLimit),
-		MemUsage:           common.FormatMemory(memUsage),
+		Name:             pod.Name,
+		Namespace:        pod.Namespace,
+		StatusProjection: types.NewStatusProjection(model.Status),
+		Ready:            formatPodFactsReady(podFacts),
+		Restarts:         podFacts.RestartCount,
+		Age:              common.FormatAge(pod.CreationTimestamp.Time),
+		CPURequest:       common.FormatCPU(cpuRequest),
+		CPULimit:         common.FormatCPU(cpuLimit),
+		CPUUsage:         common.FormatCPU(cpuUsage),
+		MemRequest:       common.FormatMemory(memRequest),
+		MemLimit:         common.FormatMemory(memLimit),
+		MemUsage:         common.FormatMemory(memUsage),
 
 		// Ownership
 		OwnerKind:       ownerKind,
@@ -264,7 +260,7 @@ func (s *Service) buildPodDetailInfo(pod corev1.Pod, podMetrics map[string]*metr
 		Containers:     []PodDetailInfoContainer{},
 		InitContainers: []PodDetailInfoContainer{},
 		Volumes:        []string{},
-		Conditions:     []string{},
+		Conditions:     types.FormatConditions(model.Facts.Pod.Conditions),
 		Tolerations:    []string{},
 	}
 }
@@ -497,19 +493,6 @@ func getPodStatus(pod corev1.Pod) string {
 func getPodRestartCount(pod corev1.Pod) int32 {
 	facts := resourcemodel.BuildPodFacts(&pod)
 	return facts.RestartCount
-}
-
-// formatPodConditions formats pod conditions for display
-func formatPodConditions(conditions []corev1.PodCondition) []string {
-	result := make([]string, 0, len(conditions))
-	for _, cond := range conditions {
-		condStr := fmt.Sprintf("%s: %s", cond.Type, cond.Status)
-		if cond.Reason != "" {
-			condStr += fmt.Sprintf(" (%s)", cond.Reason)
-		}
-		result = append(result, condStr)
-	}
-	return result
 }
 
 // formatPodVolumes formats pod volumes for display
@@ -803,25 +786,22 @@ func SummarizePod(clusterID string, pod corev1.Pod, metrics map[string]*metricsv
 	podFacts := model.Facts.Pod
 
 	return types.PodSimpleInfo{
-		Kind:               "Pod",
-		Name:               pod.Name,
-		Namespace:          pod.Namespace,
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Ready:              formatPodFactsReady(podFacts),
-		Restarts:           podFacts.RestartCount,
-		Age:                common.FormatAge(pod.CreationTimestamp.Time),
-		CPURequest:         formatCPUQuantity(cpuRequest),
-		CPULimit:           formatCPUQuantity(cpuLimit),
-		CPUUsage:           formatCPUQuantity(cpuUsage),
-		MemRequest:         formatMemoryQuantity(memRequest),
-		MemLimit:           formatMemoryQuantity(memLimit),
-		MemUsage:           formatMemoryQuantity(memUsage),
-		OwnerKind:          ownerKind,
-		OwnerName:          ownerName,
-		OwnerAPIVersion:    ownerAPIVersion,
+		Kind:             "Pod",
+		Name:             pod.Name,
+		Namespace:        pod.Namespace,
+		StatusProjection: types.NewStatusProjection(model.Status),
+		Ready:            formatPodFactsReady(podFacts),
+		Restarts:         podFacts.RestartCount,
+		Age:              common.FormatAge(pod.CreationTimestamp.Time),
+		CPURequest:       formatCPUQuantity(cpuRequest),
+		CPULimit:         formatCPUQuantity(cpuLimit),
+		CPUUsage:         formatCPUQuantity(cpuUsage),
+		MemRequest:       formatMemoryQuantity(memRequest),
+		MemLimit:         formatMemoryQuantity(memLimit),
+		MemUsage:         formatMemoryQuantity(memUsage),
+		OwnerKind:        ownerKind,
+		OwnerName:        ownerName,
+		OwnerAPIVersion:  ownerAPIVersion,
 	}
 }
 

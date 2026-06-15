@@ -64,6 +64,9 @@ func TestStatefulSetServiceReturnsDetail(t *testing.T) {
 		Status: corev1.ConditionTrue,
 		Reason: "AllReplicasReady",
 	}}
+	// Distinct UpToDate/Available so the facts projection is verified per-field.
+	ss.Status.UpdatedReplicas = 1
+	ss.Status.AvailableReplicas = 3
 
 	podA := testsupport.PodFixture(
 		"default",
@@ -100,6 +103,11 @@ func TestStatefulSetServiceReturnsDetail(t *testing.T) {
 	require.Equal(t, "StatefulSet", detail.Kind)
 	require.Equal(t, "db", detail.Name)
 	require.Len(t, detail.Pods, 2)
+	require.Equal(t, "2/2", detail.Replicas)
+	require.Equal(t, "2/2", detail.Ready)
+	require.Equal(t, int32(1), detail.UpToDate)
+	require.Equal(t, int32(3), detail.Available)
+	require.Equal(t, int32(2), detail.DesiredReplicas)
 	require.Equal(t, "Parallel", detail.PodManagementPolicy)
 	require.Equal(t, "RollingUpdate", detail.UpdateStrategy)
 	require.Equal(t, "1", detail.MaxUnavailable)
@@ -128,6 +136,12 @@ func TestDaemonSetServiceReturnsDetail(t *testing.T) {
 	}
 	ds.Status.NumberUnavailable = 1
 	ds.Status.NumberMisscheduled = 1
+	// Distinct scheduling counts so the WorkloadCommonFacts projection is verified per-field.
+	ds.Status.DesiredNumberScheduled = 5
+	ds.Status.CurrentNumberScheduled = 4
+	ds.Status.NumberReady = 3
+	ds.Status.UpdatedNumberScheduled = 2
+	ds.Status.NumberAvailable = 1
 	ds.Status.Conditions = []appsv1.DaemonSetCondition{{
 		Type:   appsv1.DaemonSetConditionType("PodsScheduled"),
 		Status: corev1.ConditionTrue,
@@ -154,6 +168,11 @@ func TestDaemonSetServiceReturnsDetail(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "DaemonSet", detail.Kind)
 	require.Len(t, detail.Pods, 1)
+	require.Equal(t, int32(5), detail.Desired)
+	require.Equal(t, int32(4), detail.Current)
+	require.Equal(t, int32(3), detail.Ready)
+	require.Equal(t, int32(2), detail.UpToDate)
+	require.Equal(t, int32(1), detail.Available)
 	require.Equal(t, "25%", detail.MaxUnavailable)
 	require.Equal(t, "1", detail.MaxSurge)
 	require.Contains(t, detail.Conditions, "PodsScheduled: True (AllScheduled)")

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -105,7 +106,7 @@ func findReadyPodForStatefulSet(
 		return "", err
 	}
 
-	return pickReadyPodName(filterPodsForStatefulSet(statefulSet, pods), "StatefulSet", name)
+	return pickReadyPodName(common.FilterPodsByControllerOwner(pods, "StatefulSet", statefulSet.Name), "StatefulSet", name)
 }
 
 func findReadyPodForDaemonSet(
@@ -123,7 +124,7 @@ func findReadyPodForDaemonSet(
 		return "", err
 	}
 
-	return pickReadyPodName(filterPodsForDaemonSet(daemonSet, pods), "DaemonSet", name)
+	return pickReadyPodName(common.FilterPodsByControllerOwner(pods, "DaemonSet", daemonSet.Name), "DaemonSet", name)
 }
 
 // findReadyPodForService finds a ready pod from the service's endpoint slices.
@@ -291,42 +292,6 @@ func filterPodsForDeployment(
 				continue
 			}
 			if _, ok := replicaSetUIDs[string(owner.UID)]; ok {
-				filtered = append(filtered, pod)
-				break
-			}
-		}
-	}
-
-	return filtered
-}
-
-func filterPodsForStatefulSet(statefulSet *appsv1.StatefulSet, podList *corev1.PodList) []corev1.Pod {
-	if podList == nil {
-		return nil
-	}
-
-	var filtered []corev1.Pod
-	for _, pod := range podList.Items {
-		for _, owner := range pod.OwnerReferences {
-			if owner.Controller != nil && *owner.Controller && owner.Kind == "StatefulSet" && owner.Name == statefulSet.Name {
-				filtered = append(filtered, pod)
-				break
-			}
-		}
-	}
-
-	return filtered
-}
-
-func filterPodsForDaemonSet(daemonSet *appsv1.DaemonSet, podList *corev1.PodList) []corev1.Pod {
-	if podList == nil {
-		return nil
-	}
-
-	var filtered []corev1.Pod
-	for _, pod := range podList.Items {
-		for _, owner := range pod.OwnerReferences {
-			if owner.Controller != nil && *owner.Controller && owner.Kind == "DaemonSet" && owner.Name == daemonSet.Name {
 				filtered = append(filtered, pod)
 				break
 			}

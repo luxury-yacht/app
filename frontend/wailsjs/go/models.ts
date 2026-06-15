@@ -2260,7 +2260,7 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
-	    status?: string;
+	    status: string;
 	    statusState?: string;
 	    statusPresentation?: string;
 	    statusReason?: string;
@@ -2396,7 +2396,7 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
-	    status?: string;
+	    status: string;
 	    statusState?: string;
 	    statusPresentation?: string;
 	    statusReason?: string;
@@ -2556,7 +2556,7 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
-	    status?: string;
+	    status: string;
 	    statusState?: string;
 	    statusPresentation?: string;
 	    statusReason?: string;
@@ -3438,12 +3438,12 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
+	    status: string;
 	    statusState?: string;
 	    statusPresentation?: string;
 	    statusReason?: string;
 	    details: string;
 	    age?: string;
-	    status?: string;
 	    completions?: number;
 	    parallelism?: number;
 	    succeeded?: number;
@@ -3474,12 +3474,12 @@ export namespace types {
 	        this.kind = source["kind"];
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
+	        this.status = source["status"];
 	        this.statusState = source["statusState"];
 	        this.statusPresentation = source["statusPresentation"];
 	        this.statusReason = source["statusReason"];
 	        this.details = source["details"];
 	        this.age = source["age"];
-	        this.status = source["status"];
 	        this.completions = source["completions"];
 	        this.parallelism = source["parallelism"];
 	        this.succeeded = source["succeeded"];
@@ -4711,7 +4711,7 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
-	    status?: string;
+	    status: string;
 	    statusState?: string;
 	    statusPresentation?: string;
 	    statusReason?: string;
@@ -5392,7 +5392,7 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    namespace: string;
-	    status?: string;
+	    status: string;
 	    statusState?: string;
 	    statusPresentation?: string;
 	    statusReason?: string;
@@ -5557,7 +5557,7 @@ export namespace types {
 	    name: string;
 	    age: string;
 	    details: string;
-	    status?: string;
+	    status: string;
 	    statusState?: string;
 	    statusPresentation?: string;
 	    statusReason?: string;

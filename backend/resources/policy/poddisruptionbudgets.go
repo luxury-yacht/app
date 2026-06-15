@@ -74,7 +74,7 @@ func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBud
 		ExpectedPods:       facts.ExpectedPods,
 		ObservedGeneration: facts.ObservedGeneration,
 		DisruptedPods:      pdb.Status.DisruptedPods,
-		Conditions:         pdbConditionStrings(facts.Conditions),
+		Conditions:         types.FormatConditions(facts.Conditions),
 		Labels:             pdb.Labels,
 		Annotations:        pdb.Annotations,
 	}

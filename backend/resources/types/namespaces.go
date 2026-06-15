@@ -9,18 +9,15 @@ package types
 
 // NamespaceDetails represents comprehensive namespace information.
 type NamespaceDetails struct {
-	Kind               string            `json:"kind"`
-	Name               string            `json:"name"`
-	Age                string            `json:"age"`
-	Details            string            `json:"details"`
-	Status             string            `json:"status"`
-	StatusState        string            `json:"statusState,omitempty"`
-	StatusPresentation string            `json:"statusPresentation,omitempty"`
-	StatusReason       string            `json:"statusReason,omitempty"`
-	HasWorkloads       bool              `json:"hasWorkloads"`
-	WorkloadsUnknown   bool              `json:"workloadsUnknown,omitempty"`
-	Labels             map[string]string `json:"labels,omitempty"`
-	Annotations        map[string]string `json:"annotations,omitempty"`
-	ResourceQuotas     []ObjectRef       `json:"resourceQuotas,omitempty"`
-	LimitRanges        []ObjectRef       `json:"limitRanges,omitempty"`
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Age     string `json:"age"`
+	Details string `json:"details"`
+	StatusProjection
+	HasWorkloads     bool              `json:"hasWorkloads"`
+	WorkloadsUnknown bool              `json:"workloadsUnknown,omitempty"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	Annotations      map[string]string `json:"annotations,omitempty"`
+	ResourceQuotas   []ObjectRef       `json:"resourceQuotas,omitempty"`
+	LimitRanges      []ObjectRef       `json:"limitRanges,omitempty"`
 }

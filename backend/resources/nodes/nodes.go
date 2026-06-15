@@ -467,16 +467,13 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 		nodeRestarts += podRestarts
 
 		podsList = append(podsList, restypes.PodSimpleInfo{
-			Kind:               "Pod",
-			Name:               pod.Name,
-			Namespace:          pod.Namespace,
-			Status:             podModel.Status.Label,
-			StatusState:        podModel.Status.State,
-			StatusPresentation: podModel.Status.Presentation,
-			StatusReason:       podModel.Status.Reason,
-			Ready:              fmt.Sprintf("%d/%d", podFacts.ReadyContainers, podFacts.TotalContainers),
-			Restarts:           podRestarts,
-			Age:                common.FormatAge(pod.CreationTimestamp.Time),
+			Kind:             "Pod",
+			Name:             pod.Name,
+			Namespace:        pod.Namespace,
+			StatusProjection: restypes.NewStatusProjection(podModel.Status),
+			Ready:            fmt.Sprintf("%d/%d", podFacts.ReadyContainers, podFacts.TotalContainers),
+			Restarts:         podRestarts,
+			Age:              common.FormatAge(pod.CreationTimestamp.Time),
 		})
 
 		if pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending {
@@ -502,24 +499,21 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 	}
 
 	details := &restypes.NodeDetails{
-		Name:               node.Name,
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Age:                common.FormatAge(node.CreationTimestamp.Time),
-		Unschedulable:      nodeFacts != nil && nodeFacts.Unschedulable,
-		Architecture:       node.Status.NodeInfo.Architecture,
-		OS:                 node.Status.NodeInfo.OperatingSystem,
-		OSImage:            node.Status.NodeInfo.OSImage,
-		KernelVersion:      node.Status.NodeInfo.KernelVersion,
-		ContainerRuntime:   node.Status.NodeInfo.ContainerRuntimeVersion,
-		KubeletVersion:     node.Status.NodeInfo.KubeletVersion,
-		Labels:             node.Labels,
-		Annotations:        node.Annotations,
-		PodsList:           podsList,
-		PodsCount:          len(podsList),
-		Restarts:           nodeRestarts,
+		Name:             node.Name,
+		StatusProjection: restypes.NewStatusProjection(model.Status),
+		Age:              common.FormatAge(node.CreationTimestamp.Time),
+		Unschedulable:    nodeFacts != nil && nodeFacts.Unschedulable,
+		Architecture:     node.Status.NodeInfo.Architecture,
+		OS:               node.Status.NodeInfo.OperatingSystem,
+		OSImage:          node.Status.NodeInfo.OSImage,
+		KernelVersion:    node.Status.NodeInfo.KernelVersion,
+		ContainerRuntime: node.Status.NodeInfo.ContainerRuntimeVersion,
+		KubeletVersion:   node.Status.NodeInfo.KubeletVersion,
+		Labels:           node.Labels,
+		Annotations:      node.Annotations,
+		PodsList:         podsList,
+		PodsCount:        len(podsList),
+		Restarts:         nodeRestarts,
 	}
 
 	for _, condition := range node.Status.Conditions {

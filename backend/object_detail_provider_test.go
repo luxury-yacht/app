@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resourcecontract"
 )
 
 func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
@@ -161,6 +162,38 @@ func TestObjectDetailFetchersHaveExactGVKPolicy(t *testing.T) {
 		if _, ok := objectDetailFetchers[kind]; !ok {
 			t.Fatalf("object detail GVK policy %q has no fetcher", kind)
 		}
+	}
+}
+
+func TestObjectDetailFetcherGVKsContractDerived(t *testing.T) {
+	// Every typed fetcher GVK must come from the built-in resource contract, so
+	// the GVK metadata cannot drift from resourcecontract.BuiltinResources.
+	for kind, gvk := range objectDetailFetcherGVKs {
+		if _, ok := resourcecontract.FindBuiltin(gvk.Group, gvk.Version, gvk.Kind); !ok {
+			t.Fatalf("object detail fetcher %q resolves to GVK %s which is not in the built-in contract", kind, gvk)
+		}
+	}
+
+	// resolveDetailFetcherGVK resolves a fetcher kind to its contract GVK.
+	cases := map[string]schema.GroupVersionKind{
+		"pod":                     {Group: "", Version: "v1", Kind: "Pod"},
+		"deployment":              {Group: "apps", Version: "v1", Kind: "Deployment"},
+		"storageclass":            {Group: "storage.k8s.io", Version: "v1", Kind: "StorageClass"},
+		"horizontalpodautoscaler": {Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler"},
+	}
+	for kind, want := range cases {
+		if got := resolveDetailFetcherGVK(kind); got != want {
+			t.Fatalf("resolveDetailFetcherGVK(%q) = %s, want %s", kind, got, want)
+		}
+	}
+
+	// The HPA version pin must serve autoscaling/v2 only; v1 falls back to the
+	// generic detail path.
+	if _, ok := lookupObjectDetailFetcher(schema.GroupVersionKind{Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler"}); !ok {
+		t.Fatal("expected autoscaling/v2 HorizontalPodAutoscaler to be served by a typed fetcher")
+	}
+	if _, ok := lookupObjectDetailFetcher(schema.GroupVersionKind{Group: "autoscaling", Version: "v1", Kind: "HorizontalPodAutoscaler"}); ok {
+		t.Fatal("expected autoscaling/v1 HorizontalPodAutoscaler to fall back to the generic detail path")
 	}
 }
 

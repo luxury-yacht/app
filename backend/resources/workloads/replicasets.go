@@ -58,49 +58,38 @@ func (s *ReplicaSetService) buildReplicaSetDetails(
 	podsList []corev1.Pod,
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
 ) *restypes.ReplicaSetDetails {
-	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
 	model := resourcemodel.BuildReplicaSetResourceModel(s.deps.ClusterID, replicaSet)
+	facts := model.Facts.ReplicaSet
+	replicas, ready := workloadReplicaDisplay(facts.WorkloadCommonFacts)
 	podInfos := buildPodSummaries(s.deps.ClusterID, "ReplicaSet", replicaSet.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
-	desiredReplicas := int32(0)
-	if replicaSet.Spec.Replicas != nil {
-		desiredReplicas = *replicaSet.Spec.Replicas
-	}
 
 	details := &restypes.ReplicaSetDetails{
-		Kind:               "ReplicaSet",
-		Name:               replicaSet.Name,
-		Namespace:          replicaSet.Namespace,
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Details:            "",
-		Replicas:           fmt.Sprintf("%d/%d", replicaSet.Status.Replicas, desiredReplicas),
-		Ready:              fmt.Sprintf("%d/%d", replicaSet.Status.ReadyReplicas, replicaSet.Status.Replicas),
-		Available:          replicaSet.Status.AvailableReplicas,
-		DesiredReplicas:    desiredReplicas,
-		Age:                common.FormatAge(replicaSet.CreationTimestamp.Time),
-		CPURequest:         common.FormatCPU(avgCPURequest),
-		CPULimit:           common.FormatCPU(avgCPULimit),
-		CPUUsage:           common.FormatCPU(avgCPUUsage),
-		MemRequest:         common.FormatMemory(avgMemRequest),
-		MemLimit:           common.FormatMemory(avgMemLimit),
-		MemUsage:           common.FormatMemory(avgMemUsage),
-		MinReadySeconds:    replicaSet.Spec.MinReadySeconds,
-		Selector:           replicaSet.Spec.Selector.MatchLabels,
-		Labels:             replicaSet.Labels,
-		Annotations:        replicaSet.Annotations,
-		Conditions:         describeReplicaSetConditions(replicaSet),
-		Containers:         describeContainers(replicaSet.Spec.Template.Spec.Containers),
-		InitContainers:     describeContainers(replicaSet.Spec.Template.Spec.InitContainers),
-		Pods:               podInfos,
-		PodMetricsSummary:  podSummary,
-		ObservedGeneration: replicaSet.Status.ObservedGeneration,
-		IsActive:           s.isReplicaSetActive(replicaSet),
+		Kind:                "ReplicaSet",
+		Name:                replicaSet.Name,
+		Namespace:           replicaSet.Namespace,
+		StatusProjection:    restypes.NewStatusProjection(model.Status),
+		Details:             "",
+		Replicas:            replicas,
+		Ready:               ready,
+		Available:           facts.AvailableReplicas,
+		DesiredReplicas:     facts.DesiredReplicas,
+		Age:                 common.FormatAge(replicaSet.CreationTimestamp.Time),
+		ResourceUtilization: workloadUtilization(podsList, podMetrics),
+		MinReadySeconds:     replicaSet.Spec.MinReadySeconds,
+		Selector:            replicaSet.Spec.Selector.MatchLabels,
+		Labels:              replicaSet.Labels,
+		Annotations:         replicaSet.Annotations,
+		Conditions:          restypes.FormatConditions(facts.Conditions),
+		Containers:          describeContainers(replicaSet.Spec.Template.Spec.Containers),
+		InitContainers:      describeContainers(replicaSet.Spec.Template.Spec.InitContainers),
+		Pods:                podInfos,
+		PodMetricsSummary:   podSummary,
+		ObservedGeneration:  replicaSet.Status.ObservedGeneration,
+		IsActive:            s.isReplicaSetActive(replicaSet),
 	}
 
-	details.Details = summarizeReplicaSet(replicaSet, desiredReplicas)
+	details.Details = summarizeReplicaSet(replicaSet, facts.DesiredReplicas)
 	return details
 }
 
@@ -195,22 +184,6 @@ func revisionFromAnnotations(annotations map[string]string) string {
 		return ""
 	}
 	return annotations["deployment.kubernetes.io/revision"]
-}
-
-// describeReplicaSetConditions formats ReplicaSet conditions for display.
-func describeReplicaSetConditions(replicaSet *appsv1.ReplicaSet) []string {
-	conditions := make([]string, 0, len(replicaSet.Status.Conditions))
-	for _, cond := range replicaSet.Status.Conditions {
-		condStr := fmt.Sprintf("%s: %s", cond.Type, cond.Status)
-		if cond.Reason != "" {
-			condStr += fmt.Sprintf(" (%s)", cond.Reason)
-		}
-		if cond.Message != "" {
-			condStr += fmt.Sprintf(" - %s", cond.Message)
-		}
-		conditions = append(conditions, condStr)
-	}
-	return conditions
 }
 
 // summarizeReplicaSet builds the short summary string for ReplicaSet details.

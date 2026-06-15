@@ -76,18 +76,15 @@ func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolu
 	)
 	facts := model.Facts.PersistentVolumeClaim
 	details := &types.PersistentVolumeClaimDetails{
-		Kind:               "PersistentVolumeClaim",
-		Name:               pvc.Name,
-		Namespace:          pvc.Namespace,
-		Age:                common.FormatAge(pvc.CreationTimestamp.Time),
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		StorageClass:       pvc.Spec.StorageClassName,
-		VolumeName:         pvc.Spec.VolumeName,
-		Labels:             pvc.Labels,
-		Annotations:        pvc.Annotations,
+		Kind:             "PersistentVolumeClaim",
+		Name:             pvc.Name,
+		Namespace:        pvc.Namespace,
+		Age:              common.FormatAge(pvc.CreationTimestamp.Time),
+		StatusProjection: types.NewStatusProjection(model.Status),
+		StorageClass:     pvc.Spec.StorageClassName,
+		VolumeName:       pvc.Spec.VolumeName,
+		Labels:           pvc.Labels,
+		Annotations:      pvc.Annotations,
 	}
 
 	for _, mode := range pvc.Spec.AccessModes {
@@ -126,16 +123,7 @@ func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolu
 		}
 	}
 
-	for _, condition := range pvc.Status.Conditions {
-		condStr := fmt.Sprintf("%s: %s", condition.Type, condition.Status)
-		if condition.Reason != "" {
-			condStr += fmt.Sprintf(" (%s)", condition.Reason)
-		}
-		if condition.Message != "" {
-			condStr += fmt.Sprintf(" - %s", condition.Message)
-		}
-		details.Conditions = append(details.Conditions, condStr)
-	}
+	details.Conditions = types.FormatConditions(model.Facts.PersistentVolumeClaim.Conditions)
 
 	if facts != nil {
 		details.MountedBy = types.ObjectRefsFromResourceLinks(facts.MountedBy)

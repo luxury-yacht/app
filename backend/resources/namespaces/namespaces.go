@@ -63,19 +63,16 @@ func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *types.Name
 	)
 	facts := model.Facts.Namespace
 	details := &types.NamespaceDetails{
-		Kind:               model.Ref.Kind,
-		Name:               model.Ref.Name,
-		Age:                common.FormatAge(model.Metadata.CreationTimestamp.Time),
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Labels:             model.Metadata.Labels,
-		Annotations:        model.Metadata.Annotations,
-		HasWorkloads:       facts.HasWorkloads,
-		WorkloadsUnknown:   !facts.WorkloadsKnown,
-		ResourceQuotas:     types.ObjectRefsFromResourceLinks(facts.ResourceQuotas),
-		LimitRanges:        types.ObjectRefsFromResourceLinks(facts.LimitRanges),
+		Kind:             model.Ref.Kind,
+		Name:             model.Ref.Name,
+		Age:              common.FormatAge(model.Metadata.CreationTimestamp.Time),
+		StatusProjection: types.NewStatusProjection(model.Status),
+		Labels:           model.Metadata.Labels,
+		Annotations:      model.Metadata.Annotations,
+		HasWorkloads:     facts.HasWorkloads,
+		WorkloadsUnknown: !facts.WorkloadsKnown,
+		ResourceQuotas:   types.ObjectRefsFromResourceLinks(facts.ResourceQuotas),
+		LimitRanges:      types.ObjectRefsFromResourceLinks(facts.LimitRanges),
 	}
 
 	detailParts := []string{fmt.Sprintf("Status: %s", details.Status)}

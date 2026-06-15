@@ -66,24 +66,6 @@ func scalingRulesFromFacts(facts *resourcemodel.ScalingRulesFacts) *types.Scalin
 	}
 }
 
-func hpaConditionStrings(facts []resourcemodel.ConditionFacts) []string {
-	if len(facts) == 0 {
-		return nil
-	}
-	result := make([]string, 0, len(facts))
-	for _, condition := range facts {
-		cond := fmt.Sprintf("%s: %s", condition.Type, condition.Status)
-		if condition.Reason != "" {
-			cond += fmt.Sprintf(" (%s)", condition.Reason)
-		}
-		if condition.Message != "" {
-			cond += fmt.Sprintf(" - %s", condition.Message)
-		}
-		result = append(result, cond)
-	}
-	return result
-}
-
 func hpaDetailsSummary(facts *resourcemodel.HorizontalPodAutoscalerFacts) string {
 	if facts == nil {
 		return ""

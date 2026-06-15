@@ -55,7 +55,7 @@ func (s *Service) buildHorizontalPodAutoscalerDetails(hpa *autoscalingv2.Horizon
 		Metrics:         metricSpecsFromFacts(facts.Metrics),
 		CurrentMetrics:  metricStatusesFromFacts(facts.CurrentMetrics),
 		Behavior:        scalingBehaviorFromFacts(facts.Behavior),
-		Conditions:      hpaConditionStrings(facts.Conditions),
+		Conditions:      types.FormatConditions(facts.Conditions),
 	}
 	return details
 }

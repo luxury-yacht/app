@@ -55,36 +55,28 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 	podsList []corev1.Pod,
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
 ) *restypes.DaemonSetDetails {
-	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
 	model := resourcemodel.BuildDaemonSetResourceModel(s.deps.ClusterID, daemonSet)
+	facts := model.Facts.DaemonSet
 	podInfos := buildPodSummaries(s.deps.ClusterID, "DaemonSet", daemonSet.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 
 	details := &restypes.DaemonSetDetails{
-		Kind:               "DaemonSet",
-		Name:               daemonSet.Name,
-		Namespace:          daemonSet.Namespace,
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Details:            "",
-		Desired:            daemonSet.Status.DesiredNumberScheduled,
-		Current:            daemonSet.Status.CurrentNumberScheduled,
-		Ready:              daemonSet.Status.NumberReady,
-		UpToDate:           daemonSet.Status.UpdatedNumberScheduled,
-		Available:          daemonSet.Status.NumberAvailable,
-		Age:                common.FormatAge(daemonSet.CreationTimestamp.Time),
-		CPURequest:         common.FormatCPU(avgCPURequest),
-		CPULimit:           common.FormatCPU(avgCPULimit),
-		CPUUsage:           common.FormatCPU(avgCPUUsage),
-		MemRequest:         common.FormatMemory(avgMemRequest),
-		MemLimit:           common.FormatMemory(avgMemLimit),
-		MemUsage:           common.FormatMemory(avgMemUsage),
-		UpdateStrategy:     string(daemonSet.Spec.UpdateStrategy.Type),
-		MaxUnavailable:     describeOptionalValue(daemonSet.Spec.UpdateStrategy.RollingUpdate, true),
-		MaxSurge:           describeOptionalValue(daemonSet.Spec.UpdateStrategy.RollingUpdate, false),
-		MinReadySeconds:    daemonSet.Spec.MinReadySeconds,
+		Kind:                "DaemonSet",
+		Name:                daemonSet.Name,
+		Namespace:           daemonSet.Namespace,
+		StatusProjection:    restypes.NewStatusProjection(model.Status),
+		Details:             "",
+		Desired:             facts.DesiredReplicas,
+		Current:             facts.CurrentReplicas,
+		Ready:               facts.ReadyReplicas,
+		UpToDate:            facts.UpdatedReplicas,
+		Available:           facts.AvailableReplicas,
+		Age:                 common.FormatAge(daemonSet.CreationTimestamp.Time),
+		ResourceUtilization: workloadUtilization(podsList, podMetrics),
+		UpdateStrategy:      string(daemonSet.Spec.UpdateStrategy.Type),
+		MaxUnavailable:      describeOptionalValue(daemonSet.Spec.UpdateStrategy.RollingUpdate, true),
+		MaxSurge:            describeOptionalValue(daemonSet.Spec.UpdateStrategy.RollingUpdate, false),
+		MinReadySeconds:     daemonSet.Spec.MinReadySeconds,
 		RevisionHistoryLimit: func() int32 {
 			if daemonSet.Spec.RevisionHistoryLimit != nil {
 				return *daemonSet.Spec.RevisionHistoryLimit
@@ -97,7 +89,7 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 		Annotations:        daemonSet.Annotations,
 		NodeSelector:       daemonSet.Spec.Template.Spec.NodeSelector,
 		Tolerations:        pods.FormatPodTolerations(daemonSet.Spec.Template.Spec.Tolerations),
-		Conditions:         describeDaemonSetConditions(daemonSet),
+		Conditions:         restypes.FormatConditions(facts.Conditions),
 		Containers:         describeContainers(daemonSet.Spec.Template.Spec.Containers),
 		InitContainers:     describeContainers(daemonSet.Spec.Template.Spec.InitContainers),
 		Pods:               podInfos,
@@ -123,7 +115,7 @@ func (s *DaemonSetService) getDaemonSetPods(daemonSet *appsv1.DaemonSet) ([]core
 		return nil, nil, err
 	}
 
-	filtered := filterPodsForDaemonSet(daemonSet, podList)
+	filtered := common.FilterPodsByControllerOwner(podList, "DaemonSet", daemonSet.Name)
 	metrics := pods.NewService(s.deps).GetPodMetricsForPods(daemonSet.Namespace, filtered)
 	return filtered, metrics, nil
 }
@@ -144,21 +136,6 @@ func describeOptionalValue(rollingUpdate *appsv1.RollingUpdateDaemonSet, extract
 	return ""
 }
 
-func describeDaemonSetConditions(daemonSet *appsv1.DaemonSet) []string {
-	conditions := make([]string, 0, len(daemonSet.Status.Conditions))
-	for _, cond := range daemonSet.Status.Conditions {
-		condStr := fmt.Sprintf("%s: %s", cond.Type, cond.Status)
-		if cond.Reason != "" {
-			condStr += fmt.Sprintf(" (%s)", cond.Reason)
-		}
-		if cond.Message != "" {
-			condStr += fmt.Sprintf(" - %s", cond.Message)
-		}
-		conditions = append(conditions, condStr)
-	}
-	return conditions
-}
-
 func summarizeDaemonSet(daemonSet *appsv1.DaemonSet) string {
 	summary := fmt.Sprintf("Desired: %d, Current: %d, Ready: %d", daemonSet.Status.DesiredNumberScheduled, daemonSet.Status.CurrentNumberScheduled, daemonSet.Status.NumberReady)
 	if daemonSet.Status.NumberUnavailable > 0 {
@@ -168,21 +145,4 @@ func summarizeDaemonSet(daemonSet *appsv1.DaemonSet) string {
 		summary += fmt.Sprintf(", Misscheduled: %d", daemonSet.Status.NumberMisscheduled)
 	}
 	return summary
-}
-
-func filterPodsForDaemonSet(daemonSet *appsv1.DaemonSet, podList *corev1.PodList) []corev1.Pod {
-	if podList == nil {
-		return nil
-	}
-
-	var filtered []corev1.Pod
-	for _, pod := range podList.Items {
-		for _, owner := range pod.OwnerReferences {
-			if owner.Controller != nil && *owner.Controller && owner.Kind == "DaemonSet" && owner.Name == daemonSet.Name {
-				filtered = append(filtered, pod)
-				break
-			}
-		}
-	}
-	return filtered
 }
