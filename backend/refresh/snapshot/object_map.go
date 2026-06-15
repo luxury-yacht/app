@@ -17,11 +17,14 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/objectmap"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/clusterrole"
+	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
@@ -32,6 +35,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	"github.com/luxury-yacht/app/backend/resources/service"
+	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	appsv1 "k8s.io/api/apps/v1"
@@ -613,7 +617,7 @@ func (idx *objectMapIndex) collectServiceAccounts(lister corelisters.ServiceAcco
 	collectKind(idx, "", "v1", "ServiceAccount", "serviceaccounts",
 		func() ([]*corev1.ServiceAccount, error) { return lister.List(labels.Everything()) },
 		func(sa *corev1.ServiceAccount, rec *objectMapRecord) {
-			rec.status = objectMapServiceAccountStatus(idx.meta.ClusterID, *sa)
+			rec.status = serviceaccount.ObjectMapStatus(idx.meta.ClusterID, *sa)
 		})
 }
 
@@ -703,7 +707,7 @@ func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.In
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&hpa.ObjectMeta, "autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", hpa.Namespace),
 			creationTimestamp: objectCreationTimestamp(&hpa.ObjectMeta),
-			status:            objectMapHPAStatus(idx.meta.ClusterID, hpa),
+			status:            hpapkg.ObjectMapStatus(idx.meta.ClusterID, hpa),
 			owners:            hpa.OwnerReferences,
 			labels:            cloneStringMap(hpa.Labels),
 			hpa:               &hpa,
@@ -751,7 +755,7 @@ func (idx *objectMapIndex) collectClusterRoles(lister rbaclisters.ClusterRoleLis
 	collectKind(idx, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles",
 		func() ([]*rbacv1.ClusterRole, error) { return lister.List(labels.Everything()) },
 		func(role *rbacv1.ClusterRole, rec *objectMapRecord) {
-			rec.status = objectMapClusterRoleStatus(idx.meta.ClusterID, *role)
+			rec.status = clusterrole.ObjectMapStatus(idx.meta.ClusterID, *role)
 			rec.clusterRole = role
 		})
 }
@@ -760,7 +764,7 @@ func (idx *objectMapIndex) collectClusterRoleBindings(lister rbaclisters.Cluster
 	collectKind(idx, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings",
 		func() ([]*rbacv1.ClusterRoleBinding, error) { return lister.List(labels.Everything()) },
 		func(binding *rbacv1.ClusterRoleBinding, rec *objectMapRecord) {
-			rec.status = objectMapClusterRoleBindingStatus(idx.meta.ClusterID, *binding)
+			rec.status = clusterrolebinding.ObjectMapStatus(idx.meta.ClusterID, *binding)
 			rec.clusterRoleBinding = binding
 		})
 }
@@ -1034,8 +1038,8 @@ func (idx *objectMapIndex) enrichActionFacts() {
 		if record == nil || record.hpa == nil {
 			continue
 		}
-		model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(idx.meta.ClusterID, record.hpa)
-		target := idx.recordForResourceLink(model.Facts.HorizontalPodAutoscaler.ScaleTarget)
+		facts := hpapkg.BuildFacts(idx.meta.ClusterID, record.hpa)
+		target := idx.recordForResourceLink(facts.ScaleTarget)
 		if target == nil {
 			continue
 		}
@@ -1159,10 +1163,6 @@ func objectMapPodStatus(clusterID string, pod corev1.Pod) *ObjectMapStatus {
 
 
 
-func objectMapServiceAccountStatus(clusterID string, sa corev1.ServiceAccount) *ObjectMapStatus {
-	model := resourcemodel.BuildServiceAccountResourceModel(clusterID, &sa, nil)
-	return objectMapStatusFromResourceModel(model)
-}
 
 func objectMapNodeStatus(clusterID string, node corev1.Node) *ObjectMapStatus {
 	model := resourcemodel.BuildNodeResourceModel(clusterID, &node)
@@ -1179,23 +1179,10 @@ func objectMapStatusFromResourceModel(model resourcemodel.ResourceModel) *Object
 	return objectmap.FromResourceModel(model)
 }
 
-func objectMapHPAStatus(clusterID string, hpa autoscalingv2.HorizontalPodAutoscaler) *ObjectMapStatus {
-	model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(clusterID, &hpa)
-	return objectMapStatusFromResourceModel(model)
-}
 
 
 
 
-func objectMapClusterRoleStatus(clusterID string, role rbacv1.ClusterRole) *ObjectMapStatus {
-	model := resourcemodel.BuildClusterRoleResourceModel(clusterID, &role, nil)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapClusterRoleBindingStatus(clusterID string, binding rbacv1.ClusterRoleBinding) *ObjectMapStatus {
-	model := resourcemodel.BuildClusterRoleBindingResourceModel(clusterID, &binding)
-	return objectMapStatusFromResourceModel(model)
-}
 
 func objectMapGatewayClassStatus(clusterID string, gatewayClass gatewayv1.GatewayClass) *ObjectMapStatus {
 	model := resourcemodel.BuildGatewayClassResourceModel(clusterID, &gatewayClass)
@@ -1685,8 +1672,8 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 			}
 		}
 		if record.hpa != nil {
-			model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(idx.meta.ClusterID, record.hpa)
-			target := idx.recordForResourceLink(model.Facts.HorizontalPodAutoscaler.ScaleTarget)
+			facts := hpapkg.BuildFacts(idx.meta.ClusterID, record.hpa)
+			target := idx.recordForResourceLink(facts.ScaleTarget)
 			relationship := objectMapRelationships[objectMapEdgeScales]
 			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 		}
@@ -1711,11 +1698,11 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 			}
 		}
 		if record.clusterRoleBinding != nil {
-			model := resourcemodel.BuildClusterRoleBindingResourceModel(idx.meta.ClusterID, record.clusterRoleBinding)
-			target := idx.recordForResourceLink(model.Facts.ClusterRoleBinding.RoleRef)
+			facts := clusterrolebinding.BuildFacts(idx.meta.ClusterID, record.clusterRoleBinding)
+			target := idx.recordForResourceLink(facts.RoleRef)
 			relationship := objectMapRelationships[objectMapEdgeGrants]
 			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-			for _, subject := range model.Facts.ClusterRoleBinding.Subjects {
+			for _, subject := range facts.Subjects {
 				if subject.Link == nil {
 					continue
 				}

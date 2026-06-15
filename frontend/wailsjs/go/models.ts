@@ -903,6 +903,120 @@ export namespace capabilities {
 
 }
 
+export namespace clusterrole {
+	
+	export class AggregationRule {
+	    clusterRoleSelectors?: any[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AggregationRule(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.clusterRoleSelectors = source["clusterRoleSelectors"];
+	    }
+	}
+	export class ClusterRoleDetails {
+	    kind: string;
+	    name: string;
+	    age: string;
+	    details: string;
+	    rules: types.PolicyRule[];
+	    aggregationRule?: AggregationRule;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    clusterRoleBindings?: resourcemodel.ResourceRef[];
+	    roleBindings?: resourcemodel.ResourceRef[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ClusterRoleDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.age = source["age"];
+	        this.details = source["details"];
+	        this.rules = this.convertValues(source["rules"], types.PolicyRule);
+	        this.aggregationRule = this.convertValues(source["aggregationRule"], AggregationRule);
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.clusterRoleBindings = this.convertValues(source["clusterRoleBindings"], resourcemodel.ResourceRef);
+	        this.roleBindings = this.convertValues(source["roleBindings"], resourcemodel.ResourceRef);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace clusterrolebinding {
+	
+	export class ClusterRoleBindingDetails {
+	    kind: string;
+	    name: string;
+	    age: string;
+	    details: string;
+	    roleRef: types.RoleRef;
+	    subjects: types.Subject[];
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClusterRoleBindingDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.age = source["age"];
+	        this.details = source["details"];
+	        this.roleRef = this.convertValues(source["roleRef"], types.RoleRef);
+	        this.subjects = this.convertValues(source["subjects"], types.Subject);
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace configmap {
 	
 	export class ConfigMapDetails {
@@ -1373,6 +1487,169 @@ export namespace endpointslice {
 		    return a;
 		}
 	}
+
+}
+
+export namespace hpa {
+	
+	export class ScalingRules {
+	    stabilizationWindowSeconds?: number;
+	    selectPolicy?: string;
+	    policies?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ScalingRules(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.stabilizationWindowSeconds = source["stabilizationWindowSeconds"];
+	        this.selectPolicy = source["selectPolicy"];
+	        this.policies = source["policies"];
+	    }
+	}
+	export class ScalingBehavior {
+	    scaleUp?: ScalingRules;
+	    scaleDown?: ScalingRules;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScalingBehavior(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scaleUp = this.convertValues(source["scaleUp"], ScalingRules);
+	        this.scaleDown = this.convertValues(source["scaleDown"], ScalingRules);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class MetricStatus {
+	    kind: string;
+	    current: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new MetricStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.current = source["current"];
+	    }
+	}
+	export class MetricSpec {
+	    kind: string;
+	    target: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new MetricSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.target = source["target"];
+	    }
+	}
+	export class ScaleTargetReference {
+	    kind: string;
+	    name: string;
+	    apiVersion?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScaleTargetReference(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.apiVersion = source["apiVersion"];
+	    }
+	}
+	export class HorizontalPodAutoscalerDetails {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    age: string;
+	    details: string;
+	    scaleTargetRef: ScaleTargetReference;
+	    minReplicas?: number;
+	    maxReplicas: number;
+	    currentReplicas: number;
+	    desiredReplicas: number;
+	    metrics: MetricSpec[];
+	    currentMetrics?: MetricStatus[];
+	    behavior?: ScalingBehavior;
+	    conditions?: string[];
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    lastScaleTime?: v1.Time;
+	
+	    static createFrom(source: any = {}) {
+	        return new HorizontalPodAutoscalerDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.age = source["age"];
+	        this.details = source["details"];
+	        this.scaleTargetRef = this.convertValues(source["scaleTargetRef"], ScaleTargetReference);
+	        this.minReplicas = source["minReplicas"];
+	        this.maxReplicas = source["maxReplicas"];
+	        this.currentReplicas = source["currentReplicas"];
+	        this.desiredReplicas = source["desiredReplicas"];
+	        this.metrics = this.convertValues(source["metrics"], MetricSpec);
+	        this.currentMetrics = this.convertValues(source["currentMetrics"], MetricStatus);
+	        this.behavior = this.convertValues(source["behavior"], ScalingBehavior);
+	        this.conditions = source["conditions"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.lastScaleTime = this.convertValues(source["lastScaleTime"], v1.Time);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	
+	
 
 }
 
@@ -2569,6 +2846,108 @@ export namespace resourcequota {
 
 }
 
+export namespace role {
+	
+	export class RoleDetails {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    age: string;
+	    details: string;
+	    rules: types.PolicyRule[];
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    usedByRoleBindings?: resourcemodel.ResourceRef[];
+	
+	    static createFrom(source: any = {}) {
+	        return new RoleDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.age = source["age"];
+	        this.details = source["details"];
+	        this.rules = this.convertValues(source["rules"], types.PolicyRule);
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.usedByRoleBindings = this.convertValues(source["usedByRoleBindings"], resourcemodel.ResourceRef);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace rolebinding {
+	
+	export class RoleBindingDetails {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    age: string;
+	    details: string;
+	    roleRef: types.RoleRef;
+	    subjects: types.Subject[];
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new RoleBindingDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.age = source["age"];
+	        this.details = source["details"];
+	        this.roleRef = this.convertValues(source["roleRef"], types.RoleRef);
+	        this.subjects = this.convertValues(source["subjects"], types.Subject);
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace secret {
 	
 	export class SecretDetails {
@@ -2706,6 +3085,65 @@ export namespace service {
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
 	        this.healthStatus = source["healthStatus"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace serviceaccount {
+	
+	export class ServiceAccountDetails {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    age: string;
+	    details: string;
+	    secrets?: resourcemodel.ResourceRef[];
+	    imagePullSecrets?: resourcemodel.ResourceRef[];
+	    automountServiceAccountToken?: boolean;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    usedByPods?: resourcemodel.ResourceRef[];
+	    roleBindings?: resourcemodel.ResourceRef[];
+	    clusterRoleBindings?: resourcemodel.ResourceRef[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ServiceAccountDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.age = source["age"];
+	        this.details = source["details"];
+	        this.secrets = this.convertValues(source["secrets"], resourcemodel.ResourceRef);
+	        this.imagePullSecrets = this.convertValues(source["imagePullSecrets"], resourcemodel.ResourceRef);
+	        this.automountServiceAccountToken = source["automountServiceAccountToken"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.usedByPods = this.convertValues(source["usedByPods"], resourcemodel.ResourceRef);
+	        this.roleBindings = this.convertValues(source["roleBindings"], resourcemodel.ResourceRef);
+	        this.clusterRoleBindings = this.convertValues(source["clusterRoleBindings"], resourcemodel.ResourceRef);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -3131,18 +3569,6 @@ export namespace storageclass {
 
 export namespace types {
 	
-	export class AggregationRule {
-	    clusterRoleSelectors?: any[];
-	
-	    static createFrom(source: any = {}) {
-	        return new AggregationRule(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.clusterRoleSelectors = source["clusterRoleSelectors"];
-	    }
-	}
 	export class AppPreferenceChange {
 	    key: string;
 	    value: any;
@@ -3580,152 +4006,6 @@ export namespace types {
 	        this.deprecated = source["deprecated"];
 	        this.schema = source["schema"];
 	    }
-	}
-	export class Subject {
-	    kind: string;
-	    apiGroup?: string;
-	    name: string;
-	    namespace?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new Subject(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.apiGroup = source["apiGroup"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	    }
-	}
-	export class RoleRef {
-	    apiGroup: string;
-	    kind: string;
-	    name: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new RoleRef(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.apiGroup = source["apiGroup"];
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	    }
-	}
-	export class ClusterRoleBindingDetails {
-	    kind: string;
-	    name: string;
-	    age: string;
-	    details: string;
-	    roleRef: RoleRef;
-	    subjects: Subject[];
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	
-	    static createFrom(source: any = {}) {
-	        return new ClusterRoleBindingDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.age = source["age"];
-	        this.details = source["details"];
-	        this.roleRef = this.convertValues(source["roleRef"], RoleRef);
-	        this.subjects = this.convertValues(source["subjects"], Subject);
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class PolicyRule {
-	    apiGroups?: string[];
-	    resources?: string[];
-	    resourceNames?: string[];
-	    verbs: string[];
-	    nonResourceURLs?: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new PolicyRule(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.apiGroups = source["apiGroups"];
-	        this.resources = source["resources"];
-	        this.resourceNames = source["resourceNames"];
-	        this.verbs = source["verbs"];
-	        this.nonResourceURLs = source["nonResourceURLs"];
-	    }
-	}
-	export class ClusterRoleDetails {
-	    kind: string;
-	    name: string;
-	    age: string;
-	    details: string;
-	    rules: PolicyRule[];
-	    aggregationRule?: AggregationRule;
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    clusterRoleBindings?: resourcemodel.ResourceRef[];
-	    roleBindings?: resourcemodel.ResourceRef[];
-	
-	    static createFrom(source: any = {}) {
-	        return new ClusterRoleDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.age = source["age"];
-	        this.details = source["details"];
-	        this.rules = this.convertValues(source["rules"], PolicyRule);
-	        this.aggregationRule = this.convertValues(source["aggregationRule"], AggregationRule);
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.clusterRoleBindings = this.convertValues(source["clusterRoleBindings"], resourcemodel.ResourceRef);
-	        this.roleBindings = this.convertValues(source["roleBindings"], resourcemodel.ResourceRef);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	
 	
@@ -4186,160 +4466,6 @@ export namespace types {
 	}
 	
 	
-	export class ScalingRules {
-	    stabilizationWindowSeconds?: number;
-	    selectPolicy?: string;
-	    policies?: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new ScalingRules(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.stabilizationWindowSeconds = source["stabilizationWindowSeconds"];
-	        this.selectPolicy = source["selectPolicy"];
-	        this.policies = source["policies"];
-	    }
-	}
-	export class ScalingBehavior {
-	    scaleUp?: ScalingRules;
-	    scaleDown?: ScalingRules;
-	
-	    static createFrom(source: any = {}) {
-	        return new ScalingBehavior(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.scaleUp = this.convertValues(source["scaleUp"], ScalingRules);
-	        this.scaleDown = this.convertValues(source["scaleDown"], ScalingRules);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class MetricStatus {
-	    kind: string;
-	    current: Record<string, string>;
-	
-	    static createFrom(source: any = {}) {
-	        return new MetricStatus(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.current = source["current"];
-	    }
-	}
-	export class MetricSpec {
-	    kind: string;
-	    target: Record<string, string>;
-	
-	    static createFrom(source: any = {}) {
-	        return new MetricSpec(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.target = source["target"];
-	    }
-	}
-	export class ScaleTargetReference {
-	    kind: string;
-	    name: string;
-	    apiVersion?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ScaleTargetReference(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.apiVersion = source["apiVersion"];
-	    }
-	}
-	export class HorizontalPodAutoscalerDetails {
-	    kind: string;
-	    name: string;
-	    namespace: string;
-	    age: string;
-	    details: string;
-	    scaleTargetRef: ScaleTargetReference;
-	    minReplicas?: number;
-	    maxReplicas: number;
-	    currentReplicas: number;
-	    desiredReplicas: number;
-	    metrics: MetricSpec[];
-	    currentMetrics?: MetricStatus[];
-	    behavior?: ScalingBehavior;
-	    conditions?: string[];
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    lastScaleTime?: v1.Time;
-	
-	    static createFrom(source: any = {}) {
-	        return new HorizontalPodAutoscalerDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.age = source["age"];
-	        this.details = source["details"];
-	        this.scaleTargetRef = this.convertValues(source["scaleTargetRef"], ScaleTargetReference);
-	        this.minReplicas = source["minReplicas"];
-	        this.maxReplicas = source["maxReplicas"];
-	        this.currentReplicas = source["currentReplicas"];
-	        this.desiredReplicas = source["desiredReplicas"];
-	        this.metrics = this.convertValues(source["metrics"], MetricSpec);
-	        this.currentMetrics = this.convertValues(source["currentMetrics"], MetricStatus);
-	        this.behavior = this.convertValues(source["behavior"], ScalingBehavior);
-	        this.conditions = source["conditions"];
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.lastScaleTime = this.convertValues(source["lastScaleTime"], v1.Time);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class JobReference {
 	    name: string;
 	    startTime?: v1.Time;
@@ -4588,8 +4714,6 @@ export namespace types {
 		    return a;
 		}
 	}
-	
-	
 	export class WebhookSelectorExpression {
 	    key: string;
 	    operator: string;
@@ -5294,7 +5418,26 @@ export namespace types {
 	    }
 	}
 	
+	export class PolicyRule {
+	    apiGroups?: string[];
+	    resources?: string[];
+	    resourceNames?: string[];
+	    verbs: string[];
+	    nonResourceURLs?: string[];
 	
+	    static createFrom(source: any = {}) {
+	        return new PolicyRule(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.apiGroups = source["apiGroups"];
+	        this.resources = source["resources"];
+	        this.resourceNames = source["resourceNames"];
+	        this.verbs = source["verbs"];
+	        this.nonResourceURLs = source["nonResourceURLs"];
+	    }
+	}
 	
 	export class ReferenceGrantFromInfo {
 	    group: string;
@@ -5381,99 +5524,22 @@ export namespace types {
 	        this.age = source["age"];
 	    }
 	}
-	export class RoleBindingDetails {
+	export class RoleRef {
+	    apiGroup: string;
 	    kind: string;
 	    name: string;
-	    namespace: string;
-	    age: string;
-	    details: string;
-	    roleRef: RoleRef;
-	    subjects: Subject[];
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
-	        return new RoleBindingDetails(source);
+	        return new RoleRef(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.apiGroup = source["apiGroup"];
 	        this.kind = source["kind"];
 	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.age = source["age"];
-	        this.details = source["details"];
-	        this.roleRef = this.convertValues(source["roleRef"], RoleRef);
-	        this.subjects = this.convertValues(source["subjects"], Subject);
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
 	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
-	export class RoleDetails {
-	    kind: string;
-	    name: string;
-	    namespace: string;
-	    age: string;
-	    details: string;
-	    rules: PolicyRule[];
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    usedByRoleBindings?: resourcemodel.ResourceRef[];
-	
-	    static createFrom(source: any = {}) {
-	        return new RoleDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.age = source["age"];
-	        this.details = source["details"];
-	        this.rules = this.convertValues(source["rules"], PolicyRule);
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.usedByRoleBindings = this.convertValues(source["usedByRoleBindings"], resourcemodel.ResourceRef);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	
 	export class RouteRuleDetails {
 	    matches?: string[];
 	    backendRefs?: RefOrDisplay[];
@@ -5561,63 +5627,6 @@ export namespace types {
 		}
 	}
 	
-	
-	
-	
-	export class ServiceAccountDetails {
-	    kind: string;
-	    name: string;
-	    namespace: string;
-	    age: string;
-	    details: string;
-	    secrets?: resourcemodel.ResourceRef[];
-	    imagePullSecrets?: resourcemodel.ResourceRef[];
-	    automountServiceAccountToken?: boolean;
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    usedByPods?: resourcemodel.ResourceRef[];
-	    roleBindings?: resourcemodel.ResourceRef[];
-	    clusterRoleBindings?: resourcemodel.ResourceRef[];
-	
-	    static createFrom(source: any = {}) {
-	        return new ServiceAccountDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.age = source["age"];
-	        this.details = source["details"];
-	        this.secrets = this.convertValues(source["secrets"], resourcemodel.ResourceRef);
-	        this.imagePullSecrets = this.convertValues(source["imagePullSecrets"], resourcemodel.ResourceRef);
-	        this.automountServiceAccountToken = source["automountServiceAccountToken"];
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.usedByPods = this.convertValues(source["usedByPods"], resourcemodel.ResourceRef);
-	        this.roleBindings = this.convertValues(source["roleBindings"], resourcemodel.ResourceRef);
-	        this.clusterRoleBindings = this.convertValues(source["clusterRoleBindings"], resourcemodel.ResourceRef);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class ShellSession {
 	    sessionId: string;
 	    namespace: string;
@@ -5702,7 +5711,24 @@ export namespace types {
 	        this.command = source["command"];
 	    }
 	}
+	export class Subject {
+	    kind: string;
+	    apiGroup?: string;
+	    name: string;
+	    namespace?: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new Subject(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.apiGroup = source["apiGroup"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	    }
+	}
 	
 	export class ThemeClusterPatternValidationResult {
 	    valid: boolean;

@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 )
 
 const (
@@ -164,16 +165,13 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 	}, nil
 }
 
-func describeHPATargetFacts(facts *resourcemodel.HorizontalPodAutoscalerFacts) string {
-	if facts == nil {
-		return ""
-	}
+func describeHPATargetFacts(facts hpapkg.Facts) string {
 	kind, name := resourceLinkKindName(facts.ScaleTarget)
 	return fmt.Sprintf("%s/%s", kind, name)
 }
 
-func hpaMinReplicas(facts *resourcemodel.HorizontalPodAutoscalerFacts) int32 {
-	if facts == nil || facts.MinReplicas == nil {
+func hpaMinReplicas(facts hpapkg.Facts) int32 {
+	if facts.MinReplicas == nil {
 		return 1
 	}
 	return *facts.MinReplicas

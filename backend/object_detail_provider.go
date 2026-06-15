@@ -18,7 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcecontract"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
-	"github.com/luxury-yacht/app/backend/resources/autoscaling"
+	"github.com/luxury-yacht/app/backend/resources/hpa"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	"github.com/luxury-yacht/app/backend/resources/helm"
@@ -37,12 +37,16 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/pods"
+	"github.com/luxury-yacht/app/backend/resources/clusterrole"
+	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
-	"github.com/luxury-yacht/app/backend/resources/rbac"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	"github.com/luxury-yacht/app/backend/resources/role"
+	"github.com/luxury-yacht/app/backend/resources/rolebinding"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	"github.com/luxury-yacht/app/backend/resources/service"
+	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -214,31 +218,31 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"serviceaccount": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(deps).ServiceAccount(namespace, name)
+			detail, err := serviceaccount.NewService(deps).ServiceAccount(namespace, name)
 			return detail, "", err
 		},
 	},
 	"role": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(deps).Role(namespace, name)
+			detail, err := role.NewService(deps).Role(namespace, name)
 			return detail, "", err
 		},
 	},
 	"rolebinding": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(deps).RoleBinding(namespace, name)
+			detail, err := rolebinding.NewService(deps).RoleBinding(namespace, name)
 			return detail, "", err
 		},
 	},
 	"clusterrole": {
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(deps).ClusterRole(name)
+			detail, err := clusterrole.NewService(deps).ClusterRole(name)
 			return detail, "", err
 		},
 	},
 	"clusterrolebinding": {
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(deps).ClusterRoleBinding(name)
+			detail, err := clusterrolebinding.NewService(deps).ClusterRoleBinding(name)
 			return detail, "", err
 		},
 	},
@@ -256,7 +260,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"horizontalpodautoscaler": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := autoscaling.NewService(deps).HorizontalPodAutoscaler(namespace, name)
+			detail, err := hpa.NewService(deps).HorizontalPodAutoscaler(namespace, name)
 			return detail, "", err
 		},
 	},

@@ -1,11 +1,14 @@
 package backend
 
 import (
+	"github.com/luxury-yacht/app/backend/resources/clusterrole"
+	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/hpa"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	"github.com/luxury-yacht/app/backend/resources/limitrange"
@@ -16,8 +19,11 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	"github.com/luxury-yacht/app/backend/resources/role"
+	"github.com/luxury-yacht/app/backend/resources/rolebinding"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	"github.com/luxury-yacht/app/backend/resources/service"
+	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"github.com/luxury-yacht/app/backend/resources/types"
@@ -109,15 +115,15 @@ type (
 	NetworkPolicyPeer                     = networkpolicy.NetworkPolicyPeer
 	IPBlock                               = networkpolicy.IPBlock
 	NetworkPolicyPort                     = networkpolicy.NetworkPolicyPort
-	RoleDetails                           = types.RoleDetails
+	RoleDetails                           = role.RoleDetails
 	PolicyRule                            = types.PolicyRule
-	RoleBindingDetails                    = types.RoleBindingDetails
+	RoleBindingDetails                    = rolebinding.RoleBindingDetails
 	RoleRef                               = types.RoleRef
 	Subject                               = types.Subject
-	ClusterRoleDetails                    = types.ClusterRoleDetails
-	AggregationRule                       = types.AggregationRule
-	ClusterRoleBindingDetails             = types.ClusterRoleBindingDetails
-	ServiceAccountDetails                 = types.ServiceAccountDetails
+	ClusterRoleDetails                    = clusterrole.ClusterRoleDetails
+	AggregationRule                       = clusterrole.AggregationRule
+	ClusterRoleBindingDetails             = clusterrolebinding.ClusterRoleBindingDetails
+	ServiceAccountDetails                 = serviceaccount.ServiceAccountDetails
 	PersistentVolumeDetails               = persistentvolume.PersistentVolumeDetails
 	ClaimReference                        = persistentvolume.ClaimReference
 	VolumeSourceInfo                      = persistentvolume.VolumeSourceInfo
@@ -141,12 +147,12 @@ type (
 	ScopeSelector                         = resourcequota.ScopeSelector
 	ScopeSelectorRequirement              = resourcequota.ScopeSelectorRequirement
 	PodDisruptionBudgetDetails            = poddisruptionbudget.PodDisruptionBudgetDetails
-	HorizontalPodAutoscalerDetails        = types.HorizontalPodAutoscalerDetails
-	ScaleTargetReference                  = types.ScaleTargetReference
-	MetricSpec                            = types.MetricSpec
-	MetricStatus                          = types.MetricStatus
-	ScalingBehavior                       = types.ScalingBehavior
-	ScalingRules                          = types.ScalingRules
+	HorizontalPodAutoscalerDetails        = hpa.HorizontalPodAutoscalerDetails
+	ScaleTargetReference                  = hpa.ScaleTargetReference
+	MetricSpec                            = hpa.MetricSpec
+	MetricStatus                          = hpa.MetricStatus
+	ScalingBehavior                       = hpa.ScalingBehavior
+	ScalingRules                          = hpa.ScalingRules
 	MutatingWebhookConfigurationDetails   = types.MutatingWebhookConfigurationDetails
 	ValidatingWebhookConfigurationDetails = types.ValidatingWebhookConfigurationDetails
 	WebhookDetails                        = types.WebhookDetails

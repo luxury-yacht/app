@@ -10,7 +10,7 @@ import (
 
 const rbacAPIGroup = "rbac.authorization.k8s.io"
 
-func rbacResourceModel(
+func RBACResourceModel(
 	clusterID, kind, resource string,
 	scope ResourceScope,
 	meta metav1.ObjectMeta,
@@ -20,7 +20,7 @@ func rbacResourceModel(
 	return NetworkResourceModel(clusterID, rbacAPIGroup, "v1", kind, resource, scope, meta, status, facts)
 }
 
-func serviceAccountResourceModel(
+func ServiceAccountResourceModel(
 	clusterID string,
 	meta metav1.ObjectMeta,
 	status ResourceStatusPresentation,
@@ -29,7 +29,7 @@ func serviceAccountResourceModel(
 	return NetworkResourceModel(clusterID, "", "v1", "ServiceAccount", "serviceaccounts", ResourceScopeNamespaced, meta, status, facts)
 }
 
-func copyPolicyRuleFacts(rules []rbacv1.PolicyRule) []PolicyRuleFacts {
+func CopyPolicyRuleFacts(rules []rbacv1.PolicyRule) []PolicyRuleFacts {
 	if len(rules) == 0 {
 		return nil
 	}
@@ -46,7 +46,7 @@ func copyPolicyRuleFacts(rules []rbacv1.PolicyRule) []PolicyRuleFacts {
 	return facts
 }
 
-func rbacRuleCountStatus(meta metav1.ObjectMeta, ruleCount int, aggregated bool) ResourceStatusPresentation {
+func RBACRuleCountStatus(meta metav1.ObjectMeta, ruleCount int, aggregated bool) ResourceStatusPresentation {
 	state := strconv.Itoa(ruleCount)
 	label := fmt.Sprintf("Rules: %d", ruleCount)
 	if aggregated {
@@ -64,7 +64,7 @@ func rbacRuleCountStatus(meta metav1.ObjectMeta, ruleCount int, aggregated bool)
 	return NetworkSourceStatus(label, state, "", "ready", signals, lifecycle)
 }
 
-func rbacBindingStatus(meta metav1.ObjectMeta, roleName string, subjectCount int) ResourceStatusPresentation {
+func RBACBindingStatus(meta metav1.ObjectMeta, roleName string, subjectCount int) ResourceStatusPresentation {
 	state := strconv.Itoa(subjectCount)
 	if roleName == "" {
 		roleName = "-"
@@ -81,7 +81,7 @@ func rbacBindingStatus(meta metav1.ObjectMeta, roleName string, subjectCount int
 	return NetworkSourceStatus(label, state, "", "ready", signals, lifecycle)
 }
 
-func serviceAccountStatus(meta metav1.ObjectMeta, secretCount int) ResourceStatusPresentation {
+func ServiceAccountStatus(meta metav1.ObjectMeta, secretCount int) ResourceStatusPresentation {
 	state := strconv.Itoa(secretCount)
 	label := fmt.Sprintf("Secrets: %d", secretCount)
 	signals := []ResourceStatusSignal{{
@@ -104,7 +104,7 @@ func rbacClusterRoleBindingLink(clusterID string, binding rbacv1.ClusterRoleBind
 	return ClusterResourceLink(clusterID, rbacAPIGroup, "v1", "ClusterRoleBinding", "clusterrolebindings", binding.Name, string(binding.UID))
 }
 
-func rbacRoleRefLink(clusterID, namespace string, ref rbacv1.RoleRef) ResourceLink {
+func RBACRoleRefLink(clusterID, namespace string, ref rbacv1.RoleRef) ResourceLink {
 	if ref.APIGroup != rbacAPIGroup {
 		return displayResourceLink(clusterID, ref.APIGroup, "", ref.Kind, "", namespace, ref.Name)
 	}
@@ -151,7 +151,7 @@ func rbacSubjectFacts(clusterID, fallbackNamespace string, subject rbacv1.Subjec
 	return facts
 }
 
-func rbacSubjectFactsList(clusterID, fallbackNamespace string, subjects []rbacv1.Subject) []SubjectFacts {
+func RBACSubjectFactsList(clusterID, fallbackNamespace string, subjects []rbacv1.Subject) []SubjectFacts {
 	if len(subjects) == 0 {
 		return nil
 	}
@@ -162,6 +162,6 @@ func rbacSubjectFactsList(clusterID, fallbackNamespace string, subjects []rbacv1
 	return facts
 }
 
-func secretLink(clusterID, namespace, name string) ResourceLink {
+func SecretLink(clusterID, namespace, name string) ResourceLink {
 	return namespacedResourceLink(clusterID, "", "v1", "Secret", "secrets", namespace, name, "")
 }

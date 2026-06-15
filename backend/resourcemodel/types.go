@@ -154,12 +154,6 @@ type ResourceFacts struct {
 	ListenerSet                    *ListenerSetFacts                    `json:"listenerSet,omitempty"`
 	ReferenceGrant                 *ReferenceGrantFacts                 `json:"referenceGrant,omitempty"`
 	BackendTLSPolicy               *BackendTLSPolicyFacts               `json:"backendTLSPolicy,omitempty"`
-	Role                           *RoleFacts                           `json:"role,omitempty"`
-	ClusterRole                    *ClusterRoleFacts                    `json:"clusterRole,omitempty"`
-	RoleBinding                    *RoleBindingFacts                    `json:"roleBinding,omitempty"`
-	ClusterRoleBinding             *ClusterRoleBindingFacts             `json:"clusterRoleBinding,omitempty"`
-	ServiceAccount                 *ServiceAccountFacts                 `json:"serviceAccount,omitempty"`
-	HorizontalPodAutoscaler        *HorizontalPodAutoscalerFacts        `json:"horizontalPodAutoscaler,omitempty"`
 	CustomResourceDefinition       *CustomResourceDefinitionFacts       `json:"customResourceDefinition,omitempty"`
 	MutatingWebhookConfiguration   *MutatingWebhookConfigurationFacts   `json:"mutatingWebhookConfiguration,omitempty"`
 	ValidatingWebhookConfiguration *ValidatingWebhookConfigurationFacts `json:"validatingWebhookConfiguration,omitempty"`
@@ -335,31 +329,10 @@ type PolicyRuleFacts struct {
 	NonResourceURLs []string `json:"nonResourceURLs,omitempty"`
 }
 
-type RoleFacts struct {
-	Rules              []PolicyRuleFacts `json:"rules,omitempty"`
-	UsedByRoleBindings []ResourceLink    `json:"usedByRoleBindings,omitempty"`
-}
 
-type ClusterRoleFacts struct {
-	Rules               []PolicyRuleFacts     `json:"rules,omitempty"`
-	AggregationRule     *AggregationRuleFacts `json:"aggregationRule,omitempty"`
-	ClusterRoleBindings []ResourceLink        `json:"clusterRoleBindings,omitempty"`
-	RoleBindings        []ResourceLink        `json:"roleBindings,omitempty"`
-}
 
-type AggregationRuleFacts struct {
-	ClusterRoleSelectors []map[string]string `json:"clusterRoleSelectors,omitempty"`
-}
 
-type RoleBindingFacts struct {
-	RoleRef  ResourceLink   `json:"roleRef"`
-	Subjects []SubjectFacts `json:"subjects,omitempty"`
-}
 
-type ClusterRoleBindingFacts struct {
-	RoleRef  ResourceLink   `json:"roleRef"`
-	Subjects []SubjectFacts `json:"subjects,omitempty"`
-}
 
 type SubjectFacts struct {
 	Kind      string        `json:"kind"`
@@ -369,48 +342,11 @@ type SubjectFacts struct {
 	Link      *ResourceLink `json:"link,omitempty"`
 }
 
-type ServiceAccountFacts struct {
-	Secrets             []ResourceLink `json:"secrets,omitempty"`
-	ImagePullSecrets    []ResourceLink `json:"imagePullSecrets,omitempty"`
-	AutomountToken      *bool          `json:"automountToken,omitempty"`
-	UsedByPods          []ResourceLink `json:"usedByPods,omitempty"`
-	RoleBindings        []ResourceLink `json:"roleBindings,omitempty"`
-	ClusterRoleBindings []ResourceLink `json:"clusterRoleBindings,omitempty"`
-}
 
-type HorizontalPodAutoscalerFacts struct {
-	ScaleTarget     ResourceLink          `json:"scaleTarget"`
-	MinReplicas     *int32                `json:"minReplicas,omitempty"`
-	MaxReplicas     int32                 `json:"maxReplicas"`
-	CurrentReplicas int32                 `json:"currentReplicas"`
-	DesiredReplicas int32                 `json:"desiredReplicas"`
-	Metrics         []MetricFacts         `json:"metrics,omitempty"`
-	CurrentMetrics  []MetricStatusFacts   `json:"currentMetrics,omitempty"`
-	Behavior        *ScalingBehaviorFacts `json:"behavior,omitempty"`
-	Conditions      []ConditionFacts      `json:"conditions,omitempty"`
-	LastScaleTime   *metav1.Time          `json:"lastScaleTime,omitempty"`
-}
 
-type MetricFacts struct {
-	Kind   string            `json:"kind"`
-	Target map[string]string `json:"target,omitempty"`
-}
 
-type MetricStatusFacts struct {
-	Kind    string            `json:"kind"`
-	Current map[string]string `json:"current,omitempty"`
-}
 
-type ScalingBehaviorFacts struct {
-	ScaleUp   *ScalingRulesFacts `json:"scaleUp,omitempty"`
-	ScaleDown *ScalingRulesFacts `json:"scaleDown,omitempty"`
-}
 
-type ScalingRulesFacts struct {
-	StabilizationWindowSeconds *int32   `json:"stabilizationWindowSeconds,omitempty"`
-	SelectPolicy               string   `json:"selectPolicy,omitempty"`
-	Policies                   []string `json:"policies,omitempty"`
-}
 
 // PodDisruptionBudgetFacts moved to resources/poddisruptionbudget (type
 // poddisruptionbudget.Facts), removed from the ResourceFacts union to break the

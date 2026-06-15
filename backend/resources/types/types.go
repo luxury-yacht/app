@@ -783,17 +783,6 @@ type BackendTLSPolicyDetails struct {
 // NetworkPolicyDetails + NetworkPolicyRule/Peer/Port + IPBlock moved to
 // resources/networkpolicy (co-located with the NetworkPolicy model + builder).
 
-type RoleDetails struct {
-	Kind               string            `json:"kind"`
-	Name               string            `json:"name"`
-	Namespace          string            `json:"namespace"`
-	Age                string            `json:"age"`
-	Details            string            `json:"details"`
-	Rules              []PolicyRule      `json:"rules"`
-	Labels             map[string]string `json:"labels,omitempty"`
-	Annotations        map[string]string `json:"annotations,omitempty"`
-	UsedByRoleBindings []ObjectRef       `json:"usedByRoleBindings,omitempty"`
-}
 
 type PolicyRule struct {
 	APIGroups       []string `json:"apiGroups,omitempty"`
@@ -803,17 +792,6 @@ type PolicyRule struct {
 	NonResourceURLs []string `json:"nonResourceURLs,omitempty"`
 }
 
-type RoleBindingDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	RoleRef     RoleRef           `json:"roleRef"`
-	Subjects    []Subject         `json:"subjects"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
 
 type RoleRef struct {
 	APIGroup string `json:"apiGroup"`
@@ -828,49 +806,9 @@ type Subject struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
-type ClusterRoleDetails struct {
-	Kind                string            `json:"kind"`
-	Name                string            `json:"name"`
-	Age                 string            `json:"age"`
-	Details             string            `json:"details"`
-	Rules               []PolicyRule      `json:"rules"`
-	AggregationRule     *AggregationRule  `json:"aggregationRule,omitempty"`
-	Labels              map[string]string `json:"labels,omitempty"`
-	Annotations         map[string]string `json:"annotations,omitempty"`
-	ClusterRoleBindings []ObjectRef       `json:"clusterRoleBindings,omitempty"`
-	RoleBindings        []ObjectRef       `json:"roleBindings,omitempty"`
-}
 
-type AggregationRule struct {
-	ClusterRoleSelectors []map[string]string `json:"clusterRoleSelectors,omitempty"`
-}
 
-type ClusterRoleBindingDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	RoleRef     RoleRef           `json:"roleRef"`
-	Subjects    []Subject         `json:"subjects"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
 
-type ServiceAccountDetails struct {
-	Kind                         string            `json:"kind"`
-	Name                         string            `json:"name"`
-	Namespace                    string            `json:"namespace"`
-	Age                          string            `json:"age"`
-	Details                      string            `json:"details"`
-	Secrets                      []ObjectRef       `json:"secrets,omitempty"`
-	ImagePullSecrets             []ObjectRef       `json:"imagePullSecrets,omitempty"`
-	AutomountServiceAccountToken *bool             `json:"automountServiceAccountToken,omitempty"`
-	Labels                       map[string]string `json:"labels,omitempty"`
-	Annotations                  map[string]string `json:"annotations,omitempty"`
-	UsedByPods                   []ObjectRef       `json:"usedByPods,omitempty"`
-	RoleBindings                 []ObjectRef       `json:"roleBindings,omitempty"`
-	ClusterRoleBindings          []ObjectRef       `json:"clusterRoleBindings,omitempty"`
-}
 
 type PodMetricsSummary struct {
 	Pods       int    `json:"pods"`

@@ -1,9 +1,12 @@
 import {
+  clusterrole,
+  clusterrolebinding,
   configmap,
   cronjob,
   daemonset,
   deployment,
   endpointslice,
+  hpa,
   ingress,
   ingressclass,
   limitrange,
@@ -14,8 +17,11 @@ import {
   poddisruptionbudget,
   replicaset,
   resourcequota,
+  role,
+  rolebinding,
   secret,
   service,
+  serviceaccount,
   statefulset,
   storageclass,
   types,
@@ -47,12 +53,12 @@ export interface DetailSlots {
   pvcDetails: persistentvolumeclaim.PersistentVolumeClaimDetails | null;
   pvDetails: persistentvolume.PersistentVolumeDetails | null;
   storageClassDetails: storageclass.StorageClassDetails | null;
-  serviceAccountDetails: types.ServiceAccountDetails | null;
-  roleDetails: types.RoleDetails | null;
-  roleBindingDetails: types.RoleBindingDetails | null;
-  clusterRoleDetails: types.ClusterRoleDetails | null;
-  clusterRoleBindingDetails: types.ClusterRoleBindingDetails | null;
-  hpaDetails: types.HorizontalPodAutoscalerDetails | null;
+  serviceAccountDetails: serviceaccount.ServiceAccountDetails | null;
+  roleDetails: role.RoleDetails | null;
+  roleBindingDetails: rolebinding.RoleBindingDetails | null;
+  clusterRoleDetails: clusterrole.ClusterRoleDetails | null;
+  clusterRoleBindingDetails: clusterrolebinding.ClusterRoleBindingDetails | null;
+  hpaDetails: hpa.HorizontalPodAutoscalerDetails | null;
   pdbDetails: poddisruptionbudget.PodDisruptionBudgetDetails | null;
   resourceQuotaDetails: resourcequota.ResourceQuotaDetails | null;
   limitRangeDetails: limitrange.LimitRangeDetails | null;
@@ -306,29 +312,29 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'serviceaccount':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        serviceAccountDetails: detailPayload as types.ServiceAccountDetails,
+        serviceAccountDetails: detailPayload as serviceaccount.ServiceAccountDetails,
       };
     case 'role':
-      return { ...EMPTY_DETAIL_SLOTS, roleDetails: detailPayload as types.RoleDetails };
+      return { ...EMPTY_DETAIL_SLOTS, roleDetails: detailPayload as role.RoleDetails };
     case 'rolebinding':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        roleBindingDetails: detailPayload as types.RoleBindingDetails,
+        roleBindingDetails: detailPayload as rolebinding.RoleBindingDetails,
       };
     case 'clusterrole':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        clusterRoleDetails: detailPayload as types.ClusterRoleDetails,
+        clusterRoleDetails: detailPayload as clusterrole.ClusterRoleDetails,
       };
     case 'clusterrolebinding':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        clusterRoleBindingDetails: detailPayload as types.ClusterRoleBindingDetails,
+        clusterRoleBindingDetails: detailPayload as clusterrolebinding.ClusterRoleBindingDetails,
       };
     case 'horizontalpodautoscaler':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        hpaDetails: detailPayload as types.HorizontalPodAutoscalerDetails,
+        hpaDetails: detailPayload as hpa.HorizontalPodAutoscalerDetails,
       };
     case 'poddisruptionbudget':
       return {

@@ -16,7 +16,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const namespaceRBACDomainName = "namespace-rbac"
@@ -235,30 +234,8 @@ func buildNamespaceRBACSnapshot(
 	}, nil
 }
 
-func describeRoleFacts(facts *resourcemodel.RoleFacts) string {
-	if facts == nil {
-		return ""
-	}
-	return fmt.Sprintf("Rules: %d", len(facts.Rules))
-}
 
-func describeRoleBindingFacts(facts *resourcemodel.RoleBindingFacts) string {
-	if facts == nil {
-		return ""
-	}
-	role := resourceLinkName(facts.RoleRef)
-	if role == "" {
-		role = "-"
-	}
-	return fmt.Sprintf("Role: %s, Subjects: %d", role, len(facts.Subjects))
-}
 
-func describeServiceAccountFacts(facts *resourcemodel.ServiceAccountFacts) string {
-	if facts == nil {
-		return ""
-	}
-	return fmt.Sprintf("Secrets: %d", len(facts.Secrets))
-}
 
 func sortRBACSummaries(resources []RBACSummary) {
 	sort.SliceStable(resources, func(i, j int) bool {

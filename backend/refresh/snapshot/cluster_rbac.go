@@ -14,7 +14,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const clusterRBACDomainName = "cluster-rbac"
@@ -178,24 +177,4 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 	}, nil
 }
 
-func describeClusterRoleFacts(facts *resourcemodel.ClusterRoleFacts) string {
-	if facts == nil {
-		return ""
-	}
-	details := fmt.Sprintf("Rules: %d", len(facts.Rules))
-	if facts.AggregationRule != nil {
-		details += " (aggregated)"
-	}
-	return details
-}
 
-func describeClusterRoleBindingFacts(facts *resourcemodel.ClusterRoleBindingFacts) string {
-	if facts == nil {
-		return ""
-	}
-	role := resourceLinkName(facts.RoleRef)
-	if role == "" {
-		role = "-"
-	}
-	return fmt.Sprintf("Role: %s, Subjects: %d", role, len(facts.Subjects))
-}

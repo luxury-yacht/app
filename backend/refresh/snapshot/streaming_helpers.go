@@ -24,8 +24,14 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
+	clusterrolepkg "github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	rolepkg "github.com/luxury-yacht/app/backend/resources/role"
+	"github.com/luxury-yacht/app/backend/resources/rolebinding"
+	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
@@ -152,8 +158,7 @@ func BuildRoleSummary(meta ClusterMeta, role *rbacv1.Role) RBACSummary {
 	if role == nil {
 		return RBACSummary{ClusterMeta: meta, Kind: "Role"}
 	}
-	model := resourcemodel.BuildRoleResourceModel(meta.ClusterID, role, nil)
-	return newRBACSummary(meta, role, "Role", describeRoleFacts(model.Facts.Role))
+	return newRBACSummary(meta, role, "Role", rolepkg.DescribeSummary(rolepkg.BuildFacts(role, nil, resourcemodel.ResourceModelBuildOptions{})))
 }
 
 // BuildRoleBindingSummary builds a role binding row payload that matches snapshot formatting.
@@ -161,8 +166,7 @@ func BuildRoleBindingSummary(meta ClusterMeta, binding *rbacv1.RoleBinding) RBAC
 	if binding == nil {
 		return RBACSummary{ClusterMeta: meta, Kind: "RoleBinding"}
 	}
-	model := resourcemodel.BuildRoleBindingResourceModel(meta.ClusterID, binding)
-	return newRBACSummary(meta, binding, "RoleBinding", describeRoleBindingFacts(model.Facts.RoleBinding))
+	return newRBACSummary(meta, binding, "RoleBinding", rolebinding.DescribeSummary(rolebinding.BuildFacts(meta.ClusterID, binding)))
 }
 
 // BuildServiceAccountSummary builds a service account row payload that matches snapshot formatting.
@@ -170,8 +174,7 @@ func BuildServiceAccountSummary(meta ClusterMeta, sa *corev1.ServiceAccount) RBA
 	if sa == nil {
 		return RBACSummary{ClusterMeta: meta, Kind: "ServiceAccount"}
 	}
-	model := resourcemodel.BuildServiceAccountResourceModel(meta.ClusterID, sa, nil)
-	return newRBACSummary(meta, sa, "ServiceAccount", describeServiceAccountFacts(model.Facts.ServiceAccount))
+	return newRBACSummary(meta, sa, "ServiceAccount", serviceaccount.DescribeSummary(serviceaccount.BuildFacts(meta.ClusterID, sa, nil, resourcemodel.ResourceModelBuildOptions{})))
 }
 
 // BuildServiceNetworkSummary builds a service row payload that matches snapshot formatting.
@@ -326,8 +329,7 @@ func BuildClusterRoleSummary(meta ClusterMeta, role *rbacv1.ClusterRole) Cluster
 	if role == nil {
 		return ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRole"}
 	}
-	model := resourcemodel.BuildClusterRoleResourceModel(meta.ClusterID, role, nil)
-	return newClusterRBACEntry(meta, role, "ClusterRole", describeClusterRoleFacts(model.Facts.ClusterRole), "CR")
+	return newClusterRBACEntry(meta, role, "ClusterRole", clusterrolepkg.DescribeSummary(clusterrolepkg.BuildFacts(role, nil, resourcemodel.ResourceModelBuildOptions{})), "CR")
 }
 
 // BuildClusterRoleBindingSummary builds a cluster role binding row payload that matches snapshot formatting.
@@ -335,8 +337,7 @@ func BuildClusterRoleBindingSummary(meta ClusterMeta, binding *rbacv1.ClusterRol
 	if binding == nil {
 		return ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRoleBinding"}
 	}
-	model := resourcemodel.BuildClusterRoleBindingResourceModel(meta.ClusterID, binding)
-	return newClusterRBACEntry(meta, binding, "ClusterRoleBinding", describeClusterRoleBindingFacts(model.Facts.ClusterRoleBinding), "CRB")
+	return newClusterRBACEntry(meta, binding, "ClusterRoleBinding", clusterrolebinding.DescribeSummary(clusterrolebinding.BuildFacts(meta.ClusterID, binding)), "CRB")
 }
 
 // BuildClusterStorageSummary builds a persistent volume row payload that matches snapshot formatting.
@@ -575,8 +576,7 @@ func BuildHPASummary(meta ClusterMeta, hpa *autoscalingv1.HorizontalPodAutoscale
 	if hpa == nil {
 		return AutoscalingSummary{ClusterMeta: meta, Kind: "HorizontalPodAutoscaler"}
 	}
-	model := resourcemodel.BuildHorizontalPodAutoscalerV1ResourceModel(meta.ClusterID, hpa)
-	facts := model.Facts.HorizontalPodAutoscaler
+	facts := hpapkg.BuildV1Facts(meta.ClusterID, hpa)
 	return AutoscalingSummary{
 		ClusterMeta:      meta,
 		Kind:             "HorizontalPodAutoscaler",

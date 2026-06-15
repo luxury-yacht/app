@@ -4,13 +4,15 @@ package backend
 
 import (
 	"github.com/luxury-yacht/app/backend/resources/admission"
-	"github.com/luxury-yacht/app/backend/resources/autoscaling"
+	"github.com/luxury-yacht/app/backend/resources/clusterrole"
+	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
+	"github.com/luxury-yacht/app/backend/resources/hpa"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	"github.com/luxury-yacht/app/backend/resources/job"
@@ -21,11 +23,13 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
-	"github.com/luxury-yacht/app/backend/resources/rbac"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	"github.com/luxury-yacht/app/backend/resources/role"
+	"github.com/luxury-yacht/app/backend/resources/rolebinding"
 	"github.com/luxury-yacht/app/backend/resources/secret"
 	"github.com/luxury-yacht/app/backend/resources/service"
+	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
 )
@@ -46,7 +50,7 @@ func (a *App) GetClusterRole(clusterID, name string) (*ClusterRoleDetails, error
 		return nil, err
 	}
 	return FetchClusterResource(a, deps, selectionKey, "ClusterRole", name, func() (*ClusterRoleDetails, error) {
-		return rbac.NewService(deps).ClusterRole(name)
+		return clusterrole.NewService(deps).ClusterRole(name)
 	})
 }
 
@@ -56,7 +60,7 @@ func (a *App) GetClusterRoleBinding(clusterID, name string) (*ClusterRoleBinding
 		return nil, err
 	}
 	return FetchClusterResource(a, deps, selectionKey, "ClusterRoleBinding", name, func() (*ClusterRoleBindingDetails, error) {
-		return rbac.NewService(deps).ClusterRoleBinding(name)
+		return clusterrolebinding.NewService(deps).ClusterRoleBinding(name)
 	})
 }
 
@@ -156,7 +160,7 @@ func (a *App) GetHorizontalPodAutoscaler(clusterID, namespace, name string) (*Ho
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "HPA", namespace, name, func() (*HorizontalPodAutoscalerDetails, error) {
-		return autoscaling.NewService(deps).HorizontalPodAutoscaler(namespace, name)
+		return hpa.NewService(deps).HorizontalPodAutoscaler(namespace, name)
 	})
 }
 
@@ -316,7 +320,7 @@ func (a *App) GetRole(clusterID, namespace, name string) (*RoleDetails, error) {
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "Role", namespace, name, func() (*RoleDetails, error) {
-		return rbac.NewService(deps).Role(namespace, name)
+		return role.NewService(deps).Role(namespace, name)
 	})
 }
 
@@ -326,7 +330,7 @@ func (a *App) GetRoleBinding(clusterID, namespace, name string) (*RoleBindingDet
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "RoleBinding", namespace, name, func() (*RoleBindingDetails, error) {
-		return rbac.NewService(deps).RoleBinding(namespace, name)
+		return rolebinding.NewService(deps).RoleBinding(namespace, name)
 	})
 }
 
@@ -356,7 +360,7 @@ func (a *App) GetServiceAccount(clusterID, namespace, name string) (*ServiceAcco
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "ServiceAccount", namespace, name, func() (*ServiceAccountDetails, error) {
-		return rbac.NewService(deps).ServiceAccount(namespace, name)
+		return serviceaccount.NewService(deps).ServiceAccount(namespace, name)
 	})
 }
 

@@ -4,12 +4,15 @@ import {backend} from '../models';
 import {context} from '../models';
 import {types} from '../models';
 import {objectcatalog} from '../models';
+import {clusterrole} from '../models';
+import {clusterrolebinding} from '../models';
 import {configmap} from '../models';
 import {cronjob} from '../models';
 import {daemonset} from '../models';
 import {deployment} from '../models';
 import {endpointslice} from '../models';
 import {json} from '../models';
+import {hpa} from '../models';
 import {ingress} from '../models';
 import {ingressclass} from '../models';
 import {job} from '../models';
@@ -20,8 +23,11 @@ import {persistentvolumeclaim} from '../models';
 import {poddisruptionbudget} from '../models';
 import {replicaset} from '../models';
 import {resourcequota} from '../models';
+import {role} from '../models';
+import {rolebinding} from '../models';
 import {secret} from '../models';
 import {service} from '../models';
+import {serviceaccount} from '../models';
 import {statefulset} from '../models';
 import {storageclass} from '../models';
 import {snapshot} from '../models';
@@ -95,9 +101,9 @@ export function GetClusterAuthState(arg1:string):Promise<string|string>;
 
 export function GetClusterPortForwardCount(arg1:string):Promise<number>;
 
-export function GetClusterRole(arg1:string,arg2:string):Promise<types.ClusterRoleDetails>;
+export function GetClusterRole(arg1:string,arg2:string):Promise<clusterrole.ClusterRoleDetails>;
 
-export function GetClusterRoleBinding(arg1:string,arg2:string):Promise<types.ClusterRoleBindingDetails>;
+export function GetClusterRoleBinding(arg1:string,arg2:string):Promise<clusterrolebinding.ClusterRoleBindingDetails>;
 
 export function GetClusterShellSessionCount(arg1:string):Promise<number>;
 
@@ -135,7 +141,7 @@ export function GetHelmReleaseDetails(arg1:string,arg2:string,arg3:string):Promi
 
 export function GetHelmValues(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>>;
 
-export function GetHorizontalPodAutoscaler(arg1:string,arg2:string,arg3:string):Promise<types.HorizontalPodAutoscalerDetails>;
+export function GetHorizontalPodAutoscaler(arg1:string,arg2:string,arg3:string):Promise<hpa.HorizontalPodAutoscalerDetails>;
 
 export function GetIngress(arg1:string,arg2:string,arg3:string):Promise<ingress.IngressDetails>;
 
@@ -183,9 +189,9 @@ export function GetResourceQuota(arg1:string,arg2:string,arg3:string):Promise<re
 
 export function GetRevisionHistory(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<Array<backend.RevisionEntry>>;
 
-export function GetRole(arg1:string,arg2:string,arg3:string):Promise<types.RoleDetails>;
+export function GetRole(arg1:string,arg2:string,arg3:string):Promise<role.RoleDetails>;
 
-export function GetRoleBinding(arg1:string,arg2:string,arg3:string):Promise<types.RoleBindingDetails>;
+export function GetRoleBinding(arg1:string,arg2:string,arg3:string):Promise<rolebinding.RoleBindingDetails>;
 
 export function GetSecret(arg1:string,arg2:string,arg3:string):Promise<secret.SecretDetails>;
 
@@ -195,7 +201,7 @@ export function GetSelectionDiagnostics():Promise<backend.SelectionDiagnostics>;
 
 export function GetService(arg1:string,arg2:string,arg3:string):Promise<service.ServiceDetails>;
 
-export function GetServiceAccount(arg1:string,arg2:string,arg3:string):Promise<types.ServiceAccountDetails>;
+export function GetServiceAccount(arg1:string,arg2:string,arg3:string):Promise<serviceaccount.ServiceAccountDetails>;
 
 export function GetShellSessionBacklog(arg1:string):Promise<string>;
 
