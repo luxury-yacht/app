@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { types } from '@wailsjs/go/models';
+import { statefulset, types } from '@wailsjs/go/models';
 import {
   buildObjectDetailModel,
   createObjectDetailModelFromSlots,
@@ -170,7 +170,7 @@ describe('objectDetailModel', () => {
       createObjectDetailModelFromSlots(
         null,
         'statefulset',
-        emptySlots({ statefulSetDetails: { desiredReplicas: 2 } as types.StatefulSetDetails })
+        emptySlots({ statefulSetDetails: { desiredReplicas: 2 } as statefulset.StatefulSetDetails })
       ).desiredScaleReplicas
     ).toBe(2);
     expect(

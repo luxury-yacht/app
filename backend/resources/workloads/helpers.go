@@ -98,7 +98,7 @@ func aggregatePodAverages(podSlice []corev1.Pod, podMetrics map[string]*metricsv
 	return avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage
 }
 
-func summarizePodMetrics(podSlice []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) (*restypes.PodMetricsSummary, int32) {
+func SummarizePodMetrics(podSlice []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) (*restypes.PodMetricsSummary, int32) {
 	summary := &restypes.PodMetricsSummary{}
 	cpuRequest := resource.NewQuantity(0, resource.DecimalSI)
 	cpuLimit := resource.NewQuantity(0, resource.DecimalSI)
@@ -172,11 +172,11 @@ func parseReadyStatus(value string) (ready, total int) {
 	return readyVal, totalVal
 }
 
-// buildPodSummaries builds pod summaries with a hardcoded owner kind/name/apiVersion
+// BuildPodSummaries builds pod summaries with a hardcoded owner kind/name/apiVersion
 // supplied by the workload caller (Deployment, StatefulSet, DaemonSet, ReplicaSet —
 // all apps/v1). The apiVersion lets the panel open the owner with a fully-qualified
 // GVK; see PodSimpleInfo.OwnerAPIVersion
-func buildPodSummaries(clusterID, ownerKind, ownerName, ownerAPIVersion string, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) []restypes.PodSimpleInfo {
+func BuildPodSummaries(clusterID, ownerKind, ownerName, ownerAPIVersion string, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) []restypes.PodSimpleInfo {
 	podInfos := make([]restypes.PodSimpleInfo, 0, len(podsList))
 	for _, pod := range podsList {
 		podInfos = append(podInfos, pods.SummarizePod(clusterID, pod, podMetrics, ownerKind, ownerName, ownerAPIVersion))
@@ -185,7 +185,7 @@ func buildPodSummaries(clusterID, ownerKind, ownerName, ownerAPIVersion string, 
 	return podInfos
 }
 
-func describeContainers(containers []corev1.Container) []restypes.PodDetailInfoContainer {
+func DescribeContainers(containers []corev1.Container) []restypes.PodDetailInfoContainer {
 	result := make([]restypes.PodDetailInfoContainer, 0, len(containers))
 	for _, container := range containers {
 		detail := restypes.PodDetailInfoContainer{

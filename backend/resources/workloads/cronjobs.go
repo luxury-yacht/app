@@ -86,7 +86,7 @@ func buildCronJobDetails(clusterID string, cronJob *batchv1.CronJob, jobs *batch
 		BackoffLimit:            cronJob.Spec.JobTemplate.Spec.BackoffLimit,
 		ActiveDeadlineSeconds:   cronJob.Spec.JobTemplate.Spec.ActiveDeadlineSeconds,
 		TTLSecondsAfterFinished: cronJob.Spec.JobTemplate.Spec.TTLSecondsAfterFinished,
-		Containers:              describeContainers(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers),
+		Containers:              DescribeContainers(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers),
 	}
 
 	if !details.Suspend {
@@ -253,7 +253,7 @@ func (s *CronJobService) collectCronJobPods(namespace string, cronJob *batchv1.C
 		podInfos = append(podInfos, pods.SummarizePod(s.deps.ClusterID, pod, metrics, ownerKind, ownerName, ownerAPIVersion))
 	}
 
-	podSummary, _ := summarizePodMetrics(collected, metrics)
+	podSummary, _ := SummarizePodMetrics(collected, metrics)
 	return podInfos, podSummary
 }
 

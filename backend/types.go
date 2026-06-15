@@ -1,6 +1,9 @@
 package backend
 
-import "github.com/luxury-yacht/app/backend/resources/types"
+import (
+	"github.com/luxury-yacht/app/backend/resources/statefulset"
+	"github.com/luxury-yacht/app/backend/resources/types"
+)
 
 type (
 	KubeconfigInfo                        = types.KubeconfigInfo
@@ -105,7 +108,8 @@ type (
 	StorageClassDetails                   = types.StorageClassDetails
 	DeploymentDetails                     = types.DeploymentDetails
 	ReplicaSetDetails                     = types.ReplicaSetDetails
-	StatefulSetDetails                    = types.StatefulSetDetails
+	StatefulSetDetails                    = statefulset.StatefulSetDetails
+	VolumeClaimTemplateSummary            = statefulset.VolumeClaimTemplateSummary
 	DaemonSetDetails                      = types.DaemonSetDetails
 	JobDetails                            = types.JobDetails
 	CronJobDetails                        = types.CronJobDetails

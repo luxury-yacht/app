@@ -1049,18 +1049,8 @@ type PodMetricsSummary struct {
 	MemLimit   string `json:"memLimit,omitempty"`
 }
 
-// VolumeClaimTemplateSummary captures the operationally-relevant
-// fields of a StatefulSet `spec.volumeClaimTemplates[]` entry — name,
-// size request, storage class, access modes, volume mode. These are
-// template definitions; the actual per-replica PVC resources live
-// elsewhere and aren't carried here.
-type VolumeClaimTemplateSummary struct {
-	Name           string   `json:"name"`
-	StorageRequest string   `json:"storageRequest,omitempty"` // e.g. "10Gi"
-	StorageClass   string   `json:"storageClass,omitempty"`   // empty = cluster default
-	AccessModes    []string `json:"accessModes,omitempty"`    // e.g. ["ReadWriteOnce"]
-	VolumeMode     string   `json:"volumeMode,omitempty"`     // "Filesystem" (default) or "Block"
-}
+// VolumeClaimTemplateSummary moved to resources/statefulset (co-located with the
+// StatefulSet DTO).
 
 type ReplicaSetSummary struct {
 	Name      string `json:"name"`
@@ -1172,70 +1162,8 @@ type DeploymentDetails struct {
 	RolloutMessage     string `json:"rolloutMessage,omitempty"`
 }
 
-type StatefulSetDetails struct {
-	// Basic information
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	StatusProjection
-	Details         string `json:"details"`
-	Replicas        string `json:"replicas"`
-	Ready           string `json:"ready"`
-	UpToDate        int32  `json:"upToDate,omitempty"`
-	Available       int32  `json:"available"`
-	DesiredReplicas int32  `json:"desiredReplicas"`
-	Age             string `json:"age"`
-
-	// Average resource utilization (per pod)
-	ResourceUtilization
-
-	// Update strategy
-	UpdateStrategy       string `json:"updateStrategy,omitempty"`
-	Partition            *int32 `json:"partition,omitempty"`
-	MaxUnavailable       string `json:"maxUnavailable,omitempty"`
-	PodManagementPolicy  string `json:"podManagementPolicy,omitempty"`
-	MinReadySeconds      int32  `json:"minReadySeconds,omitempty"`
-	RevisionHistoryLimit int32  `json:"revisionHistoryLimit,omitempty"`
-
-	// Service information
-	ServiceName                          string            `json:"serviceName,omitempty"`
-	ServiceAccount                       string            `json:"serviceAccount,omitempty"`
-	PersistentVolumeClaimRetentionPolicy map[string]string `json:"pvcRetentionPolicy,omitempty"`
-
-	// Pod placement constraints (from the pod template).
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-	Tolerations  []string          `json:"tolerations,omitempty"`
-
-	// Selector and labels
-	Selector    map[string]string `json:"selector,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Conditions
-	Conditions []string `json:"conditions,omitempty"`
-
-	// Template information
-	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
-	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
-
-	// Volume claim templates — structured summaries of each entry in
-	// `spec.volumeClaimTemplates`.
-	VolumeClaimTemplates []VolumeClaimTemplateSummary `json:"volumeClaimTemplates,omitempty"`
-
-	// Pod information
-	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
-	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
-
-	// Revision information
-	CurrentRevision string `json:"currentRevision,omitempty"`
-	UpdateRevision  string `json:"updateRevision,omitempty"`
-	CurrentReplicas int32  `json:"currentReplicas,omitempty"`
-	UpdatedReplicas int32  `json:"updatedReplicas,omitempty"`
-
-	// Status
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	CollisionCount     *int32 `json:"collisionCount,omitempty"`
-}
+// StatefulSetDetails and VolumeClaimTemplateSummary moved to resources/statefulset
+// (co-located with the StatefulSet model + detail builder).
 
 type DaemonSetDetails struct {
 	// Basic information

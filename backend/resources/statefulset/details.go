@@ -1,20 +1,24 @@
 /*
- * backend/resources/workloads/statefulsets.go
+ * backend/resources/statefulset/details.go
  *
- * StatefulSet resource handlers.
- * - Builds detail and list views for the frontend.
+ * StatefulSet resource handlers, co-located in the per-kind package.
+ * - Builds the detail view for the frontend.
+ *
+ * Shared workload helpers (pod summaries, utilization, container/replica
+ * formatting) live in resources/workloads and are imported here; StatefulSet's
+ * intrinsic fields come from the single model (resourcemodel.StatefulSetFacts).
  */
 
-package workloads
+package statefulset
 
 import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/workloads"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,15 +26,18 @@ import (
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
-type StatefulSetService struct {
+// Service provides detailed StatefulSet views backed by shared dependencies.
+type Service struct {
 	deps common.Dependencies
 }
 
-func NewStatefulSetService(deps common.Dependencies) *StatefulSetService {
-	return &StatefulSetService{deps: deps}
+// NewService constructs a StatefulSet service using the supplied dependencies bundle.
+func NewService(deps common.Dependencies) *Service {
+	return &Service{deps: deps}
 }
 
-func (s *StatefulSetService) StatefulSet(namespace, name string) (*restypes.StatefulSetDetails, error) {
+// StatefulSet returns the detailed view for a single StatefulSet.
+func (s *Service) StatefulSet(namespace, name string) (*StatefulSetDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -50,21 +57,21 @@ func (s *StatefulSetService) StatefulSet(namespace, name string) (*restypes.Stat
 	return s.buildStatefulSetDetails(ss, podsForSet, podMetrics), nil
 }
 
-func (s *StatefulSetService) buildStatefulSetDetails(
+func (s *Service) buildStatefulSetDetails(
 	statefulSet *appsv1.StatefulSet,
 	podsList []corev1.Pod,
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
-) *restypes.StatefulSetDetails {
-	model := resourcemodel.BuildStatefulSetResourceModel(s.deps.ClusterID, statefulSet)
-	facts := model.Facts.StatefulSet
-	replicas, ready := workloadReplicaDisplay(facts.WorkloadCommonFacts)
-	podInfos := buildPodSummaries(s.deps.ClusterID, "StatefulSet", statefulSet.Name, "apps/v1", podsList, podMetrics)
-	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
+) *StatefulSetDetails {
+	model := BuildResourceModel(s.deps.ClusterID, statefulSet)
+	facts := BuildFacts(statefulSet)
+	replicas, ready := workloads.WorkloadReplicaDisplay(facts.WorkloadCommonFacts)
+	podInfos := workloads.BuildPodSummaries(s.deps.ClusterID, "StatefulSet", statefulSet.Name, "apps/v1", podsList, podMetrics)
+	podSummary, _ := workloads.SummarizePodMetrics(podsList, podMetrics)
 
 	// Intrinsic spec/status fields come from the model facts (single extraction).
 	// Complex sub-objects (PVC retention, volume claim templates) are navigated
 	// here only to feed their shared formatters, which own that presentation.
-	details := &restypes.StatefulSetDetails{
+	details := &StatefulSetDetails{
 		Kind:                                 "StatefulSet",
 		Name:                                 statefulSet.Name,
 		Namespace:                            statefulSet.Namespace,
@@ -75,7 +82,7 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 		Available:                            facts.AvailableReplicas,
 		DesiredReplicas:                      facts.DesiredReplicas,
 		Age:                                  common.FormatAge(statefulSet.CreationTimestamp.Time),
-		ResourceUtilization:                  workloadUtilization(podsList, podMetrics),
+		ResourceUtilization:                  workloads.WorkloadUtilization(podsList, podMetrics),
 		UpdateStrategy:                       facts.UpdateStrategy,
 		Partition:                            facts.Partition,
 		MaxUnavailable:                       facts.MaxUnavailable,
@@ -91,8 +98,8 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 		Labels:                               statefulSet.Labels,
 		Annotations:                          statefulSet.Annotations,
 		Conditions:                           restypes.FormatConditions(facts.Conditions),
-		Containers:                           describeContainers(facts.Containers),
-		InitContainers:                       describeContainers(facts.InitContainers),
+		Containers:                           workloads.DescribeContainers(facts.Containers),
+		InitContainers:                       workloads.DescribeContainers(facts.InitContainers),
 		VolumeClaimTemplates:                 describeVolumeClaimTemplates(statefulSet.Spec.VolumeClaimTemplates),
 		Pods:                                 podInfos,
 		PodMetricsSummary:                    podSummary,
@@ -108,7 +115,7 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 	return details
 }
 
-func (s *StatefulSetService) getStatefulSetPods(statefulSet *appsv1.StatefulSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
+func (s *Service) getStatefulSetPods(statefulSet *appsv1.StatefulSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil, fmt.Errorf("kubernetes client not initialized")
@@ -126,14 +133,14 @@ func (s *StatefulSetService) getStatefulSetPods(statefulSet *appsv1.StatefulSet)
 	return filtered, metrics, nil
 }
 
-func describeVolumeClaimTemplates(templates []corev1.PersistentVolumeClaim) []restypes.VolumeClaimTemplateSummary {
+func describeVolumeClaimTemplates(templates []corev1.PersistentVolumeClaim) []VolumeClaimTemplateSummary {
 	if len(templates) == 0 {
 		return nil
 	}
 
-	result := make([]restypes.VolumeClaimTemplateSummary, 0, len(templates))
+	result := make([]VolumeClaimTemplateSummary, 0, len(templates))
 	for _, template := range templates {
-		summary := restypes.VolumeClaimTemplateSummary{
+		summary := VolumeClaimTemplateSummary{
 			Name: template.Name,
 		}
 		if template.Spec.StorageClassName != nil {
@@ -171,4 +178,3 @@ func describePVCRetention(policy *appsv1.StatefulSetPersistentVolumeClaimRetenti
 	}
 	return result
 }
-

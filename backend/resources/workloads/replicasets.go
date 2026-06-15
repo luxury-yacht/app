@@ -60,9 +60,9 @@ func (s *ReplicaSetService) buildReplicaSetDetails(
 ) *restypes.ReplicaSetDetails {
 	model := resourcemodel.BuildReplicaSetResourceModel(s.deps.ClusterID, replicaSet)
 	facts := model.Facts.ReplicaSet
-	replicas, ready := workloadReplicaDisplay(facts.WorkloadCommonFacts)
-	podInfos := buildPodSummaries(s.deps.ClusterID, "ReplicaSet", replicaSet.Name, "apps/v1", podsList, podMetrics)
-	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
+	replicas, ready := WorkloadReplicaDisplay(facts.WorkloadCommonFacts)
+	podInfos := BuildPodSummaries(s.deps.ClusterID, "ReplicaSet", replicaSet.Name, "apps/v1", podsList, podMetrics)
+	podSummary, _ := SummarizePodMetrics(podsList, podMetrics)
 
 	details := &restypes.ReplicaSetDetails{
 		Kind:                "ReplicaSet",
@@ -75,14 +75,14 @@ func (s *ReplicaSetService) buildReplicaSetDetails(
 		Available:           facts.AvailableReplicas,
 		DesiredReplicas:     facts.DesiredReplicas,
 		Age:                 common.FormatAge(replicaSet.CreationTimestamp.Time),
-		ResourceUtilization: workloadUtilization(podsList, podMetrics),
+		ResourceUtilization: WorkloadUtilization(podsList, podMetrics),
 		MinReadySeconds:     facts.MinReadySeconds,
 		Selector:            facts.Selector,
 		Labels:              replicaSet.Labels,
 		Annotations:         replicaSet.Annotations,
 		Conditions:          restypes.FormatConditions(facts.Conditions),
-		Containers:          describeContainers(facts.Containers),
-		InitContainers:      describeContainers(facts.InitContainers),
+		Containers:          DescribeContainers(facts.Containers),
+		InitContainers:      DescribeContainers(facts.InitContainers),
 		Pods:                podInfos,
 		PodMetricsSummary:   podSummary,
 		ObservedGeneration:  facts.ObservedGeneration,

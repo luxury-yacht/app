@@ -11,7 +11,7 @@ import (
 func BuildDeploymentResourceModel(clusterID string, deployment *appsv1.Deployment) ResourceModel {
 	facts := BuildDeploymentFacts(deployment)
 	status := BuildDeploymentStatusPresentation(deployment)
-	return workloadResourceModel(clusterID, "apps", "v1", "Deployment", "deployments", deployment.ObjectMeta, status, ResourceFacts{Deployment: &facts})
+	return WorkloadResourceModel(clusterID, "apps", "v1", "Deployment", "deployments", deployment.ObjectMeta, status, ResourceFacts{Deployment: &facts})
 }
 
 func BuildDeploymentFacts(deployment *appsv1.Deployment) DeploymentFacts {
@@ -43,8 +43,8 @@ func BuildDeploymentFacts(deployment *appsv1.Deployment) DeploymentFacts {
 		MaxSurge:            maxSurge,
 		MaxUnavailable:      maxUnavailable,
 		MinReadySeconds:     deployment.Spec.MinReadySeconds,
-		RevisionHistory:     int32PtrValue(deployment.Spec.RevisionHistoryLimit),
-		ProgressDeadline:    int32PtrValue(deployment.Spec.ProgressDeadlineSeconds),
+		RevisionHistory:     Int32PtrValue(deployment.Spec.RevisionHistoryLimit),
+		ProgressDeadline:    Int32PtrValue(deployment.Spec.ProgressDeadlineSeconds),
 		ObservedGeneration:  deployment.Status.ObservedGeneration,
 		Selector:            selector,
 		ReadySummary:        deploymentReadySummary(common),
@@ -53,7 +53,7 @@ func BuildDeploymentFacts(deployment *appsv1.Deployment) DeploymentFacts {
 	}
 }
 
-func int32PtrValue(p *int32) int32 {
+func Int32PtrValue(p *int32) int32 {
 	if p == nil {
 		return 0
 	}
@@ -104,11 +104,11 @@ func deploymentReadySummary(common WorkloadCommonFacts) string {
 
 func BuildDeploymentStatusPresentation(deployment *appsv1.Deployment) ResourceStatusPresentation {
 	facts := BuildDeploymentFacts(deployment)
-	signals := workloadReplicaSignals(facts.WorkloadCommonFacts)
+	signals := WorkloadReplicaSignals(facts.WorkloadCommonFacts)
 	signals = append(signals, deploymentSignals(deployment)...)
-	lifecycle := workloadLifecycle(deployment.ObjectMeta)
+	lifecycle := WorkloadLifecycle(deployment.ObjectMeta)
 
-	if status, ok := deletingWorkloadStatus(deployment.ObjectMeta, replicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
+	if status, ok := DeletingWorkloadStatus(deployment.ObjectMeta, ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
 	if failed := findDeploymentCondition(deployment, appsv1.DeploymentReplicaFailure); failed != nil && failed.Status == corev1.ConditionTrue {
@@ -120,7 +120,7 @@ func BuildDeploymentStatusPresentation(deployment *appsv1.Deployment) ResourceSt
 	if deployment.Spec.Paused {
 		return workloadSourceStatus("Paused", "true", "SpecPaused", "", "warning", signals, lifecycle)
 	}
-	return replicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
+	return ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }
 
 func deploymentSignals(deployment *appsv1.Deployment) []ResourceStatusSignal {

@@ -116,13 +116,6 @@ func TestBuildWorkloadResourceModelStatusForSupportedKinds(t *testing.T) {
 		wantPresentation string
 	}{
 		{
-			name:             "statefulset updating",
-			model:            BuildStatefulSetResourceModel("cluster-a", statefulSetWithReplicas(3, 1, 2, 2)),
-			wantState:        "1/3",
-			wantLabel:        "Updating",
-			wantPresentation: "warning",
-		},
-		{
 			name:             "daemonset running",
 			model:            BuildDaemonSetResourceModel("cluster-a", daemonSetWithReplicas(3, 3, 3, 3)),
 			wantState:        "3/3",
@@ -209,19 +202,6 @@ func deploymentWithReplicas(desired, ready, updated, available int32) *appsv1.De
 		},
 	}
 	return deployment
-}
-
-func statefulSetWithReplicas(desired, ready, updated, available int32) *appsv1.StatefulSet {
-	return &appsv1.StatefulSet{
-		ObjectMeta: workloadMeta("stateful"),
-		Spec:       appsv1.StatefulSetSpec{Replicas: ptrInt32(desired)},
-		Status: appsv1.StatefulSetStatus{
-			Replicas:          desired,
-			ReadyReplicas:     ready,
-			UpdatedReplicas:   updated,
-			AvailableReplicas: available,
-		},
-	}
 }
 
 func daemonSetWithReplicas(desired, current, ready, available int32) *appsv1.DaemonSet {

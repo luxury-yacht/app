@@ -30,6 +30,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/resources/policy"
 	"github.com/luxury-yacht/app/backend/resources/rbac"
+	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storage"
 	"github.com/luxury-yacht/app/backend/resources/workloads"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -81,7 +82,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"statefulset": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewStatefulSetService(deps).StatefulSet(namespace, name)
+			detail, err := statefulset.NewService(deps).StatefulSet(namespace, name)
 			return detail, "", err
 		},
 	},

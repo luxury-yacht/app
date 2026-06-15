@@ -14,7 +14,7 @@ import (
 )
 
 func TestWorkloadReplicaDisplay(t *testing.T) {
-	replicas, ready := workloadReplicaDisplay(resourcemodel.WorkloadCommonFacts{
+	replicas, ready := WorkloadReplicaDisplay(resourcemodel.WorkloadCommonFacts{
 		DesiredReplicas: 5,
 		CurrentReplicas: 3,
 		ReadyReplicas:   2,
@@ -29,9 +29,9 @@ func TestWorkloadReplicaDisplay(t *testing.T) {
 
 func TestWorkloadUtilization(t *testing.T) {
 	// Empty pods -> aggregatePodAverages returns nils -> common.Format* returns "-".
-	got := workloadUtilization(nil, nil)
+	got := WorkloadUtilization(nil, nil)
 	if got.CPURequest != "-" || got.CPULimit != "-" || got.CPUUsage != "-" ||
 		got.MemRequest != "-" || got.MemLimit != "-" || got.MemUsage != "-" {
-		t.Fatalf("workloadUtilization(nil,nil) = %+v, want all \"-\"", got)
+		t.Fatalf("WorkloadUtilization(nil,nil) = %+v, want all \"-\"", got)
 	}
 }

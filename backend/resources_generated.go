@@ -13,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/policy"
 	"github.com/luxury-yacht/app/backend/resources/rbac"
+	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storage"
 	"github.com/luxury-yacht/app/backend/resources/workloads"
 )
@@ -353,7 +354,7 @@ func (a *App) GetStatefulSet(clusterID, namespace, name string) (*StatefulSetDet
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "StatefulSet", namespace, name, func() (*StatefulSetDetails, error) {
-		return workloads.NewStatefulSetService(deps).StatefulSet(namespace, name)
+		return statefulset.NewService(deps).StatefulSet(namespace, name)
 	})
 }
 

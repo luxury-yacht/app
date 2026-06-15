@@ -10,7 +10,7 @@ import (
 func BuildJobResourceModel(clusterID string, job *batchv1.Job) ResourceModel {
 	facts := BuildJobFacts(job)
 	status := BuildJobStatusPresentation(job)
-	return workloadResourceModel(clusterID, "batch", "v1", "Job", "jobs", job.ObjectMeta, status, ResourceFacts{Job: &facts})
+	return WorkloadResourceModel(clusterID, "batch", "v1", "Job", "jobs", job.ObjectMeta, status, ResourceFacts{Job: &facts})
 }
 
 func BuildJobFacts(job *batchv1.Job) JobFacts {
@@ -60,8 +60,8 @@ func jobSelector(job *batchv1.Job) map[string]string {
 func BuildJobStatusPresentation(job *batchv1.Job) ResourceStatusPresentation {
 	facts := BuildJobFacts(job)
 	signals := jobSignals(job, facts)
-	lifecycle := workloadLifecycle(job.ObjectMeta)
-	if status, ok := deletingWorkloadStatus(job.ObjectMeta, jobState(facts), signals, lifecycle); ok {
+	lifecycle := WorkloadLifecycle(job.ObjectMeta)
+	if status, ok := DeletingWorkloadStatus(job.ObjectMeta, jobState(facts), signals, lifecycle); ok {
 		return status
 	}
 	if failed := findJobCondition(job, batchv1.JobFailed); failed != nil && failed.Status == corev1.ConditionTrue {

@@ -10,7 +10,7 @@ import (
 func BuildReplicaSetResourceModel(clusterID string, replicaSet *appsv1.ReplicaSet) ResourceModel {
 	facts := BuildReplicaSetFacts(replicaSet)
 	status := BuildReplicaSetStatusPresentation(replicaSet)
-	return workloadResourceModel(clusterID, "apps", "v1", "ReplicaSet", "replicasets", replicaSet.ObjectMeta, status, ResourceFacts{ReplicaSet: &facts})
+	return WorkloadResourceModel(clusterID, "apps", "v1", "ReplicaSet", "replicasets", replicaSet.ObjectMeta, status, ResourceFacts{ReplicaSet: &facts})
 }
 
 func BuildReplicaSetFacts(replicaSet *appsv1.ReplicaSet) ReplicaSetFacts {
@@ -52,16 +52,16 @@ func replicaSetReadySummary(common WorkloadCommonFacts) string {
 
 func BuildReplicaSetStatusPresentation(replicaSet *appsv1.ReplicaSet) ResourceStatusPresentation {
 	facts := BuildReplicaSetFacts(replicaSet)
-	signals := workloadReplicaSignals(facts.WorkloadCommonFacts)
+	signals := WorkloadReplicaSignals(facts.WorkloadCommonFacts)
 	signals = append(signals, replicaSetSignals(replicaSet)...)
-	lifecycle := workloadLifecycle(replicaSet.ObjectMeta)
-	if status, ok := deletingWorkloadStatus(replicaSet.ObjectMeta, replicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
+	lifecycle := WorkloadLifecycle(replicaSet.ObjectMeta)
+	if status, ok := DeletingWorkloadStatus(replicaSet.ObjectMeta, ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
 	if failed := findReplicaSetCondition(replicaSet, appsv1.ReplicaSetReplicaFailure); failed != nil && failed.Status == corev1.ConditionTrue {
 		return workloadConditionStatus("ReplicaFailure", string(failed.Status), failed.Reason, failed.Message, "Replica failure", "error", signals, lifecycle)
 	}
-	return replicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
+	return ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }
 
 func replicaSetSignals(replicaSet *appsv1.ReplicaSet) []ResourceStatusSignal {

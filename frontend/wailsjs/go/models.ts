@@ -1238,6 +1238,151 @@ export namespace snapshot {
 
 }
 
+export namespace statefulset {
+	
+	export class VolumeClaimTemplateSummary {
+	    name: string;
+	    storageRequest?: string;
+	    storageClass?: string;
+	    accessModes?: string[];
+	    volumeMode?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VolumeClaimTemplateSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.storageRequest = source["storageRequest"];
+	        this.storageClass = source["storageClass"];
+	        this.accessModes = source["accessModes"];
+	        this.volumeMode = source["volumeMode"];
+	    }
+	}
+	export class StatefulSetDetails {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    details: string;
+	    replicas: string;
+	    ready: string;
+	    upToDate?: number;
+	    available: number;
+	    desiredReplicas: number;
+	    age: string;
+	    cpuRequest?: string;
+	    cpuLimit?: string;
+	    cpuUsage?: string;
+	    memRequest?: string;
+	    memLimit?: string;
+	    memUsage?: string;
+	    updateStrategy?: string;
+	    partition?: number;
+	    maxUnavailable?: string;
+	    podManagementPolicy?: string;
+	    minReadySeconds?: number;
+	    revisionHistoryLimit?: number;
+	    serviceName?: string;
+	    serviceAccount?: string;
+	    pvcRetentionPolicy?: Record<string, string>;
+	    nodeSelector?: Record<string, string>;
+	    tolerations?: string[];
+	    selector?: Record<string, string>;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    conditions?: string[];
+	    containers?: types.PodDetailInfoContainer[];
+	    initContainers?: types.PodDetailInfoContainer[];
+	    volumeClaimTemplates?: VolumeClaimTemplateSummary[];
+	    pods?: types.PodSimpleInfo[];
+	    podMetricsSummary?: types.PodMetricsSummary;
+	    currentRevision?: string;
+	    updateRevision?: string;
+	    currentReplicas?: number;
+	    updatedReplicas?: number;
+	    observedGeneration?: number;
+	    collisionCount?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new StatefulSetDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.details = source["details"];
+	        this.replicas = source["replicas"];
+	        this.ready = source["ready"];
+	        this.upToDate = source["upToDate"];
+	        this.available = source["available"];
+	        this.desiredReplicas = source["desiredReplicas"];
+	        this.age = source["age"];
+	        this.cpuRequest = source["cpuRequest"];
+	        this.cpuLimit = source["cpuLimit"];
+	        this.cpuUsage = source["cpuUsage"];
+	        this.memRequest = source["memRequest"];
+	        this.memLimit = source["memLimit"];
+	        this.memUsage = source["memUsage"];
+	        this.updateStrategy = source["updateStrategy"];
+	        this.partition = source["partition"];
+	        this.maxUnavailable = source["maxUnavailable"];
+	        this.podManagementPolicy = source["podManagementPolicy"];
+	        this.minReadySeconds = source["minReadySeconds"];
+	        this.revisionHistoryLimit = source["revisionHistoryLimit"];
+	        this.serviceName = source["serviceName"];
+	        this.serviceAccount = source["serviceAccount"];
+	        this.pvcRetentionPolicy = source["pvcRetentionPolicy"];
+	        this.nodeSelector = source["nodeSelector"];
+	        this.tolerations = source["tolerations"];
+	        this.selector = source["selector"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.conditions = source["conditions"];
+	        this.containers = this.convertValues(source["containers"], types.PodDetailInfoContainer);
+	        this.initContainers = this.convertValues(source["initContainers"], types.PodDetailInfoContainer);
+	        this.volumeClaimTemplates = this.convertValues(source["volumeClaimTemplates"], VolumeClaimTemplateSummary);
+	        this.pods = this.convertValues(source["pods"], types.PodSimpleInfo);
+	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], types.PodMetricsSummary);
+	        this.currentRevision = source["currentRevision"];
+	        this.updateRevision = source["updateRevision"];
+	        this.currentReplicas = source["currentReplicas"];
+	        this.updatedReplicas = source["updatedReplicas"];
+	        this.observedGeneration = source["observedGeneration"];
+	        this.collisionCount = source["collisionCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace types {
 	
 	export class AggregationRule {
@@ -5368,146 +5513,6 @@ export namespace types {
 	        this.command = source["command"];
 	    }
 	}
-	export class VolumeClaimTemplateSummary {
-	    name: string;
-	    storageRequest?: string;
-	    storageClass?: string;
-	    accessModes?: string[];
-	    volumeMode?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new VolumeClaimTemplateSummary(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.storageRequest = source["storageRequest"];
-	        this.storageClass = source["storageClass"];
-	        this.accessModes = source["accessModes"];
-	        this.volumeMode = source["volumeMode"];
-	    }
-	}
-	export class StatefulSetDetails {
-	    kind: string;
-	    name: string;
-	    namespace: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    details: string;
-	    replicas: string;
-	    ready: string;
-	    upToDate?: number;
-	    available: number;
-	    desiredReplicas: number;
-	    age: string;
-	    cpuRequest?: string;
-	    cpuLimit?: string;
-	    cpuUsage?: string;
-	    memRequest?: string;
-	    memLimit?: string;
-	    memUsage?: string;
-	    updateStrategy?: string;
-	    partition?: number;
-	    maxUnavailable?: string;
-	    podManagementPolicy?: string;
-	    minReadySeconds?: number;
-	    revisionHistoryLimit?: number;
-	    serviceName?: string;
-	    serviceAccount?: string;
-	    pvcRetentionPolicy?: Record<string, string>;
-	    nodeSelector?: Record<string, string>;
-	    tolerations?: string[];
-	    selector?: Record<string, string>;
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    conditions?: string[];
-	    containers?: PodDetailInfoContainer[];
-	    initContainers?: PodDetailInfoContainer[];
-	    volumeClaimTemplates?: VolumeClaimTemplateSummary[];
-	    pods?: PodSimpleInfo[];
-	    podMetricsSummary?: PodMetricsSummary;
-	    currentRevision?: string;
-	    updateRevision?: string;
-	    currentReplicas?: number;
-	    updatedReplicas?: number;
-	    observedGeneration?: number;
-	    collisionCount?: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new StatefulSetDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.details = source["details"];
-	        this.replicas = source["replicas"];
-	        this.ready = source["ready"];
-	        this.upToDate = source["upToDate"];
-	        this.available = source["available"];
-	        this.desiredReplicas = source["desiredReplicas"];
-	        this.age = source["age"];
-	        this.cpuRequest = source["cpuRequest"];
-	        this.cpuLimit = source["cpuLimit"];
-	        this.cpuUsage = source["cpuUsage"];
-	        this.memRequest = source["memRequest"];
-	        this.memLimit = source["memLimit"];
-	        this.memUsage = source["memUsage"];
-	        this.updateStrategy = source["updateStrategy"];
-	        this.partition = source["partition"];
-	        this.maxUnavailable = source["maxUnavailable"];
-	        this.podManagementPolicy = source["podManagementPolicy"];
-	        this.minReadySeconds = source["minReadySeconds"];
-	        this.revisionHistoryLimit = source["revisionHistoryLimit"];
-	        this.serviceName = source["serviceName"];
-	        this.serviceAccount = source["serviceAccount"];
-	        this.pvcRetentionPolicy = source["pvcRetentionPolicy"];
-	        this.nodeSelector = source["nodeSelector"];
-	        this.tolerations = source["tolerations"];
-	        this.selector = source["selector"];
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.conditions = source["conditions"];
-	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
-	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
-	        this.volumeClaimTemplates = this.convertValues(source["volumeClaimTemplates"], VolumeClaimTemplateSummary);
-	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
-	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
-	        this.currentRevision = source["currentRevision"];
-	        this.updateRevision = source["updateRevision"];
-	        this.currentReplicas = source["currentReplicas"];
-	        this.updatedReplicas = source["updatedReplicas"];
-	        this.observedGeneration = source["observedGeneration"];
-	        this.collisionCount = source["collisionCount"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class TopologyLabelRequirement {
 	    key: string;
 	    values: string[];
@@ -5740,7 +5745,6 @@ export namespace types {
 		    return a;
 		}
 	}
-	
 	
 	
 	

@@ -9,7 +9,7 @@ import (
 func BuildCronJobResourceModel(clusterID string, cronJob *batchv1.CronJob) ResourceModel {
 	facts := BuildCronJobFacts(cronJob)
 	status := BuildCronJobStatusPresentation(cronJob)
-	return workloadResourceModel(clusterID, "batch", "v1", "CronJob", "cronjobs", cronJob.ObjectMeta, status, ResourceFacts{CronJob: &facts})
+	return WorkloadResourceModel(clusterID, "batch", "v1", "CronJob", "cronjobs", cronJob.ObjectMeta, status, ResourceFacts{CronJob: &facts})
 }
 
 func BuildCronJobFacts(cronJob *batchv1.CronJob) CronJobFacts {
@@ -41,8 +41,8 @@ func BuildCronJobStatusPresentation(cronJob *batchv1.CronJob) ResourceStatusPres
 		{Type: StatusSignalResourceState, Name: "spec.suspend", Status: strconv.FormatBool(facts.Suspended)},
 		{Type: StatusSignalResourceState, Name: "status.active", Status: strconv.FormatInt(int64(facts.ActiveJobs), 10)},
 	}
-	lifecycle := workloadLifecycle(cronJob.ObjectMeta)
-	if status, ok := deletingWorkloadStatus(cronJob.ObjectMeta, strconv.FormatInt(int64(facts.ActiveJobs), 10), signals, lifecycle); ok {
+	lifecycle := WorkloadLifecycle(cronJob.ObjectMeta)
+	if status, ok := DeletingWorkloadStatus(cronJob.ObjectMeta, strconv.FormatInt(int64(facts.ActiveJobs), 10), signals, lifecycle); ok {
 		return status
 	}
 	if facts.Suspended {

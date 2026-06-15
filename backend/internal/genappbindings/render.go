@@ -81,7 +81,7 @@ var Bindings = []binding{
 	{Name: "Secret", Namespaced: true, Service: "config.NewService(deps)", Import: resourcesPkg + "config"},
 	{Name: "Service", Namespaced: true, Method: "GetService", Service: "network.NewService(deps)", Import: resourcesPkg + "network"},
 	{Name: "ServiceAccount", Namespaced: true, Service: "rbac.NewService(deps)", Import: resourcesPkg + "rbac"},
-	{Name: "StatefulSet", Namespaced: true, Service: "workloads.NewStatefulSetService(deps)", Import: resourcesPkg + "workloads"},
+	{Name: "StatefulSet", Namespaced: true, Service: "statefulset.NewService(deps)", Import: resourcesPkg + "statefulset"},
 	{Name: "StorageClass", Service: "storage.NewService(deps)", Import: resourcesPkg + "storage"},
 	{Name: "TLSRoute", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
 	{Name: "ValidatingWebhookConfiguration", Service: "admission.NewService(deps)", Import: resourcesPkg + "admission"},

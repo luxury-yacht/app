@@ -14,8 +14,10 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/objectmap"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
@@ -87,12 +89,9 @@ type ObjectMapActionFacts struct {
 // ObjectMapStatus is a compact card-level status indicator. State is the source
 // status value selected by the resource-specific status builder. Presentation is
 // the backend-selected rendering token for migrated resources that need one.
-type ObjectMapStatus struct {
-	State        string `json:"state"`
-	Label        string `json:"label"`
-	Presentation string `json:"presentation,omitempty"`
-	Reason       string `json:"reason,omitempty"`
-}
+// ObjectMapStatus aliases the neutral objectmap.Status so per-kind packages can
+// produce it without importing snapshot.
+type ObjectMapStatus = objectmap.Status
 
 // ObjectMapEdge captures a directed relationship between two graph nodes.
 type ObjectMapEdge struct {
@@ -635,7 +634,7 @@ func (idx *objectMapIndex) collectStatefulSets(lister appslisters.StatefulSetLis
 	collectKind(idx, "apps", "v1", "StatefulSet", "statefulsets",
 		func() ([]*appsv1.StatefulSet, error) { return lister.List(labels.Everything()) },
 		func(sts *appsv1.StatefulSet, rec *objectMapRecord) {
-			rec.status = objectMapStatefulSetStatus(idx.meta.ClusterID, *sts)
+			rec.status = statefulset.ObjectMapStatus(idx.meta.ClusterID, *sts)
 			rec.actionFacts = objectMapScalableWorkloadFacts(sts.Spec.Replicas, common.HasForwardableContainerPorts(sts.Spec.Template.Spec.Containers))
 			rec.template = &sts.Spec.Template
 		})
@@ -1128,14 +1127,7 @@ func objectMapCronJobActionFacts(cron batchv1.CronJob) *ObjectMapActionFacts {
 }
 
 func objectMapStatus(state, label string, reasons ...string) *ObjectMapStatus {
-	status := &ObjectMapStatus{State: state, Label: label}
-	for _, reason := range reasons {
-		if strings.TrimSpace(reason) != "" {
-			status.Reason = reason
-			break
-		}
-	}
-	return status
+	return objectmap.New(state, label, reasons...)
 }
 
 func objectMapPodStatus(clusterID string, pod corev1.Pod) *ObjectMapStatus {
@@ -1202,10 +1194,8 @@ func objectMapReplicaSetStatus(clusterID string, rs appsv1.ReplicaSet) *ObjectMa
 	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapStatefulSetStatus(clusterID string, sts appsv1.StatefulSet) *ObjectMapStatus {
-	model := resourcemodel.BuildStatefulSetResourceModel(clusterID, &sts)
-	return objectMapStatusFromResourceModel(model)
-}
+// StatefulSet's object-map status projection lives in resources/statefulset
+// (statefulset.ObjectMapStatus); the collector below calls it.
 
 func objectMapDaemonSetStatus(clusterID string, ds appsv1.DaemonSet) *ObjectMapStatus {
 	model := resourcemodel.BuildDaemonSetResourceModel(clusterID, &ds)
@@ -1223,9 +1213,7 @@ func objectMapCronJobStatus(clusterID string, cron batchv1.CronJob) *ObjectMapSt
 }
 
 func objectMapStatusFromResourceModel(model resourcemodel.ResourceModel) *ObjectMapStatus {
-	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
-	status.Presentation = model.Status.Presentation
-	return status
+	return objectmap.FromResourceModel(model)
 }
 
 func objectMapHPAStatus(clusterID string, hpa autoscalingv2.HorizontalPodAutoscaler) *ObjectMapStatus {

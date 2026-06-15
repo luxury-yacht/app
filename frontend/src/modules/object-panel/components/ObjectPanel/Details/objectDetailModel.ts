@@ -1,4 +1,4 @@
-import { types } from '@wailsjs/go/models';
+import { statefulset, types } from '@wailsjs/go/models';
 import type { KubernetesObjectReference } from '@/types/view-state';
 
 export interface DetailSlots {
@@ -6,7 +6,7 @@ export interface DetailSlots {
   deploymentDetails: types.DeploymentDetails | null;
   replicaSetDetails: types.ReplicaSetDetails | null;
   daemonSetDetails: types.DaemonSetDetails | null;
-  statefulSetDetails: types.StatefulSetDetails | null;
+  statefulSetDetails: statefulset.StatefulSetDetails | null;
   jobDetails: types.JobDetails | null;
   cronJobDetails: types.CronJobDetails | null;
   configMapDetails: types.ConfigMapDetails | null;
@@ -203,7 +203,7 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'statefulset':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        statefulSetDetails: detailPayload as types.StatefulSetDetails,
+        statefulSetDetails: detailPayload as statefulset.StatefulSetDetails,
       };
     case 'job':
       return { ...EMPTY_DETAIL_SLOTS, jobDetails: detailPayload as types.JobDetails };

@@ -5,6 +5,7 @@ import {context} from '../models';
 import {types} from '../models';
 import {objectcatalog} from '../models';
 import {json} from '../models';
+import {statefulset} from '../models';
 import {snapshot} from '../models';
 import {capabilities} from '../models';
 
@@ -180,7 +181,7 @@ export function GetServiceAccount(arg1:string,arg2:string,arg3:string):Promise<t
 
 export function GetShellSessionBacklog(arg1:string):Promise<string>;
 
-export function GetStatefulSet(arg1:string,arg2:string,arg3:string):Promise<types.StatefulSetDetails>;
+export function GetStatefulSet(arg1:string,arg2:string,arg3:string):Promise<statefulset.StatefulSetDetails>;
 
 export function GetStorageClass(arg1:string,arg2:string):Promise<types.StorageClassDetails>;
 

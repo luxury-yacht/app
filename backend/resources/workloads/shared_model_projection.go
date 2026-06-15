@@ -18,20 +18,20 @@ import (
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
-// workloadReplicaDisplay renders the shared "ready/total" replica strings for
+// WorkloadReplicaDisplay renders the shared "ready/total" replica strings for
 // workloads backed by WorkloadCommonFacts (Deployment, StatefulSet, ReplicaSet),
 // keeping the projection in one place. DaemonSet reports the same facts under
 // different DTO field names and reads them directly.
-func workloadReplicaDisplay(f resourcemodel.WorkloadCommonFacts) (replicas, ready string) {
+func WorkloadReplicaDisplay(f resourcemodel.WorkloadCommonFacts) (replicas, ready string) {
 	replicas = fmt.Sprintf("%d/%d", f.CurrentReplicas, f.DesiredReplicas)
 	ready = fmt.Sprintf("%d/%d", f.ReadyReplicas, f.CurrentReplicas)
 	return replicas, ready
 }
 
-// workloadUtilization computes the display-ready average per-pod resource
+// WorkloadUtilization computes the display-ready average per-pod resource
 // utilization shared by all workload detail builders, centralizing the
 // aggregate + format step instead of repeating it per builder.
-func workloadUtilization(podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) restypes.ResourceUtilization {
+func WorkloadUtilization(podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) restypes.ResourceUtilization {
 	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
 	return restypes.ResourceUtilization{
 		CPURequest: common.FormatCPU(avgCPURequest),

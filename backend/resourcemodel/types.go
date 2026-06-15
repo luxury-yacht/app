@@ -147,7 +147,6 @@ type ResourceFacts struct {
 	Node                           *NodeFacts                           `json:"node,omitempty"`
 	Pod                            *PodFacts                            `json:"pod,omitempty"`
 	Deployment                     *DeploymentFacts                     `json:"deployment,omitempty"`
-	StatefulSet                    *StatefulSetFacts                    `json:"statefulSet,omitempty"`
 	DaemonSet                      *DaemonSetFacts                      `json:"daemonSet,omitempty"`
 	ReplicaSet                     *ReplicaSetFacts                     `json:"replicaSet,omitempty"`
 	Job                            *JobFacts                            `json:"job,omitempty"`
@@ -232,24 +231,9 @@ type DeploymentFacts struct {
 	RolloutMessage     string            `json:"rolloutMessage,omitempty"`
 }
 
-type StatefulSetFacts struct {
-	WorkloadCommonFacts
-	PodTemplateFacts
-	UpdateStrategy        string            `json:"updateStrategy,omitempty"`
-	Partition             *int32            `json:"partition,omitempty"`
-	MaxUnavailable        string            `json:"maxUnavailable,omitempty"`
-	PodManagementPolicy   string            `json:"podManagementPolicy,omitempty"`
-	MinReadySeconds       int32             `json:"minReadySeconds,omitempty"`
-	RevisionHistoryLimit  int32             `json:"revisionHistoryLimit,omitempty"`
-	ServiceName           string            `json:"serviceName,omitempty"`
-	Selector              map[string]string `json:"selector,omitempty"`
-	StatusCurrentRevision string            `json:"statusCurrentRevision,omitempty"`
-	StatusUpdateRevision  string            `json:"statusUpdateRevision,omitempty"`
-	StatusCurrentReplicas int32             `json:"statusCurrentReplicas,omitempty"`
-	ObservedGeneration    int64             `json:"observedGeneration,omitempty"`
-	CollisionCount        *int32            `json:"collisionCount,omitempty"`
-	ReadySummary          string            `json:"readySummary,omitempty"`
-}
+// StatefulSetFacts moved to resources/statefulset (type statefulset.Facts);
+// removed from the ResourceFacts union to break the import cycle so the kind owns
+// its own facts type.
 
 type DaemonSetFacts struct {
 	WorkloadCommonFacts

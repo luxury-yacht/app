@@ -9,7 +9,7 @@ import (
 func BuildDaemonSetResourceModel(clusterID string, daemonSet *appsv1.DaemonSet) ResourceModel {
 	facts := BuildDaemonSetFacts(daemonSet)
 	status := BuildDaemonSetStatusPresentation(daemonSet)
-	return workloadResourceModel(clusterID, "apps", "v1", "DaemonSet", "daemonsets", daemonSet.ObjectMeta, status, ResourceFacts{DaemonSet: &facts})
+	return WorkloadResourceModel(clusterID, "apps", "v1", "DaemonSet", "daemonsets", daemonSet.ObjectMeta, status, ResourceFacts{DaemonSet: &facts})
 }
 
 func BuildDaemonSetFacts(daemonSet *appsv1.DaemonSet) DaemonSetFacts {
@@ -44,7 +44,7 @@ func BuildDaemonSetFacts(daemonSet *appsv1.DaemonSet) DaemonSetFacts {
 		MaxUnavailable:       maxUnavailable,
 		MaxSurge:             maxSurge,
 		MinReadySeconds:      daemonSet.Spec.MinReadySeconds,
-		RevisionHistoryLimit: int32PtrValue(daemonSet.Spec.RevisionHistoryLimit),
+		RevisionHistoryLimit: Int32PtrValue(daemonSet.Spec.RevisionHistoryLimit),
 		Selector:             selector,
 		ObservedGeneration:   daemonSet.Status.ObservedGeneration,
 		NumberMisscheduled:   daemonSet.Status.NumberMisscheduled,
@@ -67,13 +67,13 @@ func daemonSetReadySummary(daemonSet *appsv1.DaemonSet) string {
 
 func BuildDaemonSetStatusPresentation(daemonSet *appsv1.DaemonSet) ResourceStatusPresentation {
 	facts := BuildDaemonSetFacts(daemonSet)
-	signals := workloadReplicaSignals(facts.WorkloadCommonFacts)
+	signals := WorkloadReplicaSignals(facts.WorkloadCommonFacts)
 	signals = append(signals, daemonSetSignals(daemonSet)...)
-	lifecycle := workloadLifecycle(daemonSet.ObjectMeta)
-	if status, ok := deletingWorkloadStatus(daemonSet.ObjectMeta, replicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
+	lifecycle := WorkloadLifecycle(daemonSet.ObjectMeta)
+	if status, ok := DeletingWorkloadStatus(daemonSet.ObjectMeta, ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
-	return replicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
+	return ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }
 
 func daemonSetSignals(daemonSet *appsv1.DaemonSet) []ResourceStatusSignal {

@@ -33,6 +33,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/statefulset"
 )
 
 const (
@@ -585,7 +586,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 		ready = stateful.Status.ReadyReplicas
 	}
 	readyStatus := workloadPodReadyStatus(pods, ready, desired)
-	model := resourcemodel.BuildStatefulSetResourceModel(clusterID, stateful)
+	model := statefulset.BuildResourceModel(clusterID, stateful)
 
 	return WorkloadSummary{
 		Kind:                 "StatefulSet",

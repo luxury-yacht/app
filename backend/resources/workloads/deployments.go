@@ -62,9 +62,9 @@ func (s *DeploymentService) buildDeploymentDetails(
 
 	model := resourcemodel.BuildDeploymentResourceModel(s.deps.ClusterID, deployment)
 	facts := model.Facts.Deployment
-	replicas, ready := workloadReplicaDisplay(facts.WorkloadCommonFacts)
-	podInfos := buildPodSummaries(s.deps.ClusterID, "Deployment", deployment.Name, "apps/v1", podsList, podMetrics)
-	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
+	replicas, ready := WorkloadReplicaDisplay(facts.WorkloadCommonFacts)
+	podInfos := BuildPodSummaries(s.deps.ClusterID, "Deployment", deployment.Name, "apps/v1", podsList, podMetrics)
+	podSummary, _ := SummarizePodMetrics(podsList, podMetrics)
 
 	// Live aggregation (not part of the resource's intrinsic definition).
 	rsNames, currentRevision, currentRSName := summarizeReplicaSets(deployment, replicaSets)
@@ -82,7 +82,7 @@ func (s *DeploymentService) buildDeploymentDetails(
 		Available:           facts.AvailableReplicas,
 		DesiredReplicas:     facts.DesiredReplicas,
 		Age:                 common.FormatAge(deployment.CreationTimestamp.Time),
-		ResourceUtilization: workloadUtilization(podsList, podMetrics),
+		ResourceUtilization: WorkloadUtilization(podsList, podMetrics),
 		Strategy:            facts.Strategy,
 		MaxSurge:            facts.MaxSurge,
 		MaxUnavailable:      facts.MaxUnavailable,
@@ -95,8 +95,8 @@ func (s *DeploymentService) buildDeploymentDetails(
 		Selector:            facts.Selector,
 		Labels:              deployment.Labels,
 		Annotations:         deployment.Annotations,
-		Containers:          describeContainers(facts.Containers),
-		InitContainers:      describeContainers(facts.InitContainers),
+		Containers:          DescribeContainers(facts.Containers),
+		InitContainers:      DescribeContainers(facts.InitContainers),
 		Pods:                podInfos,
 		CurrentRevision:     currentRevision,
 		CurrentReplicaSet:   currentRSName,

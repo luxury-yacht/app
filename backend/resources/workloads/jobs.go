@@ -53,7 +53,7 @@ func (s *JobService) Job(namespace, name string) (*restypes.JobDetails, error) {
 }
 
 func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) *restypes.JobDetails {
-	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
+	podSummary, _ := SummarizePodMetrics(podsList, podMetrics)
 	model := resourcemodel.BuildJobResourceModel(clusterID, job)
 	facts := model.Facts.Job
 
@@ -76,7 +76,7 @@ func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, 
 		Labels:                  job.Labels,
 		Annotations:             job.Annotations,
 		Selector:                facts.Selector,
-		Containers:              describeContainers(facts.Containers),
+		Containers:              DescribeContainers(facts.Containers),
 		Pods:                    buildSimplePodInfo(clusterID, podsList),
 		BackoffLimit:            facts.BackoffLimit,
 		ActiveDeadlineSeconds:   facts.ActiveDeadlineSeconds,

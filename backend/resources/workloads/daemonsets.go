@@ -57,8 +57,8 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 ) *restypes.DaemonSetDetails {
 	model := resourcemodel.BuildDaemonSetResourceModel(s.deps.ClusterID, daemonSet)
 	facts := model.Facts.DaemonSet
-	podInfos := buildPodSummaries(s.deps.ClusterID, "DaemonSet", daemonSet.Name, "apps/v1", podsList, podMetrics)
-	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
+	podInfos := BuildPodSummaries(s.deps.ClusterID, "DaemonSet", daemonSet.Name, "apps/v1", podsList, podMetrics)
+	podSummary, _ := SummarizePodMetrics(podsList, podMetrics)
 
 	// All intrinsic spec/status fields come from the model facts (single extraction).
 	details := &restypes.DaemonSetDetails{
@@ -73,7 +73,7 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 		UpToDate:             facts.UpdatedReplicas,
 		Available:            facts.AvailableReplicas,
 		Age:                  common.FormatAge(daemonSet.CreationTimestamp.Time),
-		ResourceUtilization:  workloadUtilization(podsList, podMetrics),
+		ResourceUtilization:  WorkloadUtilization(podsList, podMetrics),
 		UpdateStrategy:       facts.UpdateStrategy,
 		MaxUnavailable:       facts.MaxUnavailable,
 		MaxSurge:             facts.MaxSurge,
@@ -86,8 +86,8 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 		NodeSelector:         facts.NodeSelector,
 		Tolerations:          pods.FormatPodTolerations(facts.Tolerations),
 		Conditions:           restypes.FormatConditions(facts.Conditions),
-		Containers:           describeContainers(facts.Containers),
-		InitContainers:       describeContainers(facts.InitContainers),
+		Containers:           DescribeContainers(facts.Containers),
+		InitContainers:       DescribeContainers(facts.InitContainers),
 		Pods:                 podInfos,
 		PodMetricsSummary:    podSummary,
 		ObservedGeneration:   facts.ObservedGeneration,
