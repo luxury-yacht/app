@@ -2043,6 +2043,67 @@ export namespace limitrange {
 
 }
 
+export namespace namespaces {
+	
+	export class NamespaceDetails {
+	    kind: string;
+	    name: string;
+	    age: string;
+	    details: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    hasWorkloads: boolean;
+	    workloadsUnknown?: boolean;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    resourceQuotas?: resourcemodel.ResourceRef[];
+	    limitRanges?: resourcemodel.ResourceRef[];
+	
+	    static createFrom(source: any = {}) {
+	        return new NamespaceDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.age = source["age"];
+	        this.details = source["details"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.hasWorkloads = source["hasWorkloads"];
+	        this.workloadsUnknown = source["workloadsUnknown"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.resourceQuotas = this.convertValues(source["resourceQuotas"], resourcemodel.ResourceRef);
+	        this.limitRanges = this.convertValues(source["limitRanges"], resourcemodel.ResourceRef);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace networkpolicy {
 	
 	export class IPBlock {
@@ -4904,62 +4965,6 @@ export namespace types {
 	        this.webhooks = this.convertValues(source["webhooks"], WebhookDetails);
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class NamespaceDetails {
-	    kind: string;
-	    name: string;
-	    age: string;
-	    details: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    hasWorkloads: boolean;
-	    workloadsUnknown?: boolean;
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    resourceQuotas?: resourcemodel.ResourceRef[];
-	    limitRanges?: resourcemodel.ResourceRef[];
-	
-	    static createFrom(source: any = {}) {
-	        return new NamespaceDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.age = source["age"];
-	        this.details = source["details"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.hasWorkloads = source["hasWorkloads"];
-	        this.workloadsUnknown = source["workloadsUnknown"];
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.resourceQuotas = this.convertValues(source["resourceQuotas"], resourcemodel.ResourceRef);
-	        this.limitRanges = this.convertValues(source["limitRanges"], resourcemodel.ResourceRef);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

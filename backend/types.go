@@ -13,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	"github.com/luxury-yacht/app/backend/resources/limitrange"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
@@ -165,7 +166,7 @@ type (
 	CRDVersion                            = types.CRDVersion
 	CRDNames                              = types.CRDNames
 	CRDCondition                          = types.CRDCondition
-	NamespaceDetails                      = types.NamespaceDetails
+	NamespaceDetails                      = namespaces.NamespaceDetails
 	NodeDetails                           = types.NodeDetails
 	NodeCondition                         = types.NodeCondition
 	NodeTaint                             = types.NodeTaint

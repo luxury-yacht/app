@@ -143,7 +143,6 @@ type NodeFacts struct {
 }
 
 type ResourceFacts struct {
-	Namespace                      *NamespaceFacts                      `json:"namespace,omitempty"`
 	Node                           *NodeFacts                           `json:"node,omitempty"`
 	Pod                            *PodFacts                            `json:"pod,omitempty"`
 	GatewayClass                   *GatewayClassFacts                   `json:"gatewayClass,omitempty"`
@@ -162,14 +161,6 @@ type ResourceFacts struct {
 	CustomResource                 *CustomResourceFacts                 `json:"customResource,omitempty"`
 }
 
-type NamespaceFacts struct {
-	RawPhase       string         `json:"rawPhase,omitempty"`
-	WorkloadState  string         `json:"workloadState,omitempty"`
-	ResourceQuotas []ResourceLink `json:"resourceQuotas,omitempty"`
-	LimitRanges    []ResourceLink `json:"limitRanges,omitempty"`
-	WorkloadsKnown bool           `json:"workloadsKnown"`
-	HasWorkloads   bool           `json:"hasWorkloads"`
-}
 
 type PodFacts struct {
 	Phase           string           `json:"phase,omitempty"`

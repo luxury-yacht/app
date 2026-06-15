@@ -17,7 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/types"
+	restypes "github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +32,7 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // Namespace returns a detailed description for the given namespace.
-func (s *Service) Namespace(name string) (*types.NamespaceDetails, error) {
+func (s *Service) Namespace(name string) (*NamespaceDetails, error) {
 	if err := s.ensureClient("namespace"); err != nil {
 		return nil, err
 	}
@@ -47,39 +47,32 @@ func (s *Service) Namespace(name string) (*types.NamespaceDetails, error) {
 	return s.buildNamespaceDetails(ns), nil
 }
 
-func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *types.NamespaceDetails {
+func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *NamespaceDetails {
 	hasWorkloads, workloadsUnknown := s.hasWorkloads(namespace.Name)
 	quotas, limits := s.collectQuotasAndLimits(namespace.Name)
-	model := resourcemodel.BuildNamespaceResourceModel(
-		s.deps.ClusterID,
-		namespace,
-		hasWorkloads,
-		!workloadsUnknown,
-		quotas,
-		limits,
-		resourcemodel.ResourceModelBuildOptions{
-			Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeRelationshipFacts | resourcemodel.MaterializeDetailFacts,
-		},
-	)
-	facts := model.Facts.Namespace
-	details := &types.NamespaceDetails{
+	opts := resourcemodel.ResourceModelBuildOptions{
+		Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeRelationshipFacts | resourcemodel.MaterializeDetailFacts,
+	}
+	model := BuildResourceModel(s.deps.ClusterID, namespace, hasWorkloads, !workloadsUnknown, quotas, limits, opts)
+	facts := BuildFacts(s.deps.ClusterID, namespace, hasWorkloads, !workloadsUnknown, quotas, limits, opts)
+	details := &NamespaceDetails{
 		Kind:             model.Ref.Kind,
 		Name:             model.Ref.Name,
 		Age:              common.FormatAge(model.Metadata.CreationTimestamp.Time),
-		StatusProjection: types.NewStatusProjection(model.Status),
+		StatusProjection: restypes.NewStatusProjection(model.Status),
 		Labels:           model.Metadata.Labels,
 		Annotations:      model.Metadata.Annotations,
 		HasWorkloads:     facts.HasWorkloads,
 		WorkloadsUnknown: !facts.WorkloadsKnown,
-		ResourceQuotas:   types.ObjectRefsFromResourceLinks(facts.ResourceQuotas),
-		LimitRanges:      types.ObjectRefsFromResourceLinks(facts.LimitRanges),
+		ResourceQuotas:   restypes.ObjectRefsFromResourceLinks(facts.ResourceQuotas),
+		LimitRanges:      restypes.ObjectRefsFromResourceLinks(facts.LimitRanges),
 	}
 
 	detailParts := []string{fmt.Sprintf("Status: %s", details.Status)}
 	switch facts.WorkloadState {
-	case resourcemodel.NamespaceWorkloadStateUnknown:
+	case workloadStateUnknown:
 		detailParts = append(detailParts, "Workloads status unknown")
-	case resourcemodel.NamespaceWorkloadStatePresent:
+	case workloadStatePresent:
 		detailParts = append(detailParts, "Has workloads")
 	default:
 		detailParts = append(detailParts, "No workloads")

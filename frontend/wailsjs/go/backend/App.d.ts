@@ -17,6 +17,7 @@ import {ingress} from '../models';
 import {ingressclass} from '../models';
 import {job} from '../models';
 import {limitrange} from '../models';
+import {namespaces} from '../models';
 import {networkpolicy} from '../models';
 import {persistentvolume} from '../models';
 import {persistentvolumeclaim} from '../models';
@@ -161,7 +162,7 @@ export function GetListenerSet(arg1:string,arg2:string,arg3:string):Promise<type
 
 export function GetMutatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.MutatingWebhookConfigurationDetails>;
 
-export function GetNamespace(arg1:string,arg2:string):Promise<types.NamespaceDetails>;
+export function GetNamespace(arg1:string,arg2:string):Promise<namespaces.NamespaceDetails>;
 
 export function GetNetworkPolicy(arg1:string,arg2:string,arg3:string):Promise<networkpolicy.NetworkPolicyDetails>;
 

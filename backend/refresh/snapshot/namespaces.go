@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	namespacepkg "github.com/luxury-yacht/app/backend/resources/namespaces"
 )
 
 // NamespaceBuilder constructs namespace snapshots from informer caches.
@@ -119,7 +120,8 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	var version uint64
 	for _, ns := range namespaces {
 		hasWorkloads, workloadsUnknown := b.namespaceWorkloadsStatus(ns.Name, trackerReady)
-		model := resourcemodel.BuildNamespaceResourceModel(meta.ClusterID, ns, hasWorkloads, !workloadsUnknown, nil, nil)
+		model := namespacepkg.BuildResourceModel(meta.ClusterID, ns, hasWorkloads, !workloadsUnknown, nil, nil)
+		facts := namespacepkg.BuildFacts(meta.ClusterID, ns, hasWorkloads, !workloadsUnknown, nil, nil, resourcemodel.ResourceModelBuildOptions{})
 		items = append(items, NamespaceSummary{
 			ClusterMeta:        meta,
 			Ref:                model.Ref,
@@ -131,8 +133,8 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 			StatusReason:       model.Status.Reason,
 			ResourceVersion:    model.Metadata.ResourceVersion,
 			CreationUnix:       model.Metadata.CreationTimestamp.Unix(),
-			HasWorkloads:       model.Facts.Namespace.HasWorkloads,
-			WorkloadsUnknown:   !model.Facts.Namespace.WorkloadsKnown,
+			HasWorkloads:       facts.HasWorkloads,
+			WorkloadsUnknown:   !facts.WorkloadsKnown,
 		})
 		if v := parseResourceVersion(ns); v > version {
 			version = v

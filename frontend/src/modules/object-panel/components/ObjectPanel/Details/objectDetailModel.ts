@@ -11,6 +11,7 @@ import {
   ingressclass,
   limitrange,
   job,
+  namespaces,
   networkpolicy,
   persistentvolume,
   persistentvolumeclaim,
@@ -63,7 +64,7 @@ export interface DetailSlots {
   resourceQuotaDetails: resourcequota.ResourceQuotaDetails | null;
   limitRangeDetails: limitrange.LimitRangeDetails | null;
   nodeDetails: types.NodeDetails | null;
-  namespaceDetails: types.NamespaceDetails | null;
+  namespaceDetails: namespaces.NamespaceDetails | null;
   ingressClassDetails: ingressclass.IngressClassDetails | null;
   gatewayClassDetails?: types.GatewayClassDetails | null;
   crdDetails: types.CustomResourceDefinitionDetails | null;
@@ -354,7 +355,10 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'node':
       return { ...EMPTY_DETAIL_SLOTS, nodeDetails: detailPayload as types.NodeDetails };
     case 'namespace':
-      return { ...EMPTY_DETAIL_SLOTS, namespaceDetails: detailPayload as types.NamespaceDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        namespaceDetails: detailPayload as namespaces.NamespaceDetails,
+      };
     case 'ingressclass':
       return {
         ...EMPTY_DETAIL_SLOTS,

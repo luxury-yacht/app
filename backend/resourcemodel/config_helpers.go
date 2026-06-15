@@ -122,7 +122,7 @@ func podResourceLink(clusterID string, pod corev1.Pod) ResourceLink {
 	)
 }
 
-func sortResourceLinksByObjectName(links []ResourceLink) {
+func SortResourceLinksByObjectName(links []ResourceLink) {
 	sort.SliceStable(links, func(i, j int) bool {
 		left := resourceLinkSortKey(links[i])
 		right := resourceLinkSortKey(links[j])
