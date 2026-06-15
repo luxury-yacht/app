@@ -3,14 +3,14 @@
  */
 
 import React from 'react';
-import { types } from '@wailsjs/go/models';
+import { networkpolicy } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import './shared/OverviewBlocks.css';
 
 interface NetworkPolicyOverviewProps {
-  networkPolicyDetails: types.NetworkPolicyDetails | null;
+  networkPolicyDetails: networkpolicy.NetworkPolicyDetails | null;
 }
 
 const formatSelector = (selector: Record<string, string>): string =>
@@ -18,14 +18,14 @@ const formatSelector = (selector: Record<string, string>): string =>
     .map(([k, v]) => `${k}=${v}`)
     .join(', ');
 
-const formatPort = (port: types.NetworkPolicyPort): string => {
+const formatPort = (port: networkpolicy.NetworkPolicyPort): string => {
   const protocol = port.protocol ? `${port.protocol}/` : '';
   const portValue = port.port ?? '';
   const range = port.endPort ? `-${port.endPort}` : '';
   return `${protocol}${portValue}${range}`;
 };
 
-const PeerLines: React.FC<{ peers: types.NetworkPolicyPeer[]; keyPrefix: string }> = ({
+const PeerLines: React.FC<{ peers: networkpolicy.NetworkPolicyPeer[]; keyPrefix: string }> = ({
   peers,
   keyPrefix,
 }) => (
@@ -63,7 +63,7 @@ const PeerLines: React.FC<{ peers: types.NetworkPolicyPeer[]; keyPrefix: string 
 );
 
 const RuleCard: React.FC<{
-  rule: types.NetworkPolicyRule;
+  rule: networkpolicy.NetworkPolicyRule;
   index: number;
   direction: 'ingress' | 'egress';
 }> = ({ rule, index, direction }) => {
@@ -145,7 +145,7 @@ export const NetworkPolicyOverview: React.FC<NetworkPolicyOverviewProps> = ({
           value={
             <div className="overview-card-list">
               {networkPolicyDetails.ingressRules.map(
-                (rule: types.NetworkPolicyRule, ruleIndex: number) => (
+                (rule: networkpolicy.NetworkPolicyRule, ruleIndex: number) => (
                   <RuleCard
                     key={`ingress-rule-${ruleIndex}`}
                     rule={rule}
@@ -166,7 +166,7 @@ export const NetworkPolicyOverview: React.FC<NetworkPolicyOverviewProps> = ({
           value={
             <div className="overview-card-list">
               {networkPolicyDetails.egressRules.map(
-                (rule: types.NetworkPolicyRule, ruleIndex: number) => (
+                (rule: networkpolicy.NetworkPolicyRule, ruleIndex: number) => (
                   <RuleCard
                     key={`egress-rule-${ruleIndex}`}
                     rule={rule}

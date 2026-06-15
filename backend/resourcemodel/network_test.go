@@ -172,50 +172,6 @@ func TestBuildIngressResourceModelFactsAndStatus(t *testing.T) {
 	require.Len(t, model.Facts.Ingress.BackendRefs, 2)
 }
 
-func TestBuildNetworkPolicyResourceModelFactsAndStatus(t *testing.T) {
-	protocol := corev1.ProtocolTCP
-	endPort := int32(8443)
-	policy := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: "allow-web", Namespace: "default", UID: types.UID("policy-uid")},
-		Spec: networkingv1.NetworkPolicySpec{
-			PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
-			Ingress: []networkingv1.NetworkPolicyIngressRule{{
-				From: []networkingv1.NetworkPolicyPeer{{
-					NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "frontend"}},
-					PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"role": "client"}},
-				}},
-				Ports: []networkingv1.NetworkPolicyPort{{
-					Protocol: &protocol,
-					Port:     &intstr.IntOrString{Type: intstr.String, StrVal: "https"},
-					EndPort:  &endPort,
-				}},
-			}},
-			Egress: []networkingv1.NetworkPolicyEgressRule{{
-				To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{
-					CIDR:   "10.0.0.0/8",
-					Except: []string{"10.1.0.0/16"},
-				}}},
-			}},
-		},
-	}
-
-	model := BuildNetworkPolicyResourceModel("cluster-a", policy)
-	require.Equal(t, "NetworkPolicy", model.Ref.Kind)
-	require.Equal(t, "1/1", model.Status.State)
-	require.Equal(t, "Ingress,Egress, 1 ingress, 1 egress", model.Status.Label)
-	require.Equal(t, "ready", model.Status.Presentation)
-	require.Equal(t, []string{"Ingress", "Egress"}, model.Facts.NetworkPolicy.PolicyTypes)
-	require.Equal(t, map[string]string{"app": "web"}, model.Facts.NetworkPolicy.PodSelector)
-	require.Equal(t, map[string]string{"team": "frontend"}, model.Facts.NetworkPolicy.IngressRules[0].Peers[0].NamespaceSelector)
-	require.Equal(t, map[string]string{"role": "client"}, model.Facts.NetworkPolicy.IngressRules[0].Peers[0].PodSelector)
-	require.Equal(t, "TCP", model.Facts.NetworkPolicy.IngressRules[0].Ports[0].Protocol)
-	require.Equal(t, "https", model.Facts.NetworkPolicy.IngressRules[0].Ports[0].Port)
-	require.NotNil(t, model.Facts.NetworkPolicy.IngressRules[0].Ports[0].EndPort)
-	require.Equal(t, endPort, *model.Facts.NetworkPolicy.IngressRules[0].Ports[0].EndPort)
-	require.Equal(t, "10.0.0.0/8", model.Facts.NetworkPolicy.EgressRules[0].Peers[0].IPBlock.CIDR)
-	require.Equal(t, []string{"10.1.0.0/16"}, model.Facts.NetworkPolicy.EgressRules[0].Peers[0].IPBlock.Except)
-}
-
 func networkStringPtr(value string) *string {
 	return &value
 }

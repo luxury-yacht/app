@@ -30,6 +30,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/network"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/pods"
@@ -177,7 +178,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"networkpolicy": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(deps).NetworkPolicy(namespace, name)
+			detail, err := networkpolicy.NewService(deps).NetworkPolicy(namespace, name)
 			return detail, "", err
 		},
 	},

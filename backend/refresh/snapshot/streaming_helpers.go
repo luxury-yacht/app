@@ -25,6 +25,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 )
 
@@ -198,8 +199,8 @@ func BuildNetworkPolicySummary(meta ClusterMeta, policy *networkingv1.NetworkPol
 	if policy == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "NetworkPolicy"}
 	}
-	model := resourcemodel.BuildNetworkPolicyResourceModel(meta.ClusterID, policy)
-	return newNetworkSummary(meta, policy, "NetworkPolicy", describeNetworkPolicyFacts(model.Facts.NetworkPolicy))
+	facts := networkpolicy.BuildFacts(policy)
+	return newNetworkSummary(meta, policy, "NetworkPolicy", networkpolicy.DescribeSummary(facts))
 }
 
 func BuildGatewayNetworkSummary(meta ClusterMeta, gateway *gatewayv1.Gateway) NetworkSummary {

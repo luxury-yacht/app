@@ -1,13 +1,13 @@
 /*
- * backend/resources/network/network_policies_test.go
+ * backend/resources/networkpolicy/details_test.go
  *
- * Tests for NetworkPolicy resource handlers.
- * - Covers NetworkPolicy resource handlers behavior and edge cases.
+ * Tests for the NetworkPolicy detail service (co-located with the kind).
  */
 
-package network
+package networkpolicy_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -20,11 +20,25 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
+
+	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-func TestManagerNetworkPolicyDetails(t *testing.T) {
+func newService(t testing.TB, client *fake.Clientset) *networkpolicy.Service {
+	t.Helper()
+	deps := testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(client),
+		testsupport.WithDepsLogger(applog.Noop),
+	)
+	return networkpolicy.NewService(deps)
+}
+
+func TestNetworkPolicyDetails(t *testing.T) {
 	protocolTCP := corev1.ProtocolTCP
-	port := intstrFromInt(80)
+	port := intstr.FromInt(80)
 
 	np := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
@@ -48,16 +62,16 @@ func TestManagerNetworkPolicyDetails(t *testing.T) {
 	}
 
 	client := fake.NewClientset(np)
-	manager := newManager(t, client)
+	service := newService(t, client)
 
-	detail, err := manager.NetworkPolicy("default", "allow-http")
+	detail, err := service.NetworkPolicy("default", "allow-http")
 	require.NoError(t, err)
 	require.Equal(t, "NetworkPolicy", detail.Kind)
 	require.Len(t, detail.IngressRules, 1)
 	require.Contains(t, detail.Details, "ingress")
 }
 
-func TestManagerNetworkPolicyDetailsWithEgressAndIPBlock(t *testing.T) {
+func TestNetworkPolicyDetailsWithEgressAndIPBlock(t *testing.T) {
 	protocolUDP := corev1.ProtocolUDP
 	startPort := intstr.FromInt(53)
 	endPort := int32(55)
@@ -91,9 +105,9 @@ func TestManagerNetworkPolicyDetailsWithEgressAndIPBlock(t *testing.T) {
 	}
 
 	client := fake.NewClientset(np)
-	manager := newManager(t, client)
+	service := newService(t, client)
 
-	detail, err := manager.NetworkPolicy("default", "dns-egress")
+	detail, err := service.NetworkPolicy("default", "dns-egress")
 	require.NoError(t, err)
 	require.Contains(t, detail.Details, "All pods")
 	require.Len(t, detail.EgressRules, 1)
@@ -106,7 +120,7 @@ func TestManagerNetworkPolicyDetailsWithEgressAndIPBlock(t *testing.T) {
 	require.Contains(t, detail.Details, "0 ingress, 1 egress rules")
 }
 
-func TestManagerNetworkPoliciesAggregatesMultipleResults(t *testing.T) {
+func TestNetworkPoliciesAggregatesMultipleResults(t *testing.T) {
 	older := metav1.NewTime(time.Now().Add(-2 * time.Hour))
 	allowAll := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
@@ -136,9 +150,9 @@ func TestManagerNetworkPoliciesAggregatesMultipleResults(t *testing.T) {
 	}
 
 	client := fake.NewClientset(allowAll, restrict)
-	manager := newManager(t, client)
+	service := newService(t, client)
 
-	allPolicies, err := manager.NetworkPolicies("default")
+	allPolicies, err := service.NetworkPolicies("default")
 	require.NoError(t, err)
 	require.Len(t, allPolicies, 2)
 	require.Equal(t, "NetworkPolicy", allPolicies[0].Kind)
@@ -146,28 +160,28 @@ func TestManagerNetworkPoliciesAggregatesMultipleResults(t *testing.T) {
 	require.Contains(t, allPolicies[1].Details, "1 egress rules")
 }
 
-func TestManagerNetworkPoliciesErrorWhenListFails(t *testing.T) {
+func TestNetworkPoliciesErrorWhenListFails(t *testing.T) {
 	client := fake.NewClientset()
 	client.PrependReactor("list", "networkpolicies", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("api down")
 	})
 
-	manager := newManager(t, client)
+	service := newService(t, client)
 
-	_, err := manager.NetworkPolicies("default")
+	_, err := service.NetworkPolicies("default")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to list network policies")
 }
 
-func TestManagerNetworkPolicyErrorWhenGetFails(t *testing.T) {
+func TestNetworkPolicyErrorWhenGetFails(t *testing.T) {
 	client := fake.NewClientset()
 	client.PrependReactor("get", "networkpolicies", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("boom")
 	})
 
-	manager := newManager(t, client)
+	service := newService(t, client)
 
-	_, err := manager.NetworkPolicy("default", "missing")
+	_, err := service.NetworkPolicy("default", "missing")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get network policy")
 }

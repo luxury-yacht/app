@@ -10,6 +10,7 @@ import {deployment} from '../models';
 import {json} from '../models';
 import {ingressclass} from '../models';
 import {job} from '../models';
+import {networkpolicy} from '../models';
 import {poddisruptionbudget} from '../models';
 import {replicaset} from '../models';
 import {statefulset} from '../models';
@@ -146,7 +147,7 @@ export function GetMutatingWebhookConfiguration(arg1:string,arg2:string):Promise
 
 export function GetNamespace(arg1:string,arg2:string):Promise<types.NamespaceDetails>;
 
-export function GetNetworkPolicy(arg1:string,arg2:string,arg3:string):Promise<types.NetworkPolicyDetails>;
+export function GetNetworkPolicy(arg1:string,arg2:string,arg3:string):Promise<networkpolicy.NetworkPolicyDetails>;
 
 export function GetNode(arg1:string,arg2:string):Promise<types.NodeDetails>;
 

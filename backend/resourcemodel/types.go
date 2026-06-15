@@ -154,7 +154,6 @@ type ResourceFacts struct {
 	Service                        *ServiceFacts                        `json:"service,omitempty"`
 	EndpointSlice                  *EndpointSliceFacts                  `json:"endpointSlice,omitempty"`
 	Ingress                        *IngressFacts                        `json:"ingress,omitempty"`
-	NetworkPolicy                  *NetworkPolicyFacts                  `json:"networkPolicy,omitempty"`
 	GatewayClass                   *GatewayClassFacts                   `json:"gatewayClass,omitempty"`
 	Gateway                        *GatewayFacts                        `json:"gateway,omitempty"`
 	HTTPRoute                      *HTTPRouteFacts                      `json:"httpRoute,omitempty"`
@@ -358,34 +357,9 @@ type IngressBackendFacts struct {
 // IngressClassFacts moved to resources/ingressclass (type ingressclass.Facts),
 // removed from the ResourceFacts union (same cycle-break as the other kinds).
 
-type NetworkPolicyFacts struct {
-	PodSelector  map[string]string        `json:"podSelector,omitempty"`
-	PolicyTypes  []string                 `json:"policyTypes,omitempty"`
-	IngressRules []NetworkPolicyRuleFacts `json:"ingressRules,omitempty"`
-	EgressRules  []NetworkPolicyRuleFacts `json:"egressRules,omitempty"`
-}
-
-type NetworkPolicyRuleFacts struct {
-	Peers []NetworkPolicyPeerFacts `json:"peers,omitempty"`
-	Ports []NetworkPolicyPortFacts `json:"ports,omitempty"`
-}
-
-type NetworkPolicyPeerFacts struct {
-	PodSelector       map[string]string `json:"podSelector,omitempty"`
-	NamespaceSelector map[string]string `json:"namespaceSelector,omitempty"`
-	IPBlock           *IPBlockFacts     `json:"ipBlock,omitempty"`
-}
-
-type NetworkPolicyPortFacts struct {
-	Protocol string `json:"protocol,omitempty"`
-	Port     string `json:"port,omitempty"`
-	EndPort  *int32 `json:"endPort,omitempty"`
-}
-
-type IPBlockFacts struct {
-	CIDR   string   `json:"cidr,omitempty"`
-	Except []string `json:"except,omitempty"`
-}
+// NetworkPolicyFacts + its RuleFacts/PeerFacts/PortFacts/IPBlockFacts sub-types
+// moved to resources/networkpolicy (NetworkPolicy-only), removed from the
+// ResourceFacts union (same cycle-break as the other kinds).
 
 type ConditionsSummaryFacts struct {
 	Accepted   *ConditionFacts `json:"accepted,omitempty"`

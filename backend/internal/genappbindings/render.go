@@ -68,7 +68,7 @@ var Bindings = []binding{
 	{Name: "ListenerSet", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
 	{Name: "MutatingWebhookConfiguration", Service: "admission.NewService(deps)", Import: resourcesPkg + "admission"},
 	{Name: "Namespace", Service: "namespaces.NewService(deps)", Import: resourcesPkg + "namespaces"},
-	{Name: "NetworkPolicy", Namespaced: true, Service: "network.NewService(deps)", Import: resourcesPkg + "network"},
+	{Name: "NetworkPolicy", Namespaced: true, Service: "networkpolicy.NewService(deps)", Import: resourcesPkg + "networkpolicy"},
 	{Name: "Node", Service: "nodes.NewService(deps)", Import: resourcesPkg + "nodes"},
 	{Name: "PersistentVolume", Service: "storage.NewService(deps)", Import: resourcesPkg + "storage"},
 	{Name: "PersistentVolumeClaim", Namespaced: true, Key: "PVC", Service: "storage.NewService(deps)", Import: resourcesPkg + "storage"},

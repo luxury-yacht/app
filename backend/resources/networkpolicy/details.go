@@ -1,24 +1,33 @@
 /*
- * backend/resources/network/network_policies.go
+ * backend/resources/networkpolicy/details.go
  *
- * NetworkPolicy resource handlers.
- * - Builds detail and list views for the frontend.
+ * NetworkPolicy resource handlers, co-located in the per-kind package. Intrinsic
+ * fields come from the single model (networkpolicy.Facts).
  */
 
-package network
+package networkpolicy
 
 import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/types"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (s *Service) NetworkPolicy(namespace, name string) (*types.NetworkPolicyDetails, error) {
+// Service provides detailed NetworkPolicy views backed by shared dependencies.
+type Service struct {
+	deps common.Dependencies
+}
+
+// NewService constructs a NetworkPolicy service using the supplied dependencies bundle.
+func NewService(deps common.Dependencies) *Service {
+	return &Service{deps: deps}
+}
+
+// NetworkPolicy returns the detailed view for a single network policy.
+func (s *Service) NetworkPolicy(namespace, name string) (*NetworkPolicyDetails, error) {
 	np, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get network policy %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
@@ -27,14 +36,15 @@ func (s *Service) NetworkPolicy(namespace, name string) (*types.NetworkPolicyDet
 	return s.buildNetworkPolicyDetails(np), nil
 }
 
-func (s *Service) NetworkPolicies(namespace string) ([]*types.NetworkPolicyDetails, error) {
+// NetworkPolicies returns detailed views for all network policies in the namespace.
+func (s *Service) NetworkPolicies(namespace string) ([]*NetworkPolicyDetails, error) {
 	policies, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to list network policies in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to list network policies: %v", err)
 	}
 
-	var results []*types.NetworkPolicyDetails
+	var results []*NetworkPolicyDetails
 	for i := range policies.Items {
 		np := policies.Items[i]
 		results = append(results, s.buildNetworkPolicyDetails(&np))
@@ -43,10 +53,9 @@ func (s *Service) NetworkPolicies(namespace string) ([]*types.NetworkPolicyDetai
 	return results, nil
 }
 
-func (s *Service) buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *types.NetworkPolicyDetails {
-	model := resourcemodel.BuildNetworkPolicyResourceModel(s.deps.ClusterID, np)
-	facts := model.Facts.NetworkPolicy
-	details := &types.NetworkPolicyDetails{
+func (s *Service) buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *NetworkPolicyDetails {
+	facts := BuildFacts(np)
+	details := &NetworkPolicyDetails{
 		Kind:        "NetworkPolicy",
 		Name:        np.Name,
 		Namespace:   np.Namespace,
@@ -59,11 +68,11 @@ func (s *Service) buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *typ
 	details.PolicyTypes = append(details.PolicyTypes, facts.PolicyTypes...)
 
 	for _, ingress := range facts.IngressRules {
-		details.IngressRules = append(details.IngressRules, networkPolicyIngressFactsToDetails(ingress))
+		details.IngressRules = append(details.IngressRules, ingressFactsToDetails(ingress))
 	}
 
 	for _, egress := range facts.EgressRules {
-		details.EgressRules = append(details.EgressRules, networkPolicyEgressFactsToDetails(egress))
+		details.EgressRules = append(details.EgressRules, egressFactsToDetails(egress))
 	}
 
 	podSelectorInfo := "All pods"
@@ -85,32 +94,32 @@ func (s *Service) buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *typ
 	return details
 }
 
-func networkPolicyIngressFactsToDetails(facts resourcemodel.NetworkPolicyRuleFacts) types.NetworkPolicyRule {
-	return types.NetworkPolicyRule{
-		From:  networkPolicyPeerFactsToDetails(facts.Peers),
-		Ports: networkPolicyPortFactsToDetails(facts.Ports),
+func ingressFactsToDetails(facts RuleFacts) NetworkPolicyRule {
+	return NetworkPolicyRule{
+		From:  peerFactsToDetails(facts.Peers),
+		Ports: portFactsToDetails(facts.Ports),
 	}
 }
 
-func networkPolicyEgressFactsToDetails(facts resourcemodel.NetworkPolicyRuleFacts) types.NetworkPolicyRule {
-	return types.NetworkPolicyRule{
-		To:    networkPolicyPeerFactsToDetails(facts.Peers),
-		Ports: networkPolicyPortFactsToDetails(facts.Ports),
+func egressFactsToDetails(facts RuleFacts) NetworkPolicyRule {
+	return NetworkPolicyRule{
+		To:    peerFactsToDetails(facts.Peers),
+		Ports: portFactsToDetails(facts.Ports),
 	}
 }
 
-func networkPolicyPeerFactsToDetails(peers []resourcemodel.NetworkPolicyPeerFacts) []types.NetworkPolicyPeer {
+func peerFactsToDetails(peers []PeerFacts) []NetworkPolicyPeer {
 	if len(peers) == 0 {
 		return nil
 	}
-	details := make([]types.NetworkPolicyPeer, 0, len(peers))
+	details := make([]NetworkPolicyPeer, 0, len(peers))
 	for _, peer := range peers {
-		next := types.NetworkPolicyPeer{
+		next := NetworkPolicyPeer{
 			PodSelector:       peer.PodSelector,
 			NamespaceSelector: peer.NamespaceSelector,
 		}
 		if peer.IPBlock != nil {
-			next.IPBlock = &types.IPBlock{
+			next.IPBlock = &IPBlock{
 				CIDR:   peer.IPBlock.CIDR,
 				Except: peer.IPBlock.Except,
 			}
@@ -120,13 +129,13 @@ func networkPolicyPeerFactsToDetails(peers []resourcemodel.NetworkPolicyPeerFact
 	return details
 }
 
-func networkPolicyPortFactsToDetails(ports []resourcemodel.NetworkPolicyPortFacts) []types.NetworkPolicyPort {
+func portFactsToDetails(ports []PortFacts) []NetworkPolicyPort {
 	if len(ports) == 0 {
 		return nil
 	}
-	details := make([]types.NetworkPolicyPort, 0, len(ports))
+	details := make([]NetworkPolicyPort, 0, len(ports))
 	for _, port := range ports {
-		next := types.NetworkPolicyPort{Protocol: port.Protocol}
+		next := NetworkPolicyPort{Protocol: port.Protocol}
 		if port.Port != "" {
 			portValue := port.Port
 			next.Port = &portValue

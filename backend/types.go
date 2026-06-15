@@ -6,6 +6,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
@@ -93,11 +94,11 @@ type (
 	BackendTLSPolicyDetails               = types.BackendTLSPolicyDetails
 	IngressClassDetails                   = ingressclass.IngressClassDetails
 	IngressClassParameters                = ingressclass.IngressClassParameters
-	NetworkPolicyDetails                  = types.NetworkPolicyDetails
-	NetworkPolicyRule                     = types.NetworkPolicyRule
-	NetworkPolicyPeer                     = types.NetworkPolicyPeer
-	IPBlock                               = types.IPBlock
-	NetworkPolicyPort                     = types.NetworkPolicyPort
+	NetworkPolicyDetails                  = networkpolicy.NetworkPolicyDetails
+	NetworkPolicyRule                     = networkpolicy.NetworkPolicyRule
+	NetworkPolicyPeer                     = networkpolicy.NetworkPolicyPeer
+	IPBlock                               = networkpolicy.IPBlock
+	NetworkPolicyPort                     = networkpolicy.NetworkPolicyPort
 	RoleDetails                           = types.RoleDetails
 	PolicyRule                            = types.PolicyRule
 	RoleBindingDetails                    = types.RoleBindingDetails

@@ -22,6 +22,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
@@ -715,7 +716,7 @@ func (idx *objectMapIndex) collectNetworkPolicies(lister networklisters.NetworkP
 	collectKind(idx, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies",
 		func() ([]*networkingv1.NetworkPolicy, error) { return lister.List(labels.Everything()) },
 		func(policy *networkingv1.NetworkPolicy, rec *objectMapRecord) {
-			rec.status = objectMapNetworkPolicyStatus(idx.meta.ClusterID, *policy)
+			rec.status = networkpolicy.ObjectMapStatus(idx.meta.ClusterID, *policy)
 			rec.networkPolicy = policy
 		})
 }
@@ -1204,10 +1205,6 @@ func objectMapHPAStatus(clusterID string, hpa autoscalingv2.HorizontalPodAutosca
 	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapNetworkPolicyStatus(clusterID string, policy networkingv1.NetworkPolicy) *ObjectMapStatus {
-	model := resourcemodel.BuildNetworkPolicyResourceModel(clusterID, &policy)
-	return objectMapStatusFromResourceModel(model)
-}
 
 func objectMapIngressStatus(clusterID string, ingress networkingv1.Ingress) *ObjectMapStatus {
 	model := resourcemodel.BuildIngressResourceModel(clusterID, &ingress)

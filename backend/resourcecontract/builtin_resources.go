@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
@@ -59,7 +60,7 @@ var BuiltinResources = []BuiltinResource{
 	builtin("autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", true),
 
 	builtin("networking.k8s.io", "v1", "Ingress", "ingresses", true),
-	builtin("networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", true),
+	builtin(networkpolicy.Identity.Group, networkpolicy.Identity.Version, networkpolicy.Identity.Kind, networkpolicy.Identity.Resource, networkpolicy.Identity.Namespaced),
 	builtin(ingressclass.Identity.Group, ingressclass.Identity.Version, ingressclass.Identity.Kind, ingressclass.Identity.Resource, ingressclass.Identity.Namespaced),
 
 	builtin("discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", true),

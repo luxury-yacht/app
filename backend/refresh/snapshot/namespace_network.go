@@ -516,15 +516,8 @@ func describeIngressFacts(facts *resourcemodel.IngressFacts) string {
 	return strings.Join(parts, ", ")
 }
 
-func describeNetworkPolicyFacts(facts *resourcemodel.NetworkPolicyFacts) string {
-	if facts == nil {
-		return ""
-	}
-	if len(facts.PolicyTypes) == 0 {
-		return "Policy types: Ingress"
-	}
-	return fmt.Sprintf("Policy types: %s", strings.Join(facts.PolicyTypes, ","))
-}
+// describeNetworkPolicyFacts moved to resources/networkpolicy
+// (networkpolicy.DescribeSummary), co-located with the NetworkPolicy model.
 
 func describeEndpointSliceFacts(facts *resourcemodel.EndpointSliceFacts) string {
 	if facts == nil {

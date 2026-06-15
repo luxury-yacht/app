@@ -4,6 +4,7 @@ import {
   deployment,
   ingressclass,
   job,
+  networkpolicy,
   poddisruptionbudget,
   replicaset,
   statefulset,
@@ -24,7 +25,7 @@ export interface DetailSlots {
   helmReleaseDetails: types.HelmReleaseDetails | null;
   serviceDetails: types.ServiceDetails | null;
   ingressDetails: types.IngressDetails | null;
-  networkPolicyDetails: types.NetworkPolicyDetails | null;
+  networkPolicyDetails: networkpolicy.NetworkPolicyDetails | null;
   endpointSliceDetails: types.EndpointSliceDetails | null;
   gatewayDetails?: types.GatewayDetails | null;
   httpRouteDetails?: types.RouteDetails | null;
@@ -244,7 +245,7 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'networkpolicy':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        networkPolicyDetails: detailPayload as types.NetworkPolicyDetails,
+        networkPolicyDetails: detailPayload as networkpolicy.NetworkPolicyDetails,
       };
     case 'endpointslice':
       return {

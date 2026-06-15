@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/network"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/rbac"
@@ -229,7 +230,7 @@ func (a *App) GetNetworkPolicy(clusterID, namespace, name string) (*NetworkPolic
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "NetworkPolicy", namespace, name, func() (*NetworkPolicyDetails, error) {
-		return network.NewService(deps).NetworkPolicy(namespace, name)
+		return networkpolicy.NewService(deps).NetworkPolicy(namespace, name)
 	})
 }
 
