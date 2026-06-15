@@ -128,23 +128,9 @@ type ConditionFacts struct {
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
 }
 
-type TaintFacts struct {
-	Key    string `json:"key"`
-	Value  string `json:"value,omitempty"`
-	Effect string `json:"effect,omitempty"`
-}
 
-type NodeFacts struct {
-	Roles         []string         `json:"roles,omitempty"`
-	Unschedulable bool             `json:"unschedulable"`
-	Cordoned      bool             `json:"cordoned"`
-	Conditions    []ConditionFacts `json:"conditions,omitempty"`
-	Taints        []TaintFacts     `json:"taints,omitempty"`
-}
 
 type ResourceFacts struct {
-	Node                           *NodeFacts                           `json:"node,omitempty"`
-	Pod                            *PodFacts                            `json:"pod,omitempty"`
 	GatewayClass                   *GatewayClassFacts                   `json:"gatewayClass,omitempty"`
 	Gateway                        *GatewayFacts                        `json:"gateway,omitempty"`
 	HTTPRoute                      *HTTPRouteFacts                      `json:"httpRoute,omitempty"`
@@ -153,24 +139,9 @@ type ResourceFacts struct {
 	ListenerSet                    *ListenerSetFacts                    `json:"listenerSet,omitempty"`
 	ReferenceGrant                 *ReferenceGrantFacts                 `json:"referenceGrant,omitempty"`
 	BackendTLSPolicy               *BackendTLSPolicyFacts               `json:"backendTLSPolicy,omitempty"`
-	CustomResourceDefinition       *CustomResourceDefinitionFacts       `json:"customResourceDefinition,omitempty"`
-	MutatingWebhookConfiguration   *MutatingWebhookConfigurationFacts   `json:"mutatingWebhookConfiguration,omitempty"`
-	ValidatingWebhookConfiguration *ValidatingWebhookConfigurationFacts `json:"validatingWebhookConfiguration,omitempty"`
-	HelmRelease                    *HelmReleaseFacts                    `json:"helmRelease,omitempty"`
-	Event                          *EventFacts                          `json:"event,omitempty"`
-	CustomResource                 *CustomResourceFacts                 `json:"customResource,omitempty"`
 }
 
 
-type PodFacts struct {
-	Phase           string           `json:"phase,omitempty"`
-	NodeName        string           `json:"nodeName,omitempty"`
-	PodIP           string           `json:"podIP,omitempty"`
-	ReadyContainers int32            `json:"readyContainers"`
-	TotalContainers int32            `json:"totalContainers"`
-	RestartCount    int32            `json:"restartCount"`
-	Conditions      []ConditionFacts `json:"conditions,omitempty"`
-}
 
 type WorkloadCommonFacts struct {
 	DesiredReplicas   int32            `json:"desiredReplicas"`
@@ -360,138 +331,22 @@ type DisruptedPodFacts struct {
 // resources/resourcequota and LimitRangeFacts (+ LimitRangeItemFacts) moved to
 // resources/limitrange. ResourceQuantityMapFacts stays here (shared primitive).
 
-type CustomResourceDefinitionFacts struct {
-	Group                   string            `json:"group,omitempty"`
-	Scope                   string            `json:"scope,omitempty"`
-	Names                   CRDNamesFacts     `json:"names"`
-	Versions                []CRDVersionFacts `json:"versions,omitempty"`
-	Conditions              []ConditionFacts  `json:"conditions,omitempty"`
-	ConversionStrategy      string            `json:"conversionStrategy,omitempty"`
-	StorageVersion          string            `json:"storageVersion,omitempty"`
-	ExtraServedVersionCount int               `json:"extraServedVersionCount,omitempty"`
-}
 
-type CRDNamesFacts struct {
-	Plural     string   `json:"plural,omitempty"`
-	Singular   string   `json:"singular,omitempty"`
-	Kind       string   `json:"kind,omitempty"`
-	ListKind   string   `json:"listKind,omitempty"`
-	ShortNames []string `json:"shortNames,omitempty"`
-	Categories []string `json:"categories,omitempty"`
-}
 
-type CRDVersionFacts struct {
-	Name       string `json:"name"`
-	Served     bool   `json:"served"`
-	Storage    bool   `json:"storage"`
-	Deprecated bool   `json:"deprecated"`
-	HasSchema  bool   `json:"hasSchema"`
-}
 
-type LabelSelectorFacts struct {
-	MatchLabels      map[string]string               `json:"matchLabels,omitempty"`
-	MatchExpressions []LabelSelectorRequirementFacts `json:"matchExpressions,omitempty"`
-}
 
-type LabelSelectorRequirementFacts struct {
-	Key      string   `json:"key"`
-	Operator string   `json:"operator"`
-	Values   []string `json:"values,omitempty"`
-}
 
-type MutatingWebhookConfigurationFacts struct {
-	Webhooks []MutatingWebhookFacts `json:"webhooks,omitempty"`
-}
 
-type ValidatingWebhookConfigurationFacts struct {
-	Webhooks []ValidatingWebhookFacts `json:"webhooks,omitempty"`
-}
 
-type WebhookFacts struct {
-	Name                    string                   `json:"name,omitempty"`
-	AdmissionReviewVersions []string                 `json:"admissionReviewVersions,omitempty"`
-	ClientConfig            WebhookClientConfigFacts `json:"clientConfig"`
-	FailurePolicy           string                   `json:"failurePolicy,omitempty"`
-	MatchPolicy             string                   `json:"matchPolicy,omitempty"`
-	SideEffects             string                   `json:"sideEffects,omitempty"`
-	TimeoutSeconds          *int32                   `json:"timeoutSeconds,omitempty"`
-	NamespaceSelector       *LabelSelectorFacts      `json:"namespaceSelector,omitempty"`
-	ObjectSelector          *LabelSelectorFacts      `json:"objectSelector,omitempty"`
-	Rules                   []WebhookRuleFacts       `json:"rules,omitempty"`
-}
 
-type MutatingWebhookFacts struct {
-	WebhookFacts
-	ReinvocationPolicy string `json:"reinvocationPolicy,omitempty"`
-}
 
-type ValidatingWebhookFacts struct {
-	WebhookFacts
-}
 
-type WebhookClientConfigFacts struct {
-	Service *WebhookServiceFacts `json:"service,omitempty"`
-	URL     string               `json:"url,omitempty"`
-}
 
-type WebhookServiceFacts struct {
-	Namespace string        `json:"namespace,omitempty"`
-	Name      string        `json:"name,omitempty"`
-	Path      *string       `json:"path,omitempty"`
-	Port      *int32        `json:"port,omitempty"`
-	Service   *ResourceLink `json:"service,omitempty"`
-}
 
-type WebhookRuleFacts struct {
-	APIGroups   []string `json:"apiGroups,omitempty"`
-	APIVersions []string `json:"apiVersions,omitempty"`
-	Resources   []string `json:"resources,omitempty"`
-	Operations  []string `json:"operations,omitempty"`
-	Scope       string   `json:"scope,omitempty"`
-}
 
-type HelmReleaseFacts struct {
-	Chart       string              `json:"chart,omitempty"`
-	Version     string              `json:"version,omitempty"`
-	AppVersion  string              `json:"appVersion,omitempty"`
-	Revision    int                 `json:"revision"`
-	RawStatus   string              `json:"rawStatus,omitempty"`
-	Updated     *metav1.Time        `json:"updated,omitempty"`
-	Description string              `json:"description,omitempty"`
-	Notes       string              `json:"notes,omitempty"`
-	Resources   []ResourceLink      `json:"resources,omitempty"`
-	History     []HelmRevisionFacts `json:"history,omitempty"`
-}
 
-type HelmRevisionFacts struct {
-	Revision    int          `json:"revision"`
-	Updated     *metav1.Time `json:"updated,omitempty"`
-	Status      string       `json:"status,omitempty"`
-	Chart       string       `json:"chart,omitempty"`
-	AppVersion  string       `json:"appVersion,omitempty"`
-	Description string       `json:"description,omitempty"`
-}
 
-type EventFacts struct {
-	EventType      string        `json:"eventType,omitempty"`
-	Reason         string        `json:"reason,omitempty"`
-	Message        string        `json:"message,omitempty"`
-	Count          int32         `json:"count"`
-	Source         string        `json:"source,omitempty"`
-	FirstTimestamp metav1.Time   `json:"firstTimestamp,omitempty"`
-	LastTimestamp  metav1.Time   `json:"lastTimestamp,omitempty"`
-	InvolvedObject *ResourceLink `json:"involvedObject,omitempty"`
-}
 
-type CustomResourceFacts struct {
-	CRD                *ResourceLink    `json:"crd,omitempty"`
-	Phase              string           `json:"phase,omitempty"`
-	State              string           `json:"state,omitempty"`
-	Ready              *bool            `json:"ready,omitempty"`
-	ObservedGeneration *int64           `json:"observedGeneration,omitempty"`
-	Conditions         []ConditionFacts `json:"conditions,omitempty"`
-	RawStatus          map[string]any   `json:"rawStatus,omitempty"`
-}
 
 type ResourceModel struct {
 	Ref      ResourceRef                `json:"ref"`

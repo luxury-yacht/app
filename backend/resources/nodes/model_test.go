@@ -1,9 +1,10 @@
-package resourcemodel
+package nodes
 
 import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,8 +19,8 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 		wantState        string
 		wantPresentation string
 		wantReason       string
-		wantSignal       ResourceStatusSignal
-		wantBadge        ResourceStatusBadge
+		wantSignal       resourcemodel.ResourceStatusSignal
+		wantBadge        resourcemodel.ResourceStatusBadge
 	}{
 		{
 			name:             "ready",
@@ -39,13 +40,13 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 			wantState:        string(corev1.ConditionTrue),
 			wantPresentation: "cordoned",
 			wantReason:       "Unschedulable",
-			wantSignal: ResourceStatusSignal{
-				Type:   StatusSignalResourceState,
+			wantSignal: resourcemodel.ResourceStatusSignal{
+				Type:   resourcemodel.StatusSignalResourceState,
 				Name:   "spec.unschedulable",
 				Status: "true",
 				Reason: "Unschedulable",
 			},
-			wantBadge: ResourceStatusBadge{Text: "Cordoned", Status: "true"},
+			wantBadge: resourcemodel.ResourceStatusBadge{Text: "Cordoned", Status: "true"},
 		},
 		{
 			name: "ready with unschedulable taint",
@@ -61,13 +62,13 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 			wantState:        string(corev1.ConditionTrue),
 			wantPresentation: "cordoned",
 			wantReason:       "Unschedulable",
-			wantSignal: ResourceStatusSignal{
-				Type:   StatusSignalResourceState,
+			wantSignal: resourcemodel.ResourceStatusSignal{
+				Type:   resourcemodel.StatusSignalResourceState,
 				Name:   corev1.TaintNodeUnschedulable,
 				Status: string(corev1.TaintEffectNoSchedule),
 				Reason: "UnschedulableTaint",
 			},
-			wantBadge: ResourceStatusBadge{Text: "Cordoned", Status: string(corev1.TaintEffectNoSchedule)},
+			wantBadge: resourcemodel.ResourceStatusBadge{Text: "Cordoned", Status: string(corev1.TaintEffectNoSchedule)},
 		},
 		{
 			name:             "not ready",
@@ -97,8 +98,8 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 			wantState:        string(corev1.ConditionTrue),
 			wantPresentation: "terminating",
 			wantReason:       "DeletionTimestamp",
-			wantSignal: ResourceStatusSignal{
-				Type:   StatusSignalDeletion,
+			wantSignal: resourcemodel.ResourceStatusSignal{
+				Type:   resourcemodel.StatusSignalDeletion,
 				Name:   "metadata.deletionTimestamp",
 				Status: "2026-05-07T20:15:00Z",
 			},
@@ -107,7 +108,7 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			model := BuildNodeResourceModel("cluster-a", tt.node)
+			model := BuildResourceModel("cluster-a", tt.node)
 			require.Equal(t, "cluster-a", model.Ref.ClusterID)
 			require.Equal(t, "", model.Ref.Group)
 			require.Equal(t, "v1", model.Ref.Version)
@@ -128,7 +129,7 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 	}
 }
 
-func TestBuildNodeResourceModelCopiesMetadataFacts(t *testing.T) {
+func TestBuildNodeResourceModelCopiesMetadataAndFacts(t *testing.T) {
 	node := nodeWithReadyCondition(corev1.ConditionTrue, "KubeletReady")
 	node.UID = types.UID("uid-1")
 	node.Labels = map[string]string{
@@ -138,14 +139,15 @@ func TestBuildNodeResourceModelCopiesMetadataFacts(t *testing.T) {
 	node.Annotations = map[string]string{"example": "annotation"}
 	node.Finalizers = []string{"example.com/finalizer"}
 
-	model := BuildNodeResourceModel("cluster-a", node)
-
+	model := BuildResourceModel("cluster-a", node)
 	require.Equal(t, "uid-1", model.Ref.UID)
 	require.Equal(t, map[string]string{"node-role.kubernetes.io/worker": "", "app": "node"}, model.Metadata.Labels)
 	require.Equal(t, map[string]string{"example": "annotation"}, model.Metadata.Annotations)
-	require.Equal(t, []string{"worker"}, model.Facts.Node.Roles)
-	require.False(t, model.Facts.Node.Unschedulable)
-	require.False(t, model.Facts.Node.Cordoned)
+
+	facts := BuildFacts(node)
+	require.Equal(t, []string{"worker"}, facts.Roles)
+	require.False(t, facts.Unschedulable)
+	require.False(t, facts.Cordoned)
 
 	node.Labels["app"] = "changed"
 	require.Equal(t, "node", model.Metadata.Labels["app"])

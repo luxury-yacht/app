@@ -15,7 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -269,8 +269,8 @@ func buildNodeSnapshotFromUsage(
 		if node == nil {
 			continue
 		}
-		model := resourcemodel.BuildNodeResourceModel(meta.ClusterID, node)
-		nodeFacts := model.Facts.Node
+		model := nodepkg.BuildResourceModel(meta.ClusterID, node)
+		nodeFacts := nodepkg.BuildFacts(node)
 		ageTimestamp := int64(0)
 		if !node.CreationTimestamp.Time.IsZero() {
 			ageTimestamp = node.CreationTimestamp.Time.UnixMilli()
@@ -289,7 +289,7 @@ func buildNodeSnapshotFromUsage(
 			Labels:             copyStringMap(node.Labels),
 			Annotations:        copyStringMap(node.Annotations),
 			Kind:               "node",
-			Unschedulable:      nodeFacts != nil && nodeFacts.Unschedulable,
+			Unschedulable:      nodeFacts.Unschedulable,
 		}
 
 		if ip := findNodeAddress(node, corev1.NodeInternalIP); ip != "" {

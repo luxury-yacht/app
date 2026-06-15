@@ -1,25 +1,38 @@
-package resourcemodel
+/*
+ * backend/resources/events/model.go
+ *
+ * Event resource model: the single definition of an Event's intrinsic fields +
+ * status presentation, plus the shared event display helpers (timestamp/object/
+ * message/source) used across the live event stream and snapshot summaries. Shared
+ * model helpers are reused from resourcemodel (exported network base).
+ */
+
+package events
 
 import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func BuildEventResourceModel(clusterID string, event *corev1.Event) ResourceModel {
-	facts := BuildEventFacts(clusterID, event)
-	status := BuildEventStatusPresentation(event, facts)
-	return NetworkResourceModel(clusterID, "", "v1", "Event", "events", ResourceScopeNamespaced, event.ObjectMeta, status, ResourceFacts{Event: &facts})
+// BuildResourceModel builds the Event resource model. Facts are owned by this
+// package (events.Facts); callers needing facts use BuildFacts.
+func BuildResourceModel(clusterID string, event *corev1.Event) resourcemodel.ResourceModel {
+	facts := BuildFacts(clusterID, event)
+	status := statusPresentation(event, facts)
+	return resourcemodel.NetworkResourceModel(clusterID, "", "v1", "Event", "events", resourcemodel.ResourceScopeNamespaced, event.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
-func BuildEventFacts(clusterID string, event *corev1.Event) EventFacts {
+// BuildFacts extracts the Event facts from the raw object.
+func BuildFacts(clusterID string, event *corev1.Event) Facts {
 	if event == nil {
-		return EventFacts{}
+		return Facts{}
 	}
 	first, last := eventTimes(event)
-	return EventFacts{
+	return Facts{
 		EventType:      event.Type,
 		Reason:         strings.TrimSpace(event.Reason),
 		Message:        strings.TrimSpace(event.Message),
@@ -31,27 +44,29 @@ func BuildEventFacts(clusterID string, event *corev1.Event) EventFacts {
 	}
 }
 
-func BuildEventStatusPresentation(event *corev1.Event, facts EventFacts) ResourceStatusPresentation {
+func statusPresentation(event *corev1.Event, facts Facts) resourcemodel.ResourceStatusPresentation {
 	state := strings.TrimSpace(facts.EventType)
 	if state == "" {
 		state = "Unknown"
 	}
-	signals := []ResourceStatusSignal{{
-		Type:   StatusSignalResourceState,
+	signals := []resourcemodel.ResourceStatusSignal{{
+		Type:   resourcemodel.StatusSignalResourceState,
 		Name:   "type",
 		Status: state,
 		Reason: facts.Reason,
 	}}
-	lifecycle := ResourceLifecycle{}
+	lifecycle := resourcemodel.ResourceLifecycle{}
 	if event != nil {
-		lifecycle = NetworkLifecycle(event.ObjectMeta)
-		if status, ok := DeletingNetworkStatus(event.ObjectMeta, state, signals, lifecycle); ok {
+		lifecycle = resourcemodel.NetworkLifecycle(event.ObjectMeta)
+		if status, ok := resourcemodel.DeletingNetworkStatus(event.ObjectMeta, state, signals, lifecycle); ok {
 			return status
 		}
 	}
-	return NetworkSourceStatus(state, state, facts.Reason, eventPresentation(state), signals, lifecycle)
+	return resourcemodel.NetworkSourceStatus(state, state, facts.Reason, eventPresentation(state), signals, lifecycle)
 }
 
+// EventTimestamp returns the most-recent timestamp for an event (last seen, falling
+// back through event-time/first-seen/creation).
 func EventTimestamp(event *corev1.Event) metav1.Time {
 	if event == nil {
 		return metav1.Time{}
@@ -60,6 +75,7 @@ func EventTimestamp(event *corev1.Event) metav1.Time {
 	return last
 }
 
+// EventObjectDisplay renders the involved object as "Kind/Name" (or the available part).
 func EventObjectDisplay(event *corev1.Event) string {
 	if event == nil {
 		return "-"
@@ -78,6 +94,7 @@ func EventObjectDisplay(event *corev1.Event) string {
 	return "-"
 }
 
+// EventMessage returns the event message (falling back to the reason).
 func EventMessage(event *corev1.Event) string {
 	if event == nil {
 		return ""
@@ -88,6 +105,8 @@ func EventMessage(event *corev1.Event) string {
 	return strings.TrimSpace(event.Reason)
 }
 
+// FormatEventSource renders the event source (component/host or reporting
+// controller/instance), returning empty when neither is set.
 func FormatEventSource(event corev1.Event, empty string) string {
 	if event.Source.Component != "" {
 		if event.Source.Host != "" {
@@ -127,11 +146,11 @@ func eventTimes(event *corev1.Event) (first, last metav1.Time) {
 	return first, last
 }
 
-func eventInvolvedObjectLink(clusterID string, ref corev1.ObjectReference) *ResourceLink {
+func eventInvolvedObjectLink(clusterID string, ref corev1.ObjectReference) *resourcemodel.ResourceLink {
 	apiVersion := strings.TrimSpace(ref.APIVersion)
 	group, version := "", ""
 	if apiVersion != "" {
-		group, version = SplitAPIVersion(apiVersion)
+		group, version = resourcemodel.SplitAPIVersion(apiVersion)
 	}
 	kind := strings.TrimSpace(ref.Kind)
 	name := strings.TrimSpace(ref.Name)
@@ -141,13 +160,13 @@ func eventInvolvedObjectLink(clusterID string, ref corev1.ObjectReference) *Reso
 		return nil
 	}
 	if version == "" {
-		link := NewDisplayResourceLink(clusterID, group, version, kind, "", namespace, name)
+		link := resourcemodel.NewDisplayResourceLink(clusterID, group, version, kind, "", namespace, name)
 		if link.Display != nil {
 			link.Display.UID = uid
 		}
 		return &link
 	}
-	link := NewNamespacedResourceLink(clusterID, group, version, kind, "", namespace, name, uid)
+	link := resourcemodel.NewNamespacedResourceLink(clusterID, group, version, kind, "", namespace, name, uid)
 	return &link
 }
 

@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { types } from '@wailsjs/go/models';
+import { nodes } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
@@ -48,8 +48,8 @@ interface NodeOverviewProps {
   podsCapacity?: string;
   podsCount?: number;
   storageCapacity?: string;
-  taints?: types.NodeTaint[];
-  conditions?: types.NodeCondition[];
+  taints?: nodes.NodeTaint[];
+  conditions?: nodes.NodeCondition[];
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
   /** Set when an active drain job exists for this node. */

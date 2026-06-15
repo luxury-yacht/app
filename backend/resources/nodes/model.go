@@ -1,4 +1,13 @@
-package resourcemodel
+/*
+ * backend/resources/nodes/model.go
+ *
+ * Node resource model: the single definition of a Node's intrinsic fields + status
+ * presentation. Nodes build their ResourceModel directly (cluster-scoped, with a
+ * cordoned status badge) rather than via the network base. Shared primitives
+ * (ResourceModel/ConditionFacts/CopyStringMap) come from resourcemodel.
+ */
+
+package nodes
 
 import (
 	"sort"
@@ -6,15 +15,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 )
 
-func BuildNodeResourceModel(clusterID string, node *corev1.Node) ResourceModel {
-	facts := buildNodeFacts(node)
-	status := buildNodeStatus(node, facts)
+// BuildResourceModel builds the Node resource model. Facts are owned by this
+// package (nodes.Facts); callers needing facts use BuildFacts.
+func BuildResourceModel(clusterID string, node *corev1.Node) resourcemodel.ResourceModel {
+	facts := BuildFacts(node)
+	status := buildStatus(node, facts)
 
-	return ResourceModel{
-		Ref: ResourceRef{
+	return resourcemodel.ResourceModel{
+		Ref: resourcemodel.ResourceRef{
 			ClusterID: clusterID,
 			Group:     "",
 			Version:   "v1",
@@ -23,26 +35,25 @@ func BuildNodeResourceModel(clusterID string, node *corev1.Node) ResourceModel {
 			Name:      node.Name,
 			UID:       string(node.UID),
 		},
-		Source: ResourceSourceKubernetes,
-		Scope:  ResourceScopeCluster,
-		Metadata: ResourceMetadata{
-			Labels:            CopyStringMap(node.Labels),
-			Annotations:       CopyStringMap(node.Annotations),
+		Source: resourcemodel.ResourceSourceKubernetes,
+		Scope:  resourcemodel.ResourceScopeCluster,
+		Metadata: resourcemodel.ResourceMetadata{
+			Labels:            resourcemodel.CopyStringMap(node.Labels),
+			Annotations:       resourcemodel.CopyStringMap(node.Annotations),
 			CreationTimestamp: node.CreationTimestamp,
 			ResourceVersion:   node.ResourceVersion,
 			Finalizers:        append([]string(nil), node.Finalizers...),
 		},
 		Status: status,
-		Facts: ResourceFacts{
-			Node: &facts,
-		},
+		Facts:  resourcemodel.ResourceFacts{},
 	}
 }
 
-func buildNodeFacts(node *corev1.Node) NodeFacts {
-	conditions := make([]ConditionFacts, 0, len(node.Status.Conditions))
+// BuildFacts extracts the Node facts from the raw object.
+func BuildFacts(node *corev1.Node) Facts {
+	conditions := make([]resourcemodel.ConditionFacts, 0, len(node.Status.Conditions))
 	for _, condition := range node.Status.Conditions {
-		conditions = append(conditions, ConditionFacts{
+		conditions = append(conditions, resourcemodel.ConditionFacts{
 			Type:               string(condition.Type),
 			Status:             string(condition.Status),
 			Reason:             condition.Reason,
@@ -64,8 +75,8 @@ func buildNodeFacts(node *corev1.Node) NodeFacts {
 		})
 	}
 
-	return NodeFacts{
-		Roles:         nodeRoles(node),
+	return Facts{
+		Roles:         roles(node),
 		Unschedulable: node.Spec.Unschedulable,
 		Cordoned:      node.Spec.Unschedulable || cordonedByTaint,
 		Conditions:    conditions,
@@ -73,19 +84,19 @@ func buildNodeFacts(node *corev1.Node) NodeFacts {
 	}
 }
 
-func buildNodeStatus(node *corev1.Node, facts NodeFacts) ResourceStatusPresentation {
-	lifecycle := ResourceLifecycle{
+func buildStatus(node *corev1.Node, facts Facts) resourcemodel.ResourceStatusPresentation {
+	lifecycle := resourcemodel.ResourceLifecycle{
 		Deleting:         node.DeletionTimestamp != nil,
 		FinalizerBlocked: node.DeletionTimestamp != nil && len(node.Finalizers) > 0,
 	}
 
-	ready := findNodeCondition(node, corev1.NodeReady)
+	ready := findCondition(node, corev1.NodeReady)
 	readyStatus := string(corev1.ConditionUnknown)
-	signals := make([]ResourceStatusSignal, 0, 2)
+	signals := make([]resourcemodel.ResourceStatusSignal, 0, 2)
 	if ready != nil {
 		readyStatus = string(ready.Status)
-		signals = append(signals, ResourceStatusSignal{
-			Type:    StatusSignalCondition,
+		signals = append(signals, resourcemodel.ResourceStatusSignal{
+			Type:    resourcemodel.StatusSignalCondition,
 			Name:    string(corev1.NodeReady),
 			Status:  string(ready.Status),
 			Reason:  ready.Reason,
@@ -94,12 +105,12 @@ func buildNodeStatus(node *corev1.Node, facts NodeFacts) ResourceStatusPresentat
 	}
 	if lifecycle.Deleting {
 		deletionTimestamp := node.DeletionTimestamp.Time.Format(time.RFC3339)
-		signals = append(signals, ResourceStatusSignal{
-			Type:   StatusSignalDeletion,
+		signals = append(signals, resourcemodel.ResourceStatusSignal{
+			Type:   resourcemodel.StatusSignalDeletion,
 			Name:   "metadata.deletionTimestamp",
 			Status: deletionTimestamp,
 		})
-		return ResourceStatusPresentation{
+		return resourcemodel.ResourceStatusPresentation{
 			Label:        "Terminating",
 			State:        readyStatus,
 			Presentation: "terminating",
@@ -109,11 +120,11 @@ func buildNodeStatus(node *corev1.Node, facts NodeFacts) ResourceStatusPresentat
 		}
 	}
 	if facts.Cordoned {
-		signals = append(signals, buildNodeCordonedSignal(facts))
+		signals = append(signals, cordonedSignal(facts))
 	}
 
 	if ready == nil {
-		return ResourceStatusPresentation{
+		return resourcemodel.ResourceStatusPresentation{
 			Label:        "Unknown",
 			State:        readyStatus,
 			Presentation: "unknown",
@@ -125,17 +136,17 @@ func buildNodeStatus(node *corev1.Node, facts NodeFacts) ResourceStatusPresentat
 	switch ready.Status {
 	case corev1.ConditionTrue:
 		if facts.Cordoned {
-			return ResourceStatusPresentation{
+			return resourcemodel.ResourceStatusPresentation{
 				Label:        "Ready (Cordoned)",
 				State:        readyStatus,
 				Presentation: "cordoned",
 				Reason:       "Unschedulable",
 				Signals:      signals,
-				Badges:       []ResourceStatusBadge{{Text: "Cordoned", Status: nodeCordonedStatus(facts)}},
+				Badges:       []resourcemodel.ResourceStatusBadge{{Text: "Cordoned", Status: cordonedStatus(facts)}},
 				Lifecycle:    lifecycle,
 			}
 		}
-		return ResourceStatusPresentation{
+		return resourcemodel.ResourceStatusPresentation{
 			Label:        "Ready",
 			State:        readyStatus,
 			Presentation: "ready",
@@ -143,7 +154,7 @@ func buildNodeStatus(node *corev1.Node, facts NodeFacts) ResourceStatusPresentat
 			Lifecycle:    lifecycle,
 		}
 	case corev1.ConditionUnknown:
-		return ResourceStatusPresentation{
+		return resourcemodel.ResourceStatusPresentation{
 			Label:        "Unknown",
 			State:        readyStatus,
 			Presentation: "unknown",
@@ -152,7 +163,7 @@ func buildNodeStatus(node *corev1.Node, facts NodeFacts) ResourceStatusPresentat
 			Lifecycle:    lifecycle,
 		}
 	default:
-		return ResourceStatusPresentation{
+		return resourcemodel.ResourceStatusPresentation{
 			Label:        "NotReady",
 			State:        readyStatus,
 			Presentation: "not-ready",
@@ -163,10 +174,10 @@ func buildNodeStatus(node *corev1.Node, facts NodeFacts) ResourceStatusPresentat
 	}
 }
 
-func buildNodeCordonedSignal(facts NodeFacts) ResourceStatusSignal {
+func cordonedSignal(facts Facts) resourcemodel.ResourceStatusSignal {
 	if facts.Unschedulable {
-		return ResourceStatusSignal{
-			Type:   StatusSignalResourceState,
+		return resourcemodel.ResourceStatusSignal{
+			Type:   resourcemodel.StatusSignalResourceState,
 			Name:   "spec.unschedulable",
 			Status: strconv.FormatBool(facts.Unschedulable),
 			Reason: "Unschedulable",
@@ -174,23 +185,23 @@ func buildNodeCordonedSignal(facts NodeFacts) ResourceStatusSignal {
 	}
 	for _, taint := range facts.Taints {
 		if taint.Key == corev1.TaintNodeUnschedulable {
-			return ResourceStatusSignal{
-				Type:   StatusSignalResourceState,
+			return resourcemodel.ResourceStatusSignal{
+				Type:   resourcemodel.StatusSignalResourceState,
 				Name:   taint.Key,
 				Status: taint.Effect,
 				Reason: "UnschedulableTaint",
 			}
 		}
 	}
-	return ResourceStatusSignal{
-		Type:   StatusSignalResourceState,
+	return resourcemodel.ResourceStatusSignal{
+		Type:   resourcemodel.StatusSignalResourceState,
 		Name:   "spec.unschedulable",
 		Status: strconv.FormatBool(facts.Unschedulable),
 		Reason: "Unschedulable",
 	}
 }
 
-func nodeCordonedStatus(facts NodeFacts) string {
+func cordonedStatus(facts Facts) string {
 	if facts.Unschedulable {
 		return strconv.FormatBool(facts.Unschedulable)
 	}
@@ -202,7 +213,7 @@ func nodeCordonedStatus(facts NodeFacts) string {
 	return strconv.FormatBool(facts.Cordoned)
 }
 
-func findNodeCondition(node *corev1.Node, conditionType corev1.NodeConditionType) *corev1.NodeCondition {
+func findCondition(node *corev1.Node, conditionType corev1.NodeConditionType) *corev1.NodeCondition {
 	for index := range node.Status.Conditions {
 		if node.Status.Conditions[index].Type == conditionType {
 			return &node.Status.Conditions[index]
@@ -211,26 +222,15 @@ func findNodeCondition(node *corev1.Node, conditionType corev1.NodeConditionType
 	return nil
 }
 
-func nodeRoles(node *corev1.Node) []string {
-	roles := make([]string, 0, len(node.Labels))
+func roles(node *corev1.Node) []string {
+	result := make([]string, 0, len(node.Labels))
 	for label := range node.Labels {
 		if role, ok := strings.CutPrefix(label, "node-role.kubernetes.io/"); ok {
 			if role != "" {
-				roles = append(roles, role)
+				result = append(result, role)
 			}
 		}
 	}
-	sort.Strings(roles)
-	return roles
-}
-
-func CopyStringMap(input map[string]string) map[string]string {
-	if len(input) == 0 {
-		return nil
-	}
-	output := make(map[string]string, len(input))
-	for key, value := range input {
-		output[key] = value
-	}
-	return output
+	sort.Strings(result)
+	return result
 }

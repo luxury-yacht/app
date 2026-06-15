@@ -136,3 +136,16 @@ func NetworkDefaultClassAnnotation(annotations map[string]string) (string, strin
 	}
 	return "", ""
 }
+
+// CopyStringMap returns a shallow copy of a string map (nil for empty input). It is
+// a foundational helper shared across the resource model (formerly lived in node.go).
+func CopyStringMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return nil
+	}
+	output := make(map[string]string, len(input))
+	for key, value := range input {
+		output[key] = value
+	}
+	return output
+}

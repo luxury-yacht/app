@@ -1,16 +1,17 @@
-package resourcemodel
+package pods
 
 import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func TestBuildPodResourceModelStatus(t *testing.T) {
+func TestBuildResourceModelStatus(t *testing.T) {
 	deletingAt := metav1.NewTime(time.Date(2026, time.May, 7, 21, 15, 0, 0, time.UTC))
 
 	tests := []struct {
@@ -109,7 +110,7 @@ func TestBuildPodResourceModelStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			model := BuildPodResourceModel("cluster-a", tt.pod)
+			model := BuildResourceModel("cluster-a", tt.pod)
 			require.Equal(t, "cluster-a", model.Ref.ClusterID)
 			require.Equal(t, "", model.Ref.Group)
 			require.Equal(t, "v1", model.Ref.Version)
@@ -125,7 +126,7 @@ func TestBuildPodResourceModelStatus(t *testing.T) {
 	}
 }
 
-func TestBuildPodResourceModelFactsUseSpecContainersAsReadinessDenominator(t *testing.T) {
+func TestBuildFactsUseSpecContainersAsReadinessDenominator(t *testing.T) {
 	pod := basePod(corev1.PodRunning)
 	pod.Spec.Containers = []corev1.Container{{Name: "app"}, {Name: "sidecar"}}
 	pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
@@ -136,28 +137,28 @@ func TestBuildPodResourceModelFactsUseSpecContainersAsReadinessDenominator(t *te
 	}}
 	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{Name: "init", RestartCount: 1}}
 
-	model := BuildPodResourceModel("cluster-a", pod)
+	facts := BuildFacts(pod)
+	require.Equal(t, int32(1), facts.ReadyContainers)
+	require.Equal(t, int32(2), facts.TotalContainers)
+	require.Equal(t, int32(3), facts.RestartCount)
 
-	require.Equal(t, int32(1), model.Facts.Pod.ReadyContainers)
-	require.Equal(t, int32(2), model.Facts.Pod.TotalContainers)
-	require.Equal(t, int32(3), model.Facts.Pod.RestartCount)
+	model := BuildResourceModel("cluster-a", pod)
 	require.Equal(t, "warning", model.Status.Presentation)
-	require.Contains(t, model.Status.Signals, ResourceStatusSignal{
-		Type:   StatusSignalReadiness,
+	require.Contains(t, model.Status.Signals, resourcemodel.ResourceStatusSignal{
+		Type:   resourcemodel.StatusSignalReadiness,
 		Name:   "containers",
 		Status: "1/2",
 	})
 }
 
-func TestBuildPodResourceModelCopiesMetadata(t *testing.T) {
+func TestBuildResourceModelCopiesMetadata(t *testing.T) {
 	pod := basePod(corev1.PodRunning)
 	pod.UID = types.UID("uid-1")
 	pod.Labels = map[string]string{"app": "demo"}
 	pod.Annotations = map[string]string{"note": "test"}
 	pod.Finalizers = []string{"example.com/finalizer"}
 
-	model := BuildPodResourceModel("cluster-a", pod)
-
+	model := BuildResourceModel("cluster-a", pod)
 	require.Equal(t, "uid-1", model.Ref.UID)
 	require.Equal(t, map[string]string{"app": "demo"}, model.Metadata.Labels)
 	require.Equal(t, map[string]string{"note": "test"}, model.Metadata.Annotations)

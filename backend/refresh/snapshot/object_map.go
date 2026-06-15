@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/objectmap"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
@@ -29,6 +30,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
@@ -545,7 +547,7 @@ func (idx *objectMapIndex) collectPods(lister corelisters.PodLister) {
 	collectKind(idx, "", "v1", "Pod", "pods",
 		func() ([]*corev1.Pod, error) { return lister.List(labels.Everything()) },
 		func(pod *corev1.Pod, rec *objectMapRecord) {
-			rec.status = objectMapPodStatus(idx.meta.ClusterID, *pod)
+			rec.status = podres.ObjectMapStatus(idx.meta.ClusterID, *pod)
 			rec.actionFacts = objectMapPortForwardFacts(hasForwardablePodPorts(pod))
 			rec.pod = pod
 		})
@@ -625,7 +627,7 @@ func (idx *objectMapIndex) collectNodes(lister corelisters.NodeLister) {
 	collectKind(idx, "", "v1", "Node", "nodes",
 		func() ([]*corev1.Node, error) { return lister.List(labels.Everything()) },
 		func(node *corev1.Node, rec *objectMapRecord) {
-			rec.status = objectMapNodeStatus(idx.meta.ClusterID, *node)
+			rec.status = nodes.ObjectMapStatus(idx.meta.ClusterID, *node)
 			rec.actionFacts = objectMapNodeActionFacts(node.Spec.Unschedulable)
 		})
 }
@@ -1146,16 +1148,6 @@ func objectMapCronJobActionFacts(cron batchv1.CronJob) *ObjectMapActionFacts {
 	return facts
 }
 
-func objectMapStatus(state, label string, reasons ...string) *ObjectMapStatus {
-	return objectmap.New(state, label, reasons...)
-}
-
-func objectMapPodStatus(clusterID string, pod corev1.Pod) *ObjectMapStatus {
-	model := resourcemodel.BuildPodResourceModel(clusterID, &pod)
-	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
-	status.Presentation = model.Status.Presentation
-	return status
-}
 
 
 
@@ -1164,12 +1156,7 @@ func objectMapPodStatus(clusterID string, pod corev1.Pod) *ObjectMapStatus {
 
 
 
-func objectMapNodeStatus(clusterID string, node corev1.Node) *ObjectMapStatus {
-	model := resourcemodel.BuildNodeResourceModel(clusterID, &node)
-	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
-	status.Presentation = model.Status.Presentation
-	return status
-}
+
 
 // StatefulSet, Deployment, DaemonSet, ReplicaSet, Job, and CronJob object-map status
 // projections live in their kind packages (e.g. statefulset.ObjectMapStatus); the

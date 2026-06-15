@@ -17,7 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	"github.com/luxury-yacht/app/backend/refresh/ringbuffer"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
 
 // Manager fan-outs informer updates to subscribed streaming clients.
@@ -214,7 +214,7 @@ func (m *Manager) handleEvent(obj interface{}) {
 		return
 	}
 
-	facts := resourcemodel.BuildEventFacts(m.clusterID, evt)
+	facts := eventres.BuildFacts(m.clusterID, evt)
 	entry := Entry{
 		ClusterID:        m.clusterID,
 		Kind:             evt.InvolvedObject.Kind,
@@ -229,7 +229,7 @@ func (m *Manager) handleEvent(obj interface{}) {
 		Type:             facts.EventType,
 		Source:           facts.Source,
 		Reason:           facts.Reason,
-		Object:           resourcemodel.EventObjectDisplay(evt),
+		Object:           eventres.EventObjectDisplay(evt),
 		Message:          facts.Message,
 	}
 

@@ -13,9 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -39,7 +37,7 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // Events fetches events matching the provided filter.
-func (s *Service) Events(filter Filter) ([]types.Event, error) {
+func (s *Service) Events(filter Filter) ([]Event, error) {
 	if err := s.ensureClient(); err != nil {
 		return nil, err
 	}
@@ -71,7 +69,7 @@ func (s *Service) Events(filter Filter) ([]types.Event, error) {
 		return nil, fmt.Errorf("failed to list events in namespace %s: %w", filter.Namespace, err)
 	}
 
-	var events []types.Event
+	var events []Event
 	for _, kubeEvent := range eventList.Items {
 		if filter.ObjectName != "" && kubeEvent.InvolvedObject.Name != filter.ObjectName {
 			continue
@@ -91,12 +89,12 @@ func (s *Service) Events(filter Filter) ([]types.Event, error) {
 }
 
 // AllEvents returns events across all namespaces.
-func (s *Service) AllEvents() ([]types.Event, error) {
+func (s *Service) AllEvents() ([]Event, error) {
 	return s.Events(Filter{})
 }
 
 // NamespaceEvents returns events scoped to a namespace.
-func (s *Service) NamespaceEvents(namespace string) ([]types.Event, error) {
+func (s *Service) NamespaceEvents(namespace string) ([]Event, error) {
 	if namespace == "" {
 		return nil, fmt.Errorf("namespace cannot be empty")
 	}
@@ -104,7 +102,7 @@ func (s *Service) NamespaceEvents(namespace string) ([]types.Event, error) {
 }
 
 // ObjectEvents returns events tied to a specific object.
-func (s *Service) ObjectEvents(resourceKind, namespace, name string) ([]types.Event, error) {
+func (s *Service) ObjectEvents(resourceKind, namespace, name string) ([]Event, error) {
 	if name == "" {
 		return nil, fmt.Errorf("object name cannot be empty")
 	}
@@ -128,9 +126,9 @@ func (s *Service) ensureClient() error {
 	return nil
 }
 
-func convertEvent(clusterID string, kubeEvent corev1.Event) types.Event {
-	facts := resourcemodel.BuildEventFacts(clusterID, &kubeEvent)
-	e := types.Event{
+func convertEvent(clusterID string, kubeEvent corev1.Event) Event {
+	facts := BuildFacts(clusterID, &kubeEvent)
+	e := Event{
 		Kind:               "event",
 		EventType:          facts.EventType,
 		Reason:             facts.Reason,
@@ -151,7 +149,7 @@ func convertEvent(clusterID string, kubeEvent corev1.Event) types.Event {
 	return e
 }
 
-func sortEventsByTime(events []types.Event) {
+func sortEventsByTime(events []Event) {
 	sort.Slice(events, func(i, j int) bool {
 		ti := events[i].LastTimestamp
 		if ti.IsZero() {

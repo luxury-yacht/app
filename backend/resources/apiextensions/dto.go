@@ -1,11 +1,11 @@
 /*
- * backend/resources/types/apiextensions.go
+ * backend/resources/apiextensions/dto.go
  *
- * Type definitions for Apiextensions resources.
- * - Shared data structures for API responses.
+ * CustomResourceDefinition detail DTOs (the frontend wire shape), co-located with
+ * its model and detail builder.
  */
 
-package types
+package apiextensions
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 

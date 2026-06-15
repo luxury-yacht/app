@@ -29,6 +29,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
+	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
 
 const (
@@ -573,9 +575,9 @@ func buildClusterOverviewSnapshot(
 		overview.TotalContainers += len(pod.Spec.Containers)
 		overview.TotalInitContainers += len(pod.Spec.InitContainers)
 
-		model := resourcemodel.BuildPodResourceModel("", pod)
+		model := podres.BuildResourceModel("", pod)
 		countPodStatusPresentation(&overview, model.Status.Presentation)
-		if podCountsAsNotReadySignal(pod, model.Facts.Pod) {
+		if podCountsAsNotReadySignal(pod, podres.BuildFacts(pod)) {
 			overview.NotReadyPods++
 		}
 		hasRestarts := podHasRestarts(pod)
@@ -883,8 +885,8 @@ func countPodStatusPresentation(overview *ClusterOverviewPayload, presentation s
 	}
 }
 
-func podCountsAsNotReadySignal(pod *corev1.Pod, facts *resourcemodel.PodFacts) bool {
-	if pod == nil || facts == nil || pod.Status.Phase == corev1.PodSucceeded {
+func podCountsAsNotReadySignal(pod *corev1.Pod, facts podres.Facts) bool {
+	if pod == nil || pod.Status.Phase == corev1.PodSucceeded {
 		return false
 	}
 	return facts.TotalContainers > 0 && facts.ReadyContainers < facts.TotalContainers
@@ -1131,15 +1133,15 @@ func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
 
 	out := make([]RecentEvent, 0, len(filtered))
 	for _, evt := range filtered {
-		facts := resourcemodel.BuildEventFacts(meta.ClusterID, evt)
+		facts := eventres.BuildFacts(meta.ClusterID, evt)
 		out = append(out, RecentEvent{
 			ClusterID:        meta.ClusterID,
 			ClusterName:      meta.ClusterName,
 			InvolvedObject:   facts.InvolvedObject,
 			EventUID:         string(evt.UID),
 			Reason:           strings.TrimSpace(evt.Reason),
-			Message:          resourcemodel.EventMessage(evt),
-			Timestamp:        resourcemodel.EventTimestamp(evt).UnixMilli(),
+			Message:          eventres.EventMessage(evt),
+			Timestamp:        eventres.EventTimestamp(evt).UnixMilli(),
 			ObjectKind:       evt.InvolvedObject.Kind,
 			ObjectName:       evt.InvolvedObject.Name,
 			ObjectNamespace:  evt.InvolvedObject.Namespace,

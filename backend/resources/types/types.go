@@ -493,65 +493,8 @@ type NsHelmInfo struct {
 	Age        string `json:"age"`        // First deployment time
 }
 
-// HelmReleaseDetails represents detailed information about a Helm release
-type HelmReleaseDetails struct {
-	// Basic information
-	Kind      string `json:"kind"`
-	TypeAlias string `json:"typeAlias"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Age       string `json:"age"`
 
-	// Chart information
-	Chart      string `json:"chart"`
-	Version    string `json:"version"`
-	AppVersion string `json:"appVersion"`
 
-	// Status information
-	StatusProjection
-	Revision int    `json:"revision"`
-	Updated  string `json:"updated"`
-
-	// Additional details
-	Description string                 `json:"description,omitempty"`
-	Notes       string                 `json:"notes,omitempty"`
-	Values      map[string]interface{} `json:"values,omitempty"`
-
-	// History
-	History []HelmRevision `json:"history,omitempty"`
-
-	// Resources managed by this release
-	Resources []HelmResource `json:"resources,omitempty"`
-
-	// Metadata
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
-
-// HelmRevision represents a single revision in the Helm release history
-type HelmRevision struct {
-	Revision int    `json:"revision"`
-	Updated  string `json:"updated"`
-	StatusProjection
-	Chart       string `json:"chart"`
-	AppVersion  string `json:"appVersion,omitempty"`
-	Description string `json:"description,omitempty"`
-}
-
-// HelmResource represents a Kubernetes resource managed by a Helm release.
-//
-// APIVersion carries the manifest's apiVersion verbatim (e.g. "apps/v1",
-// "v1", "documentdb.services.k8s.aws/v1alpha1") so the frontend can open
-// the target in the object panel with a fully-qualified GVK. Required for
-// CRDs that share a Kind across operator groups — without it the strict
-// object-YAML path hard-fails on Helm-managed custom resources.
-type HelmResource struct {
-	Kind       string `json:"kind"`
-	APIVersion string `json:"apiVersion,omitempty"`
-	Name       string `json:"name"`
-	Namespace  string `json:"namespace"`
-	Scope      string `json:"scope,omitempty"`
-}
 
 // PodDetailInfoContainer represents detailed container information within a pod
 type PodDetailInfoContainer struct {

@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"github.com/luxury-yacht/app/backend/resources/admission"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
@@ -8,6 +10,8 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/events"
+	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/luxury-yacht/app/backend/resources/hpa"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
@@ -15,6 +19,7 @@ import (
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
@@ -62,7 +67,7 @@ type (
 	ClsConfigInfo                         = types.ClsConfigInfo
 	ClsCRDInfo                            = types.ClsCRDInfo
 	ClsEventsInfo                         = types.ClsEventsInfo
-	Event                                 = types.Event
+	Event                                 = events.Event
 	ClsAdmissionControlInfo               = types.ClsAdmissionControlInfo
 	ClsStorageClassInfo                   = types.ClsStorageClassInfo
 	ClsIngressClassInfo                   = types.ClsIngressClassInfo
@@ -75,9 +80,9 @@ type (
 	NsQuotaInfo                           = types.NsQuotaInfo
 	NsCustomResourceInfo                  = types.NsCustomResourceInfo
 	NsHelmInfo                            = types.NsHelmInfo
-	HelmReleaseDetails                    = types.HelmReleaseDetails
-	HelmRevision                          = types.HelmRevision
-	HelmResource                          = types.HelmResource
+	HelmReleaseDetails                    = helm.HelmReleaseDetails
+	HelmRevision                          = helm.HelmRevision
+	HelmResource                          = helm.HelmResource
 	PodDetailInfoContainer                = types.PodDetailInfoContainer
 	PodDetailInfo                         = types.PodDetailInfo
 	ConfigMapDetails                      = configmap.ConfigMapDetails
@@ -154,21 +159,21 @@ type (
 	MetricStatus                          = hpa.MetricStatus
 	ScalingBehavior                       = hpa.ScalingBehavior
 	ScalingRules                          = hpa.ScalingRules
-	MutatingWebhookConfigurationDetails   = types.MutatingWebhookConfigurationDetails
-	ValidatingWebhookConfigurationDetails = types.ValidatingWebhookConfigurationDetails
-	WebhookDetails                        = types.WebhookDetails
-	WebhookClientConfig                   = types.WebhookClientConfig
-	WebhookService                        = types.WebhookService
-	WebhookRule                           = types.WebhookRule
-	WebhookSelector                       = types.WebhookSelector
-	WebhookSelectorExpression             = types.WebhookSelectorExpression
-	CustomResourceDefinitionDetails       = types.CustomResourceDefinitionDetails
-	CRDVersion                            = types.CRDVersion
-	CRDNames                              = types.CRDNames
-	CRDCondition                          = types.CRDCondition
+	MutatingWebhookConfigurationDetails   = admission.MutatingWebhookConfigurationDetails
+	ValidatingWebhookConfigurationDetails = admission.ValidatingWebhookConfigurationDetails
+	WebhookDetails                        = admission.WebhookDetails
+	WebhookClientConfig                   = admission.WebhookClientConfig
+	WebhookService                        = admission.WebhookService
+	WebhookRule                           = admission.WebhookRule
+	WebhookSelector                       = admission.WebhookSelector
+	WebhookSelectorExpression             = admission.WebhookSelectorExpression
+	CustomResourceDefinitionDetails       = apiextensions.CustomResourceDefinitionDetails
+	CRDVersion                            = apiextensions.CRDVersion
+	CRDNames                              = apiextensions.CRDNames
+	CRDCondition                          = apiextensions.CRDCondition
 	NamespaceDetails                      = namespaces.NamespaceDetails
-	NodeDetails                           = types.NodeDetails
-	NodeCondition                         = types.NodeCondition
-	NodeTaint                             = types.NodeTaint
+	NodeDetails                           = nodes.NodeDetails
+	NodeCondition                         = nodes.NodeCondition
+	NodeTaint                             = nodes.NodeTaint
 	DrainNodeOptions                      = types.DrainNodeOptions
 )

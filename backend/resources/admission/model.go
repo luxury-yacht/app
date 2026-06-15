@@ -1,21 +1,33 @@
-package resourcemodel
+/*
+ * backend/resources/admission/model.go
+ *
+ * Webhook-configuration resource models for the admission pair (Mutating +
+ * Validating). The two kinds share the WebhookFacts extraction + status/count
+ * helpers. Shared model helpers are reused from resourcemodel (exported network
+ * base). copyStringPtr/copyInt32Ptr live in webhooks.go (package-shared).
+ */
+
+package admission
 
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const admissionRegistrationAPIGroup = "admissionregistration.k8s.io"
+const apiGroup = "admissionregistration.k8s.io"
 
-func BuildMutatingWebhookConfigurationResourceModel(clusterID string, config *admissionregistrationv1.MutatingWebhookConfiguration) ResourceModel {
-	facts := BuildMutatingWebhookConfigurationFacts(clusterID, config)
-	status := BuildWebhookConfigurationStatusPresentation(config.ObjectMeta, len(facts.Webhooks))
-	return NetworkResourceModel(clusterID, admissionRegistrationAPIGroup, "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", ResourceScopeCluster, config.ObjectMeta, status, ResourceFacts{MutatingWebhookConfiguration: &facts})
+// BuildMutatingResourceModel builds the MutatingWebhookConfiguration resource model.
+func BuildMutatingResourceModel(clusterID string, config *admissionregistrationv1.MutatingWebhookConfiguration) resourcemodel.ResourceModel {
+	facts := BuildMutatingFacts(clusterID, config)
+	status := statusPresentation(config.ObjectMeta, len(facts.Webhooks))
+	return resourcemodel.NetworkResourceModel(clusterID, apiGroup, "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", resourcemodel.ResourceScopeCluster, config.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
-func BuildMutatingWebhookConfigurationFacts(clusterID string, config *admissionregistrationv1.MutatingWebhookConfiguration) MutatingWebhookConfigurationFacts {
+// BuildMutatingFacts extracts the MutatingWebhookConfiguration facts.
+func BuildMutatingFacts(clusterID string, config *admissionregistrationv1.MutatingWebhookConfiguration) MutatingWebhookConfigurationFacts {
 	facts := MutatingWebhookConfigurationFacts{
 		Webhooks: make([]MutatingWebhookFacts, 0, len(config.Webhooks)),
 	}
@@ -28,13 +40,15 @@ func BuildMutatingWebhookConfigurationFacts(clusterID string, config *admissionr
 	return facts
 }
 
-func BuildValidatingWebhookConfigurationResourceModel(clusterID string, config *admissionregistrationv1.ValidatingWebhookConfiguration) ResourceModel {
-	facts := BuildValidatingWebhookConfigurationFacts(clusterID, config)
-	status := BuildWebhookConfigurationStatusPresentation(config.ObjectMeta, len(facts.Webhooks))
-	return NetworkResourceModel(clusterID, admissionRegistrationAPIGroup, "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", ResourceScopeCluster, config.ObjectMeta, status, ResourceFacts{ValidatingWebhookConfiguration: &facts})
+// BuildValidatingResourceModel builds the ValidatingWebhookConfiguration resource model.
+func BuildValidatingResourceModel(clusterID string, config *admissionregistrationv1.ValidatingWebhookConfiguration) resourcemodel.ResourceModel {
+	facts := BuildValidatingFacts(clusterID, config)
+	status := statusPresentation(config.ObjectMeta, len(facts.Webhooks))
+	return resourcemodel.NetworkResourceModel(clusterID, apiGroup, "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", resourcemodel.ResourceScopeCluster, config.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
-func BuildValidatingWebhookConfigurationFacts(clusterID string, config *admissionregistrationv1.ValidatingWebhookConfiguration) ValidatingWebhookConfigurationFacts {
+// BuildValidatingFacts extracts the ValidatingWebhookConfiguration facts.
+func BuildValidatingFacts(clusterID string, config *admissionregistrationv1.ValidatingWebhookConfiguration) ValidatingWebhookConfigurationFacts {
 	facts := ValidatingWebhookConfigurationFacts{
 		Webhooks: make([]ValidatingWebhookFacts, 0, len(config.Webhooks)),
 	}
@@ -46,20 +60,22 @@ func BuildValidatingWebhookConfigurationFacts(clusterID string, config *admissio
 	return facts
 }
 
-func BuildWebhookConfigurationStatusPresentation(meta metav1.ObjectMeta, count int) ResourceStatusPresentation {
+func statusPresentation(meta metav1.ObjectMeta, count int) resourcemodel.ResourceStatusPresentation {
 	state := fmt.Sprintf("%d", count)
-	signals := []ResourceStatusSignal{{
-		Type:   StatusSignalResourceState,
+	signals := []resourcemodel.ResourceStatusSignal{{
+		Type:   resourcemodel.StatusSignalResourceState,
 		Name:   "webhooks",
 		Status: state,
 	}}
-	lifecycle := NetworkLifecycle(meta)
-	if status, ok := DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.NetworkLifecycle(meta)
+	if status, ok := resourcemodel.DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
-	return NetworkSourceStatus(WebhookCountDetails(count), state, "", "ready", signals, lifecycle)
+	return resourcemodel.NetworkSourceStatus(WebhookCountDetails(count), state, "", "ready", signals, lifecycle)
 }
 
+// WebhookCountDetails renders the "N webhook(s)" label used by both the status
+// presentation and the snapshot streaming summary.
 func WebhookCountDetails(count int) string {
 	if count == 1 {
 		return "1 webhook"
@@ -104,7 +120,7 @@ func webhookClientConfigFacts(clusterID string, config admissionregistrationv1.W
 			Port:      copyInt32Ptr(config.Service.Port),
 		}
 		if service.Namespace != "" && service.Name != "" {
-			link := namespacedResourceLink(clusterID, "", "v1", "Service", "services", service.Namespace, service.Name, "")
+			link := resourcemodel.NewNamespacedResourceLink(clusterID, "", "v1", "Service", "services", service.Namespace, service.Name, "")
 			service.Service = &link
 		}
 		facts.Service = &service
@@ -142,7 +158,7 @@ func labelSelectorFacts(selector *metav1.LabelSelector) *LabelSelectorFacts {
 		return nil
 	}
 	facts := &LabelSelectorFacts{
-		MatchLabels: CopyStringMap(selector.MatchLabels),
+		MatchLabels: resourcemodel.CopyStringMap(selector.MatchLabels),
 	}
 	for _, expr := range selector.MatchExpressions {
 		facts.MatchExpressions = append(facts.MatchExpressions, LabelSelectorRequirementFacts{
@@ -159,20 +175,4 @@ func stringPtrValue[T ~string](value *T) string {
 		return ""
 	}
 	return string(*value)
-}
-
-func copyStringPtr(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	copied := *value
-	return &copied
-}
-
-func copyInt32Ptr(value *int32) *int32 {
-	if value == nil {
-		return nil
-	}
-	copied := *value
-	return &copied
 }

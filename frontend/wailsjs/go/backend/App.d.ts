@@ -8,17 +8,21 @@ import {clusterrole} from '../models';
 import {clusterrolebinding} from '../models';
 import {configmap} from '../models';
 import {cronjob} from '../models';
+import {apiextensions} from '../models';
 import {daemonset} from '../models';
 import {deployment} from '../models';
 import {endpointslice} from '../models';
 import {json} from '../models';
+import {helm} from '../models';
 import {hpa} from '../models';
 import {ingress} from '../models';
 import {ingressclass} from '../models';
 import {job} from '../models';
 import {limitrange} from '../models';
+import {admission} from '../models';
 import {namespaces} from '../models';
 import {networkpolicy} from '../models';
+import {nodes} from '../models';
 import {persistentvolume} from '../models';
 import {persistentvolumeclaim} from '../models';
 import {poddisruptionbudget} from '../models';
@@ -116,7 +120,7 @@ export function GetContainerLogsScopeContainers(arg1:string,arg2:string):Promise
 
 export function GetCronJob(arg1:string,arg2:string,arg3:string):Promise<cronjob.CronJobDetails>;
 
-export function GetCustomResourceDefinition(arg1:string,arg2:string):Promise<types.CustomResourceDefinitionDetails>;
+export function GetCustomResourceDefinition(arg1:string,arg2:string):Promise<apiextensions.CustomResourceDefinitionDetails>;
 
 export function GetDaemonSet(arg1:string,arg2:string,arg3:string):Promise<daemonset.DaemonSetDetails>;
 
@@ -138,7 +142,7 @@ export function GetHTTPRoute(arg1:string,arg2:string,arg3:string):Promise<types.
 
 export function GetHelmManifest(arg1:string,arg2:string,arg3:string):Promise<string>;
 
-export function GetHelmReleaseDetails(arg1:string,arg2:string,arg3:string):Promise<types.HelmReleaseDetails>;
+export function GetHelmReleaseDetails(arg1:string,arg2:string,arg3:string):Promise<helm.HelmReleaseDetails>;
 
 export function GetHelmValues(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>>;
 
@@ -160,13 +164,13 @@ export function GetLimitRange(arg1:string,arg2:string,arg3:string):Promise<limit
 
 export function GetListenerSet(arg1:string,arg2:string,arg3:string):Promise<types.ListenerSetDetails>;
 
-export function GetMutatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.MutatingWebhookConfigurationDetails>;
+export function GetMutatingWebhookConfiguration(arg1:string,arg2:string):Promise<admission.MutatingWebhookConfigurationDetails>;
 
 export function GetNamespace(arg1:string,arg2:string):Promise<namespaces.NamespaceDetails>;
 
 export function GetNetworkPolicy(arg1:string,arg2:string,arg3:string):Promise<networkpolicy.NetworkPolicyDetails>;
 
-export function GetNode(arg1:string,arg2:string):Promise<types.NodeDetails>;
+export function GetNode(arg1:string,arg2:string):Promise<nodes.NodeDetails>;
 
 export function GetObjectYAMLByGVK(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
@@ -216,7 +220,7 @@ export function GetTargetPorts(arg1:string,arg2:string,arg3:string,arg4:string,a
 
 export function GetThemes():Promise<Array<types.Theme>>;
 
-export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.ValidatingWebhookConfigurationDetails>;
+export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promise<admission.ValidatingWebhookConfigurationDetails>;
 
 export function GetZoomLevel():Promise<number>;
 

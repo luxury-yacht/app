@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/helm"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
@@ -314,15 +315,9 @@ func mapHelmReleases(
 		if namespaceFilter != "" && ns != namespaceFilter {
 			continue
 		}
-		model := resourcemodel.BuildHelmReleaseResourceModel(
-			meta.ClusterID,
-			release,
-			namespaceFilter,
-			nil,
-			nil,
-			resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts},
-		)
-		facts := model.Facts.HelmRelease
+		helmOpts := resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts}
+		model := helm.BuildResourceModel(meta.ClusterID, release, namespaceFilter, nil, nil, helmOpts)
+		facts := helm.BuildFacts(release, nil, nil, helmOpts)
 		chartName := facts.Chart
 		appVersion := facts.AppVersion
 		status := model.Status.Label

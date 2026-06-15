@@ -1,3 +1,402 @@
+export namespace admission {
+	
+	export class WebhookSelectorExpression {
+	    key: string;
+	    operator: string;
+	    values?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new WebhookSelectorExpression(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.operator = source["operator"];
+	        this.values = source["values"];
+	    }
+	}
+	export class WebhookSelector {
+	    matchLabels?: Record<string, string>;
+	    matchExpressions?: WebhookSelectorExpression[];
+	
+	    static createFrom(source: any = {}) {
+	        return new WebhookSelector(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.matchLabels = source["matchLabels"];
+	        this.matchExpressions = this.convertValues(source["matchExpressions"], WebhookSelectorExpression);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class WebhookRule {
+	    apiGroups?: string[];
+	    apiVersions?: string[];
+	    resources?: string[];
+	    operations?: string[];
+	    scope?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WebhookRule(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.apiGroups = source["apiGroups"];
+	        this.apiVersions = source["apiVersions"];
+	        this.resources = source["resources"];
+	        this.operations = source["operations"];
+	        this.scope = source["scope"];
+	    }
+	}
+	export class WebhookService {
+	    namespace: string;
+	    name: string;
+	    path?: string;
+	    port?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WebhookService(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.port = source["port"];
+	    }
+	}
+	export class WebhookClientConfig {
+	    service?: WebhookService;
+	    url?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WebhookClientConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.service = this.convertValues(source["service"], WebhookService);
+	        this.url = source["url"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class WebhookDetails {
+	    name: string;
+	    clientConfig: WebhookClientConfig;
+	    rules: WebhookRule[];
+	    failurePolicy?: string;
+	    matchPolicy?: string;
+	    namespaceSelector?: WebhookSelector;
+	    objectSelector?: WebhookSelector;
+	    sideEffects?: string;
+	    timeoutSeconds?: number;
+	    admissionReviewVersions?: string[];
+	    reinvocationPolicy?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WebhookDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.clientConfig = this.convertValues(source["clientConfig"], WebhookClientConfig);
+	        this.rules = this.convertValues(source["rules"], WebhookRule);
+	        this.failurePolicy = source["failurePolicy"];
+	        this.matchPolicy = source["matchPolicy"];
+	        this.namespaceSelector = this.convertValues(source["namespaceSelector"], WebhookSelector);
+	        this.objectSelector = this.convertValues(source["objectSelector"], WebhookSelector);
+	        this.sideEffects = source["sideEffects"];
+	        this.timeoutSeconds = source["timeoutSeconds"];
+	        this.admissionReviewVersions = source["admissionReviewVersions"];
+	        this.reinvocationPolicy = source["reinvocationPolicy"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class MutatingWebhookConfigurationDetails {
+	    kind: string;
+	    name: string;
+	    age: string;
+	    details: string;
+	    webhooks: WebhookDetails[];
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new MutatingWebhookConfigurationDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.age = source["age"];
+	        this.details = source["details"];
+	        this.webhooks = this.convertValues(source["webhooks"], WebhookDetails);
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ValidatingWebhookConfigurationDetails {
+	    kind: string;
+	    name: string;
+	    age: string;
+	    details: string;
+	    webhooks: WebhookDetails[];
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new ValidatingWebhookConfigurationDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.age = source["age"];
+	        this.details = source["details"];
+	        this.webhooks = this.convertValues(source["webhooks"], WebhookDetails);
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	
+	
+	
+
+}
+
+export namespace apiextensions {
+	
+	export class CRDCondition {
+	    kind: string;
+	    status: string;
+	    reason?: string;
+	    message?: string;
+	    lastTransitionTime?: v1.Time;
+	
+	    static createFrom(source: any = {}) {
+	        return new CRDCondition(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.status = source["status"];
+	        this.reason = source["reason"];
+	        this.message = source["message"];
+	        this.lastTransitionTime = this.convertValues(source["lastTransitionTime"], v1.Time);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CRDNames {
+	    plural: string;
+	    singular: string;
+	    kind: string;
+	    listKind?: string;
+	    shortNames?: string[];
+	    categories?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CRDNames(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.plural = source["plural"];
+	        this.singular = source["singular"];
+	        this.kind = source["kind"];
+	        this.listKind = source["listKind"];
+	        this.shortNames = source["shortNames"];
+	        this.categories = source["categories"];
+	    }
+	}
+	export class CRDVersion {
+	    name: string;
+	    served: boolean;
+	    storage: boolean;
+	    deprecated?: boolean;
+	    schema?: Record<string, any>;
+	
+	    static createFrom(source: any = {}) {
+	        return new CRDVersion(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.served = source["served"];
+	        this.storage = source["storage"];
+	        this.deprecated = source["deprecated"];
+	        this.schema = source["schema"];
+	    }
+	}
+	export class CustomResourceDefinitionDetails {
+	    kind: string;
+	    name: string;
+	    group: string;
+	    scope: string;
+	    age: string;
+	    details: string;
+	    versions: CRDVersion[];
+	    names: CRDNames;
+	    conversionStrategy?: string;
+	    conditions?: CRDCondition[];
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomResourceDefinitionDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.group = source["group"];
+	        this.scope = source["scope"];
+	        this.age = source["age"];
+	        this.details = source["details"];
+	        this.versions = this.convertValues(source["versions"], CRDVersion);
+	        this.names = this.convertValues(source["names"], CRDNames);
+	        this.conversionStrategy = source["conversionStrategy"];
+	        this.conditions = this.convertValues(source["conditions"], CRDCondition);
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace backend {
 	
 	export class UpdateInfo {
@@ -1490,6 +1889,130 @@ export namespace endpointslice {
 
 }
 
+export namespace helm {
+	
+	export class HelmResource {
+	    kind: string;
+	    apiVersion?: string;
+	    name: string;
+	    namespace: string;
+	    scope?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HelmResource(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.apiVersion = source["apiVersion"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.scope = source["scope"];
+	    }
+	}
+	export class HelmRevision {
+	    revision: number;
+	    updated: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    chart: string;
+	    appVersion?: string;
+	    description?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HelmRevision(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.revision = source["revision"];
+	        this.updated = source["updated"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.chart = source["chart"];
+	        this.appVersion = source["appVersion"];
+	        this.description = source["description"];
+	    }
+	}
+	export class HelmReleaseDetails {
+	    kind: string;
+	    typeAlias: string;
+	    name: string;
+	    namespace: string;
+	    age: string;
+	    chart: string;
+	    version: string;
+	    appVersion: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    revision: number;
+	    updated: string;
+	    description?: string;
+	    notes?: string;
+	    values?: Record<string, any>;
+	    history?: HelmRevision[];
+	    resources?: HelmResource[];
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new HelmReleaseDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.typeAlias = source["typeAlias"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.age = source["age"];
+	        this.chart = source["chart"];
+	        this.version = source["version"];
+	        this.appVersion = source["appVersion"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.revision = source["revision"];
+	        this.updated = source["updated"];
+	        this.description = source["description"];
+	        this.notes = source["notes"];
+	        this.values = source["values"];
+	        this.history = this.convertValues(source["history"], HelmRevision);
+	        this.resources = this.convertValues(source["resources"], HelmResource);
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+
+}
+
 export namespace hpa {
 	
 	export class ScalingRules {
@@ -2256,6 +2779,155 @@ export namespace networkpolicy {
 	}
 	
 	
+
+}
+
+export namespace nodes {
+	
+	export class NodeCondition {
+	    kind: string;
+	    status: string;
+	    reason?: string;
+	    message?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeCondition(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.status = source["status"];
+	        this.reason = source["reason"];
+	        this.message = source["message"];
+	    }
+	}
+	export class NodeTaint {
+	    key: string;
+	    value?: string;
+	    effect: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeTaint(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.value = source["value"];
+	        this.effect = source["effect"];
+	    }
+	}
+	export class NodeDetails {
+	    name: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    unschedulable: boolean;
+	    roles: string;
+	    age: string;
+	    internalIP: string;
+	    externalIP?: string;
+	    hostname: string;
+	    architecture: string;
+	    os: string;
+	    osImage: string;
+	    kernelVersion: string;
+	    containerRuntime: string;
+	    kubeletVersion: string;
+	    cpuCapacity: string;
+	    cpuAllocatable: string;
+	    memoryCapacity: string;
+	    memoryAllocatable: string;
+	    podsCapacity: string;
+	    podsAllocatable: string;
+	    storageCapacity?: string;
+	    podsCount: number;
+	    restarts: number;
+	    cpuRequests: string;
+	    cpuLimits: string;
+	    memRequests: string;
+	    memLimits: string;
+	    cpuUsage?: string;
+	    memoryUsage?: string;
+	    kind: string;
+	    cpu: string;
+	    memory: string;
+	    pods: string;
+	    conditions: NodeCondition[];
+	    taints?: NodeTaint[];
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    podsList?: types.PodSimpleInfo[];
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.unschedulable = source["unschedulable"];
+	        this.roles = source["roles"];
+	        this.age = source["age"];
+	        this.internalIP = source["internalIP"];
+	        this.externalIP = source["externalIP"];
+	        this.hostname = source["hostname"];
+	        this.architecture = source["architecture"];
+	        this.os = source["os"];
+	        this.osImage = source["osImage"];
+	        this.kernelVersion = source["kernelVersion"];
+	        this.containerRuntime = source["containerRuntime"];
+	        this.kubeletVersion = source["kubeletVersion"];
+	        this.cpuCapacity = source["cpuCapacity"];
+	        this.cpuAllocatable = source["cpuAllocatable"];
+	        this.memoryCapacity = source["memoryCapacity"];
+	        this.memoryAllocatable = source["memoryAllocatable"];
+	        this.podsCapacity = source["podsCapacity"];
+	        this.podsAllocatable = source["podsAllocatable"];
+	        this.storageCapacity = source["storageCapacity"];
+	        this.podsCount = source["podsCount"];
+	        this.restarts = source["restarts"];
+	        this.cpuRequests = source["cpuRequests"];
+	        this.cpuLimits = source["cpuLimits"];
+	        this.memRequests = source["memRequests"];
+	        this.memLimits = source["memLimits"];
+	        this.cpuUsage = source["cpuUsage"];
+	        this.memoryUsage = source["memoryUsage"];
+	        this.kind = source["kind"];
+	        this.cpu = source["cpu"];
+	        this.memory = source["memory"];
+	        this.pods = source["pods"];
+	        this.conditions = this.convertValues(source["conditions"], NodeCondition);
+	        this.taints = this.convertValues(source["taints"], NodeTaint);
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.podsList = this.convertValues(source["podsList"], types.PodSimpleInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 
@@ -3988,86 +4660,6 @@ export namespace types {
 		    return a;
 		}
 	}
-	export class CRDCondition {
-	    kind: string;
-	    status: string;
-	    reason?: string;
-	    message?: string;
-	    lastTransitionTime?: v1.Time;
-	
-	    static createFrom(source: any = {}) {
-	        return new CRDCondition(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.status = source["status"];
-	        this.reason = source["reason"];
-	        this.message = source["message"];
-	        this.lastTransitionTime = this.convertValues(source["lastTransitionTime"], v1.Time);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class CRDNames {
-	    plural: string;
-	    singular: string;
-	    kind: string;
-	    listKind?: string;
-	    shortNames?: string[];
-	    categories?: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new CRDNames(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.plural = source["plural"];
-	        this.singular = source["singular"];
-	        this.kind = source["kind"];
-	        this.listKind = source["listKind"];
-	        this.shortNames = source["shortNames"];
-	        this.categories = source["categories"];
-	    }
-	}
-	export class CRDVersion {
-	    name: string;
-	    served: boolean;
-	    storage: boolean;
-	    deprecated?: boolean;
-	    schema?: Record<string, any>;
-	
-	    static createFrom(source: any = {}) {
-	        return new CRDVersion(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.served = source["served"];
-	        this.storage = source["storage"];
-	        this.deprecated = source["deprecated"];
-	        this.schema = source["schema"];
-	    }
-	}
 	
 	
 	export class ContainerLogsEntry {
@@ -4152,58 +4744,6 @@ export namespace types {
 	        this.entries = this.convertValues(source["entries"], ContainerLogsEntry);
 	        this.warnings = source["warnings"];
 	        this.error = source["error"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class CustomResourceDefinitionDetails {
-	    kind: string;
-	    name: string;
-	    group: string;
-	    scope: string;
-	    age: string;
-	    details: string;
-	    versions: CRDVersion[];
-	    names: CRDNames;
-	    conversionStrategy?: string;
-	    conditions?: CRDCondition[];
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	
-	    static createFrom(source: any = {}) {
-	        return new CustomResourceDefinitionDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.group = source["group"];
-	        this.scope = source["scope"];
-	        this.age = source["age"];
-	        this.details = source["details"];
-	        this.versions = this.convertValues(source["versions"], CRDVersion);
-	        this.names = this.convertValues(source["names"], CRDNames);
-	        this.conversionStrategy = source["conversionStrategy"];
-	        this.conditions = this.convertValues(source["conditions"], CRDCondition);
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -4406,126 +4946,6 @@ export namespace types {
 		    return a;
 		}
 	}
-	
-	export class HelmResource {
-	    kind: string;
-	    apiVersion?: string;
-	    name: string;
-	    namespace: string;
-	    scope?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new HelmResource(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.apiVersion = source["apiVersion"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.scope = source["scope"];
-	    }
-	}
-	export class HelmRevision {
-	    revision: number;
-	    updated: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    chart: string;
-	    appVersion?: string;
-	    description?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new HelmRevision(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.revision = source["revision"];
-	        this.updated = source["updated"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.chart = source["chart"];
-	        this.appVersion = source["appVersion"];
-	        this.description = source["description"];
-	    }
-	}
-	export class HelmReleaseDetails {
-	    kind: string;
-	    typeAlias: string;
-	    name: string;
-	    namespace: string;
-	    age: string;
-	    chart: string;
-	    version: string;
-	    appVersion: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    revision: number;
-	    updated: string;
-	    description?: string;
-	    notes?: string;
-	    values?: Record<string, any>;
-	    history?: HelmRevision[];
-	    resources?: HelmResource[];
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	
-	    static createFrom(source: any = {}) {
-	        return new HelmReleaseDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.typeAlias = source["typeAlias"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.age = source["age"];
-	        this.chart = source["chart"];
-	        this.version = source["version"];
-	        this.appVersion = source["appVersion"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.revision = source["revision"];
-	        this.updated = source["updated"];
-	        this.description = source["description"];
-	        this.notes = source["notes"];
-	        this.values = source["values"];
-	        this.history = this.convertValues(source["history"], HelmRevision);
-	        this.resources = this.convertValues(source["resources"], HelmResource);
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	
 	
 	export class JobReference {
 	    name: string;
@@ -4775,408 +5195,6 @@ export namespace types {
 		    return a;
 		}
 	}
-	export class WebhookSelectorExpression {
-	    key: string;
-	    operator: string;
-	    values?: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new WebhookSelectorExpression(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.key = source["key"];
-	        this.operator = source["operator"];
-	        this.values = source["values"];
-	    }
-	}
-	export class WebhookSelector {
-	    matchLabels?: Record<string, string>;
-	    matchExpressions?: WebhookSelectorExpression[];
-	
-	    static createFrom(source: any = {}) {
-	        return new WebhookSelector(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.matchLabels = source["matchLabels"];
-	        this.matchExpressions = this.convertValues(source["matchExpressions"], WebhookSelectorExpression);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class WebhookRule {
-	    apiGroups?: string[];
-	    apiVersions?: string[];
-	    resources?: string[];
-	    operations?: string[];
-	    scope?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new WebhookRule(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.apiGroups = source["apiGroups"];
-	        this.apiVersions = source["apiVersions"];
-	        this.resources = source["resources"];
-	        this.operations = source["operations"];
-	        this.scope = source["scope"];
-	    }
-	}
-	export class WebhookService {
-	    namespace: string;
-	    name: string;
-	    path?: string;
-	    port?: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new WebhookService(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.namespace = source["namespace"];
-	        this.name = source["name"];
-	        this.path = source["path"];
-	        this.port = source["port"];
-	    }
-	}
-	export class WebhookClientConfig {
-	    service?: WebhookService;
-	    url?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new WebhookClientConfig(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.service = this.convertValues(source["service"], WebhookService);
-	        this.url = source["url"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class WebhookDetails {
-	    name: string;
-	    clientConfig: WebhookClientConfig;
-	    rules: WebhookRule[];
-	    failurePolicy?: string;
-	    matchPolicy?: string;
-	    namespaceSelector?: WebhookSelector;
-	    objectSelector?: WebhookSelector;
-	    sideEffects?: string;
-	    timeoutSeconds?: number;
-	    admissionReviewVersions?: string[];
-	    reinvocationPolicy?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new WebhookDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.clientConfig = this.convertValues(source["clientConfig"], WebhookClientConfig);
-	        this.rules = this.convertValues(source["rules"], WebhookRule);
-	        this.failurePolicy = source["failurePolicy"];
-	        this.matchPolicy = source["matchPolicy"];
-	        this.namespaceSelector = this.convertValues(source["namespaceSelector"], WebhookSelector);
-	        this.objectSelector = this.convertValues(source["objectSelector"], WebhookSelector);
-	        this.sideEffects = source["sideEffects"];
-	        this.timeoutSeconds = source["timeoutSeconds"];
-	        this.admissionReviewVersions = source["admissionReviewVersions"];
-	        this.reinvocationPolicy = source["reinvocationPolicy"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class MutatingWebhookConfigurationDetails {
-	    kind: string;
-	    name: string;
-	    age: string;
-	    details: string;
-	    webhooks: WebhookDetails[];
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	
-	    static createFrom(source: any = {}) {
-	        return new MutatingWebhookConfigurationDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.age = source["age"];
-	        this.details = source["details"];
-	        this.webhooks = this.convertValues(source["webhooks"], WebhookDetails);
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class NodeCondition {
-	    kind: string;
-	    status: string;
-	    reason?: string;
-	    message?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new NodeCondition(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.status = source["status"];
-	        this.reason = source["reason"];
-	        this.message = source["message"];
-	    }
-	}
-	export class PodSimpleInfo {
-	    kind: string;
-	    name: string;
-	    namespace: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    ready: string;
-	    restarts: number;
-	    age: string;
-	    cpuRequest: string;
-	    cpuLimit: string;
-	    cpuUsage: string;
-	    memRequest: string;
-	    memLimit: string;
-	    memUsage: string;
-	    ownerKind: string;
-	    ownerName: string;
-	    ownerApiVersion?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new PodSimpleInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.ready = source["ready"];
-	        this.restarts = source["restarts"];
-	        this.age = source["age"];
-	        this.cpuRequest = source["cpuRequest"];
-	        this.cpuLimit = source["cpuLimit"];
-	        this.cpuUsage = source["cpuUsage"];
-	        this.memRequest = source["memRequest"];
-	        this.memLimit = source["memLimit"];
-	        this.memUsage = source["memUsage"];
-	        this.ownerKind = source["ownerKind"];
-	        this.ownerName = source["ownerName"];
-	        this.ownerApiVersion = source["ownerApiVersion"];
-	    }
-	}
-	export class NodeTaint {
-	    key: string;
-	    value?: string;
-	    effect: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new NodeTaint(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.key = source["key"];
-	        this.value = source["value"];
-	        this.effect = source["effect"];
-	    }
-	}
-	export class NodeDetails {
-	    name: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    unschedulable: boolean;
-	    roles: string;
-	    age: string;
-	    internalIP: string;
-	    externalIP?: string;
-	    hostname: string;
-	    architecture: string;
-	    os: string;
-	    osImage: string;
-	    kernelVersion: string;
-	    containerRuntime: string;
-	    kubeletVersion: string;
-	    cpuCapacity: string;
-	    cpuAllocatable: string;
-	    memoryCapacity: string;
-	    memoryAllocatable: string;
-	    podsCapacity: string;
-	    podsAllocatable: string;
-	    storageCapacity?: string;
-	    podsCount: number;
-	    restarts: number;
-	    cpuRequests: string;
-	    cpuLimits: string;
-	    memRequests: string;
-	    memLimits: string;
-	    cpuUsage?: string;
-	    memoryUsage?: string;
-	    kind: string;
-	    cpu: string;
-	    memory: string;
-	    pods: string;
-	    conditions: NodeCondition[];
-	    taints?: NodeTaint[];
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    podsList?: PodSimpleInfo[];
-	
-	    static createFrom(source: any = {}) {
-	        return new NodeDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.unschedulable = source["unschedulable"];
-	        this.roles = source["roles"];
-	        this.age = source["age"];
-	        this.internalIP = source["internalIP"];
-	        this.externalIP = source["externalIP"];
-	        this.hostname = source["hostname"];
-	        this.architecture = source["architecture"];
-	        this.os = source["os"];
-	        this.osImage = source["osImage"];
-	        this.kernelVersion = source["kernelVersion"];
-	        this.containerRuntime = source["containerRuntime"];
-	        this.kubeletVersion = source["kubeletVersion"];
-	        this.cpuCapacity = source["cpuCapacity"];
-	        this.cpuAllocatable = source["cpuAllocatable"];
-	        this.memoryCapacity = source["memoryCapacity"];
-	        this.memoryAllocatable = source["memoryAllocatable"];
-	        this.podsCapacity = source["podsCapacity"];
-	        this.podsAllocatable = source["podsAllocatable"];
-	        this.storageCapacity = source["storageCapacity"];
-	        this.podsCount = source["podsCount"];
-	        this.restarts = source["restarts"];
-	        this.cpuRequests = source["cpuRequests"];
-	        this.cpuLimits = source["cpuLimits"];
-	        this.memRequests = source["memRequests"];
-	        this.memLimits = source["memLimits"];
-	        this.cpuUsage = source["cpuUsage"];
-	        this.memoryUsage = source["memoryUsage"];
-	        this.kind = source["kind"];
-	        this.cpu = source["cpu"];
-	        this.memory = source["memory"];
-	        this.pods = source["pods"];
-	        this.conditions = this.convertValues(source["conditions"], NodeCondition);
-	        this.taints = this.convertValues(source["taints"], NodeTaint);
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.podsList = this.convertValues(source["podsList"], PodSimpleInfo);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class NodeLogSource {
 	    id: string;
 	    label: string;
@@ -5283,7 +5301,6 @@ export namespace types {
 		    return a;
 		}
 	}
-	
 	
 	export class PodDetailInfo {
 	    name: string;
@@ -5422,7 +5439,54 @@ export namespace types {
 	        this.memLimit = source["memLimit"];
 	    }
 	}
+	export class PodSimpleInfo {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    ready: string;
+	    restarts: number;
+	    age: string;
+	    cpuRequest: string;
+	    cpuLimit: string;
+	    cpuUsage: string;
+	    memRequest: string;
+	    memLimit: string;
+	    memUsage: string;
+	    ownerKind: string;
+	    ownerName: string;
+	    ownerApiVersion?: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new PodSimpleInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.ready = source["ready"];
+	        this.restarts = source["restarts"];
+	        this.age = source["age"];
+	        this.cpuRequest = source["cpuRequest"];
+	        this.cpuLimit = source["cpuLimit"];
+	        this.cpuUsage = source["cpuUsage"];
+	        this.memRequest = source["memRequest"];
+	        this.memLimit = source["memLimit"];
+	        this.memUsage = source["memUsage"];
+	        this.ownerKind = source["ownerKind"];
+	        this.ownerName = source["ownerName"];
+	        this.ownerApiVersion = source["ownerApiVersion"];
+	    }
+	}
 	export class PolicyRule {
 	    apiGroups?: string[];
 	    resources?: string[];
@@ -5811,54 +5875,6 @@ export namespace types {
 		    return a;
 		}
 	}
-	export class ValidatingWebhookConfigurationDetails {
-	    kind: string;
-	    name: string;
-	    age: string;
-	    details: string;
-	    webhooks: WebhookDetails[];
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	
-	    static createFrom(source: any = {}) {
-	        return new ValidatingWebhookConfigurationDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.age = source["age"];
-	        this.details = source["details"];
-	        this.webhooks = this.convertValues(source["webhooks"], WebhookDetails);
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	
-	
-	
-	
-	
-	
 	export class WindowSettings {
 	    x: number;
 	    y: number;

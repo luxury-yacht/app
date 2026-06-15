@@ -1,11 +1,12 @@
 /*
- * backend/resources/types/admission.go
+ * backend/resources/admission/dto.go
  *
- * Type definitions for Admission resources.
- * - Shared data structures for API responses.
+ * Webhook-configuration detail DTOs (the frontend wire shape) for the admission
+ * pair, co-located with their models. WebhookDetails + sub-types are shared by both
+ * mutating and validating configs.
  */
 
-package types
+package admission
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 

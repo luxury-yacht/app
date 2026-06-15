@@ -14,13 +14,12 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/types"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // CustomResourceDefinition returns a detailed view for a single CRD.
-func (s *Service) CustomResourceDefinition(name string) (*types.CustomResourceDefinitionDetails, error) {
+func (s *Service) CustomResourceDefinition(name string) (*CustomResourceDefinitionDetails, error) {
 	if err := s.ensureAPIExtensions("CustomResourceDefinition"); err != nil {
 		return nil, err
 	}
@@ -36,7 +35,7 @@ func (s *Service) CustomResourceDefinition(name string) (*types.CustomResourceDe
 }
 
 // CustomResourceDefinitions returns detailed views for all CRDs.
-func (s *Service) CustomResourceDefinitions() ([]*types.CustomResourceDefinitionDetails, error) {
+func (s *Service) CustomResourceDefinitions() ([]*CustomResourceDefinitionDetails, error) {
 	if err := s.ensureAPIExtensions("CustomResourceDefinition"); err != nil {
 		return nil, err
 	}
@@ -48,7 +47,7 @@ func (s *Service) CustomResourceDefinitions() ([]*types.CustomResourceDefinition
 		return nil, fmt.Errorf("failed to list CRDs: %v", err)
 	}
 
-	result := make([]*types.CustomResourceDefinitionDetails, 0, len(crds.Items))
+	result := make([]*CustomResourceDefinitionDetails, 0, len(crds.Items))
 	for i := range crds.Items {
 		result = append(result, s.buildCRDDetails(&crds.Items[i]))
 	}
@@ -56,10 +55,10 @@ func (s *Service) CustomResourceDefinitions() ([]*types.CustomResourceDefinition
 	return result, nil
 }
 
-func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition) *types.CustomResourceDefinitionDetails {
-	model := resourcemodel.BuildCustomResourceDefinitionResourceModel(s.deps.ClusterID, crd)
-	facts := model.Facts.CustomResourceDefinition
-	details := &types.CustomResourceDefinitionDetails{
+func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition) *CustomResourceDefinitionDetails {
+	model := BuildResourceModel(s.deps.ClusterID, crd)
+	facts := BuildFacts(crd)
+	details := &CustomResourceDefinitionDetails{
 		Kind:        "CustomResourceDefinition",
 		Name:        crd.Name,
 		Age:         common.FormatAge(crd.CreationTimestamp.Time),
@@ -67,29 +66,27 @@ func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition)
 		Annotations: model.Metadata.Annotations,
 	}
 
-	if facts != nil {
-		details.Group = facts.Group
-		details.Scope = facts.Scope
-		details.Versions = crdVersionsFromFacts(facts.Versions)
-		details.Names = crdNamesFromFacts(facts.Names)
-		details.ConversionStrategy = facts.ConversionStrategy
-		details.Conditions = crdConditionsFromFacts(facts.Conditions)
-		details.Details = fmt.Sprintf("Group: %s, Scope: %s", facts.Group, facts.Scope)
-		if len(facts.Versions) > 0 {
-			details.Details += fmt.Sprintf(", Versions: %d", len(facts.Versions))
-		}
+	details.Group = facts.Group
+	details.Scope = facts.Scope
+	details.Versions = crdVersionsFromFacts(facts.Versions)
+	details.Names = crdNamesFromFacts(facts.Names)
+	details.ConversionStrategy = facts.ConversionStrategy
+	details.Conditions = crdConditionsFromFacts(facts.Conditions)
+	details.Details = fmt.Sprintf("Group: %s, Scope: %s", facts.Group, facts.Scope)
+	if len(facts.Versions) > 0 {
+		details.Details += fmt.Sprintf(", Versions: %d", len(facts.Versions))
 	}
 
 	return details
 }
 
-func crdVersionsFromFacts(facts []resourcemodel.CRDVersionFacts) []types.CRDVersion {
+func crdVersionsFromFacts(facts []VersionFacts) []CRDVersion {
 	if len(facts) == 0 {
 		return nil
 	}
-	versions := make([]types.CRDVersion, 0, len(facts))
+	versions := make([]CRDVersion, 0, len(facts))
 	for _, fact := range facts {
-		version := types.CRDVersion{
+		version := CRDVersion{
 			Name:       fact.Name,
 			Served:     fact.Served,
 			Storage:    fact.Storage,
@@ -103,8 +100,8 @@ func crdVersionsFromFacts(facts []resourcemodel.CRDVersionFacts) []types.CRDVers
 	return versions
 }
 
-func crdNamesFromFacts(facts resourcemodel.CRDNamesFacts) types.CRDNames {
-	return types.CRDNames{
+func crdNamesFromFacts(facts NamesFacts) CRDNames {
+	return CRDNames{
 		Plural:     facts.Plural,
 		Singular:   facts.Singular,
 		Kind:       facts.Kind,
@@ -114,13 +111,13 @@ func crdNamesFromFacts(facts resourcemodel.CRDNamesFacts) types.CRDNames {
 	}
 }
 
-func crdConditionsFromFacts(facts []resourcemodel.ConditionFacts) []types.CRDCondition {
+func crdConditionsFromFacts(facts []resourcemodel.ConditionFacts) []CRDCondition {
 	if len(facts) == 0 {
 		return nil
 	}
-	conditions := make([]types.CRDCondition, 0, len(facts))
+	conditions := make([]CRDCondition, 0, len(facts))
 	for _, fact := range facts {
-		conditions = append(conditions, types.CRDCondition{
+		conditions = append(conditions, CRDCondition{
 			Kind:               fact.Type,
 			Status:             fact.Status,
 			Reason:             fact.Reason,

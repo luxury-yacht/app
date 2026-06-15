@@ -1,15 +1,15 @@
 /*
- * backend/resources/types/events.go
+ * backend/resources/events/dto.go
  *
- * Type definitions for Event resources.
- * - Shared data structures for API responses.
+ * Event detail DTO (the frontend wire shape), co-located with its model and detail
+ * builder.
  */
 
-package types
+package events
 
 import "time"
 
-// Event represents a Kubernetes event with simplified fields for the UI.
+// Event is the flattened event row returned to the frontend.
 type Event struct {
 	Kind               string    `json:"kind"`
 	EventType          string    `json:"eventType"`

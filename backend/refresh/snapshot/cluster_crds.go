@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apiextlisters "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -15,7 +14,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const clusterCRDDomainName = "cluster-crds"
@@ -146,33 +144,4 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 	}, nil
 }
 
-// crdVersionSummary returns the storage version name and the count of
-// *additional* served versions for the Version column. The frontend
-// renders this as `storageVersion` when extraServed == 0 and
-// `storageVersion (+N)` when extraServed >= 1.
-//
-// Storage version is the canonical persistence form: when a CRD serves
-// multiple versions, exactly one is marked Storage and the API server
-// converts to/from it.
-//
-// Fallback chain when no version is flagged Storage (rare/transient):
-//  1. first served version
-//  2. first version in the list
-//  3. empty string (only if Spec.Versions is empty)
-//
-// extraServed counts versions where Served && Name != storageVersion. A
-// CRD that serves only its storage version returns (storageVersion, 0).
-func crdVersionSummary(crd *apiextensionsv1.CustomResourceDefinition) (storageVersion string, extraServed int) {
-	if crd == nil || len(crd.Spec.Versions) == 0 {
-		return "", 0
-	}
-	facts := resourcemodel.BuildCustomResourceDefinitionFacts(crd)
-	return facts.StorageVersion, facts.ExtraServedVersionCount
-}
 
-func describeCRDVersions(crd *apiextensionsv1.CustomResourceDefinition) string {
-	if crd == nil {
-		return ""
-	}
-	return resourcemodel.CustomResourceDefinitionVersionDetails(resourcemodel.BuildCustomResourceDefinitionFacts(crd))
-}

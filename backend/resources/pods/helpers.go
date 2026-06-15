@@ -14,7 +14,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -213,8 +212,8 @@ func (s *Service) buildPodDetailInfo(pod corev1.Pod, podMetrics map[string]*metr
 	// Get owner
 	ownerKind, ownerName, ownerAPIVersion := getPodOwnerWithMap(pod, rsToDeployment)
 
-	model := resourcemodel.BuildPodResourceModel(s.deps.ClusterID, &pod)
-	podFacts := model.Facts.Pod
+	model := BuildResourceModel(s.deps.ClusterID, &pod)
+	podFacts := BuildFacts(&pod)
 
 	return &types.PodDetailInfo{
 		// Basic info
@@ -260,7 +259,7 @@ func (s *Service) buildPodDetailInfo(pod corev1.Pod, podMetrics map[string]*metr
 		Containers:     []PodDetailInfoContainer{},
 		InitContainers: []PodDetailInfoContainer{},
 		Volumes:        []string{},
-		Conditions:     types.FormatConditions(model.Facts.Pod.Conditions),
+		Conditions:     types.FormatConditions(podFacts.Conditions),
 		Tolerations:    []string{},
 	}
 }
@@ -472,26 +471,23 @@ func getPodUsageFromMetrics(podName string, metrics map[string]*metricsv1beta1.P
 
 // getNsPodReadyStatus calculates ready/total containers
 func getNsPodReadyStatus(pod corev1.Pod) string {
-	facts := resourcemodel.BuildPodFacts(&pod)
-	return formatPodFactsReady(&facts)
+	facts := BuildFacts(&pod)
+	return formatPodFactsReady(facts)
 }
 
-func formatPodFactsReady(facts *resourcemodel.PodFacts) string {
-	if facts == nil {
-		return "0/0"
-	}
+func formatPodFactsReady(facts Facts) string {
 	return fmt.Sprintf("%d/%d", facts.ReadyContainers, facts.TotalContainers)
 }
 
 // getPodStatus returns the pod status similar to kubectl's display logic
 // It checks container states to provide more specific status information
 func getPodStatus(pod corev1.Pod) string {
-	return resourcemodel.BuildPodStatusPresentation(&pod).Label
+	return statusPresentation(&pod).Label
 }
 
 // getPodRestartCount calculates the total restart count across all containers
 func getPodRestartCount(pod corev1.Pod) int32 {
-	facts := resourcemodel.BuildPodFacts(&pod)
+	facts := BuildFacts(&pod)
 	return facts.RestartCount
 }
 
@@ -782,8 +778,8 @@ func (s *Service) NodeIP(nodeName string) string {
 func SummarizePod(clusterID string, pod corev1.Pod, metrics map[string]*metricsv1beta1.PodMetrics, ownerKind, ownerName, ownerAPIVersion string) types.PodSimpleInfo {
 	cpuRequest, cpuLimit, memRequest, memLimit := CalculatePodResources(pod)
 	cpuUsage, memUsage := PodUsageFromMetrics(pod.Name, metrics)
-	model := resourcemodel.BuildPodResourceModel(clusterID, &pod)
-	podFacts := model.Facts.Pod
+	model := BuildResourceModel(clusterID, &pod)
+	podFacts := BuildFacts(&pod)
 
 	return types.PodSimpleInfo{
 		Kind:             "Pod",

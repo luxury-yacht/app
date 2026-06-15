@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
 
 const objectEventsDomain = "object-events"
@@ -320,8 +321,7 @@ func maxEventVersion(events []*corev1.Event) uint64 {
 }
 
 func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
-	model := resourcemodel.BuildEventResourceModel(meta.ClusterID, &evt)
-	facts := model.Facts.Event
+	facts := eventres.BuildFacts(meta.ClusterID, &evt)
 	source := facts.Source
 	if source == "" {
 		source = "Unknown"

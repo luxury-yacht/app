@@ -1,98 +1,15 @@
-package resourcemodel
+package admission
 
 import (
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestBuildCustomResourceDefinitionResourceModelFactsStatusAndVersions(t *testing.T) {
-	crd := &apiextensionsv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{Name: "widgets.example.com", UID: "uid-1"},
-		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-			Group: "example.com",
-			Scope: apiextensionsv1.NamespaceScoped,
-			Names: apiextensionsv1.CustomResourceDefinitionNames{
-				Plural:     "widgets",
-				Singular:   "widget",
-				Kind:       "Widget",
-				ListKind:   "WidgetList",
-				ShortNames: []string{"wdg"},
-				Categories: []string{"all"},
-			},
-			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
-				{Name: "v1beta1", Served: true, Storage: false, Deprecated: true},
-				{
-					Name:    "v1",
-					Served:  true,
-					Storage: true,
-					Schema: &apiextensionsv1.CustomResourceValidation{
-						OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{Type: "object"},
-					},
-				},
-				{Name: "v2alpha1", Served: false, Storage: false},
-			},
-			Conversion: &apiextensionsv1.CustomResourceConversion{Strategy: apiextensionsv1.WebhookConverter},
-		},
-		Status: apiextensionsv1.CustomResourceDefinitionStatus{
-			Conditions: []apiextensionsv1.CustomResourceDefinitionCondition{{
-				Type:   apiextensionsv1.Established,
-				Status: apiextensionsv1.ConditionTrue,
-				Reason: "InitialNamesAccepted",
-			}},
-		},
-	}
-
-	model := BuildCustomResourceDefinitionResourceModel("cluster-a", crd)
-
-	require.Equal(t, ResourceRef{
-		ClusterID: "cluster-a",
-		Group:     "apiextensions.k8s.io",
-		Version:   "v1",
-		Kind:      "CustomResourceDefinition",
-		Resource:  "customresourcedefinitions",
-		Name:      "widgets.example.com",
-		UID:       "uid-1",
-	}, model.Ref)
-	facts := model.Facts.CustomResourceDefinition
-	require.NotNil(t, facts)
-	require.Equal(t, "example.com", facts.Group)
-	require.Equal(t, "Namespaced", facts.Scope)
-	require.Equal(t, "Widget", facts.Names.Kind)
-	require.Equal(t, []string{"wdg"}, facts.Names.ShortNames)
-	require.Equal(t, "Webhook", facts.ConversionStrategy)
-	require.Equal(t, "v1", facts.StorageVersion)
-	require.Equal(t, 1, facts.ExtraServedVersionCount)
-	require.Equal(t, "Versions: v1beta1,v1*,v2alpha1", CustomResourceDefinitionVersionDetails(*facts))
-	require.False(t, facts.Versions[0].HasSchema)
-	require.True(t, facts.Versions[1].HasSchema)
-	require.Equal(t, "Established", facts.Conditions[0].Type)
-	require.Equal(t, "True", facts.Conditions[0].Status)
-	require.Equal(t, "Versions: v1beta1,v1*,v2alpha1", model.Status.Label)
-	require.Equal(t, "v1", model.Status.State)
-}
-
-func TestBuildCustomResourceDefinitionFactsFallsBackToServedVersion(t *testing.T) {
-	crd := &apiextensionsv1.CustomResourceDefinition{
-		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
-				{Name: "v1alpha1", Served: false},
-				{Name: "v1beta1", Served: true},
-				{Name: "v1", Served: true},
-			},
-		},
-	}
-
-	facts := BuildCustomResourceDefinitionFacts(crd)
-
-	require.Equal(t, "v1beta1", facts.StorageVersion)
-	require.Equal(t, 1, facts.ExtraServedVersionCount)
-}
-
-func TestBuildMutatingWebhookConfigurationResourceModelServiceRefs(t *testing.T) {
+func TestBuildMutatingResourceModelServiceRefs(t *testing.T) {
 	path := "/mutate"
 	port := int32(9443)
 	failurePolicy := admissionregistrationv1.Fail
@@ -140,11 +57,10 @@ func TestBuildMutatingWebhookConfigurationResourceModelServiceRefs(t *testing.T)
 		}},
 	}
 
-	model := BuildMutatingWebhookConfigurationResourceModel("cluster-a", config)
-
+	model := BuildMutatingResourceModel("cluster-a", config)
 	require.Equal(t, "1 webhook", model.Status.Label)
-	facts := model.Facts.MutatingWebhookConfiguration
-	require.NotNil(t, facts)
+
+	facts := BuildMutatingFacts("cluster-a", config)
 	require.Len(t, facts.Webhooks, 1)
 	webhook := facts.Webhooks[0]
 	require.Equal(t, "pods.example.com", webhook.Name)
@@ -158,7 +74,7 @@ func TestBuildMutatingWebhookConfigurationResourceModelServiceRefs(t *testing.T)
 	require.Equal(t, "mutator", webhook.ClientConfig.Service.Name)
 	require.Equal(t, "/mutate", *webhook.ClientConfig.Service.Path)
 	require.Equal(t, int32(9443), *webhook.ClientConfig.Service.Port)
-	require.Equal(t, &ResourceRef{
+	require.Equal(t, &resourcemodel.ResourceRef{
 		ClusterID: "cluster-a",
 		Group:     "",
 		Version:   "v1",
@@ -174,7 +90,7 @@ func TestBuildMutatingWebhookConfigurationResourceModelServiceRefs(t *testing.T)
 	require.Equal(t, "Namespaced", webhook.Rules[0].Scope)
 }
 
-func TestBuildValidatingWebhookConfigurationResourceModelURLRefs(t *testing.T) {
+func TestBuildValidatingResourceModelURLRefs(t *testing.T) {
 	url := "https://webhooks.example.com/validate"
 	config := &admissionregistrationv1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{Name: "validating.example.com", UID: "uid-3"},
@@ -184,11 +100,10 @@ func TestBuildValidatingWebhookConfigurationResourceModelURLRefs(t *testing.T) {
 		}},
 	}
 
-	model := BuildValidatingWebhookConfigurationResourceModel("cluster-a", config)
+	model := BuildValidatingResourceModel("cluster-a", config)
+	require.Equal(t, "1 webhook", model.Status.Label)
 
-	facts := model.Facts.ValidatingWebhookConfiguration
-	require.NotNil(t, facts)
+	facts := BuildValidatingFacts("cluster-a", config)
 	require.Equal(t, "https://webhooks.example.com/validate", facts.Webhooks[0].ClientConfig.URL)
 	require.Nil(t, facts.Webhooks[0].ClientConfig.Service)
-	require.Equal(t, "1 webhook", model.Status.Label)
 }

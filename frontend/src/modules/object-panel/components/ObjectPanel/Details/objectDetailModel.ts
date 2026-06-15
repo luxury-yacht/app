@@ -1,4 +1,6 @@
 import {
+  admission,
+  apiextensions,
   clusterrole,
   clusterrolebinding,
   configmap,
@@ -6,6 +8,7 @@ import {
   daemonset,
   deployment,
   endpointslice,
+  helm,
   hpa,
   ingress,
   ingressclass,
@@ -13,6 +16,7 @@ import {
   job,
   namespaces,
   networkpolicy,
+  nodes,
   persistentvolume,
   persistentvolumeclaim,
   poddisruptionbudget,
@@ -39,7 +43,7 @@ export interface DetailSlots {
   cronJobDetails: cronjob.CronJobDetails | null;
   configMapDetails: configmap.ConfigMapDetails | null;
   secretDetails: secret.SecretDetails | null;
-  helmReleaseDetails: types.HelmReleaseDetails | null;
+  helmReleaseDetails: helm.HelmReleaseDetails | null;
   serviceDetails: service.ServiceDetails | null;
   ingressDetails: ingress.IngressDetails | null;
   networkPolicyDetails: networkpolicy.NetworkPolicyDetails | null;
@@ -63,13 +67,13 @@ export interface DetailSlots {
   pdbDetails: poddisruptionbudget.PodDisruptionBudgetDetails | null;
   resourceQuotaDetails: resourcequota.ResourceQuotaDetails | null;
   limitRangeDetails: limitrange.LimitRangeDetails | null;
-  nodeDetails: types.NodeDetails | null;
+  nodeDetails: nodes.NodeDetails | null;
   namespaceDetails: namespaces.NamespaceDetails | null;
   ingressClassDetails: ingressclass.IngressClassDetails | null;
   gatewayClassDetails?: types.GatewayClassDetails | null;
-  crdDetails: types.CustomResourceDefinitionDetails | null;
-  mutatingWebhookDetails: types.MutatingWebhookConfigurationDetails | null;
-  validatingWebhookDetails: types.ValidatingWebhookConfigurationDetails | null;
+  crdDetails: apiextensions.CustomResourceDefinitionDetails | null;
+  mutatingWebhookDetails: admission.MutatingWebhookConfigurationDetails | null;
+  validatingWebhookDetails: admission.ValidatingWebhookConfigurationDetails | null;
 }
 
 type DetailContainer = {
@@ -256,7 +260,7 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'helmrelease':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        helmReleaseDetails: detailPayload as types.HelmReleaseDetails,
+        helmReleaseDetails: detailPayload as helm.HelmReleaseDetails,
       };
     case 'service':
       return { ...EMPTY_DETAIL_SLOTS, serviceDetails: detailPayload as service.ServiceDetails };
@@ -353,7 +357,7 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
         limitRangeDetails: detailPayload as limitrange.LimitRangeDetails,
       };
     case 'node':
-      return { ...EMPTY_DETAIL_SLOTS, nodeDetails: detailPayload as types.NodeDetails };
+      return { ...EMPTY_DETAIL_SLOTS, nodeDetails: detailPayload as nodes.NodeDetails };
     case 'namespace':
       return {
         ...EMPTY_DETAIL_SLOTS,
@@ -372,17 +376,17 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'customresourcedefinition':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        crdDetails: detailPayload as types.CustomResourceDefinitionDetails,
+        crdDetails: detailPayload as apiextensions.CustomResourceDefinitionDetails,
       };
     case 'mutatingwebhookconfiguration':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        mutatingWebhookDetails: detailPayload as types.MutatingWebhookConfigurationDetails,
+        mutatingWebhookDetails: detailPayload as admission.MutatingWebhookConfigurationDetails,
       };
     case 'validatingwebhookconfiguration':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        validatingWebhookDetails: detailPayload as types.ValidatingWebhookConfigurationDetails,
+        validatingWebhookDetails: detailPayload as admission.ValidatingWebhookConfigurationDetails,
       };
     default:
       return EMPTY_DETAIL_SLOTS;

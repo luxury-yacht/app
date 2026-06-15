@@ -10,15 +10,13 @@ package admission
 import (
 	"fmt"
 
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/types"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ValidatingWebhookConfiguration returns details for a single validating configuration.
-func (s *Service) ValidatingWebhookConfiguration(name string) (*types.ValidatingWebhookConfigurationDetails, error) {
+func (s *Service) ValidatingWebhookConfiguration(name string) (*ValidatingWebhookConfigurationDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -34,7 +32,7 @@ func (s *Service) ValidatingWebhookConfiguration(name string) (*types.Validating
 }
 
 // ValidatingWebhookConfigurations lists all validating webhook configurations.
-func (s *Service) ValidatingWebhookConfigurations() ([]*types.ValidatingWebhookConfigurationDetails, error) {
+func (s *Service) ValidatingWebhookConfigurations() ([]*ValidatingWebhookConfigurationDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -46,7 +44,7 @@ func (s *Service) ValidatingWebhookConfigurations() ([]*types.ValidatingWebhookC
 		return nil, fmt.Errorf("failed to list validating webhook configurations: %v", err)
 	}
 
-	result := make([]*types.ValidatingWebhookConfigurationDetails, 0, len(configs.Items))
+	result := make([]*ValidatingWebhookConfigurationDetails, 0, len(configs.Items))
 	for i := range configs.Items {
 		result = append(result, s.buildValidatingWebhookConfigurationDetails(&configs.Items[i]))
 	}
@@ -54,10 +52,10 @@ func (s *Service) ValidatingWebhookConfigurations() ([]*types.ValidatingWebhookC
 	return result, nil
 }
 
-func (s *Service) buildValidatingWebhookConfigurationDetails(config *admissionregistrationv1.ValidatingWebhookConfiguration) *types.ValidatingWebhookConfigurationDetails {
-	model := resourcemodel.BuildValidatingWebhookConfigurationResourceModel(s.deps.ClusterID, config)
-	facts := model.Facts.ValidatingWebhookConfiguration
-	details := &types.ValidatingWebhookConfigurationDetails{
+func (s *Service) buildValidatingWebhookConfigurationDetails(config *admissionregistrationv1.ValidatingWebhookConfiguration) *ValidatingWebhookConfigurationDetails {
+	model := BuildValidatingResourceModel(s.deps.ClusterID, config)
+	facts := BuildValidatingFacts(s.deps.ClusterID, config)
+	details := &ValidatingWebhookConfigurationDetails{
 		Kind:        "ValidatingWebhookConfiguration",
 		Name:        config.Name,
 		Age:         common.FormatAge(config.CreationTimestamp.Time),
@@ -65,14 +63,12 @@ func (s *Service) buildValidatingWebhookConfigurationDetails(config *admissionre
 		Annotations: model.Metadata.Annotations,
 	}
 
-	if facts != nil {
-		details.Webhooks = validatingWebhookDetailsFromFacts(facts.Webhooks)
-		var selector *resourcemodel.LabelSelectorFacts
-		if len(facts.Webhooks) > 0 {
-			selector = facts.Webhooks[0].NamespaceSelector
-		}
-		details.Details = summarizeWebhookConfiguration(len(facts.Webhooks), selector)
+	details.Webhooks = validatingWebhookDetailsFromFacts(facts.Webhooks)
+	var selector *LabelSelectorFacts
+	if len(facts.Webhooks) > 0 {
+		selector = facts.Webhooks[0].NamespaceSelector
 	}
+	details.Details = summarizeWebhookConfiguration(len(facts.Webhooks), selector)
 
 	return details
 }

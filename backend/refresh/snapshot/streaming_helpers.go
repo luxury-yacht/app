@@ -24,9 +24,12 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/admission"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	clusterrolepkg "github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
+	"github.com/luxury-yacht/app/backend/resources/customresource"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 	rolepkg "github.com/luxury-yacht/app/backend/resources/role"
@@ -302,8 +305,8 @@ func BuildNamespaceCustomSummary(
 		}
 	}
 	gvr := schema.GroupVersionResource{Group: apiGroup, Version: apiVersion}
-	model := resourcemodel.BuildCustomResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeNamespaced, defaultNamespace)
-	facts := model.Facts.CustomResource
+	model := customresource.BuildResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeNamespaced, defaultNamespace)
+	facts := customresource.BuildFacts(meta.ClusterID, resource, gvr, crdName, resourcemodel.ResourceModelBuildOptions{})
 	return NamespaceCustomSummary{
 		ClusterMeta:        meta,
 		Kind:               model.Ref.Kind,
@@ -402,16 +405,12 @@ func BuildClusterValidatingWebhookSummary(
 	if webhook == nil {
 		return ClusterConfigEntry{ClusterMeta: meta, Kind: "ValidatingWebhookConfiguration"}
 	}
-	model := resourcemodel.BuildValidatingWebhookConfigurationResourceModel(meta.ClusterID, webhook)
-	count := len(webhook.Webhooks)
-	if facts := model.Facts.ValidatingWebhookConfiguration; facts != nil {
-		count = len(facts.Webhooks)
-	}
+	count := len(admission.BuildValidatingFacts(meta.ClusterID, webhook).Webhooks)
 	return ClusterConfigEntry{
 		ClusterMeta:  meta,
 		Kind:         "ValidatingWebhookConfiguration",
 		Name:         webhook.Name,
-		Details:      resourcemodel.WebhookCountDetails(count),
+		Details:      admission.WebhookCountDetails(count),
 		Age:          formatAge(webhook.CreationTimestamp.Time),
 		AgeTimestamp: creationTimestampMillis(webhook),
 	}
@@ -425,16 +424,12 @@ func BuildClusterMutatingWebhookSummary(
 	if webhook == nil {
 		return ClusterConfigEntry{ClusterMeta: meta, Kind: "MutatingWebhookConfiguration"}
 	}
-	model := resourcemodel.BuildMutatingWebhookConfigurationResourceModel(meta.ClusterID, webhook)
-	count := len(webhook.Webhooks)
-	if facts := model.Facts.MutatingWebhookConfiguration; facts != nil {
-		count = len(facts.Webhooks)
-	}
+	count := len(admission.BuildMutatingFacts(meta.ClusterID, webhook).Webhooks)
 	return ClusterConfigEntry{
 		ClusterMeta:  meta,
 		Kind:         "MutatingWebhookConfiguration",
 		Name:         webhook.Name,
-		Details:      resourcemodel.WebhookCountDetails(count),
+		Details:      admission.WebhookCountDetails(count),
 		Age:          formatAge(webhook.CreationTimestamp.Time),
 		AgeTimestamp: creationTimestampMillis(webhook),
 	}
@@ -454,28 +449,16 @@ func BuildClusterCRDSummary(meta ClusterMeta, crd *apiextensionsv1.CustomResourc
 	if crd == nil {
 		return ClusterCRDEntry{ClusterMeta: meta, Kind: "CustomResourceDefinition"}
 	}
-	model := resourcemodel.BuildCustomResourceDefinitionResourceModel(meta.ClusterID, crd)
-	facts := model.Facts.CustomResourceDefinition
-	group := crd.Spec.Group
-	scope := string(crd.Spec.Scope)
-	details := describeCRDVersions(crd)
-	storageVersion, extraServed := crdVersionSummary(crd)
-	if facts != nil {
-		group = facts.Group
-		scope = facts.Scope
-		details = resourcemodel.CustomResourceDefinitionVersionDetails(*facts)
-		storageVersion = facts.StorageVersion
-		extraServed = facts.ExtraServedVersionCount
-	}
+	facts := apiextensions.BuildFacts(crd)
 	return ClusterCRDEntry{
 		ClusterMeta:             meta,
 		Kind:                    "CustomResourceDefinition",
 		Name:                    crd.Name,
-		Group:                   group,
-		Scope:                   scope,
-		Details:                 details,
-		StorageVersion:          storageVersion,
-		ExtraServedVersionCount: extraServed,
+		Group:                   facts.Group,
+		Scope:                   facts.Scope,
+		Details:                 apiextensions.CustomResourceDefinitionVersionDetails(facts),
+		StorageVersion:          facts.StorageVersion,
+		ExtraServedVersionCount: facts.ExtraServedVersionCount,
 		Age:                     formatAge(crd.CreationTimestamp.Time),
 		AgeTimestamp:            creationTimestampMillis(crd),
 		TypeAlias:               "CRD",
@@ -515,8 +498,8 @@ func BuildClusterCustomSummary(
 		}
 	}
 	gvr := schema.GroupVersionResource{Group: apiGroup, Version: apiVersion}
-	model := resourcemodel.BuildCustomResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeCluster, "")
-	facts := model.Facts.CustomResource
+	model := customresource.BuildResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeCluster, "")
+	facts := customresource.BuildFacts(meta.ClusterID, resource, gvr, crdName, resourcemodel.ResourceModelBuildOptions{})
 	return ClusterCustomSummary{
 		ClusterMeta:        meta,
 		Kind:               model.Ref.Kind,

@@ -14,29 +14,27 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
-func mutatingWebhookDetailsFromFacts(webhooks []resourcemodel.MutatingWebhookFacts) []types.WebhookDetails {
-	result := make([]types.WebhookDetails, 0, len(webhooks))
+func mutatingWebhookDetailsFromFacts(webhooks []MutatingWebhookFacts) []WebhookDetails {
+	result := make([]WebhookDetails, 0, len(webhooks))
 	for _, webhook := range webhooks {
 		result = append(result, webhookDetailsFromFacts(webhook.WebhookFacts, webhook.ReinvocationPolicy))
 	}
 	return result
 }
 
-func validatingWebhookDetailsFromFacts(webhooks []resourcemodel.ValidatingWebhookFacts) []types.WebhookDetails {
-	result := make([]types.WebhookDetails, 0, len(webhooks))
+func validatingWebhookDetailsFromFacts(webhooks []ValidatingWebhookFacts) []WebhookDetails {
+	result := make([]WebhookDetails, 0, len(webhooks))
 	for _, webhook := range webhooks {
 		result = append(result, webhookDetailsFromFacts(webhook.WebhookFacts, ""))
 	}
 	return result
 }
 
-func webhookDetailsFromFacts(facts resourcemodel.WebhookFacts, reinvocationPolicy string) types.WebhookDetails {
-	details := types.WebhookDetails{
+func webhookDetailsFromFacts(facts WebhookFacts, reinvocationPolicy string) WebhookDetails {
+	details := WebhookDetails{
 		Name:                    facts.Name,
 		AdmissionReviewVersions: append([]string(nil), facts.AdmissionReviewVersions...),
 		FailurePolicy:           facts.FailurePolicy,
@@ -47,7 +45,7 @@ func webhookDetailsFromFacts(facts resourcemodel.WebhookFacts, reinvocationPolic
 	}
 
 	if facts.ClientConfig.Service != nil {
-		details.ClientConfig.Service = &types.WebhookService{
+		details.ClientConfig.Service = &WebhookService{
 			Namespace: facts.ClientConfig.Service.Namespace,
 			Name:      facts.ClientConfig.Service.Name,
 			Path:      copyStringPtr(facts.ClientConfig.Service.Path),
@@ -57,7 +55,7 @@ func webhookDetailsFromFacts(facts resourcemodel.WebhookFacts, reinvocationPolic
 	details.ClientConfig.URL = facts.ClientConfig.URL
 
 	for _, rule := range facts.Rules {
-		converted := types.WebhookRule{
+		converted := WebhookRule{
 			APIGroups:   append([]string(nil), rule.APIGroups...),
 			APIVersions: append([]string(nil), rule.APIVersions...),
 			Resources:   append([]string(nil), rule.Resources...),
@@ -73,14 +71,14 @@ func webhookDetailsFromFacts(facts resourcemodel.WebhookFacts, reinvocationPolic
 	return details
 }
 
-func webhookSelectorFromFacts(selector *resourcemodel.LabelSelectorFacts) *types.WebhookSelector {
+func webhookSelectorFromFacts(selector *LabelSelectorFacts) *WebhookSelector {
 	if selector == nil {
 		return nil
 	}
-	converted := &types.WebhookSelector{}
+	converted := &WebhookSelector{}
 	converted.MatchLabels = common.CopyStringMap(selector.MatchLabels)
 	for _, expr := range selector.MatchExpressions {
-		converted.MatchExpressions = append(converted.MatchExpressions, types.WebhookSelectorExpression{
+		converted.MatchExpressions = append(converted.MatchExpressions, WebhookSelectorExpression{
 			Key:      expr.Key,
 			Operator: expr.Operator,
 			Values:   append([]string(nil), expr.Values...),
@@ -89,7 +87,7 @@ func webhookSelectorFromFacts(selector *resourcemodel.LabelSelectorFacts) *types
 	return converted
 }
 
-func summarizeWebhookConfiguration(count int, selector *resourcemodel.LabelSelectorFacts) string {
+func summarizeWebhookConfiguration(count int, selector *LabelSelectorFacts) string {
 	summary := fmt.Sprintf("%d webhook(s)", count)
 	if count == 0 {
 		return summary

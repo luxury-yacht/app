@@ -32,7 +32,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
@@ -745,7 +745,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 func buildStandalonePodSummary(clusterID string, pod *corev1.Pod, usage map[string]metrics.PodUsage) WorkloadSummary {
 	resources := aggregateWorkloadPodResources([]*corev1.Pod{pod}, usage)
 	ready := podReadyStatus(pod)
-	model := resourcemodel.BuildPodResourceModel(clusterID, pod)
+	model := podres.BuildResourceModel(clusterID, pod)
 
 	return WorkloadSummary{
 		Kind:                 "Pod",
@@ -789,7 +789,7 @@ func aggregateWorkloadPodResources(pods []*corev1.Pod, usage map[string]metrics.
 			continue
 		}
 
-		totals.Restarts += resourcemodel.BuildPodFacts(pod).RestartCount
+		totals.Restarts += podres.BuildFacts(pod).RestartCount
 
 		for _, container := range pod.Spec.Containers {
 			if req := container.Resources.Requests; req != nil {
@@ -858,7 +858,7 @@ func podReadyStatus(pod *corev1.Pod) string {
 	if pod == nil {
 		return "0/0"
 	}
-	facts := resourcemodel.BuildPodFacts(pod)
+	facts := podres.BuildFacts(pod)
 	return fmt.Sprintf("%d/%d", facts.ReadyContainers, facts.TotalContainers)
 }
 
@@ -873,7 +873,7 @@ func workloadPodReadyStatus(pods []*corev1.Pod, fallbackReady, fallbackTotal int
 			continue
 		}
 		totalPods++
-		facts := resourcemodel.BuildPodFacts(pod)
+		facts := podres.BuildFacts(pod)
 		if facts.TotalContainers > 0 && facts.ReadyContainers >= facts.TotalContainers {
 			readyPods++
 		}

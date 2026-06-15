@@ -1,19 +1,29 @@
-package resourcemodel
+/*
+ * backend/resources/pods/model.go
+ *
+ * Pod resource model: the single definition of a Pod's intrinsic fields + status
+ * presentation (phase, container readiness, init/container waiting+terminated
+ * reasons, eviction, termination). Table/detail/object-map projections derive from
+ * it. Shared model primitives come from resourcemodel.
+ */
+
+package pods
 
 import (
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 )
 
-func BuildPodResourceModel(clusterID string, pod *corev1.Pod) ResourceModel {
-	facts := BuildPodFacts(pod)
-	status := BuildPodStatusPresentation(pod)
-
-	return ResourceModel{
-		Ref: ResourceRef{
+// BuildResourceModel builds the Pod resource model. Facts are owned by this package
+// (pods.Facts); callers needing facts use BuildFacts.
+func BuildResourceModel(clusterID string, pod *corev1.Pod) resourcemodel.ResourceModel {
+	status := statusPresentation(pod)
+	return resourcemodel.ResourceModel{
+		Ref: resourcemodel.ResourceRef{
 			ClusterID: clusterID,
 			Group:     "",
 			Version:   "v1",
@@ -23,96 +33,27 @@ func BuildPodResourceModel(clusterID string, pod *corev1.Pod) ResourceModel {
 			Name:      pod.Name,
 			UID:       string(pod.UID),
 		},
-		Source: ResourceSourceKubernetes,
-		Scope:  ResourceScopeNamespaced,
-		Metadata: ResourceMetadata{
-			Labels:            CopyStringMap(pod.Labels),
-			Annotations:       CopyStringMap(pod.Annotations),
+		Source: resourcemodel.ResourceSourceKubernetes,
+		Scope:  resourcemodel.ResourceScopeNamespaced,
+		Metadata: resourcemodel.ResourceMetadata{
+			Labels:            resourcemodel.CopyStringMap(pod.Labels),
+			Annotations:       resourcemodel.CopyStringMap(pod.Annotations),
 			CreationTimestamp: pod.CreationTimestamp,
 			ResourceVersion:   pod.ResourceVersion,
 			Finalizers:        append([]string(nil), pod.Finalizers...),
 		},
 		Status: status,
-		Facts: ResourceFacts{
-			Pod: &facts,
-		},
+		Facts:  resourcemodel.ResourceFacts{},
 	}
 }
 
-func BuildPodStatusPresentation(pod *corev1.Pod) ResourceStatusPresentation {
-	facts := BuildPodFacts(pod)
-	lifecycle := ResourceLifecycle{
-		Deleting:         pod.DeletionTimestamp != nil,
-		FinalizerBlocked: pod.DeletionTimestamp != nil && len(pod.Finalizers) > 0,
-	}
-
-	state := podPhaseState(pod)
-	signals := podStatusSignals(pod, facts)
-	if pod.DeletionTimestamp != nil {
-		deletionTimestamp := pod.DeletionTimestamp.Time.Format(time.RFC3339)
-		return ResourceStatusPresentation{
-			Label:        "Terminating",
-			State:        state,
-			Presentation: "terminating",
-			Reason:       "DeletionTimestamp",
-			Signals: append(signals, ResourceStatusSignal{
-				Type:   StatusSignalDeletion,
-				Name:   "metadata.deletionTimestamp",
-				Status: deletionTimestamp,
-			}),
-			Lifecycle: lifecycle,
-		}
-	}
-
-	if pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted" {
-		return ResourceStatusPresentation{
-			Label:        "Evicted",
-			State:        state,
-			Presentation: "error",
-			Reason:       "Evicted",
-			Signals:      signals,
-			Lifecycle:    lifecycle,
-		}
-	}
-
-	if label, reason, presentation, ok := initContainerStatusPresentation(pod); ok {
-		return ResourceStatusPresentation{
-			Label:        label,
-			State:        state,
-			Presentation: presentation,
-			Reason:       reason,
-			Signals:      signals,
-			Lifecycle:    lifecycle,
-		}
-	}
-
-	if label, reason, presentation, ok := containerStatusPresentation(pod); ok {
-		return ResourceStatusPresentation{
-			Label:        label,
-			State:        state,
-			Presentation: presentation,
-			Reason:       reason,
-			Signals:      signals,
-			Lifecycle:    lifecycle,
-		}
-	}
-
-	return ResourceStatusPresentation{
-		Label:        podPhaseLabel(pod),
-		State:        state,
-		Presentation: podPhasePresentation(pod.Status.Phase, facts),
-		Signals:      signals,
-		Lifecycle:    lifecycle,
-	}
-}
-
-// BuildPodFacts derives shared pod facts that table, detail, and map
-// projections can reuse without re-counting container readiness differently.
-func BuildPodFacts(pod *corev1.Pod) PodFacts {
-	ready, total, restarts := podReadinessFacts(pod)
-	conditions := make([]ConditionFacts, 0, len(pod.Status.Conditions))
+// BuildFacts derives shared pod facts that table, detail, and map projections can
+// reuse without re-counting container readiness differently.
+func BuildFacts(pod *corev1.Pod) Facts {
+	ready, total, restarts := readinessFacts(pod)
+	conditions := make([]resourcemodel.ConditionFacts, 0, len(pod.Status.Conditions))
 	for _, condition := range pod.Status.Conditions {
-		conditions = append(conditions, ConditionFacts{
+		conditions = append(conditions, resourcemodel.ConditionFacts{
 			Type:               string(condition.Type),
 			Status:             string(condition.Status),
 			Reason:             condition.Reason,
@@ -120,7 +61,7 @@ func BuildPodFacts(pod *corev1.Pod) PodFacts {
 			LastTransitionTime: condition.LastTransitionTime,
 		})
 	}
-	return PodFacts{
+	return Facts{
 		Phase:           string(pod.Status.Phase),
 		NodeName:        pod.Spec.NodeName,
 		PodIP:           pod.Status.PodIP,
@@ -131,7 +72,74 @@ func BuildPodFacts(pod *corev1.Pod) PodFacts {
 	}
 }
 
-func podReadinessFacts(pod *corev1.Pod) (ready int32, total int32, restarts int32) {
+func statusPresentation(pod *corev1.Pod) resourcemodel.ResourceStatusPresentation {
+	facts := BuildFacts(pod)
+	lifecycle := resourcemodel.ResourceLifecycle{
+		Deleting:         pod.DeletionTimestamp != nil,
+		FinalizerBlocked: pod.DeletionTimestamp != nil && len(pod.Finalizers) > 0,
+	}
+
+	state := phaseState(pod)
+	signals := statusSignals(pod, facts)
+	if pod.DeletionTimestamp != nil {
+		deletionTimestamp := pod.DeletionTimestamp.Time.Format(time.RFC3339)
+		return resourcemodel.ResourceStatusPresentation{
+			Label:        "Terminating",
+			State:        state,
+			Presentation: "terminating",
+			Reason:       "DeletionTimestamp",
+			Signals: append(signals, resourcemodel.ResourceStatusSignal{
+				Type:   resourcemodel.StatusSignalDeletion,
+				Name:   "metadata.deletionTimestamp",
+				Status: deletionTimestamp,
+			}),
+			Lifecycle: lifecycle,
+		}
+	}
+
+	if pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted" {
+		return resourcemodel.ResourceStatusPresentation{
+			Label:        "Evicted",
+			State:        state,
+			Presentation: "error",
+			Reason:       "Evicted",
+			Signals:      signals,
+			Lifecycle:    lifecycle,
+		}
+	}
+
+	if label, reason, presentation, ok := initContainerStatusPresentation(pod); ok {
+		return resourcemodel.ResourceStatusPresentation{
+			Label:        label,
+			State:        state,
+			Presentation: presentation,
+			Reason:       reason,
+			Signals:      signals,
+			Lifecycle:    lifecycle,
+		}
+	}
+
+	if label, reason, presentation, ok := containerStatusPresentation(pod); ok {
+		return resourcemodel.ResourceStatusPresentation{
+			Label:        label,
+			State:        state,
+			Presentation: presentation,
+			Reason:       reason,
+			Signals:      signals,
+			Lifecycle:    lifecycle,
+		}
+	}
+
+	return resourcemodel.ResourceStatusPresentation{
+		Label:        phaseLabel(pod),
+		State:        state,
+		Presentation: phasePresentation(pod.Status.Phase, facts),
+		Signals:      signals,
+		Lifecycle:    lifecycle,
+	}
+}
+
+func readinessFacts(pod *corev1.Pod) (ready int32, total int32, restarts int32) {
 	expectedContainers := make(map[string]struct{}, len(pod.Spec.Containers))
 	for _, container := range pod.Spec.Containers {
 		expectedContainers[container.Name] = struct{}{}
@@ -158,24 +166,24 @@ func podReadinessFacts(pod *corev1.Pod) (ready int32, total int32, restarts int3
 	return ready, total, restarts
 }
 
-func podStatusSignals(pod *corev1.Pod, facts PodFacts) []ResourceStatusSignal {
-	signals := make([]ResourceStatusSignal, 0, len(pod.Status.Conditions)+2)
+func statusSignals(pod *corev1.Pod, facts Facts) []resourcemodel.ResourceStatusSignal {
+	signals := make([]resourcemodel.ResourceStatusSignal, 0, len(pod.Status.Conditions)+2)
 	if pod.Status.Phase != "" {
-		signals = append(signals, ResourceStatusSignal{
-			Type:   StatusSignalPhase,
+		signals = append(signals, resourcemodel.ResourceStatusSignal{
+			Type:   resourcemodel.StatusSignalPhase,
 			Name:   "status.phase",
 			Status: string(pod.Status.Phase),
 			Reason: pod.Status.Reason,
 		})
 	}
-	signals = append(signals, ResourceStatusSignal{
-		Type:   StatusSignalReadiness,
+	signals = append(signals, resourcemodel.ResourceStatusSignal{
+		Type:   resourcemodel.StatusSignalReadiness,
 		Name:   "containers",
 		Status: fmt.Sprintf("%d/%d", facts.ReadyContainers, facts.TotalContainers),
 	})
 	for _, condition := range pod.Status.Conditions {
-		signals = append(signals, ResourceStatusSignal{
-			Type:    StatusSignalCondition,
+		signals = append(signals, resourcemodel.ResourceStatusSignal{
+			Type:    resourcemodel.StatusSignalCondition,
 			Name:    string(condition.Type),
 			Status:  string(condition.Status),
 			Reason:  condition.Reason,
@@ -192,11 +200,11 @@ func initContainerStatusPresentation(pod *corev1.Pod) (label, reason, presentati
 			if reason == "" {
 				reason = "Error"
 			}
-			return "Init:" + reason, reason, podReasonPresentation(reason), true
+			return "Init:" + reason, reason, reasonPresentation(reason), true
 		}
 		if status.State.Waiting != nil && status.State.Waiting.Reason != "" && status.State.Waiting.Reason != "PodInitializing" {
 			reason := status.State.Waiting.Reason
-			return "Init:" + reason, reason, podReasonPresentation(reason), true
+			return "Init:" + reason, reason, reasonPresentation(reason), true
 		}
 	}
 	return "", "", "", false
@@ -206,31 +214,31 @@ func containerStatusPresentation(pod *corev1.Pod) (label, reason, presentation s
 	for _, status := range pod.Status.ContainerStatuses {
 		if status.State.Waiting != nil && status.State.Waiting.Reason != "" {
 			reason := status.State.Waiting.Reason
-			return reason, reason, podReasonPresentation(reason), true
+			return reason, reason, reasonPresentation(reason), true
 		}
 		if status.State.Terminated != nil && status.State.Terminated.Reason != "" {
 			reason := status.State.Terminated.Reason
-			return reason, reason, podReasonPresentation(reason), true
+			return reason, reason, reasonPresentation(reason), true
 		}
 	}
 	return "", "", "", false
 }
 
-func podPhaseState(pod *corev1.Pod) string {
+func phaseState(pod *corev1.Pod) string {
 	if pod.Status.Phase != "" {
 		return string(pod.Status.Phase)
 	}
 	return string(corev1.PodUnknown)
 }
 
-func podPhaseLabel(pod *corev1.Pod) string {
+func phaseLabel(pod *corev1.Pod) string {
 	if pod.Status.Phase != "" {
 		return string(pod.Status.Phase)
 	}
 	return "Unknown"
 }
 
-func podPhasePresentation(phase corev1.PodPhase, facts PodFacts) string {
+func phasePresentation(phase corev1.PodPhase, facts Facts) string {
 	switch phase {
 	case corev1.PodRunning:
 		if facts.TotalContainers == 0 || facts.ReadyContainers < facts.TotalContainers {
@@ -250,7 +258,7 @@ func podPhasePresentation(phase corev1.PodPhase, facts PodFacts) string {
 	}
 }
 
-func podReasonPresentation(reason string) string {
+func reasonPresentation(reason string) string {
 	normalized := strings.ToLower(reason)
 	switch normalized {
 	case "completed":

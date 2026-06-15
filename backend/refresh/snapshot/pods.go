@@ -22,7 +22,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
@@ -501,16 +501,11 @@ func buildPodSummary(
 	usage map[string]metrics.PodUsage,
 	rsMap map[string]string,
 ) PodSummary {
-	model := resourcemodel.BuildPodResourceModel(meta.ClusterID, pod)
-	podFacts := model.Facts.Pod
-	ready := int32(0)
-	total := int32(0)
-	restarts := int32(0)
-	if podFacts != nil {
-		ready = podFacts.ReadyContainers
-		total = podFacts.TotalContainers
-		restarts = podFacts.RestartCount
-	}
+	model := podres.BuildResourceModel(meta.ClusterID, pod)
+	podFacts := podres.BuildFacts(pod)
+	ready := podFacts.ReadyContainers
+	total := podFacts.TotalContainers
+	restarts := podFacts.RestartCount
 	ownerKind, ownerName, ownerAPIVersion := resolvePodOwner(pod, rsMap)
 	cpuReq, cpuLim, memReq, memLim := computeResourceTotals(pod)
 	metricKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
