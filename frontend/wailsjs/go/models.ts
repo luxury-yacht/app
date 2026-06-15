@@ -1230,6 +1230,79 @@ export namespace deployment {
 
 }
 
+export namespace ingressclass {
+	
+	export class IngressClassParameters {
+	    apiGroup?: string;
+	    kind: string;
+	    name: string;
+	    namespace?: string;
+	    scope?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new IngressClassParameters(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.apiGroup = source["apiGroup"];
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.scope = source["scope"];
+	    }
+	}
+	export class IngressClassDetails {
+	    kind: string;
+	    name: string;
+	    controller: string;
+	    age: string;
+	    isDefault: boolean;
+	    details: string;
+	    parameters?: IngressClassParameters;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    ingresses?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new IngressClassDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.controller = source["controller"];
+	        this.age = source["age"];
+	        this.isDefault = source["isDefault"];
+	        this.details = source["details"];
+	        this.parameters = this.convertValues(source["parameters"], IngressClassParameters);
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.ingresses = source["ingresses"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace job {
 	
 	export class JobDetails {
@@ -3367,75 +3440,6 @@ export namespace types {
 	        this.resource = source["resource"];
 	    }
 	}
-	export class IngressClassParameters {
-	    apiGroup?: string;
-	    kind: string;
-	    name: string;
-	    namespace?: string;
-	    scope?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new IngressClassParameters(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.apiGroup = source["apiGroup"];
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.scope = source["scope"];
-	    }
-	}
-	export class IngressClassDetails {
-	    kind: string;
-	    name: string;
-	    controller: string;
-	    age: string;
-	    isDefault: boolean;
-	    details: string;
-	    parameters?: IngressClassParameters;
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    ingresses?: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new IngressClassDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.controller = source["controller"];
-	        this.age = source["age"];
-	        this.isDefault = source["isDefault"];
-	        this.details = source["details"];
-	        this.parameters = this.convertValues(source["parameters"], IngressClassParameters);
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.ingresses = source["ingresses"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	
 	export class IngressTLSDetails {
 	    hosts: string[];
 	    secretName?: string;

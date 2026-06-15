@@ -9,7 +9,7 @@ import (
 func BuildEndpointSliceResourceModel(clusterID string, slice *discoveryv1.EndpointSlice) ResourceModel {
 	facts := BuildEndpointSliceFacts(clusterID, slice)
 	status := BuildEndpointSliceStatusPresentation(slice, facts)
-	return networkResourceModel(clusterID, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", ResourceScopeNamespaced, slice.ObjectMeta, status, ResourceFacts{EndpointSlice: &facts})
+	return NetworkResourceModel(clusterID, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", ResourceScopeNamespaced, slice.ObjectMeta, status, ResourceFacts{EndpointSlice: &facts})
 }
 
 func BuildEndpointSliceFacts(clusterID string, slice *discoveryv1.EndpointSlice) EndpointSliceFacts {

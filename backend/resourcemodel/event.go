@@ -11,7 +11,7 @@ import (
 func BuildEventResourceModel(clusterID string, event *corev1.Event) ResourceModel {
 	facts := BuildEventFacts(clusterID, event)
 	status := BuildEventStatusPresentation(event, facts)
-	return networkResourceModel(clusterID, "", "v1", "Event", "events", ResourceScopeNamespaced, event.ObjectMeta, status, ResourceFacts{Event: &facts})
+	return NetworkResourceModel(clusterID, "", "v1", "Event", "events", ResourceScopeNamespaced, event.ObjectMeta, status, ResourceFacts{Event: &facts})
 }
 
 func BuildEventFacts(clusterID string, event *corev1.Event) EventFacts {

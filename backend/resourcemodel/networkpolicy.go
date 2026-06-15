@@ -11,7 +11,7 @@ import (
 func BuildNetworkPolicyResourceModel(clusterID string, policy *networkingv1.NetworkPolicy) ResourceModel {
 	facts := BuildNetworkPolicyFacts(policy)
 	status := BuildNetworkPolicyStatusPresentation(policy, facts)
-	return networkResourceModel(clusterID, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", ResourceScopeNamespaced, policy.ObjectMeta, status, ResourceFacts{NetworkPolicy: &facts})
+	return NetworkResourceModel(clusterID, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", ResourceScopeNamespaced, policy.ObjectMeta, status, ResourceFacts{NetworkPolicy: &facts})
 }
 
 func BuildNetworkPolicyFacts(policy *networkingv1.NetworkPolicy) NetworkPolicyFacts {

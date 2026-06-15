@@ -4,6 +4,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
@@ -90,8 +91,8 @@ type (
 	ReferenceGrantDetails                 = types.ReferenceGrantDetails
 	ReferenceGrantFromInfo                = types.ReferenceGrantFromInfo
 	BackendTLSPolicyDetails               = types.BackendTLSPolicyDetails
-	IngressClassDetails                   = types.IngressClassDetails
-	IngressClassParameters                = types.IngressClassParameters
+	IngressClassDetails                   = ingressclass.IngressClassDetails
+	IngressClassParameters                = ingressclass.IngressClassParameters
 	NetworkPolicyDetails                  = types.NetworkPolicyDetails
 	NetworkPolicyRule                     = types.NetworkPolicyRule
 	NetworkPolicyPeer                     = types.NetworkPolicyPeer

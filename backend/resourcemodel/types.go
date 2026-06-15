@@ -154,7 +154,6 @@ type ResourceFacts struct {
 	Service                        *ServiceFacts                        `json:"service,omitempty"`
 	EndpointSlice                  *EndpointSliceFacts                  `json:"endpointSlice,omitempty"`
 	Ingress                        *IngressFacts                        `json:"ingress,omitempty"`
-	IngressClass                   *IngressClassFacts                   `json:"ingressClass,omitempty"`
 	NetworkPolicy                  *NetworkPolicyFacts                  `json:"networkPolicy,omitempty"`
 	GatewayClass                   *GatewayClassFacts                   `json:"gatewayClass,omitempty"`
 	Gateway                        *GatewayFacts                        `json:"gateway,omitempty"`
@@ -356,12 +355,8 @@ type IngressBackendFacts struct {
 	Resource    string        `json:"resource,omitempty"`
 }
 
-type IngressClassFacts struct {
-	Controller                  string `json:"controller,omitempty"`
-	DefaultClass                bool   `json:"defaultClass"`
-	DefaultClassAnnotation      string `json:"defaultClassAnnotation,omitempty"`
-	DefaultClassAnnotationValue string `json:"defaultClassAnnotationValue,omitempty"`
-}
+// IngressClassFacts moved to resources/ingressclass (type ingressclass.Facts),
+// removed from the ResourceFacts union (same cycle-break as the other kinds).
 
 type NetworkPolicyFacts struct {
 	PodSelector  map[string]string        `json:"podSelector,omitempty"`

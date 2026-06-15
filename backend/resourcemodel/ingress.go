@@ -11,7 +11,7 @@ import (
 func BuildIngressResourceModel(clusterID string, ingress *networkingv1.Ingress) ResourceModel {
 	facts := BuildIngressFacts(clusterID, ingress)
 	status := BuildIngressStatusPresentation(ingress, facts)
-	return networkResourceModel(clusterID, "networking.k8s.io", "v1", "Ingress", "ingresses", ResourceScopeNamespaced, ingress.ObjectMeta, status, ResourceFacts{Ingress: &facts})
+	return NetworkResourceModel(clusterID, "networking.k8s.io", "v1", "Ingress", "ingresses", ResourceScopeNamespaced, ingress.ObjectMeta, status, ResourceFacts{Ingress: &facts})
 }
 
 func BuildIngressFacts(clusterID string, ingress *networkingv1.Ingress) IngressFacts {

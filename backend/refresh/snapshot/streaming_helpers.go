@@ -24,6 +24,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 )
 
@@ -381,15 +382,8 @@ func BuildClusterIngressClassSummary(meta ClusterMeta, ic *networkingv1.IngressC
 	if ic == nil {
 		return ClusterConfigEntry{ClusterMeta: meta, Kind: "IngressClass"}
 	}
-	model := resourcemodel.BuildIngressClassResourceModel(meta.ClusterID, ic)
-	facts := model.Facts.IngressClass
-	controller := ic.Spec.Controller
-	isDefault := isDefaultClass(ic.Annotations)
-	if facts != nil {
-		controller = facts.Controller
-		isDefault = facts.DefaultClass
-	}
-	return newClusterConfigEntry(meta, ic, "IngressClass", controller, isDefault)
+	facts := ingressclass.BuildFacts(ic)
+	return newClusterConfigEntry(meta, ic, "IngressClass", facts.Controller, facts.DefaultClass)
 }
 
 // BuildClusterGatewayClassSummary builds a gateway class entry that matches snapshot formatting.

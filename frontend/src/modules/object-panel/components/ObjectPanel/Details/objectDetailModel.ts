@@ -2,6 +2,7 @@ import {
   cronjob,
   daemonset,
   deployment,
+  ingressclass,
   job,
   poddisruptionbudget,
   replicaset,
@@ -46,7 +47,7 @@ export interface DetailSlots {
   limitRangeDetails: types.LimitRangeDetails | null;
   nodeDetails: types.NodeDetails | null;
   namespaceDetails: types.NamespaceDetails | null;
-  ingressClassDetails: types.IngressClassDetails | null;
+  ingressClassDetails: ingressclass.IngressClassDetails | null;
   gatewayClassDetails?: types.GatewayClassDetails | null;
   crdDetails: types.CustomResourceDefinitionDetails | null;
   mutatingWebhookDetails: types.MutatingWebhookConfigurationDetails | null;
@@ -331,7 +332,7 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'ingressclass':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        ingressClassDetails: detailPayload as types.IngressClassDetails,
+        ingressClassDetails: detailPayload as ingressclass.IngressClassDetails,
       };
     case 'gatewayclass':
       return {

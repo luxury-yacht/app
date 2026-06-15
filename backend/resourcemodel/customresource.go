@@ -31,7 +31,7 @@ func BuildCustomResourceModel(
 		}
 	}
 	kind := resourceKind(resource, kindFallback)
-	return networkResourceModel(clusterID, gvr.Group, gvr.Version, kind, gvr.Resource, scope, meta, status, ResourceFacts{CustomResource: &facts})
+	return NetworkResourceModel(clusterID, gvr.Group, gvr.Version, kind, gvr.Resource, scope, meta, status, ResourceFacts{CustomResource: &facts})
 }
 
 func BuildCustomResourceFacts(

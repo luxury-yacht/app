@@ -12,7 +12,7 @@ const apiextensionsAPIGroup = "apiextensions.k8s.io"
 func BuildCustomResourceDefinitionResourceModel(clusterID string, crd *apiextensionsv1.CustomResourceDefinition) ResourceModel {
 	facts := BuildCustomResourceDefinitionFacts(crd)
 	status := BuildCustomResourceDefinitionStatusPresentation(crd, facts)
-	return networkResourceModel(clusterID, apiextensionsAPIGroup, "v1", "CustomResourceDefinition", "customresourcedefinitions", ResourceScopeCluster, crd.ObjectMeta, status, ResourceFacts{CustomResourceDefinition: &facts})
+	return NetworkResourceModel(clusterID, apiextensionsAPIGroup, "v1", "CustomResourceDefinition", "customresourcedefinitions", ResourceScopeCluster, crd.ObjectMeta, status, ResourceFacts{CustomResourceDefinition: &facts})
 }
 
 func BuildCustomResourceDefinitionFacts(crd *apiextensionsv1.CustomResourceDefinition) CustomResourceDefinitionFacts {

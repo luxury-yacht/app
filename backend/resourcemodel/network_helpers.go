@@ -13,7 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func networkResourceModel(
+func NetworkResourceModel(
 	clusterID, group, version, kind, resource string,
 	scope ResourceScope,
 	meta metav1.ObjectMeta,
@@ -240,7 +240,7 @@ func countLabel(count int, singular, plural string) string {
 	return strconv.Itoa(count) + " " + plural
 }
 
-func networkDefaultClassAnnotation(annotations map[string]string) (string, string) {
+func NetworkDefaultClassAnnotation(annotations map[string]string) (string, string) {
 	key := "ingressclass.kubernetes.io/is-default-class"
 	if value, ok := annotations[key]; ok {
 		return key, value

@@ -28,6 +28,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/network"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
@@ -272,7 +273,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"ingressclass": {
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := network.NewService(deps).IngressClass(name)
+			detail, err := ingressclass.NewService(deps).IngressClass(name)
 			return detail, "", err
 		},
 	},

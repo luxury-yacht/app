@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
@@ -732,7 +733,7 @@ func (idx *objectMapIndex) collectIngressClasses(lister networklisters.IngressCl
 	collectKind(idx, "networking.k8s.io", "v1", "IngressClass", "ingressclasses",
 		func() ([]*networkingv1.IngressClass, error) { return lister.List(labels.Everything()) },
 		func(ingClass *networkingv1.IngressClass, rec *objectMapRecord) {
-			rec.status = objectMapIngressClassStatus(idx.meta.ClusterID, *ingClass)
+			rec.status = ingressclass.ObjectMapStatus(idx.meta.ClusterID, *ingClass)
 			rec.ingClass = ingClass
 		})
 }
@@ -1213,10 +1214,6 @@ func objectMapIngressStatus(clusterID string, ingress networkingv1.Ingress) *Obj
 	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapIngressClassStatus(clusterID string, ingressClass networkingv1.IngressClass) *ObjectMapStatus {
-	model := resourcemodel.BuildIngressClassResourceModel(clusterID, &ingressClass)
-	return objectMapStatusFromResourceModel(model)
-}
 
 func objectMapClusterRoleStatus(clusterID string, role rbacv1.ClusterRole) *ObjectMapStatus {
 	model := resourcemodel.BuildClusterRoleResourceModel(clusterID, &role, nil)

@@ -62,7 +62,7 @@ var Bindings = []binding{
 	{Name: "HorizontalPodAutoscaler", Namespaced: true, Key: "HPA", Service: "autoscaling.NewService(deps)", Import: resourcesPkg + "autoscaling"},
 	{Name: "HTTPRoute", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
 	{Name: "Ingress", Namespaced: true, Service: "network.NewService(deps)", Import: resourcesPkg + "network"},
-	{Name: "IngressClass", Service: "network.NewService(deps)", Import: resourcesPkg + "network"},
+	{Name: "IngressClass", Service: "ingressclass.NewService(deps)", Import: resourcesPkg + "ingressclass"},
 	{Name: "Job", Namespaced: true, Service: "job.NewService(deps)", Import: resourcesPkg + "job"},
 	{Name: "LimitRange", Namespaced: true, Service: "constraints.NewService(deps)", Import: resourcesPkg + "constraints"},
 	{Name: "ListenerSet", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},

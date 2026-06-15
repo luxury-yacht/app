@@ -12,7 +12,7 @@ const admissionRegistrationAPIGroup = "admissionregistration.k8s.io"
 func BuildMutatingWebhookConfigurationResourceModel(clusterID string, config *admissionregistrationv1.MutatingWebhookConfiguration) ResourceModel {
 	facts := BuildMutatingWebhookConfigurationFacts(clusterID, config)
 	status := BuildWebhookConfigurationStatusPresentation(config.ObjectMeta, len(facts.Webhooks))
-	return networkResourceModel(clusterID, admissionRegistrationAPIGroup, "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", ResourceScopeCluster, config.ObjectMeta, status, ResourceFacts{MutatingWebhookConfiguration: &facts})
+	return NetworkResourceModel(clusterID, admissionRegistrationAPIGroup, "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", ResourceScopeCluster, config.ObjectMeta, status, ResourceFacts{MutatingWebhookConfiguration: &facts})
 }
 
 func BuildMutatingWebhookConfigurationFacts(clusterID string, config *admissionregistrationv1.MutatingWebhookConfiguration) MutatingWebhookConfigurationFacts {
@@ -31,7 +31,7 @@ func BuildMutatingWebhookConfigurationFacts(clusterID string, config *admissionr
 func BuildValidatingWebhookConfigurationResourceModel(clusterID string, config *admissionregistrationv1.ValidatingWebhookConfiguration) ResourceModel {
 	facts := BuildValidatingWebhookConfigurationFacts(clusterID, config)
 	status := BuildWebhookConfigurationStatusPresentation(config.ObjectMeta, len(facts.Webhooks))
-	return networkResourceModel(clusterID, admissionRegistrationAPIGroup, "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", ResourceScopeCluster, config.ObjectMeta, status, ResourceFacts{ValidatingWebhookConfiguration: &facts})
+	return NetworkResourceModel(clusterID, admissionRegistrationAPIGroup, "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", ResourceScopeCluster, config.ObjectMeta, status, ResourceFacts{ValidatingWebhookConfiguration: &facts})
 }
 
 func BuildValidatingWebhookConfigurationFacts(clusterID string, config *admissionregistrationv1.ValidatingWebhookConfiguration) ValidatingWebhookConfigurationFacts {

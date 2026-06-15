@@ -11,6 +11,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	"github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/network"
@@ -168,7 +169,7 @@ func (a *App) GetIngressClass(clusterID, name string) (*IngressClassDetails, err
 		return nil, err
 	}
 	return FetchClusterResource(a, deps, selectionKey, "IngressClass", name, func() (*IngressClassDetails, error) {
-		return network.NewService(deps).IngressClass(name)
+		return ingressclass.NewService(deps).IngressClass(name)
 	})
 }
 

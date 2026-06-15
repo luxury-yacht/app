@@ -17,7 +17,7 @@ func gatewayAPIResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return networkResourceModel(clusterID, gatewayAPIGroup, "v1", kind, resource, scope, meta, status, facts)
+	return NetworkResourceModel(clusterID, gatewayAPIGroup, "v1", kind, resource, scope, meta, status, facts)
 }
 
 func gatewayConditionFacts(conditions []metav1.Condition) []ConditionFacts {

@@ -29,7 +29,7 @@ func BuildNamespaceResourceModel(
 	if namespace != nil {
 		meta = namespace.ObjectMeta
 	}
-	return networkResourceModel(clusterID, "", "v1", "Namespace", "namespaces", ResourceScopeCluster, meta, status, ResourceFacts{Namespace: &facts})
+	return NetworkResourceModel(clusterID, "", "v1", "Namespace", "namespaces", ResourceScopeCluster, meta, status, ResourceFacts{Namespace: &facts})
 }
 
 func BuildNamespaceFacts(

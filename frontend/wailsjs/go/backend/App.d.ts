@@ -8,6 +8,7 @@ import {cronjob} from '../models';
 import {daemonset} from '../models';
 import {deployment} from '../models';
 import {json} from '../models';
+import {ingressclass} from '../models';
 import {job} from '../models';
 import {poddisruptionbudget} from '../models';
 import {replicaset} from '../models';
@@ -127,7 +128,7 @@ export function GetHorizontalPodAutoscaler(arg1:string,arg2:string,arg3:string):
 
 export function GetIngress(arg1:string,arg2:string,arg3:string):Promise<types.IngressDetails>;
 
-export function GetIngressClass(arg1:string,arg2:string):Promise<types.IngressClassDetails>;
+export function GetIngressClass(arg1:string,arg2:string):Promise<ingressclass.IngressClassDetails>;
 
 export function GetJob(arg1:string,arg2:string,arg3:string):Promise<job.JobDetails>;
 

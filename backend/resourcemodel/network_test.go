@@ -172,29 +172,6 @@ func TestBuildIngressResourceModelFactsAndStatus(t *testing.T) {
 	require.Len(t, model.Facts.Ingress.BackendRefs, 2)
 }
 
-func TestBuildIngressClassResourceModelFactsAndStatus(t *testing.T) {
-	ingressClass := &networkingv1.IngressClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "nginx",
-			Annotations: map[string]string{"ingressclass.kubernetes.io/is-default-class": "true"},
-			UID:         types.UID("ingressclass-uid"),
-		},
-		Spec: networkingv1.IngressClassSpec{
-			Controller: "k8s.io/ingress-nginx",
-		},
-	}
-
-	model := BuildIngressClassResourceModel("cluster-a", ingressClass)
-	require.Equal(t, ResourceScopeCluster, model.Scope)
-	require.Equal(t, "IngressClass", model.Ref.Kind)
-	require.Equal(t, "true", model.Status.State)
-	require.Equal(t, "Default", model.Status.Label)
-	require.Equal(t, "ready", model.Status.Presentation)
-	require.True(t, model.Facts.IngressClass.DefaultClass)
-	require.Equal(t, "ingressclass.kubernetes.io/is-default-class", model.Facts.IngressClass.DefaultClassAnnotation)
-	require.Equal(t, "k8s.io/ingress-nginx", model.Facts.IngressClass.Controller)
-}
-
 func TestBuildNetworkPolicyResourceModelFactsAndStatus(t *testing.T) {
 	protocol := corev1.ProtocolTCP
 	endPort := int32(8443)

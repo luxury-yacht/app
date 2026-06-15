@@ -11,7 +11,7 @@ import (
 func BuildServiceResourceModel(clusterID string, service *corev1.Service, slices []*discoveryv1.EndpointSlice) ResourceModel {
 	facts := BuildServiceFacts(service, slices)
 	status := BuildServiceStatusPresentation(service, facts)
-	return networkResourceModel(clusterID, "", "v1", "Service", "services", ResourceScopeNamespaced, service.ObjectMeta, status, ResourceFacts{Service: &facts})
+	return NetworkResourceModel(clusterID, "", "v1", "Service", "services", ResourceScopeNamespaced, service.ObjectMeta, status, ResourceFacts{Service: &facts})
 }
 
 func BuildServiceFacts(service *corev1.Service, slices []*discoveryv1.EndpointSlice) ServiceFacts {

@@ -43,31 +43,6 @@ func (s *Service) Ingresses(namespace string) ([]*types.IngressDetails, error) {
 	return results, nil
 }
 
-func (s *Service) IngressClass(name string) (*types.IngressClassDetails, error) {
-	ic, err := s.deps.KubernetesClient.NetworkingV1().IngressClasses().Get(s.deps.Context, name, metav1.GetOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get ingress class %s: %v", name, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to get ingress class: %v", err)
-	}
-	return s.buildIngressClassDetails(ic, nil), nil
-}
-
-func (s *Service) IngressClasses() ([]*types.IngressClassDetails, error) {
-	classes, err := s.deps.KubernetesClient.NetworkingV1().IngressClasses().List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list ingress classes: %v", err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list ingress classes: %v", err)
-	}
-
-	var results []*types.IngressClassDetails
-	for i := range classes.Items {
-		ic := classes.Items[i]
-		results = append(results, s.buildIngressClassDetails(&ic, nil))
-	}
-
-	return results, nil
-}
-
 func (s *Service) buildIngressDetails(ingress *networkingv1.Ingress) *types.IngressDetails {
 	model := resourcemodel.BuildIngressResourceModel(s.deps.ClusterID, ingress)
 	facts := model.Facts.Ingress
@@ -123,54 +98,6 @@ func (s *Service) buildIngressDetails(ingress *networkingv1.Ingress) *types.Ingr
 	}
 	if len(details.LoadBalancerStatus) > 0 {
 		details.Details += fmt.Sprintf(", LB: %s", details.LoadBalancerStatus[0])
-	}
-
-	return details
-}
-
-func (s *Service) buildIngressClassDetails(ic *networkingv1.IngressClass, ingresses []networkingv1.Ingress) *types.IngressClassDetails {
-	model := resourcemodel.BuildIngressClassResourceModel(s.deps.ClusterID, ic)
-	facts := model.Facts.IngressClass
-	details := &types.IngressClassDetails{
-		Kind:        "IngressClass",
-		Name:        ic.Name,
-		Controller:  facts.Controller,
-		Age:         common.FormatAge(ic.CreationTimestamp.Time),
-		Labels:      ic.Labels,
-		Annotations: ic.Annotations,
-	}
-
-	details.IsDefault = facts.DefaultClass
-
-	if ic.Spec.Parameters != nil {
-		params := &types.IngressClassParameters{
-			Kind: ic.Spec.Parameters.Kind,
-			Name: ic.Spec.Parameters.Name,
-		}
-		if ic.Spec.Parameters.APIGroup != nil {
-			params.APIGroup = *ic.Spec.Parameters.APIGroup
-		}
-		if ic.Spec.Parameters.Namespace != nil {
-			params.Namespace = *ic.Spec.Parameters.Namespace
-		}
-		if ic.Spec.Parameters.Scope != nil {
-			params.Scope = *ic.Spec.Parameters.Scope
-		}
-		details.Parameters = params
-	}
-
-	for _, ingress := range ingresses {
-		if ingress.Spec.IngressClassName != nil && *ingress.Spec.IngressClassName == ic.Name {
-			details.Ingresses = append(details.Ingresses, fmt.Sprintf("%s/%s", ingress.Namespace, ingress.Name))
-		}
-	}
-
-	details.Details = fmt.Sprintf("Controller: %s", ic.Spec.Controller)
-	if details.IsDefault {
-		details.Details += " (default)"
-	}
-	if len(details.Ingresses) > 0 {
-		details.Details += fmt.Sprintf(", Used by %d ingress(es)", len(details.Ingresses))
 	}
 
 	return details

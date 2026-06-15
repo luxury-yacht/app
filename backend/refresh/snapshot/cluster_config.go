@@ -269,19 +269,3 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 	}, nil
 }
 
-func isDefaultClass(annotations map[string]string) bool {
-	if len(annotations) == 0 {
-		return false
-	}
-	keys := []string{
-		"storageclass.kubernetes.io/is-default-class",
-		"storageclass.beta.kubernetes.io/is-default-class",
-		"ingressclass.kubernetes.io/is-default-class",
-	}
-	for _, key := range keys {
-		if strings.EqualFold(annotations[key], "true") {
-			return true
-		}
-	}
-	return false
-}

@@ -13,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
@@ -59,7 +60,7 @@ var BuiltinResources = []BuiltinResource{
 
 	builtin("networking.k8s.io", "v1", "Ingress", "ingresses", true),
 	builtin("networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", true),
-	builtin("networking.k8s.io", "v1", "IngressClass", "ingressclasses", false),
+	builtin(ingressclass.Identity.Group, ingressclass.Identity.Version, ingressclass.Identity.Kind, ingressclass.Identity.Resource, ingressclass.Identity.Namespaced),
 
 	builtin("discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", true),
 

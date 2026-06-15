@@ -17,7 +17,7 @@ func rbacResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return networkResourceModel(clusterID, rbacAPIGroup, "v1", kind, resource, scope, meta, status, facts)
+	return NetworkResourceModel(clusterID, rbacAPIGroup, "v1", kind, resource, scope, meta, status, facts)
 }
 
 func serviceAccountResourceModel(
@@ -26,7 +26,7 @@ func serviceAccountResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return networkResourceModel(clusterID, "", "v1", "ServiceAccount", "serviceaccounts", ResourceScopeNamespaced, meta, status, facts)
+	return NetworkResourceModel(clusterID, "", "v1", "ServiceAccount", "serviceaccounts", ResourceScopeNamespaced, meta, status, facts)
 }
 
 func copyPolicyRuleFacts(rules []rbacv1.PolicyRule) []PolicyRuleFacts {

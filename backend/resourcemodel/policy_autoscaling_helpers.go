@@ -18,7 +18,7 @@ func autoscalingResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return networkResourceModel(clusterID, group, version, kind, resource, ResourceScopeNamespaced, meta, status, facts)
+	return NetworkResourceModel(clusterID, group, version, kind, resource, ResourceScopeNamespaced, meta, status, facts)
 }
 
 func PolicyResourceModel(
@@ -27,7 +27,7 @@ func PolicyResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return networkResourceModel(clusterID, group, version, kind, resource, ResourceScopeNamespaced, meta, status, facts)
+	return NetworkResourceModel(clusterID, group, version, kind, resource, ResourceScopeNamespaced, meta, status, facts)
 }
 
 func hpaScaleTargetLink(clusterID, namespace, apiVersion, kind, name string) ResourceLink {
