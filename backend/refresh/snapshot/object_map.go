@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
@@ -511,7 +512,7 @@ func (idx *objectMapIndex) collectServices(lister corelisters.ServiceLister) {
 			ref:               refFromObject(&svc.ObjectMeta, "", "v1", "Service", "services", svc.Namespace),
 			creationTimestamp: objectCreationTimestamp(&svc.ObjectMeta),
 			status:            objectMapServiceStatus(idx.meta.ClusterID, *svc),
-			actionFacts:       objectMapPortForwardFacts(serviceHasForwardablePorts(svc.Spec.Ports)),
+			actionFacts:       objectMapPortForwardFacts(common.ServiceHasForwardablePorts(svc.Spec.Ports)),
 			owners:            svc.OwnerReferences,
 			labels:            cloneStringMap(svc.Labels),
 			service:           svc,
@@ -662,7 +663,7 @@ func (idx *objectMapIndex) collectDeployments(lister appslisters.DeploymentListe
 			ref:               refFromObject(&deploy.ObjectMeta, "apps", "v1", "Deployment", "deployments", deploy.Namespace),
 			creationTimestamp: objectCreationTimestamp(&deploy.ObjectMeta),
 			status:            objectMapDeploymentStatus(idx.meta.ClusterID, *deploy),
-			actionFacts:       objectMapScalableWorkloadFacts(deploy.Spec.Replicas, hasForwardableContainerPorts(deploy.Spec.Template.Spec.Containers)),
+			actionFacts:       objectMapScalableWorkloadFacts(deploy.Spec.Replicas, common.HasForwardableContainerPorts(deploy.Spec.Template.Spec.Containers)),
 			owners:            deploy.OwnerReferences,
 			labels:            cloneStringMap(deploy.Labels),
 			template:          &deploy.Spec.Template,
@@ -680,7 +681,7 @@ func (idx *objectMapIndex) collectReplicaSets(lister appslisters.ReplicaSetListe
 			ref:               refFromObject(&rs.ObjectMeta, "apps", "v1", "ReplicaSet", "replicasets", rs.Namespace),
 			creationTimestamp: objectCreationTimestamp(&rs.ObjectMeta),
 			status:            objectMapReplicaSetStatus(idx.meta.ClusterID, *rs),
-			actionFacts:       objectMapScalableWorkloadFacts(rs.Spec.Replicas, hasForwardableContainerPorts(rs.Spec.Template.Spec.Containers)),
+			actionFacts:       objectMapScalableWorkloadFacts(rs.Spec.Replicas, common.HasForwardableContainerPorts(rs.Spec.Template.Spec.Containers)),
 			owners:            rs.OwnerReferences,
 			labels:            cloneStringMap(rs.Labels),
 			template:          &rs.Spec.Template,
@@ -698,7 +699,7 @@ func (idx *objectMapIndex) collectStatefulSets(lister appslisters.StatefulSetLis
 			ref:               refFromObject(&sts.ObjectMeta, "apps", "v1", "StatefulSet", "statefulsets", sts.Namespace),
 			creationTimestamp: objectCreationTimestamp(&sts.ObjectMeta),
 			status:            objectMapStatefulSetStatus(idx.meta.ClusterID, *sts),
-			actionFacts:       objectMapScalableWorkloadFacts(sts.Spec.Replicas, hasForwardableContainerPorts(sts.Spec.Template.Spec.Containers)),
+			actionFacts:       objectMapScalableWorkloadFacts(sts.Spec.Replicas, common.HasForwardableContainerPorts(sts.Spec.Template.Spec.Containers)),
 			owners:            sts.OwnerReferences,
 			labels:            cloneStringMap(sts.Labels),
 			template:          &sts.Spec.Template,
@@ -716,7 +717,7 @@ func (idx *objectMapIndex) collectDaemonSets(lister appslisters.DaemonSetLister)
 			ref:               refFromObject(&ds.ObjectMeta, "apps", "v1", "DaemonSet", "daemonsets", ds.Namespace),
 			creationTimestamp: objectCreationTimestamp(&ds.ObjectMeta),
 			status:            objectMapDaemonSetStatus(idx.meta.ClusterID, *ds),
-			actionFacts:       objectMapPortForwardFacts(hasForwardableContainerPorts(ds.Spec.Template.Spec.Containers)),
+			actionFacts:       objectMapPortForwardFacts(common.HasForwardableContainerPorts(ds.Spec.Template.Spec.Containers)),
 			owners:            ds.OwnerReferences,
 			labels:            cloneStringMap(ds.Labels),
 			template:          &ds.Spec.Template,
@@ -734,7 +735,7 @@ func (idx *objectMapIndex) collectJobs(lister batchlisters.JobLister) {
 			ref:               refFromObject(&job.ObjectMeta, "batch", "v1", "Job", "jobs", job.Namespace),
 			creationTimestamp: objectCreationTimestamp(&job.ObjectMeta),
 			status:            objectMapJobStatus(idx.meta.ClusterID, *job),
-			actionFacts:       objectMapPortForwardFacts(hasForwardableContainerPorts(job.Spec.Template.Spec.Containers)),
+			actionFacts:       objectMapPortForwardFacts(common.HasForwardableContainerPorts(job.Spec.Template.Spec.Containers)),
 			owners:            job.OwnerReferences,
 			labels:            cloneStringMap(job.Labels),
 			template:          job.Spec.Template.DeepCopy(),
@@ -1280,21 +1281,12 @@ func objectMapNodeActionFacts(unschedulable bool) *ObjectMapActionFacts {
 }
 
 func objectMapCronJobActionFacts(cron batchv1.CronJob) *ObjectMapActionFacts {
-	available := hasForwardableContainerPorts(cron.Spec.JobTemplate.Spec.Template.Spec.Containers)
+	available := common.HasForwardableContainerPorts(cron.Spec.JobTemplate.Spec.Template.Spec.Containers)
 	facts := &ObjectMapActionFacts{PortForwardAvailable: &available}
 	if cron.Spec.Suspend != nil && *cron.Spec.Suspend {
 		facts.Status = "Suspended"
 	}
 	return facts
-}
-
-func serviceHasForwardablePorts(ports []corev1.ServicePort) bool {
-	for _, port := range ports {
-		if port.Protocol == "" || port.Protocol == corev1.ProtocolTCP {
-			return true
-		}
-	}
-	return false
 }
 
 func objectMapStatus(state, label string, reasons ...string) *ObjectMapStatus {

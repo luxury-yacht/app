@@ -3,6 +3,7 @@ package objectcatalog
 import (
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -19,40 +20,40 @@ func buildSummaryActionFacts(desc resourceDescriptor, item metav1.Object) *Actio
 	}
 	switch obj := item.(type) {
 	case *corev1.Pod:
-		available := hasForwardableContainerPorts(obj.Spec.Containers)
+		available := common.HasForwardableContainerPorts(obj.Spec.Containers)
 		return &ActionFacts{PortForwardAvailable: &available}
 	case *corev1.Service:
-		available := serviceHasForwardablePorts(obj.Spec.Ports)
+		available := common.ServiceHasForwardablePorts(obj.Spec.Ports)
 		return &ActionFacts{PortForwardAvailable: &available}
 	case *corev1.Node:
 		unschedulable := obj.Spec.Unschedulable
 		return &ActionFacts{Unschedulable: &unschedulable}
 	case *appsv1.Deployment:
-		available := hasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
+		available := common.HasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
 		return &ActionFacts{
 			PortForwardAvailable: &available,
 			DesiredReplicas:      obj.Spec.Replicas,
 		}
 	case *appsv1.StatefulSet:
-		available := hasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
+		available := common.HasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
 		return &ActionFacts{
 			PortForwardAvailable: &available,
 			DesiredReplicas:      obj.Spec.Replicas,
 		}
 	case *appsv1.DaemonSet:
-		available := hasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
+		available := common.HasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
 		return &ActionFacts{PortForwardAvailable: &available}
 	case *appsv1.ReplicaSet:
-		available := hasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
+		available := common.HasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
 		return &ActionFacts{
 			PortForwardAvailable: &available,
 			DesiredReplicas:      obj.Spec.Replicas,
 		}
 	case *batchv1.Job:
-		available := hasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
+		available := common.HasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
 		return &ActionFacts{PortForwardAvailable: &available}
 	case *batchv1.CronJob:
-		available := hasForwardableContainerPorts(obj.Spec.JobTemplate.Spec.Template.Spec.Containers)
+		available := common.HasForwardableContainerPorts(obj.Spec.JobTemplate.Spec.Template.Spec.Containers)
 		facts := &ActionFacts{PortForwardAvailable: &available}
 		if obj.Spec.Suspend != nil && *obj.Spec.Suspend {
 			facts.Status = "Suspended"
@@ -118,26 +119,6 @@ func unstructuredScalableWorkloadFacts(item *unstructuredv1.Unstructured, contai
 		facts.DesiredReplicas = &value
 	}
 	return facts
-}
-
-func hasForwardableContainerPorts(containers []corev1.Container) bool {
-	for _, container := range containers {
-		for _, port := range container.Ports {
-			if port.Protocol == "" || port.Protocol == corev1.ProtocolTCP {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func serviceHasForwardablePorts(ports []corev1.ServicePort) bool {
-	for _, port := range ports {
-		if port.Protocol == "" || port.Protocol == corev1.ProtocolTCP {
-			return true
-		}
-	}
-	return false
 }
 
 func unstructuredHasForwardableContainerPorts(obj map[string]any, fields ...string) bool {

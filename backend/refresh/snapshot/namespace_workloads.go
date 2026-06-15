@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -558,7 +559,7 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: hasForwardableContainerPorts(deployment.Spec.Template.Spec.Containers),
+		PortForwardAvailable: common.HasForwardableContainerPorts(deployment.Spec.Template.Spec.Containers),
 		DesiredReplicas:      cloneInt32Ptr(deployment.Spec.Replicas),
 	}
 }
@@ -604,7 +605,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: hasForwardableContainerPorts(stateful.Spec.Template.Spec.Containers),
+		PortForwardAvailable: common.HasForwardableContainerPorts(stateful.Spec.Template.Spec.Containers),
 		DesiredReplicas:      cloneInt32Ptr(stateful.Spec.Replicas),
 	}
 }
@@ -648,7 +649,7 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: hasForwardableContainerPorts(daemon.Spec.Template.Spec.Containers),
+		PortForwardAvailable: common.HasForwardableContainerPorts(daemon.Spec.Template.Spec.Containers),
 	}
 }
 
@@ -692,7 +693,7 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: hasForwardableContainerPorts(job.Spec.Template.Spec.Containers),
+		PortForwardAvailable: common.HasForwardableContainerPorts(job.Spec.Template.Spec.Containers),
 	}
 }
 
@@ -732,7 +733,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: hasForwardableContainerPorts(cron.Spec.JobTemplate.Spec.Template.Spec.Containers),
+		PortForwardAvailable: common.HasForwardableContainerPorts(cron.Spec.JobTemplate.Spec.Template.Spec.Containers),
 	}
 }
 

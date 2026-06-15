@@ -17,11 +17,11 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/system"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
 	helmReleaseSecretType = "helm.sh/release.v1"
-	helmReleaseNamePrefix = "sh.helm.release.v1."
 	helmReleaseOwnerLabel = "owner"
 	helmReleaseOwnerValue = "helm"
 )
@@ -351,12 +351,12 @@ func (a *App) invalidateHelmCacheIfNeeded(selectionKey string, obj interface{}) 
 		if !isHelmReleaseObject(typed.Name, typed.Labels, string(typed.Type)) {
 			return
 		}
-		a.invalidateHelmCache(selectionKey, typed.Namespace, helmReleaseName(typed.Name))
+		a.invalidateHelmCache(selectionKey, typed.Namespace, resourcemodel.HelmReleaseName(typed.Name))
 	case *corev1.ConfigMap:
 		if !isHelmReleaseObject(typed.Name, typed.Labels, "") {
 			return
 		}
-		a.invalidateHelmCache(selectionKey, typed.Namespace, helmReleaseName(typed.Name))
+		a.invalidateHelmCache(selectionKey, typed.Namespace, resourcemodel.HelmReleaseName(typed.Name))
 	}
 }
 
@@ -437,17 +437,5 @@ func isHelmReleaseObject(name string, labels map[string]string, secretType strin
 			return true
 		}
 	}
-	return strings.HasPrefix(name, helmReleaseNamePrefix)
-}
-
-func helmReleaseName(name string) string {
-	if !strings.HasPrefix(name, helmReleaseNamePrefix) {
-		return name
-	}
-	trimmed := strings.TrimPrefix(name, helmReleaseNamePrefix)
-	index := strings.LastIndex(trimmed, ".v")
-	if index <= 0 {
-		return trimmed
-	}
-	return trimmed[:index]
+	return strings.HasPrefix(name, resourcemodel.HelmReleaseNamePrefix)
 }

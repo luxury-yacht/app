@@ -23,6 +23,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
 // PodBuilder constructs pod snapshots scoped by node or workload.
@@ -545,18 +546,7 @@ func hasForwardablePodPorts(pod *corev1.Pod) bool {
 	if pod == nil {
 		return false
 	}
-	return hasForwardableContainerPorts(pod.Spec.Containers)
-}
-
-func hasForwardableContainerPorts(containers []corev1.Container) bool {
-	for _, container := range containers {
-		for _, port := range container.Ports {
-			if port.Protocol == "" || port.Protocol == corev1.ProtocolTCP {
-				return true
-			}
-		}
-	}
-	return false
+	return common.HasForwardableContainerPorts(pod.Spec.Containers)
 }
 
 // resolvePodOwner returns (kind, name, apiVersion) for the controlling

@@ -79,7 +79,6 @@ const (
 
 const (
 	helmReleaseSecretType = "helm.sh/release.v1"
-	helmReleaseNamePrefix = "sh.helm.release.v1."
 	helmReleaseOwnerLabel = "owner"
 	helmReleaseOwnerValue = "helm"
 )
@@ -743,14 +742,14 @@ func helmReleaseKeyForConfigMap(cm *corev1.ConfigMap) string {
 	if cm == nil || !isHelmReleaseObject(cm.Name, cm.Labels, "") {
 		return ""
 	}
-	return cm.Namespace + "/" + helmReleaseName(cm.Name)
+	return cm.Namespace + "/" + resourcemodel.HelmReleaseName(cm.Name)
 }
 
 func helmReleaseKeyForSecret(secret *corev1.Secret) string {
 	if secret == nil || !isHelmReleaseObject(secret.Name, secret.Labels, string(secret.Type)) {
 		return ""
 	}
-	return secret.Namespace + "/" + helmReleaseName(secret.Name)
+	return secret.Namespace + "/" + resourcemodel.HelmReleaseName(secret.Name)
 }
 
 func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, updateType MessageType) {
@@ -764,7 +763,7 @@ func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, 
 		reason = "helm release updated"
 	}
 
-	releaseName := helmReleaseName(name)
+	releaseName := resourcemodel.HelmReleaseName(name)
 	ref := m.helmReleaseRef(namespace, releaseName)
 	// COMPLETE is scope-level resync. Ref is carried as diagnostic context
 	// so debugging can see which Helm release triggered the resync.
@@ -2080,19 +2079,7 @@ func isHelmReleaseObject(name string, labels map[string]string, secretType strin
 			return true
 		}
 	}
-	return strings.HasPrefix(name, helmReleaseNamePrefix)
-}
-
-func helmReleaseName(name string) string {
-	if !strings.HasPrefix(name, helmReleaseNamePrefix) {
-		return name
-	}
-	trimmed := strings.TrimPrefix(name, helmReleaseNamePrefix)
-	index := strings.LastIndex(trimmed, ".v")
-	if index <= 0 {
-		return trimmed
-	}
-	return trimmed[:index]
+	return strings.HasPrefix(name, resourcemodel.HelmReleaseNamePrefix)
 }
 
 func convertPodIndexerItems(items []interface{}) []*corev1.Pod {
