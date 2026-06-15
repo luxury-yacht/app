@@ -24,7 +24,7 @@ func BuildServiceFacts(service *corev1.Service, slices []*discoveryv1.EndpointSl
 		LoadBalancerAddresses: loadBalancerAddresses(service.Status.LoadBalancer.Ingress),
 		ExternalName:          service.Spec.ExternalName,
 		SessionAffinity:       string(service.Spec.SessionAffinity),
-		Selector:              copyStringMap(service.Spec.Selector),
+		Selector:              CopyStringMap(service.Spec.Selector),
 		Endpoints:             endpoints,
 		ReadyEndpointCount:    ready,
 		NotReadyEndpointCount: notReady,
@@ -60,25 +60,25 @@ func BuildServiceStatusPresentation(service *corev1.Service, facts ServiceFacts)
 		{Type: StatusSignalResourceState, Name: "readyEndpoints", Status: strconv.Itoa(facts.ReadyEndpointCount)},
 		{Type: StatusSignalResourceState, Name: "notReadyEndpoints", Status: strconv.Itoa(facts.NotReadyEndpointCount)},
 	}
-	lifecycle := networkLifecycle(service.ObjectMeta)
-	if status, ok := deletingNetworkStatus(service.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(service.ObjectMeta)
+	if status, ok := DeletingNetworkStatus(service.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 
 	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
 		if len(facts.LoadBalancerAddresses) > 0 {
-			return networkSourceStatus("LoadBalancer active", state, "", "ready", signals, lifecycle)
+			return NetworkSourceStatus("LoadBalancer active", state, "", "ready", signals, lifecycle)
 		}
-		return networkSourceStatus("LoadBalancer pending", state, "", "warning", signals, lifecycle)
+		return NetworkSourceStatus("LoadBalancer pending", state, "", "warning", signals, lifecycle)
 	}
 	if service.Spec.Type == corev1.ServiceTypeExternalName {
-		return networkSourceStatus("ExternalName", state, "", "ready", signals, lifecycle)
+		return NetworkSourceStatus("ExternalName", state, "", "ready", signals, lifecycle)
 	}
 	if facts.ReadyEndpointCount > 0 {
-		return networkSourceStatus(fmt.Sprintf("%s, %s", state, countLabel(facts.ReadyEndpointCount, "endpoint", "endpoints")), state, "", "ready", signals, lifecycle)
+		return NetworkSourceStatus(fmt.Sprintf("%s, %s", state, countLabel(facts.ReadyEndpointCount, "endpoint", "endpoints")), state, "", "ready", signals, lifecycle)
 	}
 	if facts.TotalEndpointCount > 0 {
-		return networkSourceStatus(fmt.Sprintf("%s, no ready endpoints", state), state, "", "warning", signals, lifecycle)
+		return NetworkSourceStatus(fmt.Sprintf("%s, no ready endpoints", state), state, "", "warning", signals, lifecycle)
 	}
-	return networkSourceStatus(state, state, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus(state, state, "", "ready", signals, lifecycle)
 }

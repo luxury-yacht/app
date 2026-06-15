@@ -26,8 +26,8 @@ func BuildNodeResourceModel(clusterID string, node *corev1.Node) ResourceModel {
 		Source: ResourceSourceKubernetes,
 		Scope:  ResourceScopeCluster,
 		Metadata: ResourceMetadata{
-			Labels:            copyStringMap(node.Labels),
-			Annotations:       copyStringMap(node.Annotations),
+			Labels:            CopyStringMap(node.Labels),
+			Annotations:       CopyStringMap(node.Annotations),
 			CreationTimestamp: node.CreationTimestamp,
 			ResourceVersion:   node.ResourceVersion,
 			Finalizers:        append([]string(nil), node.Finalizers...),
@@ -224,7 +224,7 @@ func nodeRoles(node *corev1.Node) []string {
 	return roles
 }
 
-func copyStringMap(input map[string]string) map[string]string {
+func CopyStringMap(input map[string]string) map[string]string {
 	if len(input) == 0 {
 		return nil
 	}

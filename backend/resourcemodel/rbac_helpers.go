@@ -57,11 +57,11 @@ func rbacRuleCountStatus(meta metav1.ObjectMeta, ruleCount int, aggregated bool)
 		Name:   "rules.count",
 		Status: state,
 	}}
-	lifecycle := networkLifecycle(meta)
-	if status, ok := deletingNetworkStatus(meta, state, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(meta)
+	if status, ok := DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
-	return networkSourceStatus(label, state, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus(label, state, "", "ready", signals, lifecycle)
 }
 
 func rbacBindingStatus(meta metav1.ObjectMeta, roleName string, subjectCount int) ResourceStatusPresentation {
@@ -74,11 +74,11 @@ func rbacBindingStatus(meta metav1.ObjectMeta, roleName string, subjectCount int
 		{Type: StatusSignalResourceState, Name: "roleRef.name", Status: roleName},
 		{Type: StatusSignalResourceState, Name: "subjects.count", Status: state},
 	}
-	lifecycle := networkLifecycle(meta)
-	if status, ok := deletingNetworkStatus(meta, state, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(meta)
+	if status, ok := DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
-	return networkSourceStatus(label, state, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus(label, state, "", "ready", signals, lifecycle)
 }
 
 func serviceAccountStatus(meta metav1.ObjectMeta, secretCount int) ResourceStatusPresentation {
@@ -89,11 +89,11 @@ func serviceAccountStatus(meta metav1.ObjectMeta, secretCount int) ResourceStatu
 		Name:   "secrets.count",
 		Status: state,
 	}}
-	lifecycle := networkLifecycle(meta)
-	if status, ok := deletingNetworkStatus(meta, state, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(meta)
+	if status, ok := DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
-	return networkSourceStatus(label, state, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus(label, state, "", "ready", signals, lifecycle)
 }
 
 func rbacRoleBindingLink(clusterID string, binding rbacv1.RoleBinding) ResourceLink {

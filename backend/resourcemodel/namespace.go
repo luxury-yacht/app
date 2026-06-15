@@ -81,9 +81,9 @@ func BuildNamespaceStatusPresentation(namespace *corev1.Namespace, facts Namespa
 	if namespace != nil {
 		meta = namespace.ObjectMeta
 	}
-	lifecycle := networkLifecycle(meta)
+	lifecycle := NetworkLifecycle(meta)
 	if namespace != nil {
-		if status, ok := deletingNetworkStatus(meta, state, signals, lifecycle); ok {
+		if status, ok := DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
 			return status
 		}
 	}
@@ -95,7 +95,7 @@ func BuildNamespaceStatusPresentation(namespace *corev1.Namespace, facts Namespa
 	} else if !strings.EqualFold(state, "Unknown") {
 		presentation = "warning"
 	}
-	return networkSourceStatus(state, state, "status.phase", presentation, signals, lifecycle)
+	return NetworkSourceStatus(state, state, "status.phase", presentation, signals, lifecycle)
 }
 
 func namespaceWorkloadState(hasWorkloads, workloadsKnown bool) string {

@@ -33,9 +33,9 @@ func BuildHelmReleaseResourceModel(
 		if strings.TrimSpace(rel.Namespace) != "" {
 			namespace = rel.Namespace
 		}
-		labels = copyStringMap(rel.Labels)
+		labels = CopyStringMap(rel.Labels)
 		if rel.Chart != nil && rel.Chart.Metadata != nil {
-			annotations = copyStringMap(rel.Chart.Metadata.Annotations)
+			annotations = CopyStringMap(rel.Chart.Metadata.Annotations)
 		}
 		if rel.Info != nil && !rel.Info.FirstDeployed.IsZero() {
 			created = metav1.NewTime(rel.Info.FirstDeployed.Time)

@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -76,7 +77,7 @@ var BuiltinResources = []BuiltinResource{
 	builtin("rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", false),
 	builtin("rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings", false),
 
-	builtin("policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets", true),
+	builtin(poddisruptionbudget.Identity.Group, poddisruptionbudget.Identity.Version, poddisruptionbudget.Identity.Kind, poddisruptionbudget.Identity.Resource, poddisruptionbudget.Identity.Namespaced),
 
 	builtin("storage.k8s.io", "v1", "StorageClass", "storageclasses", false),
 	builtin("storage.k8s.io", "v1", "CSIDriver", "csidrivers", false),

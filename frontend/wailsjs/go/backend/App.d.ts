@@ -9,6 +9,7 @@ import {daemonset} from '../models';
 import {deployment} from '../models';
 import {json} from '../models';
 import {job} from '../models';
+import {poddisruptionbudget} from '../models';
 import {replicaset} from '../models';
 import {statefulset} from '../models';
 import {snapshot} from '../models';
@@ -158,7 +159,7 @@ export function GetPod(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise
 
 export function GetPodContainers(arg1:string,arg2:string,arg3:string):Promise<Array<string>>;
 
-export function GetPodDisruptionBudget(arg1:string,arg2:string,arg3:string):Promise<types.PodDisruptionBudgetDetails>;
+export function GetPodDisruptionBudget(arg1:string,arg2:string,arg3:string):Promise<poddisruptionbudget.PodDisruptionBudgetDetails>;
 
 export function GetReferenceGrant(arg1:string,arg2:string,arg3:string):Promise<types.ReferenceGrantDetails>;
 

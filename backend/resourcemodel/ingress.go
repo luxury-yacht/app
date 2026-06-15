@@ -71,17 +71,17 @@ func BuildIngressStatusPresentation(ingress *networkingv1.Ingress, facts Ingress
 		{Type: StatusSignalResourceState, Name: "status.loadBalancer.ingress", Status: state},
 		{Type: StatusSignalResourceState, Name: "spec.rules", Status: strconv.Itoa(len(facts.Rules))},
 	}
-	lifecycle := networkLifecycle(ingress.ObjectMeta)
-	if status, ok := deletingNetworkStatus(ingress.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(ingress.ObjectMeta)
+	if status, ok := DeletingNetworkStatus(ingress.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 	if len(facts.Addresses) > 0 {
-		return networkSourceStatus("Address assigned", state, "", "ready", signals, lifecycle)
+		return NetworkSourceStatus("Address assigned", state, "", "ready", signals, lifecycle)
 	}
 	if len(facts.Rules) == 0 && facts.DefaultBackend == nil {
-		return networkSourceStatus("No rules", state, "", "unknown", signals, lifecycle)
+		return NetworkSourceStatus("No rules", state, "", "unknown", signals, lifecycle)
 	}
-	return networkSourceStatus("Address pending", state, "", "warning", signals, lifecycle)
+	return NetworkSourceStatus("Address pending", state, "", "warning", signals, lifecycle)
 }
 
 func ingressBackendFacts(clusterID, namespace string, backend networkingv1.IngressBackend) IngressBackendFacts {

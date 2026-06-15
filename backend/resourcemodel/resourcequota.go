@@ -10,7 +10,7 @@ import (
 func BuildResourceQuotaResourceModel(clusterID string, quota *corev1.ResourceQuota) ResourceModel {
 	facts := BuildResourceQuotaFacts(quota)
 	status := resourceQuotaStatusPresentation(quota, facts)
-	return policyResourceModel(clusterID, "", "v1", "ResourceQuota", "resourcequotas", quota.ObjectMeta, status, ResourceFacts{ResourceQuota: &facts})
+	return PolicyResourceModel(clusterID, "", "v1", "ResourceQuota", "resourcequotas", quota.ObjectMeta, status, ResourceFacts{ResourceQuota: &facts})
 }
 
 func BuildResourceQuotaFacts(quota *corev1.ResourceQuota) ResourceQuotaFacts {
@@ -41,11 +41,11 @@ func resourceQuotaStatusPresentation(quota *corev1.ResourceQuota, facts Resource
 		{Type: StatusSignalResourceState, Name: "status.hard.count", Status: state},
 		{Type: StatusSignalResourceState, Name: "status.used.count", Status: strconv.Itoa(len(facts.Used))},
 	}
-	lifecycle := networkLifecycle(quota.ObjectMeta)
-	if status, ok := deletingNetworkStatus(quota.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(quota.ObjectMeta)
+	if status, ok := DeletingNetworkStatus(quota.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	return networkSourceStatus(resourceQuotaSummary(facts), state, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus(resourceQuotaSummary(facts), state, "", "ready", signals, lifecycle)
 }
 
 func resourceQuotaSummary(facts ResourceQuotaFacts) string {

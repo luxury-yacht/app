@@ -88,13 +88,13 @@ func BuildCustomResourceStatusPresentation(resource *unstructured.Unstructured, 
 	if resource != nil {
 		meta = objectMetaFromUnstructured(resource)
 	}
-	lifecycle := networkLifecycle(meta)
+	lifecycle := NetworkLifecycle(meta)
 	if resource != nil {
-		if status, ok := deletingNetworkStatus(meta, state, signals, lifecycle); ok {
+		if status, ok := DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
 			return status
 		}
 	}
-	return networkSourceStatus(label, state, "", presentation, signals, lifecycle)
+	return NetworkSourceStatus(label, state, "", presentation, signals, lifecycle)
 }
 
 func customResourcePrimaryStatus(facts CustomResourceFacts) (state, label, presentation string) {
@@ -242,8 +242,8 @@ func objectMetaFromUnstructured(resource *unstructured.Unstructured) metav1.Obje
 		UID:               resource.GetUID(),
 		ResourceVersion:   resource.GetResourceVersion(),
 		Generation:        resource.GetGeneration(),
-		Labels:            copyStringMap(resource.GetLabels()),
-		Annotations:       copyStringMap(resource.GetAnnotations()),
+		Labels:            CopyStringMap(resource.GetLabels()),
+		Annotations:       CopyStringMap(resource.GetAnnotations()),
 		CreationTimestamp: resource.GetCreationTimestamp(),
 		DeletionTimestamp: resource.GetDeletionTimestamp(),
 		Finalizers:        append([]string(nil), resource.GetFinalizers()...),

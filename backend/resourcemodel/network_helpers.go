@@ -34,8 +34,8 @@ func networkResourceModel(
 		Source: ResourceSourceKubernetes,
 		Scope:  scope,
 		Metadata: ResourceMetadata{
-			Labels:            copyStringMap(meta.Labels),
-			Annotations:       copyStringMap(meta.Annotations),
+			Labels:            CopyStringMap(meta.Labels),
+			Annotations:       CopyStringMap(meta.Annotations),
 			CreationTimestamp: meta.CreationTimestamp,
 			ResourceVersion:   meta.ResourceVersion,
 			Finalizers:        append([]string(nil), meta.Finalizers...),
@@ -45,7 +45,7 @@ func networkResourceModel(
 	}
 }
 
-func deletingNetworkStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
+func DeletingNetworkStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
 	if meta.DeletionTimestamp == nil {
 		return ResourceStatusPresentation{}, false
 	}
@@ -64,7 +64,7 @@ func deletingNetworkStatus(meta metav1.ObjectMeta, state string, signals []Resou
 	}, true
 }
 
-func networkSourceStatus(label, state, reason, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
+func NetworkSourceStatus(label, state, reason, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
 	return ResourceStatusPresentation{
 		Label:        label,
 		State:        state,
@@ -75,7 +75,7 @@ func networkSourceStatus(label, state, reason, presentation string, signals []Re
 	}
 }
 
-func networkLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
+func NetworkLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
 	return ResourceLifecycle{
 		Deleting:         meta.DeletionTimestamp != nil,
 		FinalizerBlocked: meta.DeletionTimestamp != nil && len(meta.Finalizers) > 0,

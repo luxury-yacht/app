@@ -3,6 +3,7 @@ import {
   daemonset,
   deployment,
   job,
+  poddisruptionbudget,
   replicaset,
   statefulset,
   types,
@@ -40,7 +41,7 @@ export interface DetailSlots {
   clusterRoleDetails: types.ClusterRoleDetails | null;
   clusterRoleBindingDetails: types.ClusterRoleBindingDetails | null;
   hpaDetails: types.HorizontalPodAutoscalerDetails | null;
-  pdbDetails: types.PodDisruptionBudgetDetails | null;
+  pdbDetails: poddisruptionbudget.PodDisruptionBudgetDetails | null;
   resourceQuotaDetails: types.ResourceQuotaDetails | null;
   limitRangeDetails: types.LimitRangeDetails | null;
   nodeDetails: types.NodeDetails | null;
@@ -314,7 +315,7 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'poddisruptionbudget':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        pdbDetails: detailPayload as types.PodDisruptionBudgetDetails,
+        pdbDetails: detailPayload as poddisruptionbudget.PodDisruptionBudgetDetails,
       };
     case 'resourcequota':
       return {

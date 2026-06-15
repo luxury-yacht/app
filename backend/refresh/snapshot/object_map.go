@@ -21,6 +21,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	appsv1 "k8s.io/api/apps/v1"
@@ -704,7 +705,7 @@ func (idx *objectMapIndex) collectPodDisruptionBudgets(lister policylisters.PodD
 	collectKind(idx, "policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets",
 		func() ([]*policyv1.PodDisruptionBudget, error) { return lister.List(labels.Everything()) },
 		func(pdb *policyv1.PodDisruptionBudget, rec *objectMapRecord) {
-			rec.status = objectMapPodDisruptionBudgetStatus(idx.meta.ClusterID, *pdb)
+			rec.status = poddisruptionbudget.ObjectMapStatus(idx.meta.ClusterID, *pdb)
 			rec.pdb = pdb
 		})
 }
@@ -1199,11 +1200,6 @@ func objectMapStatusFromResourceModel(model resourcemodel.ResourceModel) *Object
 
 func objectMapHPAStatus(clusterID string, hpa autoscalingv2.HorizontalPodAutoscaler) *ObjectMapStatus {
 	model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(clusterID, &hpa)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapPodDisruptionBudgetStatus(clusterID string, pdb policyv1.PodDisruptionBudget) *ObjectMapStatus {
-	model := resourcemodel.BuildPodDisruptionBudgetResourceModel(clusterID, &pdb)
 	return objectMapStatusFromResourceModel(model)
 }
 

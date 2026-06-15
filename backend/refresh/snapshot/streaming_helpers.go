@@ -24,6 +24,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 )
 
 // The new*Summary constructors fill the metadata fields every row of a given
@@ -648,9 +649,8 @@ func BuildPodDisruptionBudgetSummary(meta ClusterMeta, pdb *policyv1.PodDisrupti
 	if pdb == nil {
 		return QuotaSummary{ClusterMeta: meta, Kind: "PodDisruptionBudget"}
 	}
-	model := resourcemodel.BuildPodDisruptionBudgetResourceModel(meta.ClusterID, pdb)
-	facts := model.Facts.PodDisruptionBudget
-	summary := newQuotaSummary(meta, pdb, "PodDisruptionBudget", describePodDisruptionBudgetFacts(facts))
+	facts := poddisruptionbudget.BuildFacts(meta.ClusterID, pdb)
+	summary := newQuotaSummary(meta, pdb, "PodDisruptionBudget", poddisruptionbudget.DescribeSummary(facts))
 	summary.Status = &QuotaStatus{
 		DisruptionsAllowed: facts.AllowedDisruptions,
 		CurrentHealthy:     facts.CurrentHealthy,

@@ -25,7 +25,7 @@ func BuildClusterRoleFacts(
 	if role.AggregationRule != nil {
 		facts.AggregationRule = &AggregationRuleFacts{}
 		for _, selector := range role.AggregationRule.ClusterRoleSelectors {
-			facts.AggregationRule.ClusterRoleSelectors = append(facts.AggregationRule.ClusterRoleSelectors, copyStringMap(selector.MatchLabels))
+			facts.AggregationRule.ClusterRoleSelectors = append(facts.AggregationRule.ClusterRoleSelectors, CopyStringMap(selector.MatchLabels))
 		}
 	}
 	if options.Materialization.Has(MaterializeReverseLinks) && relationships != nil {

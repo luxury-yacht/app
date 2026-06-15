@@ -54,8 +54,8 @@ func gatewayConditionsSummary(conditions []ConditionFacts) ConditionsSummaryFact
 
 func gatewayStatusFromConditions(meta metav1.ObjectMeta, fallbackState, fallbackLabel string, conditions []ConditionFacts) ResourceStatusPresentation {
 	signals := gatewayConditionSignals(conditions)
-	lifecycle := networkLifecycle(meta)
-	if status, ok := deletingNetworkStatus(meta, fallbackState, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(meta)
+	if status, ok := DeletingNetworkStatus(meta, fallbackState, signals, lifecycle); ok {
 		return status
 	}
 
@@ -66,7 +66,7 @@ func gatewayStatusFromConditions(meta metav1.ObjectMeta, fallbackState, fallback
 			if condition.Reason != "" {
 				label = fmt.Sprintf("%s: %s", condition.Type, condition.Reason)
 			}
-			return networkSourceStatus(label, condition.Status, condition.Reason, "warning", signals, lifecycle)
+			return NetworkSourceStatus(label, condition.Status, condition.Reason, "warning", signals, lifecycle)
 		}
 	}
 	for _, conditionType := range priority {
@@ -75,15 +75,15 @@ func gatewayStatusFromConditions(meta metav1.ObjectMeta, fallbackState, fallback
 			if condition.Reason != "" {
 				label = fmt.Sprintf("%s: %s", condition.Type, condition.Reason)
 			}
-			return networkSourceStatus(label, condition.Status, condition.Reason, "unknown", signals, lifecycle)
+			return NetworkSourceStatus(label, condition.Status, condition.Reason, "unknown", signals, lifecycle)
 		}
 	}
 	for _, conditionType := range priority {
 		if condition, ok := findConditionFacts(conditions, conditionType); ok && condition.Status == string(metav1.ConditionTrue) {
-			return networkSourceStatus(condition.Type, condition.Status, condition.Reason, "ready", signals, lifecycle)
+			return NetworkSourceStatus(condition.Type, condition.Status, condition.Reason, "ready", signals, lifecycle)
 		}
 	}
-	return networkSourceStatus(fallbackLabel, fallbackState, "", "unknown", signals, lifecycle)
+	return NetworkSourceStatus(fallbackLabel, fallbackState, "", "unknown", signals, lifecycle)
 }
 
 func gatewayConditionSignals(conditions []ConditionFacts) []ResourceStatusSignal {

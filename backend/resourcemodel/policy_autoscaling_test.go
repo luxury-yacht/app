@@ -7,11 +7,9 @@ import (
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func TestBuildHorizontalPodAutoscalerResourceModelFactsStatusAndScaleTarget(t *testing.T) {
@@ -113,38 +111,6 @@ func TestBuildHorizontalPodAutoscalerResourceModelUsesDisplayTargetForInvalidAPI
 	require.Equal(t, "Widget", model.Facts.HorizontalPodAutoscaler.ScaleTarget.Display.Kind)
 	require.Equal(t, "web", model.Facts.HorizontalPodAutoscaler.ScaleTarget.Display.Name)
 	require.Equal(t, "", model.Facts.HorizontalPodAutoscaler.ScaleTarget.Display.Version)
-}
-
-func TestBuildPodDisruptionBudgetResourceModelFactsAndStatus(t *testing.T) {
-	minAvailable := intstr.FromString("75%")
-	disruptionTime := metav1.Now()
-	pdb := &policyv1.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{Name: "web-pdb", Namespace: "default"},
-		Spec: policyv1.PodDisruptionBudgetSpec{
-			MinAvailable: &minAvailable,
-			Selector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
-		},
-		Status: policyv1.PodDisruptionBudgetStatus{
-			DisruptionsAllowed: 1,
-			CurrentHealthy:     3,
-			DesiredHealthy:     2,
-			ExpectedPods:       4,
-			DisruptedPods:      map[string]metav1.Time{"web-0": disruptionTime},
-			Conditions:         []metav1.Condition{{Type: "DisruptionAllowed", Status: metav1.ConditionTrue}},
-		},
-	}
-
-	model := BuildPodDisruptionBudgetResourceModel("cluster-a", pdb)
-	require.Equal(t, "policy", model.Ref.Group)
-	require.Equal(t, "v1", model.Ref.Version)
-	require.Equal(t, "PodDisruptionBudget", model.Ref.Kind)
-	require.Equal(t, "1", model.Status.State)
-	require.Equal(t, "MinAvailable: 75%, Disruptions Allowed: 1", model.Status.Label)
-	require.Equal(t, "75%", model.Facts.PodDisruptionBudget.MinAvailable.Value)
-	require.Equal(t, map[string]string{"app": "web"}, model.Facts.PodDisruptionBudget.Selector)
-	require.Equal(t, "Pod", model.Facts.PodDisruptionBudget.DisruptedPods[0].Pod.Ref.Kind)
-	require.Equal(t, "web-0", model.Facts.PodDisruptionBudget.DisruptedPods[0].Pod.Ref.Name)
-	require.Equal(t, "DisruptionAllowed", model.Facts.PodDisruptionBudget.Conditions[0].Type)
 }
 
 func TestBuildResourceQuotaAndLimitRangeResourceModels(t *testing.T) {

@@ -262,17 +262,5 @@ func describeLimitRangeFacts(facts *resourcemodel.LimitRangeFacts) string {
 	return fmt.Sprintf("Limits: %d", len(facts.Limits))
 }
 
-func describePodDisruptionBudgetFacts(facts *resourcemodel.PodDisruptionBudgetFacts) string {
-	if facts == nil {
-		return ""
-	}
-	parts := []string{}
-	if facts.MinAvailable != nil {
-		parts = append(parts, fmt.Sprintf("MinAvailable: %s", facts.MinAvailable.Value))
-	}
-	if facts.MaxUnavailable != nil {
-		parts = append(parts, fmt.Sprintf("MaxUnavailable: %s", facts.MaxUnavailable.Value))
-	}
-	parts = append(parts, fmt.Sprintf("Disruptions Allowed: %d", facts.AllowedDisruptions))
-	return strings.Join(parts, ", ")
-}
+// describePodDisruptionBudgetFacts moved to resources/poddisruptionbudget
+// (poddisruptionbudget.DescribeSummary), co-located with the PDB model.

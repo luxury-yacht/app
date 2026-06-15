@@ -53,11 +53,11 @@ func BuildWebhookConfigurationStatusPresentation(meta metav1.ObjectMeta, count i
 		Name:   "webhooks",
 		Status: state,
 	}}
-	lifecycle := networkLifecycle(meta)
-	if status, ok := deletingNetworkStatus(meta, state, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(meta)
+	if status, ok := DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
-	return networkSourceStatus(WebhookCountDetails(count), state, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus(WebhookCountDetails(count), state, "", "ready", signals, lifecycle)
 }
 
 func WebhookCountDetails(count int) string {
@@ -142,7 +142,7 @@ func labelSelectorFacts(selector *metav1.LabelSelector) *LabelSelectorFacts {
 		return nil
 	}
 	facts := &LabelSelectorFacts{
-		MatchLabels: copyStringMap(selector.MatchLabels),
+		MatchLabels: CopyStringMap(selector.MatchLabels),
 	}
 	for _, expr := range selector.MatchExpressions {
 		facts.MatchExpressions = append(facts.MatchExpressions, LabelSelectorRequirementFacts{

@@ -5,6 +5,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/types"
@@ -127,7 +128,7 @@ type (
 	ResourceQuotaDetails                  = types.ResourceQuotaDetails
 	ScopeSelector                         = types.ScopeSelector
 	ScopeSelectorRequirement              = types.ScopeSelectorRequirement
-	PodDisruptionBudgetDetails            = types.PodDisruptionBudgetDetails
+	PodDisruptionBudgetDetails            = poddisruptionbudget.PodDisruptionBudgetDetails
 	HorizontalPodAutoscalerDetails        = types.HorizontalPodAutoscalerDetails
 	ScaleTargetReference                  = types.ScaleTargetReference
 	MetricSpec                            = types.MetricSpec

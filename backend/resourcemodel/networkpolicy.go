@@ -16,7 +16,7 @@ func BuildNetworkPolicyResourceModel(clusterID string, policy *networkingv1.Netw
 
 func BuildNetworkPolicyFacts(policy *networkingv1.NetworkPolicy) NetworkPolicyFacts {
 	facts := NetworkPolicyFacts{
-		PodSelector: copyStringMap(policy.Spec.PodSelector.MatchLabels),
+		PodSelector: CopyStringMap(policy.Spec.PodSelector.MatchLabels),
 	}
 	for _, policyType := range policy.Spec.PolicyTypes {
 		facts.PolicyTypes = append(facts.PolicyTypes, string(policyType))
@@ -39,11 +39,11 @@ func BuildNetworkPolicyStatusPresentation(policy *networkingv1.NetworkPolicy, fa
 		{Type: StatusSignalResourceState, Name: "spec.ingress", Status: strconv.Itoa(len(facts.IngressRules))},
 		{Type: StatusSignalResourceState, Name: "spec.egress", Status: strconv.Itoa(len(facts.EgressRules))},
 	}
-	lifecycle := networkLifecycle(policy.ObjectMeta)
-	if status, ok := deletingNetworkStatus(policy.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(policy.ObjectMeta)
+	if status, ok := DeletingNetworkStatus(policy.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	return networkSourceStatus(networkPolicyLabel(facts), state, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus(networkPolicyLabel(facts), state, "", "ready", signals, lifecycle)
 }
 
 func networkPolicyLabel(facts NetworkPolicyFacts) string {
@@ -93,10 +93,10 @@ func networkPolicyEgressRuleFacts(rule networkingv1.NetworkPolicyEgressRule) Net
 func networkPolicyPeerFacts(peer networkingv1.NetworkPolicyPeer) NetworkPolicyPeerFacts {
 	facts := NetworkPolicyPeerFacts{}
 	if peer.PodSelector != nil {
-		facts.PodSelector = copyStringMap(peer.PodSelector.MatchLabels)
+		facts.PodSelector = CopyStringMap(peer.PodSelector.MatchLabels)
 	}
 	if peer.NamespaceSelector != nil {
-		facts.NamespaceSelector = copyStringMap(peer.NamespaceSelector.MatchLabels)
+		facts.NamespaceSelector = CopyStringMap(peer.NamespaceSelector.MatchLabels)
 	}
 	if peer.IPBlock != nil {
 		facts.IPBlock = &IPBlockFacts{

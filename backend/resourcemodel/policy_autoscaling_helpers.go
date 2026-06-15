@@ -21,7 +21,7 @@ func autoscalingResourceModel(
 	return networkResourceModel(clusterID, group, version, kind, resource, ResourceScopeNamespaced, meta, status, facts)
 }
 
-func policyResourceModel(
+func PolicyResourceModel(
 	clusterID, group, version, kind, resource string,
 	meta metav1.ObjectMeta,
 	status ResourceStatusPresentation,
@@ -55,9 +55,9 @@ func hpaStatusPresentation(meta metav1.ObjectMeta, facts HorizontalPodAutoscaler
 			Message: condition.Message,
 		})
 	}
-	lifecycle := networkLifecycle(meta)
+	lifecycle := NetworkLifecycle(meta)
 	state := strconv.Itoa(int(facts.CurrentReplicas))
-	if status, ok := deletingNetworkStatus(meta, state, signals, lifecycle); ok {
+	if status, ok := DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
 	for _, condition := range facts.Conditions {
@@ -70,14 +70,14 @@ func hpaStatusPresentation(meta metav1.ObjectMeta, facts HorizontalPodAutoscaler
 			if condition.Reason != "" {
 				label = fmt.Sprintf("%s: %s", condition.Type, condition.Reason)
 			}
-			return networkSourceStatus(label, condition.Status, condition.Reason, "warning", signals, lifecycle)
+			return NetworkSourceStatus(label, condition.Status, condition.Reason, "warning", signals, lifecycle)
 		}
 	}
 	if facts.DesiredReplicas != facts.CurrentReplicas {
 		state = fmt.Sprintf("%d/%d", facts.CurrentReplicas, facts.DesiredReplicas)
-		return networkSourceStatus(fmt.Sprintf("%d/%d replicas", facts.CurrentReplicas, facts.DesiredReplicas), state, "", "warning", signals, lifecycle)
+		return NetworkSourceStatus(fmt.Sprintf("%d/%d replicas", facts.CurrentReplicas, facts.DesiredReplicas), state, "", "warning", signals, lifecycle)
 	}
-	return networkSourceStatus(fmt.Sprintf("%d replicas", facts.CurrentReplicas), state, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus(fmt.Sprintf("%d replicas", facts.CurrentReplicas), state, "", "ready", signals, lifecycle)
 }
 
 func hpaConditionFacts(conditions []autoscalingv2.HorizontalPodAutoscalerCondition) []ConditionFacts {
@@ -97,7 +97,7 @@ func hpaConditionFacts(conditions []autoscalingv2.HorizontalPodAutoscalerConditi
 	return facts
 }
 
-func intOrStringFacts(value intstr.IntOrString) IntOrStringFacts {
+func NewIntOrStringFacts(value intstr.IntOrString) IntOrStringFacts {
 	facts := IntOrStringFacts{
 		Type:  "String",
 		Value: value.String(),
@@ -111,7 +111,7 @@ func intOrStringFacts(value intstr.IntOrString) IntOrStringFacts {
 	return facts
 }
 
-func conditionFactsFromMetav1(conditions []metav1.Condition) []ConditionFacts {
+func ConditionFactsFromMetav1(conditions []metav1.Condition) []ConditionFacts {
 	if len(conditions) == 0 {
 		return nil
 	}
@@ -181,7 +181,7 @@ func podDisruptedPodLink(clusterID, namespace, name string) ResourceLink {
 	return namespacedResourceLink(clusterID, "", "v1", "Pod", "pods", namespace, name, "")
 }
 
-func disruptedPodsFromMap(clusterID, namespace string, pods map[string]metav1.Time) []DisruptedPodFacts {
+func DisruptedPodsFromMap(clusterID, namespace string, pods map[string]metav1.Time) []DisruptedPodFacts {
 	if len(pods) == 0 {
 		return nil
 	}

@@ -29,14 +29,14 @@ func BuildIngressClassStatusPresentation(ingressClass *networkingv1.IngressClass
 		{Type: StatusSignalResourceState, Name: "spec.controller", Status: facts.Controller},
 		ingressClassDefaultSignal(facts),
 	}
-	lifecycle := networkLifecycle(ingressClass.ObjectMeta)
-	if status, ok := deletingNetworkStatus(ingressClass.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(ingressClass.ObjectMeta)
+	if status, ok := DeletingNetworkStatus(ingressClass.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 	if facts.DefaultClass {
-		return networkSourceStatus("Default", state, facts.DefaultClassAnnotation, "ready", signals, lifecycle)
+		return NetworkSourceStatus("Default", state, facts.DefaultClassAnnotation, "ready", signals, lifecycle)
 	}
-	return networkSourceStatus("Available", state, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus("Available", state, "", "ready", signals, lifecycle)
 }
 
 func ingressClassDefaultSignal(facts IngressClassFacts) ResourceStatusSignal {

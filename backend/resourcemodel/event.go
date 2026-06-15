@@ -44,12 +44,12 @@ func BuildEventStatusPresentation(event *corev1.Event, facts EventFacts) Resourc
 	}}
 	lifecycle := ResourceLifecycle{}
 	if event != nil {
-		lifecycle = networkLifecycle(event.ObjectMeta)
-		if status, ok := deletingNetworkStatus(event.ObjectMeta, state, signals, lifecycle); ok {
+		lifecycle = NetworkLifecycle(event.ObjectMeta)
+		if status, ok := DeletingNetworkStatus(event.ObjectMeta, state, signals, lifecycle); ok {
 			return status
 		}
 	}
-	return networkSourceStatus(state, state, facts.Reason, eventPresentation(state), signals, lifecycle)
+	return NetworkSourceStatus(state, state, facts.Reason, eventPresentation(state), signals, lifecycle)
 }
 
 func EventTimestamp(event *corev1.Event) metav1.Time {

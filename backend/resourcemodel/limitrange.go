@@ -10,7 +10,7 @@ import (
 func BuildLimitRangeResourceModel(clusterID string, limitRange *corev1.LimitRange) ResourceModel {
 	facts := BuildLimitRangeFacts(limitRange)
 	status := limitRangeStatusPresentation(limitRange, facts)
-	return policyResourceModel(clusterID, "", "v1", "LimitRange", "limitranges", limitRange.ObjectMeta, status, ResourceFacts{LimitRange: &facts})
+	return PolicyResourceModel(clusterID, "", "v1", "LimitRange", "limitranges", limitRange.ObjectMeta, status, ResourceFacts{LimitRange: &facts})
 }
 
 func BuildLimitRangeFacts(limitRange *corev1.LimitRange) LimitRangeFacts {
@@ -35,11 +35,11 @@ func limitRangeStatusPresentation(limitRange *corev1.LimitRange, facts LimitRang
 		Name:   "spec.limits.count",
 		Status: state,
 	}}
-	lifecycle := networkLifecycle(limitRange.ObjectMeta)
-	if status, ok := deletingNetworkStatus(limitRange.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(limitRange.ObjectMeta)
+	if status, ok := DeletingNetworkStatus(limitRange.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	return networkSourceStatus(limitRangeSummary(facts), state, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus(limitRangeSummary(facts), state, "", "ready", signals, lifecycle)
 }
 
 func limitRangeSummary(facts LimitRangeFacts) string {

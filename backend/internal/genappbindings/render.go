@@ -72,7 +72,7 @@ var Bindings = []binding{
 	{Name: "Node", Service: "nodes.NewService(deps)", Import: resourcesPkg + "nodes"},
 	{Name: "PersistentVolume", Service: "storage.NewService(deps)", Import: resourcesPkg + "storage"},
 	{Name: "PersistentVolumeClaim", Namespaced: true, Key: "PVC", Service: "storage.NewService(deps)", Import: resourcesPkg + "storage"},
-	{Name: "PodDisruptionBudget", Namespaced: true, Service: "policy.NewService(deps)", Import: resourcesPkg + "policy"},
+	{Name: "PodDisruptionBudget", Namespaced: true, Service: "poddisruptionbudget.NewService(deps)", Import: resourcesPkg + "poddisruptionbudget"},
 	{Name: "ReferenceGrant", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
 	{Name: "ReplicaSet", Namespaced: true, Service: "replicaset.NewService(deps)", Import: resourcesPkg + "replicaset"},
 	{Name: "ResourceQuota", Namespaced: true, Service: "constraints.NewService(deps)", Import: resourcesPkg + "constraints"},

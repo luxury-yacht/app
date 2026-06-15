@@ -26,8 +26,8 @@ func BuildPodResourceModel(clusterID string, pod *corev1.Pod) ResourceModel {
 		Source: ResourceSourceKubernetes,
 		Scope:  ResourceScopeNamespaced,
 		Metadata: ResourceMetadata{
-			Labels:            copyStringMap(pod.Labels),
-			Annotations:       copyStringMap(pod.Annotations),
+			Labels:            CopyStringMap(pod.Labels),
+			Annotations:       CopyStringMap(pod.Annotations),
 			CreationTimestamp: pod.CreationTimestamp,
 			ResourceVersion:   pod.ResourceVersion,
 			Finalizers:        append([]string(nil), pod.Finalizers...),

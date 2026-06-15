@@ -32,7 +32,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/network"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/pods"
-	"github.com/luxury-yacht/app/backend/resources/policy"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/rbac"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
@@ -254,7 +254,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"poddisruptionbudget": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := policy.NewService(deps).PodDisruptionBudget(namespace, name)
+			detail, err := poddisruptionbudget.NewService(deps).PodDisruptionBudget(namespace, name)
 			return detail, "", err
 		},
 	},

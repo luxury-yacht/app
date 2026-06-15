@@ -27,8 +27,8 @@ func storageResourceModel(
 		Source: ResourceSourceKubernetes,
 		Scope:  scope,
 		Metadata: ResourceMetadata{
-			Labels:            copyStringMap(meta.Labels),
-			Annotations:       copyStringMap(meta.Annotations),
+			Labels:            CopyStringMap(meta.Labels),
+			Annotations:       CopyStringMap(meta.Annotations),
 			CreationTimestamp: meta.CreationTimestamp,
 			ResourceVersion:   meta.ResourceVersion,
 			Finalizers:        append([]string(nil), meta.Finalizers...),

@@ -15,7 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/network"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
-	"github.com/luxury-yacht/app/backend/resources/policy"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/rbac"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
@@ -268,7 +268,7 @@ func (a *App) GetPodDisruptionBudget(clusterID, namespace, name string) (*PodDis
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "PodDisruptionBudget", namespace, name, func() (*PodDisruptionBudgetDetails, error) {
-		return policy.NewService(deps).PodDisruptionBudget(namespace, name)
+		return poddisruptionbudget.NewService(deps).PodDisruptionBudget(namespace, name)
 	})
 }
 

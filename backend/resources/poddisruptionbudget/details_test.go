@@ -1,11 +1,10 @@
 /*
- * backend/resources/policy/poddisruptionbudgets_test.go
+ * backend/resources/poddisruptionbudget/details_test.go
  *
- * Tests for PodDisruptionBudget resource handlers.
- * - Covers PodDisruptionBudget resource handlers behavior and edge cases.
+ * Tests for the PodDisruptionBudget detail service (co-located with the kind).
  */
 
-package policy
+package poddisruptionbudget
 
 import (
 	"context"

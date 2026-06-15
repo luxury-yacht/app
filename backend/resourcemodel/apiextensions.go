@@ -51,11 +51,11 @@ func BuildCustomResourceDefinitionStatusPresentation(crd *apiextensionsv1.Custom
 		})
 	}
 
-	lifecycle := networkLifecycle(crd.ObjectMeta)
-	if status, ok := deletingNetworkStatus(crd.ObjectMeta, facts.StorageVersion, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(crd.ObjectMeta)
+	if status, ok := DeletingNetworkStatus(crd.ObjectMeta, facts.StorageVersion, signals, lifecycle); ok {
 		return status
 	}
-	return networkSourceStatus(CustomResourceDefinitionVersionDetails(facts), facts.StorageVersion, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus(CustomResourceDefinitionVersionDetails(facts), facts.StorageVersion, "", "ready", signals, lifecycle)
 }
 
 func CustomResourceDefinitionVersionDetails(facts CustomResourceDefinitionFacts) string {

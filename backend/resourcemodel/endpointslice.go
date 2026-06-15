@@ -40,15 +40,15 @@ func BuildEndpointSliceStatusPresentation(slice *discoveryv1.EndpointSlice, fact
 		{Type: StatusSignalResourceState, Name: "readyAddresses", Status: state},
 		{Type: StatusSignalResourceState, Name: "notReadyAddresses", Status: strconv.Itoa(notReady)},
 	}
-	lifecycle := networkLifecycle(slice.ObjectMeta)
-	if status, ok := deletingNetworkStatus(slice.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := NetworkLifecycle(slice.ObjectMeta)
+	if status, ok := DeletingNetworkStatus(slice.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 	if notReady > 0 && ready == 0 {
-		return networkSourceStatus("No ready addresses", state, "", "warning", signals, lifecycle)
+		return NetworkSourceStatus("No ready addresses", state, "", "warning", signals, lifecycle)
 	}
 	if notReady > 0 {
-		return networkSourceStatus(countLabel(ready, "ready address", "ready addresses"), state, "", "warning", signals, lifecycle)
+		return NetworkSourceStatus(countLabel(ready, "ready address", "ready addresses"), state, "", "warning", signals, lifecycle)
 	}
-	return networkSourceStatus(countLabel(ready, "ready address", "ready addresses"), state, "", "ready", signals, lifecycle)
+	return NetworkSourceStatus(countLabel(ready, "ready address", "ready addresses"), state, "", "ready", signals, lifecycle)
 }

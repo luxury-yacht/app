@@ -170,7 +170,6 @@ type ResourceFacts struct {
 	ClusterRoleBinding             *ClusterRoleBindingFacts             `json:"clusterRoleBinding,omitempty"`
 	ServiceAccount                 *ServiceAccountFacts                 `json:"serviceAccount,omitempty"`
 	HorizontalPodAutoscaler        *HorizontalPodAutoscalerFacts        `json:"horizontalPodAutoscaler,omitempty"`
-	PodDisruptionBudget            *PodDisruptionBudgetFacts            `json:"podDisruptionBudget,omitempty"`
 	ResourceQuota                  *ResourceQuotaFacts                  `json:"resourceQuota,omitempty"`
 	LimitRange                     *LimitRangeFacts                     `json:"limitRange,omitempty"`
 	CustomResourceDefinition       *CustomResourceDefinitionFacts       `json:"customResourceDefinition,omitempty"`
@@ -560,18 +559,10 @@ type ScalingRulesFacts struct {
 	Policies                   []string `json:"policies,omitempty"`
 }
 
-type PodDisruptionBudgetFacts struct {
-	Selector           map[string]string   `json:"selector,omitempty"`
-	MinAvailable       *IntOrStringFacts   `json:"minAvailable,omitempty"`
-	MaxUnavailable     *IntOrStringFacts   `json:"maxUnavailable,omitempty"`
-	AllowedDisruptions int32               `json:"allowedDisruptions"`
-	CurrentHealthy     int32               `json:"currentHealthy"`
-	DesiredHealthy     int32               `json:"desiredHealthy"`
-	ExpectedPods       int32               `json:"expectedPods"`
-	DisruptedPods      []DisruptedPodFacts `json:"disruptedPods,omitempty"`
-	Conditions         []ConditionFacts    `json:"conditions,omitempty"`
-	ObservedGeneration int64               `json:"observedGeneration"`
-}
+// PodDisruptionBudgetFacts moved to resources/poddisruptionbudget (type
+// poddisruptionbudget.Facts), removed from the ResourceFacts union to break the
+// import cycle so the kind owns its own facts type. IntOrStringFacts,
+// DisruptedPodFacts, and ConditionFacts stay here (shared across kinds).
 
 type IntOrStringFacts struct {
 	Type   string `json:"type"`

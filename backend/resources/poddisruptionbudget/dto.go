@@ -1,11 +1,11 @@
 /*
- * backend/resources/types/policy.go
+ * backend/resources/poddisruptionbudget/dto.go
  *
- * Type definitions for Policy resources.
- * - Shared data structures for API responses.
+ * PodDisruptionBudget detail DTO (the frontend wire shape), co-located with its
+ * model and detail builder.
  */
 
-package types
+package poddisruptionbudget
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
