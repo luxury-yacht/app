@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/objectmap"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -614,7 +615,7 @@ func (idx *objectMapIndex) collectDeployments(lister appslisters.DeploymentListe
 	collectKind(idx, "apps", "v1", "Deployment", "deployments",
 		func() ([]*appsv1.Deployment, error) { return lister.List(labels.Everything()) },
 		func(deploy *appsv1.Deployment, rec *objectMapRecord) {
-			rec.status = objectMapDeploymentStatus(idx.meta.ClusterID, *deploy)
+			rec.status = deployment.ObjectMapStatus(idx.meta.ClusterID, *deploy)
 			rec.actionFacts = objectMapScalableWorkloadFacts(deploy.Spec.Replicas, common.HasForwardableContainerPorts(deploy.Spec.Template.Spec.Containers))
 			rec.template = &deploy.Spec.Template
 		})
@@ -1182,11 +1183,6 @@ func objectMapNodeStatus(clusterID string, node corev1.Node) *ObjectMapStatus {
 	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
 	status.Presentation = model.Status.Presentation
 	return status
-}
-
-func objectMapDeploymentStatus(clusterID string, deploy appsv1.Deployment) *ObjectMapStatus {
-	model := resourcemodel.BuildDeploymentResourceModel(clusterID, &deploy)
-	return objectMapStatusFromResourceModel(model)
 }
 
 func objectMapReplicaSetStatus(clusterID string, rs appsv1.ReplicaSet) *ObjectMapStatus {

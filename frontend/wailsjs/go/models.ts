@@ -903,6 +903,131 @@ export namespace capabilities {
 
 }
 
+export namespace deployment {
+	
+	export class DeploymentDetails {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    details: string;
+	    replicas: string;
+	    ready: string;
+	    updated?: string;
+	    upToDate?: number;
+	    available: number;
+	    desiredReplicas: number;
+	    age: string;
+	    cpuRequest?: string;
+	    cpuLimit?: string;
+	    cpuUsage?: string;
+	    memRequest?: string;
+	    memLimit?: string;
+	    memUsage?: string;
+	    strategy?: string;
+	    maxSurge?: string;
+	    maxUnavailable?: string;
+	    minReadySeconds?: number;
+	    revisionHistory?: number;
+	    progressDeadline?: number;
+	    serviceAccount?: string;
+	    nodeSelector?: Record<string, string>;
+	    tolerations?: string[];
+	    selector?: Record<string, string>;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    conditions?: string[];
+	    containers?: types.PodDetailInfoContainer[];
+	    initContainers?: types.PodDetailInfoContainer[];
+	    pods?: types.PodSimpleInfo[];
+	    podMetricsSummary?: types.PodMetricsSummary;
+	    currentRevision?: string;
+	    currentReplicaSet?: string;
+	    replicaSets?: string[];
+	    replicaSetSummaries?: types.ReplicaSetSummary[];
+	    observedGeneration?: number;
+	    paused?: boolean;
+	    rolloutStatus?: string;
+	    rolloutMessage?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DeploymentDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.details = source["details"];
+	        this.replicas = source["replicas"];
+	        this.ready = source["ready"];
+	        this.updated = source["updated"];
+	        this.upToDate = source["upToDate"];
+	        this.available = source["available"];
+	        this.desiredReplicas = source["desiredReplicas"];
+	        this.age = source["age"];
+	        this.cpuRequest = source["cpuRequest"];
+	        this.cpuLimit = source["cpuLimit"];
+	        this.cpuUsage = source["cpuUsage"];
+	        this.memRequest = source["memRequest"];
+	        this.memLimit = source["memLimit"];
+	        this.memUsage = source["memUsage"];
+	        this.strategy = source["strategy"];
+	        this.maxSurge = source["maxSurge"];
+	        this.maxUnavailable = source["maxUnavailable"];
+	        this.minReadySeconds = source["minReadySeconds"];
+	        this.revisionHistory = source["revisionHistory"];
+	        this.progressDeadline = source["progressDeadline"];
+	        this.serviceAccount = source["serviceAccount"];
+	        this.nodeSelector = source["nodeSelector"];
+	        this.tolerations = source["tolerations"];
+	        this.selector = source["selector"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.conditions = source["conditions"];
+	        this.containers = this.convertValues(source["containers"], types.PodDetailInfoContainer);
+	        this.initContainers = this.convertValues(source["initContainers"], types.PodDetailInfoContainer);
+	        this.pods = this.convertValues(source["pods"], types.PodSimpleInfo);
+	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], types.PodMetricsSummary);
+	        this.currentRevision = source["currentRevision"];
+	        this.currentReplicaSet = source["currentReplicaSet"];
+	        this.replicaSets = source["replicaSets"];
+	        this.replicaSetSummaries = this.convertValues(source["replicaSetSummaries"], types.ReplicaSetSummary);
+	        this.observedGeneration = source["observedGeneration"];
+	        this.paused = source["paused"];
+	        this.rolloutStatus = source["rolloutStatus"];
+	        this.rolloutMessage = source["rolloutMessage"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace objectcatalog {
 	
 	export class ActionFacts {
@@ -2674,148 +2799,6 @@ export namespace types {
 	        this.podName = source["podName"];
 	        this.namespace = source["namespace"];
 	    }
-	}
-	export class ReplicaSetSummary {
-	    name: string;
-	    revision: string;
-	    replicas: string;
-	    readyReplicas: string;
-	    availableReplicas: string;
-	    age: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ReplicaSetSummary(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.revision = source["revision"];
-	        this.replicas = source["replicas"];
-	        this.readyReplicas = source["readyReplicas"];
-	        this.availableReplicas = source["availableReplicas"];
-	        this.age = source["age"];
-	    }
-	}
-	export class DeploymentDetails {
-	    kind: string;
-	    name: string;
-	    namespace: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    details: string;
-	    replicas: string;
-	    ready: string;
-	    updated?: string;
-	    upToDate?: number;
-	    available: number;
-	    desiredReplicas: number;
-	    age: string;
-	    cpuRequest?: string;
-	    cpuLimit?: string;
-	    cpuUsage?: string;
-	    memRequest?: string;
-	    memLimit?: string;
-	    memUsage?: string;
-	    strategy?: string;
-	    maxSurge?: string;
-	    maxUnavailable?: string;
-	    minReadySeconds?: number;
-	    revisionHistory?: number;
-	    progressDeadline?: number;
-	    serviceAccount?: string;
-	    nodeSelector?: Record<string, string>;
-	    tolerations?: string[];
-	    selector?: Record<string, string>;
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    conditions?: string[];
-	    containers?: PodDetailInfoContainer[];
-	    initContainers?: PodDetailInfoContainer[];
-	    pods?: PodSimpleInfo[];
-	    podMetricsSummary?: PodMetricsSummary;
-	    currentRevision?: string;
-	    currentReplicaSet?: string;
-	    replicaSets?: string[];
-	    replicaSetSummaries?: ReplicaSetSummary[];
-	    observedGeneration?: number;
-	    paused?: boolean;
-	    rolloutStatus?: string;
-	    rolloutMessage?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new DeploymentDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.details = source["details"];
-	        this.replicas = source["replicas"];
-	        this.ready = source["ready"];
-	        this.updated = source["updated"];
-	        this.upToDate = source["upToDate"];
-	        this.available = source["available"];
-	        this.desiredReplicas = source["desiredReplicas"];
-	        this.age = source["age"];
-	        this.cpuRequest = source["cpuRequest"];
-	        this.cpuLimit = source["cpuLimit"];
-	        this.cpuUsage = source["cpuUsage"];
-	        this.memRequest = source["memRequest"];
-	        this.memLimit = source["memLimit"];
-	        this.memUsage = source["memUsage"];
-	        this.strategy = source["strategy"];
-	        this.maxSurge = source["maxSurge"];
-	        this.maxUnavailable = source["maxUnavailable"];
-	        this.minReadySeconds = source["minReadySeconds"];
-	        this.revisionHistory = source["revisionHistory"];
-	        this.progressDeadline = source["progressDeadline"];
-	        this.serviceAccount = source["serviceAccount"];
-	        this.nodeSelector = source["nodeSelector"];
-	        this.tolerations = source["tolerations"];
-	        this.selector = source["selector"];
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.conditions = source["conditions"];
-	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
-	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
-	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
-	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
-	        this.currentRevision = source["currentRevision"];
-	        this.currentReplicaSet = source["currentReplicaSet"];
-	        this.replicaSets = source["replicaSets"];
-	        this.replicaSetSummaries = this.convertValues(source["replicaSetSummaries"], ReplicaSetSummary);
-	        this.observedGeneration = source["observedGeneration"];
-	        this.paused = source["paused"];
-	        this.rolloutStatus = source["rolloutStatus"];
-	        this.rolloutMessage = source["rolloutMessage"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	export class DrainNodeOptions {
 	    gracePeriodSeconds?: number;
@@ -4940,7 +4923,28 @@ export namespace types {
 		    return a;
 		}
 	}
+	export class ReplicaSetSummary {
+	    name: string;
+	    revision: string;
+	    replicas: string;
+	    readyReplicas: string;
+	    availableReplicas: string;
+	    age: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new ReplicaSetSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.revision = source["revision"];
+	        this.replicas = source["replicas"];
+	        this.readyReplicas = source["readyReplicas"];
+	        this.availableReplicas = source["availableReplicas"];
+	        this.age = source["age"];
+	    }
+	}
 	export class ScopeSelectorRequirement {
 	    scopeName: string;
 	    operator: string;

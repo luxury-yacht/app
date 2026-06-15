@@ -7,6 +7,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/autoscaling"
 	"github.com/luxury-yacht/app/backend/resources/config"
 	"github.com/luxury-yacht/app/backend/resources/constraints"
+	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/network"
@@ -84,7 +85,7 @@ func (a *App) GetDeployment(clusterID, namespace, name string) (*DeploymentDetai
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "Deployment", namespace, name, func() (*DeploymentDetails, error) {
-		return workloads.NewDeploymentService(deps).Deployment(namespace, name)
+		return deployment.NewService(deps).Deployment(namespace, name)
 	})
 }
 

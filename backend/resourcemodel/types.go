@@ -146,7 +146,6 @@ type ResourceFacts struct {
 	Namespace                      *NamespaceFacts                      `json:"namespace,omitempty"`
 	Node                           *NodeFacts                           `json:"node,omitempty"`
 	Pod                            *PodFacts                            `json:"pod,omitempty"`
-	Deployment                     *DeploymentFacts                     `json:"deployment,omitempty"`
 	DaemonSet                      *DaemonSetFacts                      `json:"daemonSet,omitempty"`
 	ReplicaSet                     *ReplicaSetFacts                     `json:"replicaSet,omitempty"`
 	Job                            *JobFacts                            `json:"job,omitempty"`
@@ -214,26 +213,10 @@ type WorkloadCommonFacts struct {
 	Conditions        []ConditionFacts `json:"conditions,omitempty"`
 }
 
-type DeploymentFacts struct {
-	WorkloadCommonFacts
-	PodTemplateFacts
-	Paused             bool              `json:"paused,omitempty"`
-	Strategy           string            `json:"strategy,omitempty"`
-	MaxSurge           string            `json:"maxSurge,omitempty"`
-	MaxUnavailable     string            `json:"maxUnavailable,omitempty"`
-	MinReadySeconds    int32             `json:"minReadySeconds,omitempty"`
-	RevisionHistory    int32             `json:"revisionHistory,omitempty"`
-	ProgressDeadline   int32             `json:"progressDeadline,omitempty"`
-	ObservedGeneration int64             `json:"observedGeneration,omitempty"`
-	Selector           map[string]string `json:"selector,omitempty"`
-	ReadySummary       string            `json:"readySummary,omitempty"`
-	RolloutStatus      string            `json:"rolloutStatus,omitempty"`
-	RolloutMessage     string            `json:"rolloutMessage,omitempty"`
-}
-
-// StatefulSetFacts moved to resources/statefulset (type statefulset.Facts);
-// removed from the ResourceFacts union to break the import cycle so the kind owns
-// its own facts type.
+// DeploymentFacts moved to resources/deployment (type deployment.Facts) and
+// StatefulSetFacts moved to resources/statefulset (type statefulset.Facts); both
+// were removed from the ResourceFacts union to break the import cycle so each
+// kind owns its own facts type.
 
 type DaemonSetFacts struct {
 	WorkloadCommonFacts

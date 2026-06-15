@@ -65,24 +65,24 @@ func BuildJobStatusPresentation(job *batchv1.Job) ResourceStatusPresentation {
 		return status
 	}
 	if failed := findJobCondition(job, batchv1.JobFailed); failed != nil && failed.Status == corev1.ConditionTrue {
-		return workloadConditionStatus(string(batchv1.JobFailed), string(failed.Status), failed.Reason, failed.Message, "Failed", "error", signals, lifecycle)
+		return WorkloadConditionStatus(string(batchv1.JobFailed), string(failed.Status), failed.Reason, failed.Message, "Failed", "error", signals, lifecycle)
 	}
 	if complete := findJobCondition(job, batchv1.JobComplete); complete != nil && complete.Status == corev1.ConditionTrue {
-		return workloadConditionStatus(string(batchv1.JobComplete), string(complete.Status), complete.Reason, complete.Message, "Completed", "ready", signals, lifecycle)
+		return WorkloadConditionStatus(string(batchv1.JobComplete), string(complete.Status), complete.Reason, complete.Message, "Completed", "ready", signals, lifecycle)
 	}
 	if facts.Succeeded >= facts.DesiredReplicas && facts.DesiredReplicas > 0 {
-		return workloadSourceStatus("Completed", strconv.FormatInt(int64(facts.Succeeded), 10), "", "", "ready", signals, lifecycle)
+		return WorkloadSourceStatus("Completed", strconv.FormatInt(int64(facts.Succeeded), 10), "", "", "ready", signals, lifecycle)
 	}
 	if facts.Suspended {
-		return workloadSourceStatus("Suspended", "true", "Suspended", "", "warning", signals, lifecycle)
+		return WorkloadSourceStatus("Suspended", "true", "Suspended", "", "warning", signals, lifecycle)
 	}
 	if facts.Active > 0 {
-		return workloadSourceStatus("Running", strconv.FormatInt(int64(facts.Active), 10), "", "", "ready", signals, lifecycle)
+		return WorkloadSourceStatus("Running", strconv.FormatInt(int64(facts.Active), 10), "", "", "ready", signals, lifecycle)
 	}
 	if facts.Failed > 0 {
-		return workloadSourceStatus("Failed", strconv.FormatInt(int64(facts.Failed), 10), "", "", "error", signals, lifecycle)
+		return WorkloadSourceStatus("Failed", strconv.FormatInt(int64(facts.Failed), 10), "", "", "error", signals, lifecycle)
 	}
-	return workloadSourceStatus("Pending", strconv.FormatInt(int64(facts.Active), 10), "", "", "warning", signals, lifecycle)
+	return WorkloadSourceStatus("Pending", strconv.FormatInt(int64(facts.Active), 10), "", "", "warning", signals, lifecycle)
 }
 
 func jobSignals(job *batchv1.Job, facts JobFacts) []ResourceStatusSignal {

@@ -33,6 +33,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 )
 
@@ -521,47 +522,47 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 
 func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 	clusterID string,
-	deployment *appsv1.Deployment,
+	deploy *appsv1.Deployment,
 	podsByOwner map[string][]*corev1.Pod,
 	usage map[string]metrics.PodUsage,
 ) WorkloadSummary {
 	var pods []*corev1.Pod
-	if deployment != nil {
-		key := workloadOwnerKey("Deployment", deployment.Namespace, deployment.Name)
+	if deploy != nil {
+		key := workloadOwnerKey("Deployment", deploy.Namespace, deploy.Name)
 		pods = podsByOwner[key]
 	}
 	resources := aggregateWorkloadPodResources(pods, usage)
 	desired := int32(0)
-	if deployment != nil && deployment.Spec.Replicas != nil {
-		desired = *deployment.Spec.Replicas
+	if deploy != nil && deploy.Spec.Replicas != nil {
+		desired = *deploy.Spec.Replicas
 	}
 	ready := int32(0)
-	if deployment != nil {
-		ready = deployment.Status.ReadyReplicas
+	if deploy != nil {
+		ready = deploy.Status.ReadyReplicas
 	}
 	readyStatus := workloadPodReadyStatus(pods, ready, desired)
-	model := resourcemodel.BuildDeploymentResourceModel(clusterID, deployment)
+	model := deployment.BuildResourceModel(clusterID, deploy)
 
 	return WorkloadSummary{
 		Kind:                 "Deployment",
-		Name:                 deployment.Name,
-		Namespace:            deployment.Namespace,
+		Name:                 deploy.Name,
+		Namespace:            deploy.Namespace,
 		Ready:                readyStatus,
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
 		StatusPresentation:   model.Status.Presentation,
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
-		Age:                  formatAge(deployment.CreationTimestamp.Time),
-		AgeTimestamp:         creationTimestampMillis(deployment),
+		Age:                  formatAge(deploy.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(deploy),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
 		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: common.HasForwardableContainerPorts(deployment.Spec.Template.Spec.Containers),
-		DesiredReplicas:      cloneInt32Ptr(deployment.Spec.Replicas),
+		PortForwardAvailable: common.HasForwardableContainerPorts(deploy.Spec.Template.Spec.Containers),
+		DesiredReplicas:      cloneInt32Ptr(deploy.Spec.Replicas),
 	}
 }
 

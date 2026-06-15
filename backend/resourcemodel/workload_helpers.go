@@ -42,15 +42,15 @@ func WorkloadResourceModel(
 func ReplicaStatusPresentation(facts WorkloadCommonFacts, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
 	state := ReplicaState(facts)
 	if facts.DesiredReplicas == 0 {
-		return workloadSourceStatus("Scaled to 0", state, "ScaledToZero", "", "inactive", signals, lifecycle)
+		return WorkloadSourceStatus("Scaled to 0", state, "ScaledToZero", "", "inactive", signals, lifecycle)
 	}
 	if facts.ReadyReplicas >= facts.DesiredReplicas {
-		return workloadSourceStatus("Running", state, "", "", "ready", signals, lifecycle)
+		return WorkloadSourceStatus("Running", state, "", "", "ready", signals, lifecycle)
 	}
 	if facts.ReadyReplicas > 0 || facts.UpdatedReplicas > 0 || facts.CurrentReplicas > 0 {
-		return workloadSourceStatus("Updating", state, "", "", "warning", signals, lifecycle)
+		return WorkloadSourceStatus("Updating", state, "", "", "warning", signals, lifecycle)
 	}
-	return workloadSourceStatus("Pending", state, "", "", "warning", signals, lifecycle)
+	return WorkloadSourceStatus("Pending", state, "", "", "warning", signals, lifecycle)
 }
 
 func DeletingWorkloadStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
@@ -58,7 +58,7 @@ func DeletingWorkloadStatus(meta metav1.ObjectMeta, state string, signals []Reso
 		return ResourceStatusPresentation{}, false
 	}
 	deletionTimestamp := meta.DeletionTimestamp.Time.Format(time.RFC3339)
-	return workloadSourceStatus(
+	return WorkloadSourceStatus(
 		"Terminating",
 		state,
 		"DeletionTimestamp",
@@ -69,7 +69,7 @@ func DeletingWorkloadStatus(meta metav1.ObjectMeta, state string, signals []Reso
 	), true
 }
 
-func workloadConditionStatus(name, state, reason, message, label, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
+func WorkloadConditionStatus(name, state, reason, message, label, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
 	return ResourceStatusPresentation{
 		Label:        label,
 		State:        state,
@@ -80,7 +80,7 @@ func workloadConditionStatus(name, state, reason, message, label, presentation s
 	}
 }
 
-func workloadSourceStatus(label, state, reason, message, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
+func WorkloadSourceStatus(label, state, reason, message, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
 	return ResourceStatusPresentation{
 		Label:        label,
 		State:        state,
@@ -94,6 +94,16 @@ func workloadSourceStatus(label, state, reason, message, presentation string, si
 
 func ReplicaState(facts WorkloadCommonFacts) string {
 	return fmt.Sprintf("%d/%d", facts.ReadyReplicas, facts.DesiredReplicas)
+}
+
+// Int32PtrValue dereferences an optional *int32 spec field, treating nil as 0.
+// Shared by the workload kinds that surface RevisionHistoryLimit and similar
+// pointer-typed fields.
+func Int32PtrValue(p *int32) int32 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
 func jobState(facts JobFacts) string {

@@ -46,10 +46,10 @@ func BuildCronJobStatusPresentation(cronJob *batchv1.CronJob) ResourceStatusPres
 		return status
 	}
 	if facts.Suspended {
-		return workloadSourceStatus("Suspended", "true", "Suspended", "", "warning", signals, lifecycle)
+		return WorkloadSourceStatus("Suspended", "true", "Suspended", "", "warning", signals, lifecycle)
 	}
 	if facts.ActiveJobs > 0 {
-		return workloadSourceStatus("Active", strconv.FormatInt(int64(facts.ActiveJobs), 10), "", "", "ready", signals, lifecycle)
+		return WorkloadSourceStatus("Active", strconv.FormatInt(int64(facts.ActiveJobs), 10), "", "", "ready", signals, lifecycle)
 	}
-	return workloadSourceStatus("Idle", "0", "", "", "inactive", signals, lifecycle)
+	return WorkloadSourceStatus("Idle", "0", "", "", "inactive", signals, lifecycle)
 }

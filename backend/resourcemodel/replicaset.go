@@ -59,7 +59,7 @@ func BuildReplicaSetStatusPresentation(replicaSet *appsv1.ReplicaSet) ResourceSt
 		return status
 	}
 	if failed := findReplicaSetCondition(replicaSet, appsv1.ReplicaSetReplicaFailure); failed != nil && failed.Status == corev1.ConditionTrue {
-		return workloadConditionStatus("ReplicaFailure", string(failed.Status), failed.Reason, failed.Message, "Replica failure", "error", signals, lifecycle)
+		return WorkloadConditionStatus("ReplicaFailure", string(failed.Status), failed.Reason, failed.Message, "Replica failure", "error", signals, lifecycle)
 	}
 	return ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }

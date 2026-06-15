@@ -1,17 +1,16 @@
 /*
- * backend/resources/workloads/deployments_test.go
+ * backend/resources/deployment/details_test.go
  *
- * Tests for Deployment resource handlers.
- * - Covers Deployment resource handlers behavior and edge cases.
+ * Tests for the Deployment detail service (co-located with the kind).
  */
 
-package workloads_test
+package deployment_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/luxury-yacht/app/backend/resources/workloads"
+	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,12 +21,12 @@ import (
 )
 
 func TestDeploymentServiceDeployment(t *testing.T) {
-	deployment := testsupport.DeploymentFixture("default", "web", testsupport.DeploymentWithReplicas(2))
-	deployment.UID = types.UID("deployment-web")
-	deployment.Status.Replicas = 2
-	deployment.Status.ReadyReplicas = 2
-	deployment.Status.AvailableReplicas = 2
-	deployment.Status.UpdatedReplicas = 2
+	deploy := testsupport.DeploymentFixture("default", "web", testsupport.DeploymentWithReplicas(2))
+	deploy.UID = types.UID("deployment-web")
+	deploy.Status.Replicas = 2
+	deploy.Status.ReadyReplicas = 2
+	deploy.Status.AvailableReplicas = 2
+	deploy.Status.UpdatedReplicas = 2
 
 	replicaSet := &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -37,14 +36,14 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: "apps/v1",
 				Kind:       "Deployment",
-				Name:       deployment.Name,
-				UID:        deployment.UID,
+				Name:       deploy.Name,
+				UID:        deploy.UID,
 				Controller: ptr.To(true),
 			}},
 		},
 		Spec: appsv1.ReplicaSetSpec{
-			Selector: deployment.Spec.Selector,
-			Template: deployment.Spec.Template,
+			Selector: deploy.Spec.Selector,
+			Template: deploy.Spec.Template,
 		},
 	}
 	replicaSet.UID = types.UID("replicaset-web")
@@ -70,7 +69,7 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 	}
 
 	client := cgofake.NewClientset(
-		deployment.DeepCopy(),
+		deploy.DeepCopy(),
 		replicaSet.DeepCopy(),
 		podA.DeepCopy(),
 		podB.DeepCopy(),
@@ -81,7 +80,7 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	)
 
-	service := workloads.NewDeploymentService(deps)
+	service := deployment.NewService(deps)
 	details, err := service.Deployment("default", "web")
 	if err != nil {
 		t.Fatalf("Deployment returned error: %v", err)

@@ -4,6 +4,7 @@ import {backend} from '../models';
 import {context} from '../models';
 import {types} from '../models';
 import {objectcatalog} from '../models';
+import {deployment} from '../models';
 import {json} from '../models';
 import {statefulset} from '../models';
 import {snapshot} from '../models';
@@ -95,7 +96,7 @@ export function GetCustomResourceDefinition(arg1:string,arg2:string):Promise<typ
 
 export function GetDaemonSet(arg1:string,arg2:string,arg3:string):Promise<types.DaemonSetDetails>;
 
-export function GetDeployment(arg1:string,arg2:string,arg3:string):Promise<types.DeploymentDetails>;
+export function GetDeployment(arg1:string,arg2:string,arg3:string):Promise<deployment.DeploymentDetails>;
 
 export function GetEndpointSlice(arg1:string,arg2:string,arg3:string):Promise<types.EndpointSliceDetails>;
 

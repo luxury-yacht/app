@@ -54,7 +54,7 @@ var Bindings = []binding{
 	{Name: "ConfigMap", Namespaced: true, Service: "config.NewService(deps)", Import: resourcesPkg + "config"},
 	{Name: "CronJob", Namespaced: true, Service: "workloads.NewCronJobService(deps)", Import: resourcesPkg + "workloads"},
 	{Name: "DaemonSet", Namespaced: true, Service: "workloads.NewDaemonSetService(deps)", Import: resourcesPkg + "workloads"},
-	{Name: "Deployment", Namespaced: true, Service: "workloads.NewDeploymentService(deps)", Import: resourcesPkg + "workloads"},
+	{Name: "Deployment", Namespaced: true, Service: "deployment.NewService(deps)", Import: resourcesPkg + "deployment"},
 	{Name: "EndpointSlice", Namespaced: true, Service: "network.NewService(deps)", Import: resourcesPkg + "network"},
 	{Name: "Gateway", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
 	{Name: "GatewayClass", Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},

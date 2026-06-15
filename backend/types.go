@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
@@ -106,7 +107,7 @@ type (
 	PersistentVolumeClaimDetails          = types.PersistentVolumeClaimDetails
 	DataSourceInfo                        = types.DataSourceInfo
 	StorageClassDetails                   = types.StorageClassDetails
-	DeploymentDetails                     = types.DeploymentDetails
+	DeploymentDetails                     = deployment.DeploymentDetails
 	ReplicaSetDetails                     = types.ReplicaSetDetails
 	StatefulSetDetails                    = statefulset.StatefulSetDetails
 	VolumeClaimTemplateSummary            = statefulset.VolumeClaimTemplateSummary

@@ -10,6 +10,7 @@ package resourcecontract
 import (
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -40,7 +41,7 @@ var BuiltinResources = []BuiltinResource{
 	builtin("", "v1", "Node", "nodes", false),
 	builtin("", "v1", "PersistentVolume", "persistentvolumes", false),
 
-	builtin("apps", "v1", "Deployment", "deployments", true),
+	builtin(deployment.Identity.Group, deployment.Identity.Version, deployment.Identity.Kind, deployment.Identity.Resource, deployment.Identity.Namespaced),
 	builtin(statefulset.Identity.Group, statefulset.Identity.Version, statefulset.Identity.Kind, statefulset.Identity.Resource, statefulset.Identity.Namespaced),
 	builtin("apps", "v1", "DaemonSet", "daemonsets", true),
 	builtin("apps", "v1", "ReplicaSet", "replicasets", true),

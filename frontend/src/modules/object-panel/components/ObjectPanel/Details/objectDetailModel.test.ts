@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { statefulset, types } from '@wailsjs/go/models';
+import { deployment, statefulset, types } from '@wailsjs/go/models';
 import {
   buildObjectDetailModel,
   createObjectDetailModelFromSlots,
@@ -71,22 +71,22 @@ describe('objectDetailModel', () => {
   });
 
   it('selects workload containers and active pod names', () => {
-    const deployment = {
+    const deploy = {
       desiredReplicas: 3,
       containers: [container({ name: 'api' })],
       initContainers: [container({ name: 'init' })],
       pods: [{ name: 'pod-a' }, { name: '  ' }, { name: 'pod-b' }],
-    } as types.DeploymentDetails;
+    } as deployment.DeploymentDetails;
 
     const model = createObjectDetailModelFromSlots(
       null,
       'deployment',
-      emptySlots({ deploymentDetails: deployment })
+      emptySlots({ deploymentDetails: deploy })
     );
 
     expect(model.containerSection).toEqual({
-      containers: deployment.containers,
-      initContainers: deployment.initContainers,
+      containers: deploy.containers,
+      initContainers: deploy.initContainers,
     });
     expect(model.activePodNames).toEqual(['pod-a', 'pod-b']);
     expect(model.desiredScaleReplicas).toBe(3);

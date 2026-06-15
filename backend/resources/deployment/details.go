@@ -1,21 +1,22 @@
 /*
- * backend/resources/workloads/deployments.go
+ * backend/resources/deployment/details.go
  *
- * Deployment resource handlers.
- * - Builds detail and list views for the frontend.
+ * Deployment resource handlers, co-located in the per-kind package. Shared
+ * workload helpers live in resources/workloads; intrinsic fields come from the
+ * single model (deployment.Facts).
  */
 
-package workloads
+package deployment
 
 import (
 	"fmt"
 	"sort"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/workloads"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,16 +24,18 @@ import (
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
-type DeploymentService struct {
+// Service provides detailed Deployment views backed by shared dependencies.
+type Service struct {
 	deps common.Dependencies
 }
 
-func NewDeploymentService(deps common.Dependencies) *DeploymentService {
-	return &DeploymentService{deps: deps}
+// NewService constructs a Deployment service using the supplied dependencies bundle.
+func NewService(deps common.Dependencies) *Service {
+	return &Service{deps: deps}
 }
 
 // Deployment returns the detailed view for a single deployment.
-func (s *DeploymentService) Deployment(namespace, name string) (*restypes.DeploymentDetails, error) {
+func (s *Service) Deployment(namespace, name string) (*DeploymentDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -53,25 +56,22 @@ func (s *DeploymentService) Deployment(namespace, name string) (*restypes.Deploy
 	return s.buildDeploymentDetails(deployment, deploymentPods, podMetrics, replicaSets), nil
 }
 
-func (s *DeploymentService) buildDeploymentDetails(
+func (s *Service) buildDeploymentDetails(
 	deployment *appsv1.Deployment,
 	podsList []corev1.Pod,
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
 	replicaSets *appsv1.ReplicaSetList,
-) *restypes.DeploymentDetails {
-
-	model := resourcemodel.BuildDeploymentResourceModel(s.deps.ClusterID, deployment)
-	facts := model.Facts.Deployment
-	replicas, ready := WorkloadReplicaDisplay(facts.WorkloadCommonFacts)
-	podInfos := BuildPodSummaries(s.deps.ClusterID, "Deployment", deployment.Name, "apps/v1", podsList, podMetrics)
-	podSummary, _ := SummarizePodMetrics(podsList, podMetrics)
+) *DeploymentDetails {
+	model := BuildResourceModel(s.deps.ClusterID, deployment)
+	facts := BuildFacts(deployment)
+	replicas, ready := workloads.WorkloadReplicaDisplay(facts.WorkloadCommonFacts)
+	podInfos := workloads.BuildPodSummaries(s.deps.ClusterID, "Deployment", deployment.Name, "apps/v1", podsList, podMetrics)
+	podSummary, _ := workloads.SummarizePodMetrics(podsList, podMetrics)
 
 	// Live aggregation (not part of the resource's intrinsic definition).
 	rsNames, currentRevision, currentRSName := summarizeReplicaSets(deployment, replicaSets)
 
-	// Every intrinsic spec/status field is derived from the model facts — the
-	// single extraction point. Only instance metadata and live data are read here.
-	details := &restypes.DeploymentDetails{
+	details := &DeploymentDetails{
 		Kind:                "Deployment",
 		Name:                deployment.Name,
 		Namespace:           deployment.Namespace,
@@ -82,7 +82,7 @@ func (s *DeploymentService) buildDeploymentDetails(
 		Available:           facts.AvailableReplicas,
 		DesiredReplicas:     facts.DesiredReplicas,
 		Age:                 common.FormatAge(deployment.CreationTimestamp.Time),
-		ResourceUtilization: WorkloadUtilization(podsList, podMetrics),
+		ResourceUtilization: workloads.WorkloadUtilization(podsList, podMetrics),
 		Strategy:            facts.Strategy,
 		MaxSurge:            facts.MaxSurge,
 		MaxUnavailable:      facts.MaxUnavailable,
@@ -95,8 +95,8 @@ func (s *DeploymentService) buildDeploymentDetails(
 		Selector:            facts.Selector,
 		Labels:              deployment.Labels,
 		Annotations:         deployment.Annotations,
-		Containers:          DescribeContainers(facts.Containers),
-		InitContainers:      DescribeContainers(facts.InitContainers),
+		Containers:          workloads.DescribeContainers(facts.Containers),
+		InitContainers:      workloads.DescribeContainers(facts.InitContainers),
 		Pods:                podInfos,
 		CurrentRevision:     currentRevision,
 		CurrentReplicaSet:   currentRSName,
@@ -114,7 +114,7 @@ func (s *DeploymentService) buildDeploymentDetails(
 	return details
 }
 
-func (s *DeploymentService) getDeploymentPods(deployment *appsv1.Deployment) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, *appsv1.ReplicaSetList, error) {
+func (s *Service) getDeploymentPods(deployment *appsv1.Deployment) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, *appsv1.ReplicaSetList, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil, nil, fmt.Errorf("kubernetes client not initialized")

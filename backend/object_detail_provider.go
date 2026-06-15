@@ -25,6 +25,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
+	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/network"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/pods"
@@ -64,7 +65,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"deployment": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewDeploymentService(deps).Deployment(namespace, name)
+			detail, err := deployment.NewService(deps).Deployment(namespace, name)
 			return detail, "", err
 		},
 	},
