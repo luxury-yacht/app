@@ -22,6 +22,6 @@ func BuildBackendTLSPolicyFacts(clusterID string, policy *gatewayv1.BackendTLSPo
 
 func BuildBackendTLSPolicyStatusPresentation(policy *gatewayv1.BackendTLSPolicy, facts BackendTLSPolicyFacts) ResourceStatusPresentation {
 	state := gatewayCountState(len(facts.TargetRefs))
-	label := countLabel(len(facts.TargetRefs), "target", "targets")
+	label := CountLabel(len(facts.TargetRefs), "target", "targets")
 	return gatewayStatusFromConditions(policy.ObjectMeta, state, label, facts.Conditions)
 }

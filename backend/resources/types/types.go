@@ -625,136 +625,22 @@ type PodDetailInfo struct {
 	SecurityContext map[string]any           `json:"securityContext,omitempty"`
 }
 
-type ConfigMapDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	Data        map[string]string `json:"data,omitempty"`
-	BinaryData  map[string]string `json:"binaryData,omitempty"`
-	DataCount   int               `json:"dataCount"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-	UsedBy      []ObjectRef       `json:"usedBy,omitempty"`
-}
+// ConfigMapDetails moved to resources/configmap and SecretDetails moved to
+// resources/secret (co-located with each kind's model + detail builder).
 
-type SecretDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	SecretType  string            `json:"secretType"`
-	Data        map[string]string `json:"data,omitempty"`
-	DataKeys    []string          `json:"dataKeys"`
-	DataCount   int               `json:"dataCount"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-	UsedBy      []ObjectRef       `json:"usedBy,omitempty"`
-}
 
-type ServiceDetails struct {
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Age       string `json:"age"`
-	Details   string `json:"details"`
-	StatusProjection
-	ServiceType            string               `json:"serviceType"`
-	ClusterIP              string               `json:"clusterIP"`
-	ClusterIPs             []string             `json:"clusterIPs,omitempty"`
-	ExternalIPs            []string             `json:"externalIPs,omitempty"`
-	LoadBalancerIP         string               `json:"loadBalancerIP,omitempty"`
-	LoadBalancerStatus     string               `json:"loadBalancerStatus,omitempty"`
-	ExternalName           string               `json:"externalName,omitempty"`
-	Ports                  []ServicePortDetails `json:"ports"`
-	SessionAffinity        string               `json:"sessionAffinity"`
-	SessionAffinityTimeout int32                `json:"sessionAffinityTimeout,omitempty"`
-	Selector               map[string]string    `json:"selector,omitempty"`
-	Endpoints              []string             `json:"endpoints,omitempty"`
-	EndpointCount          int                  `json:"endpointCount"`
-	Labels                 map[string]string    `json:"labels,omitempty"`
-	Annotations            map[string]string    `json:"annotations,omitempty"`
-	HealthStatus           string               `json:"healthStatus"`
-}
-
-type ServicePortDetails struct {
-	Name       string `json:"name,omitempty"`
-	Protocol   string `json:"protocol"`
-	Port       int32  `json:"port"`
-	TargetPort string `json:"targetPort"`
-	NodePort   int32  `json:"nodePort,omitempty"`
-}
 
 // EndpointSliceDetails describes a single EndpointSlice resource. Address,
 // port, and address-type fields are flattened directly because each Object
 // Panel renders one EndpointSlice; aggregation across slices for a Service
 // uses a different model.
-type EndpointSliceDetails struct {
-	Kind              string                 `json:"kind"`
-	Name              string                 `json:"name"`
-	Namespace         string                 `json:"namespace"`
-	Age               string                 `json:"age"`
-	Details           string                 `json:"details"`
-	AddressType       string                 `json:"addressType"`
-	ReadyAddresses    []EndpointSliceAddress `json:"readyAddresses,omitempty"`
-	NotReadyAddresses []EndpointSliceAddress `json:"notReadyAddresses,omitempty"`
-	Ports             []EndpointSlicePort    `json:"ports,omitempty"`
-	Labels            map[string]string      `json:"labels,omitempty"`
-	Annotations       map[string]string      `json:"annotations,omitempty"`
-}
+// EndpointSliceDetails + EndpointSliceAddress/Port moved to resources/endpointslice
+// (co-located with the EndpointSlice model + detail builder).
 
-type EndpointSliceAddress struct {
-	IP        string `json:"ip"`
-	Hostname  string `json:"hostname,omitempty"`
-	NodeName  string `json:"nodeName,omitempty"`
-	TargetRef string `json:"targetRef,omitempty"`
-}
 
-type EndpointSlicePort struct {
-	Name        string `json:"name,omitempty"`
-	Port        int32  `json:"port"`
-	Protocol    string `json:"protocol"`
-	AppProtocol string `json:"appProtocol,omitempty"`
-}
 
-type IngressDetails struct {
-	Kind               string                 `json:"kind"`
-	Name               string                 `json:"name"`
-	Namespace          string                 `json:"namespace"`
-	Age                string                 `json:"age"`
-	Details            string                 `json:"details"`
-	IngressClassName   *string                `json:"ingressClassName,omitempty"`
-	Rules              []IngressRuleDetails   `json:"rules"`
-	TLS                []IngressTLSDetails    `json:"tls,omitempty"`
-	LoadBalancerStatus []string               `json:"loadBalancerStatus,omitempty"`
-	DefaultBackend     *IngressBackendDetails `json:"defaultBackend,omitempty"`
-	Labels             map[string]string      `json:"labels,omitempty"`
-	Annotations        map[string]string      `json:"annotations,omitempty"`
-}
 
-type IngressRuleDetails struct {
-	Host  string               `json:"host,omitempty"`
-	Paths []IngressPathDetails `json:"paths"`
-}
 
-type IngressPathDetails struct {
-	Path     string                `json:"path"`
-	PathType string                `json:"pathType"`
-	Backend  IngressBackendDetails `json:"backend"`
-}
-
-type IngressBackendDetails struct {
-	ServiceName string `json:"serviceName,omitempty"`
-	ServicePort string `json:"servicePort,omitempty"`
-	Resource    string `json:"resource,omitempty"`
-}
-
-type IngressTLSDetails struct {
-	Hosts      []string `json:"hosts"`
-	SecretName string   `json:"secretName,omitempty"`
-}
 
 // ObjectRef is the shared openable Kubernetes object identity.
 type ObjectRef = resourcemodel.ResourceRef

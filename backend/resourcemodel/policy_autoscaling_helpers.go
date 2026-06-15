@@ -128,7 +128,7 @@ func ConditionFactsFromMetav1(conditions []metav1.Condition) []ConditionFacts {
 	return facts
 }
 
-func quantityMapFacts(values corev1.ResourceList) ResourceQuantityMapFacts {
+func QuantityMapFacts(values corev1.ResourceList) ResourceQuantityMapFacts {
 	if len(values) == 0 {
 		return nil
 	}
@@ -139,11 +139,7 @@ func quantityMapFacts(values corev1.ResourceList) ResourceQuantityMapFacts {
 	return result
 }
 
-func limitRangeQuantityMap(values corev1.ResourceList) ResourceQuantityMapFacts {
-	return quantityMapFacts(values)
-}
-
-func quotaUsedPercentages(used, hard corev1.ResourceList) map[string]int {
+func QuotaUsedPercentages(used, hard corev1.ResourceList) map[string]int {
 	if len(used) == 0 || len(hard) == 0 {
 		return nil
 	}

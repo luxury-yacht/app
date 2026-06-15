@@ -1,13 +1,23 @@
 import {
+  configmap,
   cronjob,
   daemonset,
   deployment,
+  endpointslice,
+  ingress,
   ingressclass,
+  limitrange,
   job,
   networkpolicy,
+  persistentvolume,
+  persistentvolumeclaim,
   poddisruptionbudget,
   replicaset,
+  resourcequota,
+  secret,
+  service,
   statefulset,
+  storageclass,
   types,
 } from '@wailsjs/go/models';
 import type { KubernetesObjectReference } from '@/types/view-state';
@@ -20,13 +30,13 @@ export interface DetailSlots {
   statefulSetDetails: statefulset.StatefulSetDetails | null;
   jobDetails: job.JobDetails | null;
   cronJobDetails: cronjob.CronJobDetails | null;
-  configMapDetails: types.ConfigMapDetails | null;
-  secretDetails: types.SecretDetails | null;
+  configMapDetails: configmap.ConfigMapDetails | null;
+  secretDetails: secret.SecretDetails | null;
   helmReleaseDetails: types.HelmReleaseDetails | null;
-  serviceDetails: types.ServiceDetails | null;
-  ingressDetails: types.IngressDetails | null;
+  serviceDetails: service.ServiceDetails | null;
+  ingressDetails: ingress.IngressDetails | null;
   networkPolicyDetails: networkpolicy.NetworkPolicyDetails | null;
-  endpointSliceDetails: types.EndpointSliceDetails | null;
+  endpointSliceDetails: endpointslice.EndpointSliceDetails | null;
   gatewayDetails?: types.GatewayDetails | null;
   httpRouteDetails?: types.RouteDetails | null;
   grpcRouteDetails?: types.RouteDetails | null;
@@ -34,9 +44,9 @@ export interface DetailSlots {
   listenerSetDetails?: types.ListenerSetDetails | null;
   referenceGrantDetails?: types.ReferenceGrantDetails | null;
   backendTLSPolicyDetails?: types.BackendTLSPolicyDetails | null;
-  pvcDetails: types.PersistentVolumeClaimDetails | null;
-  pvDetails: types.PersistentVolumeDetails | null;
-  storageClassDetails: types.StorageClassDetails | null;
+  pvcDetails: persistentvolumeclaim.PersistentVolumeClaimDetails | null;
+  pvDetails: persistentvolume.PersistentVolumeDetails | null;
+  storageClassDetails: storageclass.StorageClassDetails | null;
   serviceAccountDetails: types.ServiceAccountDetails | null;
   roleDetails: types.RoleDetails | null;
   roleBindingDetails: types.RoleBindingDetails | null;
@@ -44,8 +54,8 @@ export interface DetailSlots {
   clusterRoleBindingDetails: types.ClusterRoleBindingDetails | null;
   hpaDetails: types.HorizontalPodAutoscalerDetails | null;
   pdbDetails: poddisruptionbudget.PodDisruptionBudgetDetails | null;
-  resourceQuotaDetails: types.ResourceQuotaDetails | null;
-  limitRangeDetails: types.LimitRangeDetails | null;
+  resourceQuotaDetails: resourcequota.ResourceQuotaDetails | null;
+  limitRangeDetails: limitrange.LimitRangeDetails | null;
   nodeDetails: types.NodeDetails | null;
   namespaceDetails: types.NamespaceDetails | null;
   ingressClassDetails: ingressclass.IngressClassDetails | null;
@@ -230,18 +240,21 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'cronjob':
       return { ...EMPTY_DETAIL_SLOTS, cronJobDetails: detailPayload as cronjob.CronJobDetails };
     case 'configmap':
-      return { ...EMPTY_DETAIL_SLOTS, configMapDetails: detailPayload as types.ConfigMapDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        configMapDetails: detailPayload as configmap.ConfigMapDetails,
+      };
     case 'secret':
-      return { ...EMPTY_DETAIL_SLOTS, secretDetails: detailPayload as types.SecretDetails };
+      return { ...EMPTY_DETAIL_SLOTS, secretDetails: detailPayload as secret.SecretDetails };
     case 'helmrelease':
       return {
         ...EMPTY_DETAIL_SLOTS,
         helmReleaseDetails: detailPayload as types.HelmReleaseDetails,
       };
     case 'service':
-      return { ...EMPTY_DETAIL_SLOTS, serviceDetails: detailPayload as types.ServiceDetails };
+      return { ...EMPTY_DETAIL_SLOTS, serviceDetails: detailPayload as service.ServiceDetails };
     case 'ingress':
-      return { ...EMPTY_DETAIL_SLOTS, ingressDetails: detailPayload as types.IngressDetails };
+      return { ...EMPTY_DETAIL_SLOTS, ingressDetails: detailPayload as ingress.IngressDetails };
     case 'networkpolicy':
       return {
         ...EMPTY_DETAIL_SLOTS,
@@ -250,7 +263,7 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'endpointslice':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        endpointSliceDetails: detailPayload as types.EndpointSliceDetails,
+        endpointSliceDetails: detailPayload as endpointslice.EndpointSliceDetails,
       };
     case 'gateway':
       return { ...EMPTY_DETAIL_SLOTS, gatewayDetails: detailPayload as types.GatewayDetails };
@@ -278,14 +291,17 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'persistentvolumeclaim':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        pvcDetails: detailPayload as types.PersistentVolumeClaimDetails,
+        pvcDetails: detailPayload as persistentvolumeclaim.PersistentVolumeClaimDetails,
       };
     case 'persistentvolume':
-      return { ...EMPTY_DETAIL_SLOTS, pvDetails: detailPayload as types.PersistentVolumeDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        pvDetails: detailPayload as persistentvolume.PersistentVolumeDetails,
+      };
     case 'storageclass':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        storageClassDetails: detailPayload as types.StorageClassDetails,
+        storageClassDetails: detailPayload as storageclass.StorageClassDetails,
       };
     case 'serviceaccount':
       return {
@@ -322,10 +338,13 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'resourcequota':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        resourceQuotaDetails: detailPayload as types.ResourceQuotaDetails,
+        resourceQuotaDetails: detailPayload as resourcequota.ResourceQuotaDetails,
       };
     case 'limitrange':
-      return { ...EMPTY_DETAIL_SLOTS, limitRangeDetails: detailPayload as types.LimitRangeDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        limitRangeDetails: detailPayload as limitrange.LimitRangeDetails,
+      };
     case 'node':
       return { ...EMPTY_DETAIL_SLOTS, nodeDetails: detailPayload as types.NodeDetails };
     case 'namespace':

@@ -6,7 +6,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func storageResourceModel(
+func StorageResourceModel(
 	clusterID, group, version, kind, resource string,
 	scope ResourceScope,
 	meta metav1.ObjectMeta,
@@ -38,7 +38,7 @@ func storageResourceModel(
 	}
 }
 
-func deletingStorageStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
+func DeletingStorageStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
 	if meta.DeletionTimestamp == nil {
 		return ResourceStatusPresentation{}, false
 	}
@@ -57,7 +57,7 @@ func deletingStorageStatus(meta metav1.ObjectMeta, state string, signals []Resou
 	}, true
 }
 
-func storageSourceStatus(label, state, reason, message, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
+func StorageSourceStatus(label, state, reason, message, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
 	return ResourceStatusPresentation{
 		Label:        label,
 		State:        state,
@@ -69,7 +69,7 @@ func storageSourceStatus(label, state, reason, message, presentation string, sig
 	}
 }
 
-func storageLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
+func StorageLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
 	return ResourceLifecycle{
 		Deleting:         meta.DeletionTimestamp != nil,
 		FinalizerBlocked: meta.DeletionTimestamp != nil && len(meta.Finalizers) > 0,

@@ -5,23 +5,29 @@ package backend
 import (
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/autoscaling"
-	"github.com/luxury-yacht/app/backend/resources/config"
-	"github.com/luxury-yacht/app/backend/resources/constraints"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	"github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
-	"github.com/luxury-yacht/app/backend/resources/network"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/rbac"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	"github.com/luxury-yacht/app/backend/resources/secret"
+	"github.com/luxury-yacht/app/backend/resources/service"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
-	"github.com/luxury-yacht/app/backend/resources/storage"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
 )
 
 func (a *App) GetBackendTLSPolicy(clusterID, namespace, name string) (*BackendTLSPolicyDetails, error) {
@@ -60,7 +66,7 @@ func (a *App) GetConfigMap(clusterID, namespace, name string) (*ConfigMapDetails
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "ConfigMap", namespace, name, func() (*ConfigMapDetails, error) {
-		return config.NewService(deps).ConfigMap(namespace, name)
+		return configmap.NewService(deps).ConfigMap(namespace, name)
 	})
 }
 
@@ -100,7 +106,7 @@ func (a *App) GetEndpointSlice(clusterID, namespace, name string) (*EndpointSlic
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "EndpointSlice", namespace, name, func() (*EndpointSliceDetails, error) {
-		return network.NewService(deps).EndpointSlice(namespace, name)
+		return endpointslice.NewService(deps).EndpointSlice(namespace, name)
 	})
 }
 
@@ -160,7 +166,7 @@ func (a *App) GetIngress(clusterID, namespace, name string) (*IngressDetails, er
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "Ingress", namespace, name, func() (*IngressDetails, error) {
-		return network.NewService(deps).Ingress(namespace, name)
+		return ingress.NewService(deps).Ingress(namespace, name)
 	})
 }
 
@@ -190,7 +196,7 @@ func (a *App) GetLimitRange(clusterID, namespace, name string) (*LimitRangeDetai
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "LimitRange", namespace, name, func() (*LimitRangeDetails, error) {
-		return constraints.NewService(deps).LimitRange(namespace, name)
+		return limitrange.NewService(deps).LimitRange(namespace, name)
 	})
 }
 
@@ -250,7 +256,7 @@ func (a *App) GetPersistentVolume(clusterID, name string) (*PersistentVolumeDeta
 		return nil, err
 	}
 	return FetchClusterResource(a, deps, selectionKey, "PersistentVolume", name, func() (*PersistentVolumeDetails, error) {
-		return storage.NewService(deps).PersistentVolume(name)
+		return persistentvolume.NewService(deps).PersistentVolume(name)
 	})
 }
 
@@ -260,7 +266,7 @@ func (a *App) GetPersistentVolumeClaim(clusterID, namespace, name string) (*Pers
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "PVC", namespace, name, func() (*PersistentVolumeClaimDetails, error) {
-		return storage.NewService(deps).PersistentVolumeClaim(namespace, name)
+		return persistentvolumeclaim.NewService(deps).PersistentVolumeClaim(namespace, name)
 	})
 }
 
@@ -300,7 +306,7 @@ func (a *App) GetResourceQuota(clusterID, namespace, name string) (*ResourceQuot
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "ResourceQuota", namespace, name, func() (*ResourceQuotaDetails, error) {
-		return constraints.NewService(deps).ResourceQuota(namespace, name)
+		return resourcequota.NewService(deps).ResourceQuota(namespace, name)
 	})
 }
 
@@ -330,7 +336,7 @@ func (a *App) GetSecret(clusterID, namespace, name string) (*SecretDetails, erro
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "Secret", namespace, name, func() (*SecretDetails, error) {
-		return config.NewService(deps).Secret(namespace, name)
+		return secret.NewService(deps).Secret(namespace, name)
 	})
 }
 
@@ -340,7 +346,7 @@ func (a *App) GetService(clusterID, namespace, name string) (*ServiceDetails, er
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "Service", namespace, name, func() (*ServiceDetails, error) {
-		return network.NewService(deps).GetService(namespace, name)
+		return service.NewService(deps).GetService(namespace, name)
 	})
 }
 
@@ -370,7 +376,7 @@ func (a *App) GetStorageClass(clusterID, name string) (*StorageClassDetails, err
 		return nil, err
 	}
 	return FetchClusterResource(a, deps, selectionKey, "StorageClass", name, func() (*StorageClassDetails, error) {
-		return storage.NewService(deps).StorageClass(name)
+		return storageclass.NewService(deps).StorageClass(name)
 	})
 }
 

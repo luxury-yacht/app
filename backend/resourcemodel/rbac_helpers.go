@@ -101,7 +101,7 @@ func rbacRoleBindingLink(clusterID string, binding rbacv1.RoleBinding) ResourceL
 }
 
 func rbacClusterRoleBindingLink(clusterID string, binding rbacv1.ClusterRoleBinding) ResourceLink {
-	return clusterResourceLink(clusterID, rbacAPIGroup, "v1", "ClusterRoleBinding", "clusterrolebindings", binding.Name, string(binding.UID))
+	return ClusterResourceLink(clusterID, rbacAPIGroup, "v1", "ClusterRoleBinding", "clusterrolebindings", binding.Name, string(binding.UID))
 }
 
 func rbacRoleRefLink(clusterID, namespace string, ref rbacv1.RoleRef) ResourceLink {
@@ -118,7 +118,7 @@ func rbacRoleRefLink(clusterID, namespace string, ref rbacv1.RoleRef) ResourceLi
 		if ref.Name == "" {
 			break
 		}
-		return clusterResourceLink(clusterID, rbacAPIGroup, "v1", "ClusterRole", "clusterroles", ref.Name, "")
+		return ClusterResourceLink(clusterID, rbacAPIGroup, "v1", "ClusterRole", "clusterroles", ref.Name, "")
 	}
 	return displayResourceLink(clusterID, ref.APIGroup, "", ref.Kind, "", namespace, ref.Name)
 }

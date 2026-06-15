@@ -23,7 +23,7 @@ func BuildGatewayFacts(clusterID string, gateway *gatewayv1.Gateway) GatewayFact
 
 func BuildGatewayStatusPresentation(gateway *gatewayv1.Gateway, facts GatewayFacts) ResourceStatusPresentation {
 	state := gatewayCountState(len(facts.Addresses))
-	label := countLabel(len(facts.Listeners), "listener", "listeners")
+	label := CountLabel(len(facts.Listeners), "listener", "listeners")
 	return gatewayStatusFromConditions(gateway.ObjectMeta, state, label, facts.Conditions)
 }
 

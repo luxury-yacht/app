@@ -7,7 +7,6 @@ import (
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -113,39 +112,3 @@ func TestBuildHorizontalPodAutoscalerResourceModelUsesDisplayTargetForInvalidAPI
 	require.Equal(t, "", model.Facts.HorizontalPodAutoscaler.ScaleTarget.Display.Version)
 }
 
-func TestBuildResourceQuotaAndLimitRangeResourceModels(t *testing.T) {
-	quota := &corev1.ResourceQuota{
-		ObjectMeta: metav1.ObjectMeta{Name: "rq", Namespace: "default"},
-		Spec:       corev1.ResourceQuotaSpec{Scopes: []corev1.ResourceQuotaScope{corev1.ResourceQuotaScopeBestEffort}},
-		Status: corev1.ResourceQuotaStatus{
-			Hard: corev1.ResourceList{corev1.ResourcePods: resource.MustParse("10")},
-			Used: corev1.ResourceList{corev1.ResourcePods: resource.MustParse("4")},
-		},
-	}
-	quotaModel := BuildResourceQuotaResourceModel("cluster-a", quota)
-	require.Equal(t, "ResourceQuota", quotaModel.Ref.Kind)
-	require.Equal(t, "Hard limits: 1, Used: 1, Scopes: 1", quotaModel.Status.Label)
-	hardPods := quotaModel.Facts.ResourceQuota.Hard["pods"]
-	usedPods := quotaModel.Facts.ResourceQuota.Used["pods"]
-	require.Equal(t, "10", hardPods.String())
-	require.Equal(t, "4", usedPods.String())
-	require.Equal(t, 40, quotaModel.Facts.ResourceQuota.UsedPercentage["pods"])
-	require.Equal(t, []string{"BestEffort"}, quotaModel.Facts.ResourceQuota.Scopes)
-
-	limitRange := &corev1.LimitRange{
-		ObjectMeta: metav1.ObjectMeta{Name: "limits", Namespace: "default"},
-		Spec: corev1.LimitRangeSpec{Limits: []corev1.LimitRangeItem{{
-			Type: corev1.LimitTypeContainer,
-			Max:  corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
-			Min:  corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("128Mi")},
-		}}},
-	}
-	limitModel := BuildLimitRangeResourceModel("cluster-a", limitRange)
-	require.Equal(t, "LimitRange", limitModel.Ref.Kind)
-	require.Equal(t, "1 limit(s) - Type: Container", limitModel.Status.Label)
-	require.Equal(t, "Container", limitModel.Facts.LimitRange.Limits[0].Kind)
-	maxCPU := limitModel.Facts.LimitRange.Limits[0].Max["cpu"]
-	minMemory := limitModel.Facts.LimitRange.Limits[0].Min["memory"]
-	require.Equal(t, "2", maxCPU.String())
-	require.Equal(t, "128Mi", minMemory.String())
-}

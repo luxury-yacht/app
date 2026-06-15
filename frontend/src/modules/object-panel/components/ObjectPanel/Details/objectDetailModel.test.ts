@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { cronjob, deployment, replicaset, statefulset, types } from '@wailsjs/go/models';
+import {
+  configmap,
+  cronjob,
+  deployment,
+  replicaset,
+  secret,
+  service,
+  statefulset,
+  types,
+} from '@wailsjs/go/models';
 import {
   buildObjectDetailModel,
   createObjectDetailModelFromSlots,
@@ -100,7 +109,7 @@ describe('objectDetailModel', () => {
         configMapDetails: {
           data: { key: 'value' },
           binaryData: { cert: 'base64' },
-        } as unknown as types.ConfigMapDetails,
+        } as unknown as configmap.ConfigMapDetails,
       })
     );
     const secretModel = createObjectDetailModelFromSlots(
@@ -109,7 +118,7 @@ describe('objectDetailModel', () => {
       emptySlots({
         secretDetails: {
           data: { token: 'masked' },
-        } as unknown as types.SecretDetails,
+        } as unknown as secret.SecretDetails,
       })
     );
 
@@ -146,7 +155,7 @@ describe('objectDetailModel', () => {
       emptySlots({
         serviceDetails: {
           ports: [{ port: 443, targetPort: 'https', protocol: 'TCP' }],
-        } as types.ServiceDetails,
+        } as service.ServiceDetails,
       })
     );
     const udpService = createObjectDetailModelFromSlots(
@@ -155,7 +164,7 @@ describe('objectDetailModel', () => {
       emptySlots({
         serviceDetails: {
           ports: [{ port: 53, targetPort: 'dns', protocol: 'UDP' }],
-        } as types.ServiceDetails,
+        } as service.ServiceDetails,
       })
     );
 

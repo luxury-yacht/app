@@ -110,7 +110,7 @@ func findConditionFacts(conditions []ConditionFacts, conditionType string) (Cond
 }
 
 func gatewayClassLink(clusterID string, name gatewayv1.ObjectName) ResourceLink {
-	return clusterResourceLink(clusterID, gatewayAPIGroup, "v1", "GatewayClass", "gatewayclasses", string(name), "")
+	return ClusterResourceLink(clusterID, gatewayAPIGroup, "v1", "GatewayClass", "gatewayclasses", string(name), "")
 }
 
 func gatewayRefLink(clusterID, group, kind, namespace, name string) ResourceLink {

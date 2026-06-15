@@ -20,25 +20,31 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/autoscaling"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/config"
-	"github.com/luxury-yacht/app/backend/resources/constraints"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
-	"github.com/luxury-yacht/app/backend/resources/network"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/rbac"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	"github.com/luxury-yacht/app/backend/resources/service"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
-	"github.com/luxury-yacht/app/backend/resources/storage"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -106,13 +112,13 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"configmap": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := config.NewService(deps).ConfigMap(namespace, name)
+			detail, err := configmap.NewService(deps).ConfigMap(namespace, name)
 			return detail, "", err
 		},
 	},
 	"secret": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := config.NewService(deps).Secret(namespace, name)
+			detail, err := secretpkg.NewService(deps).Secret(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -124,13 +130,13 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"service": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(deps).GetService(namespace, name)
+			detail, err := service.NewService(deps).GetService(namespace, name)
 			return detail, "", err
 		},
 	},
 	"ingress": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(deps).Ingress(namespace, name)
+			detail, err := ingress.NewService(deps).Ingress(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -184,25 +190,25 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"endpointslice": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(deps).EndpointSlice(namespace, name)
+			detail, err := endpointslice.NewService(deps).EndpointSlice(namespace, name)
 			return detail, "", err
 		},
 	},
 	"persistentvolumeclaim": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := storage.NewService(deps).PersistentVolumeClaim(namespace, name)
+			detail, err := persistentvolumeclaim.NewService(deps).PersistentVolumeClaim(namespace, name)
 			return detail, "", err
 		},
 	},
 	"persistentvolume": {
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := storage.NewService(deps).PersistentVolume(name)
+			detail, err := persistentvolume.NewService(deps).PersistentVolume(name)
 			return detail, "", err
 		},
 	},
 	"storageclass": {
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := storage.NewService(deps).StorageClass(name)
+			detail, err := storageclass.NewService(deps).StorageClass(name)
 			return detail, "", err
 		},
 	},
@@ -238,13 +244,13 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"resourcequota": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := constraints.NewService(deps).ResourceQuota(namespace, name)
+			detail, err := resourcequota.NewService(deps).ResourceQuota(namespace, name)
 			return detail, "", err
 		},
 	},
 	"limitrange": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := constraints.NewService(deps).LimitRange(namespace, name)
+			detail, err := limitrange.NewService(deps).LimitRange(namespace, name)
 			return detail, "", err
 		},
 	},

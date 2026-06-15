@@ -43,7 +43,7 @@ func BuildCustomResourceFacts(
 ) CustomResourceFacts {
 	facts := CustomResourceFacts{}
 	if crdName != "" {
-		link := clusterResourceLink(clusterID, apiextensionsAPIGroup, "v1", "CustomResourceDefinition", "customresourcedefinitions", crdName, "")
+		link := ClusterResourceLink(clusterID, apiextensionsAPIGroup, "v1", "CustomResourceDefinition", "customresourcedefinitions", crdName, "")
 		facts.CRD = &link
 	}
 	if resource == nil {

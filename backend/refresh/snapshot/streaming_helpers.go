@@ -24,9 +24,19 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	"github.com/luxury-yacht/app/backend/resources/service"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
 )
 
 // The new*Summary constructors fill the metadata fields every row of a given
@@ -124,12 +134,8 @@ func BuildConfigMapSummary(meta ClusterMeta, cm *corev1.ConfigMap) ConfigSummary
 	if cm == nil {
 		return ConfigSummary{ClusterMeta: meta, Kind: "ConfigMap", TypeAlias: "CM"}
 	}
-	model := resourcemodel.BuildConfigMapResourceModel(meta.ClusterID, cm, nil)
-	dataCount := len(cm.Data) + len(cm.BinaryData)
-	if facts := model.Facts.ConfigMap; facts != nil {
-		dataCount = facts.DataCount
-	}
-	return newConfigSummary(meta, cm, "ConfigMap", "CM", dataCount)
+	facts := configmap.BuildFacts(cm, nil)
+	return newConfigSummary(meta, cm, "ConfigMap", "CM", facts.DataCount)
 }
 
 // BuildSecretSummary builds a secret row payload that matches snapshot formatting.
@@ -137,12 +143,8 @@ func BuildSecretSummary(meta ClusterMeta, secret *corev1.Secret) ConfigSummary {
 	if secret == nil {
 		return ConfigSummary{ClusterMeta: meta, Kind: "Secret"}
 	}
-	model := resourcemodel.BuildSecretResourceModel(meta.ClusterID, secret, nil)
-	dataCount := len(secret.Data) + len(secret.StringData)
-	if facts := model.Facts.Secret; facts != nil {
-		dataCount = facts.DataCount
-	}
-	return newConfigSummary(meta, secret, "Secret", secretTypeAlias(secret), dataCount)
+	facts := secretpkg.BuildFacts(secret, nil)
+	return newConfigSummary(meta, secret, "Secret", secretTypeAlias(secret), facts.DataCount)
 }
 
 // BuildRoleSummary builds a role row payload that matches snapshot formatting.
@@ -181,8 +183,7 @@ func BuildServiceNetworkSummary(
 	if svc == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "Service"}
 	}
-	model := resourcemodel.BuildServiceResourceModel(meta.ClusterID, svc, slices)
-	return newNetworkSummary(meta, svc, "Service", describeServiceFacts(model.Facts.Service))
+	return newNetworkSummary(meta, svc, "Service", service.DescribeSummary(service.BuildFacts(svc, slices)))
 }
 
 // BuildIngressNetworkSummary builds an ingress row payload that matches snapshot formatting.
@@ -190,8 +191,7 @@ func BuildIngressNetworkSummary(meta ClusterMeta, ing *networkingv1.Ingress) Net
 	if ing == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "Ingress"}
 	}
-	model := resourcemodel.BuildIngressResourceModel(meta.ClusterID, ing)
-	return newNetworkSummary(meta, ing, "Ingress", describeIngressFacts(model.Facts.Ingress))
+	return newNetworkSummary(meta, ing, "Ingress", ingress.DescribeSummary(ingress.BuildFacts(meta.ClusterID, ing)))
 }
 
 // BuildNetworkPolicySummary builds a network policy row payload that matches snapshot formatting.
@@ -344,7 +344,7 @@ func BuildClusterStorageSummary(meta ClusterMeta, pv *corev1.PersistentVolume) C
 	if pv == nil {
 		return ClusterStorageEntry{ClusterMeta: meta, Kind: "PersistentVolume"}
 	}
-	model := resourcemodel.BuildPersistentVolumeResourceModel(meta.ClusterID, pv)
+	model := persistentvolume.BuildResourceModel(meta.ClusterID, pv)
 	return ClusterStorageEntry{
 		ClusterMeta:        meta,
 		Kind:               "PersistentVolume",
@@ -367,15 +367,8 @@ func BuildClusterStorageClassSummary(meta ClusterMeta, sc *storagev1.StorageClas
 	if sc == nil {
 		return ClusterConfigEntry{ClusterMeta: meta, Kind: "StorageClass"}
 	}
-	model := resourcemodel.BuildStorageClassResourceModel(meta.ClusterID, sc)
-	facts := model.Facts.StorageClass
-	isDefault := false
-	provisioner := sc.Provisioner
-	if facts != nil {
-		isDefault = facts.DefaultClass
-		provisioner = facts.Provisioner
-	}
-	return newClusterConfigEntry(meta, sc, "StorageClass", provisioner, isDefault)
+	facts := storageclass.BuildFacts(sc)
+	return newClusterConfigEntry(meta, sc, "StorageClass", facts.Provisioner, facts.DefaultClass)
 }
 
 // BuildClusterIngressClassSummary builds an ingress class entry that matches snapshot formatting.
@@ -550,13 +543,13 @@ func BuildEndpointSliceSummary(
 	if slice == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "EndpointSlice"}
 	}
-	model := resourcemodel.BuildEndpointSliceResourceModel(meta.ClusterID, slice)
+	facts := endpointslice.BuildFacts(meta.ClusterID, slice)
 	return NetworkSummary{
 		ClusterMeta:  meta,
 		Kind:         "EndpointSlice",
 		Name:         slice.Name,
 		Namespace:    slice.Namespace,
-		Details:      describeEndpointSliceFacts(model.Facts.EndpointSlice),
+		Details:      endpointslice.DescribeSummary(facts),
 		Age:          formatAge(slice.CreationTimestamp.Time),
 		AgeTimestamp: creationTimestampMillis(slice),
 	}
@@ -604,7 +597,7 @@ func BuildPVCStorageSummary(meta ClusterMeta, pvc *corev1.PersistentVolumeClaim)
 	if pvc == nil {
 		return StorageSummary{ClusterMeta: meta, Kind: "PersistentVolumeClaim"}
 	}
-	model := resourcemodel.BuildPersistentVolumeClaimResourceModel(meta.ClusterID, pvc)
+	model := persistentvolumeclaim.BuildResourceModel(meta.ClusterID, pvc)
 	return StorageSummary{
 		ClusterMeta:        meta,
 		Kind:               "PersistentVolumeClaim",
@@ -626,8 +619,8 @@ func BuildResourceQuotaSummary(meta ClusterMeta, quota *corev1.ResourceQuota) Qu
 	if quota == nil {
 		return QuotaSummary{ClusterMeta: meta, Kind: "ResourceQuota"}
 	}
-	model := resourcemodel.BuildResourceQuotaResourceModel(meta.ClusterID, quota)
-	return newQuotaSummary(meta, quota, "ResourceQuota", describeResourceQuotaFacts(model.Facts.ResourceQuota))
+	facts := resourcequota.BuildFacts(quota)
+	return newQuotaSummary(meta, quota, "ResourceQuota", resourcequota.DescribeSummary(facts))
 }
 
 // BuildLimitRangeSummary builds a limit range row payload that matches snapshot formatting.
@@ -635,8 +628,8 @@ func BuildLimitRangeSummary(meta ClusterMeta, limit *corev1.LimitRange) QuotaSum
 	if limit == nil {
 		return QuotaSummary{ClusterMeta: meta, Kind: "LimitRange"}
 	}
-	model := resourcemodel.BuildLimitRangeResourceModel(meta.ClusterID, limit)
-	return newQuotaSummary(meta, limit, "LimitRange", describeLimitRangeFacts(model.Facts.LimitRange))
+	facts := limitrange.BuildFacts(limit)
+	return newQuotaSummary(meta, limit, "LimitRange", limitrange.DescribeSummary(facts))
 }
 
 // BuildPodDisruptionBudgetSummary builds a PDB row payload that matches snapshot formatting.

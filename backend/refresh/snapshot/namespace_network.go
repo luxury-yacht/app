@@ -473,67 +473,13 @@ func sortNetworkSummaries(resources []NetworkSummary) {
 	})
 }
 
-func describeServiceFacts(facts *resourcemodel.ServiceFacts) string {
-	if facts == nil {
-		return ""
-	}
-	parts := []string{fmt.Sprintf("Type: %s", facts.Type)}
-	clusterIP := facts.ClusterIP
-	if clusterIP == "" {
-		clusterIP = "None"
-	}
-	parts = append(parts, fmt.Sprintf("ClusterIP: %s", clusterIP))
-	if len(facts.Ports) > 0 {
-		portStrings := make([]string, 0, len(facts.Ports))
-		for _, port := range facts.Ports {
-			portStrings = append(portStrings, fmt.Sprintf("%d/%s", port.Port, port.Protocol))
-		}
-		parts = append(parts, fmt.Sprintf("Ports: %s", strings.Join(portStrings, ",")))
-	}
-	if facts.ReadyEndpointCount > 0 {
-		parts = append(parts, fmt.Sprintf("Addresses: %d", facts.ReadyEndpointCount))
-	}
-	return strings.Join(parts, ", ")
-}
 
-func describeIngressFacts(facts *resourcemodel.IngressFacts) string {
-	if facts == nil {
-		return ""
-	}
-	parts := []string{}
-	if facts.ClassName != "" {
-		parts = append(parts, fmt.Sprintf("Class: %s", facts.ClassName))
-	}
-	if len(facts.Rules) > 0 {
-		if len(facts.Hosts) > 0 {
-			parts = append(parts, fmt.Sprintf("Hosts: %s", strings.Join(facts.Hosts, ",")))
-		}
-		parts = append(parts, fmt.Sprintf("Rules: %d", len(facts.Rules)))
-	}
-	if len(parts) == 0 {
-		return "No rules defined"
-	}
-	return strings.Join(parts, ", ")
-}
 
 // describeNetworkPolicyFacts moved to resources/networkpolicy
 // (networkpolicy.DescribeSummary), co-located with the NetworkPolicy model.
 
-func describeEndpointSliceFacts(facts *resourcemodel.EndpointSliceFacts) string {
-	if facts == nil {
-		return "No endpoint slices"
-	}
-	parts := []string{"Slices: 1"}
-	ready := len(facts.ReadyAddresses)
-	notReady := len(facts.NotReadyAddresses)
-	if ready > 0 {
-		parts = append(parts, fmt.Sprintf("Ready addresses: %d", ready))
-	}
-	if notReady > 0 {
-		parts = append(parts, fmt.Sprintf("Not Ready: %d", notReady))
-	}
-	return strings.Join(parts, ", ")
-}
+// describeEndpointSliceFacts moved to resources/endpointslice
+// (endpointslice.DescribeSummary), co-located with the EndpointSlice model.
 
 func describeGatewayFacts(facts *resourcemodel.GatewayFacts) string {
 	if facts == nil {

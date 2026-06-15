@@ -146,14 +146,6 @@ type ResourceFacts struct {
 	Namespace                      *NamespaceFacts                      `json:"namespace,omitempty"`
 	Node                           *NodeFacts                           `json:"node,omitempty"`
 	Pod                            *PodFacts                            `json:"pod,omitempty"`
-	PersistentVolume               *PersistentVolumeFacts               `json:"persistentVolume,omitempty"`
-	PersistentVolumeClaim          *PersistentVolumeClaimFacts          `json:"persistentVolumeClaim,omitempty"`
-	StorageClass                   *StorageClassFacts                   `json:"storageClass,omitempty"`
-	ConfigMap                      *ConfigMapFacts                      `json:"configMap,omitempty"`
-	Secret                         *SecretFacts                         `json:"secret,omitempty"`
-	Service                        *ServiceFacts                        `json:"service,omitempty"`
-	EndpointSlice                  *EndpointSliceFacts                  `json:"endpointSlice,omitempty"`
-	Ingress                        *IngressFacts                        `json:"ingress,omitempty"`
 	GatewayClass                   *GatewayClassFacts                   `json:"gatewayClass,omitempty"`
 	Gateway                        *GatewayFacts                        `json:"gateway,omitempty"`
 	HTTPRoute                      *HTTPRouteFacts                      `json:"httpRoute,omitempty"`
@@ -168,8 +160,6 @@ type ResourceFacts struct {
 	ClusterRoleBinding             *ClusterRoleBindingFacts             `json:"clusterRoleBinding,omitempty"`
 	ServiceAccount                 *ServiceAccountFacts                 `json:"serviceAccount,omitempty"`
 	HorizontalPodAutoscaler        *HorizontalPodAutoscalerFacts        `json:"horizontalPodAutoscaler,omitempty"`
-	ResourceQuota                  *ResourceQuotaFacts                  `json:"resourceQuota,omitempty"`
-	LimitRange                     *LimitRangeFacts                     `json:"limitRange,omitempty"`
 	CustomResourceDefinition       *CustomResourceDefinitionFacts       `json:"customResourceDefinition,omitempty"`
 	MutatingWebhookConfiguration   *MutatingWebhookConfigurationFacts   `json:"mutatingWebhookConfiguration,omitempty"`
 	ValidatingWebhookConfiguration *ValidatingWebhookConfigurationFacts `json:"validatingWebhookConfiguration,omitempty"`
@@ -226,133 +216,27 @@ type ResourceListFacts struct {
 
 type ResourceQuantityMapFacts map[string]resource.Quantity
 
-type PersistentVolumeFacts struct {
-	Phase          string            `json:"phase,omitempty"`
-	StorageClass   string            `json:"storageClass,omitempty"`
-	Capacity       ResourceListFacts `json:"capacity,omitempty"`
-	ReclaimPolicy  string            `json:"reclaimPolicy,omitempty"`
-	ClaimNamespace string            `json:"claimNamespace,omitempty"`
-	ClaimName      string            `json:"claimName,omitempty"`
-	Reason         string            `json:"reason,omitempty"`
-	Message        string            `json:"message,omitempty"`
-}
+// PersistentVolumeFacts moved to resources/persistentvolume. ResourceListFacts
+// stays here (shared primitive).
 
-type PersistentVolumeClaimFacts struct {
-	Phase        string            `json:"phase,omitempty"`
-	StorageClass string            `json:"storageClass,omitempty"`
-	VolumeName   string            `json:"volumeName,omitempty"`
-	Capacity     ResourceListFacts `json:"capacity,omitempty"`
-	Conditions   []ConditionFacts  `json:"conditions,omitempty"`
-	MountedBy    []ResourceLink    `json:"mountedBy,omitempty"`
-}
+// PersistentVolumeClaimFacts moved to resources/persistentvolumeclaim. The shared
+// primitives it referenced (ResourceListFacts/ConditionFacts/ResourceLink) stay here.
 
-type StorageClassFacts struct {
-	Provisioner                 string `json:"provisioner,omitempty"`
-	ReclaimPolicy               string `json:"reclaimPolicy,omitempty"`
-	VolumeBindingMode           string `json:"volumeBindingMode,omitempty"`
-	AllowVolumeExpansion        bool   `json:"allowVolumeExpansion,omitempty"`
-	DefaultClass                bool   `json:"defaultClass"`
-	DefaultClassAnnotation      string `json:"defaultClassAnnotation,omitempty"`
-	DefaultClassAnnotationValue string `json:"defaultClassAnnotationValue,omitempty"`
-}
+// StorageClassFacts moved to resources/storageclass (type storageclass.Facts),
+// removed from the ResourceFacts union (same cycle-break as the other kinds).
 
-type ConfigMapFacts struct {
-	DataKeys       []string       `json:"dataKeys,omitempty"`
-	BinaryDataKeys []string       `json:"binaryDataKeys,omitempty"`
-	DataCount      int            `json:"dataCount"`
-	DataSizeBytes  int64          `json:"dataSizeBytes"`
-	UsedBy         []ResourceLink `json:"usedBy,omitempty"`
-}
+// ConfigMapFacts moved to resources/configmap and SecretFacts moved to
+// resources/secret, removed from the ResourceFacts union (same cycle-break).
 
-type SecretFacts struct {
-	Type          string         `json:"type,omitempty"`
-	DataKeys      []string       `json:"dataKeys,omitempty"`
-	DataCount     int            `json:"dataCount"`
-	DataSizeBytes int64          `json:"dataSizeBytes"`
-	Immutable     *bool          `json:"immutable,omitempty"`
-	UsedBy        []ResourceLink `json:"usedBy,omitempty"`
-}
 
-type ServiceFacts struct {
-	Type                   string             `json:"type,omitempty"`
-	ClusterIP              string             `json:"clusterIP,omitempty"`
-	ClusterIPs             []string           `json:"clusterIPs,omitempty"`
-	ExternalIPs            []string           `json:"externalIPs,omitempty"`
-	LoadBalancerAddresses  []string           `json:"loadBalancerAddresses,omitempty"`
-	ExternalName           string             `json:"externalName,omitempty"`
-	Ports                  []ServicePortFacts `json:"ports,omitempty"`
-	SessionAffinity        string             `json:"sessionAffinity,omitempty"`
-	SessionAffinityTimeout int32              `json:"sessionAffinityTimeout,omitempty"`
-	Selector               map[string]string  `json:"selector,omitempty"`
-	Endpoints              []string           `json:"endpoints,omitempty"`
-	ReadyEndpointCount     int                `json:"readyEndpointCount"`
-	NotReadyEndpointCount  int                `json:"notReadyEndpointCount"`
-	TotalEndpointCount     int                `json:"totalEndpointCount"`
-}
 
-type ServicePortFacts struct {
-	Name       string `json:"name,omitempty"`
-	Protocol   string `json:"protocol,omitempty"`
-	Port       int32  `json:"port"`
-	TargetPort string `json:"targetPort,omitempty"`
-	NodePort   int32  `json:"nodePort,omitempty"`
-}
+// EndpointSliceFacts + EndpointAddressFacts/EndpointPortFacts moved to
+// resources/endpointslice (EndpointSlice-only), removed from the ResourceFacts union.
 
-type EndpointSliceFacts struct {
-	AddressType       string                 `json:"addressType,omitempty"`
-	ReadyAddresses    []EndpointAddressFacts `json:"readyAddresses,omitempty"`
-	NotReadyAddresses []EndpointAddressFacts `json:"notReadyAddresses,omitempty"`
-	Ports             []EndpointPortFacts    `json:"ports,omitempty"`
-	Service           *ResourceLink          `json:"service,omitempty"`
-}
 
-type EndpointAddressFacts struct {
-	IP        string        `json:"ip,omitempty"`
-	Hostname  string        `json:"hostname,omitempty"`
-	NodeName  string        `json:"nodeName,omitempty"`
-	TargetRef *ResourceLink `json:"targetRef,omitempty"`
-}
 
-type EndpointPortFacts struct {
-	Name        string `json:"name,omitempty"`
-	Port        int32  `json:"port"`
-	Protocol    string `json:"protocol,omitempty"`
-	AppProtocol string `json:"appProtocol,omitempty"`
-}
 
-type IngressFacts struct {
-	ClassName      string               `json:"className,omitempty"`
-	Class          *ResourceLink        `json:"class,omitempty"`
-	Hosts          []string             `json:"hosts,omitempty"`
-	Addresses      []string             `json:"addresses,omitempty"`
-	TLS            []IngressTLSFacts    `json:"tls,omitempty"`
-	Rules          []IngressRuleFacts   `json:"rules,omitempty"`
-	DefaultBackend *IngressBackendFacts `json:"defaultBackend,omitempty"`
-	BackendRefs    []ResourceLink       `json:"backendRefs,omitempty"`
-}
 
-type IngressTLSFacts struct {
-	Hosts     []string      `json:"hosts,omitempty"`
-	SecretRef *ResourceLink `json:"secretRef,omitempty"`
-}
-
-type IngressRuleFacts struct {
-	Host  string             `json:"host,omitempty"`
-	Paths []IngressPathFacts `json:"paths,omitempty"`
-}
-
-type IngressPathFacts struct {
-	Path     string              `json:"path,omitempty"`
-	PathType string              `json:"pathType,omitempty"`
-	Backend  IngressBackendFacts `json:"backend"`
-}
-
-type IngressBackendFacts struct {
-	ServiceName string        `json:"serviceName,omitempty"`
-	ServicePort string        `json:"servicePort,omitempty"`
-	Service     *ResourceLink `json:"service,omitempty"`
-	Resource    string        `json:"resource,omitempty"`
-}
 
 // IngressClassFacts moved to resources/ingressclass (type ingressclass.Facts),
 // removed from the ResourceFacts union (same cycle-break as the other kinds).
@@ -545,36 +429,9 @@ type DisruptedPodFacts struct {
 	DisruptionTime metav1.Time  `json:"disruptionTime"`
 }
 
-type ResourceQuotaFacts struct {
-	Hard           ResourceQuantityMapFacts `json:"hard,omitempty"`
-	Used           ResourceQuantityMapFacts `json:"used,omitempty"`
-	UsedPercentage map[string]int           `json:"usedPercentage,omitempty"`
-	Scopes         []string                 `json:"scopes,omitempty"`
-	ScopeSelector  *ScopeSelectorFacts      `json:"scopeSelector,omitempty"`
-}
-
-type ScopeSelectorFacts struct {
-	MatchExpressions []ScopeSelectorRequirementFacts `json:"matchExpressions,omitempty"`
-}
-
-type ScopeSelectorRequirementFacts struct {
-	ScopeName string   `json:"scopeName"`
-	Operator  string   `json:"operator"`
-	Values    []string `json:"values,omitempty"`
-}
-
-type LimitRangeFacts struct {
-	Limits []LimitRangeItemFacts `json:"limits,omitempty"`
-}
-
-type LimitRangeItemFacts struct {
-	Kind                 string                   `json:"kind"`
-	Max                  ResourceQuantityMapFacts `json:"max,omitempty"`
-	Min                  ResourceQuantityMapFacts `json:"min,omitempty"`
-	Default              ResourceQuantityMapFacts `json:"default,omitempty"`
-	DefaultRequest       ResourceQuantityMapFacts `json:"defaultRequest,omitempty"`
-	MaxLimitRequestRatio ResourceQuantityMapFacts `json:"maxLimitRequestRatio,omitempty"`
-}
+// ResourceQuotaFacts (+ ScopeSelectorFacts/ScopeSelectorRequirementFacts) moved to
+// resources/resourcequota and LimitRangeFacts (+ LimitRangeItemFacts) moved to
+// resources/limitrange. ResourceQuantityMapFacts stays here (shared primitive).
 
 type CustomResourceDefinitionFacts struct {
 	Group                   string            `json:"group,omitempty"`

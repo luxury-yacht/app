@@ -154,7 +154,7 @@ func BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(ctx context.Con
 		return displayResourceLink(clusterID, identity.Group, identity.Version, identity.Kind, identity.Resource, identity.Namespace, identity.Name)
 	}
 	if identity.Scope == ResourceScopeCluster {
-		return clusterResourceLink(clusterID, identity.Group, identity.Version, identity.Kind, identity.Resource, identity.Name, "")
+		return ClusterResourceLink(clusterID, identity.Group, identity.Version, identity.Kind, identity.Resource, identity.Name, "")
 	}
 	return namespacedResourceLink(clusterID, identity.Group, identity.Version, identity.Kind, identity.Resource, identity.Namespace, identity.Name, "")
 }
@@ -163,7 +163,7 @@ func ResolveHelmManifestResourceIdentityWithResolver(ctx context.Context, resolv
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	group, version := splitAPIVersion(strings.TrimSpace(apiVersion))
+	group, version := SplitAPIVersion(strings.TrimSpace(apiVersion))
 	kind = strings.TrimSpace(kind)
 	name = strings.TrimSpace(name)
 	namespace = strings.TrimSpace(namespace)

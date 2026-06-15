@@ -4,16 +4,26 @@ import {backend} from '../models';
 import {context} from '../models';
 import {types} from '../models';
 import {objectcatalog} from '../models';
+import {configmap} from '../models';
 import {cronjob} from '../models';
 import {daemonset} from '../models';
 import {deployment} from '../models';
+import {endpointslice} from '../models';
 import {json} from '../models';
+import {ingress} from '../models';
 import {ingressclass} from '../models';
 import {job} from '../models';
+import {limitrange} from '../models';
 import {networkpolicy} from '../models';
+import {persistentvolume} from '../models';
+import {persistentvolumeclaim} from '../models';
 import {poddisruptionbudget} from '../models';
 import {replicaset} from '../models';
+import {resourcequota} from '../models';
+import {secret} from '../models';
+import {service} from '../models';
 import {statefulset} from '../models';
+import {storageclass} from '../models';
 import {snapshot} from '../models';
 import {capabilities} from '../models';
 
@@ -93,7 +103,7 @@ export function GetClusterShellSessionCount(arg1:string):Promise<number>;
 
 export function GetClusterTabOrder():Promise<Array<string>>;
 
-export function GetConfigMap(arg1:string,arg2:string,arg3:string):Promise<types.ConfigMapDetails>;
+export function GetConfigMap(arg1:string,arg2:string,arg3:string):Promise<configmap.ConfigMapDetails>;
 
 export function GetContainerLogsScopeContainers(arg1:string,arg2:string):Promise<Array<string>>;
 
@@ -105,7 +115,7 @@ export function GetDaemonSet(arg1:string,arg2:string,arg3:string):Promise<daemon
 
 export function GetDeployment(arg1:string,arg2:string,arg3:string):Promise<deployment.DeploymentDetails>;
 
-export function GetEndpointSlice(arg1:string,arg2:string,arg3:string):Promise<types.EndpointSliceDetails>;
+export function GetEndpointSlice(arg1:string,arg2:string,arg3:string):Promise<endpointslice.EndpointSliceDetails>;
 
 export function GetFavorites():Promise<Array<backend.Favorite>>;
 
@@ -127,7 +137,7 @@ export function GetHelmValues(arg1:string,arg2:string,arg3:string):Promise<Recor
 
 export function GetHorizontalPodAutoscaler(arg1:string,arg2:string,arg3:string):Promise<types.HorizontalPodAutoscalerDetails>;
 
-export function GetIngress(arg1:string,arg2:string,arg3:string):Promise<types.IngressDetails>;
+export function GetIngress(arg1:string,arg2:string,arg3:string):Promise<ingress.IngressDetails>;
 
 export function GetIngressClass(arg1:string,arg2:string):Promise<ingressclass.IngressClassDetails>;
 
@@ -139,7 +149,7 @@ export function GetKubeconfigs():Promise<Array<types.KubeconfigInfo>>;
 
 export function GetKubernetesAPIClientDiagnostics():Promise<Array<backend.KubernetesAPIClientDiagnostics>>;
 
-export function GetLimitRange(arg1:string,arg2:string,arg3:string):Promise<types.LimitRangeDetails>;
+export function GetLimitRange(arg1:string,arg2:string,arg3:string):Promise<limitrange.LimitRangeDetails>;
 
 export function GetListenerSet(arg1:string,arg2:string,arg3:string):Promise<types.ListenerSetDetails>;
 
@@ -153,9 +163,9 @@ export function GetNode(arg1:string,arg2:string):Promise<types.NodeDetails>;
 
 export function GetObjectYAMLByGVK(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
-export function GetPersistentVolume(arg1:string,arg2:string):Promise<types.PersistentVolumeDetails>;
+export function GetPersistentVolume(arg1:string,arg2:string):Promise<persistentvolume.PersistentVolumeDetails>;
 
-export function GetPersistentVolumeClaim(arg1:string,arg2:string,arg3:string):Promise<types.PersistentVolumeClaimDetails>;
+export function GetPersistentVolumeClaim(arg1:string,arg2:string,arg3:string):Promise<persistentvolumeclaim.PersistentVolumeClaimDetails>;
 
 export function GetPod(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<types.PodDetailInfo>;
 
@@ -169,7 +179,7 @@ export function GetRefreshBaseURL():Promise<string>;
 
 export function GetReplicaSet(arg1:string,arg2:string,arg3:string):Promise<replicaset.ReplicaSetDetails>;
 
-export function GetResourceQuota(arg1:string,arg2:string,arg3:string):Promise<types.ResourceQuotaDetails>;
+export function GetResourceQuota(arg1:string,arg2:string,arg3:string):Promise<resourcequota.ResourceQuotaDetails>;
 
 export function GetRevisionHistory(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<Array<backend.RevisionEntry>>;
 
@@ -177,13 +187,13 @@ export function GetRole(arg1:string,arg2:string,arg3:string):Promise<types.RoleD
 
 export function GetRoleBinding(arg1:string,arg2:string,arg3:string):Promise<types.RoleBindingDetails>;
 
-export function GetSecret(arg1:string,arg2:string,arg3:string):Promise<types.SecretDetails>;
+export function GetSecret(arg1:string,arg2:string,arg3:string):Promise<secret.SecretDetails>;
 
 export function GetSelectedKubeconfigs():Promise<Array<string>>;
 
 export function GetSelectionDiagnostics():Promise<backend.SelectionDiagnostics>;
 
-export function GetService(arg1:string,arg2:string,arg3:string):Promise<types.ServiceDetails>;
+export function GetService(arg1:string,arg2:string,arg3:string):Promise<service.ServiceDetails>;
 
 export function GetServiceAccount(arg1:string,arg2:string,arg3:string):Promise<types.ServiceAccountDetails>;
 
@@ -191,7 +201,7 @@ export function GetShellSessionBacklog(arg1:string):Promise<string>;
 
 export function GetStatefulSet(arg1:string,arg2:string,arg3:string):Promise<statefulset.StatefulSetDetails>;
 
-export function GetStorageClass(arg1:string,arg2:string):Promise<types.StorageClassDetails>;
+export function GetStorageClass(arg1:string,arg2:string):Promise<storageclass.StorageClassDetails>;
 
 export function GetTLSRoute(arg1:string,arg2:string,arg3:string):Promise<types.RouteDetails>;
 

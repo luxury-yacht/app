@@ -20,7 +20,7 @@ func BuildListenerSetFacts(clusterID string, listenerSet *gatewayv1.ListenerSet)
 
 func BuildListenerSetStatusPresentation(listenerSet *gatewayv1.ListenerSet, facts ListenerSetFacts) ResourceStatusPresentation {
 	state := gatewayCountState(len(facts.Listeners))
-	label := countLabel(len(facts.Listeners), "listener", "listeners")
+	label := CountLabel(len(facts.Listeners), "listener", "listeners")
 	return gatewayStatusFromConditions(listenerSet.ObjectMeta, state, label, facts.Conditions)
 }
 

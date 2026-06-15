@@ -16,7 +16,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
@@ -248,19 +247,8 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 	}, nil
 }
 
-func describeResourceQuotaFacts(facts *resourcemodel.ResourceQuotaFacts) string {
-	if facts == nil {
-		return ""
-	}
-	return fmt.Sprintf("Hard: %d, Used: %d", len(facts.Hard), len(facts.Used))
-}
-
-func describeLimitRangeFacts(facts *resourcemodel.LimitRangeFacts) string {
-	if facts == nil {
-		return ""
-	}
-	return fmt.Sprintf("Limits: %d", len(facts.Limits))
-}
+// describeResourceQuotaFacts/describeLimitRangeFacts moved to
+// resources/{resourcequota,limitrange} (DescribeSummary), co-located with the models.
 
 // describePodDisruptionBudgetFacts moved to resources/poddisruptionbudget
 // (poddisruptionbudget.DescribeSummary), co-located with the PDB model.

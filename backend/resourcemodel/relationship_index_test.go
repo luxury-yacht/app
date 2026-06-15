@@ -136,16 +136,18 @@ func benchmarkReverseLinkDetails(
 	relationships *ResourceRelationshipIndex,
 	options ResourceModelBuildOptions,
 ) int {
-	configMap := BuildConfigMapResourceModel(fixture.ClusterID, fixture.ConfigMap, relationships, options)
-	secret := BuildSecretResourceModel(fixture.ClusterID, fixture.Secret, relationships, options)
-	pvc := BuildPersistentVolumeClaimResourceModelWithRelationships(fixture.ClusterID, fixture.PersistentVolumeClaim, relationships, options)
+	// ConfigMap/Secret models moved to resources/{configmap,secret}; their reverse
+	// links are produced by these ResourceRelationshipIndex methods (which stay here).
+	configMapUsedBy := relationships.ConfigMapUsedBy(fixture.ConfigMap.Namespace, fixture.ConfigMap.Name)
+	secretUsedBy := relationships.SecretUsedBy(fixture.Secret.Namespace, fixture.Secret.Name)
+	pvcMountedBy := relationships.PersistentVolumeClaimMountedBy(fixture.PersistentVolumeClaim.Namespace, fixture.PersistentVolumeClaim.Name)
 	role := BuildRoleResourceModel(fixture.ClusterID, fixture.Role, relationships, options)
 	clusterRole := BuildClusterRoleResourceModel(fixture.ClusterID, fixture.ClusterRole, relationships, options)
 	serviceAccount := BuildServiceAccountResourceModel(fixture.ClusterID, fixture.ServiceAccount, relationships, options)
 
-	return len(configMap.Facts.ConfigMap.UsedBy) +
-		len(secret.Facts.Secret.UsedBy) +
-		len(pvc.Facts.PersistentVolumeClaim.MountedBy) +
+	return len(configMapUsedBy) +
+		len(secretUsedBy) +
+		len(pvcMountedBy) +
 		len(role.Facts.Role.UsedByRoleBindings) +
 		len(clusterRole.Facts.ClusterRole.ClusterRoleBindings) +
 		len(clusterRole.Facts.ClusterRole.RoleBindings) +

@@ -131,7 +131,7 @@ func eventInvolvedObjectLink(clusterID string, ref corev1.ObjectReference) *Reso
 	apiVersion := strings.TrimSpace(ref.APIVersion)
 	group, version := "", ""
 	if apiVersion != "" {
-		group, version = splitAPIVersion(apiVersion)
+		group, version = SplitAPIVersion(apiVersion)
 	}
 	kind := strings.TrimSpace(ref.Kind)
 	name := strings.TrimSpace(ref.Name)

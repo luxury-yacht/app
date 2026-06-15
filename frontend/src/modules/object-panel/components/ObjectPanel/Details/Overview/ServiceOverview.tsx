@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { types } from '@wailsjs/go/models';
+import { service } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
@@ -12,7 +12,7 @@ import { StatusChip } from '@shared/components/StatusChip';
 import './shared/OverviewBlocks.css';
 
 interface ServiceOverviewProps {
-  serviceDetails: types.ServiceDetails | null;
+  serviceDetails: service.ServiceDetails | null;
 }
 
 // Above this count, render a count instead of the full IP list.

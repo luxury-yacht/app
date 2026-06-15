@@ -1,15 +1,25 @@
 package backend
 
 import (
+	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	"github.com/luxury-yacht/app/backend/resources/service"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
@@ -63,18 +73,18 @@ type (
 	HelmResource                          = types.HelmResource
 	PodDetailInfoContainer                = types.PodDetailInfoContainer
 	PodDetailInfo                         = types.PodDetailInfo
-	ConfigMapDetails                      = types.ConfigMapDetails
-	SecretDetails                         = types.SecretDetails
-	ServiceDetails                        = types.ServiceDetails
-	ServicePortDetails                    = types.ServicePortDetails
-	EndpointSliceDetails                  = types.EndpointSliceDetails
-	EndpointSliceAddress                  = types.EndpointSliceAddress
-	EndpointSlicePort                     = types.EndpointSlicePort
-	IngressDetails                        = types.IngressDetails
-	IngressRuleDetails                    = types.IngressRuleDetails
-	IngressPathDetails                    = types.IngressPathDetails
-	IngressBackendDetails                 = types.IngressBackendDetails
-	IngressTLSDetails                     = types.IngressTLSDetails
+	ConfigMapDetails                      = configmap.ConfigMapDetails
+	SecretDetails                         = secretpkg.SecretDetails
+	ServiceDetails                        = service.ServiceDetails
+	ServicePortDetails                    = service.ServicePortDetails
+	EndpointSliceDetails                  = endpointslice.EndpointSliceDetails
+	EndpointSliceAddress                  = endpointslice.EndpointSliceAddress
+	EndpointSlicePort                     = endpointslice.EndpointSlicePort
+	IngressDetails                        = ingress.IngressDetails
+	IngressRuleDetails                    = ingress.IngressRuleDetails
+	IngressPathDetails                    = ingress.IngressPathDetails
+	IngressBackendDetails                 = ingress.IngressBackendDetails
+	IngressTLSDetails                     = ingress.IngressTLSDetails
 	ObjectRef                             = types.ObjectRef
 	DisplayRef                            = types.DisplayRef
 	RefOrDisplay                          = types.RefOrDisplay
@@ -108,12 +118,12 @@ type (
 	AggregationRule                       = types.AggregationRule
 	ClusterRoleBindingDetails             = types.ClusterRoleBindingDetails
 	ServiceAccountDetails                 = types.ServiceAccountDetails
-	PersistentVolumeDetails               = types.PersistentVolumeDetails
-	ClaimReference                        = types.ClaimReference
-	VolumeSourceInfo                      = types.VolumeSourceInfo
-	PersistentVolumeClaimDetails          = types.PersistentVolumeClaimDetails
-	DataSourceInfo                        = types.DataSourceInfo
-	StorageClassDetails                   = types.StorageClassDetails
+	PersistentVolumeDetails               = persistentvolume.PersistentVolumeDetails
+	ClaimReference                        = persistentvolume.ClaimReference
+	VolumeSourceInfo                      = persistentvolume.VolumeSourceInfo
+	PersistentVolumeClaimDetails          = persistentvolumeclaim.PersistentVolumeClaimDetails
+	DataSourceInfo                        = persistentvolumeclaim.DataSourceInfo
+	StorageClassDetails                   = storageclass.StorageClassDetails
 	DeploymentDetails                     = deployment.DeploymentDetails
 	ReplicaSetDetails                     = replicaset.ReplicaSetDetails
 	StatefulSetDetails                    = statefulset.StatefulSetDetails
@@ -123,13 +133,13 @@ type (
 	CronJobDetails                        = cronjob.CronJobDetails
 	JobReference                          = types.JobReference
 	JobTemplateDetails                    = types.JobTemplateDetails
-	TopologySelector                      = types.TopologySelector
-	TopologyLabelRequirement              = types.TopologyLabelRequirement
-	LimitRangeDetails                     = types.LimitRangeDetails
-	LimitRangeItem                        = types.LimitRangeItem
-	ResourceQuotaDetails                  = types.ResourceQuotaDetails
-	ScopeSelector                         = types.ScopeSelector
-	ScopeSelectorRequirement              = types.ScopeSelectorRequirement
+	TopologySelector                      = storageclass.TopologySelector
+	TopologyLabelRequirement              = storageclass.TopologyLabelRequirement
+	LimitRangeDetails                     = limitrange.LimitRangeDetails
+	LimitRangeItem                        = limitrange.LimitRangeItem
+	ResourceQuotaDetails                  = resourcequota.ResourceQuotaDetails
+	ScopeSelector                         = resourcequota.ScopeSelector
+	ScopeSelectorRequirement              = resourcequota.ScopeSelectorRequirement
 	PodDisruptionBudgetDetails            = poddisruptionbudget.PodDisruptionBudgetDetails
 	HorizontalPodAutoscalerDetails        = types.HorizontalPodAutoscalerDetails
 	ScaleTargetReference                  = types.ScaleTargetReference

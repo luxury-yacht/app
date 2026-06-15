@@ -37,5 +37,5 @@ func BuildReferenceGrantStatusPresentation(grant *gatewayv1.ReferenceGrant, fact
 }
 
 func referenceGrantLabel(facts ReferenceGrantFacts) string {
-	return countLabel(len(facts.From), "from", "from") + ", " + countLabel(len(facts.To), "to", "to")
+	return CountLabel(len(facts.From), "from", "from") + ", " + CountLabel(len(facts.To), "to", "to")
 }

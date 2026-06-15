@@ -19,13 +19,21 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	"github.com/luxury-yacht/app/backend/resources/service"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
@@ -543,7 +551,7 @@ func (idx *objectMapIndex) collectServices(lister corelisters.ServiceLister) {
 	collectKind(idx, "", "v1", "Service", "services",
 		func() ([]*corev1.Service, error) { return lister.List(labels.Everything()) },
 		func(svc *corev1.Service, rec *objectMapRecord) {
-			rec.status = objectMapServiceStatus(idx.meta.ClusterID, *svc)
+			rec.status = service.ObjectMapStatus(idx.meta.ClusterID, *svc)
 			rec.actionFacts = objectMapPortForwardFacts(common.ServiceHasForwardablePorts(svc.Spec.Ports))
 			rec.service = svc
 		})
@@ -553,7 +561,7 @@ func (idx *objectMapIndex) collectEndpointSlices(lister discoverylisters.Endpoin
 	collectKind(idx, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices",
 		func() ([]*discoveryv1.EndpointSlice, error) { return lister.List(labels.Everything()) },
 		func(slice *discoveryv1.EndpointSlice, rec *objectMapRecord) {
-			rec.status = objectMapEndpointSliceStatus(idx.meta.ClusterID, *slice)
+			rec.status = endpointslice.ObjectMapStatus(idx.meta.ClusterID, *slice)
 			rec.slice = slice
 		})
 }
@@ -562,7 +570,7 @@ func (idx *objectMapIndex) collectPVCs(lister corelisters.PersistentVolumeClaimL
 	collectKind(idx, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims",
 		func() ([]*corev1.PersistentVolumeClaim, error) { return lister.List(labels.Everything()) },
 		func(pvc *corev1.PersistentVolumeClaim, rec *objectMapRecord) {
-			rec.status = objectMapPVCStatus(idx.meta.ClusterID, *pvc)
+			rec.status = persistentvolumeclaim.ObjectMapStatus(idx.meta.ClusterID, *pvc)
 			rec.pvc = pvc
 		})
 }
@@ -571,7 +579,7 @@ func (idx *objectMapIndex) collectPVs(lister corelisters.PersistentVolumeLister)
 	collectKind(idx, "", "v1", "PersistentVolume", "persistentvolumes",
 		func() ([]*corev1.PersistentVolume, error) { return lister.List(labels.Everything()) },
 		func(pv *corev1.PersistentVolume, rec *objectMapRecord) {
-			rec.status = objectMapPVStatus(idx.meta.ClusterID, *pv)
+			rec.status = persistentvolume.ObjectMapStatus(idx.meta.ClusterID, *pv)
 			rec.pv = pv
 		})
 }
@@ -580,7 +588,7 @@ func (idx *objectMapIndex) collectStorageClasses(lister storagelisters.StorageCl
 	collectKind(idx, "storage.k8s.io", "v1", "StorageClass", "storageclasses",
 		func() ([]*storagev1.StorageClass, error) { return lister.List(labels.Everything()) },
 		func(sc *storagev1.StorageClass, rec *objectMapRecord) {
-			rec.status = objectMapStorageClassStatus(idx.meta.ClusterID, *sc)
+			rec.status = storageclass.ObjectMapStatus(idx.meta.ClusterID, *sc)
 			rec.storage = sc
 		})
 }
@@ -589,7 +597,7 @@ func (idx *objectMapIndex) collectConfigMaps(lister corelisters.ConfigMapLister)
 	collectKind(idx, "", "v1", "ConfigMap", "configmaps",
 		func() ([]*corev1.ConfigMap, error) { return lister.List(labels.Everything()) },
 		func(cm *corev1.ConfigMap, rec *objectMapRecord) {
-			rec.status = objectMapConfigMapStatus(idx.meta.ClusterID, *cm)
+			rec.status = configmap.ObjectMapStatus(idx.meta.ClusterID, *cm)
 		})
 }
 
@@ -597,7 +605,7 @@ func (idx *objectMapIndex) collectSecrets(lister corelisters.SecretLister) {
 	collectKind(idx, "", "v1", "Secret", "secrets",
 		func() ([]*corev1.Secret, error) { return lister.List(labels.Everything()) },
 		func(secret *corev1.Secret, rec *objectMapRecord) {
-			rec.status = objectMapSecretStatus(idx.meta.ClusterID, *secret)
+			rec.status = secretpkg.ObjectMapStatus(idx.meta.ClusterID, *secret)
 		})
 }
 
@@ -725,7 +733,7 @@ func (idx *objectMapIndex) collectIngresses(lister networklisters.IngressLister)
 	collectKind(idx, "networking.k8s.io", "v1", "Ingress", "ingresses",
 		func() ([]*networkingv1.Ingress, error) { return lister.List(labels.Everything()) },
 		func(ing *networkingv1.Ingress, rec *objectMapRecord) {
-			rec.status = objectMapIngressStatus(idx.meta.ClusterID, *ing)
+			rec.status = ingress.ObjectMapStatus(idx.meta.ClusterID, *ing)
 			rec.ingress = ing
 		})
 }
@@ -1145,40 +1153,11 @@ func objectMapPodStatus(clusterID string, pod corev1.Pod) *ObjectMapStatus {
 	return status
 }
 
-func objectMapServiceStatus(clusterID string, service corev1.Service) *ObjectMapStatus {
-	model := resourcemodel.BuildServiceResourceModel(clusterID, &service, nil)
-	return objectMapStatusFromResourceModel(model)
-}
 
-func objectMapEndpointSliceStatus(clusterID string, slice discoveryv1.EndpointSlice) *ObjectMapStatus {
-	model := resourcemodel.BuildEndpointSliceResourceModel(clusterID, &slice)
-	return objectMapStatusFromResourceModel(model)
-}
 
-func objectMapPVCStatus(clusterID string, pvc corev1.PersistentVolumeClaim) *ObjectMapStatus {
-	model := resourcemodel.BuildPersistentVolumeClaimResourceModel(clusterID, &pvc)
-	return objectMapStatusFromResourceModel(model)
-}
 
-func objectMapPVStatus(clusterID string, pv corev1.PersistentVolume) *ObjectMapStatus {
-	model := resourcemodel.BuildPersistentVolumeResourceModel(clusterID, &pv)
-	return objectMapStatusFromResourceModel(model)
-}
 
-func objectMapStorageClassStatus(clusterID string, storageClass storagev1.StorageClass) *ObjectMapStatus {
-	model := resourcemodel.BuildStorageClassResourceModel(clusterID, &storageClass)
-	return objectMapStatusFromResourceModel(model)
-}
 
-func objectMapConfigMapStatus(clusterID string, configMap corev1.ConfigMap) *ObjectMapStatus {
-	model := resourcemodel.BuildConfigMapResourceModel(clusterID, &configMap, nil)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapSecretStatus(clusterID string, secret corev1.Secret) *ObjectMapStatus {
-	model := resourcemodel.BuildSecretResourceModel(clusterID, &secret, nil)
-	return objectMapStatusFromResourceModel(model)
-}
 
 func objectMapServiceAccountStatus(clusterID string, sa corev1.ServiceAccount) *ObjectMapStatus {
 	model := resourcemodel.BuildServiceAccountResourceModel(clusterID, &sa, nil)
@@ -1206,10 +1185,6 @@ func objectMapHPAStatus(clusterID string, hpa autoscalingv2.HorizontalPodAutosca
 }
 
 
-func objectMapIngressStatus(clusterID string, ingress networkingv1.Ingress) *ObjectMapStatus {
-	model := resourcemodel.BuildIngressResourceModel(clusterID, &ingress)
-	return objectMapStatusFromResourceModel(model)
-}
 
 
 func objectMapClusterRoleStatus(clusterID string, role rbacv1.ClusterRole) *ObjectMapStatus {

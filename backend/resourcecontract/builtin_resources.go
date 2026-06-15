@@ -10,15 +10,23 @@ package resourcecontract
 import (
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -36,17 +44,17 @@ type BuiltinResource struct {
 var BuiltinResources = []BuiltinResource{
 	builtin("", "v1", "Pod", "pods", true),
 	builtin("", "v1", "Service", "services", true),
-	builtin("", "v1", "ConfigMap", "configmaps", true),
-	builtin("", "v1", "Secret", "secrets", true),
+	builtin(configmap.Identity.Group, configmap.Identity.Version, configmap.Identity.Kind, configmap.Identity.Resource, configmap.Identity.Namespaced),
+	builtin(secretpkg.Identity.Group, secretpkg.Identity.Version, secretpkg.Identity.Kind, secretpkg.Identity.Resource, secretpkg.Identity.Namespaced),
 	builtin("", "v1", "ServiceAccount", "serviceaccounts", true),
 	builtin("", "v1", "Event", "events", true),
-	builtin("", "v1", "LimitRange", "limitranges", true),
-	builtin("", "v1", "ResourceQuota", "resourcequotas", true),
+	builtin(limitrange.Identity.Group, limitrange.Identity.Version, limitrange.Identity.Kind, limitrange.Identity.Resource, limitrange.Identity.Namespaced),
+	builtin(resourcequota.Identity.Group, resourcequota.Identity.Version, resourcequota.Identity.Kind, resourcequota.Identity.Resource, resourcequota.Identity.Namespaced),
 	builtin("", "v1", "Endpoints", "endpoints", true),
-	builtin("", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", true),
+	builtin(persistentvolumeclaim.Identity.Group, persistentvolumeclaim.Identity.Version, persistentvolumeclaim.Identity.Kind, persistentvolumeclaim.Identity.Resource, persistentvolumeclaim.Identity.Namespaced),
 	builtin("", "v1", "Namespace", "namespaces", false),
 	builtin("", "v1", "Node", "nodes", false),
-	builtin("", "v1", "PersistentVolume", "persistentvolumes", false),
+	builtin(persistentvolume.Identity.Group, persistentvolume.Identity.Version, persistentvolume.Identity.Kind, persistentvolume.Identity.Resource, persistentvolume.Identity.Namespaced),
 
 	builtin(deployment.Identity.Group, deployment.Identity.Version, deployment.Identity.Kind, deployment.Identity.Resource, deployment.Identity.Namespaced),
 	builtin(statefulset.Identity.Group, statefulset.Identity.Version, statefulset.Identity.Kind, statefulset.Identity.Resource, statefulset.Identity.Namespaced),
@@ -63,7 +71,7 @@ var BuiltinResources = []BuiltinResource{
 	builtin(networkpolicy.Identity.Group, networkpolicy.Identity.Version, networkpolicy.Identity.Kind, networkpolicy.Identity.Resource, networkpolicy.Identity.Namespaced),
 	builtin(ingressclass.Identity.Group, ingressclass.Identity.Version, ingressclass.Identity.Kind, ingressclass.Identity.Resource, ingressclass.Identity.Namespaced),
 
-	builtin("discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", true),
+	builtin(endpointslice.Identity.Group, endpointslice.Identity.Version, endpointslice.Identity.Kind, endpointslice.Identity.Resource, endpointslice.Identity.Namespaced),
 
 	builtin("gateway.networking.k8s.io", "v1", "Gateway", "gateways", true),
 	builtin("gateway.networking.k8s.io", "v1", "HTTPRoute", "httproutes", true),
@@ -81,7 +89,7 @@ var BuiltinResources = []BuiltinResource{
 
 	builtin(poddisruptionbudget.Identity.Group, poddisruptionbudget.Identity.Version, poddisruptionbudget.Identity.Kind, poddisruptionbudget.Identity.Resource, poddisruptionbudget.Identity.Namespaced),
 
-	builtin("storage.k8s.io", "v1", "StorageClass", "storageclasses", false),
+	builtin(storageclass.Identity.Group, storageclass.Identity.Version, storageclass.Identity.Kind, storageclass.Identity.Resource, storageclass.Identity.Namespaced),
 	builtin("storage.k8s.io", "v1", "CSIDriver", "csidrivers", false),
 	builtin("storage.k8s.io", "v1", "CSINode", "csinodes", false),
 	builtin("storage.k8s.io", "v1", "VolumeAttachment", "volumeattachments", false),
