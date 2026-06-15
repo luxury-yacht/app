@@ -14,9 +14,24 @@ func BuildCronJobResourceModel(clusterID string, cronJob *batchv1.CronJob) Resou
 
 func BuildCronJobFacts(cronJob *batchv1.CronJob) CronJobFacts {
 	suspended := cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend
+	successHistory := int32(3)
+	if cronJob.Spec.SuccessfulJobsHistoryLimit != nil {
+		successHistory = *cronJob.Spec.SuccessfulJobsHistoryLimit
+	}
+	failHistory := int32(1)
+	if cronJob.Spec.FailedJobsHistoryLimit != nil {
+		failHistory = *cronJob.Spec.FailedJobsHistoryLimit
+	}
 	return CronJobFacts{
-		Suspended:  suspended,
-		ActiveJobs: int32(len(cronJob.Status.Active)),
+		Suspended:               suspended,
+		ActiveJobs:              int32(len(cronJob.Status.Active)),
+		Schedule:                cronJob.Spec.Schedule,
+		ConcurrencyPolicy:       string(cronJob.Spec.ConcurrencyPolicy),
+		StartingDeadlineSeconds: cronJob.Spec.StartingDeadlineSeconds,
+		SuccessfulJobsHistory:   successHistory,
+		FailedJobsHistory:       failHistory,
+		LastScheduleTime:        cronJob.Status.LastScheduleTime,
+		LastSuccessfulTime:      cronJob.Status.LastSuccessfulTime,
 	}
 }
 

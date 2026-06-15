@@ -61,20 +61,9 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 	podInfos := buildPodSummaries(s.deps.ClusterID, "StatefulSet", statefulSet.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 
-	revisionHistory := int32(0)
-	if statefulSet.Spec.RevisionHistoryLimit != nil {
-		revisionHistory = *statefulSet.Spec.RevisionHistoryLimit
-	}
-
-	maxUnavailable := ""
-	var partition *int32
-	if ru := statefulSet.Spec.UpdateStrategy.RollingUpdate; ru != nil {
-		if ru.MaxUnavailable != nil {
-			maxUnavailable = ru.MaxUnavailable.String()
-		}
-		partition = ru.Partition
-	}
-
+	// Intrinsic spec/status fields come from the model facts (single extraction).
+	// Complex sub-objects (PVC retention, volume claim templates) are navigated
+	// here only to feed their shared formatters, which own that presentation.
 	details := &restypes.StatefulSetDetails{
 		Kind:                                 "StatefulSet",
 		Name:                                 statefulSet.Name,
@@ -87,35 +76,35 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 		DesiredReplicas:                      facts.DesiredReplicas,
 		Age:                                  common.FormatAge(statefulSet.CreationTimestamp.Time),
 		ResourceUtilization:                  workloadUtilization(podsList, podMetrics),
-		UpdateStrategy:                       string(statefulSet.Spec.UpdateStrategy.Type),
-		Partition:                            partition,
-		MaxUnavailable:                       maxUnavailable,
-		PodManagementPolicy:                  string(statefulSet.Spec.PodManagementPolicy),
-		MinReadySeconds:                      statefulSet.Spec.MinReadySeconds,
-		RevisionHistoryLimit:                 revisionHistory,
-		ServiceName:                          statefulSet.Spec.ServiceName,
-		ServiceAccount:                       statefulSet.Spec.Template.Spec.ServiceAccountName,
-		NodeSelector:                         statefulSet.Spec.Template.Spec.NodeSelector,
-		Tolerations:                          pods.FormatPodTolerations(statefulSet.Spec.Template.Spec.Tolerations),
+		UpdateStrategy:                       facts.UpdateStrategy,
+		Partition:                            facts.Partition,
+		MaxUnavailable:                       facts.MaxUnavailable,
+		PodManagementPolicy:                  facts.PodManagementPolicy,
+		MinReadySeconds:                      facts.MinReadySeconds,
+		RevisionHistoryLimit:                 facts.RevisionHistoryLimit,
+		ServiceName:                          facts.ServiceName,
+		ServiceAccount:                       facts.ServiceAccountName,
+		NodeSelector:                         facts.NodeSelector,
+		Tolerations:                          pods.FormatPodTolerations(facts.Tolerations),
 		PersistentVolumeClaimRetentionPolicy: describePVCRetention(statefulSet.Spec.PersistentVolumeClaimRetentionPolicy),
-		Selector:                             statefulSet.Spec.Selector.MatchLabels,
+		Selector:                             facts.Selector,
 		Labels:                               statefulSet.Labels,
 		Annotations:                          statefulSet.Annotations,
 		Conditions:                           restypes.FormatConditions(facts.Conditions),
-		Containers:                           describeContainers(statefulSet.Spec.Template.Spec.Containers),
-		InitContainers:                       describeContainers(statefulSet.Spec.Template.Spec.InitContainers),
+		Containers:                           describeContainers(facts.Containers),
+		InitContainers:                       describeContainers(facts.InitContainers),
 		VolumeClaimTemplates:                 describeVolumeClaimTemplates(statefulSet.Spec.VolumeClaimTemplates),
 		Pods:                                 podInfos,
 		PodMetricsSummary:                    podSummary,
-		CurrentRevision:                      statefulSet.Status.CurrentRevision,
-		UpdateRevision:                       statefulSet.Status.UpdateRevision,
-		CurrentReplicas:                      statefulSet.Status.CurrentReplicas,
-		UpdatedReplicas:                      statefulSet.Status.UpdatedReplicas,
-		ObservedGeneration:                   statefulSet.Status.ObservedGeneration,
-		CollisionCount:                       statefulSet.Status.CollisionCount,
+		CurrentRevision:                      facts.StatusCurrentRevision,
+		UpdateRevision:                       facts.StatusUpdateRevision,
+		CurrentReplicas:                      facts.StatusCurrentReplicas,
+		UpdatedReplicas:                      facts.UpdatedReplicas,
+		ObservedGeneration:                   facts.ObservedGeneration,
+		CollisionCount:                       facts.CollisionCount,
+		Details:                              facts.ReadySummary,
 	}
 
-	details.Details = summarizeStatefulSet(statefulSet)
 	return details
 }
 
@@ -183,18 +172,3 @@ func describePVCRetention(policy *appsv1.StatefulSetPersistentVolumeClaimRetenti
 	return result
 }
 
-func summarizeStatefulSet(statefulSet *appsv1.StatefulSet) string {
-	replicaInfo := fmt.Sprintf("Ready: %d/%d", statefulSet.Status.ReadyReplicas, statefulSet.Status.Replicas)
-	if statefulSet.Spec.Replicas != nil && *statefulSet.Spec.Replicas != statefulSet.Status.Replicas {
-		replicaInfo = fmt.Sprintf("Ready: %d/%d (desired: %d)", statefulSet.Status.ReadyReplicas, statefulSet.Status.Replicas, *statefulSet.Spec.Replicas)
-	}
-
-	serviceInfo := fmt.Sprintf(", Service: %s", statefulSet.Spec.ServiceName)
-
-	volumeInfo := ""
-	if len(statefulSet.Spec.VolumeClaimTemplates) > 0 {
-		volumeInfo = fmt.Sprintf(", %d PVC template(s)", len(statefulSet.Spec.VolumeClaimTemplates))
-	}
-
-	return fmt.Sprintf("%s%s%s", replicaInfo, serviceInfo, volumeInfo)
-}

@@ -82,7 +82,7 @@ func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discove
 		details.Ports = append(details.Ports, portDetail)
 	}
 
-	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
+	if facts.Type == string(corev1.ServiceTypeLoadBalancer) {
 		details.LoadBalancerStatus = "Pending"
 		if len(facts.LoadBalancerAddresses) > 0 {
 			details.LoadBalancerIP = facts.LoadBalancerAddresses[0]
@@ -90,7 +90,7 @@ func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discove
 		}
 	}
 
-	if service.Spec.Type == corev1.ServiceTypeExternalName {
+	if facts.Type == string(corev1.ServiceTypeExternalName) {
 		details.ExternalName = facts.ExternalName
 	}
 
@@ -102,14 +102,14 @@ func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discove
 		details.HealthStatus = "Healthy"
 	case slices == nil:
 		details.HealthStatus = "Unknown"
-	case service.Spec.Type == corev1.ServiceTypeExternalName:
+	case facts.Type == string(corev1.ServiceTypeExternalName):
 		details.HealthStatus = "External"
 	default:
 		details.HealthStatus = "No endpoints"
 	}
 
-	typeInfo := string(service.Spec.Type)
-	portInfo := fmt.Sprintf("%d port(s)", len(service.Spec.Ports))
+	typeInfo := facts.Type
+	portInfo := fmt.Sprintf("%d port(s)", len(facts.Ports))
 
 	endpointInfo := ""
 	switch details.HealthStatus {
@@ -120,8 +120,8 @@ func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discove
 	}
 
 	ipInfo := ""
-	if service.Spec.ClusterIP != "" && service.Spec.ClusterIP != "None" {
-		ipInfo = fmt.Sprintf(", %s", service.Spec.ClusterIP)
+	if facts.ClusterIP != "" && facts.ClusterIP != "None" {
+		ipInfo = fmt.Sprintf(", %s", facts.ClusterIP)
 	}
 
 	details.Details = fmt.Sprintf("%s, %s%s%s", typeInfo, portInfo, endpointInfo, ipInfo)

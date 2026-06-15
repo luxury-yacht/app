@@ -66,21 +66,11 @@ func (s *DeploymentService) buildDeploymentDetails(
 	podInfos := buildPodSummaries(s.deps.ClusterID, "Deployment", deployment.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 
+	// Live aggregation (not part of the resource's intrinsic definition).
 	rsNames, currentRevision, currentRSName := summarizeReplicaSets(deployment, replicaSets)
-	containers := describeContainers(deployment.Spec.Template.Spec.Containers)
-	initContainers := describeContainers(deployment.Spec.Template.Spec.InitContainers)
-	maxSurge, maxUnavailable := rolloutParameters(deployment)
 
-	revisionHistory := int32(0)
-	if deployment.Spec.RevisionHistoryLimit != nil {
-		revisionHistory = *deployment.Spec.RevisionHistoryLimit
-	}
-
-	progressDeadline := int32(0)
-	if deployment.Spec.ProgressDeadlineSeconds != nil {
-		progressDeadline = *deployment.Spec.ProgressDeadlineSeconds
-	}
-
+	// Every intrinsic spec/status field is derived from the model facts — the
+	// single extraction point. Only instance metadata and live data are read here.
 	details := &restypes.DeploymentDetails{
 		Kind:                "Deployment",
 		Name:                deployment.Name,
@@ -93,31 +83,32 @@ func (s *DeploymentService) buildDeploymentDetails(
 		DesiredReplicas:     facts.DesiredReplicas,
 		Age:                 common.FormatAge(deployment.CreationTimestamp.Time),
 		ResourceUtilization: workloadUtilization(podsList, podMetrics),
-		Strategy:            string(deployment.Spec.Strategy.Type),
-		MaxSurge:            maxSurge,
-		MaxUnavailable:      maxUnavailable,
-		MinReadySeconds:     deployment.Spec.MinReadySeconds,
-		RevisionHistory:     revisionHistory,
-		ProgressDeadline:    progressDeadline,
-		ServiceAccount:      deployment.Spec.Template.Spec.ServiceAccountName,
-		NodeSelector:        deployment.Spec.Template.Spec.NodeSelector,
-		Tolerations:         pods.FormatPodTolerations(deployment.Spec.Template.Spec.Tolerations),
-		Selector:            deployment.Spec.Selector.MatchLabels,
+		Strategy:            facts.Strategy,
+		MaxSurge:            facts.MaxSurge,
+		MaxUnavailable:      facts.MaxUnavailable,
+		MinReadySeconds:     facts.MinReadySeconds,
+		RevisionHistory:     facts.RevisionHistory,
+		ProgressDeadline:    facts.ProgressDeadline,
+		ServiceAccount:      facts.ServiceAccountName,
+		NodeSelector:        facts.NodeSelector,
+		Tolerations:         pods.FormatPodTolerations(facts.Tolerations),
+		Selector:            facts.Selector,
 		Labels:              deployment.Labels,
 		Annotations:         deployment.Annotations,
-		Containers:          containers,
-		InitContainers:      initContainers,
+		Containers:          describeContainers(facts.Containers),
+		InitContainers:      describeContainers(facts.InitContainers),
 		Pods:                podInfos,
 		CurrentRevision:     currentRevision,
 		CurrentReplicaSet:   currentRSName,
 		ReplicaSets:         rsNames,
-		ObservedGeneration:  deployment.Status.ObservedGeneration,
+		ObservedGeneration:  facts.ObservedGeneration,
 		Paused:              facts.Paused,
 	}
 
 	details.Conditions = restypes.FormatConditions(facts.Conditions)
-	details.RolloutStatus, details.RolloutMessage = deploymentRollout(deployment)
-	details.Details = summarizeDeployment(deployment, facts.DesiredReplicas)
+	details.RolloutStatus = facts.RolloutStatus
+	details.RolloutMessage = facts.RolloutMessage
+	details.Details = facts.ReadySummary
 	details.PodMetricsSummary = podSummary
 
 	return details
@@ -173,48 +164,6 @@ func summarizeReplicaSets(deployment *appsv1.Deployment, replicaSets *appsv1.Rep
 
 	sort.Strings(names)
 	return names, currentRevision, currentRSName
-}
-
-// deploymentRollout derives the rollout status/message from a Deployment's
-// Progressing/Available conditions. Condition display strings come from
-// restypes.FormatConditions(facts.Conditions).
-func deploymentRollout(deployment *appsv1.Deployment) (rolloutStatus, rolloutMessage string) {
-	for _, cond := range deployment.Status.Conditions {
-		if cond.Type == appsv1.DeploymentProgressing {
-			switch cond.Status {
-			case corev1.ConditionTrue:
-				rolloutStatus = "progressing"
-				rolloutMessage = cond.Message
-			case corev1.ConditionFalse:
-				rolloutStatus = "failed"
-				rolloutMessage = cond.Message
-			}
-		} else if cond.Type == appsv1.DeploymentAvailable && cond.Status == corev1.ConditionTrue && rolloutStatus == "" {
-			rolloutStatus = "complete"
-		}
-	}
-	return rolloutStatus, rolloutMessage
-}
-
-func summarizeDeployment(deployment *appsv1.Deployment, desired int32) string {
-	summary := fmt.Sprintf("Ready: %d/%d", deployment.Status.ReadyReplicas, desired)
-	if deployment.Status.UpdatedReplicas != deployment.Status.Replicas {
-		summary += fmt.Sprintf(", Updated: %d", deployment.Status.UpdatedReplicas)
-	}
-	return summary
-}
-
-func rolloutParameters(deployment *appsv1.Deployment) (string, string) {
-	var maxSurge, maxUnavailable string
-	if deployment.Spec.Strategy.RollingUpdate != nil {
-		if deployment.Spec.Strategy.RollingUpdate.MaxSurge != nil {
-			maxSurge = deployment.Spec.Strategy.RollingUpdate.MaxSurge.String()
-		}
-		if deployment.Spec.Strategy.RollingUpdate.MaxUnavailable != nil {
-			maxUnavailable = deployment.Spec.Strategy.RollingUpdate.MaxUnavailable.String()
-		}
-	}
-	return maxSurge, maxUnavailable
 }
 
 func filterPodsForDeployment(

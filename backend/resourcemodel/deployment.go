@@ -1,6 +1,7 @@
 package resourcemodel
 
 import (
+	"fmt"
 	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -18,17 +19,87 @@ func BuildDeploymentFacts(deployment *appsv1.Deployment) DeploymentFacts {
 	if deployment.Spec.Replicas != nil {
 		desired = *deployment.Spec.Replicas
 	}
-	return DeploymentFacts{
-		WorkloadCommonFacts: WorkloadCommonFacts{
-			DesiredReplicas:   desired,
-			CurrentReplicas:   deployment.Status.Replicas,
-			ReadyReplicas:     deployment.Status.ReadyReplicas,
-			UpdatedReplicas:   deployment.Status.UpdatedReplicas,
-			AvailableReplicas: deployment.Status.AvailableReplicas,
-			Conditions:        deploymentConditionFacts(deployment.Status.Conditions),
-		},
-		Paused: deployment.Spec.Paused,
+	common := WorkloadCommonFacts{
+		DesiredReplicas:   desired,
+		CurrentReplicas:   deployment.Status.Replicas,
+		ReadyReplicas:     deployment.Status.ReadyReplicas,
+		UpdatedReplicas:   deployment.Status.UpdatedReplicas,
+		AvailableReplicas: deployment.Status.AvailableReplicas,
+		Conditions:        deploymentConditionFacts(deployment.Status.Conditions),
 	}
+	maxSurge, maxUnavailable := deploymentRolloutParameters(deployment)
+	rolloutStatus, rolloutMessage := deploymentRolloutState(deployment)
+
+	var selector map[string]string
+	if deployment.Spec.Selector != nil {
+		selector = deployment.Spec.Selector.MatchLabels
+	}
+
+	return DeploymentFacts{
+		WorkloadCommonFacts: common,
+		PodTemplateFacts:    BuildPodTemplateFacts(deployment.Spec.Template),
+		Paused:              deployment.Spec.Paused,
+		Strategy:            string(deployment.Spec.Strategy.Type),
+		MaxSurge:            maxSurge,
+		MaxUnavailable:      maxUnavailable,
+		MinReadySeconds:     deployment.Spec.MinReadySeconds,
+		RevisionHistory:     int32PtrValue(deployment.Spec.RevisionHistoryLimit),
+		ProgressDeadline:    int32PtrValue(deployment.Spec.ProgressDeadlineSeconds),
+		ObservedGeneration:  deployment.Status.ObservedGeneration,
+		Selector:            selector,
+		ReadySummary:        deploymentReadySummary(common),
+		RolloutStatus:       rolloutStatus,
+		RolloutMessage:      rolloutMessage,
+	}
+}
+
+func int32PtrValue(p *int32) int32 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+// deploymentRolloutParameters formats the rolling-update surge/unavailable knobs.
+func deploymentRolloutParameters(deployment *appsv1.Deployment) (maxSurge, maxUnavailable string) {
+	if ru := deployment.Spec.Strategy.RollingUpdate; ru != nil {
+		if ru.MaxSurge != nil {
+			maxSurge = ru.MaxSurge.String()
+		}
+		if ru.MaxUnavailable != nil {
+			maxUnavailable = ru.MaxUnavailable.String()
+		}
+	}
+	return maxSurge, maxUnavailable
+}
+
+// deploymentRolloutState derives the rollout status/message from the deployment's
+// Progressing/Available conditions.
+func deploymentRolloutState(deployment *appsv1.Deployment) (rolloutStatus, rolloutMessage string) {
+	for _, cond := range deployment.Status.Conditions {
+		if cond.Type == appsv1.DeploymentProgressing {
+			switch cond.Status {
+			case corev1.ConditionTrue:
+				rolloutStatus = "progressing"
+				rolloutMessage = cond.Message
+			case corev1.ConditionFalse:
+				rolloutStatus = "failed"
+				rolloutMessage = cond.Message
+			}
+		} else if cond.Type == appsv1.DeploymentAvailable && cond.Status == corev1.ConditionTrue && rolloutStatus == "" {
+			rolloutStatus = "complete"
+		}
+	}
+	return rolloutStatus, rolloutMessage
+}
+
+// deploymentReadySummary is the short "Ready: x/y" details string.
+func deploymentReadySummary(common WorkloadCommonFacts) string {
+	summary := fmt.Sprintf("Ready: %d/%d", common.ReadyReplicas, common.DesiredReplicas)
+	if common.UpdatedReplicas != common.CurrentReplicas {
+		summary += fmt.Sprintf(", Updated: %d", common.UpdatedReplicas)
+	}
+	return summary
 }
 
 func BuildDeploymentStatusPresentation(deployment *appsv1.Deployment) ResourceStatusPresentation {

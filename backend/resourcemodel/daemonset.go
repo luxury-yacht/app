@@ -1,6 +1,10 @@
 package resourcemodel
 
-import appsv1 "k8s.io/api/apps/v1"
+import (
+	"fmt"
+
+	appsv1 "k8s.io/api/apps/v1"
+)
 
 func BuildDaemonSetResourceModel(clusterID string, daemonSet *appsv1.DaemonSet) ResourceModel {
 	facts := BuildDaemonSetFacts(daemonSet)
@@ -9,16 +13,56 @@ func BuildDaemonSetResourceModel(clusterID string, daemonSet *appsv1.DaemonSet) 
 }
 
 func BuildDaemonSetFacts(daemonSet *appsv1.DaemonSet) DaemonSetFacts {
-	return DaemonSetFacts{
-		WorkloadCommonFacts: WorkloadCommonFacts{
-			DesiredReplicas:   daemonSet.Status.DesiredNumberScheduled,
-			CurrentReplicas:   daemonSet.Status.CurrentNumberScheduled,
-			ReadyReplicas:     daemonSet.Status.NumberReady,
-			UpdatedReplicas:   daemonSet.Status.UpdatedNumberScheduled,
-			AvailableReplicas: daemonSet.Status.NumberAvailable,
-			Conditions:        daemonSetConditionFacts(daemonSet.Status.Conditions),
-		},
+	common := WorkloadCommonFacts{
+		DesiredReplicas:   daemonSet.Status.DesiredNumberScheduled,
+		CurrentReplicas:   daemonSet.Status.CurrentNumberScheduled,
+		ReadyReplicas:     daemonSet.Status.NumberReady,
+		UpdatedReplicas:   daemonSet.Status.UpdatedNumberScheduled,
+		AvailableReplicas: daemonSet.Status.NumberAvailable,
+		Conditions:        daemonSetConditionFacts(daemonSet.Status.Conditions),
 	}
+
+	var maxUnavailable, maxSurge string
+	if ru := daemonSet.Spec.UpdateStrategy.RollingUpdate; ru != nil {
+		if ru.MaxUnavailable != nil {
+			maxUnavailable = ru.MaxUnavailable.String()
+		}
+		if ru.MaxSurge != nil {
+			maxSurge = ru.MaxSurge.String()
+		}
+	}
+
+	var selector map[string]string
+	if daemonSet.Spec.Selector != nil {
+		selector = daemonSet.Spec.Selector.MatchLabels
+	}
+
+	return DaemonSetFacts{
+		WorkloadCommonFacts:  common,
+		PodTemplateFacts:     BuildPodTemplateFacts(daemonSet.Spec.Template),
+		UpdateStrategy:       string(daemonSet.Spec.UpdateStrategy.Type),
+		MaxUnavailable:       maxUnavailable,
+		MaxSurge:             maxSurge,
+		MinReadySeconds:      daemonSet.Spec.MinReadySeconds,
+		RevisionHistoryLimit: int32PtrValue(daemonSet.Spec.RevisionHistoryLimit),
+		Selector:             selector,
+		ObservedGeneration:   daemonSet.Status.ObservedGeneration,
+		NumberMisscheduled:   daemonSet.Status.NumberMisscheduled,
+		CollisionCount:       daemonSet.Status.CollisionCount,
+		ReadySummary:         daemonSetReadySummary(daemonSet),
+	}
+}
+
+// daemonSetReadySummary is the short details string for a DaemonSet.
+func daemonSetReadySummary(daemonSet *appsv1.DaemonSet) string {
+	summary := fmt.Sprintf("Desired: %d, Current: %d, Ready: %d", daemonSet.Status.DesiredNumberScheduled, daemonSet.Status.CurrentNumberScheduled, daemonSet.Status.NumberReady)
+	if daemonSet.Status.NumberUnavailable > 0 {
+		summary += fmt.Sprintf(", Unavailable: %d", daemonSet.Status.NumberUnavailable)
+	}
+	if daemonSet.Status.NumberMisscheduled > 0 {
+		summary += fmt.Sprintf(", Misscheduled: %d", daemonSet.Status.NumberMisscheduled)
+	}
+	return summary
 }
 
 func BuildDaemonSetStatusPresentation(daemonSet *appsv1.DaemonSet) ResourceStatusPresentation {

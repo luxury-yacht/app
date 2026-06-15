@@ -217,33 +217,92 @@ type WorkloadCommonFacts struct {
 
 type DeploymentFacts struct {
 	WorkloadCommonFacts
-	Paused bool `json:"paused,omitempty"`
+	PodTemplateFacts
+	Paused             bool              `json:"paused,omitempty"`
+	Strategy           string            `json:"strategy,omitempty"`
+	MaxSurge           string            `json:"maxSurge,omitempty"`
+	MaxUnavailable     string            `json:"maxUnavailable,omitempty"`
+	MinReadySeconds    int32             `json:"minReadySeconds,omitempty"`
+	RevisionHistory    int32             `json:"revisionHistory,omitempty"`
+	ProgressDeadline   int32             `json:"progressDeadline,omitempty"`
+	ObservedGeneration int64             `json:"observedGeneration,omitempty"`
+	Selector           map[string]string `json:"selector,omitempty"`
+	ReadySummary       string            `json:"readySummary,omitempty"`
+	RolloutStatus      string            `json:"rolloutStatus,omitempty"`
+	RolloutMessage     string            `json:"rolloutMessage,omitempty"`
 }
 
 type StatefulSetFacts struct {
 	WorkloadCommonFacts
+	PodTemplateFacts
+	UpdateStrategy        string            `json:"updateStrategy,omitempty"`
+	Partition             *int32            `json:"partition,omitempty"`
+	MaxUnavailable        string            `json:"maxUnavailable,omitempty"`
+	PodManagementPolicy   string            `json:"podManagementPolicy,omitempty"`
+	MinReadySeconds       int32             `json:"minReadySeconds,omitempty"`
+	RevisionHistoryLimit  int32             `json:"revisionHistoryLimit,omitempty"`
+	ServiceName           string            `json:"serviceName,omitempty"`
+	Selector              map[string]string `json:"selector,omitempty"`
+	StatusCurrentRevision string            `json:"statusCurrentRevision,omitempty"`
+	StatusUpdateRevision  string            `json:"statusUpdateRevision,omitempty"`
+	StatusCurrentReplicas int32             `json:"statusCurrentReplicas,omitempty"`
+	ObservedGeneration    int64             `json:"observedGeneration,omitempty"`
+	CollisionCount        *int32            `json:"collisionCount,omitempty"`
+	ReadySummary          string            `json:"readySummary,omitempty"`
 }
 
 type DaemonSetFacts struct {
 	WorkloadCommonFacts
+	PodTemplateFacts
+	UpdateStrategy       string            `json:"updateStrategy,omitempty"`
+	MaxUnavailable       string            `json:"maxUnavailable,omitempty"`
+	MaxSurge             string            `json:"maxSurge,omitempty"`
+	MinReadySeconds      int32             `json:"minReadySeconds,omitempty"`
+	RevisionHistoryLimit int32             `json:"revisionHistoryLimit,omitempty"`
+	Selector             map[string]string `json:"selector,omitempty"`
+	ObservedGeneration   int64             `json:"observedGeneration,omitempty"`
+	NumberMisscheduled   int32             `json:"numberMisscheduled,omitempty"`
+	CollisionCount       *int32            `json:"collisionCount,omitempty"`
+	ReadySummary         string            `json:"readySummary,omitempty"`
 }
 
 type ReplicaSetFacts struct {
 	WorkloadCommonFacts
+	PodTemplateFacts
+	MinReadySeconds    int32             `json:"minReadySeconds,omitempty"`
+	Selector           map[string]string `json:"selector,omitempty"`
+	ObservedGeneration int64             `json:"observedGeneration,omitempty"`
+	ReadySummary       string            `json:"readySummary,omitempty"`
 }
 
 type JobFacts struct {
-	DesiredReplicas int32            `json:"desiredReplicas"`
-	Active          int32            `json:"active,omitempty"`
-	Succeeded       int32            `json:"succeeded,omitempty"`
-	Failed          int32            `json:"failed,omitempty"`
-	Suspended       bool             `json:"suspended,omitempty"`
-	Conditions      []ConditionFacts `json:"conditions,omitempty"`
+	PodTemplateFacts
+	DesiredReplicas         int32             `json:"desiredReplicas"`
+	Active                  int32             `json:"active,omitempty"`
+	Succeeded               int32             `json:"succeeded,omitempty"`
+	Failed                  int32             `json:"failed,omitempty"`
+	Suspended               bool              `json:"suspended,omitempty"`
+	Parallelism             int32             `json:"parallelism,omitempty"`
+	BackoffLimit            int32             `json:"backoffLimit,omitempty"`
+	ActiveDeadlineSeconds   *int64            `json:"activeDeadlineSeconds,omitempty"`
+	TTLSecondsAfterFinished *int32            `json:"ttlSecondsAfterFinished,omitempty"`
+	CompletionMode          string            `json:"completionMode,omitempty"`
+	StartTime               *metav1.Time      `json:"startTime,omitempty"`
+	CompletionTime          *metav1.Time      `json:"completionTime,omitempty"`
+	Selector                map[string]string `json:"selector,omitempty"`
+	Conditions              []ConditionFacts  `json:"conditions,omitempty"`
 }
 
 type CronJobFacts struct {
-	Suspended  bool  `json:"suspended,omitempty"`
-	ActiveJobs int32 `json:"activeJobs,omitempty"`
+	Suspended               bool         `json:"suspended,omitempty"`
+	ActiveJobs              int32        `json:"activeJobs,omitempty"`
+	Schedule                string       `json:"schedule,omitempty"`
+	ConcurrencyPolicy       string       `json:"concurrencyPolicy,omitempty"`
+	StartingDeadlineSeconds *int64       `json:"startingDeadlineSeconds,omitempty"`
+	SuccessfulJobsHistory   int32        `json:"successfulJobsHistory,omitempty"`
+	FailedJobsHistory       int32        `json:"failedJobsHistory,omitempty"`
+	LastScheduleTime        *metav1.Time `json:"lastScheduleTime,omitempty"`
+	LastSuccessfulTime      *metav1.Time `json:"lastSuccessfulTime,omitempty"`
 }
 
 type ResourceListFacts struct {

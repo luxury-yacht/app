@@ -69,27 +69,27 @@ func (s *ReplicaSetService) buildReplicaSetDetails(
 		Name:                replicaSet.Name,
 		Namespace:           replicaSet.Namespace,
 		StatusProjection:    restypes.NewStatusProjection(model.Status),
-		Details:             "",
+		Details:             facts.ReadySummary,
 		Replicas:            replicas,
 		Ready:               ready,
 		Available:           facts.AvailableReplicas,
 		DesiredReplicas:     facts.DesiredReplicas,
 		Age:                 common.FormatAge(replicaSet.CreationTimestamp.Time),
 		ResourceUtilization: workloadUtilization(podsList, podMetrics),
-		MinReadySeconds:     replicaSet.Spec.MinReadySeconds,
-		Selector:            replicaSet.Spec.Selector.MatchLabels,
+		MinReadySeconds:     facts.MinReadySeconds,
+		Selector:            facts.Selector,
 		Labels:              replicaSet.Labels,
 		Annotations:         replicaSet.Annotations,
 		Conditions:          restypes.FormatConditions(facts.Conditions),
-		Containers:          describeContainers(replicaSet.Spec.Template.Spec.Containers),
-		InitContainers:      describeContainers(replicaSet.Spec.Template.Spec.InitContainers),
+		Containers:          describeContainers(facts.Containers),
+		InitContainers:      describeContainers(facts.InitContainers),
 		Pods:                podInfos,
 		PodMetricsSummary:   podSummary,
-		ObservedGeneration:  replicaSet.Status.ObservedGeneration,
-		IsActive:            s.isReplicaSetActive(replicaSet),
+		ObservedGeneration:  facts.ObservedGeneration,
+		// IsActive needs a live deployment lookup, so it stays here (not intrinsic).
+		IsActive: s.isReplicaSetActive(replicaSet),
 	}
 
-	details.Details = summarizeReplicaSet(replicaSet, facts.DesiredReplicas)
 	return details
 }
 
@@ -184,13 +184,4 @@ func revisionFromAnnotations(annotations map[string]string) string {
 		return ""
 	}
 	return annotations["deployment.kubernetes.io/revision"]
-}
-
-// summarizeReplicaSet builds the short summary string for ReplicaSet details.
-func summarizeReplicaSet(replicaSet *appsv1.ReplicaSet, desired int32) string {
-	summary := fmt.Sprintf("Ready: %d/%d", replicaSet.Status.ReadyReplicas, desired)
-	if replicaSet.Status.AvailableReplicas > 0 {
-		summary += fmt.Sprintf(", Available: %d", replicaSet.Status.AvailableReplicas)
-	}
-	return summary
 }

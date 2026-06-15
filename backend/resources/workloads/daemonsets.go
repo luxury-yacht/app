@@ -60,46 +60,41 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 	podInfos := buildPodSummaries(s.deps.ClusterID, "DaemonSet", daemonSet.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 
+	// All intrinsic spec/status fields come from the model facts (single extraction).
 	details := &restypes.DaemonSetDetails{
-		Kind:                "DaemonSet",
-		Name:                daemonSet.Name,
-		Namespace:           daemonSet.Namespace,
-		StatusProjection:    restypes.NewStatusProjection(model.Status),
-		Details:             "",
-		Desired:             facts.DesiredReplicas,
-		Current:             facts.CurrentReplicas,
-		Ready:               facts.ReadyReplicas,
-		UpToDate:            facts.UpdatedReplicas,
-		Available:           facts.AvailableReplicas,
-		Age:                 common.FormatAge(daemonSet.CreationTimestamp.Time),
-		ResourceUtilization: workloadUtilization(podsList, podMetrics),
-		UpdateStrategy:      string(daemonSet.Spec.UpdateStrategy.Type),
-		MaxUnavailable:      describeOptionalValue(daemonSet.Spec.UpdateStrategy.RollingUpdate, true),
-		MaxSurge:            describeOptionalValue(daemonSet.Spec.UpdateStrategy.RollingUpdate, false),
-		MinReadySeconds:     daemonSet.Spec.MinReadySeconds,
-		RevisionHistoryLimit: func() int32 {
-			if daemonSet.Spec.RevisionHistoryLimit != nil {
-				return *daemonSet.Spec.RevisionHistoryLimit
-			}
-			return 0
-		}(),
-		ServiceAccount:     daemonSet.Spec.Template.Spec.ServiceAccountName,
-		Selector:           daemonSet.Spec.Selector.MatchLabels,
-		Labels:             daemonSet.Labels,
-		Annotations:        daemonSet.Annotations,
-		NodeSelector:       daemonSet.Spec.Template.Spec.NodeSelector,
-		Tolerations:        pods.FormatPodTolerations(daemonSet.Spec.Template.Spec.Tolerations),
-		Conditions:         restypes.FormatConditions(facts.Conditions),
-		Containers:         describeContainers(daemonSet.Spec.Template.Spec.Containers),
-		InitContainers:     describeContainers(daemonSet.Spec.Template.Spec.InitContainers),
-		Pods:               podInfos,
-		PodMetricsSummary:  podSummary,
-		ObservedGeneration: daemonSet.Status.ObservedGeneration,
-		NumberMisscheduled: daemonSet.Status.NumberMisscheduled,
-		CollisionCount:     daemonSet.Status.CollisionCount,
+		Kind:                 "DaemonSet",
+		Name:                 daemonSet.Name,
+		Namespace:            daemonSet.Namespace,
+		StatusProjection:     restypes.NewStatusProjection(model.Status),
+		Details:              facts.ReadySummary,
+		Desired:              facts.DesiredReplicas,
+		Current:              facts.CurrentReplicas,
+		Ready:                facts.ReadyReplicas,
+		UpToDate:             facts.UpdatedReplicas,
+		Available:            facts.AvailableReplicas,
+		Age:                  common.FormatAge(daemonSet.CreationTimestamp.Time),
+		ResourceUtilization:  workloadUtilization(podsList, podMetrics),
+		UpdateStrategy:       facts.UpdateStrategy,
+		MaxUnavailable:       facts.MaxUnavailable,
+		MaxSurge:             facts.MaxSurge,
+		MinReadySeconds:      facts.MinReadySeconds,
+		RevisionHistoryLimit: facts.RevisionHistoryLimit,
+		ServiceAccount:       facts.ServiceAccountName,
+		Selector:             facts.Selector,
+		Labels:               daemonSet.Labels,
+		Annotations:          daemonSet.Annotations,
+		NodeSelector:         facts.NodeSelector,
+		Tolerations:          pods.FormatPodTolerations(facts.Tolerations),
+		Conditions:           restypes.FormatConditions(facts.Conditions),
+		Containers:           describeContainers(facts.Containers),
+		InitContainers:       describeContainers(facts.InitContainers),
+		Pods:                 podInfos,
+		PodMetricsSummary:    podSummary,
+		ObservedGeneration:   facts.ObservedGeneration,
+		NumberMisscheduled:   facts.NumberMisscheduled,
+		CollisionCount:       facts.CollisionCount,
 	}
 
-	details.Details = summarizeDaemonSet(daemonSet)
 	return details
 }
 
@@ -120,29 +115,3 @@ func (s *DaemonSetService) getDaemonSetPods(daemonSet *appsv1.DaemonSet) ([]core
 	return filtered, metrics, nil
 }
 
-func describeOptionalValue(rollingUpdate *appsv1.RollingUpdateDaemonSet, extractMaxUnavailable bool) string {
-	if rollingUpdate == nil {
-		return ""
-	}
-	if extractMaxUnavailable {
-		if rollingUpdate.MaxUnavailable != nil {
-			return rollingUpdate.MaxUnavailable.String()
-		}
-	} else {
-		if rollingUpdate.MaxSurge != nil {
-			return rollingUpdate.MaxSurge.String()
-		}
-	}
-	return ""
-}
-
-func summarizeDaemonSet(daemonSet *appsv1.DaemonSet) string {
-	summary := fmt.Sprintf("Desired: %d, Current: %d, Ready: %d", daemonSet.Status.DesiredNumberScheduled, daemonSet.Status.CurrentNumberScheduled, daemonSet.Status.NumberReady)
-	if daemonSet.Status.NumberUnavailable > 0 {
-		summary += fmt.Sprintf(", Unavailable: %d", daemonSet.Status.NumberUnavailable)
-	}
-	if daemonSet.Status.NumberMisscheduled > 0 {
-		summary += fmt.Sprintf(", Misscheduled: %d", daemonSet.Status.NumberMisscheduled)
-	}
-	return summary
-}

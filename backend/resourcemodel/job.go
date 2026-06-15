@@ -18,15 +18,43 @@ func BuildJobFacts(job *batchv1.Job) JobFacts {
 	if job.Spec.Completions != nil {
 		completions = *job.Spec.Completions
 	}
+	parallelism := int32(1)
+	if job.Spec.Parallelism != nil {
+		parallelism = *job.Spec.Parallelism
+	}
+	backoffLimit := int32(6)
+	if job.Spec.BackoffLimit != nil {
+		backoffLimit = *job.Spec.BackoffLimit
+	}
+	completionMode := ""
+	if job.Spec.CompletionMode != nil {
+		completionMode = string(*job.Spec.CompletionMode)
+	}
 	suspended := job.Spec.Suspend != nil && *job.Spec.Suspend
 	return JobFacts{
-		DesiredReplicas: completions,
-		Active:          job.Status.Active,
-		Succeeded:       job.Status.Succeeded,
-		Failed:          job.Status.Failed,
-		Suspended:       suspended,
-		Conditions:      jobConditionFacts(job.Status.Conditions),
+		PodTemplateFacts:        BuildPodTemplateFacts(job.Spec.Template),
+		DesiredReplicas:         completions,
+		Active:                  job.Status.Active,
+		Succeeded:               job.Status.Succeeded,
+		Failed:                  job.Status.Failed,
+		Suspended:               suspended,
+		Parallelism:             parallelism,
+		BackoffLimit:            backoffLimit,
+		ActiveDeadlineSeconds:   job.Spec.ActiveDeadlineSeconds,
+		TTLSecondsAfterFinished: job.Spec.TTLSecondsAfterFinished,
+		CompletionMode:          completionMode,
+		StartTime:               job.Status.StartTime,
+		CompletionTime:          job.Status.CompletionTime,
+		Selector:                jobSelector(job),
+		Conditions:              jobConditionFacts(job.Status.Conditions),
 	}
+}
+
+func jobSelector(job *batchv1.Job) map[string]string {
+	if job.Spec.Selector == nil {
+		return nil
+	}
+	return job.Spec.Selector.MatchLabels
 }
 
 func BuildJobStatusPresentation(job *batchv1.Job) ResourceStatusPresentation {

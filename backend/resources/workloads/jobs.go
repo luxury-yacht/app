@@ -55,50 +55,40 @@ func (s *JobService) Job(namespace, name string) (*restypes.JobDetails, error) {
 func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) *restypes.JobDetails {
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 	model := resourcemodel.BuildJobResourceModel(clusterID, job)
+	facts := model.Facts.Job
+
+	// All intrinsic spec/status fields come from the model facts (single extraction).
 	details := &restypes.JobDetails{
 		Kind:                    "Job",
 		Name:                    job.Name,
 		Namespace:               job.Namespace,
 		StatusProjection:        restypes.NewStatusProjection(model.Status),
 		Age:                     common.FormatAge(job.CreationTimestamp.Time),
-		Succeeded:               job.Status.Succeeded,
-		Failed:                  job.Status.Failed,
-		Active:                  job.Status.Active,
-		StartTime:               job.Status.StartTime,
-		CompletionTime:          job.Status.CompletionTime,
+		Completions:             facts.DesiredReplicas,
+		Parallelism:             facts.Parallelism,
+		Succeeded:               facts.Succeeded,
+		Failed:                  facts.Failed,
+		Active:                  facts.Active,
+		StartTime:               facts.StartTime,
+		CompletionTime:          facts.CompletionTime,
+		CompletionMode:          facts.CompletionMode,
+		Suspend:                 facts.Suspended,
 		Labels:                  job.Labels,
 		Annotations:             job.Annotations,
-		Selector:                mapStringString(job.Spec.Selector),
-		Containers:              describeContainers(job.Spec.Template.Spec.Containers),
+		Selector:                facts.Selector,
+		Containers:              describeContainers(facts.Containers),
 		Pods:                    buildSimplePodInfo(clusterID, podsList),
-		BackoffLimit:            defaultInt32(job.Spec.BackoffLimit, 6),
-		ActiveDeadlineSeconds:   job.Spec.ActiveDeadlineSeconds,
-		TTLSecondsAfterFinished: job.Spec.TTLSecondsAfterFinished,
+		BackoffLimit:            facts.BackoffLimit,
+		ActiveDeadlineSeconds:   facts.ActiveDeadlineSeconds,
+		TTLSecondsAfterFinished: facts.TTLSecondsAfterFinished,
+		Conditions:              restypes.FormatConditions(facts.Conditions),
 	}
 
 	if podSummary != nil {
 		details.PodMetricsSummary = podSummary
 	}
 
-	if job.Spec.Completions != nil {
-		details.Completions = *job.Spec.Completions
-	} else {
-		details.Completions = 1
-	}
-
-	if job.Spec.Parallelism != nil {
-		details.Parallelism = *job.Spec.Parallelism
-	} else {
-		details.Parallelism = 1
-	}
-
-	if job.Spec.CompletionMode != nil {
-		details.CompletionMode = string(*job.Spec.CompletionMode)
-	}
-	if job.Spec.Suspend != nil {
-		details.Suspend = *job.Spec.Suspend
-	}
-
+	// Duration is a display computation over the start/completion facts.
 	if details.StartTime != nil {
 		if details.CompletionTime != nil {
 			duration := details.CompletionTime.Time.Sub(details.StartTime.Time)
@@ -108,9 +98,7 @@ func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, 
 		}
 	}
 
-	details.Conditions = restypes.FormatConditions(model.Facts.Job.Conditions)
-
-	details.Details = summarizeJob(job, details)
+	details.Details = summarizeJob(details)
 	return details
 }
 
@@ -133,11 +121,4 @@ func podOwnerName(pod corev1.Pod) string {
 		}
 	}
 	return ""
-}
-
-func mapStringString(selector *metav1.LabelSelector) map[string]string {
-	if selector == nil {
-		return nil
-	}
-	return selector.MatchLabels
 }

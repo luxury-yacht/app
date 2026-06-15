@@ -55,20 +55,26 @@ func (s *CronJobService) CronJob(namespace, name string) (*restypes.CronJobDetai
 
 func buildCronJobDetails(clusterID string, cronJob *batchv1.CronJob, jobs *batchv1.JobList, podInfos []restypes.PodSimpleInfo, podSummary *restypes.PodMetricsSummary, jobInfos []restypes.JobSimpleInfo) *restypes.CronJobDetails {
 	model := resourcemodel.BuildCronJobResourceModel(clusterID, cronJob)
+	facts := model.Facts.CronJob
+
+	// Intrinsic scheduling fields come from the model facts (single extraction).
+	// The job-template sub-structure, next-schedule computation, and live job
+	// correlation are assembled below (template feeds shared formatters; the rest
+	// is display / live data, not the resource's intrinsic definition).
 	details := &restypes.CronJobDetails{
 		Kind:                    "CronJob",
 		Name:                    cronJob.Name,
 		Namespace:               cronJob.Namespace,
 		StatusProjection:        restypes.NewStatusProjection(model.Status),
 		Age:                     common.FormatAge(cronJob.CreationTimestamp.Time),
-		Schedule:                cronJob.Spec.Schedule,
-		Suspend:                 cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend,
-		LastScheduleTime:        cronJob.Status.LastScheduleTime,
-		LastSuccessfulTime:      cronJob.Status.LastSuccessfulTime,
-		ConcurrencyPolicy:       string(cronJob.Spec.ConcurrencyPolicy),
-		StartingDeadlineSeconds: cronJob.Spec.StartingDeadlineSeconds,
-		SuccessfulJobsHistory:   defaultInt32(cronJob.Spec.SuccessfulJobsHistoryLimit, 3),
-		FailedJobsHistory:       defaultInt32(cronJob.Spec.FailedJobsHistoryLimit, 1),
+		Schedule:                facts.Schedule,
+		Suspend:                 facts.Suspended,
+		LastScheduleTime:        facts.LastScheduleTime,
+		LastSuccessfulTime:      facts.LastSuccessfulTime,
+		ConcurrencyPolicy:       facts.ConcurrencyPolicy,
+		StartingDeadlineSeconds: facts.StartingDeadlineSeconds,
+		SuccessfulJobsHistory:   facts.SuccessfulJobsHistory,
+		FailedJobsHistory:       facts.FailedJobsHistory,
 		Labels:                  cronJob.Labels,
 		Annotations:             cronJob.Annotations,
 	}

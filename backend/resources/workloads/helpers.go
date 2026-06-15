@@ -279,11 +279,10 @@ func filterPodsForJob(job *batchv1.Job, podList *corev1.PodList) []corev1.Pod {
 	return filtered
 }
 
-func summarizeJob(job *batchv1.Job, details *restypes.JobDetails) string {
-	completions := details.Completions
-	summary := fmt.Sprintf("Status: %s, Succeeded: %d/%d", details.Status, job.Status.Succeeded, completions)
-	if job.Status.Failed > 0 {
-		summary += fmt.Sprintf(", Failed: %d", job.Status.Failed)
+func summarizeJob(details *restypes.JobDetails) string {
+	summary := fmt.Sprintf("Status: %s, Succeeded: %d/%d", details.Status, details.Succeeded, details.Completions)
+	if details.Failed > 0 {
+		summary += fmt.Sprintf(", Failed: %d", details.Failed)
 	}
 	return summary
 }

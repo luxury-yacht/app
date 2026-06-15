@@ -1,6 +1,8 @@
 package resourcemodel
 
 import (
+	"fmt"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -16,15 +18,36 @@ func BuildReplicaSetFacts(replicaSet *appsv1.ReplicaSet) ReplicaSetFacts {
 	if replicaSet.Spec.Replicas != nil {
 		desired = *replicaSet.Spec.Replicas
 	}
-	return ReplicaSetFacts{
-		WorkloadCommonFacts: WorkloadCommonFacts{
-			DesiredReplicas:   desired,
-			CurrentReplicas:   replicaSet.Status.Replicas,
-			ReadyReplicas:     replicaSet.Status.ReadyReplicas,
-			AvailableReplicas: replicaSet.Status.AvailableReplicas,
-			Conditions:        replicaSetConditionFacts(replicaSet.Status.Conditions),
-		},
+	common := WorkloadCommonFacts{
+		DesiredReplicas:   desired,
+		CurrentReplicas:   replicaSet.Status.Replicas,
+		ReadyReplicas:     replicaSet.Status.ReadyReplicas,
+		AvailableReplicas: replicaSet.Status.AvailableReplicas,
+		Conditions:        replicaSetConditionFacts(replicaSet.Status.Conditions),
 	}
+
+	var selector map[string]string
+	if replicaSet.Spec.Selector != nil {
+		selector = replicaSet.Spec.Selector.MatchLabels
+	}
+
+	return ReplicaSetFacts{
+		WorkloadCommonFacts: common,
+		PodTemplateFacts:    BuildPodTemplateFacts(replicaSet.Spec.Template),
+		MinReadySeconds:     replicaSet.Spec.MinReadySeconds,
+		Selector:            selector,
+		ObservedGeneration:  replicaSet.Status.ObservedGeneration,
+		ReadySummary:        replicaSetReadySummary(common),
+	}
+}
+
+// replicaSetReadySummary is the short details string for a ReplicaSet.
+func replicaSetReadySummary(common WorkloadCommonFacts) string {
+	summary := fmt.Sprintf("Ready: %d/%d", common.ReadyReplicas, common.DesiredReplicas)
+	if common.AvailableReplicas > 0 {
+		summary += fmt.Sprintf(", Available: %d", common.AvailableReplicas)
+	}
+	return summary
 }
 
 func BuildReplicaSetStatusPresentation(replicaSet *appsv1.ReplicaSet) ResourceStatusPresentation {
