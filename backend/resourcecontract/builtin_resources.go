@@ -10,7 +10,11 @@ package resourcecontract
 import (
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -43,11 +47,11 @@ var BuiltinResources = []BuiltinResource{
 
 	builtin(deployment.Identity.Group, deployment.Identity.Version, deployment.Identity.Kind, deployment.Identity.Resource, deployment.Identity.Namespaced),
 	builtin(statefulset.Identity.Group, statefulset.Identity.Version, statefulset.Identity.Kind, statefulset.Identity.Resource, statefulset.Identity.Namespaced),
-	builtin("apps", "v1", "DaemonSet", "daemonsets", true),
-	builtin("apps", "v1", "ReplicaSet", "replicasets", true),
+	builtin(daemonset.Identity.Group, daemonset.Identity.Version, daemonset.Identity.Kind, daemonset.Identity.Resource, daemonset.Identity.Namespaced),
+	builtin(replicaset.Identity.Group, replicaset.Identity.Version, replicaset.Identity.Kind, replicaset.Identity.Resource, replicaset.Identity.Namespaced),
 
-	builtin("batch", "v1", "Job", "jobs", true),
-	builtin("batch", "v1", "CronJob", "cronjobs", true),
+	builtin(jobres.Identity.Group, jobres.Identity.Version, jobres.Identity.Kind, jobres.Identity.Resource, jobres.Identity.Namespaced),
+	builtin(cronjob.Identity.Group, cronjob.Identity.Version, cronjob.Identity.Kind, cronjob.Identity.Resource, cronjob.Identity.Namespaced),
 
 	builtin("autoscaling", "v1", "HorizontalPodAutoscaler", "horizontalpodautoscalers", true),
 	builtin("autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", true),

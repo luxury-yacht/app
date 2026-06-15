@@ -903,6 +903,208 @@ export namespace capabilities {
 
 }
 
+export namespace cronjob {
+	
+	export class CronJobDetails {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    details: string;
+	    age: string;
+	    schedule: string;
+	    suspend: boolean;
+	    lastScheduleTime?: v1.Time;
+	    lastSuccessfulTime?: v1.Time;
+	    nextScheduleTime?: string;
+	    timeUntilNextSchedule?: string;
+	    lastManualTime?: v1.Time;
+	    lastFailureTime?: v1.Time;
+	    concurrencyPolicy: string;
+	    startingDeadlineSeconds?: number;
+	    successfulJobsHistory: number;
+	    failedJobsHistory: number;
+	    activeJobs?: types.JobReference[];
+	    jobs?: types.JobSimpleInfo[];
+	    jobTemplate: types.JobTemplateDetails;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    pods?: types.PodSimpleInfo[];
+	    podMetricsSummary?: types.PodMetricsSummary;
+	
+	    static createFrom(source: any = {}) {
+	        return new CronJobDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.details = source["details"];
+	        this.age = source["age"];
+	        this.schedule = source["schedule"];
+	        this.suspend = source["suspend"];
+	        this.lastScheduleTime = this.convertValues(source["lastScheduleTime"], v1.Time);
+	        this.lastSuccessfulTime = this.convertValues(source["lastSuccessfulTime"], v1.Time);
+	        this.nextScheduleTime = source["nextScheduleTime"];
+	        this.timeUntilNextSchedule = source["timeUntilNextSchedule"];
+	        this.lastManualTime = this.convertValues(source["lastManualTime"], v1.Time);
+	        this.lastFailureTime = this.convertValues(source["lastFailureTime"], v1.Time);
+	        this.concurrencyPolicy = source["concurrencyPolicy"];
+	        this.startingDeadlineSeconds = source["startingDeadlineSeconds"];
+	        this.successfulJobsHistory = source["successfulJobsHistory"];
+	        this.failedJobsHistory = source["failedJobsHistory"];
+	        this.activeJobs = this.convertValues(source["activeJobs"], types.JobReference);
+	        this.jobs = this.convertValues(source["jobs"], types.JobSimpleInfo);
+	        this.jobTemplate = this.convertValues(source["jobTemplate"], types.JobTemplateDetails);
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.pods = this.convertValues(source["pods"], types.PodSimpleInfo);
+	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], types.PodMetricsSummary);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace daemonset {
+	
+	export class DaemonSetDetails {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    details: string;
+	    desired: number;
+	    current: number;
+	    ready: number;
+	    upToDate?: number;
+	    available: number;
+	    updated?: number;
+	    age: string;
+	    cpuRequest?: string;
+	    cpuLimit?: string;
+	    cpuUsage?: string;
+	    memRequest?: string;
+	    memLimit?: string;
+	    memUsage?: string;
+	    updateStrategy?: string;
+	    maxUnavailable?: string;
+	    maxSurge?: string;
+	    minReadySeconds?: number;
+	    revisionHistoryLimit?: number;
+	    serviceAccount?: string;
+	    selector?: Record<string, string>;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    nodeSelector?: Record<string, string>;
+	    tolerations?: string[];
+	    conditions?: string[];
+	    containers?: types.PodDetailInfoContainer[];
+	    initContainers?: types.PodDetailInfoContainer[];
+	    pods?: types.PodSimpleInfo[];
+	    podMetricsSummary?: types.PodMetricsSummary;
+	    observedGeneration?: number;
+	    numberMisscheduled?: number;
+	    collisionCount?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DaemonSetDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.details = source["details"];
+	        this.desired = source["desired"];
+	        this.current = source["current"];
+	        this.ready = source["ready"];
+	        this.upToDate = source["upToDate"];
+	        this.available = source["available"];
+	        this.updated = source["updated"];
+	        this.age = source["age"];
+	        this.cpuRequest = source["cpuRequest"];
+	        this.cpuLimit = source["cpuLimit"];
+	        this.cpuUsage = source["cpuUsage"];
+	        this.memRequest = source["memRequest"];
+	        this.memLimit = source["memLimit"];
+	        this.memUsage = source["memUsage"];
+	        this.updateStrategy = source["updateStrategy"];
+	        this.maxUnavailable = source["maxUnavailable"];
+	        this.maxSurge = source["maxSurge"];
+	        this.minReadySeconds = source["minReadySeconds"];
+	        this.revisionHistoryLimit = source["revisionHistoryLimit"];
+	        this.serviceAccount = source["serviceAccount"];
+	        this.selector = source["selector"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.nodeSelector = source["nodeSelector"];
+	        this.tolerations = source["tolerations"];
+	        this.conditions = source["conditions"];
+	        this.containers = this.convertValues(source["containers"], types.PodDetailInfoContainer);
+	        this.initContainers = this.convertValues(source["initContainers"], types.PodDetailInfoContainer);
+	        this.pods = this.convertValues(source["pods"], types.PodSimpleInfo);
+	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], types.PodMetricsSummary);
+	        this.observedGeneration = source["observedGeneration"];
+	        this.numberMisscheduled = source["numberMisscheduled"];
+	        this.collisionCount = source["collisionCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace deployment {
 	
 	export class DeploymentDetails {
@@ -1028,6 +1230,97 @@ export namespace deployment {
 
 }
 
+export namespace job {
+	
+	export class JobDetails {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    details: string;
+	    age?: string;
+	    completions?: number;
+	    parallelism?: number;
+	    succeeded?: number;
+	    failed?: number;
+	    active?: number;
+	    startTime?: v1.Time;
+	    completionTime?: v1.Time;
+	    duration?: string;
+	    backoffLimit?: number;
+	    activeDeadlineSeconds?: number;
+	    ttlSecondsAfterFinished?: number;
+	    completionMode?: string;
+	    suspend?: boolean;
+	    selector?: Record<string, string>;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    containers?: types.PodDetailInfoContainer[];
+	    conditions?: string[];
+	    pods?: types.PodSimpleInfo[];
+	    podMetricsSummary?: types.PodMetricsSummary;
+	
+	    static createFrom(source: any = {}) {
+	        return new JobDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.details = source["details"];
+	        this.age = source["age"];
+	        this.completions = source["completions"];
+	        this.parallelism = source["parallelism"];
+	        this.succeeded = source["succeeded"];
+	        this.failed = source["failed"];
+	        this.active = source["active"];
+	        this.startTime = this.convertValues(source["startTime"], v1.Time);
+	        this.completionTime = this.convertValues(source["completionTime"], v1.Time);
+	        this.duration = source["duration"];
+	        this.backoffLimit = source["backoffLimit"];
+	        this.activeDeadlineSeconds = source["activeDeadlineSeconds"];
+	        this.ttlSecondsAfterFinished = source["ttlSecondsAfterFinished"];
+	        this.completionMode = source["completionMode"];
+	        this.suspend = source["suspend"];
+	        this.selector = source["selector"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.containers = this.convertValues(source["containers"], types.PodDetailInfoContainer);
+	        this.conditions = source["conditions"];
+	        this.pods = this.convertValues(source["pods"], types.PodSimpleInfo);
+	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], types.PodMetricsSummary);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace objectcatalog {
 	
 	export class ActionFacts {
@@ -1106,6 +1399,99 @@ export namespace objectcatalog {
 	        this.scope = source["scope"];
 	        this.labelsDigest = source["labelsDigest"];
 	        this.actionFacts = this.convertValues(source["actionFacts"], ActionFacts);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace replicaset {
+	
+	export class ReplicaSetDetails {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    details: string;
+	    replicas: string;
+	    ready: string;
+	    available: number;
+	    desiredReplicas: number;
+	    age: string;
+	    cpuRequest?: string;
+	    cpuLimit?: string;
+	    cpuUsage?: string;
+	    memRequest?: string;
+	    memLimit?: string;
+	    memUsage?: string;
+	    minReadySeconds?: number;
+	    selector?: Record<string, string>;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+	    conditions?: string[];
+	    containers?: types.PodDetailInfoContainer[];
+	    initContainers?: types.PodDetailInfoContainer[];
+	    pods?: types.PodSimpleInfo[];
+	    podMetricsSummary?: types.PodMetricsSummary;
+	    observedGeneration?: number;
+	    isActive: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReplicaSetDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.details = source["details"];
+	        this.replicas = source["replicas"];
+	        this.ready = source["ready"];
+	        this.available = source["available"];
+	        this.desiredReplicas = source["desiredReplicas"];
+	        this.age = source["age"];
+	        this.cpuRequest = source["cpuRequest"];
+	        this.cpuLimit = source["cpuLimit"];
+	        this.cpuUsage = source["cpuUsage"];
+	        this.memRequest = source["memRequest"];
+	        this.memLimit = source["memLimit"];
+	        this.memUsage = source["memUsage"];
+	        this.minReadySeconds = source["minReadySeconds"];
+	        this.selector = source["selector"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.conditions = source["conditions"];
+	        this.containers = this.convertValues(source["containers"], types.PodDetailInfoContainer);
+	        this.initContainers = this.convertValues(source["initContainers"], types.PodDetailInfoContainer);
+	        this.pods = this.convertValues(source["pods"], types.PodSimpleInfo);
+	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], types.PodMetricsSummary);
+	        this.observedGeneration = source["observedGeneration"];
+	        this.isActive = source["isActive"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2274,342 +2660,6 @@ export namespace types {
 		    return a;
 		}
 	}
-	export class PodMetricsSummary {
-	    pods: number;
-	    readyPods: number;
-	    cpuUsage?: string;
-	    memUsage?: string;
-	    cpuRequest?: string;
-	    cpuLimit?: string;
-	    memRequest?: string;
-	    memLimit?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new PodMetricsSummary(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pods = source["pods"];
-	        this.readyPods = source["readyPods"];
-	        this.cpuUsage = source["cpuUsage"];
-	        this.memUsage = source["memUsage"];
-	        this.cpuRequest = source["cpuRequest"];
-	        this.cpuLimit = source["cpuLimit"];
-	        this.memRequest = source["memRequest"];
-	        this.memLimit = source["memLimit"];
-	    }
-	}
-	export class PodSimpleInfo {
-	    kind: string;
-	    name: string;
-	    namespace: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    ready: string;
-	    restarts: number;
-	    age: string;
-	    cpuRequest: string;
-	    cpuLimit: string;
-	    cpuUsage: string;
-	    memRequest: string;
-	    memLimit: string;
-	    memUsage: string;
-	    ownerKind: string;
-	    ownerName: string;
-	    ownerApiVersion?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new PodSimpleInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.ready = source["ready"];
-	        this.restarts = source["restarts"];
-	        this.age = source["age"];
-	        this.cpuRequest = source["cpuRequest"];
-	        this.cpuLimit = source["cpuLimit"];
-	        this.cpuUsage = source["cpuUsage"];
-	        this.memRequest = source["memRequest"];
-	        this.memLimit = source["memLimit"];
-	        this.memUsage = source["memUsage"];
-	        this.ownerKind = source["ownerKind"];
-	        this.ownerName = source["ownerName"];
-	        this.ownerApiVersion = source["ownerApiVersion"];
-	    }
-	}
-	export class PodDetailInfoContainer {
-	    name: string;
-	    image: string;
-	    imagePullPolicy: string;
-	    ready: boolean;
-	    restartCount: number;
-	    state: string;
-	    stateReason?: string;
-	    stateMessage?: string;
-	    startedAt?: string;
-	    cpuRequest: string;
-	    cpuLimit: string;
-	    memRequest: string;
-	    memLimit: string;
-	    ports?: string[];
-	    volumeMounts?: string[];
-	    environment?: Record<string, string>;
-	    command?: string[];
-	    args?: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new PodDetailInfoContainer(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.image = source["image"];
-	        this.imagePullPolicy = source["imagePullPolicy"];
-	        this.ready = source["ready"];
-	        this.restartCount = source["restartCount"];
-	        this.state = source["state"];
-	        this.stateReason = source["stateReason"];
-	        this.stateMessage = source["stateMessage"];
-	        this.startedAt = source["startedAt"];
-	        this.cpuRequest = source["cpuRequest"];
-	        this.cpuLimit = source["cpuLimit"];
-	        this.memRequest = source["memRequest"];
-	        this.memLimit = source["memLimit"];
-	        this.ports = source["ports"];
-	        this.volumeMounts = source["volumeMounts"];
-	        this.environment = source["environment"];
-	        this.command = source["command"];
-	        this.args = source["args"];
-	    }
-	}
-	export class JobTemplateDetails {
-	    completions?: number;
-	    parallelism?: number;
-	    backoffLimit?: number;
-	    activeDeadlineSeconds?: number;
-	    ttlSecondsAfterFinished?: number;
-	    containers?: PodDetailInfoContainer[];
-	
-	    static createFrom(source: any = {}) {
-	        return new JobTemplateDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.completions = source["completions"];
-	        this.parallelism = source["parallelism"];
-	        this.backoffLimit = source["backoffLimit"];
-	        this.activeDeadlineSeconds = source["activeDeadlineSeconds"];
-	        this.ttlSecondsAfterFinished = source["ttlSecondsAfterFinished"];
-	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class JobSimpleInfo {
-	    kind: string;
-	    name: string;
-	    namespace: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    completions: string;
-	    succeeded: number;
-	    failed: number;
-	    active: number;
-	    startTime?: v1.Time;
-	    completionTime?: v1.Time;
-	    duration?: string;
-	    durationSeconds?: number;
-	    age: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new JobSimpleInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.completions = source["completions"];
-	        this.succeeded = source["succeeded"];
-	        this.failed = source["failed"];
-	        this.active = source["active"];
-	        this.startTime = this.convertValues(source["startTime"], v1.Time);
-	        this.completionTime = this.convertValues(source["completionTime"], v1.Time);
-	        this.duration = source["duration"];
-	        this.durationSeconds = source["durationSeconds"];
-	        this.age = source["age"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class JobReference {
-	    name: string;
-	    startTime?: v1.Time;
-	
-	    static createFrom(source: any = {}) {
-	        return new JobReference(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.startTime = this.convertValues(source["startTime"], v1.Time);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class CronJobDetails {
-	    kind: string;
-	    name: string;
-	    namespace: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    details: string;
-	    age: string;
-	    schedule: string;
-	    suspend: boolean;
-	    lastScheduleTime?: v1.Time;
-	    lastSuccessfulTime?: v1.Time;
-	    nextScheduleTime?: string;
-	    timeUntilNextSchedule?: string;
-	    lastManualTime?: v1.Time;
-	    lastFailureTime?: v1.Time;
-	    concurrencyPolicy: string;
-	    startingDeadlineSeconds?: number;
-	    successfulJobsHistory: number;
-	    failedJobsHistory: number;
-	    activeJobs?: JobReference[];
-	    jobs?: JobSimpleInfo[];
-	    jobTemplate: JobTemplateDetails;
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    pods?: PodSimpleInfo[];
-	    podMetricsSummary?: PodMetricsSummary;
-	
-	    static createFrom(source: any = {}) {
-	        return new CronJobDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.details = source["details"];
-	        this.age = source["age"];
-	        this.schedule = source["schedule"];
-	        this.suspend = source["suspend"];
-	        this.lastScheduleTime = this.convertValues(source["lastScheduleTime"], v1.Time);
-	        this.lastSuccessfulTime = this.convertValues(source["lastSuccessfulTime"], v1.Time);
-	        this.nextScheduleTime = source["nextScheduleTime"];
-	        this.timeUntilNextSchedule = source["timeUntilNextSchedule"];
-	        this.lastManualTime = this.convertValues(source["lastManualTime"], v1.Time);
-	        this.lastFailureTime = this.convertValues(source["lastFailureTime"], v1.Time);
-	        this.concurrencyPolicy = source["concurrencyPolicy"];
-	        this.startingDeadlineSeconds = source["startingDeadlineSeconds"];
-	        this.successfulJobsHistory = source["successfulJobsHistory"];
-	        this.failedJobsHistory = source["failedJobsHistory"];
-	        this.activeJobs = this.convertValues(source["activeJobs"], JobReference);
-	        this.jobs = this.convertValues(source["jobs"], JobSimpleInfo);
-	        this.jobTemplate = this.convertValues(source["jobTemplate"], JobTemplateDetails);
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
-	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class CustomResourceDefinitionDetails {
 	    kind: string;
 	    name: string;
@@ -2642,114 +2692,6 @@ export namespace types {
 	        this.conditions = this.convertValues(source["conditions"], CRDCondition);
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class DaemonSetDetails {
-	    kind: string;
-	    name: string;
-	    namespace: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    details: string;
-	    desired: number;
-	    current: number;
-	    ready: number;
-	    upToDate?: number;
-	    available: number;
-	    updated?: number;
-	    age: string;
-	    cpuRequest?: string;
-	    cpuLimit?: string;
-	    cpuUsage?: string;
-	    memRequest?: string;
-	    memLimit?: string;
-	    memUsage?: string;
-	    updateStrategy?: string;
-	    maxUnavailable?: string;
-	    maxSurge?: string;
-	    minReadySeconds?: number;
-	    revisionHistoryLimit?: number;
-	    serviceAccount?: string;
-	    selector?: Record<string, string>;
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    nodeSelector?: Record<string, string>;
-	    tolerations?: string[];
-	    conditions?: string[];
-	    containers?: PodDetailInfoContainer[];
-	    initContainers?: PodDetailInfoContainer[];
-	    pods?: PodSimpleInfo[];
-	    podMetricsSummary?: PodMetricsSummary;
-	    observedGeneration?: number;
-	    numberMisscheduled?: number;
-	    collisionCount?: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new DaemonSetDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.details = source["details"];
-	        this.desired = source["desired"];
-	        this.current = source["current"];
-	        this.ready = source["ready"];
-	        this.upToDate = source["upToDate"];
-	        this.available = source["available"];
-	        this.updated = source["updated"];
-	        this.age = source["age"];
-	        this.cpuRequest = source["cpuRequest"];
-	        this.cpuLimit = source["cpuLimit"];
-	        this.cpuUsage = source["cpuUsage"];
-	        this.memRequest = source["memRequest"];
-	        this.memLimit = source["memLimit"];
-	        this.memUsage = source["memUsage"];
-	        this.updateStrategy = source["updateStrategy"];
-	        this.maxUnavailable = source["maxUnavailable"];
-	        this.maxSurge = source["maxSurge"];
-	        this.minReadySeconds = source["minReadySeconds"];
-	        this.revisionHistoryLimit = source["revisionHistoryLimit"];
-	        this.serviceAccount = source["serviceAccount"];
-	        this.selector = source["selector"];
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.nodeSelector = source["nodeSelector"];
-	        this.tolerations = source["tolerations"];
-	        this.conditions = source["conditions"];
-	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
-	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
-	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
-	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
-	        this.observedGeneration = source["observedGeneration"];
-	        this.numberMisscheduled = source["numberMisscheduled"];
-	        this.collisionCount = source["collisionCount"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -3562,72 +3504,18 @@ export namespace types {
 	
 	
 	
-	export class JobDetails {
-	    kind: string;
+	export class JobReference {
 	    name: string;
-	    namespace: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    details: string;
-	    age?: string;
-	    completions?: number;
-	    parallelism?: number;
-	    succeeded?: number;
-	    failed?: number;
-	    active?: number;
 	    startTime?: v1.Time;
-	    completionTime?: v1.Time;
-	    duration?: string;
-	    backoffLimit?: number;
-	    activeDeadlineSeconds?: number;
-	    ttlSecondsAfterFinished?: number;
-	    completionMode?: string;
-	    suspend?: boolean;
-	    selector?: Record<string, string>;
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    containers?: PodDetailInfoContainer[];
-	    conditions?: string[];
-	    pods?: PodSimpleInfo[];
-	    podMetricsSummary?: PodMetricsSummary;
 	
 	    static createFrom(source: any = {}) {
-	        return new JobDetails(source);
+	        return new JobReference(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
 	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.details = source["details"];
-	        this.age = source["age"];
-	        this.completions = source["completions"];
-	        this.parallelism = source["parallelism"];
-	        this.succeeded = source["succeeded"];
-	        this.failed = source["failed"];
-	        this.active = source["active"];
 	        this.startTime = this.convertValues(source["startTime"], v1.Time);
-	        this.completionTime = this.convertValues(source["completionTime"], v1.Time);
-	        this.duration = source["duration"];
-	        this.backoffLimit = source["backoffLimit"];
-	        this.activeDeadlineSeconds = source["activeDeadlineSeconds"];
-	        this.ttlSecondsAfterFinished = source["ttlSecondsAfterFinished"];
-	        this.completionMode = source["completionMode"];
-	        this.suspend = source["suspend"];
-	        this.selector = source["selector"];
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
-	        this.conditions = source["conditions"];
-	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
-	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -3648,9 +3536,152 @@ export namespace types {
 		    return a;
 		}
 	}
+	export class JobSimpleInfo {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    completions: string;
+	    succeeded: number;
+	    failed: number;
+	    active: number;
+	    startTime?: v1.Time;
+	    completionTime?: v1.Time;
+	    duration?: string;
+	    durationSeconds?: number;
+	    age: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new JobSimpleInfo(source);
+	    }
 	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.completions = source["completions"];
+	        this.succeeded = source["succeeded"];
+	        this.failed = source["failed"];
+	        this.active = source["active"];
+	        this.startTime = this.convertValues(source["startTime"], v1.Time);
+	        this.completionTime = this.convertValues(source["completionTime"], v1.Time);
+	        this.duration = source["duration"];
+	        this.durationSeconds = source["durationSeconds"];
+	        this.age = source["age"];
+	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PodDetailInfoContainer {
+	    name: string;
+	    image: string;
+	    imagePullPolicy: string;
+	    ready: boolean;
+	    restartCount: number;
+	    state: string;
+	    stateReason?: string;
+	    stateMessage?: string;
+	    startedAt?: string;
+	    cpuRequest: string;
+	    cpuLimit: string;
+	    memRequest: string;
+	    memLimit: string;
+	    ports?: string[];
+	    volumeMounts?: string[];
+	    environment?: Record<string, string>;
+	    command?: string[];
+	    args?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PodDetailInfoContainer(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.image = source["image"];
+	        this.imagePullPolicy = source["imagePullPolicy"];
+	        this.ready = source["ready"];
+	        this.restartCount = source["restartCount"];
+	        this.state = source["state"];
+	        this.stateReason = source["stateReason"];
+	        this.stateMessage = source["stateMessage"];
+	        this.startedAt = source["startedAt"];
+	        this.cpuRequest = source["cpuRequest"];
+	        this.cpuLimit = source["cpuLimit"];
+	        this.memRequest = source["memRequest"];
+	        this.memLimit = source["memLimit"];
+	        this.ports = source["ports"];
+	        this.volumeMounts = source["volumeMounts"];
+	        this.environment = source["environment"];
+	        this.command = source["command"];
+	        this.args = source["args"];
+	    }
+	}
+	export class JobTemplateDetails {
+	    completions?: number;
+	    parallelism?: number;
+	    backoffLimit?: number;
+	    activeDeadlineSeconds?: number;
+	    ttlSecondsAfterFinished?: number;
+	    containers?: PodDetailInfoContainer[];
+	
+	    static createFrom(source: any = {}) {
+	        return new JobTemplateDetails(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.completions = source["completions"];
+	        this.parallelism = source["parallelism"];
+	        this.backoffLimit = source["backoffLimit"];
+	        this.activeDeadlineSeconds = source["activeDeadlineSeconds"];
+	        this.ttlSecondsAfterFinished = source["ttlSecondsAfterFinished"];
+	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class KubeconfigInfo {
 	    name: string;
 	    path: string;
@@ -4211,6 +4242,54 @@ export namespace types {
 	        this.message = source["message"];
 	    }
 	}
+	export class PodSimpleInfo {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    ready: string;
+	    restarts: number;
+	    age: string;
+	    cpuRequest: string;
+	    cpuLimit: string;
+	    cpuUsage: string;
+	    memRequest: string;
+	    memLimit: string;
+	    memUsage: string;
+	    ownerKind: string;
+	    ownerName: string;
+	    ownerApiVersion?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PodSimpleInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.ready = source["ready"];
+	        this.restarts = source["restarts"];
+	        this.age = source["age"];
+	        this.cpuRequest = source["cpuRequest"];
+	        this.cpuLimit = source["cpuLimit"];
+	        this.cpuUsage = source["cpuUsage"];
+	        this.memRequest = source["memRequest"];
+	        this.memLimit = source["memLimit"];
+	        this.memUsage = source["memUsage"];
+	        this.ownerKind = source["ownerKind"];
+	        this.ownerName = source["ownerName"];
+	        this.ownerApiVersion = source["ownerApiVersion"];
+	    }
+	}
 	export class NodeTaint {
 	    key: string;
 	    value?: string;
@@ -4768,7 +4847,32 @@ export namespace types {
 		    return a;
 		}
 	}
+	export class PodMetricsSummary {
+	    pods: number;
+	    readyPods: number;
+	    cpuUsage?: string;
+	    memUsage?: string;
+	    cpuRequest?: string;
+	    cpuLimit?: string;
+	    memRequest?: string;
+	    memLimit?: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new PodMetricsSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pods = source["pods"];
+	        this.readyPods = source["readyPods"];
+	        this.cpuUsage = source["cpuUsage"];
+	        this.memUsage = source["memUsage"];
+	        this.cpuRequest = source["cpuRequest"];
+	        this.cpuLimit = source["cpuLimit"];
+	        this.memRequest = source["memRequest"];
+	        this.memLimit = source["memLimit"];
+	    }
+	}
 	
 	
 	
@@ -4835,94 +4939,6 @@ export namespace types {
 		}
 	}
 	
-	export class ReplicaSetDetails {
-	    kind: string;
-	    name: string;
-	    namespace: string;
-	    status: string;
-	    statusState?: string;
-	    statusPresentation?: string;
-	    statusReason?: string;
-	    details: string;
-	    replicas: string;
-	    ready: string;
-	    available: number;
-	    desiredReplicas: number;
-	    age: string;
-	    cpuRequest?: string;
-	    cpuLimit?: string;
-	    cpuUsage?: string;
-	    memRequest?: string;
-	    memLimit?: string;
-	    memUsage?: string;
-	    minReadySeconds?: number;
-	    selector?: Record<string, string>;
-	    labels?: Record<string, string>;
-	    annotations?: Record<string, string>;
-	    conditions?: string[];
-	    containers?: PodDetailInfoContainer[];
-	    initContainers?: PodDetailInfoContainer[];
-	    pods?: PodSimpleInfo[];
-	    podMetricsSummary?: PodMetricsSummary;
-	    observedGeneration?: number;
-	    isActive: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new ReplicaSetDetails(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.status = source["status"];
-	        this.statusState = source["statusState"];
-	        this.statusPresentation = source["statusPresentation"];
-	        this.statusReason = source["statusReason"];
-	        this.details = source["details"];
-	        this.replicas = source["replicas"];
-	        this.ready = source["ready"];
-	        this.available = source["available"];
-	        this.desiredReplicas = source["desiredReplicas"];
-	        this.age = source["age"];
-	        this.cpuRequest = source["cpuRequest"];
-	        this.cpuLimit = source["cpuLimit"];
-	        this.cpuUsage = source["cpuUsage"];
-	        this.memRequest = source["memRequest"];
-	        this.memLimit = source["memLimit"];
-	        this.memUsage = source["memUsage"];
-	        this.minReadySeconds = source["minReadySeconds"];
-	        this.selector = source["selector"];
-	        this.labels = source["labels"];
-	        this.annotations = source["annotations"];
-	        this.conditions = source["conditions"];
-	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
-	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
-	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
-	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
-	        this.observedGeneration = source["observedGeneration"];
-	        this.isActive = source["isActive"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class ReplicaSetSummary {
 	    name: string;
 	    revision: string;

@@ -1062,191 +1062,22 @@ type ReplicaSetSummary struct {
 }
 
 // ReplicaSetDetails represents detailed ReplicaSet information for the object panel.
-type ReplicaSetDetails struct {
-	// Basic information
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	StatusProjection
-	Details         string `json:"details"`
-	Replicas        string `json:"replicas"`
-	Ready           string `json:"ready"`
-	Available       int32  `json:"available"`
-	DesiredReplicas int32  `json:"desiredReplicas"`
-	Age             string `json:"age"`
-
-	// Average resource utilization (per pod)
-	ResourceUtilization
-
-	// ReplicaSet configuration
-	MinReadySeconds int32             `json:"minReadySeconds,omitempty"`
-	Selector        map[string]string `json:"selector,omitempty"`
-	Labels          map[string]string `json:"labels,omitempty"`
-	Annotations     map[string]string `json:"annotations,omitempty"`
-
-	// Conditions
-	Conditions []string `json:"conditions,omitempty"`
-
-	// Template information
-	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
-	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
-
-	// Pod information
-	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
-	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
-
-	// Status
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	IsActive           bool  `json:"isActive"`
-}
+// ReplicaSetDetails moved to resources/replicaset (co-located with its model +
+// detail builder).
 
 // DeploymentDetails moved to resources/deployment, and StatefulSetDetails +
 // VolumeClaimTemplateSummary moved to resources/statefulset — each co-located
 // with its kind's model + detail builder. ReplicaSetSummary stays here because
 // it is shared across kinds.
 
-type DaemonSetDetails struct {
-	// Basic information
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	StatusProjection
-	Details   string `json:"details"`
-	Desired   int32  `json:"desired"`
-	Current   int32  `json:"current"`
-	Ready     int32  `json:"ready"`
-	UpToDate  int32  `json:"upToDate,omitempty"`
-	Available int32  `json:"available"`
-	Updated   int32  `json:"updated,omitempty"`
-	Age       string `json:"age"`
+// DaemonSetDetails moved to resources/daemonset (co-located with its model +
+// detail builder).
 
-	// Average resource utilization (per pod)
-	ResourceUtilization
+// JobDetails moved to resources/job and CronJobDetails moved to resources/cronjob
+// (each co-located with its model + detail builder). JobReference, JobSimpleInfo,
+// and JobTemplateDetails stay here — they are shared sub-types CronJobDetails
+// references.
 
-	// Update strategy
-	UpdateStrategy       string `json:"updateStrategy,omitempty"`
-	MaxUnavailable       string `json:"maxUnavailable,omitempty"`
-	MaxSurge             string `json:"maxSurge,omitempty"`
-	MinReadySeconds      int32  `json:"minReadySeconds,omitempty"`
-	RevisionHistoryLimit int32  `json:"revisionHistoryLimit,omitempty"`
-
-	// Service information
-	ServiceAccount string `json:"serviceAccount,omitempty"`
-
-	// Selector and labels
-	Selector    map[string]string `json:"selector,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Pod placement constraints (from the pod template).
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-	Tolerations  []string          `json:"tolerations,omitempty"`
-
-	// Conditions
-	Conditions []string `json:"conditions,omitempty"`
-
-	// Template information
-	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
-	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
-
-	// Pod information
-	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
-	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
-
-	// Status
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	NumberMisscheduled int32  `json:"numberMisscheduled,omitempty"`
-	CollisionCount     *int32 `json:"collisionCount,omitempty"`
-}
-
-type JobDetails struct {
-	// Basic information
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	StatusProjection
-	Details string `json:"details"`
-	Age     string `json:"age,omitempty"`
-
-	// Job status
-	Completions    int32        `json:"completions,omitempty"`
-	Parallelism    int32        `json:"parallelism,omitempty"`
-	Succeeded      int32        `json:"succeeded,omitempty"`
-	Failed         int32        `json:"failed,omitempty"`
-	Active         int32        `json:"active,omitempty"`
-	StartTime      *metav1.Time `json:"startTime,omitempty"`
-	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-	Duration       string       `json:"duration,omitempty"`
-
-	// Job configuration
-	BackoffLimit            int32  `json:"backoffLimit,omitempty"`
-	ActiveDeadlineSeconds   *int64 `json:"activeDeadlineSeconds,omitempty"`
-	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
-	CompletionMode          string `json:"completionMode,omitempty"`
-	Suspend                 bool   `json:"suspend,omitempty"`
-
-	// Selector and labels
-	Selector    map[string]string `json:"selector,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Pod template information
-	Containers []PodDetailInfoContainer `json:"containers,omitempty"`
-
-	// Conditions
-	Conditions []string `json:"conditions,omitempty"`
-
-	// Related pods
-	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
-	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
-}
-
-type CronJobDetails struct {
-	// Basic information
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	StatusProjection
-	Details string `json:"details"`
-	Age     string `json:"age"`
-
-	// Schedule information
-	Schedule              string       `json:"schedule"`
-	Suspend               bool         `json:"suspend"`
-	LastScheduleTime      *metav1.Time `json:"lastScheduleTime,omitempty"`
-	LastSuccessfulTime    *metav1.Time `json:"lastSuccessfulTime,omitempty"`
-	NextScheduleTime      string       `json:"nextScheduleTime,omitempty"`
-	TimeUntilNextSchedule string       `json:"timeUntilNextSchedule,omitempty"`
-
-	// Derived from owned Jobs — bounded by job-history retention. A
-	// nil value can mean "never happened" OR "happened but the job
-	// record has been garbage-collected"; the UI should hint at this.
-	LastManualTime  *metav1.Time `json:"lastManualTime,omitempty"`
-	LastFailureTime *metav1.Time `json:"lastFailureTime,omitempty"`
-
-	// Job configuration
-	ConcurrencyPolicy       string `json:"concurrencyPolicy"`
-	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
-	SuccessfulJobsHistory   int32  `json:"successfulJobsHistory"`
-	FailedJobsHistory       int32  `json:"failedJobsHistory"`
-
-	// Active jobs
-	ActiveJobs []JobReference `json:"activeJobs,omitempty"`
-
-	// All owned jobs (completed, failed, running, etc.)
-	Jobs []JobSimpleInfo `json:"jobs,omitempty"`
-
-	// Job template information
-	JobTemplate JobTemplateDetails `json:"jobTemplate"`
-
-	// Labels and annotations
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Related pods
-	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
-	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
-}
 type JobReference struct {
 	Name      string       `json:"name"`
 	StartTime *metav1.Time `json:"startTime,omitempty"`

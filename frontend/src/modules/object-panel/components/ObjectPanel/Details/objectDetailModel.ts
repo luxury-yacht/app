@@ -1,14 +1,22 @@
-import { deployment, statefulset, types } from '@wailsjs/go/models';
+import {
+  cronjob,
+  daemonset,
+  deployment,
+  job,
+  replicaset,
+  statefulset,
+  types,
+} from '@wailsjs/go/models';
 import type { KubernetesObjectReference } from '@/types/view-state';
 
 export interface DetailSlots {
   podDetails: types.PodDetailInfo | null;
   deploymentDetails: deployment.DeploymentDetails | null;
-  replicaSetDetails: types.ReplicaSetDetails | null;
-  daemonSetDetails: types.DaemonSetDetails | null;
+  replicaSetDetails: replicaset.ReplicaSetDetails | null;
+  daemonSetDetails: daemonset.DaemonSetDetails | null;
   statefulSetDetails: statefulset.StatefulSetDetails | null;
-  jobDetails: types.JobDetails | null;
-  cronJobDetails: types.CronJobDetails | null;
+  jobDetails: job.JobDetails | null;
+  cronJobDetails: cronjob.CronJobDetails | null;
   configMapDetails: types.ConfigMapDetails | null;
   secretDetails: types.SecretDetails | null;
   helmReleaseDetails: types.HelmReleaseDetails | null;
@@ -200,18 +208,24 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
         deploymentDetails: detailPayload as deployment.DeploymentDetails,
       };
     case 'replicaset':
-      return { ...EMPTY_DETAIL_SLOTS, replicaSetDetails: detailPayload as types.ReplicaSetDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        replicaSetDetails: detailPayload as replicaset.ReplicaSetDetails,
+      };
     case 'daemonset':
-      return { ...EMPTY_DETAIL_SLOTS, daemonSetDetails: detailPayload as types.DaemonSetDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        daemonSetDetails: detailPayload as daemonset.DaemonSetDetails,
+      };
     case 'statefulset':
       return {
         ...EMPTY_DETAIL_SLOTS,
         statefulSetDetails: detailPayload as statefulset.StatefulSetDetails,
       };
     case 'job':
-      return { ...EMPTY_DETAIL_SLOTS, jobDetails: detailPayload as types.JobDetails };
+      return { ...EMPTY_DETAIL_SLOTS, jobDetails: detailPayload as job.JobDetails };
     case 'cronjob':
-      return { ...EMPTY_DETAIL_SLOTS, cronJobDetails: detailPayload as types.CronJobDetails };
+      return { ...EMPTY_DETAIL_SLOTS, cronJobDetails: detailPayload as cronjob.CronJobDetails };
     case 'configmap':
       return { ...EMPTY_DETAIL_SLOTS, configMapDetails: detailPayload as types.ConfigMapDetails };
     case 'secret':

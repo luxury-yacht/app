@@ -1,20 +1,21 @@
 /*
- * backend/resources/workloads/replicasets.go
+ * backend/resources/replicaset/details.go
  *
- * ReplicaSet resource handlers.
- * - Builds detail and list views for the frontend.
+ * ReplicaSet resource handlers, co-located in the per-kind package. Shared
+ * workload helpers live in resources/workloads; intrinsic fields come from the
+ * single model (replicaset.Facts).
  */
 
-package workloads
+package replicaset
 
 import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/workloads"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,18 +23,18 @@ import (
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
-// ReplicaSetService provides detailed ReplicaSet views backed by shared dependencies.
-type ReplicaSetService struct {
+// Service provides detailed ReplicaSet views backed by shared dependencies.
+type Service struct {
 	deps common.Dependencies
 }
 
-// NewReplicaSetService constructs a ReplicaSet service using the supplied dependencies bundle.
-func NewReplicaSetService(deps common.Dependencies) *ReplicaSetService {
-	return &ReplicaSetService{deps: deps}
+// NewService constructs a ReplicaSet service using the supplied dependencies bundle.
+func NewService(deps common.Dependencies) *Service {
+	return &Service{deps: deps}
 }
 
 // ReplicaSet returns the detailed view for a single ReplicaSet.
-func (s *ReplicaSetService) ReplicaSet(namespace, name string) (*restypes.ReplicaSetDetails, error) {
+func (s *Service) ReplicaSet(namespace, name string) (*ReplicaSetDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -53,18 +54,18 @@ func (s *ReplicaSetService) ReplicaSet(namespace, name string) (*restypes.Replic
 	return s.buildReplicaSetDetails(replicaSet, podsForSet, podMetrics), nil
 }
 
-func (s *ReplicaSetService) buildReplicaSetDetails(
+func (s *Service) buildReplicaSetDetails(
 	replicaSet *appsv1.ReplicaSet,
 	podsList []corev1.Pod,
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
-) *restypes.ReplicaSetDetails {
-	model := resourcemodel.BuildReplicaSetResourceModel(s.deps.ClusterID, replicaSet)
-	facts := model.Facts.ReplicaSet
-	replicas, ready := WorkloadReplicaDisplay(facts.WorkloadCommonFacts)
-	podInfos := BuildPodSummaries(s.deps.ClusterID, "ReplicaSet", replicaSet.Name, "apps/v1", podsList, podMetrics)
-	podSummary, _ := SummarizePodMetrics(podsList, podMetrics)
+) *ReplicaSetDetails {
+	model := BuildResourceModel(s.deps.ClusterID, replicaSet)
+	facts := BuildFacts(replicaSet)
+	replicas, ready := workloads.WorkloadReplicaDisplay(facts.WorkloadCommonFacts)
+	podInfos := workloads.BuildPodSummaries(s.deps.ClusterID, "ReplicaSet", replicaSet.Name, "apps/v1", podsList, podMetrics)
+	podSummary, _ := workloads.SummarizePodMetrics(podsList, podMetrics)
 
-	details := &restypes.ReplicaSetDetails{
+	details := &ReplicaSetDetails{
 		Kind:                "ReplicaSet",
 		Name:                replicaSet.Name,
 		Namespace:           replicaSet.Namespace,
@@ -75,14 +76,14 @@ func (s *ReplicaSetService) buildReplicaSetDetails(
 		Available:           facts.AvailableReplicas,
 		DesiredReplicas:     facts.DesiredReplicas,
 		Age:                 common.FormatAge(replicaSet.CreationTimestamp.Time),
-		ResourceUtilization: WorkloadUtilization(podsList, podMetrics),
+		ResourceUtilization: workloads.WorkloadUtilization(podsList, podMetrics),
 		MinReadySeconds:     facts.MinReadySeconds,
 		Selector:            facts.Selector,
 		Labels:              replicaSet.Labels,
 		Annotations:         replicaSet.Annotations,
 		Conditions:          restypes.FormatConditions(facts.Conditions),
-		Containers:          DescribeContainers(facts.Containers),
-		InitContainers:      DescribeContainers(facts.InitContainers),
+		Containers:          workloads.DescribeContainers(facts.Containers),
+		InitContainers:      workloads.DescribeContainers(facts.InitContainers),
 		Pods:                podInfos,
 		PodMetricsSummary:   podSummary,
 		ObservedGeneration:  facts.ObservedGeneration,
@@ -93,7 +94,7 @@ func (s *ReplicaSetService) buildReplicaSetDetails(
 	return details
 }
 
-func (s *ReplicaSetService) getReplicaSetPods(replicaSet *appsv1.ReplicaSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
+func (s *Service) getReplicaSetPods(replicaSet *appsv1.ReplicaSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil, fmt.Errorf("kubernetes client not initialized")
@@ -110,7 +111,7 @@ func (s *ReplicaSetService) getReplicaSetPods(replicaSet *appsv1.ReplicaSet) ([]
 	return filtered, metrics, nil
 }
 
-func (s *ReplicaSetService) isReplicaSetActive(replicaSet *appsv1.ReplicaSet) bool {
+func (s *Service) isReplicaSetActive(replicaSet *appsv1.ReplicaSet) bool {
 	deploymentName := replicaSetDeploymentName(replicaSet)
 	if deploymentName == "" {
 		return true

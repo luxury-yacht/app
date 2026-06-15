@@ -17,7 +17,11 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/objectmap"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -625,7 +629,7 @@ func (idx *objectMapIndex) collectReplicaSets(lister appslisters.ReplicaSetListe
 	collectKind(idx, "apps", "v1", "ReplicaSet", "replicasets",
 		func() ([]*appsv1.ReplicaSet, error) { return lister.List(labels.Everything()) },
 		func(rs *appsv1.ReplicaSet, rec *objectMapRecord) {
-			rec.status = objectMapReplicaSetStatus(idx.meta.ClusterID, *rs)
+			rec.status = replicaset.ObjectMapStatus(idx.meta.ClusterID, *rs)
 			rec.actionFacts = objectMapScalableWorkloadFacts(rs.Spec.Replicas, common.HasForwardableContainerPorts(rs.Spec.Template.Spec.Containers))
 			rec.template = &rs.Spec.Template
 		})
@@ -645,7 +649,7 @@ func (idx *objectMapIndex) collectDaemonSets(lister appslisters.DaemonSetLister)
 	collectKind(idx, "apps", "v1", "DaemonSet", "daemonsets",
 		func() ([]*appsv1.DaemonSet, error) { return lister.List(labels.Everything()) },
 		func(ds *appsv1.DaemonSet, rec *objectMapRecord) {
-			rec.status = objectMapDaemonSetStatus(idx.meta.ClusterID, *ds)
+			rec.status = daemonset.ObjectMapStatus(idx.meta.ClusterID, *ds)
 			rec.actionFacts = objectMapPortForwardFacts(common.HasForwardableContainerPorts(ds.Spec.Template.Spec.Containers))
 			rec.template = &ds.Spec.Template
 		})
@@ -655,7 +659,7 @@ func (idx *objectMapIndex) collectJobs(lister batchlisters.JobLister) {
 	collectKind(idx, "batch", "v1", "Job", "jobs",
 		func() ([]*batchv1.Job, error) { return lister.List(labels.Everything()) },
 		func(job *batchv1.Job, rec *objectMapRecord) {
-			rec.status = objectMapJobStatus(idx.meta.ClusterID, *job)
+			rec.status = jobres.ObjectMapStatus(idx.meta.ClusterID, *job)
 			rec.actionFacts = objectMapPortForwardFacts(common.HasForwardableContainerPorts(job.Spec.Template.Spec.Containers))
 			rec.template = job.Spec.Template.DeepCopy()
 		})
@@ -665,7 +669,7 @@ func (idx *objectMapIndex) collectCronJobs(lister batchlisters.CronJobLister) {
 	collectKind(idx, "batch", "v1", "CronJob", "cronjobs",
 		func() ([]*batchv1.CronJob, error) { return lister.List(labels.Everything()) },
 		func(cron *batchv1.CronJob, rec *objectMapRecord) {
-			rec.status = objectMapCronJobStatus(idx.meta.ClusterID, *cron)
+			rec.status = cronjob.ObjectMapStatus(idx.meta.ClusterID, *cron)
 			rec.actionFacts = objectMapCronJobActionFacts(*cron)
 			rec.cronJobTpl = cron.Spec.JobTemplate.Spec.Template.DeepCopy()
 		})
@@ -1185,28 +1189,9 @@ func objectMapNodeStatus(clusterID string, node corev1.Node) *ObjectMapStatus {
 	return status
 }
 
-func objectMapReplicaSetStatus(clusterID string, rs appsv1.ReplicaSet) *ObjectMapStatus {
-	model := resourcemodel.BuildReplicaSetResourceModel(clusterID, &rs)
-	return objectMapStatusFromResourceModel(model)
-}
-
-// StatefulSet's object-map status projection lives in resources/statefulset
-// (statefulset.ObjectMapStatus); the collector below calls it.
-
-func objectMapDaemonSetStatus(clusterID string, ds appsv1.DaemonSet) *ObjectMapStatus {
-	model := resourcemodel.BuildDaemonSetResourceModel(clusterID, &ds)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapJobStatus(clusterID string, job batchv1.Job) *ObjectMapStatus {
-	model := resourcemodel.BuildJobResourceModel(clusterID, &job)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapCronJobStatus(clusterID string, cron batchv1.CronJob) *ObjectMapStatus {
-	model := resourcemodel.BuildCronJobResourceModel(clusterID, &cron)
-	return objectMapStatusFromResourceModel(model)
-}
+// StatefulSet, Deployment, DaemonSet, ReplicaSet, Job, and CronJob object-map status
+// projections live in their kind packages (e.g. statefulset.ObjectMapStatus); the
+// collectors call them.
 
 func objectMapStatusFromResourceModel(model resourcemodel.ResourceModel) *ObjectMapStatus {
 	return objectmap.FromResourceModel(model)

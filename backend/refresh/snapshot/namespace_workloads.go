@@ -33,7 +33,10 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 )
 
@@ -631,7 +634,7 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 		desired = daemon.Status.DesiredNumberScheduled
 	}
 	readyStatus := workloadPodReadyStatus(pods, ready, desired)
-	model := resourcemodel.BuildDaemonSetResourceModel(clusterID, daemon)
+	model := daemonset.BuildResourceModel(clusterID, daemon)
 
 	return WorkloadSummary{
 		Kind:                 "DaemonSet",
@@ -675,7 +678,7 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 	if job != nil {
 		completed = job.Status.Succeeded
 	}
-	model := resourcemodel.BuildJobResourceModel(clusterID, job)
+	model := jobres.BuildResourceModel(clusterID, job)
 
 	return WorkloadSummary{
 		Kind:                 "Job",
@@ -715,7 +718,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 	if cron != nil {
 		active = len(cron.Status.Active)
 	}
-	model := resourcemodel.BuildCronJobResourceModel(clusterID, cron)
+	model := cronjob.BuildResourceModel(clusterID, cron)
 
 	return WorkloadSummary{
 		Kind:                 "CronJob",

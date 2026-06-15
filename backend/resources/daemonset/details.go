@@ -1,20 +1,21 @@
 /*
- * backend/resources/workloads/daemonsets.go
+ * backend/resources/daemonset/details.go
  *
- * DaemonSet resource handlers.
- * - Builds detail and list views for the frontend.
+ * DaemonSet resource handlers, co-located in the per-kind package. Shared
+ * workload helpers live in resources/workloads; intrinsic fields come from the
+ * single model (daemonset.Facts).
  */
 
-package workloads
+package daemonset
 
 import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/workloads"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,15 +23,18 @@ import (
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
-type DaemonSetService struct {
+// Service provides detailed DaemonSet views backed by shared dependencies.
+type Service struct {
 	deps common.Dependencies
 }
 
-func NewDaemonSetService(deps common.Dependencies) *DaemonSetService {
-	return &DaemonSetService{deps: deps}
+// NewService constructs a DaemonSet service using the supplied dependencies bundle.
+func NewService(deps common.Dependencies) *Service {
+	return &Service{deps: deps}
 }
 
-func (s *DaemonSetService) DaemonSet(namespace, name string) (*restypes.DaemonSetDetails, error) {
+// DaemonSet returns the detailed view for a single daemonset.
+func (s *Service) DaemonSet(namespace, name string) (*DaemonSetDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -50,18 +54,18 @@ func (s *DaemonSetService) DaemonSet(namespace, name string) (*restypes.DaemonSe
 	return s.buildDaemonSetDetails(ds, podsForSet, podMetrics), nil
 }
 
-func (s *DaemonSetService) buildDaemonSetDetails(
+func (s *Service) buildDaemonSetDetails(
 	daemonSet *appsv1.DaemonSet,
 	podsList []corev1.Pod,
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
-) *restypes.DaemonSetDetails {
-	model := resourcemodel.BuildDaemonSetResourceModel(s.deps.ClusterID, daemonSet)
-	facts := model.Facts.DaemonSet
-	podInfos := BuildPodSummaries(s.deps.ClusterID, "DaemonSet", daemonSet.Name, "apps/v1", podsList, podMetrics)
-	podSummary, _ := SummarizePodMetrics(podsList, podMetrics)
+) *DaemonSetDetails {
+	model := BuildResourceModel(s.deps.ClusterID, daemonSet)
+	facts := BuildFacts(daemonSet)
+	podInfos := workloads.BuildPodSummaries(s.deps.ClusterID, "DaemonSet", daemonSet.Name, "apps/v1", podsList, podMetrics)
+	podSummary, _ := workloads.SummarizePodMetrics(podsList, podMetrics)
 
 	// All intrinsic spec/status fields come from the model facts (single extraction).
-	details := &restypes.DaemonSetDetails{
+	details := &DaemonSetDetails{
 		Kind:                 "DaemonSet",
 		Name:                 daemonSet.Name,
 		Namespace:            daemonSet.Namespace,
@@ -73,7 +77,7 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 		UpToDate:             facts.UpdatedReplicas,
 		Available:            facts.AvailableReplicas,
 		Age:                  common.FormatAge(daemonSet.CreationTimestamp.Time),
-		ResourceUtilization:  WorkloadUtilization(podsList, podMetrics),
+		ResourceUtilization:  workloads.WorkloadUtilization(podsList, podMetrics),
 		UpdateStrategy:       facts.UpdateStrategy,
 		MaxUnavailable:       facts.MaxUnavailable,
 		MaxSurge:             facts.MaxSurge,
@@ -86,8 +90,8 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 		NodeSelector:         facts.NodeSelector,
 		Tolerations:          pods.FormatPodTolerations(facts.Tolerations),
 		Conditions:           restypes.FormatConditions(facts.Conditions),
-		Containers:           DescribeContainers(facts.Containers),
-		InitContainers:       DescribeContainers(facts.InitContainers),
+		Containers:           workloads.DescribeContainers(facts.Containers),
+		InitContainers:       workloads.DescribeContainers(facts.InitContainers),
 		Pods:                 podInfos,
 		PodMetricsSummary:    podSummary,
 		ObservedGeneration:   facts.ObservedGeneration,
@@ -98,7 +102,7 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 	return details
 }
 
-func (s *DaemonSetService) getDaemonSetPods(daemonSet *appsv1.DaemonSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
+func (s *Service) getDaemonSetPods(daemonSet *appsv1.DaemonSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil, fmt.Errorf("kubernetes client not initialized")
@@ -114,4 +118,3 @@ func (s *DaemonSetService) getDaemonSetPods(daemonSet *appsv1.DaemonSet) ([]core
 	metrics := pods.NewService(s.deps).GetPodMetricsForPods(daemonSet.Namespace, filtered)
 	return filtered, metrics, nil
 }
-

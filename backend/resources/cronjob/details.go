@@ -1,37 +1,44 @@
 /*
- * backend/resources/workloads/cronjobs.go
+ * backend/resources/cronjob/details.go
  *
- * CronJob resource handlers.
- * - Builds detail and list views for the frontend.
+ * CronJob resource handlers, co-located in the per-kind package. Shared workload
+ * helpers live in resources/workloads; child-Job summaries use the job package
+ * (imported as jobres to avoid shadowing the common `job` loop variable).
  */
 
-package workloads
+package cronjob
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/workloads"
+	"github.com/robfig/cron/v3"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
-type CronJobService struct {
+// Service provides detailed CronJob views backed by shared dependencies.
+type Service struct {
 	deps common.Dependencies
 }
 
-func NewCronJobService(deps common.Dependencies) *CronJobService {
-	return &CronJobService{deps: deps}
+// NewService constructs a CronJob service using the supplied dependencies bundle.
+func NewService(deps common.Dependencies) *Service {
+	return &Service{deps: deps}
 }
 
-func (s *CronJobService) CronJob(namespace, name string) (*restypes.CronJobDetails, error) {
+// CronJob returns the detailed view for a single cronjob.
+func (s *Service) CronJob(namespace, name string) (*CronJobDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -53,15 +60,15 @@ func (s *CronJobService) CronJob(namespace, name string) (*restypes.CronJobDetai
 	return buildCronJobDetails(s.deps.ClusterID, cronJob, jobs, podInfos, podSummary, jobInfos), nil
 }
 
-func buildCronJobDetails(clusterID string, cronJob *batchv1.CronJob, jobs *batchv1.JobList, podInfos []restypes.PodSimpleInfo, podSummary *restypes.PodMetricsSummary, jobInfos []restypes.JobSimpleInfo) *restypes.CronJobDetails {
-	model := resourcemodel.BuildCronJobResourceModel(clusterID, cronJob)
-	facts := model.Facts.CronJob
+func buildCronJobDetails(clusterID string, cronJob *batchv1.CronJob, jobs *batchv1.JobList, podInfos []restypes.PodSimpleInfo, podSummary *restypes.PodMetricsSummary, jobInfos []restypes.JobSimpleInfo) *CronJobDetails {
+	model := BuildResourceModel(clusterID, cronJob)
+	facts := BuildFacts(cronJob)
 
 	// Intrinsic scheduling fields come from the model facts (single extraction).
 	// The job-template sub-structure, next-schedule computation, and live job
 	// correlation are assembled below (template feeds shared formatters; the rest
 	// is display / live data, not the resource's intrinsic definition).
-	details := &restypes.CronJobDetails{
+	details := &CronJobDetails{
 		Kind:                    "CronJob",
 		Name:                    cronJob.Name,
 		Namespace:               cronJob.Namespace,
@@ -86,7 +93,7 @@ func buildCronJobDetails(clusterID string, cronJob *batchv1.CronJob, jobs *batch
 		BackoffLimit:            cronJob.Spec.JobTemplate.Spec.BackoffLimit,
 		ActiveDeadlineSeconds:   cronJob.Spec.JobTemplate.Spec.ActiveDeadlineSeconds,
 		TTLSecondsAfterFinished: cronJob.Spec.JobTemplate.Spec.TTLSecondsAfterFinished,
-		Containers:              DescribeContainers(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers),
+		Containers:              workloads.DescribeContainers(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers),
 	}
 
 	if !details.Suspend {
@@ -193,7 +200,7 @@ func describeActiveJobs(cronJob *batchv1.CronJob, jobs *batchv1.JobList) []resty
 	return references
 }
 
-func (s *CronJobService) collectCronJobPods(namespace string, cronJob *batchv1.CronJob, jobs *batchv1.JobList) ([]restypes.PodSimpleInfo, *restypes.PodMetricsSummary) {
+func (s *Service) collectCronJobPods(namespace string, cronJob *batchv1.CronJob, jobs *batchv1.JobList) ([]restypes.PodSimpleInfo, *restypes.PodMetricsSummary) {
 	if jobs == nil {
 		return nil, nil
 	}
@@ -253,7 +260,7 @@ func (s *CronJobService) collectCronJobPods(namespace string, cronJob *batchv1.C
 		podInfos = append(podInfos, pods.SummarizePod(s.deps.ClusterID, pod, metrics, ownerKind, ownerName, ownerAPIVersion))
 	}
 
-	podSummary, _ := SummarizePodMetrics(collected, metrics)
+	podSummary, _ := workloads.SummarizePodMetrics(collected, metrics)
 	return podInfos, podSummary
 }
 
@@ -275,7 +282,7 @@ func collectCronJobJobs(clusterID string, cronJob *batchv1.CronJob, jobs *batchv
 
 // summarizeJobSimple builds a JobSimpleInfo from a Kubernetes Job object.
 func summarizeJobSimple(clusterID string, job *batchv1.Job) restypes.JobSimpleInfo {
-	model := resourcemodel.BuildJobResourceModel(clusterID, job)
+	model := jobres.BuildResourceModel(clusterID, job)
 	completions := int32(1)
 	if job.Spec.Completions != nil {
 		completions = *job.Spec.Completions
@@ -311,7 +318,7 @@ func summarizeJobSimple(clusterID string, job *batchv1.Job) restypes.JobSimpleIn
 	return info
 }
 
-func ownedByCronJob(owners []metav1.OwnerReference, cronJobUID types.UID) bool {
+func ownedByCronJob(owners []metav1.OwnerReference, cronJobUID k8stypes.UID) bool {
 	for _, owner := range owners {
 		if owner.Kind == "CronJob" && owner.UID == cronJobUID {
 			return true
@@ -320,11 +327,64 @@ func ownedByCronJob(owners []metav1.OwnerReference, cronJobUID types.UID) bool {
 	return false
 }
 
-func ownedByJob(pod corev1.Pod, jobUID types.UID) bool {
+func ownedByJob(pod corev1.Pod, jobUID k8stypes.UID) bool {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Kind == "Job" && owner.UID == jobUID {
 			return true
 		}
 	}
 	return false
+}
+
+func defaultInt32(ptr *int32, fallback int32) int32 {
+	if ptr != nil {
+		return *ptr
+	}
+	return fallback
+}
+
+func summarizeCronJob(details *CronJobDetails) string {
+	summary := fmt.Sprintf("Schedule: %s", details.Schedule)
+	if details.Suspend {
+		summary += " (suspended)"
+	} else if details.LastScheduleTime != nil {
+		summary += fmt.Sprintf(", Last: %s ago", common.FormatAge(details.LastScheduleTime.Time))
+	}
+	return summary
+}
+
+// calculateNextSchedule parses the CronJob's schedule expression and returns
+// the next firing time as RFC3339 plus a human "in 15m" string. Falls back to
+// empty values when the expression is unparseable so the frontend can hide the
+// row instead of showing wrong data.
+func calculateNextSchedule(schedule string, timeZone *string) (string, string) {
+	return calculateNextScheduleAt(schedule, timeZone, time.Now())
+}
+
+func calculateNextScheduleAt(schedule string, timeZone *string, now time.Time) (string, string) {
+	// k8s CronJob uses the standard 5-field format (no seconds) plus
+	// the @yearly/@hourly/@daily descriptors. cron.ParseStandard covers
+	// both, matching the kube-controller-manager parser.
+	expr, err := cron.ParseStandard(formatCronJobSchedule(schedule, timeZone))
+	if err != nil {
+		return "", ""
+	}
+	nextTime := expr.Next(now)
+	if nextTime.IsZero() {
+		return "", ""
+	}
+	return nextTime.Format(time.RFC3339), common.FormatAge(time.Now().Add(-nextTime.Sub(now)))
+}
+
+func formatCronJobSchedule(schedule string, timeZone *string) string {
+	if strings.Contains(schedule, "TZ") {
+		return schedule
+	}
+	if timeZone == nil {
+		return schedule
+	}
+	if _, err := time.LoadLocation(*timeZone); err != nil {
+		return schedule
+	}
+	return fmt.Sprintf("TZ=%s %s", *timeZone, schedule)
 }

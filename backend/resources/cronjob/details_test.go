@@ -1,11 +1,10 @@
 /*
- * backend/resources/workloads/services_test.go
+ * backend/resources/cronjob/details_test.go
  *
- * Tests for Service resource handlers.
- * - Covers Service resource handlers behavior and edge cases.
+ * Tests for the CronJob detail service (co-located with the kind).
  */
 
-package workloads_test
+package cronjob_test
 
 import (
 	"context"
@@ -14,122 +13,16 @@ import (
 
 	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	cgofake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/workloads"
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
-
-func TestDaemonSetServiceReturnsDetail(t *testing.T) {
-	ds := testsupport.DaemonSetFixture("default", "agent")
-	maxUnavailable := intstr.FromString("25%")
-	maxSurge := intstr.FromInt(1)
-	ds.Spec.UpdateStrategy = appsv1.DaemonSetUpdateStrategy{
-		Type: appsv1.RollingUpdateDaemonSetStrategyType,
-		RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-			MaxUnavailable: &maxUnavailable,
-			MaxSurge:       &maxSurge,
-		},
-	}
-	ds.Status.NumberUnavailable = 1
-	ds.Status.NumberMisscheduled = 1
-	// Distinct scheduling counts so the WorkloadCommonFacts projection is verified per-field.
-	ds.Status.DesiredNumberScheduled = 5
-	ds.Status.CurrentNumberScheduled = 4
-	ds.Status.NumberReady = 3
-	ds.Status.UpdatedNumberScheduled = 2
-	ds.Status.NumberAvailable = 1
-	ds.Status.Conditions = []appsv1.DaemonSetCondition{{
-		Type:   appsv1.DaemonSetConditionType("PodsScheduled"),
-		Status: corev1.ConditionTrue,
-		Reason: "AllScheduled",
-	}}
-	pod := testsupport.PodFixture(
-		"default",
-		"agent-node",
-		testsupport.PodWithOwner("DaemonSet", ds.Name, true),
-		testsupport.PodWithLabels(ds.Spec.Selector.MatchLabels),
-	)
-	pod.Spec.NodeName = "node-b"
-	pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
-		Name:         "agent",
-		Ready:        true,
-		RestartCount: 2,
-	}}
-
-	client := cgofake.NewClientset(ds.DeepCopy(), pod.DeepCopy())
-	deps := newDeps(t, client)
-
-	service := workloads.NewDaemonSetService(deps)
-	detail, err := service.DaemonSet("default", "agent")
-	require.NoError(t, err)
-	require.Equal(t, "DaemonSet", detail.Kind)
-	require.Len(t, detail.Pods, 1)
-	require.Equal(t, int32(5), detail.Desired)
-	require.Equal(t, int32(4), detail.Current)
-	require.Equal(t, int32(3), detail.Ready)
-	require.Equal(t, int32(2), detail.UpToDate)
-	require.Equal(t, int32(1), detail.Available)
-	require.Equal(t, "25%", detail.MaxUnavailable)
-	require.Equal(t, "1", detail.MaxSurge)
-	require.Contains(t, detail.Conditions, "PodsScheduled: True (AllScheduled)")
-	require.Contains(t, detail.Details, "Misscheduled: 1")
-}
-
-func TestJobServiceReturnsDetail(t *testing.T) {
-	job := testsupport.JobFixture("default", "report")
-	job.UID = types.UID("job-report")
-	job.Status.Active = 0
-	job.Status.Succeeded = 1
-	job.Status.Failed = 0
-	completion := metav1.NewTime(timeNow())
-	job.Status.CompletionTime = &completion
-	job.Status.Conditions = []batchv1.JobCondition{{
-		Type:   batchv1.JobComplete,
-		Status: corev1.ConditionTrue,
-		Reason: "Finished",
-	}}
-	job.Spec.Completions = int32Ptr(1)
-	job.Spec.Parallelism = int32Ptr(1)
-	job.Spec.BackoffLimit = int32Ptr(2)
-
-	pod := testsupport.PodFixture(
-		"default",
-		"report-worker",
-		testsupport.PodWithOwner("Job", job.Name, true),
-		testsupport.PodWithLabels(job.Spec.Selector.MatchLabels),
-	)
-	pod.OwnerReferences[0].UID = job.UID
-	pod.Status.Phase = corev1.PodSucceeded
-	pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
-		Name:         "worker",
-		Ready:        true,
-		RestartCount: 3,
-	}}
-
-	client := cgofake.NewClientset(job.DeepCopy(), pod.DeepCopy())
-	deps := newDeps(t, client)
-
-	service := workloads.NewJobService(deps)
-	detail, err := service.Job("default", "report")
-	require.NoError(t, err)
-	require.Equal(t, "Job", detail.Kind)
-	require.Equal(t, int32(1), detail.Succeeded)
-	require.Len(t, detail.Pods, 1)
-	require.Equal(t, "Completed", detail.Status)
-	require.Equal(t, int32(1), detail.Completions)
-	require.Equal(t, int32(1), detail.Parallelism)
-	require.Contains(t, detail.Conditions, "Complete: True (Finished)")
-	require.Contains(t, detail.Details, "Succeeded: 1/1")
-}
 
 func TestCronJobServiceCollectsPods(t *testing.T) {
 	cron := testsupport.CronJobFixture("default", "nightly")
@@ -171,7 +64,7 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 	client := cgofake.NewClientset(cron.DeepCopy(), job.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewCronJobService(deps)
+	service := cronjob.NewService(deps)
 	detail, err := service.CronJob("default", "nightly")
 	require.NoError(t, err)
 	require.Equal(t, "CronJob", detail.Kind)
@@ -196,7 +89,7 @@ func TestCronJobServiceComputesNextScheduleBeforeFirstRun(t *testing.T) {
 	client := cgofake.NewClientset(cron.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewCronJobService(deps)
+	service := cronjob.NewService(deps)
 	detail, err := service.CronJob("default", "nightly")
 	require.NoError(t, err)
 	require.NotEmpty(t, detail.NextScheduleTime)
@@ -215,7 +108,7 @@ func TestCronJobServiceUsesSpecTimeZoneForNextSchedule(t *testing.T) {
 	client := cgofake.NewClientset(cronJob.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewCronJobService(deps)
+	service := cronjob.NewService(deps)
 	detail, err := service.CronJob("default", "nightly")
 	after := time.Now()
 	require.NoError(t, err)
@@ -267,7 +160,7 @@ func TestCronJobServiceCollectsJobs(t *testing.T) {
 	client := cgofake.NewClientset(cron.DeepCopy(), completedJob.DeepCopy(), runningJob.DeepCopy(), unrelatedJob.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewCronJobService(deps)
+	service := cronjob.NewService(deps)
 	detail, err := service.CronJob("default", "nightly")
 	require.NoError(t, err)
 
@@ -306,9 +199,5 @@ func timeNow() time.Time {
 }
 
 func ptrTo(val bool) *bool {
-	return &val
-}
-
-func int32Ptr(val int32) *int32 {
 	return &val
 }

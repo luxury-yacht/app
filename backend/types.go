@@ -1,7 +1,11 @@
 package backend
 
 import (
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
@@ -108,12 +112,12 @@ type (
 	DataSourceInfo                        = types.DataSourceInfo
 	StorageClassDetails                   = types.StorageClassDetails
 	DeploymentDetails                     = deployment.DeploymentDetails
-	ReplicaSetDetails                     = types.ReplicaSetDetails
+	ReplicaSetDetails                     = replicaset.ReplicaSetDetails
 	StatefulSetDetails                    = statefulset.StatefulSetDetails
 	VolumeClaimTemplateSummary            = statefulset.VolumeClaimTemplateSummary
-	DaemonSetDetails                      = types.DaemonSetDetails
-	JobDetails                            = types.JobDetails
-	CronJobDetails                        = types.CronJobDetails
+	DaemonSetDetails                      = daemonset.DaemonSetDetails
+	JobDetails                            = jobres.JobDetails
+	CronJobDetails                        = cronjob.CronJobDetails
 	JobReference                          = types.JobReference
 	JobTemplateDetails                    = types.JobTemplateDetails
 	TopologySelector                      = types.TopologySelector

@@ -1,17 +1,16 @@
 /*
- * backend/resources/workloads/replicasets_test.go
+ * backend/resources/replicaset/details_test.go
  *
- * Tests for ReplicaSet resource handlers.
- * - Covers ReplicaSet resource handlers behavior and edge cases.
+ * Tests for the ReplicaSet detail service (co-located with the kind).
  */
 
-package workloads_test
+package replicaset_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/luxury-yacht/app/backend/resources/workloads"
+	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -92,7 +91,7 @@ func TestReplicaSetServiceReplicaSet(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	)
 
-	service := workloads.NewReplicaSetService(deps)
+	service := replicaset.NewService(deps)
 	details, err := service.ReplicaSet("default", "web-rs")
 	if err != nil {
 		t.Fatalf("ReplicaSet returned error: %v", err)
@@ -161,7 +160,7 @@ func TestReplicaSetServiceReplicaSetInactiveRevision(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	)
 
-	service := workloads.NewReplicaSetService(deps)
+	service := replicaset.NewService(deps)
 	details, err := service.ReplicaSet("default", "web-rs")
 	if err != nil {
 		t.Fatalf("ReplicaSet returned error: %v", err)

@@ -146,10 +146,6 @@ type ResourceFacts struct {
 	Namespace                      *NamespaceFacts                      `json:"namespace,omitempty"`
 	Node                           *NodeFacts                           `json:"node,omitempty"`
 	Pod                            *PodFacts                            `json:"pod,omitempty"`
-	DaemonSet                      *DaemonSetFacts                      `json:"daemonSet,omitempty"`
-	ReplicaSet                     *ReplicaSetFacts                     `json:"replicaSet,omitempty"`
-	Job                            *JobFacts                            `json:"job,omitempty"`
-	CronJob                        *CronJobFacts                        `json:"cronJob,omitempty"`
 	PersistentVolume               *PersistentVolumeFacts               `json:"persistentVolume,omitempty"`
 	PersistentVolumeClaim          *PersistentVolumeClaimFacts          `json:"persistentVolumeClaim,omitempty"`
 	StorageClass                   *StorageClassFacts                   `json:"storageClass,omitempty"`
@@ -213,64 +209,14 @@ type WorkloadCommonFacts struct {
 	Conditions        []ConditionFacts `json:"conditions,omitempty"`
 }
 
-// DeploymentFacts moved to resources/deployment (type deployment.Facts) and
-// StatefulSetFacts moved to resources/statefulset (type statefulset.Facts); both
-// were removed from the ResourceFacts union to break the import cycle so each
-// kind owns its own facts type.
+// DeploymentFacts (resources/deployment), StatefulSetFacts (resources/statefulset),
+// DaemonSetFacts (resources/daemonset), and ReplicaSetFacts (resources/replicaset)
+// moved to their kind packages and were removed from the ResourceFacts union to
+// break the import cycle so each kind owns its own facts type.
 
-type DaemonSetFacts struct {
-	WorkloadCommonFacts
-	PodTemplateFacts
-	UpdateStrategy       string            `json:"updateStrategy,omitempty"`
-	MaxUnavailable       string            `json:"maxUnavailable,omitempty"`
-	MaxSurge             string            `json:"maxSurge,omitempty"`
-	MinReadySeconds      int32             `json:"minReadySeconds,omitempty"`
-	RevisionHistoryLimit int32             `json:"revisionHistoryLimit,omitempty"`
-	Selector             map[string]string `json:"selector,omitempty"`
-	ObservedGeneration   int64             `json:"observedGeneration,omitempty"`
-	NumberMisscheduled   int32             `json:"numberMisscheduled,omitempty"`
-	CollisionCount       *int32            `json:"collisionCount,omitempty"`
-	ReadySummary         string            `json:"readySummary,omitempty"`
-}
-
-type ReplicaSetFacts struct {
-	WorkloadCommonFacts
-	PodTemplateFacts
-	MinReadySeconds    int32             `json:"minReadySeconds,omitempty"`
-	Selector           map[string]string `json:"selector,omitempty"`
-	ObservedGeneration int64             `json:"observedGeneration,omitempty"`
-	ReadySummary       string            `json:"readySummary,omitempty"`
-}
-
-type JobFacts struct {
-	PodTemplateFacts
-	DesiredReplicas         int32             `json:"desiredReplicas"`
-	Active                  int32             `json:"active,omitempty"`
-	Succeeded               int32             `json:"succeeded,omitempty"`
-	Failed                  int32             `json:"failed,omitempty"`
-	Suspended               bool              `json:"suspended,omitempty"`
-	Parallelism             int32             `json:"parallelism,omitempty"`
-	BackoffLimit            int32             `json:"backoffLimit,omitempty"`
-	ActiveDeadlineSeconds   *int64            `json:"activeDeadlineSeconds,omitempty"`
-	TTLSecondsAfterFinished *int32            `json:"ttlSecondsAfterFinished,omitempty"`
-	CompletionMode          string            `json:"completionMode,omitempty"`
-	StartTime               *metav1.Time      `json:"startTime,omitempty"`
-	CompletionTime          *metav1.Time      `json:"completionTime,omitempty"`
-	Selector                map[string]string `json:"selector,omitempty"`
-	Conditions              []ConditionFacts  `json:"conditions,omitempty"`
-}
-
-type CronJobFacts struct {
-	Suspended               bool         `json:"suspended,omitempty"`
-	ActiveJobs              int32        `json:"activeJobs,omitempty"`
-	Schedule                string       `json:"schedule,omitempty"`
-	ConcurrencyPolicy       string       `json:"concurrencyPolicy,omitempty"`
-	StartingDeadlineSeconds *int64       `json:"startingDeadlineSeconds,omitempty"`
-	SuccessfulJobsHistory   int32        `json:"successfulJobsHistory,omitempty"`
-	FailedJobsHistory       int32        `json:"failedJobsHistory,omitempty"`
-	LastScheduleTime        *metav1.Time `json:"lastScheduleTime,omitempty"`
-	LastSuccessfulTime      *metav1.Time `json:"lastSuccessfulTime,omitempty"`
-}
+// JobFacts (resources/job) and CronJobFacts (resources/cronjob) moved to their
+// kind packages, removed from the ResourceFacts union (same cycle-break as the
+// other workload kinds).
 
 type ResourceListFacts struct {
 	CPU              *resource.Quantity           `json:"cpu,omitempty"`

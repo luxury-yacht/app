@@ -7,16 +7,19 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/autoscaling"
 	"github.com/luxury-yacht/app/backend/resources/config"
 	"github.com/luxury-yacht/app/backend/resources/constraints"
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
+	"github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/network"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/policy"
 	"github.com/luxury-yacht/app/backend/resources/rbac"
+	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storage"
-	"github.com/luxury-yacht/app/backend/resources/workloads"
 )
 
 func (a *App) GetBackendTLSPolicy(clusterID, namespace, name string) (*BackendTLSPolicyDetails, error) {
@@ -65,7 +68,7 @@ func (a *App) GetCronJob(clusterID, namespace, name string) (*CronJobDetails, er
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "CronJob", namespace, name, func() (*CronJobDetails, error) {
-		return workloads.NewCronJobService(deps).CronJob(namespace, name)
+		return cronjob.NewService(deps).CronJob(namespace, name)
 	})
 }
 
@@ -75,7 +78,7 @@ func (a *App) GetDaemonSet(clusterID, namespace, name string) (*DaemonSetDetails
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "DaemonSet", namespace, name, func() (*DaemonSetDetails, error) {
-		return workloads.NewDaemonSetService(deps).DaemonSet(namespace, name)
+		return daemonset.NewService(deps).DaemonSet(namespace, name)
 	})
 }
 
@@ -175,7 +178,7 @@ func (a *App) GetJob(clusterID, namespace, name string) (*JobDetails, error) {
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "Job", namespace, name, func() (*JobDetails, error) {
-		return workloads.NewJobService(deps).Job(namespace, name)
+		return job.NewService(deps).Job(namespace, name)
 	})
 }
 
@@ -285,7 +288,7 @@ func (a *App) GetReplicaSet(clusterID, namespace, name string) (*ReplicaSetDetai
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "ReplicaSet", namespace, name, func() (*ReplicaSetDetails, error) {
-		return workloads.NewReplicaSetService(deps).ReplicaSet(namespace, name)
+		return replicaset.NewService(deps).ReplicaSet(namespace, name)
 	})
 }
 

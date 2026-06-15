@@ -25,15 +25,18 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/network"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/resources/policy"
 	"github.com/luxury-yacht/app/backend/resources/rbac"
+	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storage"
-	"github.com/luxury-yacht/app/backend/resources/workloads"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -71,13 +74,13 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"replicaset": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewReplicaSetService(deps).ReplicaSet(namespace, name)
+			detail, err := replicaset.NewService(deps).ReplicaSet(namespace, name)
 			return detail, "", err
 		},
 	},
 	"daemonset": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewDaemonSetService(deps).DaemonSet(namespace, name)
+			detail, err := daemonset.NewService(deps).DaemonSet(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -89,13 +92,13 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"job": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewJobService(deps).Job(namespace, name)
+			detail, err := jobres.NewService(deps).Job(namespace, name)
 			return detail, "", err
 		},
 	},
 	"cronjob": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewCronJobService(deps).CronJob(namespace, name)
+			detail, err := cronjob.NewService(deps).CronJob(namespace, name)
 			return detail, "", err
 		},
 	},

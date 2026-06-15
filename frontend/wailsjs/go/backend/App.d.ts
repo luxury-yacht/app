@@ -4,8 +4,12 @@ import {backend} from '../models';
 import {context} from '../models';
 import {types} from '../models';
 import {objectcatalog} from '../models';
+import {cronjob} from '../models';
+import {daemonset} from '../models';
 import {deployment} from '../models';
 import {json} from '../models';
+import {job} from '../models';
+import {replicaset} from '../models';
 import {statefulset} from '../models';
 import {snapshot} from '../models';
 import {capabilities} from '../models';
@@ -90,11 +94,11 @@ export function GetConfigMap(arg1:string,arg2:string,arg3:string):Promise<types.
 
 export function GetContainerLogsScopeContainers(arg1:string,arg2:string):Promise<Array<string>>;
 
-export function GetCronJob(arg1:string,arg2:string,arg3:string):Promise<types.CronJobDetails>;
+export function GetCronJob(arg1:string,arg2:string,arg3:string):Promise<cronjob.CronJobDetails>;
 
 export function GetCustomResourceDefinition(arg1:string,arg2:string):Promise<types.CustomResourceDefinitionDetails>;
 
-export function GetDaemonSet(arg1:string,arg2:string,arg3:string):Promise<types.DaemonSetDetails>;
+export function GetDaemonSet(arg1:string,arg2:string,arg3:string):Promise<daemonset.DaemonSetDetails>;
 
 export function GetDeployment(arg1:string,arg2:string,arg3:string):Promise<deployment.DeploymentDetails>;
 
@@ -124,7 +128,7 @@ export function GetIngress(arg1:string,arg2:string,arg3:string):Promise<types.In
 
 export function GetIngressClass(arg1:string,arg2:string):Promise<types.IngressClassDetails>;
 
-export function GetJob(arg1:string,arg2:string,arg3:string):Promise<types.JobDetails>;
+export function GetJob(arg1:string,arg2:string,arg3:string):Promise<job.JobDetails>;
 
 export function GetKubeconfigSearchPaths():Promise<Array<string>>;
 
@@ -160,7 +164,7 @@ export function GetReferenceGrant(arg1:string,arg2:string,arg3:string):Promise<t
 
 export function GetRefreshBaseURL():Promise<string>;
 
-export function GetReplicaSet(arg1:string,arg2:string,arg3:string):Promise<types.ReplicaSetDetails>;
+export function GetReplicaSet(arg1:string,arg2:string,arg3:string):Promise<replicaset.ReplicaSetDetails>;
 
 export function GetResourceQuota(arg1:string,arg2:string,arg3:string):Promise<types.ResourceQuotaDetails>;
 

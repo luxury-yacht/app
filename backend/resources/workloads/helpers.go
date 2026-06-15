@@ -11,13 +11,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
-	"github.com/robfig/cron/v3"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
@@ -255,80 +252,7 @@ func DescribeContainers(containers []corev1.Container) []restypes.PodDetailInfoC
 	return result
 }
 
-func defaultInt32(ptr *int32, fallback int32) int32 {
-	if ptr != nil {
-		return *ptr
-	}
-	return fallback
-}
-
-func filterPodsForJob(job *batchv1.Job, podList *corev1.PodList) []corev1.Pod {
-	if podList == nil {
-		return nil
-	}
-
-	var filtered []corev1.Pod
-	for _, pod := range podList.Items {
-		for _, owner := range pod.OwnerReferences {
-			if owner.Controller != nil && *owner.Controller && owner.Kind == "Job" && owner.UID == job.UID {
-				filtered = append(filtered, pod)
-				break
-			}
-		}
-	}
-	return filtered
-}
-
-func summarizeJob(details *restypes.JobDetails) string {
-	summary := fmt.Sprintf("Status: %s, Succeeded: %d/%d", details.Status, details.Succeeded, details.Completions)
-	if details.Failed > 0 {
-		summary += fmt.Sprintf(", Failed: %d", details.Failed)
-	}
-	return summary
-}
-
-func summarizeCronJob(details *restypes.CronJobDetails) string {
-	summary := fmt.Sprintf("Schedule: %s", details.Schedule)
-	if details.Suspend {
-		summary += " (suspended)"
-	} else if details.LastScheduleTime != nil {
-		summary += fmt.Sprintf(", Last: %s ago", common.FormatAge(details.LastScheduleTime.Time))
-	}
-	return summary
-}
-
-// calculateNextSchedule parses the CronJob's schedule expression and returns
-// the next firing time as RFC3339 plus a human "in 15m" string. Falls back to
-// empty values when the expression is unparseable so the frontend can hide the
-// row instead of showing wrong data.
-func calculateNextSchedule(schedule string, timeZone *string) (string, string) {
-	return calculateNextScheduleAt(schedule, timeZone, time.Now())
-}
-
-func calculateNextScheduleAt(schedule string, timeZone *string, now time.Time) (string, string) {
-	// k8s CronJob uses the standard 5-field format (no seconds) plus
-	// the @yearly/@hourly/@daily descriptors. cron.ParseStandard covers
-	// both, matching the kube-controller-manager parser.
-	expr, err := cron.ParseStandard(formatCronJobSchedule(schedule, timeZone))
-	if err != nil {
-		return "", ""
-	}
-	nextTime := expr.Next(now)
-	if nextTime.IsZero() {
-		return "", ""
-	}
-	return nextTime.Format(time.RFC3339), common.FormatAge(time.Now().Add(-nextTime.Sub(now)))
-}
-
-func formatCronJobSchedule(schedule string, timeZone *string) string {
-	if strings.Contains(schedule, "TZ") {
-		return schedule
-	}
-	if timeZone == nil {
-		return schedule
-	}
-	if _, err := time.LoadLocation(*timeZone); err != nil {
-		return schedule
-	}
-	return fmt.Sprintf("TZ=%s %s", *timeZone, schedule)
-}
+// Job-specific helpers (filterPodsForJob, summarizeJob) and CronJob-specific
+// helpers (defaultInt32, summarizeCronJob, calculateNextSchedule[At],
+// formatCronJobSchedule) moved to resources/job and resources/cronjob with their
+// detail builders.

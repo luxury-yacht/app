@@ -242,3 +242,7 @@ func TestBuildNetworkPolicyResourceModelFactsAndStatus(t *testing.T) {
 func networkStringPtr(value string) *string {
 	return &value
 }
+
+func ptrInt32(value int32) *int32 {
+	return &value
+}

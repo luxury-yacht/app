@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deployment, statefulset, types } from '@wailsjs/go/models';
+import { cronjob, deployment, replicaset, statefulset, types } from '@wailsjs/go/models';
 import {
   buildObjectDetailModel,
   createObjectDetailModelFromSlots,
@@ -62,7 +62,7 @@ const container = (
 
 describe('objectDetailModel', () => {
   it('maps detail payloads into the matching slot', () => {
-    const cronJob = { suspend: true } as types.CronJobDetails;
+    const cronJob = { suspend: true } as cronjob.CronJobDetails;
 
     const model = buildObjectDetailModel(null, 'cronjob', cronJob);
 
@@ -177,7 +177,7 @@ describe('objectDetailModel', () => {
       createObjectDetailModelFromSlots(
         null,
         'replicaset',
-        emptySlots({ replicaSetDetails: { desiredReplicas: 5 } as types.ReplicaSetDetails })
+        emptySlots({ replicaSetDetails: { desiredReplicas: 5 } as replicaset.ReplicaSetDetails })
       ).desiredScaleReplicas
     ).toBe(5);
     expect(createObjectDetailModelFromSlots(null, 'job', emptySlots()).desiredScaleReplicas).toBe(

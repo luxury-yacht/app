@@ -1,36 +1,40 @@
 /*
- * backend/resources/workloads/jobs.go
+ * backend/resources/job/details.go
  *
- * Job resource handlers.
- * - Builds detail and list views for the frontend.
+ * Job resource handlers, co-located in the per-kind package. Shared workload
+ * helpers live in resources/workloads; intrinsic fields come from the single
+ * model (job.Facts).
  */
 
-package workloads
+package job
 
 import (
 	"fmt"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/workloads"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
-type JobService struct {
+// Service provides detailed Job views backed by shared dependencies.
+type Service struct {
 	deps common.Dependencies
 }
 
-func NewJobService(deps common.Dependencies) *JobService {
-	return &JobService{deps: deps}
+// NewService constructs a Job service using the supplied dependencies bundle.
+func NewService(deps common.Dependencies) *Service {
+	return &Service{deps: deps}
 }
 
-func (s *JobService) Job(namespace, name string) (*restypes.JobDetails, error) {
+// Job returns the detailed view for a single job.
+func (s *Service) Job(namespace, name string) (*JobDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -52,13 +56,13 @@ func (s *JobService) Job(namespace, name string) (*restypes.JobDetails, error) {
 	return buildJobDetails(s.deps.ClusterID, job, podsForJob, metrics), nil
 }
 
-func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) *restypes.JobDetails {
-	podSummary, _ := SummarizePodMetrics(podsList, podMetrics)
-	model := resourcemodel.BuildJobResourceModel(clusterID, job)
-	facts := model.Facts.Job
+func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) *JobDetails {
+	podSummary, _ := workloads.SummarizePodMetrics(podsList, podMetrics)
+	model := BuildResourceModel(clusterID, job)
+	facts := BuildFacts(job)
 
 	// All intrinsic spec/status fields come from the model facts (single extraction).
-	details := &restypes.JobDetails{
+	details := &JobDetails{
 		Kind:                    "Job",
 		Name:                    job.Name,
 		Namespace:               job.Namespace,
@@ -76,7 +80,7 @@ func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, 
 		Labels:                  job.Labels,
 		Annotations:             job.Annotations,
 		Selector:                facts.Selector,
-		Containers:              DescribeContainers(facts.Containers),
+		Containers:              workloads.DescribeContainers(facts.Containers),
 		Pods:                    buildSimplePodInfo(clusterID, podsList),
 		BackoffLimit:            facts.BackoffLimit,
 		ActiveDeadlineSeconds:   facts.ActiveDeadlineSeconds,
@@ -121,4 +125,29 @@ func podOwnerName(pod corev1.Pod) string {
 		}
 	}
 	return ""
+}
+
+func filterPodsForJob(job *batchv1.Job, podList *corev1.PodList) []corev1.Pod {
+	if podList == nil {
+		return nil
+	}
+
+	var filtered []corev1.Pod
+	for _, pod := range podList.Items {
+		for _, owner := range pod.OwnerReferences {
+			if owner.Controller != nil && *owner.Controller && owner.Kind == "Job" && owner.UID == job.UID {
+				filtered = append(filtered, pod)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
+func summarizeJob(details *JobDetails) string {
+	summary := fmt.Sprintf("Status: %s, Succeeded: %d/%d", details.Status, details.Succeeded, details.Completions)
+	if details.Failed > 0 {
+		summary += fmt.Sprintf(", Failed: %d", details.Failed)
+	}
+	return summary
 }

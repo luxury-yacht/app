@@ -106,10 +106,6 @@ func Int32PtrValue(p *int32) int32 {
 	return *p
 }
 
-func jobState(facts JobFacts) string {
-	return fmt.Sprintf("%d/%d", facts.Succeeded, facts.DesiredReplicas)
-}
-
 func WorkloadReplicaSignals(facts WorkloadCommonFacts) []ResourceStatusSignal {
 	return []ResourceStatusSignal{
 		{Type: StatusSignalResourceState, Name: "spec.replicas", Status: strconv.FormatInt(int64(facts.DesiredReplicas), 10)},
