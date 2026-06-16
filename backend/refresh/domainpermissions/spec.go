@@ -3,8 +3,6 @@
 package domainpermissions
 
 import (
-	"fmt"
-
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resourcecontract"
 )
@@ -228,59 +226,58 @@ func resources(groups ...[]Resource) []Resource {
 	return result
 }
 
-func core(version, kind, resource string) Resource {
-	return builtinResource("", version, kind, resource)
+func core(version, kind string) Resource {
+	return builtinResource("", version, kind)
 }
 
-func apps(kind, resource string) Resource {
-	return builtinResource("apps", "v1", kind, resource)
+func apps(kind string) Resource {
+	return builtinResource("apps", "v1", kind)
 }
 
-func batch(kind, resource string) Resource {
-	return builtinResource("batch", "v1", kind, resource)
+func batch(kind string) Resource {
+	return builtinResource("batch", "v1", kind)
 }
 
-func autoscaling(kind, resource string) Resource {
-	return builtinResource("autoscaling", "v1", kind, resource)
+func autoscaling(kind string) Resource {
+	return builtinResource("autoscaling", "v1", kind)
 }
 
-func discovery(kind, resource string) Resource {
-	return builtinResource("discovery.k8s.io", "v1", kind, resource)
+func discovery(kind string) Resource {
+	return builtinResource("discovery.k8s.io", "v1", kind)
 }
 
-func networking(kind, resource string) Resource {
-	return builtinResource("networking.k8s.io", "v1", kind, resource)
+func networking(kind string) Resource {
+	return builtinResource("networking.k8s.io", "v1", kind)
 }
 
-func gateway(kind, resource string) Resource {
-	return builtinResource("gateway.networking.k8s.io", "v1", kind, resource)
+func gateway(kind string) Resource {
+	return builtinResource("gateway.networking.k8s.io", "v1", kind)
 }
 
-func rbac(kind, resource string) Resource {
-	return builtinResource("rbac.authorization.k8s.io", "v1", kind, resource)
+func rbac(kind string) Resource {
+	return builtinResource("rbac.authorization.k8s.io", "v1", kind)
 }
 
-func policy(kind, resource string) Resource {
-	return builtinResource("policy", "v1", kind, resource)
+func policy(kind string) Resource {
+	return builtinResource("policy", "v1", kind)
 }
 
-func storage(kind, resource string) Resource {
-	return builtinResource("storage.k8s.io", "v1", kind, resource)
+func storage(kind string) Resource {
+	return builtinResource("storage.k8s.io", "v1", kind)
 }
 
-func admission(kind, resource string) Resource {
-	return builtinResource("admissionregistration.k8s.io", "v1", kind, resource)
+func admission(kind string) Resource {
+	return builtinResource("admissionregistration.k8s.io", "v1", kind)
 }
 
-func apiextensions(kind, resource string) Resource {
-	return builtinResource("apiextensions.k8s.io", "v1", kind, resource)
+func apiextensions(kind string) Resource {
+	return builtinResource("apiextensions.k8s.io", "v1", kind)
 }
 
-func builtinResource(group, version, kind, resource string) Resource {
+// builtinResource sources one domain resource from the single contract — the
+// group/version/kind/resource identity is never re-spelled here.
+func builtinResource(group, version, kind string) Resource {
 	desc := resourcecontract.MustBuiltin(group, version, kind)
-	if desc.Resource != resource {
-		panic(fmt.Sprintf("resource contract mismatch for %s/%s/%s: got %q, want %q", group, version, kind, resource, desc.Resource))
-	}
 	return Resource{
 		Group:    desc.Group,
 		Version:  desc.Version,
@@ -293,94 +290,94 @@ var policySpecs = []policySpec{
 	{
 		Domain:  "namespaces",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Namespace", "namespaces")},
+		Runtime: []Resource{core("v1", "Namespace")},
 	},
 	{
 		Domain: "namespace-workloads",
 		Mode:   ModeAny,
 		Reason: "workload resources",
 		Runtime: []Resource{
-			core("v1", "Pod", "pods"),
-			apps("Deployment", "deployments"),
-			apps("StatefulSet", "statefulsets"),
-			apps("DaemonSet", "daemonsets"),
-			batch("Job", "jobs"),
-			batch("CronJob", "cronjobs"),
+			core("v1", "Pod"),
+			apps("Deployment"),
+			apps("StatefulSet"),
+			apps("DaemonSet"),
+			batch("Job"),
+			batch("CronJob"),
 		},
 		Stream: []Resource{
-			core("v1", "Pod", "pods"),
-			apps("ReplicaSet", "replicasets"),
-			apps("Deployment", "deployments"),
-			apps("StatefulSet", "statefulsets"),
-			apps("DaemonSet", "daemonsets"),
-			batch("Job", "jobs"),
-			batch("CronJob", "cronjobs"),
-			autoscaling("HorizontalPodAutoscaler", "horizontalpodautoscalers"),
+			core("v1", "Pod"),
+			apps("ReplicaSet"),
+			apps("Deployment"),
+			apps("StatefulSet"),
+			apps("DaemonSet"),
+			batch("Job"),
+			batch("CronJob"),
+			autoscaling("HorizontalPodAutoscaler"),
 		},
 	},
 	{
 		Domain:  "namespace-config",
 		Mode:    ModeAny,
 		Reason:  "core/configmaps,secrets",
-		Runtime: []Resource{core("v1", "ConfigMap", "configmaps"), core("v1", "Secret", "secrets")},
-		Stream:  []Resource{core("v1", "ConfigMap", "configmaps"), core("v1", "Secret", "secrets")},
+		Runtime: []Resource{core("v1", "ConfigMap"), core("v1", "Secret")},
+		Stream:  []Resource{core("v1", "ConfigMap"), core("v1", "Secret")},
 	},
 	{
 		Domain: "namespace-network",
 		Mode:   ModeAny,
 		Reason: "network resources",
 		Runtime: []Resource{
-			core("v1", "Service", "services"),
-			discovery("EndpointSlice", "endpointslices"),
-			networking("Ingress", "ingresses"),
-			networking("NetworkPolicy", "networkpolicies"),
-			gateway("Gateway", "gateways"),
-			gateway("HTTPRoute", "httproutes"),
-			gateway("GRPCRoute", "grpcroutes"),
-			gateway("TLSRoute", "tlsroutes"),
-			gateway("ListenerSet", "listenersets"),
-			gateway("ReferenceGrant", "referencegrants"),
-			gateway("BackendTLSPolicy", "backendtlspolicies"),
+			core("v1", "Service"),
+			discovery("EndpointSlice"),
+			networking("Ingress"),
+			networking("NetworkPolicy"),
+			gateway("Gateway"),
+			gateway("HTTPRoute"),
+			gateway("GRPCRoute"),
+			gateway("TLSRoute"),
+			gateway("ListenerSet"),
+			gateway("ReferenceGrant"),
+			gateway("BackendTLSPolicy"),
 		},
 		Stream: []Resource{
-			core("v1", "Service", "services"),
-			discovery("EndpointSlice", "endpointslices"),
-			networking("Ingress", "ingresses"),
-			networking("NetworkPolicy", "networkpolicies"),
-			gateway("Gateway", "gateways"),
-			gateway("HTTPRoute", "httproutes"),
-			gateway("GRPCRoute", "grpcroutes"),
-			gateway("TLSRoute", "tlsroutes"),
-			gateway("ListenerSet", "listenersets"),
-			gateway("ReferenceGrant", "referencegrants"),
-			gateway("BackendTLSPolicy", "backendtlspolicies"),
+			core("v1", "Service"),
+			discovery("EndpointSlice"),
+			networking("Ingress"),
+			networking("NetworkPolicy"),
+			gateway("Gateway"),
+			gateway("HTTPRoute"),
+			gateway("GRPCRoute"),
+			gateway("TLSRoute"),
+			gateway("ListenerSet"),
+			gateway("ReferenceGrant"),
+			gateway("BackendTLSPolicy"),
 		},
 	},
 	{
 		Domain:  "namespace-storage",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "PersistentVolumeClaim", "persistentvolumeclaims")},
-		Stream:  []Resource{core("v1", "PersistentVolumeClaim", "persistentvolumeclaims")},
+		Runtime: []Resource{core("v1", "PersistentVolumeClaim")},
+		Stream:  []Resource{core("v1", "PersistentVolumeClaim")},
 	},
 	{
 		Domain:  "namespace-autoscaling",
 		Mode:    ModeAll,
-		Runtime: []Resource{autoscaling("HorizontalPodAutoscaler", "horizontalpodautoscalers")},
-		Stream:  []Resource{autoscaling("HorizontalPodAutoscaler", "horizontalpodautoscalers")},
+		Runtime: []Resource{autoscaling("HorizontalPodAutoscaler")},
+		Stream:  []Resource{autoscaling("HorizontalPodAutoscaler")},
 	},
 	{
 		Domain: "namespace-quotas",
 		Mode:   ModeAny,
 		Reason: "quota resources",
 		Runtime: []Resource{
-			core("v1", "ResourceQuota", "resourcequotas"),
-			core("v1", "LimitRange", "limitranges"),
-			policy("PodDisruptionBudget", "poddisruptionbudgets"),
+			core("v1", "ResourceQuota"),
+			core("v1", "LimitRange"),
+			policy("PodDisruptionBudget"),
 		},
 		Stream: []Resource{
-			core("v1", "ResourceQuota", "resourcequotas"),
-			core("v1", "LimitRange", "limitranges"),
-			policy("PodDisruptionBudget", "poddisruptionbudgets"),
+			core("v1", "ResourceQuota"),
+			core("v1", "LimitRange"),
+			policy("PodDisruptionBudget"),
 		},
 	},
 	{
@@ -388,106 +385,106 @@ var policySpecs = []policySpec{
 		Mode:   ModeAny,
 		Reason: "rbac.authorization.k8s.io/roles,rolebindings,serviceaccounts",
 		Runtime: []Resource{
-			rbac("Role", "roles"),
-			rbac("RoleBinding", "rolebindings"),
-			core("v1", "ServiceAccount", "serviceaccounts"),
+			rbac("Role"),
+			rbac("RoleBinding"),
+			core("v1", "ServiceAccount"),
 		},
 		Stream: []Resource{
-			rbac("Role", "roles"),
-			rbac("RoleBinding", "rolebindings"),
-			core("v1", "ServiceAccount", "serviceaccounts"),
+			rbac("Role"),
+			rbac("RoleBinding"),
+			core("v1", "ServiceAccount"),
 		},
 	},
 	{
 		Domain:  "namespace-custom",
 		Mode:    ModeAll,
-		Runtime: []Resource{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
-		Stream:  []Resource{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
+		Runtime: []Resource{apiextensions("CustomResourceDefinition")},
+		Stream:  []Resource{apiextensions("CustomResourceDefinition")},
 	},
 	{
 		Domain:  "namespace-helm",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Secret", "secrets")},
+		Runtime: []Resource{core("v1", "Secret")},
 		// Runtime Helm list operations are secret-backed in the normal Helm
 		// storage path. Streams also watch ConfigMaps so configmap-backed Helm
 		// release storage can trigger namespace-level resyncs when permitted.
-		Stream: []Resource{core("v1", "Secret", "secrets"), core("v1", "ConfigMap", "configmaps")},
+		Stream: []Resource{core("v1", "Secret"), core("v1", "ConfigMap")},
 	},
 	{
 		Domain:  "namespace-events",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Event", "events")},
+		Runtime: []Resource{core("v1", "Event")},
 	},
 	{
 		Domain:  "pods",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Pod", "pods")},
-		Stream:  []Resource{core("v1", "Pod", "pods")},
+		Runtime: []Resource{core("v1", "Pod")},
+		Stream:  []Resource{core("v1", "Pod")},
 	},
 	{
 		Domain:  "nodes",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Node", "nodes")},
-		Stream:  []Resource{core("v1", "Node", "nodes")},
+		Runtime: []Resource{core("v1", "Node")},
+		Stream:  []Resource{core("v1", "Node")},
 	},
 	{
 		Domain:  "cluster-overview",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Node", "nodes")},
+		Runtime: []Resource{core("v1", "Node")},
 	},
 	{
 		Domain:  "cluster-rbac",
 		Mode:    ModeAny,
 		Reason:  "rbac.authorization.k8s.io",
-		Runtime: []Resource{rbac("ClusterRole", "clusterroles"), rbac("ClusterRoleBinding", "clusterrolebindings")},
-		Stream:  []Resource{rbac("ClusterRole", "clusterroles"), rbac("ClusterRoleBinding", "clusterrolebindings")},
+		Runtime: []Resource{rbac("ClusterRole"), rbac("ClusterRoleBinding")},
+		Stream:  []Resource{rbac("ClusterRole"), rbac("ClusterRoleBinding")},
 	},
 	{
 		Domain:  "cluster-storage",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "PersistentVolume", "persistentvolumes")},
-		Stream:  []Resource{core("v1", "PersistentVolume", "persistentvolumes")},
+		Runtime: []Resource{core("v1", "PersistentVolume")},
+		Stream:  []Resource{core("v1", "PersistentVolume")},
 	},
 	{
 		Domain: "cluster-config",
 		Mode:   ModeAny,
 		Reason: "cluster configuration resources",
 		Runtime: []Resource{
-			storage("StorageClass", "storageclasses"),
-			networking("IngressClass", "ingressclasses"),
-			gateway("GatewayClass", "gatewayclasses"),
-			admission("ValidatingWebhookConfiguration", "validatingwebhookconfigurations"),
-			admission("MutatingWebhookConfiguration", "mutatingwebhookconfigurations"),
+			storage("StorageClass"),
+			networking("IngressClass"),
+			gateway("GatewayClass"),
+			admission("ValidatingWebhookConfiguration"),
+			admission("MutatingWebhookConfiguration"),
 		},
 		Stream: []Resource{
-			storage("StorageClass", "storageclasses"),
-			networking("IngressClass", "ingressclasses"),
-			gateway("GatewayClass", "gatewayclasses"),
-			admission("ValidatingWebhookConfiguration", "validatingwebhookconfigurations"),
-			admission("MutatingWebhookConfiguration", "mutatingwebhookconfigurations"),
+			storage("StorageClass"),
+			networking("IngressClass"),
+			gateway("GatewayClass"),
+			admission("ValidatingWebhookConfiguration"),
+			admission("MutatingWebhookConfiguration"),
 		},
 	},
 	{
 		Domain:  "cluster-crds",
 		Mode:    ModeAll,
-		Runtime: []Resource{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
-		Stream:  []Resource{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
+		Runtime: []Resource{apiextensions("CustomResourceDefinition")},
+		Stream:  []Resource{apiextensions("CustomResourceDefinition")},
 	},
 	{
 		Domain:  "cluster-custom",
 		Mode:    ModeAll,
-		Runtime: []Resource{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
-		Stream:  []Resource{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
+		Runtime: []Resource{apiextensions("CustomResourceDefinition")},
+		Stream:  []Resource{apiextensions("CustomResourceDefinition")},
 	},
 	{
 		Domain:  "cluster-events",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Event", "events")},
+		Runtime: []Resource{core("v1", "Event")},
 	},
 	{
 		Domain:  "object-events",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Event", "events")},
+		Runtime: []Resource{core("v1", "Event")},
 	},
 	{
 		Domain: "object-map",
@@ -495,37 +492,37 @@ var policySpecs = []policySpec{
 		Reason: "object map resources",
 		Runtime: resources(
 			[]Resource{
-				core("v1", "Pod", "pods"),
-				core("v1", "Service", "services"),
-				discovery("EndpointSlice", "endpointslices"),
-				core("v1", "PersistentVolumeClaim", "persistentvolumeclaims"),
-				core("v1", "PersistentVolume", "persistentvolumes"),
-				storage("StorageClass", "storageclasses"),
-				core("v1", "ConfigMap", "configmaps"),
-				core("v1", "Secret", "secrets"),
-				core("v1", "ServiceAccount", "serviceaccounts"),
-				core("v1", "Node", "nodes"),
+				core("v1", "Pod"),
+				core("v1", "Service"),
+				discovery("EndpointSlice"),
+				core("v1", "PersistentVolumeClaim"),
+				core("v1", "PersistentVolume"),
+				storage("StorageClass"),
+				core("v1", "ConfigMap"),
+				core("v1", "Secret"),
+				core("v1", "ServiceAccount"),
+				core("v1", "Node"),
 			},
 			[]Resource{
-				apps("Deployment", "deployments"),
-				apps("ReplicaSet", "replicasets"),
-				apps("StatefulSet", "statefulsets"),
-				apps("DaemonSet", "daemonsets"),
-				batch("Job", "jobs"),
-				batch("CronJob", "cronjobs"),
-				autoscaling("HorizontalPodAutoscaler", "horizontalpodautoscalers"),
-				networking("Ingress", "ingresses"),
-				networking("IngressClass", "ingressclasses"),
+				apps("Deployment"),
+				apps("ReplicaSet"),
+				apps("StatefulSet"),
+				apps("DaemonSet"),
+				batch("Job"),
+				batch("CronJob"),
+				autoscaling("HorizontalPodAutoscaler"),
+				networking("Ingress"),
+				networking("IngressClass"),
 			},
 			[]Resource{
-				gateway("GatewayClass", "gatewayclasses"),
-				gateway("Gateway", "gateways"),
-				gateway("HTTPRoute", "httproutes"),
-				gateway("GRPCRoute", "grpcroutes"),
-				gateway("TLSRoute", "tlsroutes"),
-				gateway("ListenerSet", "listenersets"),
-				gateway("ReferenceGrant", "referencegrants"),
-				gateway("BackendTLSPolicy", "backendtlspolicies"),
+				gateway("GatewayClass"),
+				gateway("Gateway"),
+				gateway("HTTPRoute"),
+				gateway("GRPCRoute"),
+				gateway("TLSRoute"),
+				gateway("ListenerSet"),
+				gateway("ReferenceGrant"),
+				gateway("BackendTLSPolicy"),
 			},
 		),
 	},
