@@ -39,374 +39,375 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"github.com/luxury-yacht/app/backend/resources/tlsroute"
+	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
-func (a *App) GetBackendTLSPolicy(clusterID, namespace, name string) (*BackendTLSPolicyDetails, error) {
+func (a *App) GetBackendTLSPolicy(clusterID, namespace, name string) (*backendtlspolicy.BackendTLSPolicyDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "BackendTLSPolicy", namespace, name, func() (*BackendTLSPolicyDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "BackendTLSPolicy", namespace, name, func() (*backendtlspolicy.BackendTLSPolicyDetails, error) {
 		return backendtlspolicy.NewService(deps).BackendTLSPolicy(namespace, name)
 	})
 }
 
-func (a *App) GetClusterRole(clusterID, name string) (*ClusterRoleDetails, error) {
+func (a *App) GetClusterRole(clusterID, name string) (*clusterrole.ClusterRoleDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "ClusterRole", name, func() (*ClusterRoleDetails, error) {
+	return FetchClusterResource(a, deps, selectionKey, "ClusterRole", name, func() (*clusterrole.ClusterRoleDetails, error) {
 		return clusterrole.NewService(deps).ClusterRole(name)
 	})
 }
 
-func (a *App) GetClusterRoleBinding(clusterID, name string) (*ClusterRoleBindingDetails, error) {
+func (a *App) GetClusterRoleBinding(clusterID, name string) (*clusterrolebinding.ClusterRoleBindingDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "ClusterRoleBinding", name, func() (*ClusterRoleBindingDetails, error) {
+	return FetchClusterResource(a, deps, selectionKey, "ClusterRoleBinding", name, func() (*clusterrolebinding.ClusterRoleBindingDetails, error) {
 		return clusterrolebinding.NewService(deps).ClusterRoleBinding(name)
 	})
 }
 
-func (a *App) GetConfigMap(clusterID, namespace, name string) (*ConfigMapDetails, error) {
+func (a *App) GetConfigMap(clusterID, namespace, name string) (*configmap.ConfigMapDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ConfigMap", namespace, name, func() (*ConfigMapDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "ConfigMap", namespace, name, func() (*configmap.ConfigMapDetails, error) {
 		return configmap.NewService(deps).ConfigMap(namespace, name)
 	})
 }
 
-func (a *App) GetCronJob(clusterID, namespace, name string) (*CronJobDetails, error) {
+func (a *App) GetCronJob(clusterID, namespace, name string) (*cronjob.CronJobDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "CronJob", namespace, name, func() (*CronJobDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "CronJob", namespace, name, func() (*cronjob.CronJobDetails, error) {
 		return cronjob.NewService(deps).CronJob(namespace, name)
 	})
 }
 
-func (a *App) GetDaemonSet(clusterID, namespace, name string) (*DaemonSetDetails, error) {
+func (a *App) GetDaemonSet(clusterID, namespace, name string) (*daemonset.DaemonSetDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "DaemonSet", namespace, name, func() (*DaemonSetDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "DaemonSet", namespace, name, func() (*daemonset.DaemonSetDetails, error) {
 		return daemonset.NewService(deps).DaemonSet(namespace, name)
 	})
 }
 
-func (a *App) GetDeployment(clusterID, namespace, name string) (*DeploymentDetails, error) {
+func (a *App) GetDeployment(clusterID, namespace, name string) (*deployment.DeploymentDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Deployment", namespace, name, func() (*DeploymentDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "Deployment", namespace, name, func() (*deployment.DeploymentDetails, error) {
 		return deployment.NewService(deps).Deployment(namespace, name)
 	})
 }
 
-func (a *App) GetEndpointSlice(clusterID, namespace, name string) (*EndpointSliceDetails, error) {
+func (a *App) GetEndpointSlice(clusterID, namespace, name string) (*endpointslice.EndpointSliceDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "EndpointSlice", namespace, name, func() (*EndpointSliceDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "EndpointSlice", namespace, name, func() (*endpointslice.EndpointSliceDetails, error) {
 		return endpointslice.NewService(deps).EndpointSlice(namespace, name)
 	})
 }
 
-func (a *App) GetGRPCRoute(clusterID, namespace, name string) (*GRPCRouteDetails, error) {
+func (a *App) GetGRPCRoute(clusterID, namespace, name string) (*types.GRPCRouteDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "GRPCRoute", namespace, name, func() (*GRPCRouteDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "GRPCRoute", namespace, name, func() (*types.GRPCRouteDetails, error) {
 		return grpcroute.NewService(deps).GRPCRoute(namespace, name)
 	})
 }
 
-func (a *App) GetGateway(clusterID, namespace, name string) (*GatewayDetails, error) {
+func (a *App) GetGateway(clusterID, namespace, name string) (*gateway.GatewayDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Gateway", namespace, name, func() (*GatewayDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "Gateway", namespace, name, func() (*gateway.GatewayDetails, error) {
 		return gateway.NewService(deps).Gateway(namespace, name)
 	})
 }
 
-func (a *App) GetGatewayClass(clusterID, name string) (*GatewayClassDetails, error) {
+func (a *App) GetGatewayClass(clusterID, name string) (*gatewayclass.GatewayClassDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "GatewayClass", name, func() (*GatewayClassDetails, error) {
+	return FetchClusterResource(a, deps, selectionKey, "GatewayClass", name, func() (*gatewayclass.GatewayClassDetails, error) {
 		return gatewayclass.NewService(deps).GatewayClass(name)
 	})
 }
 
-func (a *App) GetHTTPRoute(clusterID, namespace, name string) (*HTTPRouteDetails, error) {
+func (a *App) GetHTTPRoute(clusterID, namespace, name string) (*types.HTTPRouteDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "HTTPRoute", namespace, name, func() (*HTTPRouteDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "HTTPRoute", namespace, name, func() (*types.HTTPRouteDetails, error) {
 		return httproute.NewService(deps).HTTPRoute(namespace, name)
 	})
 }
 
-func (a *App) GetHorizontalPodAutoscaler(clusterID, namespace, name string) (*HorizontalPodAutoscalerDetails, error) {
+func (a *App) GetHorizontalPodAutoscaler(clusterID, namespace, name string) (*hpa.HorizontalPodAutoscalerDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "HPA", namespace, name, func() (*HorizontalPodAutoscalerDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "HPA", namespace, name, func() (*hpa.HorizontalPodAutoscalerDetails, error) {
 		return hpa.NewService(deps).HorizontalPodAutoscaler(namespace, name)
 	})
 }
 
-func (a *App) GetIngress(clusterID, namespace, name string) (*IngressDetails, error) {
+func (a *App) GetIngress(clusterID, namespace, name string) (*ingress.IngressDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Ingress", namespace, name, func() (*IngressDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "Ingress", namespace, name, func() (*ingress.IngressDetails, error) {
 		return ingress.NewService(deps).Ingress(namespace, name)
 	})
 }
 
-func (a *App) GetIngressClass(clusterID, name string) (*IngressClassDetails, error) {
+func (a *App) GetIngressClass(clusterID, name string) (*ingressclass.IngressClassDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "IngressClass", name, func() (*IngressClassDetails, error) {
+	return FetchClusterResource(a, deps, selectionKey, "IngressClass", name, func() (*ingressclass.IngressClassDetails, error) {
 		return ingressclass.NewService(deps).IngressClass(name)
 	})
 }
 
-func (a *App) GetJob(clusterID, namespace, name string) (*JobDetails, error) {
+func (a *App) GetJob(clusterID, namespace, name string) (*job.JobDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Job", namespace, name, func() (*JobDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "Job", namespace, name, func() (*job.JobDetails, error) {
 		return job.NewService(deps).Job(namespace, name)
 	})
 }
 
-func (a *App) GetLimitRange(clusterID, namespace, name string) (*LimitRangeDetails, error) {
+func (a *App) GetLimitRange(clusterID, namespace, name string) (*limitrange.LimitRangeDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "LimitRange", namespace, name, func() (*LimitRangeDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "LimitRange", namespace, name, func() (*limitrange.LimitRangeDetails, error) {
 		return limitrange.NewService(deps).LimitRange(namespace, name)
 	})
 }
 
-func (a *App) GetListenerSet(clusterID, namespace, name string) (*ListenerSetDetails, error) {
+func (a *App) GetListenerSet(clusterID, namespace, name string) (*listenerset.ListenerSetDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ListenerSet", namespace, name, func() (*ListenerSetDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "ListenerSet", namespace, name, func() (*listenerset.ListenerSetDetails, error) {
 		return listenerset.NewService(deps).ListenerSet(namespace, name)
 	})
 }
 
-func (a *App) GetMutatingWebhookConfiguration(clusterID, name string) (*MutatingWebhookConfigurationDetails, error) {
+func (a *App) GetMutatingWebhookConfiguration(clusterID, name string) (*admission.MutatingWebhookConfigurationDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "MutatingWebhookConfiguration", name, func() (*MutatingWebhookConfigurationDetails, error) {
+	return FetchClusterResource(a, deps, selectionKey, "MutatingWebhookConfiguration", name, func() (*admission.MutatingWebhookConfigurationDetails, error) {
 		return admission.NewService(deps).MutatingWebhookConfiguration(name)
 	})
 }
 
-func (a *App) GetNamespace(clusterID, name string) (*NamespaceDetails, error) {
+func (a *App) GetNamespace(clusterID, name string) (*namespaces.NamespaceDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "Namespace", name, func() (*NamespaceDetails, error) {
+	return FetchClusterResource(a, deps, selectionKey, "Namespace", name, func() (*namespaces.NamespaceDetails, error) {
 		return namespaces.NewService(deps).Namespace(name)
 	})
 }
 
-func (a *App) GetNetworkPolicy(clusterID, namespace, name string) (*NetworkPolicyDetails, error) {
+func (a *App) GetNetworkPolicy(clusterID, namespace, name string) (*networkpolicy.NetworkPolicyDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "NetworkPolicy", namespace, name, func() (*NetworkPolicyDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "NetworkPolicy", namespace, name, func() (*networkpolicy.NetworkPolicyDetails, error) {
 		return networkpolicy.NewService(deps).NetworkPolicy(namespace, name)
 	})
 }
 
-func (a *App) GetNode(clusterID, name string) (*NodeDetails, error) {
+func (a *App) GetNode(clusterID, name string) (*nodes.NodeDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "Node", name, func() (*NodeDetails, error) {
+	return FetchClusterResource(a, deps, selectionKey, "Node", name, func() (*nodes.NodeDetails, error) {
 		return nodes.NewService(deps).Node(name)
 	})
 }
 
-func (a *App) GetPersistentVolume(clusterID, name string) (*PersistentVolumeDetails, error) {
+func (a *App) GetPersistentVolume(clusterID, name string) (*persistentvolume.PersistentVolumeDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "PersistentVolume", name, func() (*PersistentVolumeDetails, error) {
+	return FetchClusterResource(a, deps, selectionKey, "PersistentVolume", name, func() (*persistentvolume.PersistentVolumeDetails, error) {
 		return persistentvolume.NewService(deps).PersistentVolume(name)
 	})
 }
 
-func (a *App) GetPersistentVolumeClaim(clusterID, namespace, name string) (*PersistentVolumeClaimDetails, error) {
+func (a *App) GetPersistentVolumeClaim(clusterID, namespace, name string) (*persistentvolumeclaim.PersistentVolumeClaimDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "PVC", namespace, name, func() (*PersistentVolumeClaimDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "PVC", namespace, name, func() (*persistentvolumeclaim.PersistentVolumeClaimDetails, error) {
 		return persistentvolumeclaim.NewService(deps).PersistentVolumeClaim(namespace, name)
 	})
 }
 
-func (a *App) GetPodDisruptionBudget(clusterID, namespace, name string) (*PodDisruptionBudgetDetails, error) {
+func (a *App) GetPodDisruptionBudget(clusterID, namespace, name string) (*poddisruptionbudget.PodDisruptionBudgetDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "PodDisruptionBudget", namespace, name, func() (*PodDisruptionBudgetDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "PodDisruptionBudget", namespace, name, func() (*poddisruptionbudget.PodDisruptionBudgetDetails, error) {
 		return poddisruptionbudget.NewService(deps).PodDisruptionBudget(namespace, name)
 	})
 }
 
-func (a *App) GetReferenceGrant(clusterID, namespace, name string) (*ReferenceGrantDetails, error) {
+func (a *App) GetReferenceGrant(clusterID, namespace, name string) (*referencegrant.ReferenceGrantDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ReferenceGrant", namespace, name, func() (*ReferenceGrantDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "ReferenceGrant", namespace, name, func() (*referencegrant.ReferenceGrantDetails, error) {
 		return referencegrant.NewService(deps).ReferenceGrant(namespace, name)
 	})
 }
 
-func (a *App) GetReplicaSet(clusterID, namespace, name string) (*ReplicaSetDetails, error) {
+func (a *App) GetReplicaSet(clusterID, namespace, name string) (*replicaset.ReplicaSetDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ReplicaSet", namespace, name, func() (*ReplicaSetDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "ReplicaSet", namespace, name, func() (*replicaset.ReplicaSetDetails, error) {
 		return replicaset.NewService(deps).ReplicaSet(namespace, name)
 	})
 }
 
-func (a *App) GetResourceQuota(clusterID, namespace, name string) (*ResourceQuotaDetails, error) {
+func (a *App) GetResourceQuota(clusterID, namespace, name string) (*resourcequota.ResourceQuotaDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ResourceQuota", namespace, name, func() (*ResourceQuotaDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "ResourceQuota", namespace, name, func() (*resourcequota.ResourceQuotaDetails, error) {
 		return resourcequota.NewService(deps).ResourceQuota(namespace, name)
 	})
 }
 
-func (a *App) GetRole(clusterID, namespace, name string) (*RoleDetails, error) {
+func (a *App) GetRole(clusterID, namespace, name string) (*role.RoleDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Role", namespace, name, func() (*RoleDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "Role", namespace, name, func() (*role.RoleDetails, error) {
 		return role.NewService(deps).Role(namespace, name)
 	})
 }
 
-func (a *App) GetRoleBinding(clusterID, namespace, name string) (*RoleBindingDetails, error) {
+func (a *App) GetRoleBinding(clusterID, namespace, name string) (*rolebinding.RoleBindingDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "RoleBinding", namespace, name, func() (*RoleBindingDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "RoleBinding", namespace, name, func() (*rolebinding.RoleBindingDetails, error) {
 		return rolebinding.NewService(deps).RoleBinding(namespace, name)
 	})
 }
 
-func (a *App) GetSecret(clusterID, namespace, name string) (*SecretDetails, error) {
+func (a *App) GetSecret(clusterID, namespace, name string) (*secret.SecretDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Secret", namespace, name, func() (*SecretDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "Secret", namespace, name, func() (*secret.SecretDetails, error) {
 		return secret.NewService(deps).Secret(namespace, name)
 	})
 }
 
-func (a *App) GetService(clusterID, namespace, name string) (*ServiceDetails, error) {
+func (a *App) GetService(clusterID, namespace, name string) (*service.ServiceDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Service", namespace, name, func() (*ServiceDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "Service", namespace, name, func() (*service.ServiceDetails, error) {
 		return service.NewService(deps).GetService(namespace, name)
 	})
 }
 
-func (a *App) GetServiceAccount(clusterID, namespace, name string) (*ServiceAccountDetails, error) {
+func (a *App) GetServiceAccount(clusterID, namespace, name string) (*serviceaccount.ServiceAccountDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ServiceAccount", namespace, name, func() (*ServiceAccountDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "ServiceAccount", namespace, name, func() (*serviceaccount.ServiceAccountDetails, error) {
 		return serviceaccount.NewService(deps).ServiceAccount(namespace, name)
 	})
 }
 
-func (a *App) GetStatefulSet(clusterID, namespace, name string) (*StatefulSetDetails, error) {
+func (a *App) GetStatefulSet(clusterID, namespace, name string) (*statefulset.StatefulSetDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "StatefulSet", namespace, name, func() (*StatefulSetDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "StatefulSet", namespace, name, func() (*statefulset.StatefulSetDetails, error) {
 		return statefulset.NewService(deps).StatefulSet(namespace, name)
 	})
 }
 
-func (a *App) GetStorageClass(clusterID, name string) (*StorageClassDetails, error) {
+func (a *App) GetStorageClass(clusterID, name string) (*storageclass.StorageClassDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "StorageClass", name, func() (*StorageClassDetails, error) {
+	return FetchClusterResource(a, deps, selectionKey, "StorageClass", name, func() (*storageclass.StorageClassDetails, error) {
 		return storageclass.NewService(deps).StorageClass(name)
 	})
 }
 
-func (a *App) GetTLSRoute(clusterID, namespace, name string) (*TLSRouteDetails, error) {
+func (a *App) GetTLSRoute(clusterID, namespace, name string) (*types.TLSRouteDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "TLSRoute", namespace, name, func() (*TLSRouteDetails, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "TLSRoute", namespace, name, func() (*types.TLSRouteDetails, error) {
 		return tlsroute.NewService(deps).TLSRoute(namespace, name)
 	})
 }
 
-func (a *App) GetValidatingWebhookConfiguration(clusterID, name string) (*ValidatingWebhookConfigurationDetails, error) {
+func (a *App) GetValidatingWebhookConfiguration(clusterID, name string) (*admission.ValidatingWebhookConfigurationDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "ValidatingWebhookConfiguration", name, func() (*ValidatingWebhookConfigurationDetails, error) {
+	return FetchClusterResource(a, deps, selectionKey, "ValidatingWebhookConfiguration", name, func() (*admission.ValidatingWebhookConfigurationDetails, error) {
 		return admission.NewService(deps).ValidatingWebhookConfiguration(name)
 	})
 }

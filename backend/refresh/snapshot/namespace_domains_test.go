@@ -90,6 +90,49 @@ func clusterStorageCollectIndexer(pvIdx cache.Indexer) func(streamspec.Descripto
 	}
 }
 
+// networkIndexers holds the per-kind test indexers for the descriptor-driven
+// network kinds (nil = kind unavailable).
+type networkIndexers struct {
+	ingress          cache.Indexer
+	networkpolicy    cache.Indexer
+	gateway          cache.Indexer
+	httproute        cache.Indexer
+	grpcroute        cache.Indexer
+	tlsroute         cache.Indexer
+	listenerset      cache.Indexer
+	referencegrant   cache.Indexer
+	backendtlspolicy cache.Indexer
+}
+
+// networkCollectIndexer resolves the namespace-network stream descriptors to the
+// supplied test indexers. Service and EndpointSlice are listed via the builder's
+// own listers, not here.
+func networkCollectIndexer(idx networkIndexers) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		switch d.Resource {
+		case "ingresses":
+			return idx.ingress
+		case "networkpolicies":
+			return idx.networkpolicy
+		case "gateways":
+			return idx.gateway
+		case "httproutes":
+			return idx.httproute
+		case "grpcroutes":
+			return idx.grpcroute
+		case "tlsroutes":
+			return idx.tlsroute
+		case "listenersets":
+			return idx.listenerset
+		case "referencegrants":
+			return idx.referencegrant
+		case "backendtlspolicies":
+			return idx.backendtlspolicy
+		}
+		return nil
+	}
+}
+
 // rbacCollectIndexer returns a collectIndexer that resolves the RBAC stream
 // descriptors to the supplied test indexers (nil = kind unavailable), so the
 // descriptor-driven NamespaceRBACBuilder can be tested without an informer factory.
@@ -466,8 +509,10 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 	builder := &NamespaceNetworkBuilder{
 		serviceLister:       testsupport.NewServiceLister(t, svc),
 		endpointSliceLister: testsupport.NewEndpointSliceLister(t, slice),
-		ingressLister:       testsupport.NewIngressLister(t, ing),
-		policyLister:        testsupport.NewNetworkPolicyLister(t, policy),
+		collectIndexer: networkCollectIndexer(networkIndexers{
+			ingress:       testsupport.NewNamespacedIndexer(t, ing),
+			networkpolicy: testsupport.NewNamespacedIndexer(t, policy),
+		}),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
@@ -562,8 +607,10 @@ func TestNamespaceNetworkBuilderAllNamespaces(t *testing.T) {
 	builder := &NamespaceNetworkBuilder{
 		serviceLister:       testsupport.NewServiceLister(t, svcDefault, svcOther),
 		endpointSliceLister: testsupport.NewEndpointSliceLister(t, sliceDefault, sliceOther),
-		ingressLister:       testsupport.NewIngressLister(t, ingDefault),
-		policyLister:        testsupport.NewNetworkPolicyLister(t, policyOther),
+		collectIndexer: networkCollectIndexer(networkIndexers{
+			ingress:       testsupport.NewNamespacedIndexer(t, ingDefault),
+			networkpolicy: testsupport.NewNamespacedIndexer(t, policyOther),
+		}),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")

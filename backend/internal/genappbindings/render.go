@@ -35,6 +35,7 @@ type binding struct {
 	Method     string // service method (default Name)
 	Service    string // service constructor expression, e.g. "rbac.NewService(deps)"
 	Import     string // service package import path
+	DTOImport  string // DTO package import path (default: Import — DTO shares the service's package)
 	Fetch      string // raw detail-fetch expression override (default: Service.Method(args))
 }
 
@@ -50,6 +51,25 @@ func (b binding) method() string {
 		return b.Method
 	}
 	return b.Name
+}
+
+// dtoImport is the import path of the package holding the <Name>Details DTO. It
+// defaults to the service package (most kinds co-locate the DTO with the service)
+// and is overridden when the DTO lives elsewhere (e.g. the shared resources/types).
+func (b binding) dtoImport() string {
+	if b.DTOImport != "" {
+		return b.DTOImport
+	}
+	return b.Import
+}
+
+// dtoType is the package-qualified DTO type the App.Get wrapper returns, e.g.
+// "deployment.DeploymentDetails". Qualifying it here means package backend no
+// longer needs a re-export alias for every kind's DTO.
+func (b binding) dtoType() string {
+	imp := b.dtoImport()
+	selector := imp[strings.LastIndex(imp, "/")+1:]
+	return selector + "." + b.Name + "Details"
 }
 
 // detailKey is the object-panel dispatch key: the lowercased kind name.
@@ -83,9 +103,9 @@ var Bindings = []binding{
 	{Name: "EndpointSlice", Namespaced: true, Service: "endpointslice.NewService(deps)", Import: resourcesPkg + "endpointslice"},
 	{Name: "Gateway", Namespaced: true, Service: "gateway.NewService(deps)", Import: resourcesPkg + "gateway"},
 	{Name: "GatewayClass", Service: "gatewayclass.NewService(deps)", Import: resourcesPkg + "gatewayclass"},
-	{Name: "GRPCRoute", Namespaced: true, Service: "grpcroute.NewService(deps)", Import: resourcesPkg + "grpcroute"},
+	{Name: "GRPCRoute", Namespaced: true, Service: "grpcroute.NewService(deps)", Import: resourcesPkg + "grpcroute", DTOImport: resourcesPkg + "types"},
 	{Name: "HorizontalPodAutoscaler", Namespaced: true, Key: "HPA", Service: "hpa.NewService(deps)", Import: resourcesPkg + "hpa"},
-	{Name: "HTTPRoute", Namespaced: true, Service: "httproute.NewService(deps)", Import: resourcesPkg + "httproute"},
+	{Name: "HTTPRoute", Namespaced: true, Service: "httproute.NewService(deps)", Import: resourcesPkg + "httproute", DTOImport: resourcesPkg + "types"},
 	{Name: "Ingress", Namespaced: true, Service: "ingress.NewService(deps)", Import: resourcesPkg + "ingress"},
 	{Name: "IngressClass", Service: "ingressclass.NewService(deps)", Import: resourcesPkg + "ingressclass"},
 	{Name: "Job", Namespaced: true, Service: "job.NewService(deps)", Import: resourcesPkg + "job"},
@@ -108,7 +128,7 @@ var Bindings = []binding{
 	{Name: "ServiceAccount", Namespaced: true, Service: "serviceaccount.NewService(deps)", Import: resourcesPkg + "serviceaccount"},
 	{Name: "StatefulSet", Namespaced: true, Service: "statefulset.NewService(deps)", Import: resourcesPkg + "statefulset"},
 	{Name: "StorageClass", Service: "storageclass.NewService(deps)", Import: resourcesPkg + "storageclass"},
-	{Name: "TLSRoute", Namespaced: true, Service: "tlsroute.NewService(deps)", Import: resourcesPkg + "tlsroute"},
+	{Name: "TLSRoute", Namespaced: true, Service: "tlsroute.NewService(deps)", Import: resourcesPkg + "tlsroute", DTOImport: resourcesPkg + "types"},
 	{Name: "ValidatingWebhookConfiguration", Service: "admission.NewService(deps)", Import: resourcesPkg + "admission"},
 }
 
@@ -129,6 +149,7 @@ func Render() ([]byte, error) {
 	importSet := map[string]struct{}{}
 	for _, r := range rows {
 		importSet[r.Import] = struct{}{}
+		importSet[r.dtoImport()] = struct{}{}
 	}
 	imports := make([]string, 0, len(importSet))
 	for imp := range importSet {
@@ -192,7 +213,7 @@ func RenderDetailFetchers() ([]byte, error) {
 }
 
 func writeBinding(b *bytes.Buffer, r binding) {
-	dto := r.Name + "Details"
+	dto := r.dtoType()
 	if r.Namespaced {
 		fmt.Fprintf(b, `func (a *App) Get%[1]s(clusterID, namespace, name string) (*%[2]s, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)

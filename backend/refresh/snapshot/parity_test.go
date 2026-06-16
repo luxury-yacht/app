@@ -34,6 +34,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	gatewaypkg "github.com/luxury-yacht/app/backend/resources/gateway"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 	ingresspkg "github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
@@ -439,6 +440,7 @@ func parityServiceCase(meta ClusterMeta, withEndpoints bool) parityCase {
 			builder := &NamespaceNetworkBuilder{
 				serviceLister:       testsupport.NewServiceLister(t, service),
 				endpointSliceLister: testsupport.NewEndpointSliceLister(t, slices...),
+				collectIndexer:      networkCollectIndexer(networkIndexers{}),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
@@ -482,19 +484,18 @@ func parityNamespaceNetworkObjectsCase(meta ClusterMeta) parityCase {
 				},
 			}
 
-			// Gateway/HTTPRoute/etc. are projected through the same shared
-			// Build*NetworkSummary helpers as Ingress/NetworkPolicy. The
-			// gateway lister types live outside testsupport; rather than
-			// adding lister helpers solely for this test we exercise the
-			// Build* projectors directly below and assert the snapshot
-			// builder produces equivalent rows for Ingress+NetworkPolicy
-			// which use the same loop structure.
-			_ = gateway
+			// Ingress, NetworkPolicy, and the Gateway-API kinds are all
+			// descriptor-driven plain object→row projections; the builder lists
+			// them from their informer indexers and calls the same shared
+			// Build*StreamSummary helpers as the streaming path.
 			builder := &NamespaceNetworkBuilder{
-				ingressLister:       testsupport.NewIngressLister(t, ingress),
-				policyLister:        testsupport.NewNetworkPolicyLister(t, policy),
 				serviceLister:       testsupport.NewServiceLister(t),
 				endpointSliceLister: testsupport.NewEndpointSliceLister(t),
+				collectIndexer: networkCollectIndexer(networkIndexers{
+					ingress:       testsupport.NewNamespacedIndexer(t, ingress),
+					networkpolicy: testsupport.NewNamespacedIndexer(t, policy),
+					gateway:       testsupport.NewNamespacedIndexer(t, gateway),
+				}),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
@@ -503,6 +504,7 @@ func parityNamespaceNetworkObjectsCase(meta ClusterMeta) parityCase {
 			expected := []NetworkSummary{
 				ingresspkg.BuildStreamSummary(meta, ingress),
 				networkpolicy.BuildStreamSummary(meta, policy),
+				gatewaypkg.BuildStreamSummary(meta, gateway),
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(NetworkSummary)

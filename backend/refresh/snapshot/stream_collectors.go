@@ -108,15 +108,20 @@ func collectDescriptorTableRows[Row any](
 	sources := make([]typedTableResourceSource, 0, len(descriptors))
 	var version uint64
 	for _, d := range descriptors {
-		available := runtimeResourceAllowed(ctx, domainName, d.Group, d.Resource)
+		// A kind is available only when we both hold permission AND have an
+		// indexer to list it from. A nil indexer means the kind was not
+		// registered (denied at registration, or its factory is absent — e.g.
+		// the Gateway API is not installed), so its data is genuinely
+		// unavailable regardless of the runtime permission check.
+		indexer := indexerFor(d)
+		available := indexer != nil && runtimeResourceAllowed(ctx, domainName, d.Group, d.Resource)
 		sources = append(sources, typedTableResourceSource{
 			Kind:      d.Kind,
 			Group:     d.Group,
 			Resource:  d.Resource,
 			Available: available,
 		})
-		indexer := indexerFor(d)
-		if !available || indexer == nil {
+		if !available {
 			continue
 		}
 		var objs []interface{}
