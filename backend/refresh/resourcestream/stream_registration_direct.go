@@ -32,12 +32,3 @@ func (m *Manager) registerAutoscalingStreams(factory *informer.Factory) {
 	}
 }
 
-func (m *Manager) registerClusterConfigStreams(factory *informer.Factory) {
-	gatewayShared := factory.GatewayInformerFactory()
-	if gatewayShared == nil {
-		return
-	}
-	if m.canListWatch("gateway.networking.k8s.io", "gatewayclasses") {
-		m.addResourceEventHandler(gatewayShared.Gateway().V1().GatewayClasses().Informer(), (*Manager).handleGatewayClass)
-	}
-}

@@ -14,21 +14,31 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/streamregistry"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 )
 
-// registerDescriptorStreams wires every registry descriptor served by the shared
-// informer factory to the generic erased handler.
+// registerDescriptorStreams wires every registry descriptor to the generic erased
+// handler, resolving its informer from whichever factory the descriptor uses
+// (shared or Gateway-API). Descriptors whose factory is unavailable are skipped.
 func (m *Manager) registerDescriptorStreams(factory *informer.Factory) {
 	shared := factory.SharedInformerFactory()
-	if shared == nil {
-		return
-	}
-	for _, d := range streamregistry.Shared {
+	gatewayShared := factory.GatewayInformerFactory()
+	for _, d := range streamregistry.All {
 		if !m.canListWatch(d.Group, d.Resource) {
 			continue
 		}
+		var inf cache.SharedIndexInformer
+		switch {
+		case d.Informer != nil && shared != nil:
+			inf = d.Informer(shared)
+		case d.GatewayInformer != nil && gatewayShared != nil:
+			inf = d.GatewayInformer(gatewayShared)
+		}
+		if inf == nil {
+			continue
+		}
 		desc := d
-		m.addResourceEventHandler(desc.Informer(shared), func(mgr *Manager, obj interface{}, updateType MessageType) {
+		m.addResourceEventHandler(inf, func(mgr *Manager, obj interface{}, updateType MessageType) {
 			mgr.streamObjectRowFromDescriptor(obj, updateType, desc)
 		})
 	}

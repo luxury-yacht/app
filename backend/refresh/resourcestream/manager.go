@@ -34,7 +34,6 @@ import (
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	discoverylisters "k8s.io/client-go/listers/discovery/v1"
-	networklisters "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
@@ -49,22 +48,12 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
-	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
-	"github.com/luxury-yacht/app/backend/resources/gateway"
-	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
-	"github.com/luxury-yacht/app/backend/resources/grpcroute"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
-	"github.com/luxury-yacht/app/backend/resources/httproute"
-	"github.com/luxury-yacht/app/backend/resources/ingress"
-	"github.com/luxury-yacht/app/backend/resources/listenerset"
-	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
-	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
-	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 )
 
 const podNodeIndexName = "pods:node"
@@ -186,8 +175,6 @@ type Manager struct {
 	jobLister        batchlisters.JobLister
 	cronJobLister    batchlisters.CronJobLister
 	hpaLister        autoscalinglisters.HorizontalPodAutoscalerLister
-	ingressLister    networklisters.IngressLister
-	policyLister     networklisters.NetworkPolicyLister
 
 	customInformerMu sync.Mutex
 	customInformers  map[string]*customResourceInformer
@@ -253,7 +240,6 @@ func NewManager(
 	mgr.registerAutoscalingStreams(factory)
 	mgr.registerNodeStreams(factory)
 	mgr.registerWorkloadStreams(factory)
-	mgr.registerClusterConfigStreams(factory)
 
 	mgr.initCustomResourceInformers(factory)
 
@@ -828,47 +814,7 @@ func (m *Manager) broadcastServiceFromEndpointSlice(slice *discoveryv1.EndpointS
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), serviceUpdate)
 }
 
-func (m *Manager) handleIngress(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, ingress.BuildStreamSummary, "networking.k8s.io", "v1", "Ingress", "ingresses", domainNamespaceNetwork, false)
-}
-
-func (m *Manager) handleNetworkPolicy(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, networkpolicy.BuildStreamSummary, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", domainNamespaceNetwork, false)
-}
-
-func (m *Manager) handleGateway(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, gateway.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "Gateway", "gateways", domainNamespaceNetwork, false)
-}
-
-func (m *Manager) handleHTTPRoute(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, httproute.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "HTTPRoute", "httproutes", domainNamespaceNetwork, false)
-}
-
-func (m *Manager) handleGRPCRoute(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, grpcroute.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "GRPCRoute", "grpcroutes", domainNamespaceNetwork, false)
-}
-
-func (m *Manager) handleTLSRoute(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, tlsroute.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "TLSRoute", "tlsroutes", domainNamespaceNetwork, false)
-}
-
-func (m *Manager) handleListenerSet(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, listenerset.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "ListenerSet", "listenersets", domainNamespaceNetwork, false)
-}
-
-func (m *Manager) handleReferenceGrant(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, referencegrant.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "ReferenceGrant", "referencegrants", domainNamespaceNetwork, false)
-}
-
-func (m *Manager) handleBackendTLSPolicy(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, backendtlspolicy.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "BackendTLSPolicy", "backendtlspolicies", domainNamespaceNetwork, false)
-}
-
 // Cluster configuration updates stream shared cluster resources.
-func (m *Manager) handleGatewayClass(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, gatewayclass.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "GatewayClass", "gatewayclasses", domainClusterConfig, true)
-}
-
 // Persistent volumes belong to the cluster storage domain.
 func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
 	hpa := hpaFromObject(obj)

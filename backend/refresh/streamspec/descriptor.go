@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 // Descriptor is the registry entry for one directly-streamed built-in kind served
@@ -34,6 +35,10 @@ type Descriptor struct {
 	// manager handles only metav1.Object.
 	StreamRow func(meta streamrows.ClusterMeta, obj metav1.Object) any
 
-	// Informer returns the kind's informer from the shared factory.
+	// Informer returns the kind's informer from the shared factory. Kinds served by
+	// the shared factory set this; Gateway-API kinds set GatewayInformer instead.
 	Informer func(factory informers.SharedInformerFactory) cache.SharedIndexInformer
+
+	// GatewayInformer returns the kind's informer from the Gateway-API factory.
+	GatewayInformer func(factory gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer
 }

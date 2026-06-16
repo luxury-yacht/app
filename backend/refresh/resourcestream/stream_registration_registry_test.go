@@ -12,7 +12,7 @@ import (
 // fails CI. streamregistry.Shared is the single source the manager loops; this
 // guards it against the contract.
 func TestStreamRegistryMatchesContract(t *testing.T) {
-	for _, d := range streamregistry.Shared {
+	for _, d := range streamregistry.All {
 		if _, ok := resourcecontract.FindBuiltin(d.Group, d.Version, d.Kind); !ok {
 			t.Errorf("stream descriptor %s/%s/%s (%s) not in BuiltinResources", d.Group, d.Version, d.Kind, d.Resource)
 		}
