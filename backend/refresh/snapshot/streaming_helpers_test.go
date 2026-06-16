@@ -23,6 +23,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -290,7 +294,7 @@ func TestBuildConfigSummariesUseSharedConfigFacts(t *testing.T) {
 		Data:       map[string]string{"app.yaml": "enabled: true"},
 		BinaryData: map[string][]byte{"cert.der": []byte("cert")},
 	}
-	configMapSummary := BuildConfigMapSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, configMap)
+	configMapSummary := configmap.BuildStreamSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, configMap)
 	require.Equal(t, "ConfigMap", configMapSummary.Kind)
 	require.Equal(t, "CM", configMapSummary.TypeAlias)
 	require.Equal(t, 2, configMapSummary.Data)
@@ -301,7 +305,7 @@ func TestBuildConfigSummariesUseSharedConfigFacts(t *testing.T) {
 		Data:       map[string][]byte{"tls.crt": []byte("cert")},
 		StringData: map[string]string{"write-only": "not-returned-by-api"},
 	}
-	secretSummary := BuildSecretSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, secret)
+	secretSummary := secretpkg.BuildStreamSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, secret)
 	require.Equal(t, "Secret", secretSummary.Kind)
 	require.Equal(t, "TLS", secretSummary.TypeAlias)
 	require.Equal(t, 1, secretSummary.Data)
@@ -530,7 +534,7 @@ func TestBuildClusterCRDSummaryPopulatesAllFields(t *testing.T) {
 	}
 
 	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
-	row := BuildClusterCRDSummary(meta, crd)
+	row := apiextensions.BuildStreamSummary(meta, crd)
 
 	require.Equal(t, "c1", row.ClusterID)
 	require.Equal(t, "cluster", row.ClusterName)
@@ -551,7 +555,7 @@ func TestBuildClusterCRDSummaryPopulatesAllFields(t *testing.T) {
 // doesn't panic on a nil CRD (which can happen briefly during cache
 // warmup or delete events).
 func TestBuildClusterCRDSummaryNilCRDIsSafe(t *testing.T) {
-	row := BuildClusterCRDSummary(ClusterMeta{ClusterID: "c1"}, nil)
+	row := apiextensions.BuildStreamSummary(ClusterMeta{ClusterID: "c1"}, nil)
 	require.Equal(t, "c1", row.ClusterID)
 	require.Equal(t, "CustomResourceDefinition", row.Kind)
 	require.Empty(t, row.StorageVersion)
@@ -590,7 +594,7 @@ func TestBuildHPASummaryPopulatesTargetAPIVersion(t *testing.T) {
 		},
 	}
 
-	row := BuildHPASummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, hpa)
+	row := hpapkg.BuildStreamSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, hpa)
 
 	require.Equal(t, "c1", row.ClusterID)
 	require.Equal(t, "HorizontalPodAutoscaler", row.Kind)
@@ -608,7 +612,7 @@ func TestBuildHPASummaryPopulatesTargetAPIVersion(t *testing.T) {
 // TestBuildHPASummaryNilHPAIsSafe ensures the streaming path doesn't
 // panic on a nil HPA.
 func TestBuildHPASummaryNilHPAIsSafe(t *testing.T) {
-	row := BuildHPASummary(ClusterMeta{ClusterID: "c1"}, nil)
+	row := hpapkg.BuildStreamSummary(ClusterMeta{ClusterID: "c1"}, nil)
 	require.Equal(t, "c1", row.ClusterID)
 	require.Equal(t, "HorizontalPodAutoscaler", row.Kind)
 	require.Empty(t, row.TargetAPIVersion)

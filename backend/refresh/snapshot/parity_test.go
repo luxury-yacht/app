@@ -27,6 +27,20 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
+	"github.com/luxury-yacht/app/backend/resources/clusterrole"
+	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	rolepkg "github.com/luxury-yacht/app/backend/resources/role"
+	"github.com/luxury-yacht/app/backend/resources/rolebinding"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -507,16 +521,18 @@ func parityNamespaceConfigCase(meta ClusterMeta) parityCase {
 			}
 
 			builder := &NamespaceConfigBuilder{
-				configMaps: testsupport.NewConfigMapLister(t, cm),
-				secrets:    testsupport.NewSecretLister(t, secret),
+				collectors: []kindCollector[ConfigSummary]{
+					newConfigMapCollector(testsupport.NewConfigMapLister(t, cm)),
+					newSecretCollector(testsupport.NewSecretLister(t, secret)),
+				},
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceConfigSnapshot)
 
 			expected := []ConfigSummary{
-				BuildConfigMapSummary(meta, cm),
-				BuildSecretSummary(meta, secret),
+				configmap.BuildStreamSummary(meta, cm),
+				secretpkg.BuildStreamSummary(meta, secret),
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ConfigSummary)
@@ -550,9 +566,9 @@ func parityNamespaceRBACCase(meta ClusterMeta) parityCase {
 			payload := snap.Payload.(NamespaceRBACSnapshot)
 
 			expected := []RBACSummary{
-				BuildRoleSummary(meta, role),
-				BuildRoleBindingSummary(meta, binding),
-				BuildServiceAccountSummary(meta, sa),
+				rolepkg.BuildStreamSummary(meta, role),
+				rolebinding.BuildStreamSummary(meta, binding),
+				serviceaccount.BuildStreamSummary(meta, sa),
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(RBACSummary)
@@ -585,9 +601,9 @@ func parityNamespaceQuotasCase(meta ClusterMeta) parityCase {
 			payload := snap.Payload.(NamespaceQuotasSnapshot)
 
 			expected := []QuotaSummary{
-				BuildResourceQuotaSummary(meta, quota),
-				BuildLimitRangeSummary(meta, limit),
-				BuildPodDisruptionBudgetSummary(meta, pdb),
+				resourcequota.BuildStreamSummary(meta, quota),
+				limitrange.BuildStreamSummary(meta, limit),
+				poddisruptionbudget.BuildStreamSummary(meta, pdb),
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(QuotaSummary)
@@ -617,7 +633,7 @@ func parityNamespaceStorageCase(meta ClusterMeta) parityCase {
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceStorageSnapshot)
 
-			expected := []StorageSummary{BuildPVCStorageSummary(meta, pvc)}
+			expected := []StorageSummary{persistentvolumeclaim.BuildStreamSummary(meta, pvc)}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(StorageSummary)
 				return row.Kind + "/" + row.Namespace + "/" + row.Name
@@ -649,7 +665,7 @@ func parityNamespaceAutoscalingCase(meta ClusterMeta) parityCase {
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceAutoscalingSnapshot)
 
-			expected := []AutoscalingSummary{BuildHPASummary(meta, hpa)}
+			expected := []AutoscalingSummary{hpapkg.BuildStreamSummary(meta, hpa)}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(AutoscalingSummary)
 				return row.Kind + "/" + row.Namespace + "/" + row.Name
@@ -750,8 +766,8 @@ func parityClusterRBACCase(meta ClusterMeta) parityCase {
 			payload := snap.Payload.(ClusterRBACSnapshot)
 
 			expected := []ClusterRBACEntry{
-				BuildClusterRoleSummary(meta, cr),
-				BuildClusterRoleBindingSummary(meta, crb),
+				clusterrole.BuildStreamSummary(meta, cr),
+				clusterrolebinding.BuildStreamSummary(meta, crb),
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterRBACEntry)
@@ -782,7 +798,7 @@ func parityClusterStorageCase(meta ClusterMeta) parityCase {
 			require.NoError(t, err)
 			payload := snap.Payload.(ClusterStorageSnapshot)
 
-			expected := []ClusterStorageEntry{BuildClusterStorageSummary(meta, pv)}
+			expected := []ClusterStorageEntry{persistentvolume.BuildStreamSummary(meta, pv)}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterStorageEntry)
 				return row.Kind + "/" + row.Name
@@ -862,7 +878,7 @@ func parityClusterCRDCase(meta ClusterMeta) parityCase {
 			require.NoError(t, err)
 			payload := snap.Payload.(ClusterCRDSnapshot)
 
-			expected := []ClusterCRDEntry{BuildClusterCRDSummary(meta, crd)}
+			expected := []ClusterCRDEntry{apiextensions.BuildStreamSummary(meta, crd)}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterCRDEntry)
 				return row.Name

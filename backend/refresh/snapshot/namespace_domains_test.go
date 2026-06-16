@@ -49,8 +49,10 @@ func TestNamespaceConfigBuilder(t *testing.T) {
 	}
 
 	builder := &NamespaceConfigBuilder{
-		configMaps: testsupport.NewConfigMapLister(t, configMap),
-		secrets:    testsupport.NewSecretLister(t, secret),
+		collectors: []kindCollector[ConfigSummary]{
+			newConfigMapCollector(testsupport.NewConfigMapLister(t, configMap)),
+			newSecretCollector(testsupport.NewSecretLister(t, secret)),
+		},
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
@@ -88,8 +90,10 @@ func TestNamespaceConfigBuilderHonorsRuntimeAllowedResources(t *testing.T) {
 		Data: map[string][]byte{"user": []byte("alice")},
 	}
 	builder := &NamespaceConfigBuilder{
-		configMaps: testsupport.NewConfigMapLister(t, configMap),
-		secrets:    testsupport.NewSecretLister(t, secret),
+		collectors: []kindCollector[ConfigSummary]{
+			newConfigMapCollector(testsupport.NewConfigMapLister(t, configMap)),
+			newSecretCollector(testsupport.NewSecretLister(t, secret)),
+		},
 	}
 	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceConfigDomainName, domainpermissions.AllowedResources{
 		"core/configmaps": false,
@@ -128,8 +132,10 @@ func TestNamespaceConfigBuilderQueryReportsPartialAllowedResources(t *testing.T)
 		Data: map[string][]byte{"user": []byte("alice")},
 	}
 	builder := &NamespaceConfigBuilder{
-		configMaps: testsupport.NewConfigMapLister(t, configMap),
-		secrets:    testsupport.NewSecretLister(t, secret),
+		collectors: []kindCollector[ConfigSummary]{
+			newConfigMapCollector(testsupport.NewConfigMapLister(t, configMap)),
+			newSecretCollector(testsupport.NewSecretLister(t, secret)),
+		},
 	}
 	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceConfigDomainName, domainpermissions.AllowedResources{
 		"core/configmaps": false,
@@ -198,8 +204,10 @@ func TestNamespaceConfigBuilderAllNamespaces(t *testing.T) {
 	}
 
 	builder := &NamespaceConfigBuilder{
-		configMaps: testsupport.NewConfigMapLister(t, configMapDefault, configMapSystem),
-		secrets:    testsupport.NewSecretLister(t, secretDefault, secretOther),
+		collectors: []kindCollector[ConfigSummary]{
+			newConfigMapCollector(testsupport.NewConfigMapLister(t, configMapDefault, configMapSystem)),
+			newSecretCollector(testsupport.NewSecretLister(t, secretDefault, secretOther)),
+		},
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
@@ -244,8 +252,10 @@ func TestNamespaceConfigBuilderStableOrdering(t *testing.T) {
 	}
 
 	builder := &NamespaceConfigBuilder{
-		configMaps: testsupport.NewConfigMapLister(t, configMap),
-		secrets:    testsupport.NewSecretLister(t, secret),
+		collectors: []kindCollector[ConfigSummary]{
+			newConfigMapCollector(testsupport.NewConfigMapLister(t, configMap)),
+			newSecretCollector(testsupport.NewSecretLister(t, secret)),
+		},
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")

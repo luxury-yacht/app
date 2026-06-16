@@ -16,6 +16,10 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 )
 
 const (
@@ -52,27 +56,13 @@ func namespaceQuotasQueryCapabilities() ResourceQueryCapabilities {
 	)
 }
 
-// QuotaSummary captures quota/limit range/PDB info.
-type QuotaSummary struct {
-	ClusterMeta
-	Kind         string `json:"kind"`
-	Name         string `json:"name"`
-	Namespace    string `json:"namespace"`
-	Details      string `json:"details"`
-	Age          string `json:"age"`
-	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
-	// PDB-specific fields used by the quotas view.
-	MinAvailable   *string      `json:"minAvailable,omitempty"`
-	MaxUnavailable *string      `json:"maxUnavailable,omitempty"`
-	Status         *QuotaStatus `json:"status,omitempty"`
-}
+// QuotaSummary captures quota/limit range/PDB info. The type lives in the
+// streamrows leaf so the kind packages can build it; these aliases keep the
+// snapshot-side names and wire JSON unchanged.
+type QuotaSummary = streamrows.QuotaSummary
 
 // QuotaStatus carries PDB status fields needed by the quotas table.
-type QuotaStatus struct {
-	DisruptionsAllowed int32 `json:"disruptionsAllowed"`
-	CurrentHealthy     int32 `json:"currentHealthy"`
-	DesiredHealthy     int32 `json:"desiredHealthy"`
-}
+type QuotaStatus = streamrows.QuotaStatus
 
 // RegisterNamespaceQuotasDomain registers quotas domain.
 // Only listers for permitted resources are wired; denied resources are left nil
@@ -101,7 +91,7 @@ func RegisterNamespaceQuotasDomain(
 	})
 }
 
-// Build assembles quota summaries for the namespace.
+// Build assembles quota summaries for the namespace by looping the kind collectors.
 func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
@@ -114,106 +104,14 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, err
 	}
 
-	quotasAvailable := b.quotaLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "", "resourcequotas")
-	var quotas []*corev1.ResourceQuota
-	if quotasAvailable {
-		quotas, err = b.listResourceQuotas(parsedScope.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace quotas: failed to list resourcequotas: %w", err)
-		}
+	collectors := []kindCollector[QuotaSummary]{
+		newQuotaCollector(b.quotaLister),
+		newLimitRangeCollector(b.limitLister),
+		newPodDisruptionBudgetCollector(b.pdbLister),
 	}
-	limitsAvailable := b.limitLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "", "limitranges")
-	var limits []*corev1.LimitRange
-	if limitsAvailable {
-		limits, err = b.listLimitRanges(parsedScope.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace quotas: failed to list limitranges: %w", err)
-		}
-	}
-	pdbsAvailable := b.pdbLister != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, "policy", "poddisruptionbudgets")
-	var pdbs []*policyv1.PodDisruptionBudget
-	if pdbsAvailable {
-		pdbs, err = b.listPodDisruptionBudgets(parsedScope.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace quotas: failed to list poddisruptionbudgets: %w", err)
-		}
-	}
-
-	sources := []typedTableResourceSource{
-		{Kind: "ResourceQuota", Group: "", Resource: "resourcequotas", Available: quotasAvailable},
-		{Kind: "LimitRange", Group: "", Resource: "limitranges", Available: limitsAvailable},
-		{Kind: "PodDisruptionBudget", Group: "policy", Resource: "poddisruptionbudgets", Available: pdbsAvailable},
-	}
-	issues := typedTableQueryResourceIssues(ctx, namespaceQuotasDomainName, query, sources)
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, quotas, limits, pdbs, issues, capabilitiesWithAvailableKinds(namespaceQuotasQueryCapabilities(), sources))
-}
-
-func (b *NamespaceQuotasBuilder) listResourceQuotas(namespace string) ([]*corev1.ResourceQuota, error) {
-	if namespace == "" {
-		return b.quotaLister.List(labels.Everything())
-	}
-	return b.quotaLister.ResourceQuotas(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceQuotasBuilder) listLimitRanges(namespace string) ([]*corev1.LimitRange, error) {
-	if namespace == "" {
-		return b.limitLister.List(labels.Everything())
-	}
-	return b.limitLister.LimitRanges(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceQuotasBuilder) listPodDisruptionBudgets(namespace string) ([]*policyv1.PodDisruptionBudget, error) {
-	if namespace == "" {
-		return b.pdbLister.List(labels.Everything())
-	}
-	return b.pdbLister.PodDisruptionBudgets(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceQuotasBuilder) buildSnapshot(
-	meta ClusterMeta,
-	namespace string,
-	query typedTableQuery,
-	quotas []*corev1.ResourceQuota,
-	limits []*corev1.LimitRange,
-	pdbs []*policyv1.PodDisruptionBudget,
-	issues []ResourceQueryIssue,
-	capabilities ResourceQueryCapabilities,
-) (*refresh.Snapshot, error) {
-	resources := make([]QuotaSummary, 0, len(quotas)+len(limits)+len(pdbs))
-	var version uint64
-
-	// Delegate to the shared row builders so the full-snapshot path and
-	// the streaming/incremental update path emit identical row shapes.
-	// See BuildResourceQuotaSummary / BuildLimitRangeSummary /
-	// BuildPodDisruptionBudgetSummary in streaming_helpers.go.
-	for _, quota := range quotas {
-		if quota == nil {
-			continue
-		}
-		resources = append(resources, BuildResourceQuotaSummary(meta, quota))
-		if v := resourceVersionOrTimestamp(quota); v > version {
-			version = v
-		}
-	}
-
-	for _, limit := range limits {
-		if limit == nil {
-			continue
-		}
-		resources = append(resources, BuildLimitRangeSummary(meta, limit))
-		if v := resourceVersionOrTimestamp(limit); v > version {
-			version = v
-		}
-	}
-
-	for _, pdb := range pdbs {
-		if pdb == nil {
-			continue
-		}
-		resources = append(resources, BuildPodDisruptionBudgetSummary(meta, pdb))
-		if v := resourceVersionOrTimestamp(pdb); v > version {
-			version = v
-		}
+	resources, sources, version, err := collectDomainRows(ctx, namespaceQuotasDomainName, collectors, meta, parsedScope.Namespace)
+	if err != nil {
+		return nil, err
 	}
 
 	sort.Slice(resources, func(i, j int) bool {
@@ -223,12 +121,13 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
+	issues := typedTableQueryResourceIssues(ctx, namespaceQuotasDomainName, query, sources)
 	resolved := resolveTypedSnapshotPage(
 		namespaceQuotasDomainName,
 		resources,
 		query,
 		quotaTableQueryAdapter(),
-		capabilities,
+		capabilitiesWithAvailableKinds(namespaceQuotasQueryCapabilities(), sources),
 		config.SnapshotNamespaceQuotasEntryLimit,
 		"quota resources",
 		func(resource QuotaSummary) string { return resource.Kind },
@@ -236,7 +135,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 	)
 	return &refresh.Snapshot{
 		Domain:  namespaceQuotasDomainName,
-		Scope:   namespace,
+		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
 		Version: version,
 		Payload: NamespaceQuotasSnapshot{
 			ClusterMeta:           meta,
@@ -247,8 +146,98 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 	}, nil
 }
 
-// describeResourceQuotaFacts/describeLimitRangeFacts moved to
-// resources/{resourcequota,limitrange} (DescribeSummary), co-located with the models.
+func newQuotaCollector(lister corelisters.ResourceQuotaLister) kindCollector[QuotaSummary] {
+	collector := kindCollector[QuotaSummary]{kind: "ResourceQuota", group: "", resource: "resourcequotas", available: lister != nil}
+	if lister != nil {
+		collector.collect = func(meta ClusterMeta, namespace string) ([]QuotaSummary, uint64, error) {
+			items, err := listResourceQuotas(lister, namespace)
+			if err != nil {
+				return nil, 0, err
+			}
+			rows := make([]QuotaSummary, 0, len(items))
+			var version uint64
+			for _, quota := range items {
+				if quota == nil {
+					continue
+				}
+				rows = append(rows, resourcequota.BuildStreamSummary(meta, quota))
+				if v := resourceVersionOrTimestamp(quota); v > version {
+					version = v
+				}
+			}
+			return rows, version, nil
+		}
+	}
+	return collector
+}
 
-// describePodDisruptionBudgetFacts moved to resources/poddisruptionbudget
-// (poddisruptionbudget.DescribeSummary), co-located with the PDB model.
+func newLimitRangeCollector(lister corelisters.LimitRangeLister) kindCollector[QuotaSummary] {
+	collector := kindCollector[QuotaSummary]{kind: "LimitRange", group: "", resource: "limitranges", available: lister != nil}
+	if lister != nil {
+		collector.collect = func(meta ClusterMeta, namespace string) ([]QuotaSummary, uint64, error) {
+			items, err := listLimitRanges(lister, namespace)
+			if err != nil {
+				return nil, 0, err
+			}
+			rows := make([]QuotaSummary, 0, len(items))
+			var version uint64
+			for _, limit := range items {
+				if limit == nil {
+					continue
+				}
+				rows = append(rows, limitrange.BuildStreamSummary(meta, limit))
+				if v := resourceVersionOrTimestamp(limit); v > version {
+					version = v
+				}
+			}
+			return rows, version, nil
+		}
+	}
+	return collector
+}
+
+func newPodDisruptionBudgetCollector(lister policylisters.PodDisruptionBudgetLister) kindCollector[QuotaSummary] {
+	collector := kindCollector[QuotaSummary]{kind: "PodDisruptionBudget", group: "policy", resource: "poddisruptionbudgets", available: lister != nil}
+	if lister != nil {
+		collector.collect = func(meta ClusterMeta, namespace string) ([]QuotaSummary, uint64, error) {
+			items, err := listPodDisruptionBudgets(lister, namespace)
+			if err != nil {
+				return nil, 0, err
+			}
+			rows := make([]QuotaSummary, 0, len(items))
+			var version uint64
+			for _, pdb := range items {
+				if pdb == nil {
+					continue
+				}
+				rows = append(rows, poddisruptionbudget.BuildStreamSummary(meta, pdb))
+				if v := resourceVersionOrTimestamp(pdb); v > version {
+					version = v
+				}
+			}
+			return rows, version, nil
+		}
+	}
+	return collector
+}
+
+func listResourceQuotas(lister corelisters.ResourceQuotaLister, namespace string) ([]*corev1.ResourceQuota, error) {
+	if namespace == "" {
+		return lister.List(labels.Everything())
+	}
+	return lister.ResourceQuotas(namespace).List(labels.Everything())
+}
+
+func listLimitRanges(lister corelisters.LimitRangeLister, namespace string) ([]*corev1.LimitRange, error) {
+	if namespace == "" {
+		return lister.List(labels.Everything())
+	}
+	return lister.LimitRanges(namespace).List(labels.Everything())
+}
+
+func listPodDisruptionBudgets(lister policylisters.PodDisruptionBudgetLister, namespace string) ([]*policyv1.PodDisruptionBudget, error) {
+	if namespace == "" {
+		return lister.List(labels.Everything())
+	}
+	return lister.PodDisruptionBudgets(namespace).List(labels.Everything())
+}

@@ -88,7 +88,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 	},
 	domainNamespaceConfig: namespaceDescriptor(
 		domainNamespaceConfig,
-		"snapshot.BuildConfigMapSummary / snapshot.BuildSecretSummary",
+		"configmap.BuildStreamSummary / secret.BuildStreamSummary",
 		streamResourceDescriptors(domainNamespaceConfig),
 		[]ResourceDescriptor{},
 	),
@@ -107,7 +107,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 	},
 	domainNamespaceRBAC: namespaceDescriptor(
 		domainNamespaceRBAC,
-		"snapshot.BuildRoleSummary / BuildRoleBindingSummary / BuildServiceAccountSummary",
+		"role.BuildStreamSummary / rolebinding.BuildStreamSummary / serviceaccount.BuildStreamSummary",
 		streamResourceDescriptors(domainNamespaceRBAC),
 		[]ResourceDescriptor{},
 	),
@@ -139,30 +139,30 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 	},
 	domainNamespaceAutoscaling: namespaceDescriptor(
 		domainNamespaceAutoscaling,
-		"snapshot.BuildHPASummary",
+		"hpa.BuildStreamSummary",
 		streamResourceDescriptors(domainNamespaceAutoscaling),
 		[]ResourceDescriptor{},
 	),
 	domainNamespaceQuotas: namespaceDescriptor(
 		domainNamespaceQuotas,
-		"snapshot.BuildResourceQuotaSummary / BuildLimitRangeSummary / BuildPodDisruptionBudgetSummary",
+		"resourcequota.BuildStreamSummary / limitrange.BuildStreamSummary / poddisruptionbudget.BuildStreamSummary",
 		streamResourceDescriptors(domainNamespaceQuotas),
 		[]ResourceDescriptor{},
 	),
 	domainNamespaceStorage: namespaceDescriptor(
 		domainNamespaceStorage,
-		"snapshot.BuildPVCStorageSummary",
+		"persistentvolumeclaim.BuildStreamSummary",
 		streamResourceDescriptors(domainNamespaceStorage),
 		[]ResourceDescriptor{},
 	),
 	domainClusterRBAC: clusterDescriptor(
 		domainClusterRBAC,
-		"snapshot.BuildClusterRoleSummary / BuildClusterRoleBindingSummary",
+		"clusterrole.BuildStreamSummary / clusterrolebinding.BuildStreamSummary",
 		streamResourceDescriptors(domainClusterRBAC),
 	),
 	domainClusterStorage: clusterDescriptor(
 		domainClusterStorage,
-		"snapshot.BuildClusterStorageSummary",
+		"persistentvolume.BuildStreamSummary",
 		streamResourceDescriptors(domainClusterStorage),
 	),
 	domainClusterConfig: clusterDescriptor(
@@ -172,7 +172,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 	),
 	domainClusterCRDs: clusterDescriptor(
 		domainClusterCRDs,
-		"snapshot.BuildClusterCRDSummary",
+		"apiextensions.BuildStreamSummary",
 		streamResourceDescriptors(domainClusterCRDs),
 	),
 	domainClusterCustom: {

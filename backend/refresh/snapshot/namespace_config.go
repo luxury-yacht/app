@@ -14,6 +14,9 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 )
 
 const (
@@ -27,10 +30,11 @@ type NamespaceConfigPermissions struct {
 	IncludeSecrets    bool
 }
 
-// NamespaceConfigBuilder constructs config summaries for a namespace.
+// NamespaceConfigBuilder constructs config summaries for a namespace. Each kind
+// it serves (ConfigMap, Secret) contributes a collector that calls the kind
+// package's stream-summary builder; Build loops them via collectDomainRows.
 type NamespaceConfigBuilder struct {
-	configMaps corelisters.ConfigMapLister
-	secrets    corelisters.SecretLister
+	collectors []kindCollector[ConfigSummary]
 }
 
 // NamespaceConfigSnapshot payload returned to the frontend. It embeds the
@@ -51,21 +55,15 @@ func namespaceConfigQueryCapabilities() ResourceQueryCapabilities {
 	)
 }
 
-// ConfigSummary describes a ConfigMap or Secret entry.
-type ConfigSummary struct {
-	ClusterMeta
-	Kind         string `json:"kind"`
-	TypeAlias    string `json:"typeAlias,omitempty"`
-	Name         string `json:"name"`
-	Namespace    string `json:"namespace"`
-	Data         int    `json:"data"`
-	Age          string `json:"age"`
-	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
-}
+// ConfigSummary describes a ConfigMap or Secret entry. The type lives in the
+// streamrows leaf so the kind packages can build it; this alias keeps the
+// snapshot-side name and wire JSON unchanged.
+type ConfigSummary = streamrows.ConfigSummary
 
 // RegisterNamespaceConfigDomain registers the namespace config domain.
-// Only listers for permitted resources are wired; denied resources are left nil
-// so the builder skips them gracefully.
+// Only listers for permitted resources are wired; denied resources contribute a
+// collector with available=false so they still appear in the source list (for
+// query capabilities/issues) but are not listed.
 func RegisterNamespaceConfigDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
@@ -74,12 +72,19 @@ func RegisterNamespaceConfigDomain(
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	builder := &NamespaceConfigBuilder{}
+	var configMaps corelisters.ConfigMapLister
 	if perms.IncludeConfigMaps {
-		builder.configMaps = factory.Core().V1().ConfigMaps().Lister()
+		configMaps = factory.Core().V1().ConfigMaps().Lister()
 	}
+	var secrets corelisters.SecretLister
 	if perms.IncludeSecrets {
-		builder.secrets = factory.Core().V1().Secrets().Lister()
+		secrets = factory.Core().V1().Secrets().Lister()
+	}
+	builder := &NamespaceConfigBuilder{
+		collectors: []kindCollector[ConfigSummary]{
+			newConfigMapCollector(configMaps),
+			newSecretCollector(secrets),
+		},
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceConfigDomainName,
@@ -87,7 +92,75 @@ func RegisterNamespaceConfigDomain(
 	})
 }
 
-// Build assembles ConfigMap and Secret summaries for a namespace scope.
+// newConfigMapCollector returns the ConfigMap collector. A nil lister marks the
+// kind unavailable (denied): it still appears in the source list but is not listed.
+func newConfigMapCollector(lister corelisters.ConfigMapLister) kindCollector[ConfigSummary] {
+	collector := kindCollector[ConfigSummary]{kind: "ConfigMap", group: "", resource: "configmaps", available: lister != nil}
+	if lister != nil {
+		collector.collect = func(meta ClusterMeta, namespace string) ([]ConfigSummary, uint64, error) {
+			items, err := listConfigMaps(lister, namespace)
+			if err != nil {
+				return nil, 0, err
+			}
+			rows := make([]ConfigSummary, 0, len(items))
+			var version uint64
+			for _, cm := range items {
+				if cm == nil {
+					continue
+				}
+				rows = append(rows, configmap.BuildStreamSummary(meta, cm))
+				if v := resourceVersionOrTimestamp(cm); v > version {
+					version = v
+				}
+			}
+			return rows, version, nil
+		}
+	}
+	return collector
+}
+
+// newSecretCollector returns the Secret collector. A nil lister marks the kind
+// unavailable (denied): it still appears in the source list but is not listed.
+func newSecretCollector(lister corelisters.SecretLister) kindCollector[ConfigSummary] {
+	collector := kindCollector[ConfigSummary]{kind: "Secret", group: "", resource: "secrets", available: lister != nil}
+	if lister != nil {
+		collector.collect = func(meta ClusterMeta, namespace string) ([]ConfigSummary, uint64, error) {
+			items, err := listSecrets(lister, namespace)
+			if err != nil {
+				return nil, 0, err
+			}
+			rows := make([]ConfigSummary, 0, len(items))
+			var version uint64
+			for _, sec := range items {
+				if sec == nil {
+					continue
+				}
+				rows = append(rows, secretpkg.BuildStreamSummary(meta, sec))
+				if v := resourceVersionOrTimestamp(sec); v > version {
+					version = v
+				}
+			}
+			return rows, version, nil
+		}
+	}
+	return collector
+}
+
+func listConfigMaps(lister corelisters.ConfigMapLister, namespace string) ([]*corev1.ConfigMap, error) {
+	if namespace == "" {
+		return lister.List(labels.Everything())
+	}
+	return lister.ConfigMaps(namespace).List(labels.Everything())
+}
+
+func listSecrets(lister corelisters.SecretLister, namespace string) ([]*corev1.Secret, error) {
+	if namespace == "" {
+		return lister.List(labels.Everything())
+	}
+	return lister.Secrets(namespace).List(labels.Everything())
+}
+
+// Build assembles the namespace-config rows by looping the kind collectors.
 func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
@@ -100,89 +173,20 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, err
 	}
 
-	configMapsAvailable := b.configMaps != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "configmaps")
-	var configMaps []*corev1.ConfigMap
-	if configMapsAvailable {
-		configMaps, err = b.listConfigMaps(parsedScope.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace config: failed to list configmaps: %w", err)
-		}
-	}
-
-	secretsAvailable := b.secrets != nil && runtimeResourceAllowed(ctx, namespaceConfigDomainName, "", "secrets")
-	var secrets []*corev1.Secret
-	if secretsAvailable {
-		secrets, err = b.listSecrets(parsedScope.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace config: failed to list secrets: %w", err)
-		}
-	}
-
-	sources := []typedTableResourceSource{
-		{Kind: "ConfigMap", Group: "", Resource: "configmaps", Available: configMapsAvailable},
-		{Kind: "Secret", Group: "", Resource: "secrets", Available: secretsAvailable},
-	}
-	issues := typedTableQueryResourceIssues(ctx, namespaceConfigDomainName, query, sources)
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, configMaps, secrets, issues, capabilitiesWithAvailableKinds(namespaceConfigQueryCapabilities(), sources))
-}
-
-func (b *NamespaceConfigBuilder) listConfigMaps(namespace string) ([]*corev1.ConfigMap, error) {
-	if namespace == "" {
-		return b.configMaps.List(labels.Everything())
-	}
-	return b.configMaps.ConfigMaps(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceConfigBuilder) listSecrets(namespace string) ([]*corev1.Secret, error) {
-	if namespace == "" {
-		return b.secrets.List(labels.Everything())
-	}
-	return b.secrets.Secrets(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceConfigBuilder) buildSnapshot(
-	meta ClusterMeta,
-	scope string,
-	query typedTableQuery,
-	configMaps []*corev1.ConfigMap,
-	secrets []*corev1.Secret,
-	issues []ResourceQueryIssue,
-	capabilities ResourceQueryCapabilities,
-) (*refresh.Snapshot, error) {
-	resources := make([]ConfigSummary, 0, len(configMaps)+len(secrets))
-	var version uint64
-
-	for _, cm := range configMaps {
-		if cm == nil {
-			continue
-		}
-		// Delegate to the shared row builder so the full-snapshot path
-		// and the streaming/incremental update path emit identical row
-		// shapes. See BuildConfigMapSummary in streaming_helpers.go.
-		resources = append(resources, BuildConfigMapSummary(meta, cm))
-		if v := resourceVersionOrTimestamp(cm); v > version {
-			version = v
-		}
-	}
-
-	for _, secret := range secrets {
-		if secret == nil {
-			continue
-		}
-		resources = append(resources, BuildSecretSummary(meta, secret))
-		if v := resourceVersionOrTimestamp(secret); v > version {
-			version = v
-		}
+	resources, sources, version, err := collectDomainRows(ctx, namespaceConfigDomainName, b.collectors, meta, parsedScope.Namespace)
+	if err != nil {
+		return nil, err
 	}
 
 	sortConfigSummaries(resources)
 
+	issues := typedTableQueryResourceIssues(ctx, namespaceConfigDomainName, query, sources)
 	resolved := resolveTypedSnapshotPage(
 		namespaceConfigDomainName,
 		resources,
 		query,
 		configTableQueryAdapter(),
-		capabilities,
+		capabilitiesWithAvailableKinds(namespaceConfigQueryCapabilities(), sources),
 		config.SnapshotNamespaceConfigEntryLimit,
 		"config resources",
 		func(resource ConfigSummary) string { return resource.Kind },
@@ -190,7 +194,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 	)
 	return &refresh.Snapshot{
 		Domain:  namespaceConfigDomainName,
-		Scope:   scope,
+		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
 		Version: version,
 		Payload: NamespaceConfigSnapshot{
 			ClusterMeta:           meta,
@@ -199,26 +203,6 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 		},
 		Stats: resolved.Stats,
 	}, nil
-}
-
-func secretTypeAlias(secret *corev1.Secret) string {
-	if secret == nil {
-		return ""
-	}
-	switch secret.Type {
-	case corev1.SecretTypeTLS:
-		return "TLS"
-	case corev1.SecretTypeServiceAccountToken:
-		return "SA"
-	case corev1.SecretTypeDockercfg, corev1.SecretTypeDockerConfigJson:
-		return "Docker"
-	case corev1.SecretTypeBasicAuth:
-		return "Auth"
-	case corev1.SecretTypeOpaque:
-		return "Opaque"
-	default:
-		return string(secret.Type)
-	}
 }
 
 func sortConfigSummaries(resources []ConfigSummary) {

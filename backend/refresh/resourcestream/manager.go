@@ -48,6 +48,20 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
+	"github.com/luxury-yacht/app/backend/resources/clusterrole"
+	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	rolepkg "github.com/luxury-yacht/app/backend/resources/role"
+	"github.com/luxury-yacht/app/backend/resources/rolebinding"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 )
 
 const podNodeIndexName = "pods:node"
@@ -543,7 +557,7 @@ func (m *Manager) handleClusterCRD(obj interface{}, updateType MessageType) {
 	}
 
 	ref := m.resourceRefForObject(crd, "apiextensions.k8s.io", "v1", "CustomResourceDefinition", "customresourcedefinitions")
-	update := m.newObjectRowUpdate(updateType, domainClusterCRDs, crd, ref, snapshot.BuildClusterCRDSummary(m.clusterMeta, crd))
+	update := m.newObjectRowUpdate(updateType, domainClusterCRDs, crd, ref, apiextensionspkg.BuildStreamSummary(m.clusterMeta, crd))
 
 	m.broadcast(domainClusterCRDs, scopesForCluster(), update)
 }
@@ -606,7 +620,7 @@ func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	summary := snapshot.BuildConfigMapSummary(m.clusterMeta, cm)
+	summary := configmap.BuildStreamSummary(m.clusterMeta, cm)
 	ref := m.resourceRefForObject(cm, "", "v1", "ConfigMap", "configmaps")
 	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, cm, ref, summary)
 
@@ -639,7 +653,7 @@ func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	summary := snapshot.BuildSecretSummary(m.clusterMeta, secret)
+	summary := secretpkg.BuildStreamSummary(m.clusterMeta, secret)
 	ref := m.resourceRefForObject(secret, "", "v1", "Secret", "secrets")
 	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, secret, ref, summary)
 
@@ -726,24 +740,24 @@ func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, 
 }
 
 func (m *Manager) handleRole(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildRoleSummary, "rbac.authorization.k8s.io", "v1", "Role", "roles", domainNamespaceRBAC, false)
+	streamObjectRow(m, obj, updateType, rolepkg.BuildStreamSummary, "rbac.authorization.k8s.io", "v1", "Role", "roles", domainNamespaceRBAC, false)
 }
 
 func (m *Manager) handleRoleBinding(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildRoleBindingSummary, "rbac.authorization.k8s.io", "v1", "RoleBinding", "rolebindings", domainNamespaceRBAC, false)
+	streamObjectRow(m, obj, updateType, rolebinding.BuildStreamSummary, "rbac.authorization.k8s.io", "v1", "RoleBinding", "rolebindings", domainNamespaceRBAC, false)
 }
 
 func (m *Manager) handleServiceAccount(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildServiceAccountSummary, "", "v1", "ServiceAccount", "serviceaccounts", domainNamespaceRBAC, false)
+	streamObjectRow(m, obj, updateType, serviceaccount.BuildStreamSummary, "", "v1", "ServiceAccount", "serviceaccounts", domainNamespaceRBAC, false)
 }
 
 // Cluster RBAC updates target the cluster scope only.
 func (m *Manager) handleClusterRole(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildClusterRoleSummary, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", domainClusterRBAC, true)
+	streamObjectRow(m, obj, updateType, clusterrole.BuildStreamSummary, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", domainClusterRBAC, true)
 }
 
 func (m *Manager) handleClusterRoleBinding(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildClusterRoleBindingSummary, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings", domainClusterRBAC, true)
+	streamObjectRow(m, obj, updateType, clusterrolebinding.BuildStreamSummary, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings", domainClusterRBAC, true)
 }
 
 func (m *Manager) handleService(obj interface{}, updateType MessageType) {
@@ -889,12 +903,12 @@ func (m *Manager) handleMutatingWebhook(obj interface{}, updateType MessageType)
 }
 
 func (m *Manager) handlePersistentVolumeClaim(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildPVCStorageSummary, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", domainNamespaceStorage, false)
+	streamObjectRow(m, obj, updateType, persistentvolumeclaim.BuildStreamSummary, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", domainNamespaceStorage, false)
 }
 
 // Persistent volumes belong to the cluster storage domain.
 func (m *Manager) handlePersistentVolume(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildClusterStorageSummary, "", "v1", "PersistentVolume", "persistentvolumes", domainClusterStorage, true)
+	streamObjectRow(m, obj, updateType, persistentvolume.BuildStreamSummary, "", "v1", "PersistentVolume", "persistentvolumes", domainClusterStorage, true)
 }
 
 func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
@@ -904,7 +918,7 @@ func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
 	}
 
 	ref := m.resourceRefForObject(hpa, "autoscaling", "v1", "HorizontalPodAutoscaler", "horizontalpodautoscalers")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceAutoscaling, hpa, ref, snapshot.BuildHPASummary(m.clusterMeta, hpa))
+	update := m.newObjectRowUpdate(updateType, domainNamespaceAutoscaling, hpa, ref, hpapkg.BuildStreamSummary(m.clusterMeta, hpa))
 
 	m.broadcast(domainNamespaceAutoscaling, scopesForNamespace(hpa.Namespace), update)
 	m.handleWorkloadFromHPA(hpa, updateType)
@@ -972,15 +986,15 @@ func hpaWorkloadKey(hpa *autoscalingv1.HorizontalPodAutoscaler) string {
 }
 
 func (m *Manager) handleResourceQuota(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildResourceQuotaSummary, "", "v1", "ResourceQuota", "resourcequotas", domainNamespaceQuotas, false)
+	streamObjectRow(m, obj, updateType, resourcequota.BuildStreamSummary, "", "v1", "ResourceQuota", "resourcequotas", domainNamespaceQuotas, false)
 }
 
 func (m *Manager) handleLimitRange(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildLimitRangeSummary, "", "v1", "LimitRange", "limitranges", domainNamespaceQuotas, false)
+	streamObjectRow(m, obj, updateType, limitrange.BuildStreamSummary, "", "v1", "LimitRange", "limitranges", domainNamespaceQuotas, false)
 }
 
 func (m *Manager) handlePodDisruptionBudget(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildPodDisruptionBudgetSummary, "policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets", domainNamespaceQuotas, false)
+	streamObjectRow(m, obj, updateType, poddisruptionbudget.BuildStreamSummary, "policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets", domainNamespaceQuotas, false)
 }
 
 func (m *Manager) podMetricsSnapshot() map[string]metrics.PodUsage {

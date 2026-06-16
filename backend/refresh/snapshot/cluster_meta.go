@@ -9,23 +9,16 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"strings"
+
+	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 )
 
-// ClusterMeta carries stable cluster identifiers for snapshot payloads.
-type ClusterMeta struct {
-	ClusterID   string `json:"clusterId"`
-	ClusterName string `json:"clusterName"`
-}
-
-func (m ClusterMeta) Validate() error {
-	if strings.TrimSpace(m.ClusterID) == "" {
-		return fmt.Errorf("snapshot clusterId is required")
-	}
-	return nil
-}
+// ClusterMeta carries stable cluster identifiers for snapshot payloads. The type
+// lives in the streamrows leaf package so resources/<kind> packages can own their
+// stream-summary builders without importing snapshot; this alias keeps the
+// snapshot-side name, methods, and wire JSON unchanged.
+type ClusterMeta = streamrows.ClusterMeta
 
 type clusterMetaContextKey struct{}
 

@@ -6,14 +6,10 @@
 
 package resourcequota
 
+import "github.com/luxury-yacht/app/backend/resourcekind"
+
 // Identity is the ResourceQuota built-in resource identity.
-var Identity = struct {
-	Group      string
-	Version    string
-	Kind       string
-	Resource   string
-	Namespaced bool
-}{
+var Identity = resourcekind.Identity{
 	Group:      "",
 	Version:    "v1",
 	Kind:       "ResourceQuota",

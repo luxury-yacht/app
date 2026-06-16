@@ -14,6 +14,8 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 )
 
 const (
@@ -42,21 +44,10 @@ func namespaceStorageQueryCapabilities() ResourceQueryCapabilities {
 	)
 }
 
-// StorageSummary captures PVC info for UI consumption.
-type StorageSummary struct {
-	ClusterMeta
-	Kind               string `json:"kind"`
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	Capacity           string `json:"capacity"`
-	Status             string `json:"status"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	StorageClass       string `json:"storageClass"`
-	Age                string `json:"age"`
-	AgeTimestamp       int64  `json:"ageTimestamp,omitempty"`
-}
+// StorageSummary captures PVC info for UI consumption. The type lives in the
+// streamrows leaf so the pvc package can build it; this alias keeps the
+// snapshot-side name and wire JSON unchanged.
+type StorageSummary = streamrows.StorageSummary
 
 // RegisterNamespaceStorageDomain registers the storage domain.
 func RegisterNamespaceStorageDomain(
@@ -112,14 +103,13 @@ func (b *NamespaceStorageBuilder) buildSnapshot(
 	resources := make([]StorageSummary, 0, len(pvcs))
 	var version uint64
 
-	// Delegate to the shared row builder so the full-snapshot path and
-	// the streaming/incremental update path emit identical row shapes.
-	// See BuildPVCStorageSummary in streaming_helpers.go.
+	// The pvc package owns the row builder; the full-snapshot path here and
+	// the streaming/incremental path both call it so they cannot drift.
 	for _, pvc := range pvcs {
 		if pvc == nil {
 			continue
 		}
-		resources = append(resources, BuildPVCStorageSummary(meta, pvc))
+		resources = append(resources, persistentvolumeclaim.BuildStreamSummary(meta, pvc))
 		if v := resourceVersionOrTimestamp(pvc); v > version {
 			version = v
 		}
@@ -154,34 +144,4 @@ func (b *NamespaceStorageBuilder) buildSnapshot(
 		},
 		Stats: resolved.Stats,
 	}, nil
-}
-
-func pvcCapacity(pvc *corev1.PersistentVolumeClaim) string {
-	if pvc == nil {
-		return "-"
-	}
-	if qty, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
-		return qty.String()
-	}
-	if pvc.Spec.Resources.Requests != nil {
-		if qty, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
-			return qty.String()
-		}
-	}
-	return "-"
-}
-
-func storageClassName(pvc *corev1.PersistentVolumeClaim) string {
-	if pvc == nil {
-		return ""
-	}
-	if pvc.Spec.StorageClassName != nil {
-		return *pvc.Spec.StorageClassName
-	}
-	if pvc.Annotations != nil {
-		if value, ok := pvc.Annotations["volume.beta.kubernetes.io/storage-class"]; ok {
-			return value
-		}
-	}
-	return ""
 }

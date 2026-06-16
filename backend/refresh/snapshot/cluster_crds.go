@@ -14,6 +14,8 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 )
 
 const clusterCRDDomainName = "cluster-crds"
@@ -48,19 +50,7 @@ func clusterCRDQueryCapabilities() ResourceQueryCapabilities {
 // is the number of *additional* served versions beyond the storage
 // version, used by the frontend to render `v1` for single-version CRDs
 // and `v1 (+2)` for multi-version CRDs.
-type ClusterCRDEntry struct {
-	ClusterMeta
-	Kind                    string `json:"kind"`
-	Name                    string `json:"name"`
-	Group                   string `json:"group"`
-	Scope                   string `json:"scope"`
-	Details                 string `json:"details"`
-	StorageVersion          string `json:"storageVersion,omitempty"`
-	ExtraServedVersionCount int    `json:"extraServedVersionCount,omitempty"`
-	Age                     string `json:"age"`
-	AgeTimestamp            int64  `json:"ageTimestamp,omitempty"`
-	TypeAlias               string `json:"typeAlias,omitempty"`
-}
+type ClusterCRDEntry = streamrows.ClusterCRDEntry
 
 // RegisterClusterCRDDomain registers the CRD domain with the registry.
 func RegisterClusterCRDDomain(
@@ -104,7 +94,7 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 		// Use the shared row builder so the full-snapshot path and the
 		// streaming/incremental update path emit identical row shapes.
 		// See BuildClusterCRDSummary in streaming_helpers.go.
-		entries = append(entries, BuildClusterCRDSummary(meta, crd))
+		entries = append(entries, apiextensions.BuildStreamSummary(meta, crd))
 		if v := resourceVersionOrTimestamp(crd); v > version {
 			version = v
 		}
@@ -143,5 +133,3 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 		Stats: resolved.Stats,
 	}, nil
 }
-
-

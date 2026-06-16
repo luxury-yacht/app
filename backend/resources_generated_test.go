@@ -25,6 +25,23 @@ func TestAppBindingsGeneratedInSync(t *testing.T) {
 	}
 }
 
+// TestObjectDetailFetchersGeneratedInSync fails if object_detail_fetchers_generated.go
+// drifts from what the generator produces — i.e. it was hand-edited, or the binding
+// table / detailExtras changed without running `go generate ./backend`.
+func TestObjectDetailFetchersGeneratedInSync(t *testing.T) {
+	want, err := genappbindings.RenderDetailFetchers()
+	if err != nil {
+		t.Fatalf("render detail fetchers: %v", err)
+	}
+	got, err := os.ReadFile("object_detail_fetchers_generated.go")
+	if err != nil {
+		t.Fatalf("read generated file: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Fatal("object_detail_fetchers_generated.go is stale; run `go generate ./backend`")
+	}
+}
+
 // TestAppBindingsMatchContract ties the binding table to the identity source of
 // truth: every generated binding must name a real kind in BuiltinResources, with
 // a Namespaced flag that agrees. This catches a binding added with the wrong

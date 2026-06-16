@@ -14,7 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 )
 
@@ -44,28 +44,10 @@ func namespaceAutoscalingQueryCapabilities() ResourceQueryCapabilities {
 	)
 }
 
-// AutoscalingSummary captures HPA details for display.
-//
-// Target is the human-readable "Kind/Name" string used by the table column.
-// TargetAPIVersion carries the scale target's apiVersion verbatim from
-// hpa.Spec.ScaleTargetRef.APIVersion so the frontend can open the target
-// in the object panel with a fully-qualified GVK — required for CRDs that
-// share a Kind across groups (e.g. two operators each defining a custom
-// scalable resource named DBCluster). Without it the strict object-YAML
-// path hard-fails on CRD HPA targets.
-type AutoscalingSummary struct {
-	ClusterMeta
-	Kind             string `json:"kind"`
-	Name             string `json:"name"`
-	Namespace        string `json:"namespace"`
-	Target           string `json:"target"`
-	TargetAPIVersion string `json:"targetApiVersion,omitempty"`
-	Min              int32  `json:"min"`
-	Max              int32  `json:"max"`
-	Current          int32  `json:"current"`
-	Age              string `json:"age"`
-	AgeTimestamp     int64  `json:"ageTimestamp,omitempty"`
-}
+// AutoscalingSummary captures HPA details for display. The type lives in the
+// streamrows leaf so the hpa package can build it; this alias keeps the
+// snapshot-side name and wire JSON unchanged.
+type AutoscalingSummary = streamrows.AutoscalingSummary
 
 // RegisterNamespaceAutoscalingDomain registers the autoscaling domain.
 func RegisterNamespaceAutoscalingDomain(
@@ -125,10 +107,9 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		if hpa == nil {
 			continue
 		}
-		// Delegate to the shared row builder so the full-snapshot path
-		// and the streaming/incremental update path emit identical row
-		// shapes. See BuildHPASummary in streaming_helpers.go.
-		resources = append(resources, BuildHPASummary(meta, hpa))
+		// The hpa package owns the row builder; the full-snapshot path here
+		// and the streaming/incremental path both call it so they cannot drift.
+		resources = append(resources, hpapkg.BuildStreamSummary(meta, hpa))
 		if v := resourceVersionOrTimestamp(hpa); v > version {
 			version = v
 		}
@@ -163,42 +144,4 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		},
 		Stats: resolved.Stats,
 	}, nil
-}
-
-func describeHPATargetFacts(facts hpapkg.Facts) string {
-	kind, name := resourceLinkKindName(facts.ScaleTarget)
-	return fmt.Sprintf("%s/%s", kind, name)
-}
-
-func hpaMinReplicas(facts hpapkg.Facts) int32 {
-	if facts.MinReplicas == nil {
-		return 1
-	}
-	return *facts.MinReplicas
-}
-
-func scaleTargetAPIVersion(link resourcemodel.ResourceLink) string {
-	if link.Ref != nil {
-		if link.Ref.Group == "" {
-			return link.Ref.Version
-		}
-		return link.Ref.Group + "/" + link.Ref.Version
-	}
-	if link.Display != nil {
-		if link.Display.Group == "" {
-			return link.Display.Version
-		}
-		return link.Display.Group + "/" + link.Display.Version
-	}
-	return ""
-}
-
-func resourceLinkKindName(link resourcemodel.ResourceLink) (string, string) {
-	if link.Ref != nil {
-		return link.Ref.Kind, link.Ref.Name
-	}
-	if link.Display != nil {
-		return link.Display.Kind, link.Display.Name
-	}
-	return "", ""
 }

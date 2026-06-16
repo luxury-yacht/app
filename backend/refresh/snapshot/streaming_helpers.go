@@ -12,10 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	policyv1 "k8s.io/api/policy/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -25,26 +22,12 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/admission"
-	"github.com/luxury-yacht/app/backend/resources/apiextensions"
-	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
-	clusterrolepkg "github.com/luxury-yacht/app/backend/resources/clusterrole"
-	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
-	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
-	rolepkg "github.com/luxury-yacht/app/backend/resources/role"
-	"github.com/luxury-yacht/app/backend/resources/rolebinding"
-	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
-	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
-	"github.com/luxury-yacht/app/backend/resources/service"
-	"github.com/luxury-yacht/app/backend/resources/limitrange"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
-	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
-	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
-	"github.com/luxury-yacht/app/backend/resources/resourcequota"
-	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	"github.com/luxury-yacht/app/backend/resources/service"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
 )
 
@@ -65,42 +48,6 @@ func newNetworkSummary(meta ClusterMeta, obj metav1.Object, kind, details string
 	}
 }
 
-func newRBACSummary(meta ClusterMeta, obj metav1.Object, kind, details string) RBACSummary {
-	return RBACSummary{
-		ClusterMeta:  meta,
-		Kind:         kind,
-		Name:         obj.GetName(),
-		Namespace:    obj.GetNamespace(),
-		Details:      details,
-		Age:          formatAge(obj.GetCreationTimestamp().Time),
-		AgeTimestamp: creationTimestampMillis(obj),
-	}
-}
-
-func newQuotaSummary(meta ClusterMeta, obj metav1.Object, kind, details string) QuotaSummary {
-	return QuotaSummary{
-		ClusterMeta:  meta,
-		Kind:         kind,
-		Name:         obj.GetName(),
-		Namespace:    obj.GetNamespace(),
-		Details:      details,
-		Age:          formatAge(obj.GetCreationTimestamp().Time),
-		AgeTimestamp: creationTimestampMillis(obj),
-	}
-}
-
-func newClusterRBACEntry(meta ClusterMeta, obj metav1.Object, kind, details, typeAlias string) ClusterRBACEntry {
-	return ClusterRBACEntry{
-		ClusterMeta:  meta,
-		Kind:         kind,
-		Name:         obj.GetName(),
-		Details:      details,
-		Age:          formatAge(obj.GetCreationTimestamp().Time),
-		AgeTimestamp: creationTimestampMillis(obj),
-		TypeAlias:    typeAlias,
-	}
-}
-
 func newClusterConfigEntry(meta ClusterMeta, obj metav1.Object, kind, details string, isDefault bool) ClusterConfigEntry {
 	return ClusterConfigEntry{
 		ClusterMeta:  meta,
@@ -108,19 +55,6 @@ func newClusterConfigEntry(meta ClusterMeta, obj metav1.Object, kind, details st
 		Name:         obj.GetName(),
 		Details:      details,
 		IsDefault:    isDefault,
-		Age:          formatAge(obj.GetCreationTimestamp().Time),
-		AgeTimestamp: creationTimestampMillis(obj),
-	}
-}
-
-func newConfigSummary(meta ClusterMeta, obj metav1.Object, kind, typeAlias string, data int) ConfigSummary {
-	return ConfigSummary{
-		ClusterMeta:  meta,
-		Kind:         kind,
-		TypeAlias:    typeAlias,
-		Name:         obj.GetName(),
-		Namespace:    obj.GetNamespace(),
-		Data:         data,
 		Age:          formatAge(obj.GetCreationTimestamp().Time),
 		AgeTimestamp: creationTimestampMillis(obj),
 	}
@@ -136,48 +70,6 @@ func BuildPodSummary(meta ClusterMeta, pod *corev1.Pod, usage map[string]metrics
 	}
 	rsMap := buildReplicaSetDeploymentMapForPod(pod, rsLister)
 	return buildPodSummary(meta, pod, usage, rsMap)
-}
-
-// BuildConfigMapSummary builds a config map row payload that matches snapshot formatting.
-func BuildConfigMapSummary(meta ClusterMeta, cm *corev1.ConfigMap) ConfigSummary {
-	if cm == nil {
-		return ConfigSummary{ClusterMeta: meta, Kind: "ConfigMap", TypeAlias: "CM"}
-	}
-	facts := configmap.BuildFacts(cm, nil)
-	return newConfigSummary(meta, cm, "ConfigMap", "CM", facts.DataCount)
-}
-
-// BuildSecretSummary builds a secret row payload that matches snapshot formatting.
-func BuildSecretSummary(meta ClusterMeta, secret *corev1.Secret) ConfigSummary {
-	if secret == nil {
-		return ConfigSummary{ClusterMeta: meta, Kind: "Secret"}
-	}
-	facts := secretpkg.BuildFacts(secret, nil)
-	return newConfigSummary(meta, secret, "Secret", secretTypeAlias(secret), facts.DataCount)
-}
-
-// BuildRoleSummary builds a role row payload that matches snapshot formatting.
-func BuildRoleSummary(meta ClusterMeta, role *rbacv1.Role) RBACSummary {
-	if role == nil {
-		return RBACSummary{ClusterMeta: meta, Kind: "Role"}
-	}
-	return newRBACSummary(meta, role, "Role", rolepkg.DescribeSummary(rolepkg.BuildFacts(role, nil, resourcemodel.ResourceModelBuildOptions{})))
-}
-
-// BuildRoleBindingSummary builds a role binding row payload that matches snapshot formatting.
-func BuildRoleBindingSummary(meta ClusterMeta, binding *rbacv1.RoleBinding) RBACSummary {
-	if binding == nil {
-		return RBACSummary{ClusterMeta: meta, Kind: "RoleBinding"}
-	}
-	return newRBACSummary(meta, binding, "RoleBinding", rolebinding.DescribeSummary(rolebinding.BuildFacts(meta.ClusterID, binding)))
-}
-
-// BuildServiceAccountSummary builds a service account row payload that matches snapshot formatting.
-func BuildServiceAccountSummary(meta ClusterMeta, sa *corev1.ServiceAccount) RBACSummary {
-	if sa == nil {
-		return RBACSummary{ClusterMeta: meta, Kind: "ServiceAccount"}
-	}
-	return newRBACSummary(meta, sa, "ServiceAccount", serviceaccount.DescribeSummary(serviceaccount.BuildFacts(meta.ClusterID, sa, nil, resourcemodel.ResourceModelBuildOptions{})))
 }
 
 // BuildServiceNetworkSummary builds a service row payload that matches snapshot formatting.
@@ -327,45 +219,6 @@ func BuildNamespaceCustomSummary(
 	}
 }
 
-// BuildClusterRoleSummary builds a cluster role row payload that matches snapshot formatting.
-func BuildClusterRoleSummary(meta ClusterMeta, role *rbacv1.ClusterRole) ClusterRBACEntry {
-	if role == nil {
-		return ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRole"}
-	}
-	return newClusterRBACEntry(meta, role, "ClusterRole", clusterrolepkg.DescribeSummary(clusterrolepkg.BuildFacts(role, nil, resourcemodel.ResourceModelBuildOptions{})), "CR")
-}
-
-// BuildClusterRoleBindingSummary builds a cluster role binding row payload that matches snapshot formatting.
-func BuildClusterRoleBindingSummary(meta ClusterMeta, binding *rbacv1.ClusterRoleBinding) ClusterRBACEntry {
-	if binding == nil {
-		return ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRoleBinding"}
-	}
-	return newClusterRBACEntry(meta, binding, "ClusterRoleBinding", clusterrolebinding.DescribeSummary(clusterrolebinding.BuildFacts(meta.ClusterID, binding)), "CRB")
-}
-
-// BuildClusterStorageSummary builds a persistent volume row payload that matches snapshot formatting.
-func BuildClusterStorageSummary(meta ClusterMeta, pv *corev1.PersistentVolume) ClusterStorageEntry {
-	if pv == nil {
-		return ClusterStorageEntry{ClusterMeta: meta, Kind: "PersistentVolume"}
-	}
-	model := persistentvolume.BuildResourceModel(meta.ClusterID, pv)
-	return ClusterStorageEntry{
-		ClusterMeta:        meta,
-		Kind:               "PersistentVolume",
-		Name:               pv.Name,
-		StorageClass:       pv.Spec.StorageClassName,
-		Capacity:           formatStorageCapacity(pv),
-		AccessModes:        formatAccessModes(pv.Spec.AccessModes),
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Claim:              formatClaimRef(pv.Spec.ClaimRef),
-		Age:                formatAge(pv.CreationTimestamp.Time),
-		AgeTimestamp:       creationTimestampMillis(pv),
-	}
-}
-
 // BuildClusterStorageClassSummary builds a storage class entry that matches snapshot formatting.
 func BuildClusterStorageClassSummary(meta ClusterMeta, sc *storagev1.StorageClass) ClusterConfigEntry {
 	if sc == nil {
@@ -445,25 +298,7 @@ func BuildClusterMutatingWebhookSummary(
 // streaming update. The convergence here is the structural fix.
 //
 // Any new field added to ClusterCRDEntry MUST be populated here.
-func BuildClusterCRDSummary(meta ClusterMeta, crd *apiextensionsv1.CustomResourceDefinition) ClusterCRDEntry {
-	if crd == nil {
-		return ClusterCRDEntry{ClusterMeta: meta, Kind: "CustomResourceDefinition"}
-	}
-	facts := apiextensions.BuildFacts(crd)
-	return ClusterCRDEntry{
-		ClusterMeta:             meta,
-		Kind:                    "CustomResourceDefinition",
-		Name:                    crd.Name,
-		Group:                   facts.Group,
-		Scope:                   facts.Scope,
-		Details:                 apiextensions.CustomResourceDefinitionVersionDetails(facts),
-		StorageVersion:          facts.StorageVersion,
-		ExtraServedVersionCount: facts.ExtraServedVersionCount,
-		Age:                     formatAge(crd.CreationTimestamp.Time),
-		AgeTimestamp:            creationTimestampMillis(crd),
-		TypeAlias:               "CRD",
-	}
-}
+// BuildClusterCRDSummary moved to resources/apiextensions (BuildStreamSummary).
 
 // BuildClusterCustomSummary builds a cluster custom resource row payload
 // that matches snapshot formatting. This is the **single source of truth**
@@ -537,105 +372,6 @@ func BuildEndpointSliceSummary(
 		Age:          formatAge(slice.CreationTimestamp.Time),
 		AgeTimestamp: creationTimestampMillis(slice),
 	}
-}
-
-// BuildHPASummary builds an HPA row payload that matches snapshot
-// formatting. This is the **single source of truth** for HPA row
-// construction — the full-snapshot builder in namespace_autoscaling.go
-// calls this helper rather than inlining its own construction, so the
-// two paths cannot drift.
-//
-// TargetAPIVersion is the wire-form apiVersion of the scale target,
-// threaded verbatim from hpa.Spec.ScaleTargetRef.APIVersion. It is what
-// lets the frontend open CRD scale targets (Argo Rollout, KEDA, custom
-// workload operators) in the object panel with a fully-qualified GVK. A
-// previous bug had this path dropping the field on streaming updates
-// (which HPAs receive constantly as Status.CurrentReplicas changes),
-// which silently re-introduced the kind-only-objects bug for CRD scale
-// targets.
-//
-// Any new field added to AutoscalingSummary MUST be populated here.
-func BuildHPASummary(meta ClusterMeta, hpa *autoscalingv1.HorizontalPodAutoscaler) AutoscalingSummary {
-	if hpa == nil {
-		return AutoscalingSummary{ClusterMeta: meta, Kind: "HorizontalPodAutoscaler"}
-	}
-	facts := hpapkg.BuildV1Facts(meta.ClusterID, hpa)
-	return AutoscalingSummary{
-		ClusterMeta:      meta,
-		Kind:             "HorizontalPodAutoscaler",
-		Name:             hpa.Name,
-		Namespace:        hpa.Namespace,
-		Target:           describeHPATargetFacts(facts),
-		TargetAPIVersion: scaleTargetAPIVersion(facts.ScaleTarget),
-		Min:              hpaMinReplicas(facts),
-		Max:              facts.MaxReplicas,
-		Current:          facts.CurrentReplicas,
-		Age:              formatAge(hpa.CreationTimestamp.Time),
-		AgeTimestamp:     creationTimestampMillis(hpa),
-	}
-}
-
-// BuildPVCStorageSummary builds a PVC row payload that matches snapshot formatting.
-func BuildPVCStorageSummary(meta ClusterMeta, pvc *corev1.PersistentVolumeClaim) StorageSummary {
-	if pvc == nil {
-		return StorageSummary{ClusterMeta: meta, Kind: "PersistentVolumeClaim"}
-	}
-	model := persistentvolumeclaim.BuildResourceModel(meta.ClusterID, pvc)
-	return StorageSummary{
-		ClusterMeta:        meta,
-		Kind:               "PersistentVolumeClaim",
-		Name:               pvc.Name,
-		Namespace:          pvc.Namespace,
-		Capacity:           pvcCapacity(pvc),
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		StorageClass:       storageClassName(pvc),
-		Age:                formatAge(pvc.CreationTimestamp.Time),
-		AgeTimestamp:       creationTimestampMillis(pvc),
-	}
-}
-
-// BuildResourceQuotaSummary builds a quota row payload that matches snapshot formatting.
-func BuildResourceQuotaSummary(meta ClusterMeta, quota *corev1.ResourceQuota) QuotaSummary {
-	if quota == nil {
-		return QuotaSummary{ClusterMeta: meta, Kind: "ResourceQuota"}
-	}
-	facts := resourcequota.BuildFacts(quota)
-	return newQuotaSummary(meta, quota, "ResourceQuota", resourcequota.DescribeSummary(facts))
-}
-
-// BuildLimitRangeSummary builds a limit range row payload that matches snapshot formatting.
-func BuildLimitRangeSummary(meta ClusterMeta, limit *corev1.LimitRange) QuotaSummary {
-	if limit == nil {
-		return QuotaSummary{ClusterMeta: meta, Kind: "LimitRange"}
-	}
-	facts := limitrange.BuildFacts(limit)
-	return newQuotaSummary(meta, limit, "LimitRange", limitrange.DescribeSummary(facts))
-}
-
-// BuildPodDisruptionBudgetSummary builds a PDB row payload that matches snapshot formatting.
-func BuildPodDisruptionBudgetSummary(meta ClusterMeta, pdb *policyv1.PodDisruptionBudget) QuotaSummary {
-	if pdb == nil {
-		return QuotaSummary{ClusterMeta: meta, Kind: "PodDisruptionBudget"}
-	}
-	facts := poddisruptionbudget.BuildFacts(meta.ClusterID, pdb)
-	summary := newQuotaSummary(meta, pdb, "PodDisruptionBudget", poddisruptionbudget.DescribeSummary(facts))
-	summary.Status = &QuotaStatus{
-		DisruptionsAllowed: facts.AllowedDisruptions,
-		CurrentHealthy:     facts.CurrentHealthy,
-		DesiredHealthy:     facts.DesiredHealthy,
-	}
-	if facts.MinAvailable != nil {
-		value := facts.MinAvailable.Value
-		summary.MinAvailable = &value
-	}
-	if facts.MaxUnavailable != nil {
-		value := facts.MaxUnavailable.Value
-		summary.MaxUnavailable = &value
-	}
-	return summary
 }
 
 // BuildWorkloadSummary builds a workload row payload for a single workload object.

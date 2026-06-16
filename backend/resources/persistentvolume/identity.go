@@ -6,14 +6,10 @@
 
 package persistentvolume
 
+import "github.com/luxury-yacht/app/backend/resourcekind"
+
 // Identity is the PersistentVolume built-in resource identity (cluster-scoped).
-var Identity = struct {
-	Group      string
-	Version    string
-	Kind       string
-	Resource   string
-	Namespaced bool
-}{
+var Identity = resourcekind.Identity{
 	Group:      "",
 	Version:    "v1",
 	Kind:       "PersistentVolume",

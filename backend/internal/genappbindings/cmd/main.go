@@ -1,5 +1,5 @@
-// Command genappbindings writes the generated App.Get<Kind> bindings.
-// Invoked via `go generate ./backend`.
+// Command genappbindings writes the generated App.Get<Kind> bindings and the
+// object-panel detail-fetcher dispatch map. Invoked via `go generate ./backend`.
 package main
 
 import (
@@ -11,19 +11,31 @@ import (
 )
 
 func main() {
-	out := flag.String("out", "", "output file path (stdout if empty)")
+	out := flag.String("out", "", "App.Get bindings output file path (stdout if empty and no other output requested)")
+	fetchersOut := flag.String("fetchers-out", "", "objectDetailFetchers output file path")
 	flag.Parse()
 
-	src, err := genappbindings.Render()
+	if *fetchersOut != "" {
+		writeRendered(genappbindings.RenderDetailFetchers, *fetchersOut)
+	}
+	if *out != "" || *fetchersOut == "" {
+		writeRendered(genappbindings.Render, *out)
+	}
+}
+
+// writeRendered renders source with the given renderer and writes it to path, or
+// to stdout when path is empty.
+func writeRendered(render func() ([]byte, error), path string) {
+	src, err := render()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "genappbindings:", err)
 		os.Exit(1)
 	}
-	if *out == "" {
+	if path == "" {
 		os.Stdout.Write(src)
 		return
 	}
-	if err := os.WriteFile(*out, src, 0o644); err != nil {
+	if err := os.WriteFile(path, src, 0o644); err != nil {
 		fmt.Fprintln(os.Stderr, "genappbindings:", err)
 		os.Exit(1)
 	}
