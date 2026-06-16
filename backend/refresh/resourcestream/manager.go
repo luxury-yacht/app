@@ -48,11 +48,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	"github.com/luxury-yacht/app/backend/resources/admission"
 	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
-	"github.com/luxury-yacht/app/backend/resources/clusterrole"
-	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
@@ -62,21 +59,11 @@ import (
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 	"github.com/luxury-yacht/app/backend/resources/httproute"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
-	"github.com/luxury-yacht/app/backend/resources/ingressclass"
-	"github.com/luxury-yacht/app/backend/resources/limitrange"
 	"github.com/luxury-yacht/app/backend/resources/listenerset"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
-	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
-	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
-	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/referencegrant"
-	"github.com/luxury-yacht/app/backend/resources/resourcequota"
-	rolepkg "github.com/luxury-yacht/app/backend/resources/role"
-	"github.com/luxury-yacht/app/backend/resources/rolebinding"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
-	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
-	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 )
 
@@ -262,7 +249,7 @@ func NewManager(
 	mgr.registerPodStreams(factory)
 	mgr.registerConfigStreams(factory)
 	mgr.registerNetworkStreams(factory)
-	mgr.registerSharedStreams(factory)
+	mgr.registerDescriptorStreams(factory)
 	mgr.registerAutoscalingStreams(factory)
 	mgr.registerNodeStreams(factory)
 	mgr.registerWorkloadStreams(factory)
@@ -755,27 +742,7 @@ func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, 
 	m.broadcast(domainNamespaceHelm, scopesForNamespace(namespace), update)
 }
 
-func (m *Manager) handleRole(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, rolepkg.BuildStreamSummary, "rbac.authorization.k8s.io", "v1", "Role", "roles", domainNamespaceRBAC, false)
-}
-
-func (m *Manager) handleRoleBinding(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, rolebinding.BuildStreamSummary, "rbac.authorization.k8s.io", "v1", "RoleBinding", "rolebindings", domainNamespaceRBAC, false)
-}
-
-func (m *Manager) handleServiceAccount(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, serviceaccount.BuildStreamSummary, "", "v1", "ServiceAccount", "serviceaccounts", domainNamespaceRBAC, false)
-}
-
 // Cluster RBAC updates target the cluster scope only.
-func (m *Manager) handleClusterRole(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, clusterrole.BuildStreamSummary, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", domainClusterRBAC, true)
-}
-
-func (m *Manager) handleClusterRoleBinding(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, clusterrolebinding.BuildStreamSummary, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings", domainClusterRBAC, true)
-}
-
 func (m *Manager) handleService(obj interface{}, updateType MessageType) {
 	service := serviceFromObject(obj)
 	if service == nil {
@@ -898,35 +865,11 @@ func (m *Manager) handleBackendTLSPolicy(obj interface{}, updateType MessageType
 }
 
 // Cluster configuration updates stream shared cluster resources.
-func (m *Manager) handleStorageClass(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, storageclass.BuildStreamSummary, "storage.k8s.io", "v1", "StorageClass", "storageclasses", domainClusterConfig, true)
-}
-
-func (m *Manager) handleIngressClass(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, ingressclass.BuildStreamSummary, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", domainClusterConfig, true)
-}
-
 func (m *Manager) handleGatewayClass(obj interface{}, updateType MessageType) {
 	streamObjectRow(m, obj, updateType, gatewayclass.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "GatewayClass", "gatewayclasses", domainClusterConfig, true)
 }
 
-func (m *Manager) handleValidatingWebhook(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, admission.BuildValidatingStreamSummary, "admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", domainClusterConfig, true)
-}
-
-func (m *Manager) handleMutatingWebhook(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, admission.BuildMutatingStreamSummary, "admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", domainClusterConfig, true)
-}
-
-func (m *Manager) handlePersistentVolumeClaim(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, persistentvolumeclaim.BuildStreamSummary, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", domainNamespaceStorage, false)
-}
-
 // Persistent volumes belong to the cluster storage domain.
-func (m *Manager) handlePersistentVolume(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, persistentvolume.BuildStreamSummary, "", "v1", "PersistentVolume", "persistentvolumes", domainClusterStorage, true)
-}
-
 func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
 	hpa := hpaFromObject(obj)
 	if hpa == nil {
@@ -999,18 +942,6 @@ func hpaWorkloadKey(hpa *autoscalingv1.HorizontalPodAutoscaler) string {
 		return ""
 	}
 	return snapshot.WorkloadOwnerKey(kind, namespace, name)
-}
-
-func (m *Manager) handleResourceQuota(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, resourcequota.BuildStreamSummary, "", "v1", "ResourceQuota", "resourcequotas", domainNamespaceQuotas, false)
-}
-
-func (m *Manager) handleLimitRange(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, limitrange.BuildStreamSummary, "", "v1", "LimitRange", "limitranges", domainNamespaceQuotas, false)
-}
-
-func (m *Manager) handlePodDisruptionBudget(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, poddisruptionbudget.BuildStreamSummary, "policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets", domainNamespaceQuotas, false)
 }
 
 func (m *Manager) podMetricsSnapshot() map[string]metrics.PodUsage {

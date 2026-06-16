@@ -26,6 +26,12 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/clusterrole"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	rolepkg "github.com/luxury-yacht/app/backend/resources/role"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -170,7 +176,7 @@ func TestManagerRBACUpdateBroadcasts(t *testing.T) {
 		},
 	}
 
-	manager.handleRole(role, MessageTypeAdded)
+	manager.streamObjectRowFromDescriptor(role, MessageTypeAdded, rolepkg.StreamDescriptor)
 
 	select {
 	case update := <-sub.Updates:
@@ -269,7 +275,7 @@ func TestManagerClusterRBACUpdateBroadcasts(t *testing.T) {
 		},
 	}
 
-	manager.handleClusterRole(role, MessageTypeAdded)
+	manager.streamObjectRowFromDescriptor(role, MessageTypeAdded, clusterrole.StreamDescriptor)
 
 	select {
 	case update := <-sub.Updates:
@@ -302,7 +308,7 @@ func TestManagerQuotasUpdateBroadcasts(t *testing.T) {
 		},
 	}
 
-	manager.handleResourceQuota(quota, MessageTypeAdded)
+	manager.streamObjectRowFromDescriptor(quota, MessageTypeAdded, resourcequota.StreamDescriptor)
 
 	select {
 	case update := <-sub.Updates:
@@ -372,7 +378,7 @@ func TestManagerClusterConfigUpdateBroadcasts(t *testing.T) {
 		Provisioner: "kubernetes.io/no-provisioner",
 	}
 
-	manager.handleStorageClass(storageClass, MessageTypeAdded)
+	manager.streamObjectRowFromDescriptor(storageClass, MessageTypeAdded, storageclass.StreamDescriptor)
 
 	select {
 	case update := <-sub.Updates:
@@ -408,7 +414,7 @@ func TestManagerStorageUpdateBroadcasts(t *testing.T) {
 		},
 	}
 
-	manager.handlePersistentVolumeClaim(pvc, MessageTypeAdded)
+	manager.streamObjectRowFromDescriptor(pvc, MessageTypeAdded, persistentvolumeclaim.StreamDescriptor)
 
 	select {
 	case update := <-sub.Updates:
@@ -443,7 +449,7 @@ func TestManagerClusterStorageUpdateBroadcasts(t *testing.T) {
 		},
 	}
 
-	manager.handlePersistentVolume(pv, MessageTypeAdded)
+	manager.streamObjectRowFromDescriptor(pv, MessageTypeAdded, persistentvolume.StreamDescriptor)
 
 	select {
 	case update := <-sub.Updates:
