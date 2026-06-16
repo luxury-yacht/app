@@ -9,19 +9,15 @@ import (
 
 var ErrGatewayAPINotInstalled = errors.New("gateway api kind is not installed on this cluster")
 
-type Service struct {
-	deps common.Dependencies
-}
-
-func NewService(deps common.Dependencies) *Service {
-	return &Service{deps: deps}
-}
-
-func (s *Service) ensureKind(kind string) error {
-	if s == nil || s.deps.GatewayClient == nil {
+// EnsureKindInstalled reports whether the Gateway-API kind is reachable on the
+// cluster: the gateway client must be wired and, when presence detection ran,
+// the kind must be present. Kind packages call this through GetResource/
+// ListResources so the CRD-discovery seam stays single-sourced here.
+func EnsureKindInstalled(deps common.Dependencies, kind string) error {
+	if deps.GatewayClient == nil {
 		return fmt.Errorf("%w: %s", ErrGatewayAPINotInstalled, kind)
 	}
-	if s.deps.GatewayAPIPresence != nil && !s.deps.GatewayAPIPresence.Has(kind) {
+	if deps.GatewayAPIPresence != nil && !deps.GatewayAPIPresence.Has(kind) {
 		return fmt.Errorf("%w: %s", ErrGatewayAPINotInstalled, kind)
 	}
 	return nil

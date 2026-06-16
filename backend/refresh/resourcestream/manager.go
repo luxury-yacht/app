@@ -48,20 +48,36 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/admission"
 	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
+	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
+	"github.com/luxury-yacht/app/backend/resources/customresource"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/gateway"
+	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
+	"github.com/luxury-yacht/app/backend/resources/grpcroute"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/httproute"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/listenerset"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 	rolepkg "github.com/luxury-yacht/app/backend/resources/role"
 	"github.com/luxury-yacht/app/backend/resources/rolebinding"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
 	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
+	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 )
 
 const podNodeIndexName = "pods:node"
@@ -532,12 +548,12 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		// for both the cluster-scoped and namespace-scoped paths.
 		crdName := info.gvr.Resource + "." + info.gvr.Group
 		if domain == domainClusterCustom {
-			row = snapshot.BuildClusterCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName)
+			row = customresource.BuildClusterStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName)
 		} else {
 			// The streaming path has no parent scope concept — fall back
 			// to the resource's own namespace (which is almost always
 			// set for anything that reaches an informer).
-			row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName, resource.GetNamespace())
+			row = customresource.BuildNamespaceStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName, resource.GetNamespace())
 		}
 	}
 	update := m.newObjectRowUpdate(updateType, domain, resource, ref, row)
@@ -776,7 +792,7 @@ func (m *Manager) handleService(obj interface{}, updateType MessageType) {
 	}
 
 	ref := m.resourceRefForObject(service, "", "v1", "Service", "services")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, service, ref, snapshot.BuildServiceNetworkSummary(m.clusterMeta, service, slices))
+	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, service, ref, servicepkg.BuildStreamSummary(m.clusterMeta, service, slices))
 
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), update)
 }
@@ -789,7 +805,7 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 	serviceName := endpointSliceServiceName(slice)
 
 	ref := m.resourceRefForObject(slice, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, slice, ref, snapshot.BuildEndpointSliceSummary(m.clusterMeta, slice))
+	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, slice, ref, endpointslice.BuildStreamSummary(m.clusterMeta, slice))
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
 
 	m.broadcastServiceFromEndpointSlice(slice, serviceName)
@@ -838,7 +854,7 @@ func (m *Manager) broadcastServiceFromEndpointSlice(slice *discoveryv1.EndpointS
 	if err != nil || service == nil {
 		return
 	}
-	serviceSummary := snapshot.BuildServiceNetworkSummary(m.clusterMeta, service, slices)
+	serviceSummary := servicepkg.BuildStreamSummary(m.clusterMeta, service, slices)
 	ref := m.resourceRefForObject(service, "", "v1", "Service", "services")
 	serviceUpdate := m.newObjectRowUpdate(MessageTypeModified, domainNamespaceNetwork, service, ref, serviceSummary)
 	serviceUpdate.ResourceVersion = slice.ResourceVersion
@@ -846,60 +862,60 @@ func (m *Manager) broadcastServiceFromEndpointSlice(slice *discoveryv1.EndpointS
 }
 
 func (m *Manager) handleIngress(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildIngressNetworkSummary, "networking.k8s.io", "v1", "Ingress", "ingresses", domainNamespaceNetwork, false)
+	streamObjectRow(m, obj, updateType, ingress.BuildStreamSummary, "networking.k8s.io", "v1", "Ingress", "ingresses", domainNamespaceNetwork, false)
 }
 
 func (m *Manager) handleNetworkPolicy(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildNetworkPolicySummary, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", domainNamespaceNetwork, false)
+	streamObjectRow(m, obj, updateType, networkpolicy.BuildStreamSummary, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", domainNamespaceNetwork, false)
 }
 
 func (m *Manager) handleGateway(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildGatewayNetworkSummary, "gateway.networking.k8s.io", "v1", "Gateway", "gateways", domainNamespaceNetwork, false)
+	streamObjectRow(m, obj, updateType, gateway.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "Gateway", "gateways", domainNamespaceNetwork, false)
 }
 
 func (m *Manager) handleHTTPRoute(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildHTTPRouteNetworkSummary, "gateway.networking.k8s.io", "v1", "HTTPRoute", "httproutes", domainNamespaceNetwork, false)
+	streamObjectRow(m, obj, updateType, httproute.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "HTTPRoute", "httproutes", domainNamespaceNetwork, false)
 }
 
 func (m *Manager) handleGRPCRoute(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildGRPCRouteNetworkSummary, "gateway.networking.k8s.io", "v1", "GRPCRoute", "grpcroutes", domainNamespaceNetwork, false)
+	streamObjectRow(m, obj, updateType, grpcroute.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "GRPCRoute", "grpcroutes", domainNamespaceNetwork, false)
 }
 
 func (m *Manager) handleTLSRoute(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildTLSRouteNetworkSummary, "gateway.networking.k8s.io", "v1", "TLSRoute", "tlsroutes", domainNamespaceNetwork, false)
+	streamObjectRow(m, obj, updateType, tlsroute.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "TLSRoute", "tlsroutes", domainNamespaceNetwork, false)
 }
 
 func (m *Manager) handleListenerSet(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildListenerSetNetworkSummary, "gateway.networking.k8s.io", "v1", "ListenerSet", "listenersets", domainNamespaceNetwork, false)
+	streamObjectRow(m, obj, updateType, listenerset.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "ListenerSet", "listenersets", domainNamespaceNetwork, false)
 }
 
 func (m *Manager) handleReferenceGrant(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildReferenceGrantNetworkSummary, "gateway.networking.k8s.io", "v1", "ReferenceGrant", "referencegrants", domainNamespaceNetwork, false)
+	streamObjectRow(m, obj, updateType, referencegrant.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "ReferenceGrant", "referencegrants", domainNamespaceNetwork, false)
 }
 
 func (m *Manager) handleBackendTLSPolicy(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildBackendTLSPolicyNetworkSummary, "gateway.networking.k8s.io", "v1", "BackendTLSPolicy", "backendtlspolicies", domainNamespaceNetwork, false)
+	streamObjectRow(m, obj, updateType, backendtlspolicy.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "BackendTLSPolicy", "backendtlspolicies", domainNamespaceNetwork, false)
 }
 
 // Cluster configuration updates stream shared cluster resources.
 func (m *Manager) handleStorageClass(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildClusterStorageClassSummary, "storage.k8s.io", "v1", "StorageClass", "storageclasses", domainClusterConfig, true)
+	streamObjectRow(m, obj, updateType, storageclass.BuildStreamSummary, "storage.k8s.io", "v1", "StorageClass", "storageclasses", domainClusterConfig, true)
 }
 
 func (m *Manager) handleIngressClass(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildClusterIngressClassSummary, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", domainClusterConfig, true)
+	streamObjectRow(m, obj, updateType, ingressclass.BuildStreamSummary, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", domainClusterConfig, true)
 }
 
 func (m *Manager) handleGatewayClass(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildClusterGatewayClassSummary, "gateway.networking.k8s.io", "v1", "GatewayClass", "gatewayclasses", domainClusterConfig, true)
+	streamObjectRow(m, obj, updateType, gatewayclass.BuildStreamSummary, "gateway.networking.k8s.io", "v1", "GatewayClass", "gatewayclasses", domainClusterConfig, true)
 }
 
 func (m *Manager) handleValidatingWebhook(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildClusterValidatingWebhookSummary, "admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", domainClusterConfig, true)
+	streamObjectRow(m, obj, updateType, admission.BuildValidatingStreamSummary, "admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", domainClusterConfig, true)
 }
 
 func (m *Manager) handleMutatingWebhook(obj interface{}, updateType MessageType) {
-	streamObjectRow(m, obj, updateType, snapshot.BuildClusterMutatingWebhookSummary, "admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", domainClusterConfig, true)
+	streamObjectRow(m, obj, updateType, admission.BuildMutatingStreamSummary, "admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", domainClusterConfig, true)
 }
 
 func (m *Manager) handlePersistentVolumeClaim(obj interface{}, updateType MessageType) {

@@ -18,10 +18,12 @@ package streamrows
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -227,6 +229,197 @@ type ClusterCRDEntry struct {
 	Age                     string `json:"age"`
 	AgeTimestamp            int64  `json:"ageTimestamp,omitempty"`
 	TypeAlias               string `json:"typeAlias,omitempty"`
+}
+
+// NamespaceCustomSummary is a CRD-backed namespaced custom resource row.
+type NamespaceCustomSummary struct {
+	ClusterMeta
+	Kind               string                         `json:"kind"`
+	Name               string                         `json:"name"`
+	APIGroup           string                         `json:"apiGroup"`
+	APIVersion         string                         `json:"apiVersion"`
+	CRDName            string                         `json:"crdName,omitempty"`
+	Namespace          string                         `json:"namespace"`
+	Status             string                         `json:"status,omitempty"`
+	StatusState        string                         `json:"statusState,omitempty"`
+	StatusPresentation string                         `json:"statusPresentation,omitempty"`
+	Ready              *bool                          `json:"ready,omitempty"`
+	ObservedGeneration *int64                         `json:"observedGeneration,omitempty"`
+	Conditions         []resourcemodel.ConditionFacts `json:"conditions,omitempty"`
+	Age                string                         `json:"age"`
+	Labels             map[string]string              `json:"labels,omitempty"`
+	Annotations        map[string]string              `json:"annotations,omitempty"`
+}
+
+// ClusterCustomSummary is a CRD-backed cluster-scoped custom resource row.
+type ClusterCustomSummary struct {
+	ClusterMeta
+	Kind               string                         `json:"kind"`
+	Name               string                         `json:"name"`
+	APIGroup           string                         `json:"apiGroup"`
+	APIVersion         string                         `json:"apiVersion"`
+	CRDName            string                         `json:"crdName,omitempty"`
+	Status             string                         `json:"status,omitempty"`
+	StatusState        string                         `json:"statusState,omitempty"`
+	StatusPresentation string                         `json:"statusPresentation,omitempty"`
+	Ready              *bool                          `json:"ready,omitempty"`
+	ObservedGeneration *int64                         `json:"observedGeneration,omitempty"`
+	Conditions         []resourcemodel.ConditionFacts `json:"conditions,omitempty"`
+	Age                string                         `json:"age"`
+	Labels             map[string]string              `json:"labels,omitempty"`
+	Annotations        map[string]string              `json:"annotations,omitempty"`
+}
+
+// NetworkSummary is a Service/Ingress/EndpointSlice/NetworkPolicy/Gateway-API row
+// (the namespace-network domain).
+type NetworkSummary struct {
+	ClusterMeta
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Namespace    string `json:"namespace"`
+	Details      string `json:"details"`
+	Age          string `json:"age"`
+	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
+}
+
+// NewNetworkSummary fills the row skeleton shared by the namespace-network kinds.
+func NewNetworkSummary(meta ClusterMeta, obj metav1.Object, kind, details string) NetworkSummary {
+	return NetworkSummary{
+		ClusterMeta:  meta,
+		Kind:         kind,
+		Name:         obj.GetName(),
+		Namespace:    obj.GetNamespace(),
+		Details:      details,
+		Age:          FormatAge(obj.GetCreationTimestamp().Time),
+		AgeTimestamp: CreationMillis(obj),
+	}
+}
+
+// PodSummary is a pod row (the pods domain).
+type PodSummary struct {
+	ClusterMeta
+	Name                 string `json:"name"`
+	Namespace            string `json:"namespace"`
+	Node                 string `json:"node"`
+	Status               string `json:"status"`
+	StatusState          string `json:"statusState,omitempty"`
+	StatusPresentation   string `json:"statusPresentation,omitempty"`
+	StatusReason         string `json:"statusReason,omitempty"`
+	Ready                string `json:"ready"`
+	Restarts             int32  `json:"restarts"`
+	Age                  string `json:"age"`
+	AgeTimestamp         int64  `json:"ageTimestamp,omitempty"`
+	OwnerKind            string `json:"ownerKind"`
+	OwnerName            string `json:"ownerName"`
+	PortForwardAvailable bool   `json:"portForwardAvailable"`
+	OwnerAPIVersion      string `json:"ownerApiVersion,omitempty"`
+	CPURequest           string `json:"cpuRequest"`
+	CPULimit             string `json:"cpuLimit"`
+	CPUUsage             string `json:"cpuUsage"`
+	MemRequest           string `json:"memRequest"`
+	MemLimit             string `json:"memLimit"`
+	MemUsage             string `json:"memUsage"`
+}
+
+// WorkloadSummary is a Deployment/StatefulSet/DaemonSet/Job/CronJob/Pod row
+// (the namespace-workloads domain).
+type WorkloadSummary struct {
+	ClusterMeta
+	Kind                 string `json:"kind"`
+	Name                 string `json:"name"`
+	Namespace            string `json:"namespace"`
+	Ready                string `json:"ready"`
+	Status               string `json:"status"`
+	StatusState          string `json:"statusState,omitempty"`
+	StatusPresentation   string `json:"statusPresentation,omitempty"`
+	StatusReason         string `json:"statusReason,omitempty"`
+	Restarts             int32  `json:"restarts"`
+	Age                  string `json:"age"`
+	AgeTimestamp         int64  `json:"ageTimestamp,omitempty"`
+	CPUUsage             string `json:"cpuUsage,omitempty"`
+	CPURequest           string `json:"cpuRequest,omitempty"`
+	CPULimit             string `json:"cpuLimit,omitempty"`
+	MemUsage             string `json:"memUsage,omitempty"`
+	MemRequest           string `json:"memRequest,omitempty"`
+	MemLimit             string `json:"memLimit,omitempty"`
+	PortForwardAvailable bool   `json:"portForwardAvailable"`
+	DesiredReplicas      *int32 `json:"desiredReplicas,omitempty"`
+	HPAManaged           *bool  `json:"hpaManaged,omitempty"`
+}
+
+// NodeSummary is a node row (the nodes domain).
+type NodeSummary struct {
+	ClusterMeta
+	Name               string            `json:"name"`
+	Status             string            `json:"status"`
+	StatusState        string            `json:"statusState,omitempty"`
+	StatusPresentation string            `json:"statusPresentation,omitempty"`
+	StatusReason       string            `json:"statusReason,omitempty"`
+	Roles              string            `json:"roles"`
+	Age                string            `json:"age"`
+	AgeTimestamp       int64             `json:"ageTimestamp,omitempty"`
+	Version            string            `json:"version"`
+	InternalIP         string            `json:"internalIP,omitempty"`
+	ExternalIP         string            `json:"externalIP,omitempty"`
+	CPUCapacity        string            `json:"cpuCapacity"`
+	CPUAllocatable     string            `json:"cpuAllocatable"`
+	CPURequests        string            `json:"cpuRequests"`
+	CPULimits          string            `json:"cpuLimits"`
+	CPUUsage           string            `json:"cpuUsage"`
+	MemoryCapacity     string            `json:"memoryCapacity"`
+	MemoryAllocatable  string            `json:"memoryAllocatable"`
+	MemRequests        string            `json:"memRequests"`
+	MemLimits          string            `json:"memLimits"`
+	MemoryUsage        string            `json:"memoryUsage"`
+	Pods               string            `json:"pods"`
+	PodsCapacity       string            `json:"podsCapacity"`
+	PodsAllocatable    string            `json:"podsAllocatable"`
+	Restarts           int32             `json:"restarts"`
+	Kind               string            `json:"kind"`
+	CPU                string            `json:"cpu"`
+	Memory             string            `json:"memory"`
+	Unschedulable      bool              `json:"unschedulable"`
+	Labels             map[string]string `json:"labels,omitempty"`
+	Annotations        map[string]string `json:"annotations,omitempty"`
+	Taints             []NodeTaint       `json:"taints,omitempty"`
+	PodMetrics         []NodePodMetric   `json:"podMetrics,omitempty"`
+}
+
+// NodeTaint is a node taint shown in the node row.
+type NodeTaint struct {
+	Key    string `json:"key"`
+	Value  string `json:"value,omitempty"`
+	Effect string `json:"effect"`
+}
+
+// NodePodMetric is a per-pod usage entry shown in the node row.
+type NodePodMetric struct {
+	Namespace   string `json:"namespace"`
+	Name        string `json:"name"`
+	CPUUsage    string `json:"cpuUsage"`
+	MemoryUsage string `json:"memoryUsage"`
+}
+
+// FormatCPUMilli renders CPU millicores as the streaming rows display them.
+func FormatCPUMilli(value int64) string {
+	return fmt.Sprintf("%dm", value)
+}
+
+// FormatMemoryBytes renders a byte count as the streaming rows display it.
+func FormatMemoryBytes(bytes int64) string {
+	if bytes <= 0 {
+		return "0Mi"
+	}
+	gb := float64(bytes) / (1024 * 1024 * 1024)
+	if gb >= 1 {
+		return fmt.Sprintf("%.1f GB", gb)
+	}
+	mb := float64(bytes) / (1024 * 1024)
+	if mb >= 1 {
+		return fmt.Sprintf("%.0f MB", mb)
+	}
+	kb := float64(bytes) / 1024
+	return fmt.Sprintf("%.0f KB", kb)
 }
 
 // FormatAge renders an object's age the way every streaming row displays it.

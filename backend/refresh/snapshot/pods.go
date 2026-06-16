@@ -22,8 +22,9 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
-	podres "github.com/luxury-yacht/app/backend/resources/pods"
+	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
 )
 
 // PodBuilder constructs pod snapshots scoped by node or workload.
@@ -51,34 +52,9 @@ func podQueryCapabilities() ResourceQueryCapabilities {
 	)
 }
 
-// PodSummary captures essential pod information for UI tables.
-type PodSummary struct {
-	ClusterMeta
-	Name                 string `json:"name"`
-	Namespace            string `json:"namespace"`
-	Node                 string `json:"node"`
-	Status               string `json:"status"`
-	StatusState          string `json:"statusState,omitempty"`
-	StatusPresentation   string `json:"statusPresentation,omitempty"`
-	StatusReason         string `json:"statusReason,omitempty"`
-	Ready                string `json:"ready"`
-	Restarts             int32  `json:"restarts"`
-	Age                  string `json:"age"`
-	AgeTimestamp         int64  `json:"ageTimestamp,omitempty"`
-	OwnerKind            string `json:"ownerKind"`
-	OwnerName            string `json:"ownerName"`
-	PortForwardAvailable bool   `json:"portForwardAvailable"`
-	// OwnerAPIVersion is the wire-form apiVersion of the controlling owner
-	// (e.g. "apps/v1", "argoproj.io/v1alpha1"). Threaded so the panel can
-	// open CRD-as-Pod-owner targets correctly. See PodSimpleInfo.
-	OwnerAPIVersion string `json:"ownerApiVersion,omitempty"`
-	CPURequest      string `json:"cpuRequest"`
-	CPULimit        string `json:"cpuLimit"`
-	CPUUsage        string `json:"cpuUsage"`
-	MemRequest      string `json:"memRequest"`
-	MemLimit        string `json:"memLimit"`
-	MemUsage        string `json:"memUsage"`
-}
+// PodSummary lives in the streamrows leaf so the pods package can build it; this
+// alias keeps the snapshot-side name and wire JSON unchanged.
+type PodSummary = streamrows.PodSummary
 
 // PodMetricsInfo mirrors metrics poller metadata for pods.
 type PodMetricsInfo struct {
@@ -155,7 +131,8 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			if pod == nil {
 				continue
 			}
-			summary := buildPodSummary(meta, pod, podUsage, rsMap)
+			podMetricsUsage := podUsage[pod.Namespace+"/"+pod.Name]
+			summary := podres.BuildStreamSummaryFromRSMap(meta, pod, podMetricsUsage.CPUUsageMilli, podMetricsUsage.MemoryUsageBytes, rsMap)
 			collector.Add(summary)
 			if v := parsePodResourceVersion(pod); v > version {
 				version = v
@@ -168,7 +145,8 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			if pod == nil {
 				continue
 			}
-			summary := buildPodSummary(meta, pod, podUsage, rsMap)
+			podMetricsUsage := podUsage[pod.Namespace+"/"+pod.Name]
+			summary := podres.BuildStreamSummaryFromRSMap(meta, pod, podMetricsUsage.CPUUsageMilli, podMetricsUsage.MemoryUsageBytes, rsMap)
 			summaries = append(summaries, summary)
 			if v := parsePodResourceVersion(pod); v > version {
 				version = v
@@ -495,77 +473,11 @@ func convertPodIndexerItems(items []interface{}) []*corev1.Pod {
 	return result
 }
 
-func buildPodSummary(
-	meta ClusterMeta,
-	pod *corev1.Pod,
-	usage map[string]metrics.PodUsage,
-	rsMap map[string]string,
-) PodSummary {
-	model := podres.BuildResourceModel(meta.ClusterID, pod)
-	podFacts := podres.BuildFacts(pod)
-	ready := podFacts.ReadyContainers
-	total := podFacts.TotalContainers
-	restarts := podFacts.RestartCount
-	ownerKind, ownerName, ownerAPIVersion := resolvePodOwner(pod, rsMap)
-	cpuReq, cpuLim, memReq, memLim := computeResourceTotals(pod)
-	metricKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
-	metricsUsage := usage[metricKey]
-
-	return PodSummary{
-		ClusterMeta:          meta,
-		Name:                 pod.Name,
-		Namespace:            pod.Namespace,
-		Node:                 pod.Spec.NodeName,
-		Status:               model.Status.Label,
-		StatusState:          model.Status.State,
-		StatusPresentation:   model.Status.Presentation,
-		StatusReason:         model.Status.Reason,
-		Ready:                fmt.Sprintf("%d/%d", ready, total),
-		Restarts:             restarts,
-		Age:                  formatAge(pod.CreationTimestamp.Time),
-		AgeTimestamp:         creationTimestampMillis(pod),
-		OwnerKind:            ownerKind,
-		OwnerName:            ownerName,
-		PortForwardAvailable: hasForwardablePodPorts(pod),
-		OwnerAPIVersion:      ownerAPIVersion,
-		CPURequest:           formatCPUMilli(cpuReq),
-		CPULimit:             formatCPUMilli(cpuLim),
-		CPUUsage:             formatCPUMilli(metricsUsage.CPUUsageMilli),
-		MemRequest:           formatMemoryBytes(memReq),
-		MemLimit:             formatMemoryBytes(memLim),
-		MemUsage:             formatMemoryBytes(metricsUsage.MemoryUsageBytes),
-	}
-}
-
 func hasForwardablePodPorts(pod *corev1.Pod) bool {
 	if pod == nil {
 		return false
 	}
 	return common.HasForwardableContainerPorts(pod.Spec.Containers)
-}
-
-// resolvePodOwner returns (kind, name, apiVersion) for the controlling
-// owner of a pod, collapsing ReplicaSets into their parent Deployment.
-// apiVersion is "apps/v1" for the ReplicaSet→Deployment collapse and
-// owner.APIVersion verbatim otherwise.
-func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string) (string, string, string) {
-	for _, owner := range pod.OwnerReferences {
-		if owner.Controller == nil || !*owner.Controller {
-			continue
-		}
-		kind := owner.Kind
-		name := owner.Name
-		apiVersion := owner.APIVersion
-		if owner.Kind == "ReplicaSet" {
-			if deployment, ok := rsMap[owner.Name]; ok {
-				kind = "Deployment"
-				name = deployment
-				apiVersion = "apps/v1"
-			}
-		}
-		return kind, name, apiVersion
-	}
-	return "None", "None", ""
 }
 
 func parsePodResourceVersion(pod *corev1.Pod) uint64 {
@@ -578,25 +490,4 @@ func parsePodResourceVersion(pod *corev1.Pod) uint64 {
 		}
 	}
 	return uint64(pod.CreationTimestamp.UnixNano())
-}
-
-func computeResourceTotals(pod *corev1.Pod) (cpuReq, cpuLim, memReq, memLim int64) {
-	if pod == nil {
-		return 0, 0, 0, 0
-	}
-	for _, container := range pod.Spec.Containers {
-		if cpu := container.Resources.Requests.Cpu(); cpu != nil {
-			cpuReq += cpu.MilliValue()
-		}
-		if cpu := container.Resources.Limits.Cpu(); cpu != nil {
-			cpuLim += cpu.MilliValue()
-		}
-		if mem := container.Resources.Requests.Memory(); mem != nil {
-			memReq += mem.Value()
-		}
-		if mem := container.Resources.Limits.Memory(); mem != nil {
-			memLim += mem.Value()
-		}
-	}
-	return cpuReq, cpuLim, memReq, memLim
 }

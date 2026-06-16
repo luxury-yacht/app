@@ -9,6 +9,8 @@ package resourcestream
 import (
 	"fmt"
 
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
+
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -43,7 +45,7 @@ func (m *Manager) broadcastPodRow(
 	if pod == nil {
 		return
 	}
-	summary := snapshot.BuildPodSummary(m.clusterMeta, pod, podUsage, m.rsLister)
+	summary := podStreamRow(m, pod, podUsage)
 	ref := m.resourceRefForObject(pod, "", "v1", "Pod", "pods")
 	update := m.newObjectRowUpdate(updateType, domainPods, pod, ref, summary)
 	if len(scopes) == 0 {
@@ -67,8 +69,8 @@ func (m *Manager) handlePodEvent(oldObj interface{}, newObj interface{}, updateT
 			return
 		}
 		podUsage := m.podMetricsSnapshot()
-		oldSummary := snapshot.BuildPodSummary(m.clusterMeta, oldPod, podUsage, m.rsLister)
-		newSummary := snapshot.BuildPodSummary(m.clusterMeta, newPod, podUsage, m.rsLister)
+		oldSummary := podStreamRow(m, oldPod, podUsage)
+		newSummary := podStreamRow(m, newPod, podUsage)
 		if staleScopes := stalePodScopes(oldSummary, newSummary); len(staleScopes) > 0 {
 			m.broadcastPodRow(oldPod, MessageTypeDeleted, staleScopes, podUsage)
 		}
@@ -359,4 +361,12 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 	ref := m.resourceRefForObject(node, "", "v1", "Node", "nodes")
 	update := m.newObjectRowUpdate(MessageTypeModified, domainNodes, node, ref, summary)
 	m.broadcast(domainNodes, []string{""}, update)
+}
+
+// podStreamRow resolves a pod's current usage and builds its row via the pods
+// package (which cannot import refresh/metrics — it would cycle through
+// resourcecontract — so the manager owns the usage lookup).
+func podStreamRow(m *Manager, pod *corev1.Pod, podUsage map[string]metrics.PodUsage) snapshot.PodSummary {
+	usage := podUsage[pod.Namespace+"/"+pod.Name]
+	return podres.BuildStreamSummary(m.clusterMeta, pod, usage.CPUUsageMilli, usage.MemoryUsageBytes, m.rsLister)
 }

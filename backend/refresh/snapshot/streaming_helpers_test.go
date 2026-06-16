@@ -23,10 +23,24 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
+	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
+	"github.com/luxury-yacht/app/backend/resources/customresource"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	gatewaypkg "github.com/luxury-yacht/app/backend/resources/gateway"
+	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/httproute"
+	ingresspkg "github.com/luxury-yacht/app/backend/resources/ingress"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	"github.com/luxury-yacht/app/backend/resources/listenerset"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
+	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -67,7 +81,7 @@ func TestBuildPodSummaryResolvesDeploymentOwner(t *testing.T) {
 		},
 	}
 
-	summary := BuildPodSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, pod, nil, rsLister)
+	summary := buildPodSummaryForTest(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, pod, nil, rsLister)
 	require.Equal(t, "Deployment", summary.OwnerKind)
 	require.Equal(t, "web", summary.OwnerName)
 	require.True(t, summary.PortForwardAvailable)
@@ -258,7 +272,7 @@ func TestBuildPodSummaryMarksNoForwardablePorts(t *testing.T) {
 		},
 	}
 
-	summary := BuildPodSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, pod, nil, nil)
+	summary := buildPodSummaryForTest(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, pod, nil, nil)
 	require.False(t, summary.PortForwardAvailable)
 }
 
@@ -281,7 +295,7 @@ func TestBuildPodSummaryUsesSharedPodStatusPresentation(t *testing.T) {
 		},
 	}
 
-	summary := BuildPodSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, pod, nil, nil)
+	summary := buildPodSummaryForTest(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, pod, nil, nil)
 	require.Equal(t, "Running", summary.Status)
 	require.Equal(t, "Running", summary.StatusState)
 	require.Equal(t, "warning", summary.StatusPresentation)
@@ -338,12 +352,12 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 		}},
 	}
 
-	serviceSummary := BuildServiceNetworkSummary(meta, service, []*discoveryv1.EndpointSlice{slice})
+	serviceSummary := servicepkg.BuildStreamSummary(meta, service, []*discoveryv1.EndpointSlice{slice})
 	require.Equal(t, "Service", serviceSummary.Kind)
 	require.Equal(t, "api", serviceSummary.Name)
 	require.Equal(t, "Type: ClusterIP, ClusterIP: 10.0.0.10, Ports: 443/TCP, Addresses: 1", serviceSummary.Details)
 
-	sliceSummary := BuildEndpointSliceSummary(meta, slice)
+	sliceSummary := endpointslice.BuildStreamSummary(meta, slice)
 	require.Equal(t, "EndpointSlice", sliceSummary.Kind)
 	require.Equal(t, "Slices: 1, Ready addresses: 1", sliceSummary.Details)
 
@@ -354,7 +368,7 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 			Rules:            []networkingv1.IngressRule{{Host: "web.example.com"}},
 		},
 	}
-	ingressSummary := BuildIngressNetworkSummary(meta, ingress)
+	ingressSummary := ingresspkg.BuildStreamSummary(meta, ingress)
 	require.Equal(t, "Ingress", ingressSummary.Kind)
 	require.Equal(t, "Class: nginx, Hosts: web.example.com, Rules: 1", ingressSummary.Details)
 
@@ -364,7 +378,7 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 			Egress: []networkingv1.NetworkPolicyEgressRule{{}},
 		},
 	}
-	policySummary := BuildNetworkPolicySummary(meta, policy)
+	policySummary := networkpolicy.BuildStreamSummary(meta, policy)
 	require.Equal(t, "NetworkPolicy", policySummary.Kind)
 	require.Equal(t, "Policy types: Ingress,Egress", policySummary.Details)
 }
@@ -378,7 +392,7 @@ func TestBuildClusterIngressClassSummaryUsesSharedNetworkFacts(t *testing.T) {
 		Spec: networkingv1.IngressClassSpec{Controller: "k8s.io/ingress-nginx"},
 	}
 
-	summary := BuildClusterIngressClassSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, ingressClass)
+	summary := ingressclass.BuildStreamSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, ingressClass)
 	require.Equal(t, "IngressClass", summary.Kind)
 	require.Equal(t, "nginx", summary.Name)
 	require.Equal(t, "k8s.io/ingress-nginx", summary.Details)
@@ -394,7 +408,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 			Listeners:        []gatewayv1.Listener{{Name: gatewayv1.SectionName("http"), Port: gatewayv1.PortNumber(80), Protocol: gatewayv1.HTTPProtocolType}},
 		},
 	}
-	gatewaySummary := BuildGatewayNetworkSummary(meta, gateway)
+	gatewaySummary := gatewaypkg.BuildStreamSummary(meta, gateway)
 	require.Equal(t, "Gateway", gatewaySummary.Kind)
 	require.Equal(t, "Class: public, 1 listener(s)", gatewaySummary.Details)
 
@@ -406,7 +420,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 			Rules:           []gatewayv1.HTTPRouteRule{{}},
 		},
 	}
-	routeSummary := BuildHTTPRouteNetworkSummary(meta, route)
+	routeSummary := httproute.BuildStreamSummary(meta, route)
 	require.Equal(t, "HTTPRoute", routeSummary.Kind)
 	require.Equal(t, "1 rule(s), 1 parent(s), 1 hostname(s)", routeSummary.Details)
 
@@ -417,7 +431,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 			Listeners: []gatewayv1.ListenerEntry{{Name: gatewayv1.SectionName("http"), Port: gatewayv1.PortNumber(80), Protocol: gatewayv1.HTTPProtocolType}},
 		},
 	}
-	listenerSetSummary := BuildListenerSetNetworkSummary(meta, listenerSet)
+	listenerSetSummary := listenerset.BuildStreamSummary(meta, listenerSet)
 	require.Equal(t, "ListenerSet", listenerSetSummary.Kind)
 	require.Equal(t, "Parent: edge, 1 listener(s)", listenerSetSummary.Details)
 
@@ -428,7 +442,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 			To:   []gatewayv1.ReferenceGrantTo{{Group: gatewayv1.Group(""), Kind: gatewayv1.Kind("Service"), Name: gatewayObjectNamePtr("api")}},
 		},
 	}
-	grantSummary := BuildReferenceGrantNetworkSummary(meta, grant)
+	grantSummary := referencegrant.BuildStreamSummary(meta, grant)
 	require.Equal(t, "ReferenceGrant", grantSummary.Kind)
 	require.Equal(t, "1 from, 1 to", grantSummary.Details)
 
@@ -438,7 +452,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 			LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{Group: gatewayv1.Group(""), Kind: gatewayv1.Kind("Service"), Name: gatewayv1.ObjectName("api")},
 		}}},
 	}
-	policySummary := BuildBackendTLSPolicyNetworkSummary(meta, policy)
+	policySummary := backendtlspolicy.BuildStreamSummary(meta, policy)
 	require.Equal(t, "BackendTLSPolicy", policySummary.Kind)
 	require.Equal(t, "1 target(s)", policySummary.Details)
 
@@ -446,7 +460,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "public"},
 		Spec:       gatewayv1.GatewayClassSpec{ControllerName: "example.com/controller"},
 	}
-	classSummary := BuildClusterGatewayClassSummary(meta, gatewayClass)
+	classSummary := gatewayclass.BuildStreamSummary(meta, gatewayClass)
 	require.Equal(t, "GatewayClass", classSummary.Kind)
 	require.Equal(t, "example.com/controller", classSummary.Details)
 }
@@ -631,7 +645,7 @@ func TestBuildNamespaceCustomSummaryFallsBackToDefaultNamespace(t *testing.T) {
 	resourceWithNamespace.SetName("explicit")
 	resourceWithNamespace.SetNamespace("team-a")
 
-	row := BuildNamespaceCustomSummary(
+	row := customresource.BuildNamespaceStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
 		resourceWithNamespace,
 		"example.com",
@@ -648,7 +662,7 @@ func TestBuildNamespaceCustomSummaryFallsBackToDefaultNamespace(t *testing.T) {
 	resourceWithoutNamespace.SetKind("Foo")
 	resourceWithoutNamespace.SetName("implicit")
 
-	row = BuildNamespaceCustomSummary(
+	row = customresource.BuildNamespaceStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
 		resourceWithoutNamespace,
 		"example.com",
@@ -663,7 +677,7 @@ func TestBuildNamespaceCustomSummaryFallsBackToDefaultNamespace(t *testing.T) {
 // TestBuildNamespaceCustomSummaryNilResourceIsSafe ensures the streaming
 // path doesn't panic on a nil resource.
 func TestBuildNamespaceCustomSummaryNilResourceIsSafe(t *testing.T) {
-	row := BuildNamespaceCustomSummary(
+	row := customresource.BuildNamespaceStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
 		nil,
 		"example.com",
@@ -693,7 +707,7 @@ func TestBuildClusterCustomSummaryThreadsCRDName(t *testing.T) {
 	resource.SetKind("DBCluster")
 	resource.SetName("primary")
 
-	row := BuildClusterCustomSummary(
+	row := customresource.BuildClusterStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
 		resource,
 		"rds.services.k8s.aws",
@@ -715,7 +729,7 @@ func TestBuildClusterCustomSummaryThreadsCRDName(t *testing.T) {
 // TestBuildClusterCustomSummaryNilResourceIsSafe ensures the streaming
 // path doesn't panic on a nil resource.
 func TestBuildClusterCustomSummaryNilResourceIsSafe(t *testing.T) {
-	row := BuildClusterCustomSummary(
+	row := customresource.BuildClusterStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
 		nil,
 		"rds.services.k8s.aws",
@@ -744,7 +758,7 @@ func TestBuildNamespaceCustomSummaryThreadsCRDName(t *testing.T) {
 	resource.SetName("primary")
 	resource.SetNamespace("data")
 
-	row := BuildNamespaceCustomSummary(
+	row := customresource.BuildNamespaceStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
 		resource,
 		"rds.services.k8s.aws",
@@ -757,4 +771,14 @@ func TestBuildNamespaceCustomSummaryThreadsCRDName(t *testing.T) {
 	require.Equal(t, "Unknown", row.Status)
 	require.Equal(t, "unknown", row.StatusState)
 	require.Equal(t, "unknown", row.StatusPresentation)
+}
+
+// buildPodSummaryForTest resolves a pod's usage from the map and calls the
+// pods-package builder (which takes usage primitives, not the metrics map).
+func buildPodSummaryForTest(meta ClusterMeta, pod *corev1.Pod, usage map[string]metrics.PodUsage, rsLister v1.ReplicaSetLister) PodSummary {
+	var u metrics.PodUsage
+	if pod != nil {
+		u = usage[pod.Namespace+"/"+pod.Name]
+	}
+	return podres.BuildStreamSummary(meta, pod, u.CPUUsageMilli, u.MemoryUsageBytes, rsLister)
 }

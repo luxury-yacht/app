@@ -3,6 +3,7 @@ package backend
 import (
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
+	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
@@ -11,18 +12,22 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	"github.com/luxury-yacht/app/backend/resources/events"
+	"github.com/luxury-yacht/app/backend/resources/gateway"
+	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/luxury-yacht/app/backend/resources/hpa"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
-	"github.com/luxury-yacht/app/backend/resources/limitrange"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/listenerset"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 	"github.com/luxury-yacht/app/backend/resources/role"
@@ -102,18 +107,18 @@ type (
 	RefOrDisplay                          = types.RefOrDisplay
 	ConditionState                        = types.ConditionState
 	ConditionsSummary                     = types.ConditionsSummary
-	GatewayClassDetails                   = types.GatewayClassDetails
-	GatewayDetails                        = types.GatewayDetails
+	GatewayClassDetails                   = gatewayclass.GatewayClassDetails
+	GatewayDetails                        = gateway.GatewayDetails
 	GatewayListenerDetails                = types.GatewayListenerDetails
 	RouteDetails                          = types.RouteDetails
 	RouteRuleDetails                      = types.RouteRuleDetails
 	HTTPRouteDetails                      = types.HTTPRouteDetails
 	GRPCRouteDetails                      = types.GRPCRouteDetails
 	TLSRouteDetails                       = types.TLSRouteDetails
-	ListenerSetDetails                    = types.ListenerSetDetails
-	ReferenceGrantDetails                 = types.ReferenceGrantDetails
+	ListenerSetDetails                    = listenerset.ListenerSetDetails
+	ReferenceGrantDetails                 = referencegrant.ReferenceGrantDetails
 	ReferenceGrantFromInfo                = types.ReferenceGrantFromInfo
-	BackendTLSPolicyDetails               = types.BackendTLSPolicyDetails
+	BackendTLSPolicyDetails               = backendtlspolicy.BackendTLSPolicyDetails
 	IngressClassDetails                   = ingressclass.IngressClassDetails
 	IngressClassParameters                = ingressclass.IngressClassParameters
 	NetworkPolicyDetails                  = networkpolicy.NetworkPolicyDetails

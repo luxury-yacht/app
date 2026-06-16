@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
+	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
@@ -23,12 +24,16 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	"github.com/luxury-yacht/app/backend/resources/events"
-	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
+	"github.com/luxury-yacht/app/backend/resources/gateway"
+	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
+	"github.com/luxury-yacht/app/backend/resources/grpcroute"
 	"github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/httproute"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/listenerset"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
@@ -36,6 +41,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/pods"
+	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 	"github.com/luxury-yacht/app/backend/resources/role"
@@ -45,6 +51,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
+	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,14 +84,14 @@ func packagedKindIdentities() []resourcekind.Identity {
 		networkpolicy.Identity,
 		ingressclass.Identity,
 		endpointslice.Identity,
-		gatewayapi.GatewayIdentity,
-		gatewayapi.HTTPRouteIdentity,
-		gatewayapi.GRPCRouteIdentity,
-		gatewayapi.TLSRouteIdentity,
-		gatewayapi.ListenerSetIdentity,
-		gatewayapi.BackendTLSPolicyIdentity,
-		gatewayapi.ReferenceGrantIdentity,
-		gatewayapi.GatewayClassIdentity,
+		gateway.Identity,
+		httproute.Identity,
+		grpcroute.Identity,
+		tlsroute.Identity,
+		listenerset.Identity,
+		backendtlspolicy.Identity,
+		referencegrant.Identity,
+		gatewayclass.Identity,
 		role.Identity,
 		rolebinding.Identity,
 		clusterrole.Identity,

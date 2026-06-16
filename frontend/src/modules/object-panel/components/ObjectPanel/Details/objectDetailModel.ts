@@ -1,6 +1,7 @@
 import {
   admission,
   apiextensions,
+  backendtlspolicy,
   clusterrole,
   clusterrolebinding,
   configmap,
@@ -8,7 +9,11 @@ import {
   daemonset,
   deployment,
   endpointslice,
+  gateway,
+  gatewayclass,
   helm,
+  listenerset,
+  referencegrant,
   hpa,
   ingress,
   ingressclass,
@@ -48,13 +53,13 @@ export interface DetailSlots {
   ingressDetails: ingress.IngressDetails | null;
   networkPolicyDetails: networkpolicy.NetworkPolicyDetails | null;
   endpointSliceDetails: endpointslice.EndpointSliceDetails | null;
-  gatewayDetails?: types.GatewayDetails | null;
+  gatewayDetails?: gateway.GatewayDetails | null;
   httpRouteDetails?: types.RouteDetails | null;
   grpcRouteDetails?: types.RouteDetails | null;
   tlsRouteDetails?: types.RouteDetails | null;
-  listenerSetDetails?: types.ListenerSetDetails | null;
-  referenceGrantDetails?: types.ReferenceGrantDetails | null;
-  backendTLSPolicyDetails?: types.BackendTLSPolicyDetails | null;
+  listenerSetDetails?: listenerset.ListenerSetDetails | null;
+  referenceGrantDetails?: referencegrant.ReferenceGrantDetails | null;
+  backendTLSPolicyDetails?: backendtlspolicy.BackendTLSPolicyDetails | null;
   pvcDetails: persistentvolumeclaim.PersistentVolumeClaimDetails | null;
   pvDetails: persistentvolume.PersistentVolumeDetails | null;
   storageClassDetails: storageclass.StorageClassDetails | null;
@@ -70,7 +75,7 @@ export interface DetailSlots {
   nodeDetails: nodes.NodeDetails | null;
   namespaceDetails: namespaces.NamespaceDetails | null;
   ingressClassDetails: ingressclass.IngressClassDetails | null;
-  gatewayClassDetails?: types.GatewayClassDetails | null;
+  gatewayClassDetails?: gatewayclass.GatewayClassDetails | null;
   crdDetails: apiextensions.CustomResourceDefinitionDetails | null;
   mutatingWebhookDetails: admission.MutatingWebhookConfigurationDetails | null;
   validatingWebhookDetails: admission.ValidatingWebhookConfigurationDetails | null;
@@ -277,7 +282,7 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
         endpointSliceDetails: detailPayload as endpointslice.EndpointSliceDetails,
       };
     case 'gateway':
-      return { ...EMPTY_DETAIL_SLOTS, gatewayDetails: detailPayload as types.GatewayDetails };
+      return { ...EMPTY_DETAIL_SLOTS, gatewayDetails: detailPayload as gateway.GatewayDetails };
     case 'httproute':
       return { ...EMPTY_DETAIL_SLOTS, httpRouteDetails: detailPayload as types.RouteDetails };
     case 'grpcroute':
@@ -287,17 +292,17 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'listenerset':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        listenerSetDetails: detailPayload as types.ListenerSetDetails,
+        listenerSetDetails: detailPayload as listenerset.ListenerSetDetails,
       };
     case 'referencegrant':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        referenceGrantDetails: detailPayload as types.ReferenceGrantDetails,
+        referenceGrantDetails: detailPayload as referencegrant.ReferenceGrantDetails,
       };
     case 'backendtlspolicy':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        backendTLSPolicyDetails: detailPayload as types.BackendTLSPolicyDetails,
+        backendTLSPolicyDetails: detailPayload as backendtlspolicy.BackendTLSPolicyDetails,
       };
     case 'persistentvolumeclaim':
       return {
@@ -371,7 +376,7 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'gatewayclass':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        gatewayClassDetails: detailPayload as types.GatewayClassDetails,
+        gatewayClassDetails: detailPayload as gatewayclass.GatewayClassDetails,
       };
     case 'customresourcedefinition':
       return {

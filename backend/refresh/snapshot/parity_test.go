@@ -27,12 +27,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
+	"github.com/luxury-yacht/app/backend/resources/customresource"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	ingresspkg "github.com/luxury-yacht/app/backend/resources/ingress"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
@@ -40,7 +46,9 @@ import (
 	rolepkg "github.com/luxury-yacht/app/backend/resources/role"
 	"github.com/luxury-yacht/app/backend/resources/rolebinding"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
 	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -296,8 +304,8 @@ func parityPodsCase(meta ClusterMeta, withMetrics bool) parityCase {
 			payload := snap.Payload.(PodSnapshot)
 
 			expected := []PodSummary{
-				BuildPodSummary(meta, podA, usage, rsLister),
-				BuildPodSummary(meta, podB, usage, rsLister),
+				buildPodSummaryForTest(meta, podA, usage, rsLister),
+				buildPodSummaryForTest(meta, podB, usage, rsLister),
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(PodSummary)
@@ -437,10 +445,10 @@ func parityServiceCase(meta ClusterMeta, withEndpoints bool) parityCase {
 			payload := snap.Payload.(NamespaceNetworkSnapshot)
 
 			expected := []NetworkSummary{
-				BuildServiceNetworkSummary(meta, service, slices),
+				servicepkg.BuildStreamSummary(meta, service, slices),
 			}
 			for _, slice := range slices {
-				expected = append(expected, BuildEndpointSliceSummary(meta, slice))
+				expected = append(expected, endpointslice.BuildStreamSummary(meta, slice))
 			}
 
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
@@ -493,8 +501,8 @@ func parityNamespaceNetworkObjectsCase(meta ClusterMeta) parityCase {
 			payload := snap.Payload.(NamespaceNetworkSnapshot)
 
 			expected := []NetworkSummary{
-				BuildIngressNetworkSummary(meta, ingress),
-				BuildNetworkPolicySummary(meta, policy),
+				ingresspkg.BuildStreamSummary(meta, ingress),
+				networkpolicy.BuildStreamSummary(meta, policy),
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(NetworkSummary)
@@ -694,8 +702,8 @@ func parityNamespaceCustomCollisionCase(meta ClusterMeta) parityCase {
 			crB.SetName("primary")
 			crB.SetNamespace("data")
 
-			rowA := BuildNamespaceCustomSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
-			rowB := BuildNamespaceCustomSummary(meta, crB, "databases.example.com", "v1", "DBInstance", "dbinstances.databases.example.com", "data")
+			rowA := customresource.BuildNamespaceStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
+			rowB := customresource.BuildNamespaceStreamSummary(meta, crB, "databases.example.com", "v1", "DBInstance", "dbinstances.databases.example.com", "data")
 
 			require.NotEqual(t, rowA.APIGroup, rowB.APIGroup, "collision regression: rows with same kind/name but different GVKs must remain distinguishable")
 			require.NotEqual(t, rowA.CRDName, rowB.CRDName, "CRDName must differ for distinct CRDs")
@@ -704,7 +712,7 @@ func parityNamespaceCustomCollisionCase(meta ClusterMeta) parityCase {
 
 			// Per-row parity: re-invoking the projector with the same inputs
 			// returns byte-identical rows.
-			rowARepeat := BuildNamespaceCustomSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
+			rowARepeat := customresource.BuildNamespaceStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
 			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
 				row := r.(NamespaceCustomSummary)
 				return row.APIGroup + "/" + row.APIVersion + "/" + row.Kind + "/" + row.Namespace + "/" + row.Name
@@ -729,13 +737,13 @@ func parityClusterCustomCollisionCase(meta ClusterMeta) parityCase {
 			crB.SetKind("DBCluster")
 			crB.SetName("primary")
 
-			rowA := BuildClusterCustomSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBCluster", "dbclusters.rds.services.k8s.aws")
-			rowB := BuildClusterCustomSummary(meta, crB, "databases.example.com", "v1", "DBCluster", "dbclusters.databases.example.com")
+			rowA := customresource.BuildClusterStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBCluster", "dbclusters.rds.services.k8s.aws")
+			rowB := customresource.BuildClusterStreamSummary(meta, crB, "databases.example.com", "v1", "DBCluster", "dbclusters.databases.example.com")
 
 			require.NotEqual(t, rowA.APIGroup, rowB.APIGroup)
 			require.NotEqual(t, rowA.CRDName, rowB.CRDName)
 
-			rowARepeat := BuildClusterCustomSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBCluster", "dbclusters.rds.services.k8s.aws")
+			rowARepeat := customresource.BuildClusterStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBCluster", "dbclusters.rds.services.k8s.aws")
 			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
 				row := r.(ClusterCustomSummary)
 				return row.APIGroup + "/" + row.APIVersion + "/" + row.Kind + "/" + row.Name
@@ -839,10 +847,10 @@ func parityClusterConfigCase(meta ClusterMeta) parityCase {
 			payload := snap.Payload.(ClusterConfigSnapshot)
 
 			expected := []ClusterConfigEntry{
-				BuildClusterStorageClassSummary(meta, sc),
-				BuildClusterIngressClassSummary(meta, ic),
-				BuildClusterValidatingWebhookSummary(meta, vwh),
-				BuildClusterMutatingWebhookSummary(meta, mwh),
+				storageclass.BuildStreamSummary(meta, sc),
+				ingressclass.BuildStreamSummary(meta, ic),
+				admission.BuildValidatingStreamSummary(meta, vwh),
+				admission.BuildMutatingStreamSummary(meta, mwh),
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterConfigEntry)

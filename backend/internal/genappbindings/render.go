@@ -73,7 +73,7 @@ func (b binding) fetchExpr() string {
 // Bindings is the single source for the generated App.Get wrappers. Keep it
 // sorted by Name; the generator re-sorts anyway for stable output.
 var Bindings = []binding{
-	{Name: "BackendTLSPolicy", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
+	{Name: "BackendTLSPolicy", Namespaced: true, Service: "backendtlspolicy.NewService(deps)", Import: resourcesPkg + "backendtlspolicy"},
 	{Name: "ClusterRole", Service: "clusterrole.NewService(deps)", Import: resourcesPkg + "clusterrole"},
 	{Name: "ClusterRoleBinding", Service: "clusterrolebinding.NewService(deps)", Import: resourcesPkg + "clusterrolebinding"},
 	{Name: "ConfigMap", Namespaced: true, Service: "configmap.NewService(deps)", Import: resourcesPkg + "configmap"},
@@ -81,16 +81,16 @@ var Bindings = []binding{
 	{Name: "DaemonSet", Namespaced: true, Service: "daemonset.NewService(deps)", Import: resourcesPkg + "daemonset"},
 	{Name: "Deployment", Namespaced: true, Service: "deployment.NewService(deps)", Import: resourcesPkg + "deployment"},
 	{Name: "EndpointSlice", Namespaced: true, Service: "endpointslice.NewService(deps)", Import: resourcesPkg + "endpointslice"},
-	{Name: "Gateway", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
-	{Name: "GatewayClass", Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
-	{Name: "GRPCRoute", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
+	{Name: "Gateway", Namespaced: true, Service: "gateway.NewService(deps)", Import: resourcesPkg + "gateway"},
+	{Name: "GatewayClass", Service: "gatewayclass.NewService(deps)", Import: resourcesPkg + "gatewayclass"},
+	{Name: "GRPCRoute", Namespaced: true, Service: "grpcroute.NewService(deps)", Import: resourcesPkg + "grpcroute"},
 	{Name: "HorizontalPodAutoscaler", Namespaced: true, Key: "HPA", Service: "hpa.NewService(deps)", Import: resourcesPkg + "hpa"},
-	{Name: "HTTPRoute", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
+	{Name: "HTTPRoute", Namespaced: true, Service: "httproute.NewService(deps)", Import: resourcesPkg + "httproute"},
 	{Name: "Ingress", Namespaced: true, Service: "ingress.NewService(deps)", Import: resourcesPkg + "ingress"},
 	{Name: "IngressClass", Service: "ingressclass.NewService(deps)", Import: resourcesPkg + "ingressclass"},
 	{Name: "Job", Namespaced: true, Service: "job.NewService(deps)", Import: resourcesPkg + "job"},
 	{Name: "LimitRange", Namespaced: true, Service: "limitrange.NewService(deps)", Import: resourcesPkg + "limitrange"},
-	{Name: "ListenerSet", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
+	{Name: "ListenerSet", Namespaced: true, Service: "listenerset.NewService(deps)", Import: resourcesPkg + "listenerset"},
 	{Name: "MutatingWebhookConfiguration", Service: "admission.NewService(deps)", Import: resourcesPkg + "admission"},
 	{Name: "Namespace", Service: "namespaces.NewService(deps)", Import: resourcesPkg + "namespaces"},
 	{Name: "NetworkPolicy", Namespaced: true, Service: "networkpolicy.NewService(deps)", Import: resourcesPkg + "networkpolicy"},
@@ -98,7 +98,7 @@ var Bindings = []binding{
 	{Name: "PersistentVolume", Service: "persistentvolume.NewService(deps)", Import: resourcesPkg + "persistentvolume"},
 	{Name: "PersistentVolumeClaim", Namespaced: true, Key: "PVC", Service: "persistentvolumeclaim.NewService(deps)", Import: resourcesPkg + "persistentvolumeclaim"},
 	{Name: "PodDisruptionBudget", Namespaced: true, Service: "poddisruptionbudget.NewService(deps)", Import: resourcesPkg + "poddisruptionbudget"},
-	{Name: "ReferenceGrant", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
+	{Name: "ReferenceGrant", Namespaced: true, Service: "referencegrant.NewService(deps)", Import: resourcesPkg + "referencegrant"},
 	{Name: "ReplicaSet", Namespaced: true, Service: "replicaset.NewService(deps)", Import: resourcesPkg + "replicaset"},
 	{Name: "ResourceQuota", Namespaced: true, Service: "resourcequota.NewService(deps)", Import: resourcesPkg + "resourcequota"},
 	{Name: "Role", Namespaced: true, Service: "role.NewService(deps)", Import: resourcesPkg + "role"},
@@ -108,7 +108,7 @@ var Bindings = []binding{
 	{Name: "ServiceAccount", Namespaced: true, Service: "serviceaccount.NewService(deps)", Import: resourcesPkg + "serviceaccount"},
 	{Name: "StatefulSet", Namespaced: true, Service: "statefulset.NewService(deps)", Import: resourcesPkg + "statefulset"},
 	{Name: "StorageClass", Service: "storageclass.NewService(deps)", Import: resourcesPkg + "storageclass"},
-	{Name: "TLSRoute", Namespaced: true, Service: "gatewayapi.NewService(deps)", Import: resourcesPkg + "gatewayapi"},
+	{Name: "TLSRoute", Namespaced: true, Service: "tlsroute.NewService(deps)", Import: resourcesPkg + "tlsroute"},
 	{Name: "ValidatingWebhookConfiguration", Service: "admission.NewService(deps)", Import: resourcesPkg + "admission"},
 }
 

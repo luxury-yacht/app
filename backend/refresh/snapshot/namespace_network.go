@@ -21,7 +21,18 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	gatewaypkg "github.com/luxury-yacht/app/backend/resources/gateway"
+	"github.com/luxury-yacht/app/backend/resources/grpcroute"
+	"github.com/luxury-yacht/app/backend/resources/httproute"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
+	"github.com/luxury-yacht/app/backend/resources/listenerset"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	"github.com/luxury-yacht/app/backend/resources/referencegrant"
+	"github.com/luxury-yacht/app/backend/resources/service"
+	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 )
 
 const (
@@ -75,16 +86,9 @@ func namespaceNetworkQueryCapabilities() ResourceQueryCapabilities {
 	)
 }
 
-// NetworkSummary mirrors the UI requirements for namespace network resources.
-type NetworkSummary struct {
-	ClusterMeta
-	Kind         string `json:"kind"`
-	Name         string `json:"name"`
-	Namespace    string `json:"namespace"`
-	Details      string `json:"details"`
-	Age          string `json:"age"`
-	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
-}
+// NetworkSummary lives in the streamrows leaf so the kind packages can build it;
+// this alias keeps the snapshot-side name and wire JSON unchanged.
+type NetworkSummary = streamrows.NetworkSummary
 
 // RegisterNamespaceNetworkDomain registers the network domain with the registry.
 // Only listers for permitted resources are wired; denied resources are left nil
@@ -356,7 +360,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		if svc == nil {
 			continue
 		}
-		resources = append(resources, BuildServiceNetworkSummary(meta, svc, slicesByService[serviceSliceKey(svc.Namespace, svc.Name)]))
+		resources = append(resources, service.BuildStreamSummary(meta, svc, slicesByService[serviceSliceKey(svc.Namespace, svc.Name)]))
 		if v := resourceVersionOrTimestamp(svc); v > version {
 			version = v
 		}
@@ -366,7 +370,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		if ing == nil {
 			continue
 		}
-		resources = append(resources, BuildIngressNetworkSummary(meta, ing))
+		resources = append(resources, ingress.BuildStreamSummary(meta, ing))
 		if v := resourceVersionOrTimestamp(ing); v > version {
 			version = v
 		}
@@ -376,50 +380,50 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		if policy == nil {
 			continue
 		}
-		resources = append(resources, BuildNetworkPolicySummary(meta, policy))
+		resources = append(resources, networkpolicy.BuildStreamSummary(meta, policy))
 		if v := resourceVersionOrTimestamp(policy); v > version {
 			version = v
 		}
 	}
 
 	for _, gateway := range gatewayItems.gateways {
-		resources = append(resources, BuildGatewayNetworkSummary(meta, gateway))
+		resources = append(resources, gatewaypkg.BuildStreamSummary(meta, gateway))
 		if v := resourceVersionOrTimestamp(gateway); v > version {
 			version = v
 		}
 	}
 	for _, route := range gatewayItems.httpRoutes {
-		resources = append(resources, BuildHTTPRouteNetworkSummary(meta, route))
+		resources = append(resources, httproute.BuildStreamSummary(meta, route))
 		if v := resourceVersionOrTimestamp(route); v > version {
 			version = v
 		}
 	}
 	for _, route := range gatewayItems.grpcRoutes {
-		resources = append(resources, BuildGRPCRouteNetworkSummary(meta, route))
+		resources = append(resources, grpcroute.BuildStreamSummary(meta, route))
 		if v := resourceVersionOrTimestamp(route); v > version {
 			version = v
 		}
 	}
 	for _, route := range gatewayItems.tlsRoutes {
-		resources = append(resources, BuildTLSRouteNetworkSummary(meta, route))
+		resources = append(resources, tlsroute.BuildStreamSummary(meta, route))
 		if v := resourceVersionOrTimestamp(route); v > version {
 			version = v
 		}
 	}
 	for _, listenerSet := range gatewayItems.listenerSets {
-		resources = append(resources, BuildListenerSetNetworkSummary(meta, listenerSet))
+		resources = append(resources, listenerset.BuildStreamSummary(meta, listenerSet))
 		if v := resourceVersionOrTimestamp(listenerSet); v > version {
 			version = v
 		}
 	}
 	for _, referenceGrant := range gatewayItems.referenceGrants {
-		resources = append(resources, BuildReferenceGrantNetworkSummary(meta, referenceGrant))
+		resources = append(resources, referencegrant.BuildStreamSummary(meta, referenceGrant))
 		if v := resourceVersionOrTimestamp(referenceGrant); v > version {
 			version = v
 		}
 	}
 	for _, policy := range gatewayItems.backendTLSPolicies {
-		resources = append(resources, BuildBackendTLSPolicyNetworkSummary(meta, policy))
+		resources = append(resources, backendtlspolicy.BuildStreamSummary(meta, policy))
 		if v := resourceVersionOrTimestamp(policy); v > version {
 			version = v
 		}
@@ -429,7 +433,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		if slice == nil {
 			continue
 		}
-		resources = append(resources, BuildEndpointSliceSummary(meta, slice))
+		resources = append(resources, endpointslice.BuildStreamSummary(meta, slice))
 		if v := resourceVersionOrTimestamp(slice); v > version {
 			version = v
 		}
@@ -473,62 +477,11 @@ func sortNetworkSummaries(resources []NetworkSummary) {
 	})
 }
 
-
-
 // describeNetworkPolicyFacts moved to resources/networkpolicy
 // (networkpolicy.DescribeSummary), co-located with the NetworkPolicy model.
 
 // describeEndpointSliceFacts moved to resources/endpointslice
 // (endpointslice.DescribeSummary), co-located with the EndpointSlice model.
-
-func describeGatewayFacts(facts *resourcemodel.GatewayFacts) string {
-	if facts == nil {
-		return ""
-	}
-	className := ""
-	if facts.Class != nil {
-		className = resourceLinkName(*facts.Class)
-	}
-	if className == "" {
-		return fmt.Sprintf("%d listener(s)", len(facts.Listeners))
-	}
-	return fmt.Sprintf("Class: %s, %d listener(s)", className, len(facts.Listeners))
-}
-
-func describeGatewayRouteFacts(facts resourcemodel.RouteCommonFacts) string {
-	return fmt.Sprintf("%d rule(s), %d parent(s), %d hostname(s)", len(facts.Rules), len(facts.ParentRefs), len(facts.Hostnames))
-}
-
-func describeListenerSetFacts(facts *resourcemodel.ListenerSetFacts) string {
-	if facts == nil {
-		return ""
-	}
-	return fmt.Sprintf("Parent: %s, %d listener(s)", resourceLinkName(facts.ParentRef), len(facts.Listeners))
-}
-
-func describeReferenceGrantFacts(facts *resourcemodel.ReferenceGrantFacts) string {
-	if facts == nil {
-		return ""
-	}
-	return fmt.Sprintf("%d from, %d to", len(facts.From), len(facts.To))
-}
-
-func describeBackendTLSPolicyFacts(facts *resourcemodel.BackendTLSPolicyFacts) string {
-	if facts == nil {
-		return ""
-	}
-	return fmt.Sprintf("%d target(s)", len(facts.TargetRefs))
-}
-
-func resourceLinkName(link resourcemodel.ResourceLink) string {
-	if link.Ref != nil {
-		return link.Ref.Name
-	}
-	if link.Display != nil {
-		return link.Display.Name
-	}
-	return ""
-}
 
 func groupEndpointSlicesByService(slices []*discoveryv1.EndpointSlice) map[string][]*discoveryv1.EndpointSlice {
 	result := make(map[string][]*discoveryv1.EndpointSlice)

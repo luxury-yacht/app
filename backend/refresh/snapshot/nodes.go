@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -67,58 +68,15 @@ type NodeMetricsInfo struct {
 	FailureCount        uint64 `json:"failureCount"`
 }
 
-// NodeSummary captures essential information for each node.
-type NodeSummary struct {
-	ClusterMeta
-	Name               string            `json:"name"`
-	Status             string            `json:"status"`
-	StatusState        string            `json:"statusState,omitempty"`
-	StatusPresentation string            `json:"statusPresentation,omitempty"`
-	StatusReason       string            `json:"statusReason,omitempty"`
-	Roles              string            `json:"roles"`
-	Age                string            `json:"age"`
-	AgeTimestamp       int64             `json:"ageTimestamp,omitempty"`
-	Version            string            `json:"version"`
-	InternalIP         string            `json:"internalIP,omitempty"`
-	ExternalIP         string            `json:"externalIP,omitempty"`
-	CPUCapacity        string            `json:"cpuCapacity"`
-	CPUAllocatable     string            `json:"cpuAllocatable"`
-	CPURequests        string            `json:"cpuRequests"`
-	CPULimits          string            `json:"cpuLimits"`
-	CPUUsage           string            `json:"cpuUsage"`
-	MemoryCapacity     string            `json:"memoryCapacity"`
-	MemoryAllocatable  string            `json:"memoryAllocatable"`
-	MemRequests        string            `json:"memRequests"`
-	MemLimits          string            `json:"memLimits"`
-	MemoryUsage        string            `json:"memoryUsage"`
-	Pods               string            `json:"pods"`
-	PodsCapacity       string            `json:"podsCapacity"`
-	PodsAllocatable    string            `json:"podsAllocatable"`
-	Restarts           int32             `json:"restarts"`
-	Kind               string            `json:"kind"`
-	CPU                string            `json:"cpu"`
-	Memory             string            `json:"memory"`
-	Unschedulable      bool              `json:"unschedulable"`
-	Labels             map[string]string `json:"labels,omitempty"`
-	Annotations        map[string]string `json:"annotations,omitempty"`
-	Taints             []NodeTaint       `json:"taints,omitempty"`
-	PodMetrics         []NodePodMetric   `json:"podMetrics,omitempty"`
-}
+// NodeSummary and its sub-types live in the streamrows leaf so every streaming
+// row type has one home; these aliases keep the snapshot-side names and wire JSON.
+type NodeSummary = streamrows.NodeSummary
 
 // NodeTaint represents a node taint in snapshot payload.
-type NodeTaint struct {
-	Key    string `json:"key"`
-	Value  string `json:"value,omitempty"`
-	Effect string `json:"effect"`
-}
+type NodeTaint = streamrows.NodeTaint
 
 // NodePodMetric captures realtime usage for a pod scheduled on the node.
-type NodePodMetric struct {
-	Namespace   string `json:"namespace"`
-	Name        string `json:"name"`
-	CPUUsage    string `json:"cpuUsage"`
-	MemoryUsage string `json:"memoryUsage"`
-}
+type NodePodMetric = streamrows.NodePodMetric
 
 // RegisterNodeDomain registers the nodes snapshot domain.
 func RegisterNodeDomain(reg *domain.Registry, factory informers.SharedInformerFactory, provider metrics.Provider) error {
@@ -507,25 +465,11 @@ func formatAge(t time.Time) string {
 	return timeutil.FormatAge(t)
 }
 
-func formatCPUMilli(value int64) string {
-	return fmt.Sprintf("%dm", value)
-}
-
-func formatMemoryBytes(bytes int64) string {
-	if bytes <= 0 {
-		return "0Mi"
-	}
-	gb := float64(bytes) / (1024 * 1024 * 1024)
-	if gb >= 1 {
-		return fmt.Sprintf("%.1f GB", gb)
-	}
-	mb := float64(bytes) / (1024 * 1024)
-	if mb >= 1 {
-		return fmt.Sprintf("%.0f MB", mb)
-	}
-	kb := float64(bytes) / 1024
-	return fmt.Sprintf("%.0f KB", kb)
-}
+// formatCPUMilli/formatMemoryBytes live in the streamrows leaf so the metrics
+// kind packages (pods/nodes/workloads) share them; these aliases keep the
+// snapshot-side names for the remaining snapshot callers.
+var formatCPUMilli = streamrows.FormatCPUMilli
+var formatMemoryBytes = streamrows.FormatMemoryBytes
 
 func aggregatePodResources(pods []*corev1.Pod) (cpuReq, cpuLim, memReq, memLim int64, restarts int32) {
 	for _, pod := range pods {

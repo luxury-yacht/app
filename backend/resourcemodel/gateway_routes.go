@@ -7,124 +7,47 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-func BuildHTTPRouteResourceModel(clusterID string, route *gatewayv1.HTTPRoute) ResourceModel {
-	facts := BuildHTTPRouteFacts(clusterID, route)
-	status := BuildGatewayRouteStatusPresentation(route.ObjectMeta, facts.RouteCommonFacts)
-	return gatewayAPIResourceModel(clusterID, "HTTPRoute", "httproutes", ResourceScopeNamespaced, route.ObjectMeta, status, ResourceFacts{HTTPRoute: &facts})
-}
+// Gateway-API route helpers shared by the httproute/grpcroute/tlsroute kind
+// packages. Per-route model/facts builders + the HTTP/GRPC match summaries live
+// in those packages; the common-facts assembly, status presentation, and the
+// streaming description string stay here so they exist in exactly one place.
 
-func BuildHTTPRouteFacts(clusterID string, route *gatewayv1.HTTPRoute) HTTPRouteFacts {
-	common := gatewayRouteCommonFacts(clusterID, route.ObjectMeta, route.Spec.Hostnames, route.Spec.ParentRefs, route.Status.Parents)
-	for _, rule := range route.Spec.Rules {
-		ruleFacts := RouteRuleFacts{}
-		for _, match := range rule.Matches {
-			ruleFacts.Matches = append(ruleFacts.Matches, gatewayHTTPMatchSummary(match))
-		}
-		for _, backendRef := range rule.BackendRefs {
-			link := gatewayBackendRefLink(clusterID, route.Namespace, backendRef.BackendObjectReference)
-			ruleFacts.Backends = append(ruleFacts.Backends, link)
-			common.Backends = append(common.Backends, link)
-		}
-		common.Rules = append(common.Rules, ruleFacts)
-	}
-	return HTTPRouteFacts{RouteCommonFacts: common}
-}
-
-func BuildGRPCRouteResourceModel(clusterID string, route *gatewayv1.GRPCRoute) ResourceModel {
-	facts := BuildGRPCRouteFacts(clusterID, route)
-	status := BuildGatewayRouteStatusPresentation(route.ObjectMeta, facts.RouteCommonFacts)
-	return gatewayAPIResourceModel(clusterID, "GRPCRoute", "grpcroutes", ResourceScopeNamespaced, route.ObjectMeta, status, ResourceFacts{GRPCRoute: &facts})
-}
-
-func BuildGRPCRouteFacts(clusterID string, route *gatewayv1.GRPCRoute) GRPCRouteFacts {
-	common := gatewayRouteCommonFacts(clusterID, route.ObjectMeta, route.Spec.Hostnames, route.Spec.ParentRefs, route.Status.Parents)
-	for _, rule := range route.Spec.Rules {
-		ruleFacts := RouteRuleFacts{}
-		for _, match := range rule.Matches {
-			ruleFacts.Matches = append(ruleFacts.Matches, gatewayGRPCMatchSummary(match))
-		}
-		for _, backendRef := range rule.BackendRefs {
-			link := gatewayBackendRefLink(clusterID, route.Namespace, backendRef.BackendObjectReference)
-			ruleFacts.Backends = append(ruleFacts.Backends, link)
-			common.Backends = append(common.Backends, link)
-		}
-		common.Rules = append(common.Rules, ruleFacts)
-	}
-	return GRPCRouteFacts{RouteCommonFacts: common}
-}
-
-func BuildTLSRouteResourceModel(clusterID string, route *gatewayv1.TLSRoute) ResourceModel {
-	facts := BuildTLSRouteFacts(clusterID, route)
-	status := BuildGatewayRouteStatusPresentation(route.ObjectMeta, facts.RouteCommonFacts)
-	return gatewayAPIResourceModel(clusterID, "TLSRoute", "tlsroutes", ResourceScopeNamespaced, route.ObjectMeta, status, ResourceFacts{TLSRoute: &facts})
-}
-
-func BuildTLSRouteFacts(clusterID string, route *gatewayv1.TLSRoute) TLSRouteFacts {
-	common := gatewayRouteCommonFacts(clusterID, route.ObjectMeta, route.Spec.Hostnames, route.Spec.ParentRefs, route.Status.Parents)
-	for _, rule := range route.Spec.Rules {
-		ruleFacts := RouteRuleFacts{}
-		for _, backendRef := range rule.BackendRefs {
-			link := gatewayBackendRefLink(clusterID, route.Namespace, backendRef.BackendObjectReference)
-			ruleFacts.Backends = append(ruleFacts.Backends, link)
-			common.Backends = append(common.Backends, link)
-		}
-		common.Rules = append(common.Rules, ruleFacts)
-	}
-	return TLSRouteFacts{RouteCommonFacts: common}
-}
-
+// BuildGatewayRouteStatusPresentation projects shared route facts into a status.
 func BuildGatewayRouteStatusPresentation(meta metav1.ObjectMeta, facts RouteCommonFacts) ResourceStatusPresentation {
-	state := gatewayCountState(len(facts.Rules))
+	state := GatewayCountState(len(facts.Rules))
 	label := gatewayRouteLabel(len(facts.Rules), len(facts.ParentRefs), len(facts.Backends))
-	return gatewayStatusFromConditions(meta, state, label, facts.Conditions)
+	return GatewayStatusFromConditions(meta, state, label, facts.Conditions)
 }
 
-func gatewayRouteCommonFacts(
+// GatewayRouteCommonFacts builds the hostname/parent/condition facts every
+// Gateway-API route shares. The kind package appends per-rule match + backend
+// facts on top.
+func GatewayRouteCommonFacts(
 	clusterID string,
 	meta metav1.ObjectMeta,
 	hostnames []gatewayv1.Hostname,
 	parentRefs []gatewayv1.ParentReference,
 	parentStatuses []gatewayv1.RouteParentStatus,
 ) RouteCommonFacts {
-	conditions := gatewayConditionFacts(gatewayRouteStatusConditions(parentStatuses))
+	conditions := GatewayConditionFacts(GatewayRouteStatusConditions(parentStatuses))
 	facts := RouteCommonFacts{
 		Conditions: conditions,
-		Summary:    gatewayConditionsSummary(conditions),
+		Summary:    GatewayConditionsSummary(conditions),
 	}
 	for _, hostname := range hostnames {
 		facts.Hostnames = append(facts.Hostnames, string(hostname))
 	}
 	for _, parentRef := range parentRefs {
-		facts.ParentRefs = append(facts.ParentRefs, gatewayParentRefLink(clusterID, meta.Namespace, parentRef))
+		facts.ParentRefs = append(facts.ParentRefs, GatewayParentRefLink(clusterID, meta.Namespace, parentRef))
 	}
 	return facts
 }
 
+// DescribeRouteFacts renders the namespace-network streaming detail for a route.
+func DescribeRouteFacts(facts RouteCommonFacts) string {
+	return fmt.Sprintf("%d rule(s), %d parent(s), %d hostname(s)", len(facts.Rules), len(facts.ParentRefs), len(facts.Hostnames))
+}
+
 func gatewayRouteLabel(ruleCount, parentCount, backendCount int) string {
 	return fmt.Sprintf("%d rule(s), %d parent(s), %d backend(s)", ruleCount, parentCount, backendCount)
-}
-
-func gatewayHTTPMatchSummary(match gatewayv1.HTTPRouteMatch) string {
-	if match.Path != nil && match.Path.Value != nil {
-		return fmt.Sprintf("Path %s", *match.Path.Value)
-	}
-	if match.Method != nil {
-		return fmt.Sprintf("Method %s", *match.Method)
-	}
-	return "Any"
-}
-
-func gatewayGRPCMatchSummary(match gatewayv1.GRPCRouteMatch) string {
-	if match.Method != nil {
-		if match.Method.Service != nil && match.Method.Method != nil {
-			return fmt.Sprintf("%s/%s", *match.Method.Service, *match.Method.Method)
-		}
-		if match.Method.Service != nil {
-			return *match.Method.Service
-		}
-		if match.Method.Method != nil {
-			return *match.Method.Method
-		}
-	}
-	return "Any"
 }

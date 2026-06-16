@@ -16,30 +16,38 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/objectmap"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	podres "github.com/luxury-yacht/app/backend/resources/pods"
-	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
+	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
-	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	gatewaypkg "github.com/luxury-yacht/app/backend/resources/gateway"
+	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
+	"github.com/luxury-yacht/app/backend/resources/grpcroute"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/httproute"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/listenerset"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
+	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	"github.com/luxury-yacht/app/backend/resources/service"
 	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
+	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
@@ -781,7 +789,7 @@ func (idx *objectMapIndex) collectGatewayClasses(ctx context.Context, client gat
 			return ptrsOf(list.Items), nil
 		},
 		func(gatewayClass *gatewayv1.GatewayClass, rec *objectMapRecord) {
-			rec.status = objectMapGatewayClassStatus(idx.meta.ClusterID, *gatewayClass)
+			rec.status = gatewayclass.ObjectMapStatus(idx.meta.ClusterID, *gatewayClass)
 			rec.gatewayClass = gatewayClass
 		})
 }
@@ -796,7 +804,7 @@ func (idx *objectMapIndex) collectGateways(ctx context.Context, client gatewayve
 			return ptrsOf(list.Items), nil
 		},
 		func(gateway *gatewayv1.Gateway, rec *objectMapRecord) {
-			rec.status = objectMapGatewayStatus(idx.meta.ClusterID, *gateway)
+			rec.status = gatewaypkg.ObjectMapStatus(idx.meta.ClusterID, *gateway)
 			rec.gateway = gateway
 		})
 }
@@ -811,7 +819,7 @@ func (idx *objectMapIndex) collectHTTPRoutes(ctx context.Context, client gateway
 			return ptrsOf(list.Items), nil
 		},
 		func(route *gatewayv1.HTTPRoute, rec *objectMapRecord) {
-			rec.status = objectMapHTTPRouteStatus(idx.meta.ClusterID, *route)
+			rec.status = httproute.ObjectMapStatus(idx.meta.ClusterID, *route)
 			rec.httpRoute = route
 		})
 }
@@ -826,7 +834,7 @@ func (idx *objectMapIndex) collectGRPCRoutes(ctx context.Context, client gateway
 			return ptrsOf(list.Items), nil
 		},
 		func(route *gatewayv1.GRPCRoute, rec *objectMapRecord) {
-			rec.status = objectMapGRPCRouteStatus(idx.meta.ClusterID, *route)
+			rec.status = grpcroute.ObjectMapStatus(idx.meta.ClusterID, *route)
 			rec.grpcRoute = route
 		})
 }
@@ -841,7 +849,7 @@ func (idx *objectMapIndex) collectTLSRoutes(ctx context.Context, client gatewayv
 			return ptrsOf(list.Items), nil
 		},
 		func(route *gatewayv1.TLSRoute, rec *objectMapRecord) {
-			rec.status = objectMapTLSRouteStatus(idx.meta.ClusterID, *route)
+			rec.status = tlsroute.ObjectMapStatus(idx.meta.ClusterID, *route)
 			rec.tlsRoute = route
 		})
 }
@@ -856,7 +864,7 @@ func (idx *objectMapIndex) collectListenerSets(ctx context.Context, client gatew
 			return ptrsOf(list.Items), nil
 		},
 		func(listenerSet *gatewayv1.ListenerSet, rec *objectMapRecord) {
-			rec.status = objectMapListenerSetStatus(idx.meta.ClusterID, *listenerSet)
+			rec.status = listenerset.ObjectMapStatus(idx.meta.ClusterID, *listenerSet)
 			rec.listenerSet = listenerSet
 		})
 }
@@ -871,7 +879,7 @@ func (idx *objectMapIndex) collectReferenceGrants(ctx context.Context, client ga
 			return ptrsOf(list.Items), nil
 		},
 		func(grant *gatewayv1.ReferenceGrant, rec *objectMapRecord) {
-			rec.status = objectMapReferenceGrantStatus(idx.meta.ClusterID, *grant)
+			rec.status = referencegrant.ObjectMapStatus(idx.meta.ClusterID, *grant)
 			rec.referenceGrant = grant
 		})
 }
@@ -886,7 +894,7 @@ func (idx *objectMapIndex) collectBackendTLSPolicies(ctx context.Context, client
 			return ptrsOf(list.Items), nil
 		},
 		func(policy *gatewayv1.BackendTLSPolicy, rec *objectMapRecord) {
-			rec.status = objectMapBackendTLSPolicyStatus(idx.meta.ClusterID, *policy)
+			rec.status = backendtlspolicy.ObjectMapStatus(idx.meta.ClusterID, *policy)
 			rec.backendTLSPolicy = policy
 		})
 }
@@ -1148,68 +1156,9 @@ func objectMapCronJobActionFacts(cron batchv1.CronJob) *ObjectMapActionFacts {
 	return facts
 }
 
-
-
-
-
-
-
-
-
-
-
-// StatefulSet, Deployment, DaemonSet, ReplicaSet, Job, and CronJob object-map status
-// projections live in their kind packages (e.g. statefulset.ObjectMapStatus); the
-// collectors call them.
-
-func objectMapStatusFromResourceModel(model resourcemodel.ResourceModel) *ObjectMapStatus {
-	return objectmap.FromResourceModel(model)
-}
-
-
-
-
-
-
-func objectMapGatewayClassStatus(clusterID string, gatewayClass gatewayv1.GatewayClass) *ObjectMapStatus {
-	model := resourcemodel.BuildGatewayClassResourceModel(clusterID, &gatewayClass)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapGatewayStatus(clusterID string, gateway gatewayv1.Gateway) *ObjectMapStatus {
-	model := resourcemodel.BuildGatewayResourceModel(clusterID, &gateway)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapHTTPRouteStatus(clusterID string, route gatewayv1.HTTPRoute) *ObjectMapStatus {
-	model := resourcemodel.BuildHTTPRouteResourceModel(clusterID, &route)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapGRPCRouteStatus(clusterID string, route gatewayv1.GRPCRoute) *ObjectMapStatus {
-	model := resourcemodel.BuildGRPCRouteResourceModel(clusterID, &route)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapTLSRouteStatus(clusterID string, route gatewayv1.TLSRoute) *ObjectMapStatus {
-	model := resourcemodel.BuildTLSRouteResourceModel(clusterID, &route)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapListenerSetStatus(clusterID string, listenerSet gatewayv1.ListenerSet) *ObjectMapStatus {
-	model := resourcemodel.BuildListenerSetResourceModel(clusterID, &listenerSet)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapReferenceGrantStatus(clusterID string, grant gatewayv1.ReferenceGrant) *ObjectMapStatus {
-	model := resourcemodel.BuildReferenceGrantResourceModel(clusterID, &grant)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapBackendTLSPolicyStatus(clusterID string, policy gatewayv1.BackendTLSPolicy) *ObjectMapStatus {
-	model := resourcemodel.BuildBackendTLSPolicyResourceModel(clusterID, &policy)
-	return objectMapStatusFromResourceModel(model)
-}
+// Every kind's object-map status projection now lives in its kind package
+// (e.g. statefulset.ObjectMapStatus, gateway.ObjectMapStatus); the collectors
+// call them directly.
 
 func (idx *objectMapIndex) findIdentity(namespace string, gvk schema.GroupVersionKind, name string) (*objectMapRecord, bool) {
 	if idx == nil {
@@ -1699,47 +1648,40 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 			}
 		}
 		if record.gatewayClass != nil {
-			model := resourcemodel.BuildGatewayClassResourceModel(idx.meta.ClusterID, record.gatewayClass)
-			if model.Facts.GatewayClass.Parameters != nil {
+			facts := gatewayclass.BuildFacts(idx.meta.ClusterID, record.gatewayClass)
+			if facts.Parameters != nil {
 				relationship := objectMapRelationships[objectMapEdgeUses]
-				add(record, idx.recordForResourceLink(*model.Facts.GatewayClass.Parameters), relationship.typ, relationship.label, "spec.parametersRef")
+				add(record, idx.recordForResourceLink(*facts.Parameters), relationship.typ, relationship.label, "spec.parametersRef")
 			}
 		}
 		if record.gateway != nil {
-			model := resourcemodel.BuildGatewayResourceModel(idx.meta.ClusterID, record.gateway)
-			if model.Facts.Gateway.Class != nil {
+			if class := gatewaypkg.BuildFacts(idx.meta.ClusterID, record.gateway).Class; class != nil {
 				relationship := objectMapRelationships[objectMapEdgeUses]
-				add(record, idx.recordForResourceLink(*model.Facts.Gateway.Class), relationship.typ, "uses class", "spec.gatewayClassName")
+				add(record, idx.recordForResourceLink(*class), relationship.typ, "uses class", "spec.gatewayClassName")
 			}
 		}
 		if record.httpRoute != nil {
-			model := resourcemodel.BuildHTTPRouteResourceModel(idx.meta.ClusterID, record.httpRoute)
-			idx.addGatewayRouteEdges(record, model.Facts.HTTPRoute.RouteCommonFacts, add)
+			idx.addGatewayRouteEdges(record, httproute.BuildFacts(idx.meta.ClusterID, record.httpRoute).RouteCommonFacts, add)
 		}
 		if record.grpcRoute != nil {
-			model := resourcemodel.BuildGRPCRouteResourceModel(idx.meta.ClusterID, record.grpcRoute)
-			idx.addGatewayRouteEdges(record, model.Facts.GRPCRoute.RouteCommonFacts, add)
+			idx.addGatewayRouteEdges(record, grpcroute.BuildFacts(idx.meta.ClusterID, record.grpcRoute).RouteCommonFacts, add)
 		}
 		if record.tlsRoute != nil {
-			model := resourcemodel.BuildTLSRouteResourceModel(idx.meta.ClusterID, record.tlsRoute)
-			idx.addGatewayRouteEdges(record, model.Facts.TLSRoute.RouteCommonFacts, add)
+			idx.addGatewayRouteEdges(record, tlsroute.BuildFacts(idx.meta.ClusterID, record.tlsRoute).RouteCommonFacts, add)
 		}
 		if record.listenerSet != nil {
-			model := resourcemodel.BuildListenerSetResourceModel(idx.meta.ClusterID, record.listenerSet)
 			relationship := objectMapRelationships[objectMapEdgeUses]
-			add(record, idx.recordForResourceLink(model.Facts.ListenerSet.ParentRef), relationship.typ, relationship.label, "spec.parentRef")
+			add(record, idx.recordForResourceLink(listenerset.BuildFacts(idx.meta.ClusterID, record.listenerSet).ParentRef), relationship.typ, relationship.label, "spec.parentRef")
 		}
 		if record.referenceGrant != nil {
-			model := resourcemodel.BuildReferenceGrantResourceModel(idx.meta.ClusterID, record.referenceGrant)
 			relationship := objectMapRelationships[objectMapEdgeGrants]
-			for _, targetRef := range model.Facts.ReferenceGrant.To {
+			for _, targetRef := range referencegrant.BuildFacts(idx.meta.ClusterID, record.referenceGrant).To {
 				add(record, idx.recordForResourceLink(targetRef), relationship.typ, relationship.label, "spec.to")
 			}
 		}
 		if record.backendTLSPolicy != nil {
-			model := resourcemodel.BuildBackendTLSPolicyResourceModel(idx.meta.ClusterID, record.backendTLSPolicy)
 			relationship := objectMapRelationships[objectMapEdgeUses]
-			for _, targetRef := range model.Facts.BackendTLSPolicy.TargetRefs {
+			for _, targetRef := range backendtlspolicy.BuildFacts(idx.meta.ClusterID, record.backendTLSPolicy).TargetRefs {
 				add(record, idx.recordForResourceLink(targetRef), relationship.typ, relationship.label, "spec.targetRefs")
 			}
 		}

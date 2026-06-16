@@ -128,20 +128,8 @@ type ConditionFacts struct {
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
 }
 
-
-
 type ResourceFacts struct {
-	GatewayClass                   *GatewayClassFacts                   `json:"gatewayClass,omitempty"`
-	Gateway                        *GatewayFacts                        `json:"gateway,omitempty"`
-	HTTPRoute                      *HTTPRouteFacts                      `json:"httpRoute,omitempty"`
-	GRPCRoute                      *GRPCRouteFacts                      `json:"grpcRoute,omitempty"`
-	TLSRoute                       *TLSRouteFacts                       `json:"tlsRoute,omitempty"`
-	ListenerSet                    *ListenerSetFacts                    `json:"listenerSet,omitempty"`
-	ReferenceGrant                 *ReferenceGrantFacts                 `json:"referenceGrant,omitempty"`
-	BackendTLSPolicy               *BackendTLSPolicyFacts               `json:"backendTLSPolicy,omitempty"`
 }
-
-
 
 type WorkloadCommonFacts struct {
 	DesiredReplicas   int32            `json:"desiredReplicas"`
@@ -184,15 +172,8 @@ type ResourceQuantityMapFacts map[string]resource.Quantity
 // ConfigMapFacts moved to resources/configmap and SecretFacts moved to
 // resources/secret, removed from the ResourceFacts union (same cycle-break).
 
-
-
 // EndpointSliceFacts + EndpointAddressFacts/EndpointPortFacts moved to
 // resources/endpointslice (EndpointSlice-only), removed from the ResourceFacts union.
-
-
-
-
-
 
 // IngressClassFacts moved to resources/ingressclass (type ingressclass.Facts),
 // removed from the ResourceFacts union (same cycle-break as the other kinds).
@@ -208,22 +189,6 @@ type ConditionsSummaryFacts struct {
 	Resolved   *ConditionFacts `json:"resolvedRefs,omitempty"`
 }
 
-type GatewayClassFacts struct {
-	ControllerName string                 `json:"controllerName,omitempty"`
-	Parameters     *ResourceLink          `json:"parameters,omitempty"`
-	UsedBy         []ResourceLink         `json:"usedBy,omitempty"`
-	Conditions     []ConditionFacts       `json:"conditions,omitempty"`
-	Summary        ConditionsSummaryFacts `json:"summary,omitempty"`
-}
-
-type GatewayFacts struct {
-	Class      *ResourceLink          `json:"class,omitempty"`
-	Addresses  []string               `json:"addresses,omitempty"`
-	Listeners  []GatewayListenerFacts `json:"listeners,omitempty"`
-	Conditions []ConditionFacts       `json:"conditions,omitempty"`
-	Summary    ConditionsSummaryFacts `json:"summary,omitempty"`
-}
-
 type GatewayListenerFacts struct {
 	Name           string           `json:"name,omitempty"`
 	Hostname       string           `json:"hostname,omitempty"`
@@ -231,13 +196,6 @@ type GatewayListenerFacts struct {
 	Protocol       string           `json:"protocol,omitempty"`
 	AttachedRoutes int32            `json:"attachedRoutes"`
 	Conditions     []ConditionFacts `json:"conditions,omitempty"`
-}
-
-type ListenerSetFacts struct {
-	ParentRef  ResourceLink           `json:"parentRef"`
-	Listeners  []GatewayListenerFacts `json:"listeners,omitempty"`
-	Conditions []ConditionFacts       `json:"conditions,omitempty"`
-	Summary    ConditionsSummaryFacts `json:"summary,omitempty"`
 }
 
 type RouteCommonFacts struct {
@@ -254,35 +212,6 @@ type RouteRuleFacts struct {
 	Backends []ResourceLink `json:"backends,omitempty"`
 }
 
-type HTTPRouteFacts struct {
-	RouteCommonFacts
-}
-
-type GRPCRouteFacts struct {
-	RouteCommonFacts
-}
-
-type TLSRouteFacts struct {
-	RouteCommonFacts
-}
-
-type ReferenceGrantFacts struct {
-	From []ReferenceGrantFromFacts `json:"from,omitempty"`
-	To   []ResourceLink            `json:"to,omitempty"`
-}
-
-type ReferenceGrantFromFacts struct {
-	Group     string `json:"group,omitempty"`
-	Kind      string `json:"kind,omitempty"`
-	Namespace string `json:"namespace,omitempty"`
-}
-
-type BackendTLSPolicyFacts struct {
-	TargetRefs []ResourceLink         `json:"targetRefs,omitempty"`
-	Conditions []ConditionFacts       `json:"conditions,omitempty"`
-	Summary    ConditionsSummaryFacts `json:"summary,omitempty"`
-}
-
 type PolicyRuleFacts struct {
 	APIGroups       []string `json:"apiGroups,omitempty"`
 	Resources       []string `json:"resources,omitempty"`
@@ -291,11 +220,6 @@ type PolicyRuleFacts struct {
 	NonResourceURLs []string `json:"nonResourceURLs,omitempty"`
 }
 
-
-
-
-
-
 type SubjectFacts struct {
 	Kind      string        `json:"kind"`
 	APIGroup  string        `json:"apiGroup,omitempty"`
@@ -303,12 +227,6 @@ type SubjectFacts struct {
 	Namespace string        `json:"namespace,omitempty"`
 	Link      *ResourceLink `json:"link,omitempty"`
 }
-
-
-
-
-
-
 
 // PodDisruptionBudgetFacts moved to resources/poddisruptionbudget (type
 // poddisruptionbudget.Facts), removed from the ResourceFacts union to break the
@@ -330,23 +248,6 @@ type DisruptedPodFacts struct {
 // ResourceQuotaFacts (+ ScopeSelectorFacts/ScopeSelectorRequirementFacts) moved to
 // resources/resourcequota and LimitRangeFacts (+ LimitRangeItemFacts) moved to
 // resources/limitrange. ResourceQuantityMapFacts stays here (shared primitive).
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 type ResourceModel struct {
 	Ref      ResourceRef                `json:"ref"`

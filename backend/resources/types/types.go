@@ -612,35 +612,6 @@ type ConditionsSummary struct {
 	Resolved   *ConditionState `json:"resolvedRefs,omitempty"`
 }
 
-type GatewayClassDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Controller  string            `json:"controller"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	Conditions  []ConditionState  `json:"conditions,omitempty"`
-	Summary     ConditionsSummary `json:"summary"`
-	Parameters  *RefOrDisplay     `json:"parameters,omitempty"`
-	UsedBy      []ObjectRef       `json:"usedBy,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
-
-type GatewayDetails struct {
-	Kind            string                   `json:"kind"`
-	Name            string                   `json:"name"`
-	Namespace       string                   `json:"namespace"`
-	Age             string                   `json:"age"`
-	Details         string                   `json:"details"`
-	GatewayClassRef ObjectRef                `json:"gatewayClassRef"`
-	Addresses       []string                 `json:"addresses,omitempty"`
-	Listeners       []GatewayListenerDetails `json:"listeners,omitempty"`
-	Conditions      []ConditionState         `json:"conditions,omitempty"`
-	Summary         ConditionsSummary        `json:"summary"`
-	Labels          map[string]string        `json:"labels,omitempty"`
-	Annotations     map[string]string        `json:"annotations,omitempty"`
-}
-
 type GatewayListenerDetails struct {
 	Name           string           `json:"name"`
 	Hostname       string           `json:"hostname,omitempty"`
@@ -675,49 +646,10 @@ type HTTPRouteDetails = RouteDetails
 type GRPCRouteDetails = RouteDetails
 type TLSRouteDetails = RouteDetails
 
-type ListenerSetDetails struct {
-	Kind        string                   `json:"kind"`
-	Name        string                   `json:"name"`
-	Namespace   string                   `json:"namespace"`
-	Age         string                   `json:"age"`
-	Details     string                   `json:"details"`
-	ParentRef   RefOrDisplay             `json:"parentRef"`
-	Listeners   []GatewayListenerDetails `json:"listeners,omitempty"`
-	Conditions  []ConditionState         `json:"conditions,omitempty"`
-	Summary     ConditionsSummary        `json:"summary"`
-	Labels      map[string]string        `json:"labels,omitempty"`
-	Annotations map[string]string        `json:"annotations,omitempty"`
-}
-
-type ReferenceGrantDetails struct {
-	Kind        string                   `json:"kind"`
-	Name        string                   `json:"name"`
-	Namespace   string                   `json:"namespace"`
-	Age         string                   `json:"age"`
-	Details     string                   `json:"details"`
-	From        []ReferenceGrantFromInfo `json:"from,omitempty"`
-	To          []RefOrDisplay           `json:"to,omitempty"`
-	Labels      map[string]string        `json:"labels,omitempty"`
-	Annotations map[string]string        `json:"annotations,omitempty"`
-}
-
 type ReferenceGrantFromInfo struct {
 	Group     string `json:"group"`
 	Kind      string `json:"kind"`
 	Namespace string `json:"namespace"`
-}
-
-type BackendTLSPolicyDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	TargetRefs  []RefOrDisplay    `json:"targetRefs,omitempty"`
-	Conditions  []ConditionState  `json:"conditions,omitempty"`
-	Summary     ConditionsSummary `json:"summary"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // IngressClassDetails + IngressClassParameters moved to resources/ingressclass

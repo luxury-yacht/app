@@ -10,7 +10,7 @@ import (
 
 const gatewayAPIGroup = "gateway.networking.k8s.io"
 
-func gatewayAPIResourceModel(
+func GatewayAPIResourceModel(
 	clusterID, kind, resource string,
 	scope ResourceScope,
 	meta metav1.ObjectMeta,
@@ -20,7 +20,7 @@ func gatewayAPIResourceModel(
 	return NetworkResourceModel(clusterID, gatewayAPIGroup, "v1", kind, resource, scope, meta, status, facts)
 }
 
-func gatewayConditionFacts(conditions []metav1.Condition) []ConditionFacts {
+func GatewayConditionFacts(conditions []metav1.Condition) []ConditionFacts {
 	facts := make([]ConditionFacts, 0, len(conditions))
 	for _, condition := range conditions {
 		facts = append(facts, ConditionFacts{
@@ -34,7 +34,7 @@ func gatewayConditionFacts(conditions []metav1.Condition) []ConditionFacts {
 	return facts
 }
 
-func gatewayConditionsSummary(conditions []ConditionFacts) ConditionsSummaryFacts {
+func GatewayConditionsSummary(conditions []ConditionFacts) ConditionsSummaryFacts {
 	var summary ConditionsSummaryFacts
 	for _, condition := range conditions {
 		next := condition
@@ -52,7 +52,7 @@ func gatewayConditionsSummary(conditions []ConditionFacts) ConditionsSummaryFact
 	return summary
 }
 
-func gatewayStatusFromConditions(meta metav1.ObjectMeta, fallbackState, fallbackLabel string, conditions []ConditionFacts) ResourceStatusPresentation {
+func GatewayStatusFromConditions(meta metav1.ObjectMeta, fallbackState, fallbackLabel string, conditions []ConditionFacts) ResourceStatusPresentation {
 	signals := gatewayConditionSignals(conditions)
 	lifecycle := NetworkLifecycle(meta)
 	if status, ok := DeletingNetworkStatus(meta, fallbackState, signals, lifecycle); ok {
@@ -109,11 +109,24 @@ func findConditionFacts(conditions []ConditionFacts, conditionType string) (Cond
 	return ConditionFacts{}, false
 }
 
-func gatewayClassLink(clusterID string, name gatewayv1.ObjectName) ResourceLink {
+func GatewayClassLink(clusterID string, name gatewayv1.ObjectName) ResourceLink {
 	return ClusterResourceLink(clusterID, gatewayAPIGroup, "v1", "GatewayClass", "gatewayclasses", string(name), "")
 }
 
-func gatewayRefLink(clusterID, group, kind, namespace, name string) ResourceLink {
+// ResourceLinkName returns the referenced object's name from a link, preferring
+// the resolved ref and falling back to the display-only ref. Gateway-family kind
+// packages use it to render their streaming detail strings.
+func ResourceLinkName(link ResourceLink) string {
+	if link.Ref != nil {
+		return link.Ref.Name
+	}
+	if link.Display != nil {
+		return link.Display.Name
+	}
+	return ""
+}
+
+func GatewayRefLink(clusterID, group, kind, namespace, name string) ResourceLink {
 	resource := gatewayResourceName(group, kind)
 	if version := gatewayRefVersion(group, kind); version != "" && name != "" {
 		return namespacedResourceLink(clusterID, group, version, kind, resource, namespace, name, "")
@@ -166,7 +179,7 @@ func gatewayResourceName(group, kind string) string {
 	return ""
 }
 
-func gatewayParentRefLink(clusterID, currentNamespace string, ref gatewayv1.ParentReference) ResourceLink {
+func GatewayParentRefLink(clusterID, currentNamespace string, ref gatewayv1.ParentReference) ResourceLink {
 	group := gatewayAPIGroup
 	if ref.Group != nil {
 		group = string(*ref.Group)
@@ -179,10 +192,10 @@ func gatewayParentRefLink(clusterID, currentNamespace string, ref gatewayv1.Pare
 	if ref.Namespace != nil {
 		namespace = string(*ref.Namespace)
 	}
-	return gatewayRefLink(clusterID, group, kind, namespace, string(ref.Name))
+	return GatewayRefLink(clusterID, group, kind, namespace, string(ref.Name))
 }
 
-func gatewayParentGatewayRefLink(clusterID, currentNamespace string, ref gatewayv1.ParentGatewayReference) ResourceLink {
+func GatewayParentGatewayRefLink(clusterID, currentNamespace string, ref gatewayv1.ParentGatewayReference) ResourceLink {
 	group := gatewayAPIGroup
 	if ref.Group != nil {
 		group = string(*ref.Group)
@@ -195,10 +208,10 @@ func gatewayParentGatewayRefLink(clusterID, currentNamespace string, ref gateway
 	if ref.Namespace != nil {
 		namespace = string(*ref.Namespace)
 	}
-	return gatewayRefLink(clusterID, group, kind, namespace, string(ref.Name))
+	return GatewayRefLink(clusterID, group, kind, namespace, string(ref.Name))
 }
 
-func gatewayBackendRefLink(clusterID, currentNamespace string, ref gatewayv1.BackendObjectReference) ResourceLink {
+func GatewayBackendRefLink(clusterID, currentNamespace string, ref gatewayv1.BackendObjectReference) ResourceLink {
 	group := ""
 	if ref.Group != nil {
 		group = string(*ref.Group)
@@ -211,22 +224,22 @@ func gatewayBackendRefLink(clusterID, currentNamespace string, ref gatewayv1.Bac
 	if ref.Namespace != nil {
 		namespace = string(*ref.Namespace)
 	}
-	return gatewayRefLink(clusterID, group, kind, namespace, string(ref.Name))
+	return GatewayRefLink(clusterID, group, kind, namespace, string(ref.Name))
 }
 
-func gatewayPolicyTargetRefLink(clusterID, currentNamespace string, ref gatewayv1.LocalPolicyTargetReferenceWithSectionName) ResourceLink {
-	return gatewayRefLink(clusterID, string(ref.Group), string(ref.Kind), currentNamespace, string(ref.Name))
+func GatewayPolicyTargetRefLink(clusterID, currentNamespace string, ref gatewayv1.LocalPolicyTargetReferenceWithSectionName) ResourceLink {
+	return GatewayRefLink(clusterID, string(ref.Group), string(ref.Kind), currentNamespace, string(ref.Name))
 }
 
-func gatewayReferenceGrantToLink(clusterID, currentNamespace string, ref gatewayv1.ReferenceGrantTo) ResourceLink {
+func GatewayReferenceGrantToLink(clusterID, currentNamespace string, ref gatewayv1.ReferenceGrantTo) ResourceLink {
 	name := ""
 	if ref.Name != nil {
 		name = string(*ref.Name)
 	}
-	return gatewayRefLink(clusterID, string(ref.Group), string(ref.Kind), currentNamespace, name)
+	return GatewayRefLink(clusterID, string(ref.Group), string(ref.Kind), currentNamespace, name)
 }
 
-func gatewayListenerFacts(statusByName map[string]gatewayListenerStatusFacts, name, hostname, protocol string, port int32) GatewayListenerFacts {
+func BuildGatewayListenerFacts(statusByName map[string]GatewayListenerStatusFacts, name, hostname, protocol string, port int32) GatewayListenerFacts {
 	facts := GatewayListenerFacts{
 		Name:     name,
 		Hostname: hostname,
@@ -234,18 +247,21 @@ func gatewayListenerFacts(statusByName map[string]gatewayListenerStatusFacts, na
 		Protocol: protocol,
 	}
 	if status, ok := statusByName[name]; ok {
-		facts.AttachedRoutes = status.attachedRoutes
-		facts.Conditions = gatewayConditionFacts(status.conditions)
+		facts.AttachedRoutes = status.AttachedRoutes
+		facts.Conditions = GatewayConditionFacts(status.Conditions)
 	}
 	return facts
 }
 
-type gatewayListenerStatusFacts struct {
-	attachedRoutes int32
-	conditions     []metav1.Condition
+// GatewayListenerStatusFacts carries the per-listener status a kind package
+// extracts from its typed Gateway/ListenerSet object and hands to
+// BuildGatewayListenerFacts. Fields are exported so kind packages can build it.
+type GatewayListenerStatusFacts struct {
+	AttachedRoutes int32
+	Conditions     []metav1.Condition
 }
 
-func gatewayRouteStatusConditions(statuses []gatewayv1.RouteParentStatus) []metav1.Condition {
+func GatewayRouteStatusConditions(statuses []gatewayv1.RouteParentStatus) []metav1.Condition {
 	var conditions []metav1.Condition
 	for _, status := range statuses {
 		conditions = append(conditions, status.Conditions...)
@@ -253,7 +269,7 @@ func gatewayRouteStatusConditions(statuses []gatewayv1.RouteParentStatus) []meta
 	return conditions
 }
 
-func gatewayBackendTLSConditions(ancestors []gatewayv1.PolicyAncestorStatus) []metav1.Condition {
+func GatewayBackendTLSConditions(ancestors []gatewayv1.PolicyAncestorStatus) []metav1.Condition {
 	var conditions []metav1.Condition
 	for _, ancestor := range ancestors {
 		conditions = append(conditions, ancestor.Conditions...)
@@ -261,7 +277,7 @@ func gatewayBackendTLSConditions(ancestors []gatewayv1.PolicyAncestorStatus) []m
 	return conditions
 }
 
-func gatewayAddressValues(addresses []gatewayv1.GatewayStatusAddress) []string {
+func GatewayAddressValues(addresses []gatewayv1.GatewayStatusAddress) []string {
 	values := make([]string, 0, len(addresses))
 	for _, address := range addresses {
 		values = append(values, address.Value)
@@ -269,6 +285,6 @@ func gatewayAddressValues(addresses []gatewayv1.GatewayStatusAddress) []string {
 	return values
 }
 
-func gatewayCountState(count int) string {
+func GatewayCountState(count int) string {
 	return strconv.Itoa(count)
 }

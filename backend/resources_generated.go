@@ -4,6 +4,7 @@ package backend
 
 import (
 	"github.com/luxury-yacht/app/backend/resources/admission"
+	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
@@ -11,18 +12,23 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
-	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
+	"github.com/luxury-yacht/app/backend/resources/gateway"
+	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
+	"github.com/luxury-yacht/app/backend/resources/grpcroute"
 	"github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/httproute"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	"github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/listenerset"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 	"github.com/luxury-yacht/app/backend/resources/role"
@@ -32,6 +38,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
+	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 )
 
 func (a *App) GetBackendTLSPolicy(clusterID, namespace, name string) (*BackendTLSPolicyDetails, error) {
@@ -40,7 +47,7 @@ func (a *App) GetBackendTLSPolicy(clusterID, namespace, name string) (*BackendTL
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "BackendTLSPolicy", namespace, name, func() (*BackendTLSPolicyDetails, error) {
-		return gatewayapi.NewService(deps).BackendTLSPolicy(namespace, name)
+		return backendtlspolicy.NewService(deps).BackendTLSPolicy(namespace, name)
 	})
 }
 
@@ -120,7 +127,7 @@ func (a *App) GetGRPCRoute(clusterID, namespace, name string) (*GRPCRouteDetails
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "GRPCRoute", namespace, name, func() (*GRPCRouteDetails, error) {
-		return gatewayapi.NewService(deps).GRPCRoute(namespace, name)
+		return grpcroute.NewService(deps).GRPCRoute(namespace, name)
 	})
 }
 
@@ -130,7 +137,7 @@ func (a *App) GetGateway(clusterID, namespace, name string) (*GatewayDetails, er
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "Gateway", namespace, name, func() (*GatewayDetails, error) {
-		return gatewayapi.NewService(deps).Gateway(namespace, name)
+		return gateway.NewService(deps).Gateway(namespace, name)
 	})
 }
 
@@ -140,7 +147,7 @@ func (a *App) GetGatewayClass(clusterID, name string) (*GatewayClassDetails, err
 		return nil, err
 	}
 	return FetchClusterResource(a, deps, selectionKey, "GatewayClass", name, func() (*GatewayClassDetails, error) {
-		return gatewayapi.NewService(deps).GatewayClass(name)
+		return gatewayclass.NewService(deps).GatewayClass(name)
 	})
 }
 
@@ -150,7 +157,7 @@ func (a *App) GetHTTPRoute(clusterID, namespace, name string) (*HTTPRouteDetails
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "HTTPRoute", namespace, name, func() (*HTTPRouteDetails, error) {
-		return gatewayapi.NewService(deps).HTTPRoute(namespace, name)
+		return httproute.NewService(deps).HTTPRoute(namespace, name)
 	})
 }
 
@@ -210,7 +217,7 @@ func (a *App) GetListenerSet(clusterID, namespace, name string) (*ListenerSetDet
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "ListenerSet", namespace, name, func() (*ListenerSetDetails, error) {
-		return gatewayapi.NewService(deps).ListenerSet(namespace, name)
+		return listenerset.NewService(deps).ListenerSet(namespace, name)
 	})
 }
 
@@ -290,7 +297,7 @@ func (a *App) GetReferenceGrant(clusterID, namespace, name string) (*ReferenceGr
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "ReferenceGrant", namespace, name, func() (*ReferenceGrantDetails, error) {
-		return gatewayapi.NewService(deps).ReferenceGrant(namespace, name)
+		return referencegrant.NewService(deps).ReferenceGrant(namespace, name)
 	})
 }
 
@@ -390,7 +397,7 @@ func (a *App) GetTLSRoute(clusterID, namespace, name string) (*TLSRouteDetails, 
 		return nil, err
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "TLSRoute", namespace, name, func() (*TLSRouteDetails, error) {
-		return gatewayapi.NewService(deps).TLSRoute(namespace, name)
+		return tlsroute.NewService(deps).TLSRoute(namespace, name)
 	})
 }
 

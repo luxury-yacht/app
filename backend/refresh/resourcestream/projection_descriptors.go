@@ -56,7 +56,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		PrimaryResources:     []ResourceDescriptor{core("v1", "Pod", "pods")},
 		RelatedResources:     []ResourceDescriptor{apps("ReplicaSet", "replicasets")},
 		MetricsDependency:    true,
-		Projection:           "snapshot.BuildPodSummary",
+		Projection:           "pods.BuildStreamSummary",
 		AffectedRowResolver:  "pod event -> pod row, workload row, node row",
 		StaleScopeResolver:   "stalePodScopes",
 		CompleteIsScopeLevel: true,
@@ -100,7 +100,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		UpdateIdentity:       "ref (full ResourceRef)",
 		PrimaryResources:     streamResourceDescriptors(domainNamespaceNetwork),
 		RelatedResources:     []ResourceDescriptor{discovery("EndpointSlice", "endpointslices")},
-		Projection:           "snapshot.Build*NetworkSummary",
+		Projection:           "service/ingress/networkpolicy/endpointslice/gatewayapi BuildStreamSummary",
 		AffectedRowResolver:  "network object and EndpointSlice->Service resolvers",
 		StaleScopeResolver:   "EndpointSlice old/new service resolver",
 		CompleteIsScopeLevel: true,
@@ -167,7 +167,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 	),
 	domainClusterConfig: clusterDescriptor(
 		domainClusterConfig,
-		"snapshot.BuildCluster*Summary",
+		"storageclass.BuildStreamSummary / ingressclass.BuildStreamSummary / gatewayapi.BuildGatewayClassStreamSummary / admission.Build{Validating,Mutating}StreamSummary",
 		streamResourceDescriptors(domainClusterConfig),
 	),
 	domainClusterCRDs: clusterDescriptor(

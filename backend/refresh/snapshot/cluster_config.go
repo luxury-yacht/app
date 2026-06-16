@@ -17,6 +17,11 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/resources/admission"
+	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
 )
 
 const clusterConfigDomainName = "cluster-config"
@@ -59,15 +64,9 @@ func clusterConfigQueryCapabilities() ResourceQueryCapabilities {
 }
 
 // ClusterConfigEntry covers a storage class, ingress class, or webhook config.
-type ClusterConfigEntry struct {
-	ClusterMeta
-	Kind         string `json:"kind"`
-	Name         string `json:"name"`
-	Details      string `json:"details"`
-	IsDefault    bool   `json:"isDefault,omitempty"`
-	Age          string `json:"age"`
-	AgeTimestamp int64  `json:"ageTimestamp,omitempty"`
-}
+// The type lives in the streamrows leaf so the kind packages can build it; this
+// alias keeps the snapshot-side name and wire JSON unchanged.
+type ClusterConfigEntry = streamrows.ClusterConfigEntry
 
 // RegisterClusterConfigDomain registers the domain with the registry.
 // Only listers for permitted resources are wired; denied resources are left nil
@@ -130,98 +129,16 @@ func (b *ClusterConfigBuilder) Build(ctx context.Context, scope string) (*refres
 
 func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope string, query typedTableQuery) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	var version uint64
-	entries := make([]ClusterConfigEntry, 0, 64)
-	storageClassesAvailable := b.storageClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "storage.k8s.io", "storageclasses")
-	ingressClassesAvailable := b.ingressClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "networking.k8s.io", "ingressclasses")
-	gatewayClassesAvailable := b.gatewayClassLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "gateway.networking.k8s.io", "gatewayclasses")
-	validatingWebhooksAvailable := b.validatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "validatingwebhookconfigurations")
-	mutatingWebhooksAvailable := b.mutatingWebhookLister != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, "admissionregistration.k8s.io", "mutatingwebhookconfigurations")
-
-	if storageClassesAvailable {
-		storageClasses, err := b.storageClassLister.List(labels.Everything())
-		if err != nil {
-			return nil, err
-		}
-		// Delegate to the shared row builders so the full-snapshot path
-		// and the streaming/incremental update path emit identical row
-		// shapes. See BuildClusterStorageClassSummary /
-		// BuildClusterIngressClassSummary /
-		// BuildClusterValidatingWebhookSummary /
-		// BuildClusterMutatingWebhookSummary in streaming_helpers.go.
-		for _, sc := range storageClasses {
-			if sc == nil {
-				continue
-			}
-			entries = append(entries, BuildClusterStorageClassSummary(meta, sc))
-			if v := resourceVersionOrTimestamp(sc); v > version {
-				version = v
-			}
-		}
+	collectors := []kindCollector[ClusterConfigEntry]{
+		newStorageClassCollector(b.storageClassLister),
+		newIngressClassCollector(b.ingressClassLister),
+		newGatewayClassCollector(b.gatewayClassLister),
+		newValidatingWebhookCollector(b.validatingWebhookLister),
+		newMutatingWebhookCollector(b.mutatingWebhookLister),
 	}
-
-	if ingressClassesAvailable {
-		ingressClasses, err := b.ingressClassLister.List(labels.Everything())
-		if err != nil {
-			return nil, err
-		}
-		for _, ic := range ingressClasses {
-			if ic == nil {
-				continue
-			}
-			entries = append(entries, BuildClusterIngressClassSummary(meta, ic))
-			if v := resourceVersionOrTimestamp(ic); v > version {
-				version = v
-			}
-		}
-	}
-
-	if gatewayClassesAvailable {
-		gatewayClasses, err := b.gatewayClassLister.List(labels.Everything())
-		if err != nil {
-			return nil, err
-		}
-		for _, gc := range gatewayClasses {
-			if gc == nil {
-				continue
-			}
-			entries = append(entries, BuildClusterGatewayClassSummary(meta, gc))
-			if v := resourceVersionOrTimestamp(gc); v > version {
-				version = v
-			}
-		}
-	}
-
-	if validatingWebhooksAvailable {
-		validatingWebhooks, err := b.validatingWebhookLister.List(labels.Everything())
-		if err != nil {
-			return nil, err
-		}
-		for _, webhook := range validatingWebhooks {
-			if webhook == nil {
-				continue
-			}
-			entries = append(entries, BuildClusterValidatingWebhookSummary(meta, webhook))
-			if v := resourceVersionOrTimestamp(webhook); v > version {
-				version = v
-			}
-		}
-	}
-
-	if mutatingWebhooksAvailable {
-		mutatingWebhooks, err := b.mutatingWebhookLister.List(labels.Everything())
-		if err != nil {
-			return nil, err
-		}
-		for _, webhook := range mutatingWebhooks {
-			if webhook == nil {
-				continue
-			}
-			entries = append(entries, BuildClusterMutatingWebhookSummary(meta, webhook))
-			if v := resourceVersionOrTimestamp(webhook); v > version {
-				version = v
-			}
-		}
+	entries, sources, version, err := collectDomainRows(ctx, clusterConfigDomainName, collectors, meta, "")
+	if err != nil {
+		return nil, err
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -230,13 +147,6 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 		}
 		return entries[i].Kind < entries[j].Kind
 	})
-	sources := []typedTableResourceSource{
-		{Kind: "StorageClass", Group: "storage.k8s.io", Resource: "storageclasses", Available: storageClassesAvailable},
-		{Kind: "IngressClass", Group: "networking.k8s.io", Resource: "ingressclasses", Available: ingressClassesAvailable},
-		{Kind: "GatewayClass", Group: "gateway.networking.k8s.io", Resource: "gatewayclasses", Available: gatewayClassesAvailable},
-		{Kind: "ValidatingWebhookConfiguration", Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Available: validatingWebhooksAvailable},
-		{Kind: "MutatingWebhookConfiguration", Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Available: mutatingWebhooksAvailable},
-	}
 	issues := typedTableQueryResourceIssues(ctx, clusterConfigDomainName, query, sources)
 
 	resolved := resolveTypedSnapshotPage(
@@ -269,3 +179,127 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 	}, nil
 }
 
+func newStorageClassCollector(lister storagelisters.StorageClassLister) kindCollector[ClusterConfigEntry] {
+	collector := kindCollector[ClusterConfigEntry]{kind: "StorageClass", group: "storage.k8s.io", resource: "storageclasses", available: lister != nil}
+	if lister != nil {
+		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterConfigEntry, uint64, error) {
+			items, err := lister.List(labels.Everything())
+			if err != nil {
+				return nil, 0, err
+			}
+			rows := make([]ClusterConfigEntry, 0, len(items))
+			var version uint64
+			for _, sc := range items {
+				if sc == nil {
+					continue
+				}
+				rows = append(rows, storageclass.BuildStreamSummary(meta, sc))
+				if v := resourceVersionOrTimestamp(sc); v > version {
+					version = v
+				}
+			}
+			return rows, version, nil
+		}
+	}
+	return collector
+}
+
+func newIngressClassCollector(lister networklisters.IngressClassLister) kindCollector[ClusterConfigEntry] {
+	collector := kindCollector[ClusterConfigEntry]{kind: "IngressClass", group: "networking.k8s.io", resource: "ingressclasses", available: lister != nil}
+	if lister != nil {
+		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterConfigEntry, uint64, error) {
+			items, err := lister.List(labels.Everything())
+			if err != nil {
+				return nil, 0, err
+			}
+			rows := make([]ClusterConfigEntry, 0, len(items))
+			var version uint64
+			for _, ic := range items {
+				if ic == nil {
+					continue
+				}
+				rows = append(rows, ingressclass.BuildStreamSummary(meta, ic))
+				if v := resourceVersionOrTimestamp(ic); v > version {
+					version = v
+				}
+			}
+			return rows, version, nil
+		}
+	}
+	return collector
+}
+
+func newGatewayClassCollector(lister gatewaylisters.GatewayClassLister) kindCollector[ClusterConfigEntry] {
+	collector := kindCollector[ClusterConfigEntry]{kind: "GatewayClass", group: "gateway.networking.k8s.io", resource: "gatewayclasses", available: lister != nil}
+	if lister != nil {
+		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterConfigEntry, uint64, error) {
+			items, err := lister.List(labels.Everything())
+			if err != nil {
+				return nil, 0, err
+			}
+			rows := make([]ClusterConfigEntry, 0, len(items))
+			var version uint64
+			for _, gc := range items {
+				if gc == nil {
+					continue
+				}
+				rows = append(rows, gatewayclass.BuildStreamSummary(meta, gc))
+				if v := resourceVersionOrTimestamp(gc); v > version {
+					version = v
+				}
+			}
+			return rows, version, nil
+		}
+	}
+	return collector
+}
+
+func newValidatingWebhookCollector(lister admissionlisters.ValidatingWebhookConfigurationLister) kindCollector[ClusterConfigEntry] {
+	collector := kindCollector[ClusterConfigEntry]{kind: "ValidatingWebhookConfiguration", group: "admissionregistration.k8s.io", resource: "validatingwebhookconfigurations", available: lister != nil}
+	if lister != nil {
+		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterConfigEntry, uint64, error) {
+			items, err := lister.List(labels.Everything())
+			if err != nil {
+				return nil, 0, err
+			}
+			rows := make([]ClusterConfigEntry, 0, len(items))
+			var version uint64
+			for _, webhook := range items {
+				if webhook == nil {
+					continue
+				}
+				rows = append(rows, admission.BuildValidatingStreamSummary(meta, webhook))
+				if v := resourceVersionOrTimestamp(webhook); v > version {
+					version = v
+				}
+			}
+			return rows, version, nil
+		}
+	}
+	return collector
+}
+
+func newMutatingWebhookCollector(lister admissionlisters.MutatingWebhookConfigurationLister) kindCollector[ClusterConfigEntry] {
+	collector := kindCollector[ClusterConfigEntry]{kind: "MutatingWebhookConfiguration", group: "admissionregistration.k8s.io", resource: "mutatingwebhookconfigurations", available: lister != nil}
+	if lister != nil {
+		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterConfigEntry, uint64, error) {
+			items, err := lister.List(labels.Everything())
+			if err != nil {
+				return nil, 0, err
+			}
+			rows := make([]ClusterConfigEntry, 0, len(items))
+			var version uint64
+			for _, webhook := range items {
+				if webhook == nil {
+					continue
+				}
+				rows = append(rows, admission.BuildMutatingStreamSummary(meta, webhook))
+				if v := resourceVersionOrTimestamp(webhook); v > version {
+					version = v
+				}
+			}
+			return rows, version, nil
+		}
+	}
+	return collector
+}

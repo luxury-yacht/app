@@ -4,6 +4,7 @@ import {backend} from '../models';
 import {context} from '../models';
 import {types} from '../models';
 import {objectcatalog} from '../models';
+import {backendtlspolicy} from '../models';
 import {clusterrole} from '../models';
 import {clusterrolebinding} from '../models';
 import {configmap} from '../models';
@@ -12,6 +13,8 @@ import {apiextensions} from '../models';
 import {daemonset} from '../models';
 import {deployment} from '../models';
 import {endpointslice} from '../models';
+import {gateway} from '../models';
+import {gatewayclass} from '../models';
 import {json} from '../models';
 import {helm} from '../models';
 import {hpa} from '../models';
@@ -19,6 +22,7 @@ import {ingress} from '../models';
 import {ingressclass} from '../models';
 import {job} from '../models';
 import {limitrange} from '../models';
+import {listenerset} from '../models';
 import {admission} from '../models';
 import {namespaces} from '../models';
 import {networkpolicy} from '../models';
@@ -26,6 +30,7 @@ import {nodes} from '../models';
 import {persistentvolume} from '../models';
 import {persistentvolumeclaim} from '../models';
 import {poddisruptionbudget} from '../models';
+import {referencegrant} from '../models';
 import {replicaset} from '../models';
 import {resourcequota} from '../models';
 import {role} from '../models';
@@ -98,7 +103,7 @@ export function GetAppSettingsSchema():Promise<types.AppSettingsSchema>;
 
 export function GetAppearanceModeInfo():Promise<types.AppearanceModeInfo>;
 
-export function GetBackendTLSPolicy(arg1:string,arg2:string,arg3:string):Promise<types.BackendTLSPolicyDetails>;
+export function GetBackendTLSPolicy(arg1:string,arg2:string,arg3:string):Promise<backendtlspolicy.BackendTLSPolicyDetails>;
 
 export function GetCatalogDiagnostics():Promise<backend.CatalogDiagnostics>;
 
@@ -132,9 +137,9 @@ export function GetFavorites():Promise<Array<backend.Favorite>>;
 
 export function GetGRPCRoute(arg1:string,arg2:string,arg3:string):Promise<types.RouteDetails>;
 
-export function GetGateway(arg1:string,arg2:string,arg3:string):Promise<types.GatewayDetails>;
+export function GetGateway(arg1:string,arg2:string,arg3:string):Promise<gateway.GatewayDetails>;
 
-export function GetGatewayClass(arg1:string,arg2:string):Promise<types.GatewayClassDetails>;
+export function GetGatewayClass(arg1:string,arg2:string):Promise<gatewayclass.GatewayClassDetails>;
 
 export function GetGridTablePersistence():Promise<Record<string, json.RawMessage>>;
 
@@ -162,7 +167,7 @@ export function GetKubernetesAPIClientDiagnostics():Promise<Array<backend.Kubern
 
 export function GetLimitRange(arg1:string,arg2:string,arg3:string):Promise<limitrange.LimitRangeDetails>;
 
-export function GetListenerSet(arg1:string,arg2:string,arg3:string):Promise<types.ListenerSetDetails>;
+export function GetListenerSet(arg1:string,arg2:string,arg3:string):Promise<listenerset.ListenerSetDetails>;
 
 export function GetMutatingWebhookConfiguration(arg1:string,arg2:string):Promise<admission.MutatingWebhookConfigurationDetails>;
 
@@ -184,7 +189,7 @@ export function GetPodContainers(arg1:string,arg2:string,arg3:string):Promise<Ar
 
 export function GetPodDisruptionBudget(arg1:string,arg2:string,arg3:string):Promise<poddisruptionbudget.PodDisruptionBudgetDetails>;
 
-export function GetReferenceGrant(arg1:string,arg2:string,arg3:string):Promise<types.ReferenceGrantDetails>;
+export function GetReferenceGrant(arg1:string,arg2:string,arg3:string):Promise<referencegrant.ReferenceGrantDetails>;
 
 export function GetRefreshBaseURL():Promise<string>;
 

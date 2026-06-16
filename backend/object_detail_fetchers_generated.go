@@ -5,6 +5,7 @@ package backend
 import (
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
+	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -13,13 +14,17 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
-	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
+	"github.com/luxury-yacht/app/backend/resources/gateway"
+	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
+	"github.com/luxury-yacht/app/backend/resources/grpcroute"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/httproute"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	"github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/listenerset"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
@@ -27,6 +32,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/pods"
+	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	"github.com/luxury-yacht/app/backend/resources/replicaset"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 	"github.com/luxury-yacht/app/backend/resources/role"
@@ -36,13 +42,14 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
+	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 )
 
 // objectDetailFetchers maps a kind's dispatch key to its typed detail retrieval.
 var objectDetailFetchers = map[string]objectDetailFetcher{
 	"backendtlspolicy": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).BackendTLSPolicy(namespace, name)
+			detail, err := backendtlspolicy.NewService(deps).BackendTLSPolicy(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -96,19 +103,19 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"gateway": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).Gateway(namespace, name)
+			detail, err := gateway.NewService(deps).Gateway(namespace, name)
 			return detail, "", err
 		},
 	},
 	"gatewayclass": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).GatewayClass(name)
+			detail, err := gatewayclass.NewService(deps).GatewayClass(name)
 			return detail, "", err
 		},
 	},
 	"grpcroute": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).GRPCRoute(namespace, name)
+			detail, err := grpcroute.NewService(deps).GRPCRoute(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -126,7 +133,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"httproute": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).HTTPRoute(namespace, name)
+			detail, err := httproute.NewService(deps).HTTPRoute(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -156,7 +163,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"listenerset": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).ListenerSet(namespace, name)
+			detail, err := listenerset.NewService(deps).ListenerSet(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -210,7 +217,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"referencegrant": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).ReferenceGrant(namespace, name)
+			detail, err := referencegrant.NewService(deps).ReferenceGrant(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -270,7 +277,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 	"tlsroute": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).TLSRoute(namespace, name)
+			detail, err := tlsroute.NewService(deps).TLSRoute(namespace, name)
 			return detail, "", err
 		},
 	},

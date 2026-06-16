@@ -32,11 +32,12 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
-	podres "github.com/luxury-yacht/app/backend/resources/pods"
+	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 )
 
@@ -84,32 +85,11 @@ func namespaceWorkloadsQueryCapabilities() ResourceQueryCapabilities {
 	)
 }
 
-// WorkloadSummary mirrors the data required by the workloads table.
-type WorkloadSummary struct {
-	ClusterMeta
-	Kind                 string `json:"kind"`
-	Name                 string `json:"name"`
-	Namespace            string `json:"namespace"`
-	Ready                string `json:"ready"`
-	Status               string `json:"status"`
-	StatusState          string `json:"statusState,omitempty"`
-	StatusPresentation   string `json:"statusPresentation,omitempty"`
-	StatusReason         string `json:"statusReason,omitempty"`
-	Restarts             int32  `json:"restarts"`
-	Age                  string `json:"age"`
-	AgeTimestamp         int64  `json:"ageTimestamp,omitempty"`
-	CPUUsage             string `json:"cpuUsage,omitempty"`
-	CPURequest           string `json:"cpuRequest,omitempty"`
-	CPULimit             string `json:"cpuLimit,omitempty"`
-	MemUsage             string `json:"memUsage,omitempty"`
-	MemRequest           string `json:"memRequest,omitempty"`
-	MemLimit             string `json:"memLimit,omitempty"`
-	PortForwardAvailable bool   `json:"portForwardAvailable"`
-	DesiredReplicas      *int32 `json:"desiredReplicas,omitempty"`
-	// HPAManaged indicates whether a HorizontalPodAutoscaler targets this workload.
-	// Nil means HPA coverage was unavailable, so action surfaces must fail closed.
-	HPAManaged *bool `json:"hpaManaged,omitempty"`
-}
+// WorkloadSummary lives in the streamrows leaf so every streaming row type has
+// one home; this alias keeps the snapshot-side name and wire JSON unchanged. The
+// row is a unified cross-kind workload aggregation, so its builder stays in this
+// domain (moving it to a kind package would cycle through resourcecontract).
+type WorkloadSummary = streamrows.WorkloadSummary
 
 // RegisterNamespaceWorkloadsDomain wires the workloads domain into the registry.
 // Only listers for permitted resources are wired; denied resources are left nil
