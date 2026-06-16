@@ -322,13 +322,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
 					deps.informerFactory.GatewayInformerFactory(),
-					snapshot.ClusterConfigPermissions{
-						IncludeStorageClasses:     allowed.Allows("storage.k8s.io", "storageclasses"),
-						IncludeIngressClasses:     allowed.Allows("networking.k8s.io", "ingressclasses"),
-						IncludeGatewayClasses:     allowed.Allows("gateway.networking.k8s.io", "gatewayclasses"),
-						IncludeValidatingWebhooks: allowed.Allows("admissionregistration.k8s.io", "validatingwebhookconfigurations"),
-						IncludeMutatingWebhooks:   allowed.Allows("admissionregistration.k8s.io", "mutatingwebhookconfigurations"),
-					},
+					allowed,
 				)
 			},
 		}),
@@ -366,10 +360,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				return snapshot.RegisterClusterRBACDomain(
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
-					snapshot.ClusterRBACPermissions{
-						IncludeClusterRoles:        allowed.Allows("rbac.authorization.k8s.io", "clusterroles"),
-						IncludeClusterRoleBindings: allowed.Allows("rbac.authorization.k8s.io", "clusterrolebindings"),
-					},
+					allowed,
 				)
 			},
 		}),
@@ -422,10 +413,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				return snapshot.RegisterNamespaceConfigDomain(
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
-					snapshot.NamespaceConfigPermissions{
-						IncludeConfigMaps: allowed.Allows("", "configmaps"),
-						IncludeSecrets:    allowed.Allows("", "secrets"),
-					},
+					allowed,
 				)
 			},
 		}),
@@ -482,11 +470,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				return snapshot.RegisterNamespaceQuotasDomain(
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
-					snapshot.NamespaceQuotasPermissions{
-						IncludeResourceQuotas:       allowed.Allows("", "resourcequotas"),
-						IncludeLimitRanges:          allowed.Allows("", "limitranges"),
-						IncludePodDisruptionBudgets: allowed.Allows("policy", "poddisruptionbudgets"),
-					},
+					allowed,
 				)
 			},
 		}),
@@ -497,11 +481,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				return snapshot.RegisterNamespaceRBACDomain(
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
-					snapshot.NamespaceRBACPermissions{
-						IncludeRoles:           allowed.Allows("rbac.authorization.k8s.io", "roles"),
-						IncludeRoleBindings:    allowed.Allows("rbac.authorization.k8s.io", "rolebindings"),
-						IncludeServiceAccounts: allowed.Allows("", "serviceaccounts"),
-					},
+					allowed,
 				)
 			},
 		}),

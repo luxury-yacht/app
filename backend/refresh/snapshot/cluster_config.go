@@ -6,43 +6,24 @@ import (
 	"sort"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
-	admissionlisters "k8s.io/client-go/listers/admissionregistration/v1"
-	networklisters "k8s.io/client-go/listers/networking/v1"
-	storagelisters "k8s.io/client-go/listers/storage/v1"
+	"k8s.io/client-go/tools/cache"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
-	gatewaylisters "sigs.k8s.io/gateway-api/pkg/client/listers/apis/v1"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
-	"github.com/luxury-yacht/app/backend/resources/admission"
-	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
-	"github.com/luxury-yacht/app/backend/resources/ingressclass"
-	"github.com/luxury-yacht/app/backend/resources/storageclass"
+	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 )
 
 const clusterConfigDomainName = "cluster-config"
 
-// ClusterConfigBuilder aggregates configuration resources for the cluster tab.
+// ClusterConfigBuilder aggregates configuration resources for the cluster tab by
+// listing each registered kind (shared- or Gateway-API-factory) from its indexer.
 type ClusterConfigBuilder struct {
-	storageClassLister      storagelisters.StorageClassLister
-	ingressClassLister      networklisters.IngressClassLister
-	gatewayClassLister      gatewaylisters.GatewayClassLister
-	validatingWebhookLister admissionlisters.ValidatingWebhookConfigurationLister
-	mutatingWebhookLister   admissionlisters.MutatingWebhookConfigurationLister
-	perms                   ClusterConfigPermissions
-}
-
-// ClusterConfigPermissions indicates which resources should be included in the domain.
-type ClusterConfigPermissions struct {
-	IncludeStorageClasses     bool
-	IncludeIngressClasses     bool
-	IncludeGatewayClasses     bool
-	IncludeValidatingWebhooks bool
-	IncludeMutatingWebhooks   bool
+	collectIndexer func(streamspec.Descriptor) cache.Indexer
 }
 
 // ClusterConfigSnapshot represents the payload exposed to the UI. It embeds the
@@ -74,43 +55,23 @@ type ClusterConfigEntry = streamrows.ClusterConfigEntry
 func RegisterClusterConfigDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
-	perms ClusterConfigPermissions,
+	allowed domainpermissions.AllowedResources,
 ) error {
-	return RegisterClusterConfigDomainWithGatewayAPI(reg, factory, nil, perms)
+	return RegisterClusterConfigDomainWithGatewayAPI(reg, factory, nil, allowed)
 }
 
 func RegisterClusterConfigDomainWithGatewayAPI(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	gatewayFactory gatewayinformers.SharedInformerFactory,
-	perms ClusterConfigPermissions,
+	allowed domainpermissions.AllowedResources,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &ClusterConfigBuilder{
-		storageClassLister:      nil,
-		ingressClassLister:      nil,
-		gatewayClassLister:      nil,
-		validatingWebhookLister: nil,
-		mutatingWebhookLister:   nil,
+		collectIndexer: factoryIndexers(factory, gatewayFactory, allowed, clusterConfigDomainName),
 	}
-	if perms.IncludeStorageClasses {
-		builder.storageClassLister = factory.Storage().V1().StorageClasses().Lister()
-	}
-	if perms.IncludeIngressClasses {
-		builder.ingressClassLister = factory.Networking().V1().IngressClasses().Lister()
-	}
-	if perms.IncludeGatewayClasses && gatewayFactory != nil {
-		builder.gatewayClassLister = gatewayFactory.Gateway().V1().GatewayClasses().Lister()
-	}
-	if perms.IncludeValidatingWebhooks {
-		builder.validatingWebhookLister = factory.Admissionregistration().V1().ValidatingWebhookConfigurations().Lister()
-	}
-	if perms.IncludeMutatingWebhooks {
-		builder.mutatingWebhookLister = factory.Admissionregistration().V1().MutatingWebhookConfigurations().Lister()
-	}
-	builder.perms = perms
 	return reg.Register(refresh.DomainConfig{
 		Name:          clusterConfigDomainName,
 		BuildSnapshot: builder.Build,
@@ -129,14 +90,7 @@ func (b *ClusterConfigBuilder) Build(ctx context.Context, scope string) (*refres
 
 func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope string, query typedTableQuery) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	collectors := []kindCollector[ClusterConfigEntry]{
-		newStorageClassCollector(b.storageClassLister),
-		newIngressClassCollector(b.ingressClassLister),
-		newGatewayClassCollector(b.gatewayClassLister),
-		newValidatingWebhookCollector(b.validatingWebhookLister),
-		newMutatingWebhookCollector(b.mutatingWebhookLister),
-	}
-	entries, sources, version, err := collectDomainRows(ctx, clusterConfigDomainName, collectors, meta, "")
+	entries, sources, version, err := collectDescriptorTableRows[ClusterConfigEntry](ctx, clusterConfigDomainName, b.collectIndexer, meta, "")
 	if err != nil {
 		return nil, err
 	}
@@ -179,127 +133,3 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 	}, nil
 }
 
-func newStorageClassCollector(lister storagelisters.StorageClassLister) kindCollector[ClusterConfigEntry] {
-	collector := kindCollector[ClusterConfigEntry]{kind: "StorageClass", group: "storage.k8s.io", resource: "storageclasses", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterConfigEntry, uint64, error) {
-			items, err := lister.List(labels.Everything())
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]ClusterConfigEntry, 0, len(items))
-			var version uint64
-			for _, sc := range items {
-				if sc == nil {
-					continue
-				}
-				rows = append(rows, storageclass.BuildStreamSummary(meta, sc))
-				if v := resourceVersionOrTimestamp(sc); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
-}
-
-func newIngressClassCollector(lister networklisters.IngressClassLister) kindCollector[ClusterConfigEntry] {
-	collector := kindCollector[ClusterConfigEntry]{kind: "IngressClass", group: "networking.k8s.io", resource: "ingressclasses", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterConfigEntry, uint64, error) {
-			items, err := lister.List(labels.Everything())
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]ClusterConfigEntry, 0, len(items))
-			var version uint64
-			for _, ic := range items {
-				if ic == nil {
-					continue
-				}
-				rows = append(rows, ingressclass.BuildStreamSummary(meta, ic))
-				if v := resourceVersionOrTimestamp(ic); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
-}
-
-func newGatewayClassCollector(lister gatewaylisters.GatewayClassLister) kindCollector[ClusterConfigEntry] {
-	collector := kindCollector[ClusterConfigEntry]{kind: "GatewayClass", group: "gateway.networking.k8s.io", resource: "gatewayclasses", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterConfigEntry, uint64, error) {
-			items, err := lister.List(labels.Everything())
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]ClusterConfigEntry, 0, len(items))
-			var version uint64
-			for _, gc := range items {
-				if gc == nil {
-					continue
-				}
-				rows = append(rows, gatewayclass.BuildStreamSummary(meta, gc))
-				if v := resourceVersionOrTimestamp(gc); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
-}
-
-func newValidatingWebhookCollector(lister admissionlisters.ValidatingWebhookConfigurationLister) kindCollector[ClusterConfigEntry] {
-	collector := kindCollector[ClusterConfigEntry]{kind: "ValidatingWebhookConfiguration", group: "admissionregistration.k8s.io", resource: "validatingwebhookconfigurations", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterConfigEntry, uint64, error) {
-			items, err := lister.List(labels.Everything())
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]ClusterConfigEntry, 0, len(items))
-			var version uint64
-			for _, webhook := range items {
-				if webhook == nil {
-					continue
-				}
-				rows = append(rows, admission.BuildValidatingStreamSummary(meta, webhook))
-				if v := resourceVersionOrTimestamp(webhook); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
-}
-
-func newMutatingWebhookCollector(lister admissionlisters.MutatingWebhookConfigurationLister) kindCollector[ClusterConfigEntry] {
-	collector := kindCollector[ClusterConfigEntry]{kind: "MutatingWebhookConfiguration", group: "admissionregistration.k8s.io", resource: "mutatingwebhookconfigurations", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterConfigEntry, uint64, error) {
-			items, err := lister.List(labels.Everything())
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]ClusterConfigEntry, 0, len(items))
-			var version uint64
-			for _, webhook := range items {
-				if webhook == nil {
-					continue
-				}
-				rows = append(rows, admission.BuildMutatingStreamSummary(meta, webhook))
-				if v := resourceVersionOrTimestamp(webhook); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
-}

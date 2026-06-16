@@ -24,6 +24,11 @@ func (m *Manager) registerDescriptorStreams(factory *informer.Factory) {
 	shared := factory.SharedInformerFactory()
 	gatewayShared := factory.GatewayInformerFactory()
 	for _, d := range streamregistry.All {
+		// Kinds with a bespoke streaming handler (registerConfigStreams etc.) are
+		// registered there; their descriptor exists only for the snapshot side.
+		if d.CustomStreamHandler {
+			continue
+		}
 		if !m.canListWatch(d.Group, d.Resource) {
 			continue
 		}

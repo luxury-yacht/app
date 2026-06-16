@@ -6,16 +6,14 @@ import (
 	"sort"
 	"strings"
 
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
-	autoscalinglisters "k8s.io/client-go/listers/autoscaling/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
-	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 )
 
 const (
@@ -23,9 +21,11 @@ const (
 	errNamespaceAutoscalingScopeRequired = "namespace scope is required"
 )
 
-// NamespaceAutoscalingBuilder constructs HPA summaries.
+// NamespaceAutoscalingBuilder constructs HPA summaries by listing the kind's
+// informer indexer and projecting it via the hpa package's stream-summary
+// builder; Build loops the stream descriptor registry via collectDescriptorTableRows.
 type NamespaceAutoscalingBuilder struct {
-	hpaLister autoscalinglisters.HorizontalPodAutoscalerLister
+	collectIndexer func(streamspec.Descriptor) cache.Indexer
 }
 
 // NamespaceAutoscalingSnapshot payload for autoscaling tab.
@@ -58,7 +58,7 @@ func RegisterNamespaceAutoscalingDomain(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &NamespaceAutoscalingBuilder{
-		hpaLister: factory.Autoscaling().V1().HorizontalPodAutoscalers().Lister(),
+		collectIndexer: unconditionalSharedIndexers(factory, namespaceAutoscalingDomainName),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceAutoscalingDomainName,
@@ -79,40 +79,9 @@ func (b *NamespaceAutoscalingBuilder) Build(ctx context.Context, scope string) (
 		return nil, err
 	}
 
-	hpas, err := b.listHPAs(parsedScope.Namespace)
+	resources, sources, version, err := collectDescriptorTableRows[AutoscalingSummary](ctx, namespaceAutoscalingDomainName, b.collectIndexer, meta, parsedScope.Namespace)
 	if err != nil {
 		return nil, fmt.Errorf("namespace autoscaling: failed to list hpas: %w", err)
-	}
-
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, hpas)
-}
-
-func (b *NamespaceAutoscalingBuilder) listHPAs(namespace string) ([]*autoscalingv1.HorizontalPodAutoscaler, error) {
-	if namespace == "" {
-		return b.hpaLister.List(labels.Everything())
-	}
-	return b.hpaLister.HorizontalPodAutoscalers(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceAutoscalingBuilder) buildSnapshot(
-	meta ClusterMeta,
-	scope string,
-	query typedTableQuery,
-	hpas []*autoscalingv1.HorizontalPodAutoscaler,
-) (*refresh.Snapshot, error) {
-	resources := make([]AutoscalingSummary, 0, len(hpas))
-	var version uint64
-
-	for _, hpa := range hpas {
-		if hpa == nil {
-			continue
-		}
-		// The hpa package owns the row builder; the full-snapshot path here
-		// and the streaming/incremental path both call it so they cannot drift.
-		resources = append(resources, hpapkg.BuildStreamSummary(meta, hpa))
-		if v := resourceVersionOrTimestamp(hpa); v > version {
-			version = v
-		}
 	}
 
 	sort.Slice(resources, func(i, j int) bool {
@@ -127,15 +96,15 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		resources,
 		query,
 		autoscalingTableQueryAdapter(),
-		namespaceAutoscalingQueryCapabilities(),
+		capabilitiesWithAvailableKinds(namespaceAutoscalingQueryCapabilities(), sources),
 		config.SnapshotNamespaceAutoscalingEntryLimit,
 		"autoscaling resources",
 		func(resource AutoscalingSummary) string { return resource.Kind },
-		nil,
+		typedTableQueryResourceIssues(ctx, namespaceAutoscalingDomainName, query, sources),
 	)
 	return &refresh.Snapshot{
 		Domain:  namespaceAutoscalingDomainName,
-		Scope:   scope,
+		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
 		Version: version,
 		Payload: NamespaceAutoscalingSnapshot{
 			ClusterMeta:           meta,

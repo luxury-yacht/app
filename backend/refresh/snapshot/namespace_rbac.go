@@ -6,36 +6,24 @@ import (
 	"sort"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	rbaclisters "k8s.io/client-go/listers/rbac/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
-	rolepkg "github.com/luxury-yacht/app/backend/resources/role"
-	"github.com/luxury-yacht/app/backend/resources/rolebinding"
-	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
+	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 )
 
 const namespaceRBACDomainName = "namespace-rbac"
 
-// NamespaceRBACPermissions indicates which resources should be included in the domain.
-type NamespaceRBACPermissions struct {
-	IncludeRoles           bool
-	IncludeRoleBindings    bool
-	IncludeServiceAccounts bool
-}
-
-// NamespaceRBACBuilder constructs RBAC summaries for a namespace.
+// NamespaceRBACBuilder constructs RBAC summaries for a namespace by listing each
+// registered kind from its informer indexer; collectIndexer resolves a stream
+// descriptor to its permitted indexer (nil when the kind is unavailable).
 type NamespaceRBACBuilder struct {
-	roleLister    rbaclisters.RoleLister
-	bindingLister rbaclisters.RoleBindingLister
-	saLister      corelisters.ServiceAccountLister
+	collectIndexer func(streamspec.Descriptor) cache.Indexer
 }
 
 // NamespaceRBACSnapshot payload for RBAC view.
@@ -59,26 +47,20 @@ func namespaceRBACQueryCapabilities() ResourceQueryCapabilities {
 // snapshot-side name and wire JSON unchanged.
 type RBACSummary = streamrows.RBACSummary
 
-// RegisterNamespaceRBACDomain registers the namespace RBAC domain.
-// Only listers for permitted resources are wired; denied resources are left nil
-// so the builder skips them gracefully.
+// RegisterNamespaceRBACDomain registers the namespace RBAC domain. The kinds it
+// serves, their informers, and their row builders all come from the shared stream
+// descriptor registry; only informers for permitted resources are registered, so
+// denied resources are skipped gracefully.
 func RegisterNamespaceRBACDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
-	perms NamespaceRBACPermissions,
+	allowed domainpermissions.AllowedResources,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	builder := &NamespaceRBACBuilder{}
-	if perms.IncludeRoles {
-		builder.roleLister = factory.Rbac().V1().Roles().Lister()
-	}
-	if perms.IncludeRoleBindings {
-		builder.bindingLister = factory.Rbac().V1().RoleBindings().Lister()
-	}
-	if perms.IncludeServiceAccounts {
-		builder.saLister = factory.Core().V1().ServiceAccounts().Lister()
+	builder := &NamespaceRBACBuilder{
+		collectIndexer: sharedFactoryIndexers(factory, allowed, namespaceRBACDomainName),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceRBACDomainName,
@@ -100,12 +82,7 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, err
 	}
 
-	collectors := []kindCollector[RBACSummary]{
-		newRoleCollector(b.roleLister),
-		newRoleBindingCollector(b.bindingLister),
-		newServiceAccountCollector(b.saLister),
-	}
-	resources, sources, version, err := collectDomainRows(ctx, namespaceRBACDomainName, collectors, meta, parsedScope.Namespace)
+	resources, sources, version, err := collectDescriptorTableRows[RBACSummary](ctx, namespaceRBACDomainName, b.collectIndexer, meta, parsedScope.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -134,102 +111,6 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 		},
 		Stats: resolved.Stats,
 	}, nil
-}
-
-func newRoleCollector(lister rbaclisters.RoleLister) kindCollector[RBACSummary] {
-	collector := kindCollector[RBACSummary]{kind: "Role", group: "rbac.authorization.k8s.io", resource: "roles", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, namespace string) ([]RBACSummary, uint64, error) {
-			items, err := listRoles(lister, namespace)
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]RBACSummary, 0, len(items))
-			var version uint64
-			for _, r := range items {
-				if r == nil {
-					continue
-				}
-				rows = append(rows, rolepkg.BuildStreamSummary(meta, r))
-				if v := resourceVersionOrTimestamp(r); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
-}
-
-func newRoleBindingCollector(lister rbaclisters.RoleBindingLister) kindCollector[RBACSummary] {
-	collector := kindCollector[RBACSummary]{kind: "RoleBinding", group: "rbac.authorization.k8s.io", resource: "rolebindings", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, namespace string) ([]RBACSummary, uint64, error) {
-			items, err := listRoleBindings(lister, namespace)
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]RBACSummary, 0, len(items))
-			var version uint64
-			for _, binding := range items {
-				if binding == nil {
-					continue
-				}
-				rows = append(rows, rolebinding.BuildStreamSummary(meta, binding))
-				if v := resourceVersionOrTimestamp(binding); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
-}
-
-func newServiceAccountCollector(lister corelisters.ServiceAccountLister) kindCollector[RBACSummary] {
-	collector := kindCollector[RBACSummary]{kind: "ServiceAccount", group: "", resource: "serviceaccounts", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, namespace string) ([]RBACSummary, uint64, error) {
-			items, err := listServiceAccounts(lister, namespace)
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]RBACSummary, 0, len(items))
-			var version uint64
-			for _, sa := range items {
-				if sa == nil {
-					continue
-				}
-				rows = append(rows, serviceaccount.BuildStreamSummary(meta, sa))
-				if v := resourceVersionOrTimestamp(sa); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
-}
-
-func listRoles(lister rbaclisters.RoleLister, namespace string) ([]*rbacv1.Role, error) {
-	if namespace == "" {
-		return lister.List(labels.Everything())
-	}
-	return lister.Roles(namespace).List(labels.Everything())
-}
-
-func listRoleBindings(lister rbaclisters.RoleBindingLister, namespace string) ([]*rbacv1.RoleBinding, error) {
-	if namespace == "" {
-		return lister.List(labels.Everything())
-	}
-	return lister.RoleBindings(namespace).List(labels.Everything())
-}
-
-func listServiceAccounts(lister corelisters.ServiceAccountLister, namespace string) ([]*corev1.ServiceAccount, error) {
-	if namespace == "" {
-		return lister.List(labels.Everything())
-	}
-	return lister.ServiceAccounts(namespace).List(labels.Everything())
 }
 
 func sortRBACSummaries(resources []RBACSummary) {

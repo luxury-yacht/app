@@ -8,10 +8,26 @@ import (
 	"github.com/stretchr/testify/require"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
+
+// clusterRBACCollectIndexer resolves the cluster-RBAC stream descriptors to the
+// supplied test indexers (nil = kind unavailable).
+func clusterRBACCollectIndexer(roleIdx, bindingIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		switch d.Resource {
+		case "clusterroles":
+			return roleIdx
+		case "clusterrolebindings":
+			return bindingIdx
+		}
+		return nil
+	}
+}
 
 func TestClusterRBACBuilder(t *testing.T) {
 	now := time.Now()
@@ -44,8 +60,10 @@ func TestClusterRBACBuilder(t *testing.T) {
 	}
 
 	builder := &ClusterRBACBuilder{
-		roleLister:    testsupport.NewClusterRoleLister(t, role),
-		bindingLister: testsupport.NewClusterRoleBindingLister(t, binding),
+		collectIndexer: clusterRBACCollectIndexer(
+			testsupport.NewClusterIndexer(t, role),
+			testsupport.NewClusterIndexer(t, binding),
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -75,8 +93,10 @@ func TestClusterRBACBuilder(t *testing.T) {
 
 func TestClusterRBACBuilderEmpty(t *testing.T) {
 	builder := &ClusterRBACBuilder{
-		roleLister:    testsupport.NewClusterRoleLister(t /* none */),
-		bindingLister: testsupport.NewClusterRoleBindingLister(t /* none */),
+		collectIndexer: clusterRBACCollectIndexer(
+			testsupport.NewClusterIndexer[rbacv1.ClusterRole](t),
+			testsupport.NewClusterIndexer[rbacv1.ClusterRoleBinding](t),
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -101,7 +121,7 @@ func TestClusterRBACBuilderCapsLargeSnapshots(t *testing.T) {
 	}
 
 	builder := &ClusterRBACBuilder{
-		roleLister: testsupport.NewClusterRoleLister(t, roles...),
+		collectIndexer: clusterRBACCollectIndexer(testsupport.NewClusterIndexer(t, roles...), nil),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")

@@ -53,6 +53,18 @@ func newClusterIndexer[T any](t testing.TB, objs []*T) cache.Indexer {
 	return buildIndexer(t, cache.Indexers{}, objs)
 }
 
+// NewNamespacedIndexer builds a namespace-indexed cache.Indexer holding the given
+// objects. Tests use it to feed descriptor-driven typed-table snapshot builders
+// (which list from each kind's informer indexer) without a full informer factory.
+func NewNamespacedIndexer[T any](t testing.TB, objs ...*T) cache.Indexer {
+	return newNamespacedIndexer(t, objs)
+}
+
+// NewClusterIndexer builds a cluster-scoped cache.Indexer holding the given objects.
+func NewClusterIndexer[T any](t testing.TB, objs ...*T) cache.Indexer {
+	return newClusterIndexer(t, objs)
+}
+
 // NewPodLister constructs a pod lister backed by an in-memory indexer populated
 // with the supplied pod objects.
 func NewPodLister(t testing.TB, pods ...*corev1.Pod) corelisters.PodLister {

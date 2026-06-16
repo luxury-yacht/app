@@ -2,11 +2,15 @@
  * backend/refresh/snapshot/stream_collectors.go
  *
  * Shared registry-driven dispatch for the typed-table snapshot domains. A domain
- * builder declares one kindCollector per kind it serves — each collector lists
- * that kind and builds its rows by calling the kind package's stream-summary
- * builder — and loops them via collectDomainRows instead of hand-coding a
- * per-kind list+build. The per-kind row construction lives in the kind packages;
- * this file owns only the shared loop, permission gating, and source list.
+ * builder names no kind: it supplies its domain name and an indexerFor closure,
+ * then loops the stream descriptor registry (streamregistry.ForDomain) via
+ * collectDescriptorTableRows — gating each descriptor on the request's runtime
+ * permission, listing the kind's cached objects from its informer indexer, and
+ * projecting each into the domain's Row type via the descriptor's StreamRow
+ * closure. Production wires indexerFor from the shared/Gateway-API factory
+ * (factoryIndexers); tests inject their own. The per-kind row construction lives
+ * in the kind packages; this file owns only the shared loop, permission gating,
+ * and source list.
  */
 
 package snapshot
@@ -14,52 +18,130 @@ package snapshot
 import (
 	"context"
 	"fmt"
+
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/streamregistry"
+	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	informers "k8s.io/client-go/informers"
+	"k8s.io/client-go/tools/cache"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
-// kindCollector lists one kind within a typed-table domain and builds its rows.
-type kindCollector[Row any] struct {
-	kind      string
-	group     string
-	resource  string
-	available bool
-	// collect lists the kind's objects in namespace (all namespaces when empty)
-	// and returns the rows plus the max observed resource version. It is nil when
-	// the kind is unavailable (denied), in which case the kind still appears in
-	// the source list but is not listed.
-	collect func(meta ClusterMeta, namespace string) ([]Row, uint64, error)
+// factoryIndexers registers each permitted descriptor's informer from whichever
+// factory it uses (shared or Gateway-API) and returns an indexerFor that resolves
+// a descriptor to its registered indexer (nil for kinds the user may not access or
+// whose factory is unavailable). It is the production indexer source every typed-
+// table domain passes to collectDescriptorTableRows; tests inject their own.
+func factoryIndexers(
+	shared informers.SharedInformerFactory,
+	gateway gatewayinformers.SharedInformerFactory,
+	allowed domainpermissions.AllowedResources,
+	domainName string,
+) func(streamspec.Descriptor) cache.Indexer {
+	registered := map[string]cache.Indexer{}
+	for _, d := range streamregistry.ForDomain(domainName) {
+		if !allowed.Allows(d.Group, d.Resource) {
+			continue
+		}
+		switch {
+		case d.Informer != nil && shared != nil:
+			registered[d.Group+"/"+d.Resource] = d.Informer(shared).GetIndexer()
+		case d.GatewayInformer != nil && gateway != nil:
+			registered[d.Group+"/"+d.Resource] = d.GatewayInformer(gateway).GetIndexer()
+		}
+	}
+	return func(d streamspec.Descriptor) cache.Indexer {
+		return registered[d.Group+"/"+d.Resource]
+	}
 }
 
-// collectDomainRows loops the collectors, gating each on runtime permission,
-// building the per-kind source list and accumulating rows plus the max resource
-// version. It is the single dispatch every typed-table domain builder uses.
-func collectDomainRows[Row any](
+// sharedFactoryIndexers is factoryIndexers for domains served only by the shared
+// informer factory.
+func sharedFactoryIndexers(
+	factory informers.SharedInformerFactory,
+	allowed domainpermissions.AllowedResources,
+	domainName string,
+) func(streamspec.Descriptor) cache.Indexer {
+	return factoryIndexers(factory, nil, allowed, domainName)
+}
+
+// unconditionalSharedIndexers registers every shared-factory descriptor for a
+// domain UNCONDITIONALLY and returns the indexerFor. It is the production indexer
+// source for single-kind typed-table domains that register their informer
+// unconditionally (directRegistration / listWatchRegistration) and gate access at
+// the domain level — there is no per-kind allowed set to filter on. The runtime
+// permission gate in collectDescriptorTableRows still applies per request.
+func unconditionalSharedIndexers(
+	factory informers.SharedInformerFactory,
+	domainName string,
+) func(streamspec.Descriptor) cache.Indexer {
+	registered := map[string]cache.Indexer{}
+	for _, d := range streamregistry.ForDomain(domainName) {
+		if d.Informer != nil && factory != nil {
+			registered[d.Group+"/"+d.Resource] = d.Informer(factory).GetIndexer()
+		}
+	}
+	return func(d streamspec.Descriptor) cache.Indexer {
+		return registered[d.Group+"/"+d.Resource]
+	}
+}
+
+// collectDescriptorTableRows drives a typed-table snapshot domain entirely from
+// the shared stream descriptor registry: it loops every descriptor registered for
+// the domain, gates each on the request's runtime permission, lists the kind's
+// cached objects from its indexer, and projects each into the domain's Row type
+// via the descriptor's StreamRow closure. The domain builder names no kind — it
+// supplies its domain name and an indexerFor that resolves a descriptor to its
+// permitted informer indexer (nil when the kind was not registered). Cluster-scoped
+// kinds (namespace "") list the whole indexer; namespaced scopes use the namespace
+// index.
+func collectDescriptorTableRows[Row any](
 	ctx context.Context,
 	domainName string,
-	collectors []kindCollector[Row],
+	indexerFor func(streamspec.Descriptor) cache.Indexer,
 	meta ClusterMeta,
 	namespace string,
 ) ([]Row, []typedTableResourceSource, uint64, error) {
 	rows := make([]Row, 0)
-	sources := make([]typedTableResourceSource, 0, len(collectors))
+	descriptors := streamregistry.ForDomain(domainName)
+	sources := make([]typedTableResourceSource, 0, len(descriptors))
 	var version uint64
-	for _, collector := range collectors {
-		available := collector.available && runtimeResourceAllowed(ctx, domainName, collector.group, collector.resource)
+	for _, d := range descriptors {
+		available := runtimeResourceAllowed(ctx, domainName, d.Group, d.Resource)
 		sources = append(sources, typedTableResourceSource{
-			Kind:      collector.kind,
-			Group:     collector.group,
-			Resource:  collector.resource,
+			Kind:      d.Kind,
+			Group:     d.Group,
+			Resource:  d.Resource,
 			Available: available,
 		})
-		if !available || collector.collect == nil {
+		indexer := indexerFor(d)
+		if !available || indexer == nil {
 			continue
 		}
-		collected, collectorVersion, err := collector.collect(meta, namespace)
-		if err != nil {
-			return nil, nil, 0, fmt.Errorf("%s: failed to list %s: %w", domainName, collector.resource, err)
+		var objs []interface{}
+		if namespace == "" {
+			objs = indexer.List()
+		} else {
+			byNamespace, err := indexer.ByIndex(cache.NamespaceIndex, namespace)
+			if err != nil {
+				return nil, nil, 0, fmt.Errorf("%s: failed to list %s: %w", domainName, d.Resource, err)
+			}
+			objs = byNamespace
 		}
-		rows = append(rows, collected...)
-		if collectorVersion > version {
-			version = collectorVersion
+		for _, obj := range objs {
+			item, ok := obj.(metav1.Object)
+			if !ok {
+				continue
+			}
+			row, ok := d.StreamRow(meta, item).(Row)
+			if !ok {
+				continue
+			}
+			rows = append(rows, row)
+			if v := resourceVersionOrTimestamp(item); v > version {
+				version = v
+			}
 		}
 	}
 	return rows, sources, version, nil

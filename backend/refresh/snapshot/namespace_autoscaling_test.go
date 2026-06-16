@@ -1,10 +1,13 @@
 package snapshot
 
 import (
+	"context"
 	"testing"
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 // TestBuildSnapshotPopulatesTargetAPIVersion verifies that the autoscaling
@@ -59,15 +62,12 @@ func TestBuildSnapshotPopulatesTargetAPIVersion(t *testing.T) {
 		},
 	}
 
-	builder := &NamespaceAutoscalingBuilder{}
-	snap, err := builder.buildSnapshot(
-		ClusterMeta{},
-		"namespace:default",
-		typedTableQuery{},
-		[]*autoscalingv1.HorizontalPodAutoscaler{ackHPA, cnpgHPA, builtinHPA},
-	)
+	builder := &NamespaceAutoscalingBuilder{
+		collectIndexer: autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, ackHPA, cnpgHPA, builtinHPA)),
+	}
+	snap, err := builder.Build(context.Background(), "namespace:default")
 	if err != nil {
-		t.Fatalf("buildSnapshot returned error: %v", err)
+		t.Fatalf("Build returned error: %v", err)
 	}
 
 	payload, ok := snap.Payload.(NamespaceAutoscalingSnapshot)

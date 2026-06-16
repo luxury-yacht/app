@@ -529,10 +529,10 @@ func parityNamespaceConfigCase(meta ClusterMeta) parityCase {
 			}
 
 			builder := &NamespaceConfigBuilder{
-				collectors: []kindCollector[ConfigSummary]{
-					newConfigMapCollector(testsupport.NewConfigMapLister(t, cm)),
-					newSecretCollector(testsupport.NewSecretLister(t, secret)),
-				},
+				collectIndexer: configCollectIndexer(
+					testsupport.NewNamespacedIndexer(t, cm),
+					testsupport.NewNamespacedIndexer(t, secret),
+				),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
@@ -565,9 +565,11 @@ func parityNamespaceRBACCase(meta ClusterMeta) parityCase {
 			sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "default"}}
 
 			builder := &NamespaceRBACBuilder{
-				roleLister:    testsupport.NewRoleLister(t, role),
-				bindingLister: testsupport.NewRoleBindingLister(t, binding),
-				saLister:      testsupport.NewServiceAccountLister(t, sa),
+				collectIndexer: rbacCollectIndexer(
+					testsupport.NewNamespacedIndexer(t, role),
+					testsupport.NewNamespacedIndexer(t, binding),
+					testsupport.NewNamespacedIndexer(t, sa),
+				),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
@@ -600,9 +602,11 @@ func parityNamespaceQuotasCase(meta ClusterMeta) parityCase {
 			}
 
 			builder := &NamespaceQuotasBuilder{
-				quotaLister: testsupport.NewResourceQuotaLister(t, quota),
-				limitLister: testsupport.NewLimitRangeLister(t, limit),
-				pdbLister:   testsupport.NewPodDisruptionBudgetLister(t, pdb),
+				collectIndexer: quotasCollectIndexer(
+					testsupport.NewNamespacedIndexer(t, quota),
+					testsupport.NewNamespacedIndexer(t, limit),
+					testsupport.NewNamespacedIndexer(t, pdb),
+				),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
@@ -635,7 +639,7 @@ func parityNamespaceStorageCase(meta ClusterMeta) parityCase {
 			}
 
 			builder := &NamespaceStorageBuilder{
-				pvcLister: testsupport.NewPersistentVolumeClaimLister(t, pvc),
+				collectIndexer: storageCollectIndexer(testsupport.NewNamespacedIndexer(t, pvc)),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
@@ -667,7 +671,7 @@ func parityNamespaceAutoscalingCase(meta ClusterMeta) parityCase {
 			}
 
 			builder := &NamespaceAutoscalingBuilder{
-				hpaLister: testsupport.NewHorizontalPodAutoscalerLister(t, hpa),
+				collectIndexer: autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, hpa)),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
@@ -766,8 +770,10 @@ func parityClusterRBACCase(meta ClusterMeta) parityCase {
 			}
 
 			builder := &ClusterRBACBuilder{
-				roleLister:    testsupport.NewClusterRoleLister(t, cr),
-				bindingLister: testsupport.NewClusterRoleBindingLister(t, crb),
+				collectIndexer: clusterRBACCollectIndexer(
+					testsupport.NewClusterIndexer(t, cr),
+					testsupport.NewClusterIndexer(t, crb),
+				),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
 			require.NoError(t, err)
@@ -800,7 +806,7 @@ func parityClusterStorageCase(meta ClusterMeta) parityCase {
 			}
 
 			builder := &ClusterStorageBuilder{
-				pvLister: testsupport.NewPersistentVolumeLister(t, pv),
+				collectIndexer: clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pv)),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
 			require.NoError(t, err)
@@ -833,14 +839,17 @@ func parityClusterConfigCase(meta ClusterMeta) parityCase {
 				ObjectMeta: metav1.ObjectMeta{Name: "mw"},
 			}
 
-			// GatewayClass uses a lister type outside testsupport's helpers;
-			// the projector is exercised by its own unit test and shares the
-			// same call site as the other cluster-config classes.
+			// GatewayClass is omitted (nil indexer) here; its projector is
+			// exercised by its own unit test and shares the same descriptor
+			// dispatch as the other cluster-config classes.
 			builder := &ClusterConfigBuilder{
-				storageClassLister:      testsupport.NewStorageClassLister(t, sc),
-				ingressClassLister:      testsupport.NewIngressClassLister(t, ic),
-				validatingWebhookLister: testsupport.NewValidatingWebhookLister(t, vwh),
-				mutatingWebhookLister:   testsupport.NewMutatingWebhookLister(t, mwh),
+				collectIndexer: clusterConfigCollectIndexer(
+					testsupport.NewClusterIndexer(t, sc),
+					testsupport.NewClusterIndexer(t, ic),
+					nil,
+					testsupport.NewClusterIndexer(t, vwh),
+					testsupport.NewClusterIndexer(t, mwh),
+				),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
 			require.NoError(t, err)

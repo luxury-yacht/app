@@ -6,30 +6,23 @@ import (
 	"sort"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
-	rbaclisters "k8s.io/client-go/listers/rbac/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
-	"github.com/luxury-yacht/app/backend/resources/clusterrole"
-	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
+	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 )
 
 const clusterRBACDomainName = "cluster-rbac"
 
-// ClusterRBACPermissions indicates which resources should be included in the domain.
-type ClusterRBACPermissions struct {
-	IncludeClusterRoles        bool
-	IncludeClusterRoleBindings bool
-}
-
-// ClusterRBACBuilder produces cluster-level RBAC snapshots.
+// ClusterRBACBuilder produces cluster-level RBAC snapshots by listing each
+// registered kind from its informer indexer.
 type ClusterRBACBuilder struct {
-	roleLister    rbaclisters.ClusterRoleLister
-	bindingLister rbaclisters.ClusterRoleBindingLister
+	collectIndexer func(streamspec.Descriptor) cache.Indexer
 }
 
 // ClusterRBACSnapshot is the payload returned to the frontend. It embeds the
@@ -61,17 +54,13 @@ type ClusterRBACEntry = streamrows.ClusterRBACEntry
 func RegisterClusterRBACDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
-	perms ClusterRBACPermissions,
+	allowed domainpermissions.AllowedResources,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	builder := &ClusterRBACBuilder{}
-	if perms.IncludeClusterRoles {
-		builder.roleLister = factory.Rbac().V1().ClusterRoles().Lister()
-	}
-	if perms.IncludeClusterRoleBindings {
-		builder.bindingLister = factory.Rbac().V1().ClusterRoleBindings().Lister()
+	builder := &ClusterRBACBuilder{
+		collectIndexer: sharedFactoryIndexers(factory, allowed, clusterRBACDomainName),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          clusterRBACDomainName,
@@ -87,11 +76,7 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 	if err != nil {
 		return nil, err
 	}
-	collectors := []kindCollector[ClusterRBACEntry]{
-		newClusterRoleCollector(b.roleLister),
-		newClusterRoleBindingCollector(b.bindingLister),
-	}
-	entries, sources, version, err := collectDomainRows(ctx, clusterRBACDomainName, collectors, meta, "")
+	entries, sources, version, err := collectDescriptorTableRows[ClusterRBACEntry](ctx, clusterRBACDomainName, b.collectIndexer, meta, "")
 	if err != nil {
 		return nil, err
 	}
@@ -132,54 +117,4 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		},
 		Stats: resolved.Stats,
 	}, nil
-}
-
-func newClusterRoleCollector(lister rbaclisters.ClusterRoleLister) kindCollector[ClusterRBACEntry] {
-	collector := kindCollector[ClusterRBACEntry]{kind: "ClusterRole", group: "rbac.authorization.k8s.io", resource: "clusterroles", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterRBACEntry, uint64, error) {
-			items, err := lister.List(labels.Everything())
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]ClusterRBACEntry, 0, len(items))
-			var version uint64
-			for _, role := range items {
-				if role == nil {
-					continue
-				}
-				rows = append(rows, clusterrole.BuildStreamSummary(meta, role))
-				if v := resourceVersionOrTimestamp(role); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
-}
-
-func newClusterRoleBindingCollector(lister rbaclisters.ClusterRoleBindingLister) kindCollector[ClusterRBACEntry] {
-	collector := kindCollector[ClusterRBACEntry]{kind: "ClusterRoleBinding", group: "rbac.authorization.k8s.io", resource: "clusterrolebindings", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, _ string) ([]ClusterRBACEntry, uint64, error) {
-			items, err := lister.List(labels.Everything())
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]ClusterRBACEntry, 0, len(items))
-			var version uint64
-			for _, binding := range items {
-				if binding == nil {
-					continue
-				}
-				rows = append(rows, clusterrolebinding.BuildStreamSummary(meta, binding))
-				if v := resourceVersionOrTimestamp(binding); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
 }

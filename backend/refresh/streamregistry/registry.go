@@ -14,9 +14,11 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/gateway"
 	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
 	"github.com/luxury-yacht/app/backend/resources/grpcroute"
+	"github.com/luxury-yacht/app/backend/resources/hpa"
 	"github.com/luxury-yacht/app/backend/resources/httproute"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
@@ -30,6 +32,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 	"github.com/luxury-yacht/app/backend/resources/role"
 	"github.com/luxury-yacht/app/backend/resources/rolebinding"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"github.com/luxury-yacht/app/backend/resources/tlsroute"
@@ -63,4 +66,20 @@ var All = []streamspec.Descriptor{
 	referencegrant.StreamDescriptor,
 	backendtlspolicy.StreamDescriptor,
 	gatewayclass.StreamDescriptor,
+	configmap.StreamDescriptor,
+	secretpkg.StreamDescriptor,
+	hpa.StreamDescriptor,
+}
+
+// ForDomain returns the descriptors whose Domain matches, preserving registry
+// order. Snapshot typed-table domains loop this to collect their kinds instead of
+// hand-listing them.
+func ForDomain(domain string) []streamspec.Descriptor {
+	var out []streamspec.Descriptor
+	for _, d := range All {
+		if d.Domain == domain {
+			out = append(out, d)
+		}
+	}
+	return out
 }

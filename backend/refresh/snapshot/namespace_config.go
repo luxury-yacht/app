@@ -6,17 +6,15 @@ import (
 	"sort"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
-	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
-	"github.com/luxury-yacht/app/backend/resources/configmap"
-	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 )
 
 const (
@@ -24,17 +22,12 @@ const (
 	errNamespaceConfigScopeRequired = "namespace scope is required"
 )
 
-// NamespaceConfigPermissions indicates which resources should be included in the domain.
-type NamespaceConfigPermissions struct {
-	IncludeConfigMaps bool
-	IncludeSecrets    bool
-}
-
-// NamespaceConfigBuilder constructs config summaries for a namespace. Each kind
-// it serves (ConfigMap, Secret) contributes a collector that calls the kind
-// package's stream-summary builder; Build loops them via collectDomainRows.
+// NamespaceConfigBuilder constructs config summaries for a namespace by listing
+// each registered kind (ConfigMap, Secret) from its informer indexer and
+// projecting it via the kind package's stream-summary builder; Build loops the
+// stream descriptor registry via collectDescriptorTableRows.
 type NamespaceConfigBuilder struct {
-	collectors []kindCollector[ConfigSummary]
+	collectIndexer func(streamspec.Descriptor) cache.Indexer
 }
 
 // NamespaceConfigSnapshot payload returned to the frontend. It embeds the
@@ -61,30 +54,19 @@ func namespaceConfigQueryCapabilities() ResourceQueryCapabilities {
 type ConfigSummary = streamrows.ConfigSummary
 
 // RegisterNamespaceConfigDomain registers the namespace config domain.
-// Only listers for permitted resources are wired; denied resources contribute a
-// collector with available=false so they still appear in the source list (for
-// query capabilities/issues) but are not listed.
+// Only indexers for permitted resources are wired; denied resources are skipped
+// so they still appear in the source list (for query capabilities/issues) but
+// are not listed.
 func RegisterNamespaceConfigDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
-	perms NamespaceConfigPermissions,
+	allowed domainpermissions.AllowedResources,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	var configMaps corelisters.ConfigMapLister
-	if perms.IncludeConfigMaps {
-		configMaps = factory.Core().V1().ConfigMaps().Lister()
-	}
-	var secrets corelisters.SecretLister
-	if perms.IncludeSecrets {
-		secrets = factory.Core().V1().Secrets().Lister()
-	}
 	builder := &NamespaceConfigBuilder{
-		collectors: []kindCollector[ConfigSummary]{
-			newConfigMapCollector(configMaps),
-			newSecretCollector(secrets),
-		},
+		collectIndexer: sharedFactoryIndexers(factory, allowed, namespaceConfigDomainName),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceConfigDomainName,
@@ -92,75 +74,7 @@ func RegisterNamespaceConfigDomain(
 	})
 }
 
-// newConfigMapCollector returns the ConfigMap collector. A nil lister marks the
-// kind unavailable (denied): it still appears in the source list but is not listed.
-func newConfigMapCollector(lister corelisters.ConfigMapLister) kindCollector[ConfigSummary] {
-	collector := kindCollector[ConfigSummary]{kind: "ConfigMap", group: "", resource: "configmaps", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, namespace string) ([]ConfigSummary, uint64, error) {
-			items, err := listConfigMaps(lister, namespace)
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]ConfigSummary, 0, len(items))
-			var version uint64
-			for _, cm := range items {
-				if cm == nil {
-					continue
-				}
-				rows = append(rows, configmap.BuildStreamSummary(meta, cm))
-				if v := resourceVersionOrTimestamp(cm); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
-}
-
-// newSecretCollector returns the Secret collector. A nil lister marks the kind
-// unavailable (denied): it still appears in the source list but is not listed.
-func newSecretCollector(lister corelisters.SecretLister) kindCollector[ConfigSummary] {
-	collector := kindCollector[ConfigSummary]{kind: "Secret", group: "", resource: "secrets", available: lister != nil}
-	if lister != nil {
-		collector.collect = func(meta ClusterMeta, namespace string) ([]ConfigSummary, uint64, error) {
-			items, err := listSecrets(lister, namespace)
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]ConfigSummary, 0, len(items))
-			var version uint64
-			for _, sec := range items {
-				if sec == nil {
-					continue
-				}
-				rows = append(rows, secretpkg.BuildStreamSummary(meta, sec))
-				if v := resourceVersionOrTimestamp(sec); v > version {
-					version = v
-				}
-			}
-			return rows, version, nil
-		}
-	}
-	return collector
-}
-
-func listConfigMaps(lister corelisters.ConfigMapLister, namespace string) ([]*corev1.ConfigMap, error) {
-	if namespace == "" {
-		return lister.List(labels.Everything())
-	}
-	return lister.ConfigMaps(namespace).List(labels.Everything())
-}
-
-func listSecrets(lister corelisters.SecretLister, namespace string) ([]*corev1.Secret, error) {
-	if namespace == "" {
-		return lister.List(labels.Everything())
-	}
-	return lister.Secrets(namespace).List(labels.Everything())
-}
-
-// Build assembles the namespace-config rows by looping the kind collectors.
+// Build assembles the namespace-config rows by looping the stream descriptors.
 func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
@@ -173,7 +87,7 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, err
 	}
 
-	resources, sources, version, err := collectDomainRows(ctx, namespaceConfigDomainName, b.collectors, meta, parsedScope.Namespace)
+	resources, sources, version, err := collectDescriptorTableRows[ConfigSummary](ctx, namespaceConfigDomainName, b.collectIndexer, meta, parsedScope.Namespace)
 	if err != nil {
 		return nil, err
 	}

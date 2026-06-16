@@ -6,16 +6,14 @@ import (
 	"sort"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
-	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
-	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
+	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 )
 
 const (
@@ -23,9 +21,11 @@ const (
 	errNamespaceStorageScopeRequired = "namespace scope is required"
 )
 
-// NamespaceStorageBuilder constructs PVC summaries for a namespace.
+// NamespaceStorageBuilder constructs PVC summaries for a namespace by listing the
+// kind's informer indexer and projecting it via the pvc package's stream-summary
+// builder; Build loops the stream descriptor registry via collectDescriptorTableRows.
 type NamespaceStorageBuilder struct {
-	pvcLister corelisters.PersistentVolumeClaimLister
+	collectIndexer func(streamspec.Descriptor) cache.Indexer
 }
 
 // NamespaceStorageSnapshot payload for storage tab.
@@ -58,7 +58,7 @@ func RegisterNamespaceStorageDomain(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &NamespaceStorageBuilder{
-		pvcLister: factory.Core().V1().PersistentVolumeClaims().Lister(),
+		collectIndexer: unconditionalSharedIndexers(factory, namespaceStorageDomainName),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceStorageDomainName,
@@ -79,40 +79,9 @@ func (b *NamespaceStorageBuilder) Build(ctx context.Context, scope string) (*ref
 		return nil, err
 	}
 
-	pvcs, err := b.listPVCs(parsedScope.Namespace)
+	resources, sources, version, err := collectDescriptorTableRows[StorageSummary](ctx, namespaceStorageDomainName, b.collectIndexer, meta, parsedScope.Namespace)
 	if err != nil {
 		return nil, fmt.Errorf("namespace storage: failed to list pvcs: %w", err)
-	}
-
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, pvcs)
-}
-
-func (b *NamespaceStorageBuilder) listPVCs(namespace string) ([]*corev1.PersistentVolumeClaim, error) {
-	if namespace == "" {
-		return b.pvcLister.List(labels.Everything())
-	}
-	return b.pvcLister.PersistentVolumeClaims(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceStorageBuilder) buildSnapshot(
-	meta ClusterMeta,
-	namespace string,
-	query typedTableQuery,
-	pvcs []*corev1.PersistentVolumeClaim,
-) (*refresh.Snapshot, error) {
-	resources := make([]StorageSummary, 0, len(pvcs))
-	var version uint64
-
-	// The pvc package owns the row builder; the full-snapshot path here and
-	// the streaming/incremental path both call it so they cannot drift.
-	for _, pvc := range pvcs {
-		if pvc == nil {
-			continue
-		}
-		resources = append(resources, persistentvolumeclaim.BuildStreamSummary(meta, pvc))
-		if v := resourceVersionOrTimestamp(pvc); v > version {
-			version = v
-		}
 	}
 
 	sort.Slice(resources, func(i, j int) bool {
@@ -127,15 +96,15 @@ func (b *NamespaceStorageBuilder) buildSnapshot(
 		resources,
 		query,
 		storageTableQueryAdapter(),
-		namespaceStorageQueryCapabilities(),
+		capabilitiesWithAvailableKinds(namespaceStorageQueryCapabilities(), sources),
 		config.SnapshotNamespaceStorageEntryLimit,
 		"storage resources",
 		func(resource StorageSummary) string { return resource.Kind },
-		nil,
+		typedTableQueryResourceIssues(ctx, namespaceStorageDomainName, query, sources),
 	)
 	return &refresh.Snapshot{
 		Domain:  namespaceStorageDomainName,
-		Scope:   namespace,
+		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
 		Version: version,
 		Payload: NamespaceStorageSnapshot{
 			ClusterMeta:           meta,

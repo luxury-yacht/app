@@ -6,22 +6,23 @@ import (
 	"sort"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
-	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
-	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 )
 
 const clusterStorageDomainName = "cluster-storage"
 
-// ClusterStorageBuilder constructs PersistentVolume summaries.
+// ClusterStorageBuilder constructs PersistentVolume summaries by listing the
+// kind's informer indexer and projecting it via the pv package's stream-summary
+// builder; Build loops the stream descriptor registry via collectDescriptorTableRows.
 type ClusterStorageBuilder struct {
-	pvLister corelisters.PersistentVolumeLister
+	collectIndexer func(streamspec.Descriptor) cache.Indexer
 }
 
 // ClusterStorageSnapshot is the payload exposed to the frontend. It embeds the
@@ -58,7 +59,7 @@ func RegisterClusterStorageDomain(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &ClusterStorageBuilder{
-		pvLister: factory.Core().V1().PersistentVolumes().Lister(),
+		collectIndexer: unconditionalSharedIndexers(factory, clusterStorageDomainName),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          clusterStorageDomainName,
@@ -68,31 +69,16 @@ func RegisterClusterStorageDomain(
 
 // Build creates a snapshot of persistent volumes.
 func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	if b.pvLister == nil {
-		return nil, fmt.Errorf("cluster storage: persistent volume lister unavailable")
-	}
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
 	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterStorageDomainName, "")
 	if err != nil {
 		return nil, err
 	}
-	pvs, err := b.pvLister.List(labels.Everything())
+
+	entries, sources, version, err := collectDescriptorTableRows[ClusterStorageEntry](ctx, clusterStorageDomainName, b.collectIndexer, meta, "")
 	if err != nil {
 		return nil, fmt.Errorf("cluster storage: failed to list persistent volumes: %w", err)
-	}
-	entries := make([]ClusterStorageEntry, 0, len(pvs))
-	var version uint64
-	// The pv package owns the row builder; the full-snapshot path here and the
-	// streaming/incremental path both call it so they cannot drift.
-	for _, pv := range pvs {
-		if pv == nil {
-			continue
-		}
-		entries = append(entries, persistentvolume.BuildStreamSummary(meta, pv))
-		if v := resourceVersionOrTimestamp(pv); v > version {
-			version = v
-		}
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -104,11 +90,11 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 		entries,
 		query,
 		clusterStorageTableQueryAdapter(),
-		clusterStorageQueryCapabilities(),
+		capabilitiesWithAvailableKinds(clusterStorageQueryCapabilities(), sources),
 		config.SnapshotClusterStorageEntryLimit,
 		"persistent volumes",
 		func(entry ClusterStorageEntry) string { return entry.Kind },
-		nil,
+		typedTableQueryResourceIssues(ctx, clusterStorageDomainName, query, sources),
 	)
 	// The window snapshot is the canonical unscoped refresh payload; only the
 	// query page publishes the request scope.

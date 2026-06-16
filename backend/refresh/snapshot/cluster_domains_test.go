@@ -12,11 +12,33 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
+
+// clusterConfigCollectIndexer resolves the cluster-config stream descriptors to
+// the supplied test indexers (nil = kind unavailable).
+func clusterConfigCollectIndexer(scIdx, icIdx, gcIdx, vwhIdx, mwhIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		switch d.Resource {
+		case "storageclasses":
+			return scIdx
+		case "ingressclasses":
+			return icIdx
+		case "gatewayclasses":
+			return gcIdx
+		case "validatingwebhookconfigurations":
+			return vwhIdx
+		case "mutatingwebhookconfigurations":
+			return mwhIdx
+		}
+		return nil
+	}
+}
 
 func TestClusterConfigBuilder(t *testing.T) {
 	now := time.Now()
@@ -64,19 +86,25 @@ func TestClusterConfigBuilder(t *testing.T) {
 	}
 
 	builder := &ClusterConfigBuilder{
-		storageClassLister:      testsupport.NewStorageClassLister(t, storageClass),
-		ingressClassLister:      testsupport.NewIngressClassLister(t, ingressClass),
-		validatingWebhookLister: testsupport.NewValidatingWebhookLister(t, validatingWebhook),
-		mutatingWebhookLister:   testsupport.NewMutatingWebhookLister(t, mutatingWebhook),
-		perms: ClusterConfigPermissions{
-			IncludeStorageClasses:     true,
-			IncludeIngressClasses:     true,
-			IncludeValidatingWebhooks: true,
-			IncludeMutatingWebhooks:   true,
-		},
+		collectIndexer: clusterConfigCollectIndexer(
+			testsupport.NewClusterIndexer(t, storageClass),
+			testsupport.NewClusterIndexer(t, ingressClass),
+			nil,
+			testsupport.NewClusterIndexer(t, validatingWebhook),
+			testsupport.NewClusterIndexer(t, mutatingWebhook),
+		),
 	}
 
-	snapshot, err := builder.Build(context.Background(), "")
+	// GatewayClass is omitted from the allowed set so it does not appear among the
+	// available kinds (the indexer is nil and the runtime permission denies it).
+	ctx := domainpermissions.WithAllowedResources(context.Background(), clusterConfigDomainName, domainpermissions.AllowedResources{
+		"storage.k8s.io/storageclasses":                                true,
+		"networking.k8s.io/ingressclasses":                             true,
+		"admissionregistration.k8s.io/validatingwebhookconfigurations": true,
+		"admissionregistration.k8s.io/mutatingwebhookconfigurations":   true,
+	})
+
+	snapshot, err := builder.Build(ctx, "")
 	require.NoError(t, err)
 	require.Equal(t, clusterConfigDomainName, snapshot.Domain)
 	require.Equal(t, uint64(24), snapshot.Version)
@@ -117,8 +145,10 @@ func TestClusterConfigBuilderCapsLargeSnapshots(t *testing.T) {
 	}
 
 	builder := &ClusterConfigBuilder{
-		storageClassLister: testsupport.NewStorageClassLister(t, classes...),
-		perms:              ClusterConfigPermissions{IncludeStorageClasses: true},
+		collectIndexer: clusterConfigCollectIndexer(
+			testsupport.NewClusterIndexer(t, classes...),
+			nil, nil, nil, nil,
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -140,10 +170,11 @@ func TestClusterConfigBuilderQueryReportsPartialAllowedResources(t *testing.T) {
 		Spec: networkingv1.IngressClassSpec{Controller: "nginx.org/ingress-controller"},
 	}
 	builder := &ClusterConfigBuilder{
-		ingressClassLister: testsupport.NewIngressClassLister(t, ingressClass),
-		perms: ClusterConfigPermissions{
-			IncludeIngressClasses: true,
-		},
+		collectIndexer: clusterConfigCollectIndexer(
+			nil,
+			testsupport.NewClusterIndexer(t, ingressClass),
+			nil, nil, nil,
+		),
 	}
 	ctx := domainpermissions.WithAllowedResources(context.Background(), clusterConfigDomainName, domainpermissions.AllowedResources{
 		"networking.k8s.io/ingressclasses": false,
@@ -184,7 +215,7 @@ func TestClusterStorageBuilder(t *testing.T) {
 	}
 
 	builder := &ClusterStorageBuilder{
-		pvLister: testsupport.NewPersistentVolumeLister(t, pv),
+		collectIndexer: clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pv)),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -221,7 +252,7 @@ func TestClusterStorageBuilderCapsLargeSnapshots(t *testing.T) {
 	}
 
 	builder := &ClusterStorageBuilder{
-		pvLister: testsupport.NewPersistentVolumeLister(t, pvs...),
+		collectIndexer: clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pvs...)),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
