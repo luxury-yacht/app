@@ -18,7 +18,7 @@ func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 	}
 	var edges []objectmapspec.Edge
 	if className, tracedBy := ingressClassName(ing); className != "" {
-		edges = append(edges, objectmapspec.Edge{Type: objectmapspec.EdgeUses, Label: "uses class", TracedBy: tracedBy, IngressClass: className})
+		edges = append(edges, objectmapspec.Edge{Type: objectmapspec.EdgeUses, Label: "uses class", TracedBy: tracedBy, CoreRef: &objectmapspec.CoreRef{Group: "networking.k8s.io", Version: "v1", Kind: "IngressClass", Name: className}})
 	}
 	for _, name := range ingressBackendServices(ing) {
 		edges = append(edges, objectmapspec.Edge{Type: objectmapspec.EdgeRoutes, TracedBy: "spec.backend.service", CoreRef: &objectmapspec.CoreRef{Version: "v1", Kind: "Service", Namespace: ing.Namespace, Name: name}})

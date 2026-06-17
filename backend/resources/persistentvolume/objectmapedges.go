@@ -12,5 +12,5 @@ func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 	if !ok || pv.Spec.StorageClassName == "" {
 		return nil
 	}
-	return []objectmapspec.Edge{{Type: objectmapspec.EdgeStorageClass, StorageClass: pv.Spec.StorageClassName}}
+	return []objectmapspec.Edge{{Type: objectmapspec.EdgeStorageClass, CoreRef: &objectmapspec.CoreRef{Group: "storage.k8s.io", Version: "v1", Kind: "StorageClass", Name: pv.Spec.StorageClassName}}}
 }

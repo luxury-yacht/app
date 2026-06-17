@@ -29,10 +29,13 @@ const (
 	EdgeStorageClass  = "storage-class"
 )
 
-// CoreRef identifies a graph node by group-less GVK + namespace + name (the
-// snapshot resolver looks it up by identity). Namespace is empty for cluster-
-// scoped targets (e.g. a PersistentVolume).
+// CoreRef identifies a graph node by GVK + namespace + name (the snapshot resolver
+// looks it up by identity). Group is empty for core-group targets (Pod, Service,
+// ConfigMap, …) and set for others a kind references by name (e.g. a PVC's
+// StorageClass, an Ingress's IngressClass). Namespace is empty for cluster-scoped
+// targets (e.g. a PersistentVolume or StorageClass).
 type CoreRef struct {
+	Group     string
 	Version   string
 	Kind      string
 	Namespace string
@@ -50,8 +53,6 @@ type Edge struct {
 
 	Link                resourcemodel.ResourceLink // default target
 	CoreRef             *CoreRef                   // resolved by identity
-	StorageClass        string                     // StorageClass by name
-	IngressClass        string                     // IngressClass by name
 	PodsSelector        map[string]string          // pods matching this selector in the source namespace
 	PodsLabelSelector   *metav1.LabelSelector      // pods matching this label selector in the source namespace
 	ServiceSlices       bool                       // endpoint slices for this service (source namespace + name)

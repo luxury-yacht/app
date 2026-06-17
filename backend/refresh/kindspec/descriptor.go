@@ -24,6 +24,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ObjectMapGraph holds how a kind behaves in the object-map graph traversal — its
+// graph ROLE, not its edges. The object-map walker reads these instead of
+// hard-coding kind names: ScalableWorkload kinds carry HPA-managed action facts;
+// DirectionalTraversal kinds are graph leaves walked one-way; StopsReverseExpansion
+// kinds (cluster-scoped "class" resources) halt reverse namespace-map expansion.
+type ObjectMapGraph struct {
+	ScalableWorkload      bool
+	DirectionalTraversal  bool
+	StopsReverseExpansion bool
+}
+
 // CatalogSource names how the object catalog lists a kind's objects.
 type CatalogSource int
 
@@ -78,4 +89,8 @@ type Descriptor struct {
 	// Binding is the typed detail-service / app-binding spec; nil when the kind's
 	// detail is served by a bespoke path (e.g. Pod, CustomResourceDefinition, Helm).
 	Binding *appbinding.Spec
+
+	// Graph is the kind's role in the object-map graph traversal (zero value for
+	// kinds with no special graph behaviour).
+	Graph ObjectMapGraph
 }

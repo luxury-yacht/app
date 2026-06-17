@@ -14,6 +14,8 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
+	"github.com/luxury-yacht/app/backend/refresh/kindspec"
 	"github.com/luxury-yacht/app/backend/refresh/objectmap"
 	"github.com/luxury-yacht/app/backend/refresh/objectmapspec"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -551,10 +553,20 @@ func (idx *objectMapIndex) enrichActionFacts() {
 	}
 }
 
+// objectMapGraphByKind is each kind's object-map graph role, keyed by Kind, from
+// the single registry — so the traversal heuristics below name no kind.
+var objectMapGraphByKind = func() map[string]kindspec.ObjectMapGraph {
+	m := make(map[string]kindspec.ObjectMapGraph, len(kindregistry.All))
+	for _, d := range kindregistry.All {
+		m[d.Identity.Kind] = d.Graph
+	}
+	return m
+}()
+
 func isObjectMapScalableWorkload(ref ObjectMapReference) bool {
-	return ref.Group == "apps" &&
-		ref.Version == "v1" &&
-		(ref.Kind == "Deployment" || ref.Kind == "StatefulSet" || ref.Kind == "ReplicaSet")
+	// The apps/v1 guard preserves the historical scope (a same-named CRD is not a
+	// scalable workload); the registry supplies the per-kind classification.
+	return ref.Group == "apps" && ref.Version == "v1" && objectMapGraphByKind[ref.Kind].ScalableWorkload
 }
 
 func objectMapActionTargetKey(ref ObjectMapReference) string {
@@ -908,24 +920,7 @@ func canTraverseObjectMapReverse(edgeType string, currentDepth int) bool {
 }
 
 func usesDirectionalObjectMapTraversal(ref ObjectMapReference) bool {
-	switch ref.Kind {
-	case "Pod",
-		"Service",
-		"EndpointSlice",
-		"PersistentVolumeClaim",
-		"PersistentVolume",
-		"StorageClass",
-		"ConfigMap",
-		"Secret",
-		"ServiceAccount",
-		"Node",
-		"PodDisruptionBudget",
-		"NetworkPolicy",
-		"IngressClass":
-		return true
-	default:
-		return false
-	}
+	return objectMapGraphByKind[ref.Kind].DirectionalTraversal
 }
 
 // isNamespaceMapSupportedRecord reports whether a record is a node the object map
@@ -936,12 +931,7 @@ func isNamespaceMapSupportedRecord(record *objectMapRecord) bool {
 }
 
 func stopsNamespaceMapReverseExpansion(ref ObjectMapReference) bool {
-	switch ref.Kind {
-	case "StorageClass", "IngressClass", "GatewayClass":
-		return true
-	default:
-		return false
-	}
+	return objectMapGraphByKind[ref.Kind].StopsReverseExpansion
 }
 
 func compareObjectMapRefs(a, b ObjectMapReference) int {
@@ -1056,18 +1046,6 @@ func (idx *objectMapIndex) resolveCoreObjectRef(defaultNamespace string, ref *co
 	return idx.byIdent[objectMapIdentityKey(namespace, group, version, ref.Kind, ref.Name)]
 }
 
-func (idx *objectMapIndex) findCore(namespace, version, kind, name string) *objectMapRecord {
-	return idx.byIdent[objectMapIdentityKey(namespace, "", version, kind, name)]
-}
-
-func (idx *objectMapIndex) findStorageClass(name string) *objectMapRecord {
-	return idx.byIdent[objectMapIdentityKey("", "storage.k8s.io", "v1", "StorageClass", name)]
-}
-
-func (idx *objectMapIndex) findIngressClass(name string) *objectMapRecord {
-	return idx.byIdent[objectMapIdentityKey("", "networking.k8s.io", "v1", "IngressClass", name)]
-}
-
 func (idx *objectMapIndex) recordForResourceLink(link resourcemodel.ResourceLink) *objectMapRecord {
 	if link.Ref != nil {
 		return idx.byIdent[objectMapIdentityKey(link.Ref.Namespace, link.Ref.Group, link.Ref.Version, link.Ref.Kind, link.Ref.Name)]
@@ -1159,11 +1137,7 @@ func labelsMatch(selector, labels map[string]string) bool {
 func (idx *objectMapIndex) resolveEdgeTargets(source *objectMapRecord, e objectmapspec.Edge) []*objectMapRecord {
 	switch {
 	case e.CoreRef != nil:
-		return []*objectMapRecord{idx.findCore(e.CoreRef.Namespace, e.CoreRef.Version, e.CoreRef.Kind, e.CoreRef.Name)}
-	case e.StorageClass != "":
-		return []*objectMapRecord{idx.findStorageClass(e.StorageClass)}
-	case e.IngressClass != "":
-		return []*objectMapRecord{idx.findIngressClass(e.IngressClass)}
+		return []*objectMapRecord{idx.byIdent[objectMapIdentityKey(e.CoreRef.Namespace, e.CoreRef.Group, e.CoreRef.Version, e.CoreRef.Kind, e.CoreRef.Name)]}
 	case e.PodsSelector != nil:
 		return idx.matchingPods(source.ref.Namespace, e.PodsSelector)
 	case e.PodsLabelSelector != nil:

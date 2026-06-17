@@ -13,4 +13,5 @@ var Descriptor = kindspec.Descriptor{
 	Collector:       &ObjectMapNode,
 	Edges:           ObjectMapEdges,
 	Binding:         &DetailBinding,
+	Graph:           kindspec.ObjectMapGraph{ScalableWorkload: true},
 }

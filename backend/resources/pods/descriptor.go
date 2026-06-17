@@ -12,4 +12,5 @@ var Descriptor = kindspec.Descriptor{
 	DetailCacheable: true,
 	Collector:       &ObjectMapNode,
 	Edges:           ObjectMapEdges,
+	Graph:           kindspec.ObjectMapGraph{DirectionalTraversal: true},
 }

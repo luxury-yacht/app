@@ -22,6 +22,25 @@
 > now sources its group/version/kind/resource from `Identity` (no literal second
 > copy). Adding a kind = create `resources/<kind>/` (with its `descriptor.go`) +
 > one line in `kindregistry.All`.
+>
+> Object-map internals also moved off hard-coded kind names: the graph-role
+> classifications (scalable-workload / directional-traversal / stops-reverse-
+> expansion) are now a `kindspec.ObjectMapGraph` facet on each kind's Descriptor,
+> and the StorageClass/IngressClass byName edge targets are declared by the source
+> kinds (PVC/PV/Ingress) via a `CoreRef{Group,…}` instead of resolvers hard-coded in
+> `object_map.go`.
+>
+> **What is NOT registry-driven (deliberately — these are not "kind definition", so
+> not among the 9 surfaces):** per-kind *operations* (`workload_actions.go`/
+> `workload_rollback.go` scale/restart/trigger, port-forward, log streaming — each a
+> distinct typed K8s API call); cross-kind *relationship* helpers (`resourcemodel`
+> reverse-link index, and the object-map selector/slice resolution primitives where
+> the target kind is intrinsic to the relationship type); the catalog's
+> `buildSummaryActionFacts` projection (overlaps the object-map's registry-driven
+> action facts — a feature-projection done in two places); and workload-metrics
+> streaming (no shared informer for metrics). Converting operations and unifying the
+> action-facts projection are tractable follow-ups but are larger refactors outside
+> the plan's 9 named surfaces.
 
 
 

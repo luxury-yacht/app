@@ -17,7 +17,7 @@ func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 		return []objectmapspec.Edge{{Type: objectmapspec.EdgeVolumeBinding, CoreRef: &objectmapspec.CoreRef{Version: "v1", Kind: "PersistentVolume", Name: pvc.Spec.VolumeName}}}
 	}
 	if pvc.Spec.StorageClassName != nil && *pvc.Spec.StorageClassName != "" {
-		return []objectmapspec.Edge{{Type: objectmapspec.EdgeStorageClass, StorageClass: *pvc.Spec.StorageClassName}}
+		return []objectmapspec.Edge{{Type: objectmapspec.EdgeStorageClass, CoreRef: &objectmapspec.CoreRef{Group: "storage.k8s.io", Version: "v1", Kind: "StorageClass", Name: *pvc.Spec.StorageClassName}}}
 	}
 	return nil
 }
