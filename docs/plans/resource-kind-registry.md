@@ -30,17 +30,23 @@
 > kinds (PVC/PV/Ingress) via a `CoreRef{Group,…}` instead of resolvers hard-coded in
 > `object_map.go`.
 >
-> **What is NOT registry-driven (deliberately — these are not "kind definition", so
-> not among the 9 surfaces):** per-kind *operations* (`workload_actions.go`/
-> `workload_rollback.go` scale/restart/trigger, port-forward, log streaming — each a
-> distinct typed K8s API call); cross-kind *relationship* helpers (`resourcemodel`
-> reverse-link index, and the object-map selector/slice resolution primitives where
-> the target kind is intrinsic to the relationship type); the catalog's
-> `buildSummaryActionFacts` projection (overlaps the object-map's registry-driven
-> action facts — a feature-projection done in two places); and workload-metrics
-> streaming (no shared informer for metrics). Converting operations and unifying the
-> action-facts projection are tractable follow-ups but are larger refactors outside
-> the plan's 9 named surfaces.
+> **Workload mutation operations are now registry-driven too** (beyond the 9): a
+> `kindspec.WorkloadOperations` facet (Restart/Scale/CurrentReplicas/RevisionHistory/
+> ApplyPodTemplate) carries each workload kind's own typed calls, so
+> `workload_actions.go` and `workload_rollback.go` switch on no kind; the
+> supported-kind sets derive from the registry. The catalog's `buildSummaryActionFacts`
+> now reuses each kind's object-map action-facts projection (one projection, not two).
+>
+> **What is NOT registry-driven (deliberately — relationships and single-kind ops,
+> not multi-kind definition dispatch):** cross-kind *relationship resolution* where
+> the target kind is intrinsic to the relationship mechanism — port-forward target→pod
+> resolution (Deployment→ReplicaSet→Pod, Service→EndpointSlice→Pod), object-map
+> selector/slice primitives, `resourcemodel` reverse-link index, pod-spec edge walkers;
+> *single-kind operations* that name only their own kind (CronJob trigger/suspend, Node
+> cordon/drain); the catalog's unstructured action-facts path (dynamic/CRD objects);
+> and workload-metrics streaming (no shared informer). These are per-kind by nature —
+> a relationship must name its target, a single-kind action names its kind — not the
+> hand-maintained multi-kind dispatch the plan targets.
 
 
 

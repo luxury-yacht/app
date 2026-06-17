@@ -16,13 +16,45 @@
 package kindspec
 
 import (
+	"context"
+
 	"github.com/luxury-yacht/app/backend/refresh/objectmapnode"
 	"github.com/luxury-yacht/app/backend/refresh/objectmapspec"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resources/appbinding"
+	"github.com/luxury-yacht/app/backend/resources/common"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
+
+// WorkloadOperations are a workload kind's mutating actions, declared in the kind's
+// package so the action handlers never switch on kind. A nil func means the kind
+// does not support that action (e.g. DaemonSet is not scalable; ReplicaSet is not
+// rollout-restartable). Each func makes the kind's own typed API call.
+type WorkloadOperations struct {
+	// Restart applies the rollout-restart patch to the workload's pod template.
+	Restart func(ctx context.Context, client kubernetes.Interface, namespace, name string, patch []byte) error
+	// Scale sets the workload's desired replica count via its scale subresource.
+	Scale func(ctx context.Context, client kubernetes.Interface, namespace, name string, replicas int32) error
+	// CurrentReplicas reads the workload's current desired replica count (1 when unset).
+	CurrentReplicas func(ctx context.Context, client kubernetes.Interface, namespace, name string) (int32, error)
+	// RevisionHistory returns the workload's rollout revision history, newest first.
+	RevisionHistory func(ctx context.Context, client kubernetes.Interface, namespace, name string) ([]common.WorkloadRevision, error)
+	// ApplyPodTemplate replaces the workload's pod template (used by rollback).
+	ApplyPodTemplate func(ctx context.Context, client kubernetes.Interface, namespace, name string, template corev1.PodTemplateSpec) error
+}
+
+// scaleSpec builds the autoscaling/v1 Scale a kind's Scale op submits; shared so the
+// per-kind ops stay one-liners.
+func ScaleObject(namespace, name string, replicas int32) *autoscalingv1.Scale {
+	return &autoscalingv1.Scale{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec:       autoscalingv1.ScaleSpec{Replicas: replicas},
+	}
+}
 
 // ObjectMapGraph holds how a kind behaves in the object-map graph traversal — its
 // graph ROLE, not its edges. The object-map walker reads these instead of
@@ -93,4 +125,8 @@ type Descriptor struct {
 	// Graph is the kind's role in the object-map graph traversal (zero value for
 	// kinds with no special graph behaviour).
 	Graph ObjectMapGraph
+
+	// Workload is the kind's mutating workload actions (restart/scale); nil for
+	// non-workload kinds.
+	Workload *WorkloadOperations
 }
