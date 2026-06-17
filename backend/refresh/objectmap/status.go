@@ -22,6 +22,18 @@ type Status struct {
 	Reason       string `json:"reason,omitempty"`
 }
 
+// ActionFacts is the compact action-availability projection an object-map node
+// carries (port-forward availability, scalability, HPA management). It lives in
+// this leaf so per-kind collector declarations can build it without importing the
+// snapshot package.
+type ActionFacts struct {
+	Status               string `json:"status,omitempty"`
+	Unschedulable        *bool  `json:"unschedulable,omitempty"`
+	PortForwardAvailable *bool  `json:"portForwardAvailable,omitempty"`
+	HPAManaged           *bool  `json:"hpaManaged,omitempty"`
+	DesiredReplicas      *int32 `json:"desiredReplicas,omitempty"`
+}
+
 // New builds a Status, taking the first non-blank reason.
 func New(state, label string, reasons ...string) *Status {
 	status := &Status{State: state, Label: label}
