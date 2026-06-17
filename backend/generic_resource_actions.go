@@ -39,7 +39,6 @@ func (a *App) deleteResourceByGVK(clusterID, apiVersion, kind, namespace, name s
 	})
 	return err
 }
-
 func (a *App) deleteGenericResourceAction(target ObjectActionTargetRef) error {
 	if err := requireObjectName(target.Name); err != nil {
 		return err

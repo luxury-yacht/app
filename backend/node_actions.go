@@ -10,13 +10,9 @@ package backend
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
-	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
-	"github.com/luxury-yacht/app/backend/resources/pods"
-	kubectldrain "k8s.io/kubectl/pkg/drain"
 )
 
 func (a *App) cordonNode(clusterID, nodeName string) error {
@@ -29,7 +25,6 @@ func (a *App) cordonNode(clusterID, nodeName string) error {
 	})
 	return err
 }
-
 func (a *App) cordonNodeAction(target ObjectActionTargetRef) error {
 	if err := requireNodeActionTarget(ObjectActionCordon, target); err != nil {
 		return err
@@ -47,7 +42,6 @@ func (a *App) cordonNodeAction(target ObjectActionTargetRef) error {
 	a.clearNodeCaches(selectionKey, target.Name)
 	return nil
 }
-
 func (a *App) uncordonNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
@@ -58,7 +52,6 @@ func (a *App) uncordonNode(clusterID, nodeName string) error {
 	})
 	return err
 }
-
 func (a *App) uncordonNodeAction(target ObjectActionTargetRef) error {
 	if err := requireNodeActionTarget(ObjectActionUncordon, target); err != nil {
 		return err
@@ -76,7 +69,6 @@ func (a *App) uncordonNodeAction(target ObjectActionTargetRef) error {
 	a.clearNodeCaches(selectionKey, target.Name)
 	return nil
 }
-
 func (a *App) drainNode(clusterID, nodeName string, options DrainNodeOptions) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
@@ -88,7 +80,6 @@ func (a *App) drainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	})
 	return err
 }
-
 func (a *App) drainNodeAction(target ObjectActionTargetRef, options DrainNodeOptions) error {
 	if err := requireNodeActionTarget(ObjectActionDrain, target); err != nil {
 		return err
@@ -112,7 +103,6 @@ func (a *App) drainNodeAction(target ObjectActionTargetRef, options DrainNodeOpt
 	a.clearNodeCaches(selectionKey, target.Name)
 	return nil
 }
-
 func (a *App) startDrainNodeAction(target ObjectActionTargetRef, options DrainNodeOptions) (string, error) {
 	if err := requireNodeActionTarget(ObjectActionStartDrain, target); err != nil {
 		return "", err
@@ -144,52 +134,6 @@ func (a *App) startDrainNodeAction(target ObjectActionTargetRef, options DrainNo
 	a.clearNodeCaches(selectionKey, target.Name)
 	return job.ID, nil
 }
-
-func requireNodeActionTarget(action string, target ObjectActionTargetRef) error {
-	if target.Group != "" || target.Version != "v1" || target.Kind != nodes.Identity.Kind {
-		return errUnsupportedActionTarget(action, target, "/v1", nodes.Identity.Kind)
-	}
-	return requireObjectName(target.Name)
-}
-
-func (a *App) requireNodeMaintenancePermission(deps common.Dependencies, nodeName string) error {
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Version: "v1",
-		Kind:    nodes.Identity.Kind,
-		Name:    nodeName,
-		Verb:    "get",
-	}); err != nil {
-		return err
-	}
-	return a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Version: "v1",
-		Kind:    nodes.Identity.Kind,
-		Name:    nodeName,
-		Verb:    "patch",
-	})
-}
-
-func (a *App) requireDrainPodPermission(deps common.Dependencies, options DrainNodeOptions) error {
-	podCheck := resourcePermissionCheck{
-		Version:     "v1",
-		Kind:        pods.Identity.Kind,
-		Verb:        "create",
-		Subresource: "eviction",
-	}
-	if options.DisableEviction {
-		podCheck = resourcePermissionCheck{Version: "v1", Kind: pods.Identity.Kind, Verb: "delete"}
-	} else {
-		evictionGroupVersion, err := kubectldrain.CheckEvictionSupport(deps.KubernetesClient)
-		if err != nil {
-			return fmt.Errorf("failed to check eviction support: %w", err)
-		}
-		if evictionGroupVersion.Empty() {
-			podCheck = resourcePermissionCheck{Version: "v1", Kind: pods.Identity.Kind, Verb: "delete"}
-		}
-	}
-	return a.requireResourcePermission(deps.Context, deps, podCheck)
-}
-
 func (a *App) CancelDrainNodeJob(clusterID, jobID string) error {
 	trimmedJobID := strings.TrimSpace(jobID)
 	if trimmedJobID == "" {
@@ -209,26 +153,6 @@ func (a *App) CancelDrainNodeJob(clusterID, jobID string) error {
 	}
 	return store.CancelDrainForCluster(trimmedJobID, deps.ClusterID)
 }
-
-func runtimeOperationFromDrainJob(job *nodemaintenance.DrainJob) RuntimeOperation {
-	if job == nil {
-		return RuntimeOperation{}
-	}
-	return RuntimeOperation{
-		ID:          job.ID,
-		Type:        RuntimeOperationDrain,
-		ClusterID:   job.ClusterID,
-		ClusterName: job.ClusterName,
-		Target:      runtimeOperationTarget(job.ClusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", job.NodeName),
-		Status:      string(job.Status),
-		StartedAt:   time.UnixMilli(job.StartedAt).Format(time.RFC3339),
-		DisplayName: fmt.Sprintf("Drain %s", job.NodeName),
-		Summary: map[string]string{
-			"nodeName": job.NodeName,
-		},
-	}
-}
-
 func (a *App) deleteNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
@@ -239,7 +163,6 @@ func (a *App) deleteNode(clusterID, nodeName string) error {
 	})
 	return err
 }
-
 func (a *App) forceDeleteNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
@@ -250,7 +173,6 @@ func (a *App) forceDeleteNode(clusterID, nodeName string) error {
 	})
 	return err
 }
-
 func (a *App) deleteNodeAction(target ObjectActionTargetRef, force bool) error {
 	if err := requireNodeActionTarget(ObjectActionDelete, target); err != nil {
 		return err
@@ -273,48 +195,4 @@ func (a *App) deleteNodeAction(target ObjectActionTargetRef, force bool) error {
 	}
 	a.clearNodeCaches(selectionKey, target.Name)
 	return nil
-}
-
-func (a *App) clearNodeCaches(selectionKey, nodeName string) {
-	a.invalidateResponseCache(selectionKey, nodes.Identity.Kind, "", nodeName)
-}
-
-func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryResponse {
-	if err := requireObjectName(nodeName); err != nil {
-		return NodeLogDiscoveryResponse{Reason: err.Error()}
-	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return NodeLogDiscoveryResponse{Reason: err.Error()}
-	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Version:     "v1",
-		Kind:        nodes.Identity.Kind,
-		Name:        nodeName,
-		Verb:        "get",
-		Subresource: "proxy",
-	}); err != nil {
-		return NodeLogDiscoveryResponse{Reason: err.Error()}
-	}
-	return nodes.NewService(deps).DiscoverLogs(nodeName)
-}
-
-func (a *App) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest) NodeLogFetchResponse {
-	if err := requireObjectName(nodeName); err != nil {
-		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
-	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
-	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Version:     "v1",
-		Kind:        nodes.Identity.Kind,
-		Name:        nodeName,
-		Verb:        "get",
-		Subresource: "proxy",
-	}); err != nil {
-		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
-	}
-	return nodes.NewService(deps).FetchLogs(nodeName, req)
 }

@@ -37,7 +37,6 @@ func (a *App) IsWorkloadHPAManaged(clusterID, namespace, group, version, kind, n
 
 	return isWorkloadHPAManaged(ctx, deps, namespace, group, version, kind, name)
 }
-
 func isWorkloadHPAManaged(ctx context.Context, deps common.Dependencies, namespace, group, version, kind, name string) (bool, error) {
 	if deps.KubernetesClient == nil {
 		return false, fmt.Errorf("kubernetes client is not initialized")
