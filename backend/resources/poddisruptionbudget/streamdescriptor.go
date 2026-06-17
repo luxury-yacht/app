@@ -17,10 +17,10 @@ import (
 
 // StreamDescriptor registers PodDisruptionBudget for resource streaming (namespace-quotas).
 var StreamDescriptor = streamspec.Descriptor{
-	Group:    "policy",
-	Version:  "v1",
-	Kind:     "PodDisruptionBudget",
-	Resource: "poddisruptionbudgets",
+	Group:    Identity.Group,
+	Version:  Identity.Version,
+	Kind:     Identity.Kind,
+	Resource: Identity.Resource,
 	Domain:   "namespace-quotas",
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*policyv1.PodDisruptionBudget))

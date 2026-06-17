@@ -20,12 +20,12 @@ import (
 
 // StreamDescriptor registers Secret for the namespace-config snapshot domain.
 var StreamDescriptor = streamspec.Descriptor{
-	Group:               "",
-	Version:             "v1",
-	Kind:                "Secret",
-	Resource:            "secrets",
+	Group:               Identity.Group,
+	Version:             Identity.Version,
+	Kind:                Identity.Kind,
+	Resource:            Identity.Resource,
 	Domain:              "namespace-config",
-	ClusterScoped:       false,
+	ClusterScoped:       !Identity.Namespaced,
 	CustomStreamHandler: true,
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*corev1.Secret))

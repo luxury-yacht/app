@@ -1,0 +1,23 @@
+package admission
+
+import "github.com/luxury-yacht/app/backend/refresh/kindspec"
+
+// Descriptor(s) register admission's kind(s) in the single kind registry
+// (refresh/kindregistry.All): the canonical Identity plus the facets every
+// subsystem reads. This is the one place admission hands itself to the app.
+
+var MutatingDescriptor = kindspec.Descriptor{
+	Identity:        MutatingIdentity,
+	CatalogSource:   kindspec.CatalogDynamic,
+	DetailCacheable: true,
+	Stream:          &MutatingStreamDescriptor,
+	Binding:         &MutatingDetailBinding,
+}
+
+var ValidatingDescriptor = kindspec.Descriptor{
+	Identity:        ValidatingIdentity,
+	CatalogSource:   kindspec.CatalogDynamic,
+	DetailCacheable: true,
+	Stream:          &ValidatingStreamDescriptor,
+	Binding:         &ValidatingDetailBinding,
+}

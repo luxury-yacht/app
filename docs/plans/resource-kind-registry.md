@@ -16,11 +16,12 @@
 > shared leaf types, comments, and tests — none of which is a subsystem spelling a
 > kind out for dispatch.
 >
-> Two deliberate non-goals remain (do not re-open without reason): each kind's
-> `StreamDescriptor` restates G/V/K/R as literals **in its own package** (the
-> done-test allows own-package naming; drift-guarded); and each kind exports
-> several facet vars rather than one bundled `Descriptor` var (the registry
-> aggregates them, so "register once" holds — step 1 met in spirit).
+> Step 1 (literal) is now done: **each kind package exports exactly one
+> `Descriptor`** (`resources/<kind>/descriptor.go`) bundling its identity + facets,
+> and `kindregistry.All` is just the list of those. Each kind's `StreamDescriptor`
+> now sources its group/version/kind/resource from `Identity` (no literal second
+> copy). Adding a kind = create `resources/<kind>/` (with its `descriptor.go`) +
+> one line in `kindregistry.All`.
 
 
 

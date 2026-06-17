@@ -17,10 +17,10 @@ import (
 
 // StreamDescriptor registers NetworkPolicy for resource streaming (namespace-network).
 var StreamDescriptor = streamspec.Descriptor{
-	Group:    "networking.k8s.io",
-	Version:  "v1",
-	Kind:     "NetworkPolicy",
-	Resource: "networkpolicies",
+	Group:    Identity.Group,
+	Version:  Identity.Version,
+	Kind:     Identity.Kind,
+	Resource: Identity.Resource,
 	Domain:   "namespace-network",
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*networkingv1.NetworkPolicy))

@@ -17,12 +17,12 @@ import (
 
 // ValidatingStreamDescriptor registers ValidatingWebhookConfiguration for streaming.
 var ValidatingStreamDescriptor = streamspec.Descriptor{
-	Group:         "admissionregistration.k8s.io",
-	Version:       "v1",
-	Kind:          "ValidatingWebhookConfiguration",
-	Resource:      "validatingwebhookconfigurations",
+	Group:         ValidatingIdentity.Group,
+	Version:       ValidatingIdentity.Version,
+	Kind:          ValidatingIdentity.Kind,
+	Resource:      ValidatingIdentity.Resource,
 	Domain:        "cluster-config",
-	ClusterScoped: true,
+	ClusterScoped: !ValidatingIdentity.Namespaced,
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildValidatingStreamSummary(meta, obj.(*admissionregistrationv1.ValidatingWebhookConfiguration))
 	},
@@ -33,12 +33,12 @@ var ValidatingStreamDescriptor = streamspec.Descriptor{
 
 // MutatingStreamDescriptor registers MutatingWebhookConfiguration for streaming.
 var MutatingStreamDescriptor = streamspec.Descriptor{
-	Group:         "admissionregistration.k8s.io",
-	Version:       "v1",
-	Kind:          "MutatingWebhookConfiguration",
-	Resource:      "mutatingwebhookconfigurations",
+	Group:         MutatingIdentity.Group,
+	Version:       MutatingIdentity.Version,
+	Kind:          MutatingIdentity.Kind,
+	Resource:      MutatingIdentity.Resource,
 	Domain:        "cluster-config",
-	ClusterScoped: true,
+	ClusterScoped: !MutatingIdentity.Namespaced,
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildMutatingStreamSummary(meta, obj.(*admissionregistrationv1.MutatingWebhookConfiguration))
 	},

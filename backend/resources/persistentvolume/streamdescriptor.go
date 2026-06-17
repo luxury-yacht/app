@@ -17,12 +17,12 @@ import (
 
 // StreamDescriptor registers PersistentVolume for resource streaming (cluster-storage).
 var StreamDescriptor = streamspec.Descriptor{
-	Group:         "",
-	Version:       "v1",
-	Kind:          "PersistentVolume",
-	Resource:      "persistentvolumes",
+	Group:         Identity.Group,
+	Version:       Identity.Version,
+	Kind:          Identity.Kind,
+	Resource:      Identity.Resource,
 	Domain:        "cluster-storage",
-	ClusterScoped: true,
+	ClusterScoped: !Identity.Namespaced,
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*corev1.PersistentVolume))
 	},

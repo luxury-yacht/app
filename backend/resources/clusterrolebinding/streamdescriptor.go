@@ -17,12 +17,12 @@ import (
 
 // StreamDescriptor registers ClusterRoleBinding for resource streaming (cluster-rbac).
 var StreamDescriptor = streamspec.Descriptor{
-	Group:         "rbac.authorization.k8s.io",
-	Version:       "v1",
-	Kind:          "ClusterRoleBinding",
-	Resource:      "clusterrolebindings",
+	Group:         Identity.Group,
+	Version:       Identity.Version,
+	Kind:          Identity.Kind,
+	Resource:      Identity.Resource,
 	Domain:        "cluster-rbac",
-	ClusterScoped: true,
+	ClusterScoped: !Identity.Namespaced,
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*rbacv1.ClusterRoleBinding))
 	},

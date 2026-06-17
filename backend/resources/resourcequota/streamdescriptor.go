@@ -17,10 +17,10 @@ import (
 
 // StreamDescriptor registers ResourceQuota for resource streaming (namespace-quotas).
 var StreamDescriptor = streamspec.Descriptor{
-	Group:    "",
-	Version:  "v1",
-	Kind:     "ResourceQuota",
-	Resource: "resourcequotas",
+	Group:    Identity.Group,
+	Version:  Identity.Version,
+	Kind:     Identity.Kind,
+	Resource: Identity.Resource,
 	Domain:   "namespace-quotas",
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*corev1.ResourceQuota))

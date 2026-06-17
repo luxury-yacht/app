@@ -17,12 +17,12 @@ import (
 
 // StreamDescriptor registers StorageClass for resource streaming (cluster-config).
 var StreamDescriptor = streamspec.Descriptor{
-	Group:         "storage.k8s.io",
-	Version:       "v1",
-	Kind:          "StorageClass",
-	Resource:      "storageclasses",
+	Group:         Identity.Group,
+	Version:       Identity.Version,
+	Kind:          Identity.Kind,
+	Resource:      Identity.Resource,
 	Domain:        "cluster-config",
-	ClusterScoped: true,
+	ClusterScoped: !Identity.Namespaced,
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*storagev1.StorageClass))
 	},

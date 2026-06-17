@@ -17,10 +17,10 @@ import (
 
 // StreamDescriptor registers ServiceAccount for resource streaming (namespace-rbac).
 var StreamDescriptor = streamspec.Descriptor{
-	Group:    "",
-	Version:  "v1",
-	Kind:     "ServiceAccount",
-	Resource: "serviceaccounts",
+	Group:    Identity.Group,
+	Version:  Identity.Version,
+	Kind:     Identity.Kind,
+	Resource: Identity.Resource,
 	Domain:   "namespace-rbac",
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*corev1.ServiceAccount))

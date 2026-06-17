@@ -22,12 +22,12 @@ import (
 // StreamDescriptor registers HPA for the namespace-autoscaling snapshot domain.
 // The autoscaling/v1 informer feeds the summary builder (which takes a v1 HPA).
 var StreamDescriptor = streamspec.Descriptor{
-	Group:               "autoscaling",
-	Version:             "v1",
-	Kind:                "HorizontalPodAutoscaler",
-	Resource:            "horizontalpodautoscalers",
+	Group:               IdentityV1.Group,
+	Version:             IdentityV1.Version,
+	Kind:                IdentityV1.Kind,
+	Resource:            IdentityV1.Resource,
 	Domain:              "namespace-autoscaling",
-	ClusterScoped:       false,
+	ClusterScoped:       !IdentityV1.Namespaced,
 	CustomStreamHandler: true,
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*autoscalingv1.HorizontalPodAutoscaler))

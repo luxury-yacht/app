@@ -17,10 +17,10 @@ import (
 
 // StreamDescriptor registers PersistentVolumeClaim for resource streaming (namespace-storage).
 var StreamDescriptor = streamspec.Descriptor{
-	Group:    "",
-	Version:  "v1",
-	Kind:     "PersistentVolumeClaim",
-	Resource: "persistentvolumeclaims",
+	Group:    Identity.Group,
+	Version:  Identity.Version,
+	Kind:     Identity.Kind,
+	Resource: Identity.Resource,
 	Domain:   "namespace-storage",
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*corev1.PersistentVolumeClaim))
