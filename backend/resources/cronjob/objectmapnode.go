@@ -25,7 +25,10 @@ var ObjectMapNode = objectmapnode.Collector{
 		return ObjectMapStatus(clusterID, *obj.(*batchv1.CronJob))
 	},
 	ActionFacts: func(obj metav1.Object) *objectmap.ActionFacts {
-		cron := obj.(*batchv1.CronJob)
+		cron, ok := obj.(*batchv1.CronJob)
+		if !ok {
+			return nil
+		}
 		available := common.HasForwardableContainerPorts(cron.Spec.JobTemplate.Spec.Template.Spec.Containers)
 		facts := &objectmap.ActionFacts{PortForwardAvailable: &available}
 		if cron.Spec.Suspend != nil && *cron.Spec.Suspend {

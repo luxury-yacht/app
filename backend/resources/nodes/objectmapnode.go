@@ -24,7 +24,11 @@ var ObjectMapNode = objectmapnode.Collector{
 		return ObjectMapStatus(clusterID, *obj.(*corev1.Node))
 	},
 	ActionFacts: func(obj metav1.Object) *objectmap.ActionFacts {
-		unschedulable := obj.(*corev1.Node).Spec.Unschedulable
+		node, ok := obj.(*corev1.Node)
+		if !ok {
+			return nil
+		}
+		unschedulable := node.Spec.Unschedulable
 		return &objectmap.ActionFacts{Unschedulable: &unschedulable}
 	},
 }

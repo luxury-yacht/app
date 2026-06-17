@@ -25,7 +25,10 @@ var ObjectMapNode = objectmapnode.Collector{
 		return ObjectMapStatus(clusterID, *obj.(*appsv1.StatefulSet))
 	},
 	ActionFacts: func(obj metav1.Object) *objectmap.ActionFacts {
-		workload := obj.(*appsv1.StatefulSet)
+		workload, ok := obj.(*appsv1.StatefulSet)
+		if !ok {
+			return nil
+		}
 		available := common.HasForwardableContainerPorts(workload.Spec.Template.Spec.Containers)
 		return &objectmap.ActionFacts{PortForwardAvailable: &available, DesiredReplicas: workload.Spec.Replicas}
 	},

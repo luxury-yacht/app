@@ -3,11 +3,10 @@ package objectcatalog
 import (
 	"strings"
 
-	"github.com/luxury-yacht/app/backend/resources/common"
-	appsv1 "k8s.io/api/apps/v1"
+	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
+	"github.com/luxury-yacht/app/backend/refresh/objectmap"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	unstructuredv1 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -19,46 +18,6 @@ func buildSummaryActionFacts(desc resourceDescriptor, item metav1.Object) *Actio
 		return nil
 	}
 	switch obj := item.(type) {
-	case *corev1.Pod:
-		available := common.HasForwardableContainerPorts(obj.Spec.Containers)
-		return &ActionFacts{PortForwardAvailable: &available}
-	case *corev1.Service:
-		available := common.ServiceHasForwardablePorts(obj.Spec.Ports)
-		return &ActionFacts{PortForwardAvailable: &available}
-	case *corev1.Node:
-		unschedulable := obj.Spec.Unschedulable
-		return &ActionFacts{Unschedulable: &unschedulable}
-	case *appsv1.Deployment:
-		available := common.HasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
-		return &ActionFacts{
-			PortForwardAvailable: &available,
-			DesiredReplicas:      obj.Spec.Replicas,
-		}
-	case *appsv1.StatefulSet:
-		available := common.HasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
-		return &ActionFacts{
-			PortForwardAvailable: &available,
-			DesiredReplicas:      obj.Spec.Replicas,
-		}
-	case *appsv1.DaemonSet:
-		available := common.HasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
-		return &ActionFacts{PortForwardAvailable: &available}
-	case *appsv1.ReplicaSet:
-		available := common.HasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
-		return &ActionFacts{
-			PortForwardAvailable: &available,
-			DesiredReplicas:      obj.Spec.Replicas,
-		}
-	case *batchv1.Job:
-		available := common.HasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
-		return &ActionFacts{PortForwardAvailable: &available}
-	case *batchv1.CronJob:
-		available := common.HasForwardableContainerPorts(obj.Spec.JobTemplate.Spec.Template.Spec.Containers)
-		facts := &ActionFacts{PortForwardAvailable: &available}
-		if obj.Spec.Suspend != nil && *obj.Spec.Suspend {
-			facts.Status = "Suspended"
-		}
-		return facts
 	case *autoscalingv1.HorizontalPodAutoscaler:
 		return &ActionFacts{ScaleTarget: actionScaleTargetFromV1HPA(obj)}
 	case *autoscalingv2.HorizontalPodAutoscaler:
@@ -66,7 +25,50 @@ func buildSummaryActionFacts(desc resourceDescriptor, item metav1.Object) *Actio
 	case *unstructuredv1.Unstructured:
 		return buildUnstructuredSummaryActionFacts(desc, obj)
 	default:
+		// Typed built-in kinds reuse their object-map action-facts projection from
+		// the single registry, so the per-kind projection lives once — in the kind
+		// package — instead of being copied here. (HorizontalPodAutoscaler has no
+		// object-map collector; its ScaleTarget is handled above.)
+		return actionFactsFromObjectMap(objectMapActionFacts(desc, item))
+	}
+}
+
+// objectMapActionFactsByKind indexes each kind's registry-declared object-map
+// action-facts projection by GroupKind, so the catalog reuses it rather than
+// re-deriving per-kind facts.
+var objectMapActionFactsByKind = func() map[schema.GroupKind]func(metav1.Object) *objectmap.ActionFacts {
+	m := make(map[schema.GroupKind]func(metav1.Object) *objectmap.ActionFacts)
+	for _, d := range kindregistry.All {
+		if d.Collector != nil && d.Collector.ActionFacts != nil {
+			m[schema.GroupKind{Group: d.Identity.Group, Kind: d.Identity.Kind}] = d.Collector.ActionFacts
+		}
+	}
+	return m
+}()
+
+// objectMapActionFacts runs the registry projection for desc's kind, or returns
+// nil when the kind has none.
+func objectMapActionFacts(desc resourceDescriptor, item metav1.Object) *objectmap.ActionFacts {
+	fn := objectMapActionFactsByKind[schema.GroupKind{Group: desc.Group, Kind: desc.Kind}]
+	if fn == nil {
 		return nil
+	}
+	return fn(item)
+}
+
+// actionFactsFromObjectMap copies the neutral object-map action facts into the
+// catalog's summary action facts (which additionally carries the backend-only HPA
+// ScaleTarget, set on the HPA branch of buildSummaryActionFacts).
+func actionFactsFromObjectMap(f *objectmap.ActionFacts) *ActionFacts {
+	if f == nil {
+		return nil
+	}
+	return &ActionFacts{
+		Status:               f.Status,
+		Unschedulable:        f.Unschedulable,
+		PortForwardAvailable: f.PortForwardAvailable,
+		HPAManaged:           f.HPAManaged,
+		DesiredReplicas:      f.DesiredReplicas,
 	}
 }
 

@@ -25,7 +25,11 @@ var ObjectMapNode = objectmapnode.Collector{
 		return ObjectMapStatus(clusterID, *obj.(*corev1.Service))
 	},
 	ActionFacts: func(obj metav1.Object) *objectmap.ActionFacts {
-		available := common.ServiceHasForwardablePorts(obj.(*corev1.Service).Spec.Ports)
+		svc, ok := obj.(*corev1.Service)
+		if !ok {
+			return nil
+		}
+		available := common.ServiceHasForwardablePorts(svc.Spec.Ports)
 		return &objectmap.ActionFacts{PortForwardAvailable: &available}
 	},
 }

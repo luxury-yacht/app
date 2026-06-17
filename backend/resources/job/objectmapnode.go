@@ -25,7 +25,11 @@ var ObjectMapNode = objectmapnode.Collector{
 		return ObjectMapStatus(clusterID, *obj.(*batchv1.Job))
 	},
 	ActionFacts: func(obj metav1.Object) *objectmap.ActionFacts {
-		available := common.HasForwardableContainerPorts(obj.(*batchv1.Job).Spec.Template.Spec.Containers)
+		j, ok := obj.(*batchv1.Job)
+		if !ok {
+			return nil
+		}
+		available := common.HasForwardableContainerPorts(j.Spec.Template.Spec.Containers)
 		return &objectmap.ActionFacts{PortForwardAvailable: &available}
 	},
 }
