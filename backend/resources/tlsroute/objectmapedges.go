@@ -7,7 +7,7 @@ import (
 )
 
 // ObjectMapEdges returns this route's edges to its parents and backends.
-func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.LinkEdge {
+func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 	route, ok := obj.(*gatewayv1.TLSRoute)
 	if !ok {
 		return nil

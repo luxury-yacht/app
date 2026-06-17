@@ -7,18 +7,18 @@ import (
 )
 
 // ObjectMapEdges returns this binding's edges: it grants a role and binds subjects.
-func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.LinkEdge {
+func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 	binding, ok := obj.(*rbacv1.ClusterRoleBinding)
 	if !ok {
 		return nil
 	}
 	facts := BuildFacts(clusterID, binding)
-	edges := []objectmapspec.LinkEdge{{Type: objectmapspec.EdgeGrants, Link: facts.RoleRef}}
+	edges := []objectmapspec.Edge{{Type: objectmapspec.EdgeGrants, Link: facts.RoleRef}}
 	for _, subject := range facts.Subjects {
 		if subject.Link == nil {
 			continue
 		}
-		edges = append(edges, objectmapspec.LinkEdge{Type: objectmapspec.EdgeBinds, Link: *subject.Link})
+		edges = append(edges, objectmapspec.Edge{Type: objectmapspec.EdgeBinds, Link: *subject.Link})
 	}
 	return edges
 }

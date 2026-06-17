@@ -7,15 +7,15 @@ import (
 )
 
 // ObjectMapEdges returns this BackendTLSPolicy's edges to the backends it targets.
-func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.LinkEdge {
+func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 	policy, ok := obj.(*gatewayv1.BackendTLSPolicy)
 	if !ok {
 		return nil
 	}
 	facts := BuildFacts(clusterID, policy)
-	edges := make([]objectmapspec.LinkEdge, 0, len(facts.TargetRefs))
+	edges := make([]objectmapspec.Edge, 0, len(facts.TargetRefs))
 	for _, ref := range facts.TargetRefs {
-		edges = append(edges, objectmapspec.LinkEdge{Type: objectmapspec.EdgeUses, TracedBy: "spec.targetRefs", Link: ref})
+		edges = append(edges, objectmapspec.Edge{Type: objectmapspec.EdgeUses, TracedBy: "spec.targetRefs", Link: ref})
 	}
 	return edges
 }

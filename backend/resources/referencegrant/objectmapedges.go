@@ -7,15 +7,15 @@ import (
 )
 
 // ObjectMapEdges returns this ReferenceGrant's grant edges to its allowed targets.
-func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.LinkEdge {
+func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 	grant, ok := obj.(*gatewayv1.ReferenceGrant)
 	if !ok {
 		return nil
 	}
 	facts := BuildFacts(clusterID, grant)
-	edges := make([]objectmapspec.LinkEdge, 0, len(facts.To))
+	edges := make([]objectmapspec.Edge, 0, len(facts.To))
 	for _, to := range facts.To {
-		edges = append(edges, objectmapspec.LinkEdge{Type: objectmapspec.EdgeGrants, TracedBy: "spec.to", Link: to})
+		edges = append(edges, objectmapspec.Edge{Type: objectmapspec.EdgeGrants, TracedBy: "spec.to", Link: to})
 	}
 	return edges
 }

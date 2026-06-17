@@ -7,10 +7,10 @@ import (
 )
 
 // ObjectMapEdges returns this HPA's relationship-graph edges (it scales its target).
-func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.LinkEdge {
+func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 	hpa, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler)
 	if !ok {
 		return nil
 	}
-	return []objectmapspec.LinkEdge{{Type: objectmapspec.EdgeScales, Link: BuildFacts(clusterID, hpa).ScaleTarget}}
+	return []objectmapspec.Edge{{Type: objectmapspec.EdgeScales, Link: BuildFacts(clusterID, hpa).ScaleTarget}}
 }

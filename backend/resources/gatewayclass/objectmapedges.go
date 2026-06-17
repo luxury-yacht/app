@@ -7,7 +7,7 @@ import (
 )
 
 // ObjectMapEdges returns this GatewayClass's edge to its parameters resource.
-func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.LinkEdge {
+func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 	gatewayClass, ok := obj.(*gatewayv1.GatewayClass)
 	if !ok {
 		return nil
@@ -16,5 +16,5 @@ func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.LinkEdg
 	if facts.Parameters == nil {
 		return nil
 	}
-	return []objectmapspec.LinkEdge{{Type: objectmapspec.EdgeUses, TracedBy: "spec.parametersRef", Link: *facts.Parameters}}
+	return []objectmapspec.Edge{{Type: objectmapspec.EdgeUses, TracedBy: "spec.parametersRef", Link: *facts.Parameters}}
 }

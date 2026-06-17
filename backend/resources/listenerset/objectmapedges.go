@@ -7,10 +7,10 @@ import (
 )
 
 // ObjectMapEdges returns this ListenerSet's edge to its parent Gateway.
-func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.LinkEdge {
+func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
 	listenerSet, ok := obj.(*gatewayv1.ListenerSet)
 	if !ok {
 		return nil
 	}
-	return []objectmapspec.LinkEdge{{Type: objectmapspec.EdgeUses, TracedBy: "spec.parentRef", Link: BuildFacts(clusterID, listenerSet).ParentRef}}
+	return []objectmapspec.Edge{{Type: objectmapspec.EdgeUses, TracedBy: "spec.parentRef", Link: BuildFacts(clusterID, listenerSet).ParentRef}}
 }

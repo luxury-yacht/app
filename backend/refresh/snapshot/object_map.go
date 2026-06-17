@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/objectmap"
+	"github.com/luxury-yacht/app/backend/refresh/objectmapspec"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
@@ -1448,7 +1449,7 @@ func isNamespaceMapSupportedRecord(record *objectMapRecord) bool {
 		record.clusterRole != nil ||
 		record.template != nil ||
 		record.cronJobTpl != nil ||
-		objectMapLinkEdgeBuilders[record.ref.Kind] != nil ||
+		objectMapEdgeBuilders[record.ref.Kind] != nil ||
 		record.ref.Kind == "ConfigMap" ||
 		record.ref.Kind == "Secret" ||
 		record.ref.Kind == "ServiceAccount" ||
@@ -1510,77 +1511,12 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 	}
 
 	for _, record := range idx.records {
-		if record.service != nil {
-			for _, pod := range idx.matchingPods(record.ref.Namespace, record.service.Spec.Selector) {
-				relationship := objectMapRelationships[objectMapEdgeSelector]
-				add(record, pod, relationship.typ, relationship.label, relationship.defaultTracedBy)
-			}
-			for _, slice := range idx.endpointSlicesForService(record.ref.Namespace, record.ref.Name) {
-				relationship := objectMapRelationships[objectMapEdgeEndpoint]
-				add(record, slice, relationship.typ, relationship.label, discoveryv1.LabelServiceName)
-			}
-		}
-		if record.slice != nil {
-			for _, endpoint := range record.slice.Endpoints {
-				if endpoint.TargetRef == nil {
-					continue
-				}
-				target := idx.resolveCoreObjectRef(record.ref.Namespace, endpoint.TargetRef)
-				add(record, target, objectMapEdgeEndpoint, "routes to", "endpoints.targetRef")
-			}
-		}
 		if record.pod != nil {
 			idx.addPodEdges(record, add)
 		}
-		if record.pvc != nil && record.pvc.Spec.VolumeName != "" {
-			target := idx.findCore("", "v1", "PersistentVolume", record.pvc.Spec.VolumeName)
-			relationship := objectMapRelationships[objectMapEdgeVolumeBinding]
-			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-		}
-		if record.pvc != nil && record.pvc.Spec.VolumeName == "" && record.pvc.Spec.StorageClassName != nil && *record.pvc.Spec.StorageClassName != "" {
-			target := idx.findStorageClass(*record.pvc.Spec.StorageClassName)
-			relationship := objectMapRelationships[objectMapEdgeStorageClass]
-			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-		}
-		if record.pv != nil && record.pv.Spec.StorageClassName != "" {
-			target := idx.findStorageClass(record.pv.Spec.StorageClassName)
-			relationship := objectMapRelationships[objectMapEdgeStorageClass]
-			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-		}
-		if record.ingress != nil {
-			if className, tracedBy := ingressClassName(record.ingress); className != "" {
-				target := idx.findIngressClass(className)
-				add(record, target, objectMapEdgeUses, "uses class", tracedBy)
-			}
-			for _, serviceName := range ingressBackendServices(record.ingress) {
-				target := idx.findCore(record.ref.Namespace, "v1", "Service", serviceName)
-				relationship := objectMapRelationships[objectMapEdgeRoutes]
-				add(record, target, relationship.typ, relationship.label, "spec.backend.service")
-			}
-		}
-		if record.pdb != nil {
-			for _, pod := range idx.matchingPodsByLabelSelector(record.ref.Namespace, record.pdb.Spec.Selector) {
-				relationship := objectMapRelationships[objectMapEdgeSelector]
-				add(record, pod, relationship.typ, relationship.label, relationship.defaultTracedBy)
-			}
-		}
-		if record.networkPolicy != nil {
-			for _, pod := range idx.matchingPodsByLabelSelector(record.ref.Namespace, &record.networkPolicy.Spec.PodSelector) {
-				relationship := objectMapRelationships[objectMapEdgeSelector]
-				add(record, pod, relationship.typ, relationship.label, "spec.podSelector")
-			}
-		}
-		if record.clusterRole != nil && record.clusterRole.AggregationRule != nil {
-			for _, selector := range record.clusterRole.AggregationRule.ClusterRoleSelectors {
-				for _, target := range idx.clusterRolesMatchingSelector(selector) {
-					relationship := objectMapRelationships[objectMapEdgeAggregates]
-					add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-				}
-			}
-		}
-		// Kinds whose edges are pure "build facts → link to the facts' resource
-		// links" declare them in their own package; the registry dispatches by kind.
-		if build := objectMapLinkEdgeBuilders[record.ref.Kind]; build != nil {
+		// Kinds that declare their relationship edges in their own package; the
+		// registry dispatches by kind and resolveEdgeTargets resolves each target.
+		if build := objectMapEdgeBuilders[record.ref.Kind]; build != nil {
 			for _, e := range build(idx.meta.ClusterID, record.obj) {
 				relationship := objectMapRelationships[e.Type]
 				label := e.Label
@@ -1591,7 +1527,9 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 				if tracedBy == "" {
 					tracedBy = relationship.defaultTracedBy
 				}
-				add(record, idx.recordForResourceLink(e.Link), e.Type, label, tracedBy)
+				for _, target := range idx.resolveEdgeTargets(record, e) {
+					add(record, target, e.Type, label, tracedBy)
+				}
 			}
 		}
 		if record.template != nil {
@@ -1823,17 +1761,30 @@ func labelsMatch(selector, labels map[string]string) bool {
 	return true
 }
 
-func ingressClassName(ing *networkingv1.Ingress) (string, string) {
-	if ing == nil {
-		return "", ""
+// resolveEdgeTargets resolves an Edge's target descriptor to the graph records it
+// points at. Selectors and slice endpoints can resolve to several; the rest to one
+// (possibly nil, which add() skips).
+func (idx *objectMapIndex) resolveEdgeTargets(source *objectMapRecord, e objectmapspec.Edge) []*objectMapRecord {
+	switch {
+	case e.CoreRef != nil:
+		return []*objectMapRecord{idx.findCore(e.CoreRef.Namespace, e.CoreRef.Version, e.CoreRef.Kind, e.CoreRef.Name)}
+	case e.StorageClass != "":
+		return []*objectMapRecord{idx.findStorageClass(e.StorageClass)}
+	case e.IngressClass != "":
+		return []*objectMapRecord{idx.findIngressClass(e.IngressClass)}
+	case e.PodsSelector != nil:
+		return idx.matchingPods(source.ref.Namespace, e.PodsSelector)
+	case e.PodsLabelSelector != nil:
+		return idx.matchingPodsByLabelSelector(source.ref.Namespace, e.PodsLabelSelector)
+	case e.ServiceSlices:
+		return idx.endpointSlicesForService(source.ref.Namespace, source.ref.Name)
+	case e.CoreObjectRef != nil:
+		return []*objectMapRecord{idx.resolveCoreObjectRef(source.ref.Namespace, e.CoreObjectRef)}
+	case e.ClusterRoleSelector != nil:
+		return idx.clusterRolesMatchingSelector(*e.ClusterRoleSelector)
+	default:
+		return []*objectMapRecord{idx.recordForResourceLink(e.Link)}
 	}
-	if ing.Spec.IngressClassName != nil && strings.TrimSpace(*ing.Spec.IngressClassName) != "" {
-		return strings.TrimSpace(*ing.Spec.IngressClassName), "spec.ingressClassName"
-	}
-	if ing.Annotations != nil && strings.TrimSpace(ing.Annotations["kubernetes.io/ingress.class"]) != "" {
-		return strings.TrimSpace(ing.Annotations["kubernetes.io/ingress.class"]), "metadata.annotations[kubernetes.io/ingress.class]"
-	}
-	return "", ""
 }
 
 func isIngressRef(ref ObjectMapReference) bool {
@@ -1842,38 +1793,6 @@ func isIngressRef(ref ObjectMapReference) bool {
 
 func isIngressClassRef(ref ObjectMapReference) bool {
 	return ref.Group == "networking.k8s.io" && ref.Version == "v1" && ref.Kind == "IngressClass"
-}
-
-func ingressBackendServices(ing *networkingv1.Ingress) []string {
-	if ing == nil {
-		return nil
-	}
-	seen := map[string]struct{}{}
-	add := func(name string) {
-		if name == "" {
-			return
-		}
-		seen[name] = struct{}{}
-	}
-	if ing.Spec.DefaultBackend != nil && ing.Spec.DefaultBackend.Service != nil {
-		add(ing.Spec.DefaultBackend.Service.Name)
-	}
-	for _, rule := range ing.Spec.Rules {
-		if rule.HTTP == nil {
-			continue
-		}
-		for _, path := range rule.HTTP.Paths {
-			if path.Backend.Service != nil {
-				add(path.Backend.Service.Name)
-			}
-		}
-	}
-	result := make([]string, 0, len(seen))
-	for name := range seen {
-		result = append(result, name)
-	}
-	sort.Strings(result)
-	return result
 }
 
 func refFromCatalog(item objectcatalog.Summary) ObjectMapReference {
