@@ -10,6 +10,9 @@ import (
 	"sync"
 	"time"
 
+	cronjobpkg "github.com/luxury-yacht/app/backend/resources/cronjob"
+	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
+
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/internal/linescanner"
@@ -728,7 +731,7 @@ func (s *Streamer) listPods(ctx context.Context, opts Options) ([]*corev1.Pod, s
 		var jobNames []string
 		for _, job := range jobs.Items {
 			for _, owner := range job.OwnerReferences {
-				if owner.Kind == "CronJob" && owner.Name == opts.Name {
+				if owner.Kind == cronjobpkg.Identity.Kind && owner.Name == opts.Name {
 					jobNames = append(jobNames, job.Name)
 				}
 			}
@@ -962,7 +965,7 @@ func (s *Streamer) podBelongsToCronJob(ctx context.Context, namespace, cronJob s
 	jobName := pod.Labels["job-name"]
 	if jobName == "" {
 		for _, owner := range pod.OwnerReferences {
-			if owner.Kind == "Job" {
+			if owner.Kind == jobpkg.Identity.Kind {
 				jobName = owner.Name
 				break
 			}
@@ -991,7 +994,7 @@ func (s *Streamer) podBelongsToCronJob(ctx context.Context, namespace, cronJob s
 		return false
 	}
 	for _, owner := range job.OwnerReferences {
-		if owner.Kind == "CronJob" && owner.Name == cronJob {
+		if owner.Kind == cronjobpkg.Identity.Kind && owner.Name == cronJob {
 			cache[cacheKey] = true
 			return true
 		}

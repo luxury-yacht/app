@@ -9,6 +9,10 @@ import (
 	"strings"
 	"time"
 
+	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
+	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -24,7 +28,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	podres "github.com/luxury-yacht/app/backend/resources/pods"
 )
 
 // PodBuilder constructs pod snapshots scoped by node or workload.
@@ -197,7 +200,7 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 			return fmt.Sprintf("%s/%s", strings.ToLower(pod.Namespace), strings.ToLower(pod.Name))
 		},
 		Namespace: func(pod PodSummary) string { return pod.Namespace },
-		Kind:      func(PodSummary) string { return "Pod" },
+		Kind:      func(PodSummary) string { return podres.Identity.Kind },
 		SearchText: func(pod PodSummary) []string {
 			return []string{
 				pod.Name,
@@ -363,7 +366,7 @@ func matchesWorkload(pod *corev1.Pod, scope workloadScope, rsLister appslisters.
 		if ownerMatchesWorkloadScope(owner.APIVersion, owner.Kind, owner.Name, scope) {
 			return true
 		}
-		if owner.Kind == "ReplicaSet" && scope.kind == "Deployment" && rsLister != nil {
+		if owner.Kind == replicasetpkg.Identity.Kind && scope.kind == deploymentpkg.Identity.Kind && rsLister != nil {
 			rs, err := rsLister.ReplicaSets(pod.Namespace).Get(owner.Name)
 			if err != nil {
 				continue
@@ -399,7 +402,7 @@ func (b *PodBuilder) replicasetDeploymentMap(pods []*corev1.Pod) (map[string]str
 			continue
 		}
 		for _, owner := range pod.OwnerReferences {
-			if owner.Controller == nil || !*owner.Controller || owner.Kind != "ReplicaSet" {
+			if owner.Controller == nil || !*owner.Controller || owner.Kind != replicasetpkg.Identity.Kind {
 				continue
 			}
 			if _, exists := result[owner.Name]; exists {
@@ -413,7 +416,7 @@ func (b *PodBuilder) replicasetDeploymentMap(pods []*corev1.Pod) (map[string]str
 				return nil, err
 			}
 			for _, rsOwner := range rs.OwnerReferences {
-				if rsOwner.Controller != nil && *rsOwner.Controller && rsOwner.Kind == "Deployment" {
+				if rsOwner.Controller != nil && *rsOwner.Controller && rsOwner.Kind == deploymentpkg.Identity.Kind {
 					result[owner.Name] = rsOwner.Name
 					break
 				}

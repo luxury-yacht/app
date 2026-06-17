@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	clusterrolepkg "github.com/luxury-yacht/app/backend/resources/clusterrole"
+
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -19,7 +21,12 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/objectmap"
 	"github.com/luxury-yacht/app/backend/refresh/objectmapspec"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
+
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -435,7 +442,7 @@ func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.In
 	for i := range list.Items {
 		hpa := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&hpa.ObjectMeta, "autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", hpa.Namespace),
+			ref:               refFromObject(&hpa.ObjectMeta, hpapkg.Identity.Group, hpapkg.Identity.Version, hpapkg.Identity.Kind, hpapkg.Identity.Resource, hpa.Namespace),
 			obj:               &hpa,
 			creationTimestamp: objectCreationTimestamp(&hpa.ObjectMeta),
 			status:            hpapkg.ObjectMapStatus(idx.meta.ClusterID, hpa),
@@ -1063,7 +1070,7 @@ func (idx *objectMapIndex) clusterRolesMatchingSelector(selector metav1.LabelSel
 	}
 	result := []*objectMapRecord{}
 	for _, record := range idx.records {
-		if record.ref.Kind != "ClusterRole" {
+		if record.ref.Kind != clusterrolepkg.Identity.Kind {
 			continue
 		}
 		if parsed.Matches(labels.Set(record.labels)) {
@@ -1079,7 +1086,7 @@ func (idx *objectMapIndex) matchingPods(namespace string, selector map[string]st
 	}
 	result := []*objectMapRecord{}
 	for _, record := range idx.records {
-		if record.ref.Kind != "Pod" || record.ref.Namespace != namespace {
+		if record.ref.Kind != podres.Identity.Kind || record.ref.Namespace != namespace {
 			continue
 		}
 		if labelsMatch(selector, record.labels) {
@@ -1099,7 +1106,7 @@ func (idx *objectMapIndex) matchingPodsByLabelSelector(namespace string, selecto
 	}
 	result := []*objectMapRecord{}
 	for _, record := range idx.records {
-		if record.ref.Kind != "Pod" || record.ref.Namespace != namespace {
+		if record.ref.Kind != podres.Identity.Kind || record.ref.Namespace != namespace {
 			continue
 		}
 		if parsed.Matches(labels.Set(record.labels)) {
@@ -1112,7 +1119,7 @@ func (idx *objectMapIndex) matchingPodsByLabelSelector(namespace string, selecto
 func (idx *objectMapIndex) endpointSlicesForService(namespace, serviceName string) []*objectMapRecord {
 	result := []*objectMapRecord{}
 	for _, record := range idx.records {
-		if record.ref.Kind != "EndpointSlice" || record.ref.Namespace != namespace {
+		if record.ref.Kind != endpointslice.Identity.Kind || record.ref.Namespace != namespace {
 			continue
 		}
 		if record.labels[discoveryv1.LabelServiceName] == serviceName {
@@ -1154,11 +1161,11 @@ func (idx *objectMapIndex) resolveEdgeTargets(source *objectMapRecord, e objectm
 }
 
 func isIngressRef(ref ObjectMapReference) bool {
-	return ref.Group == "networking.k8s.io" && ref.Version == "v1" && ref.Kind == "Ingress"
+	return ref.Group == ingress.Identity.Group && ref.Version == ingress.Identity.Version && ref.Kind == ingress.Identity.Kind
 }
 
 func isIngressClassRef(ref ObjectMapReference) bool {
-	return ref.Group == "networking.k8s.io" && ref.Version == "v1" && ref.Kind == "IngressClass"
+	return ref.Group == ingressclass.Identity.Group && ref.Version == ingressclass.Identity.Version && ref.Kind == ingressclass.Identity.Kind
 }
 
 func refFromCatalog(item objectcatalog.Summary) ObjectMapReference {

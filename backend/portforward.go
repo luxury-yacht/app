@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
+
 	"github.com/google/uuid"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -86,7 +88,7 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
 		Version:     "v1",
-		Kind:        "Pod",
+		Kind:        podspkg.Identity.Kind,
 		Namespace:   target.Namespace,
 		Name:        resolved.PodName,
 		Verb:        "create",

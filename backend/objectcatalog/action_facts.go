@@ -3,6 +3,17 @@ package objectcatalog
 import (
 	"strings"
 
+	cronjobpkg "github.com/luxury-yacht/app/backend/resources/cronjob"
+	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
+	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
+	nodespkg "github.com/luxury-yacht/app/backend/resources/nodes"
+	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
+	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
+	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
+	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
+
 	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh/objectmap"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -77,35 +88,35 @@ func buildUnstructuredSummaryActionFacts(desc resourceDescriptor, item *unstruct
 		return nil
 	}
 	switch {
-	case desc.Group == "" && desc.Version == "v1" && desc.Kind == "Pod":
+	case desc.Group == "" && desc.Version == "v1" && desc.Kind == podspkg.Identity.Kind:
 		available := unstructuredHasForwardableContainerPorts(item.Object, "spec", "containers")
 		return &ActionFacts{PortForwardAvailable: &available}
-	case desc.Group == "" && desc.Version == "v1" && desc.Kind == "Service":
+	case desc.Group == "" && desc.Version == "v1" && desc.Kind == servicepkg.Identity.Kind:
 		available := unstructuredServiceHasForwardablePorts(item.Object)
 		return &ActionFacts{PortForwardAvailable: &available}
-	case desc.Group == "" && desc.Version == "v1" && desc.Kind == "Node":
+	case desc.Group == "" && desc.Version == "v1" && desc.Kind == nodespkg.Identity.Kind:
 		unschedulable, _, _ := unstructuredv1.NestedBool(item.Object, "spec", "unschedulable")
 		return &ActionFacts{Unschedulable: &unschedulable}
-	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == "Deployment":
+	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == deploymentpkg.Identity.Kind:
 		return unstructuredScalableWorkloadFacts(item, "spec", "template", "spec", "containers")
-	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == "StatefulSet":
+	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == statefulsetpkg.Identity.Kind:
 		return unstructuredScalableWorkloadFacts(item, "spec", "template", "spec", "containers")
-	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == "ReplicaSet":
+	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == replicasetpkg.Identity.Kind:
 		return unstructuredScalableWorkloadFacts(item, "spec", "template", "spec", "containers")
-	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == "DaemonSet":
+	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == daemonsetpkg.Identity.Kind:
 		available := unstructuredHasForwardableContainerPorts(item.Object, "spec", "template", "spec", "containers")
 		return &ActionFacts{PortForwardAvailable: &available}
-	case desc.Group == "batch" && desc.Version == "v1" && desc.Kind == "Job":
+	case desc.Group == "batch" && desc.Version == "v1" && desc.Kind == jobpkg.Identity.Kind:
 		available := unstructuredHasForwardableContainerPorts(item.Object, "spec", "template", "spec", "containers")
 		return &ActionFacts{PortForwardAvailable: &available}
-	case desc.Group == "batch" && desc.Version == "v1" && desc.Kind == "CronJob":
+	case desc.Group == "batch" && desc.Version == "v1" && desc.Kind == cronjobpkg.Identity.Kind:
 		available := unstructuredHasForwardableContainerPorts(item.Object, "spec", "jobTemplate", "spec", "template", "spec", "containers")
 		facts := &ActionFacts{PortForwardAvailable: &available}
 		if suspended, found, _ := unstructuredv1.NestedBool(item.Object, "spec", "suspend"); found && suspended {
 			facts.Status = "Suspended"
 		}
 		return facts
-	case desc.Group == "autoscaling" && desc.Kind == "HorizontalPodAutoscaler":
+	case desc.Group == "autoscaling" && desc.Kind == hpapkg.Identity.Kind:
 		if target := unstructuredHPAScaleTarget(item); target != nil {
 			return &ActionFacts{ScaleTarget: target}
 		}

@@ -24,6 +24,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
+	"github.com/luxury-yacht/app/backend/resources/pods"
+
 	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resources/appbinding"
@@ -139,9 +142,9 @@ func bindingsFromRegistry() []binding {
 // only in detail-fetcher generation, never in App.Get binding generation. Their
 // Identity is declared inline because HelmRelease is not a built-in Kubernetes kind.
 var detailExtras = fromSpecs([]appbinding.Spec{
-	{Identity: resourcekind.Identity{Kind: "Pod", Namespaced: true}, Fetch: "pods.GetPod(deps, namespace, name, true)", Import: resourcesPkg + "pods"},
+	{Identity: pods.Identity, Fetch: "pods.GetPod(deps, namespace, name, true)", Import: resourcesPkg + "pods"},
 	{Identity: resourcekind.Identity{Kind: "HelmRelease", Namespaced: true}, Fetch: "helm.NewService(helm.Dependencies{Common: deps}).ReleaseDetails(namespace, name)", Import: resourcesPkg + "helm"},
-	{Identity: resourcekind.Identity{Kind: "CustomResourceDefinition"}, Service: "apiextensions.NewService(deps)", Import: resourcesPkg + "apiextensions"},
+	{Identity: apiextensions.Identity, Service: "apiextensions.NewService(deps)", Import: resourcesPkg + "apiextensions"},
 })
 
 // Render returns the gofmt'd source of the generated bindings file.

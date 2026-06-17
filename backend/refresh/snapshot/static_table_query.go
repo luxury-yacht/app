@@ -5,6 +5,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	nodespkg "github.com/luxury-yacht/app/backend/resources/nodes"
 )
 
 // numericAgeSortValue reports the numeric sort value for an age column. Age is
@@ -424,9 +426,9 @@ func metadataSearchText(maps ...map[string]string) []string {
 
 func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 	return typedTableQueryAdapter[NodeSummary]{
-		Key:       func(row NodeSummary) string { return clusterTableKey("Node", row.Name) },
+		Key:       func(row NodeSummary) string { return clusterTableKey(nodespkg.Identity.Kind, row.Name) },
 		Namespace: func(NodeSummary) string { return "" },
-		Kind:      func(NodeSummary) string { return "Node" },
+		Kind:      func(NodeSummary) string { return nodespkg.Identity.Kind },
 		SearchText: func(row NodeSummary) []string {
 			return []string{row.Name, row.Status, row.Roles, row.Version, row.InternalIP, row.ExternalIP}
 		},
@@ -437,7 +439,7 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 		SortValue: func(row NodeSummary, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return "Node"
+				return nodespkg.Identity.Kind
 			case "status":
 				return row.Status
 			case "roles":

@@ -49,11 +49,18 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
+	cronjobpkg "github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
+	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
+	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
+	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
+	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
+	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
 )
 
 const podNodeIndexName = "pods:node"
@@ -610,7 +617,7 @@ func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
 	}
 
 	summary := configmap.BuildStreamSummary(m.clusterMeta, cm)
-	ref := m.resourceRefForObject(cm, "", "v1", "ConfigMap", "configmaps")
+	ref := m.resourceRefForObject(cm, configmap.Identity.Group, configmap.Identity.Version, configmap.Identity.Kind, configmap.Identity.Resource)
 	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, cm, ref, summary)
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(cm.Namespace), update)
@@ -643,7 +650,7 @@ func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
 	}
 
 	summary := secretpkg.BuildStreamSummary(m.clusterMeta, secret)
-	ref := m.resourceRefForObject(secret, "", "v1", "Secret", "secrets")
+	ref := m.resourceRefForObject(secret, secretpkg.Identity.Group, secretpkg.Identity.Version, secretpkg.Identity.Kind, secretpkg.Identity.Resource)
 	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, secret, ref, summary)
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(secret.Namespace), update)
@@ -744,7 +751,7 @@ func (m *Manager) handleService(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	ref := m.resourceRefForObject(service, "", "v1", "Service", "services")
+	ref := m.resourceRefForObject(service, servicepkg.Identity.Group, servicepkg.Identity.Version, servicepkg.Identity.Kind, servicepkg.Identity.Resource)
 	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, service, ref, servicepkg.BuildStreamSummary(m.clusterMeta, service, slices))
 
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), update)
@@ -757,7 +764,7 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 	}
 	serviceName := endpointSliceServiceName(slice)
 
-	ref := m.resourceRefForObject(slice, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices")
+	ref := m.resourceRefForObject(slice, endpointslice.Identity.Group, endpointslice.Identity.Version, endpointslice.Identity.Kind, endpointslice.Identity.Resource)
 	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, slice, ref, endpointslice.BuildStreamSummary(m.clusterMeta, slice))
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
 
@@ -808,7 +815,7 @@ func (m *Manager) broadcastServiceFromEndpointSlice(slice *discoveryv1.EndpointS
 		return
 	}
 	serviceSummary := servicepkg.BuildStreamSummary(m.clusterMeta, service, slices)
-	ref := m.resourceRefForObject(service, "", "v1", "Service", "services")
+	ref := m.resourceRefForObject(service, servicepkg.Identity.Group, servicepkg.Identity.Version, servicepkg.Identity.Kind, servicepkg.Identity.Resource)
 	serviceUpdate := m.newObjectRowUpdate(MessageTypeModified, domainNamespaceNetwork, service, ref, serviceSummary)
 	serviceUpdate.ResourceVersion = slice.ResourceVersion
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), serviceUpdate)
@@ -822,7 +829,7 @@ func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	ref := m.resourceRefForObject(hpa, "autoscaling", "v1", "HorizontalPodAutoscaler", "horizontalpodautoscalers")
+	ref := m.resourceRefForObject(hpa, hpapkg.IdentityV1.Group, hpapkg.IdentityV1.Version, hpapkg.IdentityV1.Kind, hpapkg.IdentityV1.Resource)
 	update := m.newObjectRowUpdate(updateType, domainNamespaceAutoscaling, hpa, ref, hpapkg.BuildStreamSummary(m.clusterMeta, hpa))
 
 	m.broadcast(domainNamespaceAutoscaling, scopesForNamespace(hpa.Namespace), update)
@@ -854,7 +861,7 @@ func (m *Manager) handleWorkloadFromHPA(hpa *autoscalingv1.HorizontalPodAutoscal
 		return
 	}
 	hpas := m.hpasForWorkloadContext(namespace, hpa, updateType)
-	if kind == "Pod" {
+	if kind == podspkg.Identity.Kind {
 		m.broadcastStandalonePodWorkloadRow(namespace, name, hpa.ResourceVersion, hpas)
 		return
 	}
@@ -871,11 +878,11 @@ func hpaWorkloadTarget(hpa *autoscalingv1.HorizontalPodAutoscaler) (namespace, k
 		return "", "", "", false
 	}
 	switch {
-	case gvk.Group == "apps" && gvk.Version == "v1" && (gvk.Kind == "Deployment" || gvk.Kind == "StatefulSet" || gvk.Kind == "DaemonSet"):
+	case gvk.Group == "apps" && gvk.Version == "v1" && (gvk.Kind == deploymentpkg.Identity.Kind || gvk.Kind == statefulsetpkg.Identity.Kind || gvk.Kind == daemonsetpkg.Identity.Kind):
 		return hpa.Namespace, gvk.Kind, ref.Name, true
-	case gvk.Group == "batch" && gvk.Version == "v1" && (gvk.Kind == "Job" || gvk.Kind == "CronJob"):
+	case gvk.Group == "batch" && gvk.Version == "v1" && (gvk.Kind == jobpkg.Identity.Kind || gvk.Kind == cronjobpkg.Identity.Kind):
 		return hpa.Namespace, gvk.Kind, ref.Name, true
-	case gvk.Group == "" && gvk.Version == "v1" && gvk.Kind == "Pod":
+	case gvk.Group == "" && gvk.Version == "v1" && gvk.Kind == podspkg.Identity.Kind:
 		return hpa.Namespace, gvk.Kind, ref.Name, true
 	default:
 		return "", "", "", false
@@ -1202,15 +1209,15 @@ func (m *Manager) lookupWorkload(kind, namespace, name string) (metav1.Object, e
 func workloadFromObject(obj interface{}) (metav1.Object, string) {
 	switch typed := obj.(type) {
 	case *appsv1.Deployment:
-		return typed, "Deployment"
+		return typed, deploymentpkg.Identity.Kind
 	case *appsv1.StatefulSet:
-		return typed, "StatefulSet"
+		return typed, statefulsetpkg.Identity.Kind
 	case *appsv1.DaemonSet:
-		return typed, "DaemonSet"
+		return typed, daemonsetpkg.Identity.Kind
 	case *batchv1.Job:
-		return typed, "Job"
+		return typed, jobpkg.Identity.Kind
 	case *batchv1.CronJob:
-		return typed, "CronJob"
+		return typed, cronjobpkg.Identity.Kind
 	case cache.DeletedFinalStateUnknown:
 		return workloadFromObject(typed.Obj)
 	default:
@@ -1291,7 +1298,7 @@ func podOwnedByReplicaSet(pod *corev1.Pod, rs *appsv1.ReplicaSet) bool {
 		return false
 	}
 	for _, owner := range pod.OwnerReferences {
-		if owner.Controller != nil && *owner.Controller && owner.Kind == "ReplicaSet" && owner.Name == rs.Name {
+		if owner.Controller != nil && *owner.Controller && owner.Kind == replicasetpkg.Identity.Kind && owner.Name == rs.Name {
 			return true
 		}
 	}
@@ -1335,7 +1342,7 @@ func replicaSetDeploymentOwnerName(rs *appsv1.ReplicaSet) string {
 		return ""
 	}
 	for _, owner := range rs.OwnerReferences {
-		if owner.Controller != nil && *owner.Controller && owner.Kind == "Deployment" && owner.Name != "" {
+		if owner.Controller != nil && *owner.Controller && owner.Kind == deploymentpkg.Identity.Kind && owner.Name != "" {
 			return owner.Name
 		}
 	}

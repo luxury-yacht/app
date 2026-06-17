@@ -9,6 +9,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
+	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
+	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
+	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
+	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,8 +35,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	eventres "github.com/luxury-yacht/app/backend/resources/events"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
 )
 
 const (
@@ -820,10 +826,10 @@ type workloadUsageTotals struct {
 func buildWorkloadResourceUsage(pods []*corev1.Pod, podUsage map[string]metrics.PodUsage, replicaSets []*appsv1.ReplicaSet) WorkloadResourceUsage {
 	replicaSetDeployments := buildClusterOverviewReplicaSetDeploymentMap(replicaSets)
 	totals := map[string]workloadUsageTotals{
-		"Deployment":  {},
-		"DaemonSet":   {},
-		"StatefulSet": {},
-		"Job":         {},
+		deploymentpkg.Identity.Kind:  {},
+		daemonsetpkg.Identity.Kind:   {},
+		statefulsetpkg.Identity.Kind: {},
+		jobpkg.Identity.Kind:         {},
 	}
 
 	for _, pod := range pods {
@@ -845,10 +851,10 @@ func buildWorkloadResourceUsage(pods []*corev1.Pod, podUsage map[string]metrics.
 	}
 
 	return WorkloadResourceUsage{
-		Deployments:  formatWorkloadTypeResourceUsage(totals["Deployment"]),
-		DaemonSets:   formatWorkloadTypeResourceUsage(totals["DaemonSet"]),
-		StatefulSets: formatWorkloadTypeResourceUsage(totals["StatefulSet"]),
-		Jobs:         formatWorkloadTypeResourceUsage(totals["Job"]),
+		Deployments:  formatWorkloadTypeResourceUsage(totals[deploymentpkg.Identity.Kind]),
+		DaemonSets:   formatWorkloadTypeResourceUsage(totals[daemonsetpkg.Identity.Kind]),
+		StatefulSets: formatWorkloadTypeResourceUsage(totals[statefulsetpkg.Identity.Kind]),
+		Jobs:         formatWorkloadTypeResourceUsage(totals[jobpkg.Identity.Kind]),
 	}
 }
 
@@ -859,7 +865,7 @@ func buildClusterOverviewReplicaSetDeploymentMap(replicaSets []*appsv1.ReplicaSe
 			continue
 		}
 		for _, owner := range replicaSet.OwnerReferences {
-			if owner.Controller == nil || !*owner.Controller || owner.Kind != "Deployment" || owner.Name == "" {
+			if owner.Controller == nil || !*owner.Controller || owner.Kind != deploymentpkg.Identity.Kind || owner.Name == "" {
 				continue
 			}
 			out[namespaceNameKey(replicaSet.Namespace, replicaSet.Name)] = owner.Name
@@ -920,11 +926,11 @@ func clusterOverviewWorkloadKind(pod *corev1.Pod, replicaSetDeployments map[stri
 			continue
 		}
 		switch owner.Kind {
-		case "Deployment", "DaemonSet", "StatefulSet", "Job":
+		case deploymentpkg.Identity.Kind, daemonsetpkg.Identity.Kind, statefulsetpkg.Identity.Kind, jobpkg.Identity.Kind:
 			return owner.Kind
-		case "ReplicaSet":
+		case replicasetpkg.Identity.Kind:
 			if _, ok := replicaSetDeployments[namespaceNameKey(pod.Namespace, owner.Name)]; ok {
-				return "Deployment"
+				return deploymentpkg.Identity.Kind
 			}
 		}
 		return ""

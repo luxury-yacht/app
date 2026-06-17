@@ -177,8 +177,8 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	// Sources in the canonical order the table contract expects: Service and
 	// EndpointSlice first, then the descriptor kinds in registry order.
 	sources := append([]typedTableResourceSource{
-		{Kind: "Service", Group: "", Resource: "services", Available: servicesAvailable},
-		{Kind: "EndpointSlice", Group: "discovery.k8s.io", Resource: "endpointslices", Available: endpointSlicesAvailable, QueryKinds: []string{endpointslice.Identity.Kind, service.Identity.Kind}},
+		{Kind: service.Identity.Kind, Group: "", Resource: "services", Available: servicesAvailable},
+		{Kind: endpointslice.Identity.Kind, Group: "discovery.k8s.io", Resource: "endpointslices", Available: endpointSlicesAvailable, QueryKinds: []string{endpointslice.Identity.Kind, service.Identity.Kind}},
 	}, descriptorSources...)
 
 	issues := typedTableQueryResourceIssues(ctx, namespaceNetworkDomainName, query, sources)

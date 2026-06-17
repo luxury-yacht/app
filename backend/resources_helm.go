@@ -10,6 +10,9 @@ package backend
 import (
 	"strings"
 
+	configmappkg "github.com/luxury-yacht/app/backend/resources/configmap"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+
 	"github.com/luxury-yacht/app/backend/resources/helm"
 )
 
@@ -78,13 +81,13 @@ func (a *App) deleteHelmReleaseAction(target ObjectActionTargetRef) error {
 	if err := a.requireAnyResourcePermission(deps.Context, deps,
 		resourcePermissionCheck{
 			Version:   "v1",
-			Kind:      "Secret",
+			Kind:      secretpkg.Identity.Kind,
 			Namespace: target.Namespace,
 			Verb:      "delete",
 		},
 		resourcePermissionCheck{
 			Version:   "v1",
-			Kind:      "ConfigMap",
+			Kind:      configmappkg.Identity.Kind,
 			Namespace: target.Namespace,
 			Verb:      "delete",
 		},

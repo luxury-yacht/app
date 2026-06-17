@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
+
 	"github.com/luxury-yacht/app/backend/resources/common"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -257,7 +259,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 			}
 			summary.HPAManaged = &managed
 		}
-		if summary.Kind != "Pod" {
+		if summary.Kind != podres.Identity.Kind {
 			processedOwners[workloadOwnerKey(summary.Kind, summary.Namespace, summary.Name)] = struct{}{}
 		}
 		if queryCollector != nil {
@@ -386,17 +388,17 @@ func sortWorkloadSummaries(items []WorkloadSummary) {
 func (b *NamespaceWorkloadsBuilder) resourceSources() []typedTableResourceSource {
 	return []typedTableResourceSource{
 		{
-			Kind:       "Pod",
+			Kind:       podres.Identity.Kind,
 			Group:      "",
 			Resource:   "pods",
 			Available:  b.podLister != nil,
 			QueryKinds: []string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
 		},
-		{Kind: "Deployment", Group: "apps", Resource: "deployments", Available: b.deploymentLister != nil},
-		{Kind: "StatefulSet", Group: "apps", Resource: "statefulsets", Available: b.statefulLister != nil},
-		{Kind: "DaemonSet", Group: "apps", Resource: "daemonsets", Available: b.daemonLister != nil},
-		{Kind: "Job", Group: "batch", Resource: "jobs", Available: b.jobLister != nil},
-		{Kind: "CronJob", Group: "batch", Resource: "cronjobs", Available: b.cronJobLister != nil},
+		{Kind: deployment.Identity.Kind, Group: "apps", Resource: "deployments", Available: b.deploymentLister != nil},
+		{Kind: statefulset.Identity.Kind, Group: "apps", Resource: "statefulsets", Available: b.statefulLister != nil},
+		{Kind: daemonset.Identity.Kind, Group: "apps", Resource: "daemonsets", Available: b.daemonLister != nil},
+		{Kind: jobres.Identity.Kind, Group: "batch", Resource: "jobs", Available: b.jobLister != nil},
+		{Kind: cronjob.Identity.Kind, Group: "batch", Resource: "cronjobs", Available: b.cronJobLister != nil},
 	}
 }
 
@@ -511,7 +513,7 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 ) WorkloadSummary {
 	var pods []*corev1.Pod
 	if deploy != nil {
-		key := workloadOwnerKey("Deployment", deploy.Namespace, deploy.Name)
+		key := workloadOwnerKey(deployment.Identity.Kind, deploy.Namespace, deploy.Name)
 		pods = podsByOwner[key]
 	}
 	resources := aggregateWorkloadPodResources(pods, usage)
@@ -527,7 +529,7 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 	model := deployment.BuildResourceModel(clusterID, deploy)
 
 	return WorkloadSummary{
-		Kind:                 "Deployment",
+		Kind:                 deployment.Identity.Kind,
 		Name:                 deploy.Name,
 		Namespace:            deploy.Namespace,
 		Ready:                readyStatus,
@@ -557,7 +559,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 ) WorkloadSummary {
 	var pods []*corev1.Pod
 	if stateful != nil {
-		key := workloadOwnerKey("StatefulSet", stateful.Namespace, stateful.Name)
+		key := workloadOwnerKey(statefulset.Identity.Kind, stateful.Namespace, stateful.Name)
 		pods = podsByOwner[key]
 	}
 	resources := aggregateWorkloadPodResources(pods, usage)
@@ -573,7 +575,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 	model := statefulset.BuildResourceModel(clusterID, stateful)
 
 	return WorkloadSummary{
-		Kind:                 "StatefulSet",
+		Kind:                 statefulset.Identity.Kind,
 		Name:                 stateful.Name,
 		Namespace:            stateful.Namespace,
 		Ready:                readyStatus,
@@ -603,7 +605,7 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 ) WorkloadSummary {
 	var pods []*corev1.Pod
 	if daemon != nil {
-		key := workloadOwnerKey("DaemonSet", daemon.Namespace, daemon.Name)
+		key := workloadOwnerKey(daemonset.Identity.Kind, daemon.Namespace, daemon.Name)
 		pods = podsByOwner[key]
 	}
 	resources := aggregateWorkloadPodResources(pods, usage)
@@ -617,7 +619,7 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 	model := daemonset.BuildResourceModel(clusterID, daemon)
 
 	return WorkloadSummary{
-		Kind:                 "DaemonSet",
+		Kind:                 daemonset.Identity.Kind,
 		Name:                 daemon.Name,
 		Namespace:            daemon.Namespace,
 		Ready:                readyStatus,
@@ -646,7 +648,7 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 ) WorkloadSummary {
 	var pods []*corev1.Pod
 	if job != nil {
-		key := workloadOwnerKey("Job", job.Namespace, job.Name)
+		key := workloadOwnerKey(jobres.Identity.Kind, job.Namespace, job.Name)
 		pods = podsByOwner[key]
 	}
 	resources := aggregateWorkloadPodResources(pods, usage)
@@ -661,7 +663,7 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 	model := jobres.BuildResourceModel(clusterID, job)
 
 	return WorkloadSummary{
-		Kind:                 "Job",
+		Kind:                 jobres.Identity.Kind,
 		Name:                 job.Name,
 		Namespace:            job.Namespace,
 		Ready:                fmt.Sprintf("%d/%d", completed, desired),
@@ -690,7 +692,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 ) WorkloadSummary {
 	var pods []*corev1.Pod
 	if cron != nil {
-		key := workloadOwnerKey("CronJob", cron.Namespace, cron.Name)
+		key := workloadOwnerKey(cronjob.Identity.Kind, cron.Namespace, cron.Name)
 		pods = podsByOwner[key]
 	}
 	resources := aggregateWorkloadPodResources(pods, usage)
@@ -701,7 +703,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 	model := cronjob.BuildResourceModel(clusterID, cron)
 
 	return WorkloadSummary{
-		Kind:                 "CronJob",
+		Kind:                 cronjob.Identity.Kind,
 		Name:                 cron.Name,
 		Namespace:            cron.Namespace,
 		Ready:                fmt.Sprintf("%d", active),
@@ -728,7 +730,7 @@ func buildStandalonePodSummary(clusterID string, pod *corev1.Pod, usage map[stri
 	model := podres.BuildResourceModel(clusterID, pod)
 
 	return WorkloadSummary{
-		Kind:                 "Pod",
+		Kind:                 podres.Identity.Kind,
 		Name:                 pod.Name,
 		Namespace:            pod.Namespace,
 		Ready:                ready,
@@ -811,9 +813,9 @@ func ownerKeyForPod(pod *corev1.Pod) string {
 		if owner.Controller != nil && *owner.Controller {
 			kind := owner.Kind
 			name := owner.Name
-			if owner.Kind == "ReplicaSet" {
+			if owner.Kind == replicasetpkg.Identity.Kind {
 				if base := deploymentNameFromReplicaSet(owner.Name); base != "" {
-					kind = "Deployment"
+					kind = deployment.Identity.Kind
 					name = base
 				}
 			}
@@ -937,11 +939,11 @@ func buildHPATargetSet(hpas []*autoscalingv1.HorizontalPodAutoscaler) map[string
 
 func workloadHPATargetKey(summary WorkloadSummary) string {
 	switch summary.Kind {
-	case "Deployment", "StatefulSet", "DaemonSet":
+	case deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind:
 		return hpaTargetKey("apps", "v1", summary.Kind, summary.Namespace, summary.Name)
-	case "Job", "CronJob":
+	case jobres.Identity.Kind, cronjob.Identity.Kind:
 		return hpaTargetKey("batch", "v1", summary.Kind, summary.Namespace, summary.Name)
-	case "Pod":
+	case podres.Identity.Kind:
 		return hpaTargetKey("", "v1", summary.Kind, summary.Namespace, summary.Name)
 	default:
 		return hpaTargetKey("", "", summary.Kind, summary.Namespace, summary.Name)

@@ -365,7 +365,7 @@ func buildNodeSnapshotFromUsage(
 		Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
 		Payload: NodeSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope("nodes", totalItems, totalItems == len(items), snapshotSortedKinds(items, func(NodeSummary) string { return "Node" }), nodeQueryCapabilities()),
+			ResourceQueryEnvelope: typedWindowEnvelope("nodes", totalItems, totalItems == len(items), snapshotSortedKinds(items, func(NodeSummary) string { return nodepkg.Identity.Kind }), nodeQueryCapabilities()),
 			Rows:                  items,
 			Metrics:               metricsInfo,
 		},
