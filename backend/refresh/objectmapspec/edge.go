@@ -71,3 +71,86 @@ func RouteEdges(facts resourcemodel.RouteCommonFacts) []Edge {
 	}
 	return edges
 }
+
+// PodEdges is the shared pod relationship projection: the node the pod is
+// scheduled on, its service account, and the config/secret/PVC objects its volumes
+// and containers reference. Shared by the Pod kind (here) and every workload's pod
+// template (via PodTemplateEdges).
+func PodEdges(pod *corev1.Pod) []Edge {
+	edges := []Edge{}
+	if pod.Spec.NodeName != "" {
+		edges = append(edges, Edge{Type: EdgeSchedules, CoreRef: &CoreRef{Version: "v1", Kind: "Node", Name: pod.Spec.NodeName}})
+	}
+	serviceAccount := pod.Spec.ServiceAccountName
+	if serviceAccount == "" {
+		serviceAccount = "default"
+	}
+	edges = append(edges, Edge{Type: EdgeUses, TracedBy: "spec.serviceAccountName", CoreRef: &CoreRef{Version: "v1", Kind: "ServiceAccount", Namespace: pod.Namespace, Name: serviceAccount}})
+	return append(edges, podSpecEdges(pod.Namespace, pod.Spec)...)
+}
+
+// PodTemplateEdges is the pod relationship projection for a workload's pod
+// template: its service account (when set) and the objects its volumes and
+// containers reference. A template never schedules onto a node.
+func PodTemplateEdges(namespace string, tpl *corev1.PodTemplateSpec) []Edge {
+	if tpl == nil {
+		return nil
+	}
+	var edges []Edge
+	if sa := tpl.Spec.ServiceAccountName; sa != "" {
+		edges = append(edges, Edge{Type: EdgeUses, TracedBy: "template.spec.serviceAccountName", CoreRef: &CoreRef{Version: "v1", Kind: "ServiceAccount", Namespace: namespace, Name: sa}})
+	}
+	return append(edges, podSpecEdges(namespace, tpl.Spec)...)
+}
+
+func podSpecEdges(namespace string, spec corev1.PodSpec) []Edge {
+	var edges []Edge
+	for _, volume := range spec.Volumes {
+		edges = append(edges, volumeEdges(namespace, volume)...)
+	}
+	for _, container := range spec.InitContainers {
+		edges = append(edges, containerEdges(namespace, container)...)
+	}
+	for _, container := range spec.Containers {
+		edges = append(edges, containerEdges(namespace, container)...)
+	}
+	return edges
+}
+
+func volumeEdges(namespace string, volume corev1.Volume) []Edge {
+	var edges []Edge
+	if volume.ConfigMap != nil && volume.ConfigMap.Name != "" {
+		edges = append(edges, Edge{Type: EdgeUses, TracedBy: "volume.configMap", CoreRef: &CoreRef{Version: "v1", Kind: "ConfigMap", Namespace: namespace, Name: volume.ConfigMap.Name}})
+	}
+	if volume.Secret != nil && volume.Secret.SecretName != "" {
+		edges = append(edges, Edge{Type: EdgeUses, TracedBy: "volume.secret", CoreRef: &CoreRef{Version: "v1", Kind: "Secret", Namespace: namespace, Name: volume.Secret.SecretName}})
+	}
+	if volume.PersistentVolumeClaim != nil && volume.PersistentVolumeClaim.ClaimName != "" {
+		edges = append(edges, Edge{Type: EdgeMounts, TracedBy: "volume.persistentVolumeClaim", CoreRef: &CoreRef{Version: "v1", Kind: "PersistentVolumeClaim", Namespace: namespace, Name: volume.PersistentVolumeClaim.ClaimName}})
+	}
+	return edges
+}
+
+func containerEdges(namespace string, container corev1.Container) []Edge {
+	var edges []Edge
+	for _, envFrom := range container.EnvFrom {
+		if envFrom.ConfigMapRef != nil && envFrom.ConfigMapRef.Name != "" {
+			edges = append(edges, Edge{Type: EdgeUses, TracedBy: "envFrom.configMapRef", CoreRef: &CoreRef{Version: "v1", Kind: "ConfigMap", Namespace: namespace, Name: envFrom.ConfigMapRef.Name}})
+		}
+		if envFrom.SecretRef != nil && envFrom.SecretRef.Name != "" {
+			edges = append(edges, Edge{Type: EdgeUses, TracedBy: "envFrom.secretRef", CoreRef: &CoreRef{Version: "v1", Kind: "Secret", Namespace: namespace, Name: envFrom.SecretRef.Name}})
+		}
+	}
+	for _, env := range container.Env {
+		if env.ValueFrom == nil {
+			continue
+		}
+		if env.ValueFrom.ConfigMapKeyRef != nil && env.ValueFrom.ConfigMapKeyRef.Name != "" {
+			edges = append(edges, Edge{Type: EdgeUses, TracedBy: "env.configMapKeyRef", CoreRef: &CoreRef{Version: "v1", Kind: "ConfigMap", Namespace: namespace, Name: env.ValueFrom.ConfigMapKeyRef.Name}})
+		}
+		if env.ValueFrom.SecretKeyRef != nil && env.ValueFrom.SecretKeyRef.Name != "" {
+			edges = append(edges, Edge{Type: EdgeUses, TracedBy: "env.secretKeyRef", CoreRef: &CoreRef{Version: "v1", Kind: "Secret", Namespace: namespace, Name: env.ValueFrom.SecretKeyRef.Name}})
+		}
+	}
+	return edges
+}
