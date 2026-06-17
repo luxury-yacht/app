@@ -29,3 +29,18 @@ func TestCacheInvalidationKindsMatchContract(t *testing.T) {
 		}
 	}
 }
+
+// TestAllRegistryKindsAreDetailCacheable is the reverse-direction guard: the
+// forward test above only checks that cacheable kinds are real, so it would not
+// catch a kind that silently lost its DetailCacheable facet (its detail/YAML/Helm
+// cache would then never be evicted, showing stale data after the object changes).
+// Every built-in kind is detail-cacheable today; this pins that invariant so a
+// dropped facet fails. If a future kind is intentionally non-cacheable, update this
+// guard deliberately.
+func TestAllRegistryKindsAreDetailCacheable(t *testing.T) {
+	for _, d := range kindregistry.All {
+		if !d.DetailCacheable {
+			t.Errorf("kind %q/%q/%q is not DetailCacheable; its response cache will never be invalidated — if intentional, update this guard", d.Identity.Group, d.Identity.Resource, d.Identity.Kind)
+		}
+	}
+}
