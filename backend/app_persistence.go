@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
 )
 
 const persistenceSchemaVersion = 1
@@ -17,8 +16,8 @@ const gridTablePersistenceVersionKey = "v1"
 type persistenceFile struct {
 	SchemaVersion int                    `json:"schemaVersion"`
 	UpdatedAt     time.Time              `json:"updatedAt"`
-	ClusterTabs persistenceClusterTabs `json:"clusterTabs"`
-	Tables      persistenceTables      `json:"tables"`
+	ClusterTabs   persistenceClusterTabs `json:"clusterTabs"`
+	Tables        persistenceTables      `json:"tables"`
 }
 
 type persistenceClusterTabs struct {

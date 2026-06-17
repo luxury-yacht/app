@@ -31,4 +31,3 @@ func (m *Manager) registerAutoscalingStreams(factory *informer.Factory) {
 		m.addRelatedResourceEventHandler(shared.Autoscaling().V1().HorizontalPodAutoscalers().Informer(), (*Manager).handleHPAEvent)
 	}
 }
-

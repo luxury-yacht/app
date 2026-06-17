@@ -32,10 +32,18 @@ type capturingLogger struct {
 	entries []logEntry
 }
 
-func (l *capturingLogger) Debug(msg string, _ ...string) { l.entries = append(l.entries, logEntry{"DEBUG", msg}) }
-func (l *capturingLogger) Info(msg string, _ ...string)  { l.entries = append(l.entries, logEntry{"INFO", msg}) }
-func (l *capturingLogger) Warn(msg string, _ ...string)  { l.entries = append(l.entries, logEntry{"WARN", msg}) }
-func (l *capturingLogger) Error(msg string, _ ...string) { l.entries = append(l.entries, logEntry{"ERROR", msg}) }
+func (l *capturingLogger) Debug(msg string, _ ...string) {
+	l.entries = append(l.entries, logEntry{"DEBUG", msg})
+}
+func (l *capturingLogger) Info(msg string, _ ...string) {
+	l.entries = append(l.entries, logEntry{"INFO", msg})
+}
+func (l *capturingLogger) Warn(msg string, _ ...string) {
+	l.entries = append(l.entries, logEntry{"WARN", msg})
+}
+func (l *capturingLogger) Error(msg string, _ ...string) {
+	l.entries = append(l.entries, logEntry{"ERROR", msg})
+}
 
 func newService(t testing.TB, client *fake.Clientset) *persistentvolumeclaim.Service {
 	t.Helper()

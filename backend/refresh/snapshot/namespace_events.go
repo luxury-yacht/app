@@ -151,7 +151,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		if event.InvolvedObject.Namespace == "" {
 			continue
 		}
-			facts := eventres.BuildFacts(meta.ClusterID, event)
+		facts := eventres.BuildFacts(meta.ClusterID, event)
 		timestamp := eventres.EventTimestamp(event).Time
 		summary := EventSummary{
 			ClusterMeta:      meta,

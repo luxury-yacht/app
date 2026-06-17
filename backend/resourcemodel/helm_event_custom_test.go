@@ -28,8 +28,6 @@ var helmTestResolver = testResourceResolver{
 	},
 }
 
-
-
 func TestBuildHelmManifestResourceLinkDoesNotGuessMissingAPIVersion(t *testing.T) {
 	link := BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(context.Background(), nil, "cluster-a", "", "Deployment", "apps", "orders", true)
 
@@ -111,6 +109,3 @@ func TestBuildHelmManifestResourceLinkKeepsExplicitUnknownNamespaceOpenable(t *t
 	require.Equal(t, "release-ns", link.Ref.Namespace)
 	require.Equal(t, "orders", link.Ref.Name)
 }
-
-
-

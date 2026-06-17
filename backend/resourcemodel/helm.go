@@ -8,10 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-
-
-
-
 type HelmManifestResourceIdentity struct {
 	Group     string
 	Version   string
@@ -80,5 +76,3 @@ func ResolveHelmManifestResourceIdentityWithResolver(ctx context.Context, resolv
 	}
 	return identity
 }
-
-

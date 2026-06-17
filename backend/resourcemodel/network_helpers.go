@@ -118,10 +118,6 @@ func SplitAPIVersion(apiVersion string) (string, string) {
 	return parts[0], parts[1]
 }
 
-
-
-
-
 func CountLabel(count int, singular, plural string) string {
 	if count == 1 {
 		return "1 " + singular

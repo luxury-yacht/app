@@ -210,9 +210,6 @@ func TestObjectMapNetworkPolicyEmptyPodSelectorSelectsNamespacePods(t *testing.T
 	assertEdge(t, payload, "NetworkPolicy", "all-pods", "Pod", "web-pod", "selector")
 }
 
-
-
-
 func TestObjectMapEnforcesVersionedSeedScope(t *testing.T) {
 	client := fake.NewSimpleClientset(objectMapFixtureObjects()...)
 	builder := newObjectMapTestBuilder(t, client)

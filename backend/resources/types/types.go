@@ -493,9 +493,6 @@ type NsHelmInfo struct {
 	Age        string `json:"age"`        // First deployment time
 }
 
-
-
-
 // PodDetailInfoContainer represents detailed container information within a pod
 type PodDetailInfoContainer struct {
 	Name            string            `json:"name"`
@@ -571,19 +568,12 @@ type PodDetailInfo struct {
 // ConfigMapDetails moved to resources/configmap and SecretDetails moved to
 // resources/secret (co-located with each kind's model + detail builder).
 
-
-
 // EndpointSliceDetails describes a single EndpointSlice resource. Address,
 // port, and address-type fields are flattened directly because each Object
 // Panel renders one EndpointSlice; aggregation across slices for a Service
 // uses a different model.
 // EndpointSliceDetails + EndpointSliceAddress/Port moved to resources/endpointslice
 // (co-located with the EndpointSlice model + detail builder).
-
-
-
-
-
 
 // ObjectRef is the shared openable Kubernetes object identity.
 type ObjectRef = resourcemodel.ResourceRef
@@ -658,7 +648,6 @@ type ReferenceGrantFromInfo struct {
 // NetworkPolicyDetails + NetworkPolicyRule/Peer/Port + IPBlock moved to
 // resources/networkpolicy (co-located with the NetworkPolicy model + builder).
 
-
 type PolicyRule struct {
 	APIGroups       []string `json:"apiGroups,omitempty"`
 	Resources       []string `json:"resources,omitempty"`
@@ -666,7 +655,6 @@ type PolicyRule struct {
 	Verbs           []string `json:"verbs"`
 	NonResourceURLs []string `json:"nonResourceURLs,omitempty"`
 }
-
 
 type RoleRef struct {
 	APIGroup string `json:"apiGroup"`
@@ -680,10 +668,6 @@ type Subject struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace,omitempty"`
 }
-
-
-
-
 
 type PodMetricsSummary struct {
 	Pods       int    `json:"pods"`

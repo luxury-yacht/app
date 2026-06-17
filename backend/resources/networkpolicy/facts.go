@@ -11,8 +11,8 @@ package networkpolicy
 type Facts struct {
 	PodSelector  map[string]string `json:"podSelector,omitempty"`
 	PolicyTypes  []string          `json:"policyTypes,omitempty"`
-	IngressRules []RuleFacts        `json:"ingressRules,omitempty"`
-	EgressRules  []RuleFacts        `json:"egressRules,omitempty"`
+	IngressRules []RuleFacts       `json:"ingressRules,omitempty"`
+	EgressRules  []RuleFacts       `json:"egressRules,omitempty"`
 }
 
 type RuleFacts struct {

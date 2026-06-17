@@ -29,10 +29,11 @@ func BuildWindows(cfg BuildConfig) error {
 // For beta releases, we extract the trailing number from the prerelease tag to use as the build number.
 // For stable releases, we append a build number of 1000 so it takes precedence over prerelease versions.
 // Examples:
-//   v1.2.3        -> 1.2.3.1000
-//   v1.2.3-beta.5 -> 1.2.3.5
+//
+//	v1.2.3        -> 1.2.3.1000
+//	v1.2.3-beta.5 -> 1.2.3.5
 func sanitizeSemverForWindows(semver string) (string, error) {
-    fmt.Printf("\n⚙️ Sanitizing semver %s for Windows...\n", semver)
+	fmt.Printf("\n⚙️ Sanitizing semver %s for Windows...\n", semver)
 
 	re := regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$`)
 	m := re.FindStringSubmatch(semver)

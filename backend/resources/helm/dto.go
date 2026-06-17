@@ -26,8 +26,8 @@ type HelmReleaseDetails struct {
 	Updated  string `json:"updated"`
 
 	Description string                 `json:"description,omitempty"`
-	Notes      string                 `json:"notes,omitempty"`
-	Values     map[string]interface{} `json:"values,omitempty"`
+	Notes       string                 `json:"notes,omitempty"`
+	Values      map[string]interface{} `json:"values,omitempty"`
 
 	History []HelmRevision `json:"history,omitempty"`
 

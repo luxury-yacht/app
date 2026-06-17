@@ -6,7 +6,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-
 func PolicyResourceModel(
 	clusterID, group, version, kind, resource string,
 	meta metav1.ObjectMeta,
@@ -15,9 +14,6 @@ func PolicyResourceModel(
 ) ResourceModel {
 	return NetworkResourceModel(clusterID, group, version, kind, resource, ResourceScopeNamespaced, meta, status, facts)
 }
-
-
-
 
 func NewIntOrStringFacts(value intstr.IntOrString) IntOrStringFacts {
 	facts := IntOrStringFacts{
@@ -80,8 +76,6 @@ func QuotaUsedPercentages(used, hard corev1.ResourceList) map[string]int {
 	}
 	return result
 }
-
-
 
 func podDisruptedPodLink(clusterID, namespace, name string) ResourceLink {
 	return namespacedResourceLink(clusterID, "", "v1", "Pod", "pods", namespace, name, "")

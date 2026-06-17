@@ -131,7 +131,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		if strings.TrimSpace(objectNamespace) != "" {
 			continue
 		}
-			facts := eventres.BuildFacts(meta.ClusterID, evt)
+		facts := eventres.BuildFacts(meta.ClusterID, evt)
 		timestamp := eventres.EventTimestamp(evt).Time
 		eventType := facts.EventType
 		if eventType == "" {

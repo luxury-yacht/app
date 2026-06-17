@@ -15,7 +15,7 @@ type Facts struct {
 	Class          *resourcemodel.ResourceLink  `json:"class,omitempty"`
 	Hosts          []string                     `json:"hosts,omitempty"`
 	Addresses      []string                     `json:"addresses,omitempty"`
-	TLS            []TLSFacts                    `json:"tls,omitempty"`
+	TLS            []TLSFacts                   `json:"tls,omitempty"`
 	Rules          []RuleFacts                  `json:"rules,omitempty"`
 	DefaultBackend *BackendFacts                `json:"defaultBackend,omitempty"`
 	BackendRefs    []resourcemodel.ResourceLink `json:"backendRefs,omitempty"`
@@ -35,8 +35,8 @@ type RuleFacts struct {
 
 // PathFacts describes a single HTTP path within an Ingress rule.
 type PathFacts struct {
-	Path     string      `json:"path,omitempty"`
-	PathType string      `json:"pathType,omitempty"`
+	Path     string       `json:"path,omitempty"`
+	PathType string       `json:"pathType,omitempty"`
 	Backend  BackendFacts `json:"backend"`
 }
 

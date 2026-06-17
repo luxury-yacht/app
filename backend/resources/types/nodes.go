@@ -17,6 +17,3 @@ type DrainNodeOptions struct {
 	DisableEviction            bool `json:"disableEviction"`
 	SkipWaitForPodsToTerminate bool `json:"skipWaitForPodsToTerminate"`
 }
-
-
-

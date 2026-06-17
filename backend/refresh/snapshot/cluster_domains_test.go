@@ -347,4 +347,3 @@ func TestClusterCRDBuilderCapsLargeSnapshots(t *testing.T) {
 	require.Equal(t, config.SnapshotClusterCRDEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "CRDs")
 }
-
