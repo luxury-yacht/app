@@ -48,7 +48,7 @@ func podQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "cpu", "memory", "age"},
 		[]string{"kinds", "namespaces", "statuses", "nodes"},
 		[]string{"name", "namespace", "status", "ready", "owner", "node"},
-		[]string{"Pod"},
+		[]string{podres.Identity.Kind},
 	)
 }
 

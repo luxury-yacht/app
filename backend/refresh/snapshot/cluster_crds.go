@@ -39,7 +39,7 @@ func clusterCRDQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "group", "scope", "details", "version", "age"},
 		[]string{"kinds"},
 		[]string{"kind", "typeAlias", "name", "group", "scope", "details", "storageVersion"},
-		[]string{"CustomResourceDefinition"},
+		[]string{apiextensions.Identity.Kind},
 	)
 }
 

@@ -24,44 +24,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
 	"github.com/luxury-yacht/app/backend/resourcekind"
-	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/appbinding"
-	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
-	"github.com/luxury-yacht/app/backend/resources/clusterrole"
-	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
-	"github.com/luxury-yacht/app/backend/resources/configmap"
-	"github.com/luxury-yacht/app/backend/resources/cronjob"
-	"github.com/luxury-yacht/app/backend/resources/daemonset"
-	"github.com/luxury-yacht/app/backend/resources/deployment"
-	"github.com/luxury-yacht/app/backend/resources/endpointslice"
-	"github.com/luxury-yacht/app/backend/resources/gateway"
-	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
-	"github.com/luxury-yacht/app/backend/resources/grpcroute"
-	"github.com/luxury-yacht/app/backend/resources/hpa"
-	"github.com/luxury-yacht/app/backend/resources/httproute"
-	"github.com/luxury-yacht/app/backend/resources/ingress"
-	"github.com/luxury-yacht/app/backend/resources/ingressclass"
-	"github.com/luxury-yacht/app/backend/resources/job"
-	"github.com/luxury-yacht/app/backend/resources/limitrange"
-	"github.com/luxury-yacht/app/backend/resources/listenerset"
-	"github.com/luxury-yacht/app/backend/resources/namespaces"
-	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
-	"github.com/luxury-yacht/app/backend/resources/nodes"
-	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
-	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
-	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
-	"github.com/luxury-yacht/app/backend/resources/referencegrant"
-	"github.com/luxury-yacht/app/backend/resources/replicaset"
-	"github.com/luxury-yacht/app/backend/resources/resourcequota"
-	"github.com/luxury-yacht/app/backend/resources/role"
-	"github.com/luxury-yacht/app/backend/resources/rolebinding"
-	"github.com/luxury-yacht/app/backend/resources/secret"
-	"github.com/luxury-yacht/app/backend/resources/service"
-	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
-	"github.com/luxury-yacht/app/backend/resources/statefulset"
-	"github.com/luxury-yacht/app/backend/resources/storageclass"
-	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 )
 
 const resourcesPkg = "github.com/luxury-yacht/app/backend/resources/"
@@ -153,49 +118,21 @@ func fromSpecs(specs []appbinding.Spec) []binding {
 	return out
 }
 
-// Bindings is the aggregated source for the generated App.Get wrappers: every kind
-// declares its own appbinding.Spec (resources/<kind>/appbinding.go) and this lists
-// each once, like the stream registry. The generator sorts by Name for stable
-// output, so the order here is immaterial.
-var Bindings = fromSpecs([]appbinding.Spec{
-	backendtlspolicy.DetailBinding,
-	clusterrole.DetailBinding,
-	clusterrolebinding.DetailBinding,
-	configmap.DetailBinding,
-	cronjob.DetailBinding,
-	daemonset.DetailBinding,
-	deployment.DetailBinding,
-	endpointslice.DetailBinding,
-	gateway.DetailBinding,
-	gatewayclass.DetailBinding,
-	grpcroute.DetailBinding,
-	hpa.DetailBinding,
-	httproute.DetailBinding,
-	ingress.DetailBinding,
-	ingressclass.DetailBinding,
-	job.DetailBinding,
-	limitrange.DetailBinding,
-	listenerset.DetailBinding,
-	admission.MutatingDetailBinding,
-	namespaces.DetailBinding,
-	networkpolicy.DetailBinding,
-	nodes.DetailBinding,
-	persistentvolume.DetailBinding,
-	persistentvolumeclaim.DetailBinding,
-	poddisruptionbudget.DetailBinding,
-	referencegrant.DetailBinding,
-	replicaset.DetailBinding,
-	resourcequota.DetailBinding,
-	role.DetailBinding,
-	rolebinding.DetailBinding,
-	secret.DetailBinding,
-	service.DetailBinding,
-	serviceaccount.DetailBinding,
-	statefulset.DetailBinding,
-	storageclass.DetailBinding,
-	tlsroute.DetailBinding,
-	admission.ValidatingDetailBinding,
-})
+// Bindings is the aggregated source for the generated App.Get wrappers, derived
+// from the single kind registry: every kind declares its own appbinding.Spec
+// (resources/<kind>/appbinding.go) and registers it once in kindregistry.All. The
+// generator sorts by Name for stable output, so registry order is immaterial.
+var Bindings = bindingsFromRegistry()
+
+func bindingsFromRegistry() []binding {
+	out := make([]binding, 0, len(kindregistry.All))
+	for _, d := range kindregistry.All {
+		if d.Binding != nil {
+			out = append(out, fromSpec(*d.Binding))
+		}
+	}
+	return out
+}
 
 // detailExtras are kinds that have a runtime object-panel detail fetcher but whose
 // App.Get binding is hand-written, so they are absent from Bindings. They take part

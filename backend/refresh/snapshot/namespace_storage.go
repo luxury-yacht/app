@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 )
 
 const (
@@ -40,7 +41,7 @@ func namespaceStorageQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "capacity", "status", "storageClass", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "capacity", "status", "storageClass"},
-		[]string{"PersistentVolumeClaim"},
+		[]string{persistentvolumeclaim.Identity.Kind},
 	)
 }
 

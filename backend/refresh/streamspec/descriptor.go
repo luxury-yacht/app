@@ -34,7 +34,7 @@ type Descriptor struct {
 	// handler in resourcestream (e.g. ConfigMap/Secret, which also trigger a
 	// Helm-release refresh side-effect). registerDescriptorStreams skips these so
 	// the custom handler stays the sole streamer; the descriptor still exists so
-	// the snapshot side (streamregistry.ForDomain) and the drift guard see the kind.
+	// the snapshot side (kindregistry.StreamDescriptorsForDomain) and the drift guard see the kind.
 	CustomStreamHandler bool
 
 	// StreamRow projects one event object into its neutral stream row. The closure

@@ -15,6 +15,9 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	"github.com/luxury-yacht/app/backend/resources/role"
+	"github.com/luxury-yacht/app/backend/resources/rolebinding"
+	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 )
 
 const namespaceRBACDomainName = "namespace-rbac"
@@ -38,7 +41,7 @@ func namespaceRBACQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "details", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "details"},
-		[]string{"Role", "RoleBinding", "ServiceAccount"},
+		[]string{role.Identity.Kind, rolebinding.Identity.Kind, serviceaccount.Identity.Kind},
 	)
 }
 

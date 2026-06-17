@@ -15,6 +15,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	"github.com/luxury-yacht/app/backend/resources/clusterrole"
+	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 )
 
 const clusterRBACDomainName = "cluster-rbac"
@@ -39,7 +41,7 @@ func clusterRBACQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "details", "age"},
 		[]string{"kinds"},
 		[]string{"kind", "typeAlias", "name", "details"},
-		[]string{"ClusterRole", "ClusterRoleBinding"},
+		[]string{clusterrole.Identity.Kind, clusterrolebinding.Identity.Kind},
 	)
 }
 

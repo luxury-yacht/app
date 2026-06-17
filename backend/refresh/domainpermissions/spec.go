@@ -4,7 +4,46 @@ package domainpermissions
 
 import (
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
-	"github.com/luxury-yacht/app/backend/resourcecontract"
+	"github.com/luxury-yacht/app/backend/resourcekind"
+	admissionpkg "github.com/luxury-yacht/app/backend/resources/admission"
+	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
+	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
+	"github.com/luxury-yacht/app/backend/resources/clusterrole"
+	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/daemonset"
+	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/events"
+	gatewaypkg "github.com/luxury-yacht/app/backend/resources/gateway"
+	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
+	"github.com/luxury-yacht/app/backend/resources/grpcroute"
+	"github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/httproute"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	"github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/listenerset"
+	"github.com/luxury-yacht/app/backend/resources/namespaces"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	"github.com/luxury-yacht/app/backend/resources/nodes"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	"github.com/luxury-yacht/app/backend/resources/pods"
+	"github.com/luxury-yacht/app/backend/resources/referencegrant"
+	"github.com/luxury-yacht/app/backend/resources/replicaset"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	"github.com/luxury-yacht/app/backend/resources/role"
+	"github.com/luxury-yacht/app/backend/resources/rolebinding"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	"github.com/luxury-yacht/app/backend/resources/service"
+	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
+	"github.com/luxury-yacht/app/backend/resources/statefulset"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
+	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 )
 
 // Mode describes how a domain's runtime permission requirements are evaluated.
@@ -226,63 +265,15 @@ func resources(groups ...[]Resource) []Resource {
 	return result
 }
 
-func core(version, kind string) Resource {
-	return builtinResource("", version, kind)
-}
-
-func apps(kind string) Resource {
-	return builtinResource("apps", "v1", kind)
-}
-
-func batch(kind string) Resource {
-	return builtinResource("batch", "v1", kind)
-}
-
-func autoscaling(kind string) Resource {
-	return builtinResource("autoscaling", "v1", kind)
-}
-
-func discovery(kind string) Resource {
-	return builtinResource("discovery.k8s.io", "v1", kind)
-}
-
-func networking(kind string) Resource {
-	return builtinResource("networking.k8s.io", "v1", kind)
-}
-
-func gateway(kind string) Resource {
-	return builtinResource("gateway.networking.k8s.io", "v1", kind)
-}
-
-func rbac(kind string) Resource {
-	return builtinResource("rbac.authorization.k8s.io", "v1", kind)
-}
-
-func policy(kind string) Resource {
-	return builtinResource("policy", "v1", kind)
-}
-
-func storage(kind string) Resource {
-	return builtinResource("storage.k8s.io", "v1", kind)
-}
-
-func admission(kind string) Resource {
-	return builtinResource("admissionregistration.k8s.io", "v1", kind)
-}
-
-func apiextensions(kind string) Resource {
-	return builtinResource("apiextensions.k8s.io", "v1", kind)
-}
-
-// builtinResource sources one domain resource from the single contract — the
-// group/version/kind/resource identity is never re-spelled here.
-func builtinResource(group, version, kind string) Resource {
-	desc := resourcecontract.MustBuiltin(group, version, kind)
+// fromIdentity builds a domain Resource from a kind package's canonical Identity,
+// so a domain composition references each kind (e.g. deployment.Identity) instead
+// of re-spelling its group/version/kind/resource.
+func fromIdentity(id resourcekind.Identity) Resource {
 	return Resource{
-		Group:    desc.Group,
-		Version:  desc.Version,
-		Kind:     desc.Kind,
-		Resource: desc.Resource,
+		Group:    id.Group,
+		Version:  id.Version,
+		Kind:     id.Kind,
+		Resource: id.Resource,
 	}
 }
 
@@ -290,94 +281,94 @@ var policySpecs = []policySpec{
 	{
 		Domain:  "namespaces",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Namespace")},
+		Runtime: []Resource{fromIdentity(namespaces.Identity)},
 	},
 	{
 		Domain: "namespace-workloads",
 		Mode:   ModeAny,
 		Reason: "workload resources",
 		Runtime: []Resource{
-			core("v1", "Pod"),
-			apps("Deployment"),
-			apps("StatefulSet"),
-			apps("DaemonSet"),
-			batch("Job"),
-			batch("CronJob"),
+			fromIdentity(pods.Identity),
+			fromIdentity(deployment.Identity),
+			fromIdentity(statefulset.Identity),
+			fromIdentity(daemonset.Identity),
+			fromIdentity(job.Identity),
+			fromIdentity(cronjob.Identity),
 		},
 		Stream: []Resource{
-			core("v1", "Pod"),
-			apps("ReplicaSet"),
-			apps("Deployment"),
-			apps("StatefulSet"),
-			apps("DaemonSet"),
-			batch("Job"),
-			batch("CronJob"),
-			autoscaling("HorizontalPodAutoscaler"),
+			fromIdentity(pods.Identity),
+			fromIdentity(replicaset.Identity),
+			fromIdentity(deployment.Identity),
+			fromIdentity(statefulset.Identity),
+			fromIdentity(daemonset.Identity),
+			fromIdentity(job.Identity),
+			fromIdentity(cronjob.Identity),
+			fromIdentity(hpa.IdentityV1),
 		},
 	},
 	{
 		Domain:  "namespace-config",
 		Mode:    ModeAny,
 		Reason:  "core/configmaps,secrets",
-		Runtime: []Resource{core("v1", "ConfigMap"), core("v1", "Secret")},
-		Stream:  []Resource{core("v1", "ConfigMap"), core("v1", "Secret")},
+		Runtime: []Resource{fromIdentity(configmap.Identity), fromIdentity(secretpkg.Identity)},
+		Stream:  []Resource{fromIdentity(configmap.Identity), fromIdentity(secretpkg.Identity)},
 	},
 	{
 		Domain: "namespace-network",
 		Mode:   ModeAny,
 		Reason: "network resources",
 		Runtime: []Resource{
-			core("v1", "Service"),
-			discovery("EndpointSlice"),
-			networking("Ingress"),
-			networking("NetworkPolicy"),
-			gateway("Gateway"),
-			gateway("HTTPRoute"),
-			gateway("GRPCRoute"),
-			gateway("TLSRoute"),
-			gateway("ListenerSet"),
-			gateway("ReferenceGrant"),
-			gateway("BackendTLSPolicy"),
+			fromIdentity(service.Identity),
+			fromIdentity(endpointslice.Identity),
+			fromIdentity(ingress.Identity),
+			fromIdentity(networkpolicy.Identity),
+			fromIdentity(gatewaypkg.Identity),
+			fromIdentity(httproute.Identity),
+			fromIdentity(grpcroute.Identity),
+			fromIdentity(tlsroute.Identity),
+			fromIdentity(listenerset.Identity),
+			fromIdentity(referencegrant.Identity),
+			fromIdentity(backendtlspolicy.Identity),
 		},
 		Stream: []Resource{
-			core("v1", "Service"),
-			discovery("EndpointSlice"),
-			networking("Ingress"),
-			networking("NetworkPolicy"),
-			gateway("Gateway"),
-			gateway("HTTPRoute"),
-			gateway("GRPCRoute"),
-			gateway("TLSRoute"),
-			gateway("ListenerSet"),
-			gateway("ReferenceGrant"),
-			gateway("BackendTLSPolicy"),
+			fromIdentity(service.Identity),
+			fromIdentity(endpointslice.Identity),
+			fromIdentity(ingress.Identity),
+			fromIdentity(networkpolicy.Identity),
+			fromIdentity(gatewaypkg.Identity),
+			fromIdentity(httproute.Identity),
+			fromIdentity(grpcroute.Identity),
+			fromIdentity(tlsroute.Identity),
+			fromIdentity(listenerset.Identity),
+			fromIdentity(referencegrant.Identity),
+			fromIdentity(backendtlspolicy.Identity),
 		},
 	},
 	{
 		Domain:  "namespace-storage",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "PersistentVolumeClaim")},
-		Stream:  []Resource{core("v1", "PersistentVolumeClaim")},
+		Runtime: []Resource{fromIdentity(persistentvolumeclaim.Identity)},
+		Stream:  []Resource{fromIdentity(persistentvolumeclaim.Identity)},
 	},
 	{
 		Domain:  "namespace-autoscaling",
 		Mode:    ModeAll,
-		Runtime: []Resource{autoscaling("HorizontalPodAutoscaler")},
-		Stream:  []Resource{autoscaling("HorizontalPodAutoscaler")},
+		Runtime: []Resource{fromIdentity(hpa.IdentityV1)},
+		Stream:  []Resource{fromIdentity(hpa.IdentityV1)},
 	},
 	{
 		Domain: "namespace-quotas",
 		Mode:   ModeAny,
 		Reason: "quota resources",
 		Runtime: []Resource{
-			core("v1", "ResourceQuota"),
-			core("v1", "LimitRange"),
-			policy("PodDisruptionBudget"),
+			fromIdentity(resourcequota.Identity),
+			fromIdentity(limitrange.Identity),
+			fromIdentity(poddisruptionbudget.Identity),
 		},
 		Stream: []Resource{
-			core("v1", "ResourceQuota"),
-			core("v1", "LimitRange"),
-			policy("PodDisruptionBudget"),
+			fromIdentity(resourcequota.Identity),
+			fromIdentity(limitrange.Identity),
+			fromIdentity(poddisruptionbudget.Identity),
 		},
 	},
 	{
@@ -385,106 +376,106 @@ var policySpecs = []policySpec{
 		Mode:   ModeAny,
 		Reason: "rbac.authorization.k8s.io/roles,rolebindings,serviceaccounts",
 		Runtime: []Resource{
-			rbac("Role"),
-			rbac("RoleBinding"),
-			core("v1", "ServiceAccount"),
+			fromIdentity(role.Identity),
+			fromIdentity(rolebinding.Identity),
+			fromIdentity(serviceaccount.Identity),
 		},
 		Stream: []Resource{
-			rbac("Role"),
-			rbac("RoleBinding"),
-			core("v1", "ServiceAccount"),
+			fromIdentity(role.Identity),
+			fromIdentity(rolebinding.Identity),
+			fromIdentity(serviceaccount.Identity),
 		},
 	},
 	{
 		Domain:  "namespace-custom",
 		Mode:    ModeAll,
-		Runtime: []Resource{apiextensions("CustomResourceDefinition")},
-		Stream:  []Resource{apiextensions("CustomResourceDefinition")},
+		Runtime: []Resource{fromIdentity(apiextensionspkg.Identity)},
+		Stream:  []Resource{fromIdentity(apiextensionspkg.Identity)},
 	},
 	{
 		Domain:  "namespace-helm",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Secret")},
+		Runtime: []Resource{fromIdentity(secretpkg.Identity)},
 		// Runtime Helm list operations are secret-backed in the normal Helm
 		// storage path. Streams also watch ConfigMaps so configmap-backed Helm
 		// release storage can trigger namespace-level resyncs when permitted.
-		Stream: []Resource{core("v1", "Secret"), core("v1", "ConfigMap")},
+		Stream: []Resource{fromIdentity(secretpkg.Identity), fromIdentity(configmap.Identity)},
 	},
 	{
 		Domain:  "namespace-events",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Event")},
+		Runtime: []Resource{fromIdentity(events.Identity)},
 	},
 	{
 		Domain:  "pods",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Pod")},
-		Stream:  []Resource{core("v1", "Pod")},
+		Runtime: []Resource{fromIdentity(pods.Identity)},
+		Stream:  []Resource{fromIdentity(pods.Identity)},
 	},
 	{
 		Domain:  "nodes",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Node")},
-		Stream:  []Resource{core("v1", "Node")},
+		Runtime: []Resource{fromIdentity(nodes.Identity)},
+		Stream:  []Resource{fromIdentity(nodes.Identity)},
 	},
 	{
 		Domain:  "cluster-overview",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Node")},
+		Runtime: []Resource{fromIdentity(nodes.Identity)},
 	},
 	{
 		Domain:  "cluster-rbac",
 		Mode:    ModeAny,
 		Reason:  "rbac.authorization.k8s.io",
-		Runtime: []Resource{rbac("ClusterRole"), rbac("ClusterRoleBinding")},
-		Stream:  []Resource{rbac("ClusterRole"), rbac("ClusterRoleBinding")},
+		Runtime: []Resource{fromIdentity(clusterrole.Identity), fromIdentity(clusterrolebinding.Identity)},
+		Stream:  []Resource{fromIdentity(clusterrole.Identity), fromIdentity(clusterrolebinding.Identity)},
 	},
 	{
 		Domain:  "cluster-storage",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "PersistentVolume")},
-		Stream:  []Resource{core("v1", "PersistentVolume")},
+		Runtime: []Resource{fromIdentity(persistentvolume.Identity)},
+		Stream:  []Resource{fromIdentity(persistentvolume.Identity)},
 	},
 	{
 		Domain: "cluster-config",
 		Mode:   ModeAny,
 		Reason: "cluster configuration resources",
 		Runtime: []Resource{
-			storage("StorageClass"),
-			networking("IngressClass"),
-			gateway("GatewayClass"),
-			admission("ValidatingWebhookConfiguration"),
-			admission("MutatingWebhookConfiguration"),
+			fromIdentity(storageclass.Identity),
+			fromIdentity(ingressclass.Identity),
+			fromIdentity(gatewayclass.Identity),
+			fromIdentity(admissionpkg.ValidatingIdentity),
+			fromIdentity(admissionpkg.MutatingIdentity),
 		},
 		Stream: []Resource{
-			storage("StorageClass"),
-			networking("IngressClass"),
-			gateway("GatewayClass"),
-			admission("ValidatingWebhookConfiguration"),
-			admission("MutatingWebhookConfiguration"),
+			fromIdentity(storageclass.Identity),
+			fromIdentity(ingressclass.Identity),
+			fromIdentity(gatewayclass.Identity),
+			fromIdentity(admissionpkg.ValidatingIdentity),
+			fromIdentity(admissionpkg.MutatingIdentity),
 		},
 	},
 	{
 		Domain:  "cluster-crds",
 		Mode:    ModeAll,
-		Runtime: []Resource{apiextensions("CustomResourceDefinition")},
-		Stream:  []Resource{apiextensions("CustomResourceDefinition")},
+		Runtime: []Resource{fromIdentity(apiextensionspkg.Identity)},
+		Stream:  []Resource{fromIdentity(apiextensionspkg.Identity)},
 	},
 	{
 		Domain:  "cluster-custom",
 		Mode:    ModeAll,
-		Runtime: []Resource{apiextensions("CustomResourceDefinition")},
-		Stream:  []Resource{apiextensions("CustomResourceDefinition")},
+		Runtime: []Resource{fromIdentity(apiextensionspkg.Identity)},
+		Stream:  []Resource{fromIdentity(apiextensionspkg.Identity)},
 	},
 	{
 		Domain:  "cluster-events",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Event")},
+		Runtime: []Resource{fromIdentity(events.Identity)},
 	},
 	{
 		Domain:  "object-events",
 		Mode:    ModeAll,
-		Runtime: []Resource{core("v1", "Event")},
+		Runtime: []Resource{fromIdentity(events.Identity)},
 	},
 	{
 		Domain: "object-map",
@@ -492,37 +483,37 @@ var policySpecs = []policySpec{
 		Reason: "object map resources",
 		Runtime: resources(
 			[]Resource{
-				core("v1", "Pod"),
-				core("v1", "Service"),
-				discovery("EndpointSlice"),
-				core("v1", "PersistentVolumeClaim"),
-				core("v1", "PersistentVolume"),
-				storage("StorageClass"),
-				core("v1", "ConfigMap"),
-				core("v1", "Secret"),
-				core("v1", "ServiceAccount"),
-				core("v1", "Node"),
+				fromIdentity(pods.Identity),
+				fromIdentity(service.Identity),
+				fromIdentity(endpointslice.Identity),
+				fromIdentity(persistentvolumeclaim.Identity),
+				fromIdentity(persistentvolume.Identity),
+				fromIdentity(storageclass.Identity),
+				fromIdentity(configmap.Identity),
+				fromIdentity(secretpkg.Identity),
+				fromIdentity(serviceaccount.Identity),
+				fromIdentity(nodes.Identity),
 			},
 			[]Resource{
-				apps("Deployment"),
-				apps("ReplicaSet"),
-				apps("StatefulSet"),
-				apps("DaemonSet"),
-				batch("Job"),
-				batch("CronJob"),
-				autoscaling("HorizontalPodAutoscaler"),
-				networking("Ingress"),
-				networking("IngressClass"),
+				fromIdentity(deployment.Identity),
+				fromIdentity(replicaset.Identity),
+				fromIdentity(statefulset.Identity),
+				fromIdentity(daemonset.Identity),
+				fromIdentity(job.Identity),
+				fromIdentity(cronjob.Identity),
+				fromIdentity(hpa.IdentityV1),
+				fromIdentity(ingress.Identity),
+				fromIdentity(ingressclass.Identity),
 			},
 			[]Resource{
-				gateway("GatewayClass"),
-				gateway("Gateway"),
-				gateway("HTTPRoute"),
-				gateway("GRPCRoute"),
-				gateway("TLSRoute"),
-				gateway("ListenerSet"),
-				gateway("ReferenceGrant"),
-				gateway("BackendTLSPolicy"),
+				fromIdentity(gatewayclass.Identity),
+				fromIdentity(gatewaypkg.Identity),
+				fromIdentity(httproute.Identity),
+				fromIdentity(grpcroute.Identity),
+				fromIdentity(tlsroute.Identity),
+				fromIdentity(listenerset.Identity),
+				fromIdentity(referencegrant.Identity),
+				fromIdentity(backendtlspolicy.Identity),
 			},
 		),
 	},

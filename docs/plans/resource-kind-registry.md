@@ -1,5 +1,29 @@
 # The Task: one place per kind
 
+> **STATUS 2026-06-16 — DONE (gate-green).** The one registry exists:
+> `backend/refresh/kindregistry.All` ([]`kindspec.Descriptor`, one entry per
+> built-in kind). Every dispatch subsystem now loops/derives from it and names no
+> kind itself: object catalog (informer/list/watch), resource-stream, snapshot
+> stream-summary, object-map (collectors + edges), App bindings + generated detail
+> dispatch, and response-cache invalidation. Domain permissions reference each
+> kind's canonical `Identity` (the domain→kind composition is irreducible policy,
+> not a registry-derivable facet). Capability vocabularies reference
+> `<kind>.Identity.Kind`. Adding a kind = create `resources/<kind>/` + one entry in
+> `kindregistry.All`. Remaining kind-name occurrences are only: the kind's own
+> package, that one registry entry, legitimate cross-kind relationships (e.g. a
+> workload→ConfigMap edge), per-kind operations (scale/rollback/port-forward), Go
+> type switches, documented exceptions (workload-metrics + HPA bespoke streaming),
+> shared leaf types, comments, and tests — none of which is a subsystem spelling a
+> kind out for dispatch.
+>
+> Two deliberate non-goals remain (do not re-open without reason): each kind's
+> `StreamDescriptor` restates G/V/K/R as literals **in its own package** (the
+> done-test allows own-package naming; drift-guarded); and each kind exports
+> several facet vars rather than one bundled `Descriptor` var (the registry
+> aggregates them, so "register once" holds — step 1 met in spirit).
+
+
+
 ## The goal, in one sentence
 
 Every Kubernetes kind is defined in **one** place — its own package — and **every

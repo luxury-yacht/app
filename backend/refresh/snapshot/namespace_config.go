@@ -15,6 +15,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
+	"github.com/luxury-yacht/app/backend/resources/secret"
 )
 
 const (
@@ -44,7 +46,7 @@ func namespaceConfigQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "data", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "typeAlias", "name", "namespace", "data"},
-		[]string{"ConfigMap", "Secret"},
+		[]string{configmap.Identity.Kind, secret.Identity.Kind},
 	)
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
 )
 
 const clusterStorageDomainName = "cluster-storage"
@@ -41,7 +42,7 @@ func clusterStorageQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "storageClass", "capacity", "accessModes", "status", "claim", "age"},
 		[]string{"kinds"},
 		[]string{"kind", "name", "storageClass", "capacity", "accessModes", "status", "claim"},
-		[]string{"PersistentVolume"},
+		[]string{persistentvolume.Identity.Kind},
 	)
 }
 

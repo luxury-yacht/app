@@ -15,6 +15,7 @@ import (
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -54,6 +55,8 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	if shared == nil {
 		return
 	}
+	gateway := subsystem.InformerFactory.GatewayInformerFactory()
+	apiext := subsystem.InformerFactory.APIExtensionsInformerFactory()
 
 	guard := responseCacheInvalidationGuard{
 		hasSynced: func() bool {
@@ -66,9 +69,33 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	// creation for cluster-scoped resources the user cannot list/watch.
 	var perms permissions.ListWatchChecker = subsystem.InformerFactory
 
-	a.registerSharedCacheInvalidation(shared, selectionKey, guard, perms)
-	a.registerGatewayAPIInvalidation(subsystem.InformerFactory.GatewayInformerFactory(), selectionKey, guard, perms)
-	a.registerAPIExtensionsInvalidation(subsystem.InformerFactory.APIExtensionsInformerFactory(), selectionKey, guard, perms)
+	// Every detail-cacheable kind drives response-cache eviction. The kind registry
+	// is the single source; the informer is read generically from the factory its
+	// group implies (Gateway-API, apiextensions, or the core shared factory), so no
+	// per-kind informer accessor is wired here. Permissions are checked before
+	// ForResource to avoid creating informers the user cannot list/watch.
+	for _, d := range kindregistry.All {
+		if !d.DetailCacheable {
+			continue
+		}
+		group := d.Identity.Group
+		resource := d.Identity.Resource
+		if !perms.CanListWatch(group, resource) {
+			continue
+		}
+		gvr := schema.GroupVersionResource{Group: group, Version: d.Identity.Version, Resource: resource}
+		var informer cache.SharedIndexInformer
+		switch group {
+		case gatewayAPIGroup:
+			informer = gatewayFactoryInformer(gateway, gvr)
+		case apiExtensionsGroup:
+			informer = apiextensionsFactoryInformer(apiext, gvr)
+		default:
+			informer = sharedFactoryInformer(shared, gvr)
+		}
+		a.addResponseCacheInvalidationHandler(informer, selectionKey, d.Identity.Kind, guard)
+	}
+
 	if subsystem.ResourceStream != nil {
 		// Use custom resource stream updates to evict cached YAML for dynamic resources.
 		subsystem.ResourceStream.SetCustomResourceCacheInvalidator(func(kind, namespace, name string) {
@@ -80,175 +107,51 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	}
 }
 
-// cacheInvalidationDescriptor declares one built-in kind whose informer drives
-// response-cache eviction via the core shared informer factory.
-type cacheInvalidationDescriptor struct {
-	group    string
-	resource string
-	kind     string
-	informer func(informers.SharedInformerFactory) cache.SharedIndexInformer
-}
+// gatewayAPIGroup and apiExtensionsGroup select the non-core informer factory for
+// a kind in the response-cache invalidation loop; every other group reads from the
+// core shared informer factory.
+const (
+	gatewayAPIGroup    = "gateway.networking.k8s.io"
+	apiExtensionsGroup = "apiextensions.k8s.io"
+)
 
-// gatewayCacheInvalidationDescriptor is the Gateway API equivalent (different factory type).
-type gatewayCacheInvalidationDescriptor struct {
-	group    string
-	resource string
-	kind     string
-	informer func(gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer
-}
-
-var sharedCacheInvalidationDescriptors = []cacheInvalidationDescriptor{
-	{"", "pods", "Pod", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Core().V1().Pods().Informer()
-	}},
-	{"", "configmaps", "ConfigMap", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Core().V1().ConfigMaps().Informer()
-	}},
-	{"", "secrets", "Secret", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Core().V1().Secrets().Informer()
-	}},
-	{"", "services", "Service", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Core().V1().Services().Informer()
-	}},
-	{"", "persistentvolumeclaims", "PersistentVolumeClaim", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Core().V1().PersistentVolumeClaims().Informer()
-	}},
-	{"", "resourcequotas", "ResourceQuota", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Core().V1().ResourceQuotas().Informer()
-	}},
-	{"", "limitranges", "LimitRange", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Core().V1().LimitRanges().Informer()
-	}},
-	{"", "serviceaccounts", "ServiceAccount", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Core().V1().ServiceAccounts().Informer()
-	}},
-	{"", "namespaces", "Namespace", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Core().V1().Namespaces().Informer()
-	}},
-	{"", "nodes", "Node", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Core().V1().Nodes().Informer()
-	}},
-	{"", "persistentvolumes", "PersistentVolume", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Core().V1().PersistentVolumes().Informer()
-	}},
-	{"apps", "replicasets", "ReplicaSet", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Apps().V1().ReplicaSets().Informer()
-	}},
-	{"apps", "deployments", "Deployment", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Apps().V1().Deployments().Informer()
-	}},
-	{"apps", "statefulsets", "StatefulSet", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Apps().V1().StatefulSets().Informer()
-	}},
-	{"apps", "daemonsets", "DaemonSet", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Apps().V1().DaemonSets().Informer()
-	}},
-	{"batch", "jobs", "Job", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Batch().V1().Jobs().Informer()
-	}},
-	{"batch", "cronjobs", "CronJob", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Batch().V1().CronJobs().Informer()
-	}},
-	{"rbac.authorization.k8s.io", "roles", "Role", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Rbac().V1().Roles().Informer()
-	}},
-	{"rbac.authorization.k8s.io", "rolebindings", "RoleBinding", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Rbac().V1().RoleBindings().Informer()
-	}},
-	{"rbac.authorization.k8s.io", "clusterroles", "ClusterRole", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Rbac().V1().ClusterRoles().Informer()
-	}},
-	{"rbac.authorization.k8s.io", "clusterrolebindings", "ClusterRoleBinding", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Rbac().V1().ClusterRoleBindings().Informer()
-	}},
-	{"storage.k8s.io", "storageclasses", "StorageClass", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Storage().V1().StorageClasses().Informer()
-	}},
-	{"networking.k8s.io", "ingresses", "Ingress", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Networking().V1().Ingresses().Informer()
-	}},
-	{"networking.k8s.io", "networkpolicies", "NetworkPolicy", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Networking().V1().NetworkPolicies().Informer()
-	}},
-	{"discovery.k8s.io", "endpointslices", "EndpointSlice", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Discovery().V1().EndpointSlices().Informer()
-	}},
-	{"networking.k8s.io", "ingressclasses", "IngressClass", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Networking().V1().IngressClasses().Informer()
-	}},
-	{"autoscaling", "horizontalpodautoscalers", "HorizontalPodAutoscaler", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Autoscaling().V1().HorizontalPodAutoscalers().Informer()
-	}},
-	{"policy", "poddisruptionbudgets", "PodDisruptionBudget", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Policy().V1().PodDisruptionBudgets().Informer()
-	}},
-	{"admissionregistration.k8s.io", "mutatingwebhookconfigurations", "MutatingWebhookConfiguration", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Admissionregistration().V1().MutatingWebhookConfigurations().Informer()
-	}},
-	{"admissionregistration.k8s.io", "validatingwebhookconfigurations", "ValidatingWebhookConfiguration", func(s informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return s.Admissionregistration().V1().ValidatingWebhookConfigurations().Informer()
-	}},
-}
-
-var gatewayCacheInvalidationDescriptors = []gatewayCacheInvalidationDescriptor{
-	{"gateway.networking.k8s.io", "gatewayclasses", "GatewayClass", func(f gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Gateway().V1().GatewayClasses().Informer()
-	}},
-	{"gateway.networking.k8s.io", "gateways", "Gateway", func(f gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Gateway().V1().Gateways().Informer()
-	}},
-	{"gateway.networking.k8s.io", "httproutes", "HTTPRoute", func(f gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Gateway().V1().HTTPRoutes().Informer()
-	}},
-	{"gateway.networking.k8s.io", "grpcroutes", "GRPCRoute", func(f gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Gateway().V1().GRPCRoutes().Informer()
-	}},
-	{"gateway.networking.k8s.io", "tlsroutes", "TLSRoute", func(f gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Gateway().V1().TLSRoutes().Informer()
-	}},
-	{"gateway.networking.k8s.io", "listenersets", "ListenerSet", func(f gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Gateway().V1().ListenerSets().Informer()
-	}},
-	{"gateway.networking.k8s.io", "referencegrants", "ReferenceGrant", func(f gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Gateway().V1().ReferenceGrants().Informer()
-	}},
-	{"gateway.networking.k8s.io", "backendtlspolicies", "BackendTLSPolicy", func(f gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Gateway().V1().BackendTLSPolicies().Informer()
-	}},
-}
-
-// registerSharedCacheInvalidation installs cache-eviction handlers for every
-// built-in kind served by the shared informer factory. Cluster-scoped informers
-// are gated on list/watch permission to avoid lazy informer creation.
-func (a *App) registerSharedCacheInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	for _, d := range sharedCacheInvalidationDescriptors {
-		if perms == nil || perms.CanListWatch(d.group, d.resource) {
-			a.addResponseCacheInvalidationHandler(d.informer(shared), selectionKey, d.kind, guard)
-		}
-	}
-}
-
-func (a *App) registerGatewayAPIInvalidation(factory gatewayinformers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
+// sharedFactoryInformer returns the core shared informer for a GVR, reading it
+// generically via ForResource so no per-kind accessor is wired. Returns nil when
+// the factory is absent or cannot serve the GVR; the caller's handler registration
+// is a no-op on nil.
+func sharedFactoryInformer(factory informers.SharedInformerFactory, gvr schema.GroupVersionResource) cache.SharedIndexInformer {
 	if factory == nil {
-		return
+		return nil
 	}
-	for _, d := range gatewayCacheInvalidationDescriptors {
-		if perms == nil || perms.CanListWatch(d.group, d.resource) {
-			a.addResponseCacheInvalidationHandler(d.informer(factory), selectionKey, d.kind, guard)
-		}
+	generic, err := factory.ForResource(gvr)
+	if err != nil {
+		return nil
 	}
+	return generic.Informer()
 }
 
-func (a *App) registerAPIExtensionsInvalidation(shared apiextensionsinformers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	if shared == nil {
-		return
+// gatewayFactoryInformer is sharedFactoryInformer for the Gateway-API factory.
+func gatewayFactoryInformer(factory gatewayinformers.SharedInformerFactory, gvr schema.GroupVersionResource) cache.SharedIndexInformer {
+	if factory == nil {
+		return nil
 	}
-	// CustomResourceDefinitions are cluster-scoped — gate on permissions.
-	if perms != nil && !perms.CanListWatch("apiextensions.k8s.io", "customresourcedefinitions") {
-		return
+	generic, err := factory.ForResource(gvr)
+	if err != nil {
+		return nil
 	}
-	informer := shared.Apiextensions().V1().CustomResourceDefinitions().Informer()
-	a.addResponseCacheInvalidationHandler(informer, selectionKey, "CustomResourceDefinition", guard)
+	return generic.Informer()
+}
+
+// apiextensionsFactoryInformer is sharedFactoryInformer for the apiextensions factory.
+func apiextensionsFactoryInformer(factory apiextensionsinformers.SharedInformerFactory, gvr schema.GroupVersionResource) cache.SharedIndexInformer {
+	if factory == nil {
+		return nil
+	}
+	generic, err := factory.ForResource(gvr)
+	if err != nil {
+		return nil
+	}
+	return generic.Informer()
 }
 
 // addResponseCacheInvalidationHandler evicts cached responses when an informer update arrives.

@@ -11,7 +11,7 @@ package resourcestream
 
 import (
 	"github.com/luxury-yacht/app/backend/refresh/informer"
-	"github.com/luxury-yacht/app/backend/refresh/streamregistry"
+	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
@@ -23,7 +23,7 @@ import (
 func (m *Manager) registerDescriptorStreams(factory *informer.Factory) {
 	shared := factory.SharedInformerFactory()
 	gatewayShared := factory.GatewayInformerFactory()
-	for _, d := range streamregistry.All {
+	for _, d := range kindregistry.StreamDescriptors() {
 		// Kinds with a bespoke streaming handler (registerConfigStreams etc.) are
 		// registered there; their descriptor exists only for the snapshot side.
 		if d.CustomStreamHandler {

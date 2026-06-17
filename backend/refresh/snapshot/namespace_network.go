@@ -21,8 +21,17 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/gateway"
+	"github.com/luxury-yacht/app/backend/resources/grpcroute"
+	"github.com/luxury-yacht/app/backend/resources/httproute"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
+	"github.com/luxury-yacht/app/backend/resources/listenerset"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	"github.com/luxury-yacht/app/backend/resources/service"
+	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 )
 
 const (
@@ -53,7 +62,7 @@ func namespaceNetworkQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "details", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "details"},
-		[]string{"Service", "Ingress", "EndpointSlice", "NetworkPolicy", "Gateway", "HTTPRoute", "GRPCRoute", "TLSRoute", "ListenerSet", "ReferenceGrant", "BackendTLSPolicy"},
+		[]string{service.Identity.Kind, ingress.Identity.Kind, endpointslice.Identity.Kind, networkpolicy.Identity.Kind, gateway.Identity.Kind, httproute.Identity.Kind, grpcroute.Identity.Kind, tlsroute.Identity.Kind, listenerset.Identity.Kind, referencegrant.Identity.Kind, backendtlspolicy.Identity.Kind},
 	)
 }
 
@@ -169,7 +178,7 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	// EndpointSlice first, then the descriptor kinds in registry order.
 	sources := append([]typedTableResourceSource{
 		{Kind: "Service", Group: "", Resource: "services", Available: servicesAvailable},
-		{Kind: "EndpointSlice", Group: "discovery.k8s.io", Resource: "endpointslices", Available: endpointSlicesAvailable, QueryKinds: []string{"EndpointSlice", "Service"}},
+		{Kind: "EndpointSlice", Group: "discovery.k8s.io", Resource: "endpointslices", Available: endpointSlicesAvailable, QueryKinds: []string{endpointslice.Identity.Kind, service.Identity.Kind}},
 	}, descriptorSources...)
 
 	issues := typedTableQueryResourceIssues(ctx, namespaceNetworkDomainName, query, sources)

@@ -81,7 +81,7 @@ func namespaceWorkloadsQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "status", "ready"},
-		[]string{"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"},
+		[]string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
 	)
 }
 
@@ -390,7 +390,7 @@ func (b *NamespaceWorkloadsBuilder) resourceSources() []typedTableResourceSource
 			Group:      "",
 			Resource:   "pods",
 			Available:  b.podLister != nil,
-			QueryKinds: []string{"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"},
+			QueryKinds: []string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
 		},
 		{Kind: "Deployment", Group: "apps", Resource: "deployments", Available: b.deploymentLister != nil},
 		{Kind: "StatefulSet", Group: "apps", Resource: "statefulsets", Available: b.statefulLister != nil},

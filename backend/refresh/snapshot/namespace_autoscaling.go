@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	"github.com/luxury-yacht/app/backend/resources/hpa"
 )
 
 const (
@@ -40,7 +41,7 @@ func namespaceAutoscalingQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "target", "min", "max", "current", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "target", "targetApiVersion"},
-		[]string{"HorizontalPodAutoscaler"},
+		[]string{hpa.Identity.Kind},
 	)
 }
 

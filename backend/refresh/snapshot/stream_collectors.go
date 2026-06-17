@@ -3,7 +3,7 @@
  *
  * Shared registry-driven dispatch for the typed-table snapshot domains. A domain
  * builder names no kind: it supplies its domain name and an indexerFor closure,
- * then loops the stream descriptor registry (streamregistry.ForDomain) via
+ * then loops the stream descriptor registry (kindregistry.StreamDescriptorsForDomain) via
  * collectDescriptorTableRows — gating each descriptor on the request's runtime
  * permission, listing the kind's cached objects from its informer indexer, and
  * projecting each into the domain's Row type via the descriptor's StreamRow
@@ -20,7 +20,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
-	"github.com/luxury-yacht/app/backend/refresh/streamregistry"
+	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	informers "k8s.io/client-go/informers"
@@ -40,7 +40,7 @@ func factoryIndexers(
 	domainName string,
 ) func(streamspec.Descriptor) cache.Indexer {
 	registered := map[string]cache.Indexer{}
-	for _, d := range streamregistry.ForDomain(domainName) {
+	for _, d := range kindregistry.StreamDescriptorsForDomain(domainName) {
 		if !allowed.Allows(d.Group, d.Resource) {
 			continue
 		}
@@ -77,7 +77,7 @@ func unconditionalSharedIndexers(
 	domainName string,
 ) func(streamspec.Descriptor) cache.Indexer {
 	registered := map[string]cache.Indexer{}
-	for _, d := range streamregistry.ForDomain(domainName) {
+	for _, d := range kindregistry.StreamDescriptorsForDomain(domainName) {
 		if d.Informer != nil && factory != nil {
 			registered[d.Group+"/"+d.Resource] = d.Informer(factory).GetIndexer()
 		}
@@ -104,7 +104,7 @@ func collectDescriptorTableRows[Row any](
 	namespace string,
 ) ([]Row, []typedTableResourceSource, uint64, error) {
 	rows := make([]Row, 0)
-	descriptors := streamregistry.ForDomain(domainName)
+	descriptors := kindregistry.StreamDescriptorsForDomain(domainName)
 	sources := make([]typedTableResourceSource, 0, len(descriptors))
 	var version uint64
 	for _, d := range descriptors {

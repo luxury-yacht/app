@@ -15,6 +15,9 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 )
 
 const (
@@ -39,7 +42,7 @@ func namespaceQuotasQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "details", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "details"},
-		[]string{"ResourceQuota", "LimitRange", "PodDisruptionBudget"},
+		[]string{resourcequota.Identity.Kind, limitrange.Identity.Kind, poddisruptionbudget.Identity.Kind},
 	)
 }
 

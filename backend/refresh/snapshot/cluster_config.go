@@ -16,6 +16,10 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	"github.com/luxury-yacht/app/backend/resources/admission"
+	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
 )
 
 const clusterConfigDomainName = "cluster-config"
@@ -40,7 +44,7 @@ func clusterConfigQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "details", "age"},
 		[]string{"kinds"},
 		[]string{"kind", "name", "details"},
-		[]string{"StorageClass", "IngressClass", "GatewayClass", "MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"},
+		[]string{storageclass.Identity.Kind, ingressclass.Identity.Kind, gatewayclass.Identity.Kind, admission.MutatingIdentity.Kind, admission.ValidatingIdentity.Kind},
 	)
 }
 
@@ -132,4 +136,3 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 		Stats: resolved.Stats,
 	}, nil
 }
-

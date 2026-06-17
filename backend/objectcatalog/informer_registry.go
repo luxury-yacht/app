@@ -16,55 +16,37 @@ import (
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
+
+	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
+	"github.com/luxury-yacht/app/backend/refresh/kindspec"
 )
 
 // informerListFunc returns objects for a namespace (or cluster-wide when empty/all).
 type informerListFunc func(namespace string) ([]metav1.Object, error)
 
-// sharedInformerGroupResources maps each catalog-cached built-in resource to the
-// group-version-resource its shared informer is registered under. Membership marks
-// a resource as shared-informer-backed (vs live/dynamic listed); the value is the
-// GVR the generic lister/informer uses.
-var sharedInformerGroupResources = map[schema.GroupResource]schema.GroupVersionResource{
-	{Group: "", Resource: "pods"}:                                         {Group: "", Version: "v1", Resource: "pods"},
-	{Group: "apps", Resource: "deployments"}:                              {Group: "apps", Version: "v1", Resource: "deployments"},
-	{Group: "apps", Resource: "statefulsets"}:                             {Group: "apps", Version: "v1", Resource: "statefulsets"},
-	{Group: "apps", Resource: "daemonsets"}:                               {Group: "apps", Version: "v1", Resource: "daemonsets"},
-	{Group: "apps", Resource: "replicasets"}:                              {Group: "apps", Version: "v1", Resource: "replicasets"},
-	{Group: "batch", Resource: "jobs"}:                                    {Group: "batch", Version: "v1", Resource: "jobs"},
-	{Group: "batch", Resource: "cronjobs"}:                                {Group: "batch", Version: "v1", Resource: "cronjobs"},
-	{Group: "", Resource: "services"}:                                     {Group: "", Version: "v1", Resource: "services"},
-	{Group: "discovery.k8s.io", Resource: "endpointslices"}:               {Group: "discovery.k8s.io", Version: "v1", Resource: "endpointslices"},
-	{Group: "", Resource: "configmaps"}:                                   {Group: "", Version: "v1", Resource: "configmaps"},
-	{Group: "", Resource: "secrets"}:                                      {Group: "", Version: "v1", Resource: "secrets"},
-	{Group: "", Resource: "persistentvolumeclaims"}:                       {Group: "", Version: "v1", Resource: "persistentvolumeclaims"},
-	{Group: "", Resource: "resourcequotas"}:                               {Group: "", Version: "v1", Resource: "resourcequotas"},
-	{Group: "", Resource: "limitranges"}:                                  {Group: "", Version: "v1", Resource: "limitranges"},
-	{Group: "networking.k8s.io", Resource: "ingresses"}:                   {Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"},
-	{Group: "networking.k8s.io", Resource: "networkpolicies"}:             {Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"},
-	{Group: "autoscaling", Resource: "horizontalpodautoscalers"}:          {Group: "autoscaling", Version: "v1", Resource: "horizontalpodautoscalers"},
-	{Group: "rbac.authorization.k8s.io", Resource: "clusterroles"}:        {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"},
-	{Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings"}: {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"},
-	{Group: "rbac.authorization.k8s.io", Resource: "roles"}:               {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"},
-	{Group: "rbac.authorization.k8s.io", Resource: "rolebindings"}:        {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"},
-	{Group: "", Resource: "namespaces"}:                                   {Group: "", Version: "v1", Resource: "namespaces"},
-	{Group: "", Resource: "nodes"}:                                        {Group: "", Version: "v1", Resource: "nodes"},
-	{Group: "", Resource: "persistentvolumes"}:                            {Group: "", Version: "v1", Resource: "persistentvolumes"},
-	{Group: "storage.k8s.io", Resource: "storageclasses"}:                 {Group: "storage.k8s.io", Version: "v1", Resource: "storageclasses"},
+// catalogGroupResources builds the GroupResource→GVR map for every registry kind
+// with the given catalog source. Membership marks a resource as served by that
+// informer factory (vs live/dynamic listed); the value is the GVR the generic
+// lister/informer uses. The catalog never lists kinds itself — it derives them
+// from the single kind registry.
+func catalogGroupResources(source kindspec.CatalogSource) map[schema.GroupResource]schema.GroupVersionResource {
+	out := map[schema.GroupResource]schema.GroupVersionResource{}
+	for _, d := range kindregistry.All {
+		if d.CatalogSource != source {
+			continue
+		}
+		gvr := schema.GroupVersionResource{Group: d.Identity.Group, Version: d.Identity.Version, Resource: d.Identity.Resource}
+		out[gvr.GroupResource()] = gvr
+	}
+	return out
 }
 
-// gatewayInformerGroupResources is the same set for Gateway-API resources, read
-// from the Gateway-API informer factory.
-var gatewayInformerGroupResources = map[schema.GroupResource]schema.GroupVersionResource{
-	{Group: "gateway.networking.k8s.io", Resource: "gatewayclasses"}:     {Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gatewayclasses"},
-	{Group: "gateway.networking.k8s.io", Resource: "gateways"}:           {Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gateways"},
-	{Group: "gateway.networking.k8s.io", Resource: "httproutes"}:         {Group: "gateway.networking.k8s.io", Version: "v1", Resource: "httproutes"},
-	{Group: "gateway.networking.k8s.io", Resource: "grpcroutes"}:         {Group: "gateway.networking.k8s.io", Version: "v1", Resource: "grpcroutes"},
-	{Group: "gateway.networking.k8s.io", Resource: "tlsroutes"}:          {Group: "gateway.networking.k8s.io", Version: "v1", Resource: "tlsroutes"},
-	{Group: "gateway.networking.k8s.io", Resource: "listenersets"}:       {Group: "gateway.networking.k8s.io", Version: "v1", Resource: "listenersets"},
-	{Group: "gateway.networking.k8s.io", Resource: "referencegrants"}:    {Group: "gateway.networking.k8s.io", Version: "v1", Resource: "referencegrants"},
-	{Group: "gateway.networking.k8s.io", Resource: "backendtlspolicies"}: {Group: "gateway.networking.k8s.io", Version: "v1", Resource: "backendtlspolicies"},
-}
+// sharedInformerGroupResources is every registry kind read from the core shared
+// informer factory; gatewayInformerGroupResources is the Gateway-API equivalent.
+var (
+	sharedInformerGroupResources  = catalogGroupResources(kindspec.CatalogShared)
+	gatewayInformerGroupResources = catalogGroupResources(kindspec.CatalogGateway)
+)
 
 // sharedInformerLister lists a shared-informer-backed resource generically through
 // the factory's ForResource, so adding a resource is one map entry, not a lister.

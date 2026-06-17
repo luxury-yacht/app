@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh/kindspec"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -37,36 +38,10 @@ type watchEvent struct {
 }
 
 // watchInformerGroupResources is the set of built-in resources the catalog watches
-// for incremental updates, each mapped to the GVR its shared informer registers
-// under. registerWatchHandlers attaches a handler to each via ForResource — no
-// per-kind informer is wired here.
-var watchInformerGroupResources = map[schema.GroupResource]schema.GroupVersionResource{
-	{Group: "", Resource: "pods"}:                                         {Group: "", Version: "v1", Resource: "pods"},
-	{Group: "apps", Resource: "deployments"}:                              {Group: "apps", Version: "v1", Resource: "deployments"},
-	{Group: "apps", Resource: "statefulsets"}:                             {Group: "apps", Version: "v1", Resource: "statefulsets"},
-	{Group: "apps", Resource: "daemonsets"}:                               {Group: "apps", Version: "v1", Resource: "daemonsets"},
-	{Group: "apps", Resource: "replicasets"}:                              {Group: "apps", Version: "v1", Resource: "replicasets"},
-	{Group: "batch", Resource: "jobs"}:                                    {Group: "batch", Version: "v1", Resource: "jobs"},
-	{Group: "batch", Resource: "cronjobs"}:                                {Group: "batch", Version: "v1", Resource: "cronjobs"},
-	{Group: "", Resource: "services"}:                                     {Group: "", Version: "v1", Resource: "services"},
-	{Group: "discovery.k8s.io", Resource: "endpointslices"}:               {Group: "discovery.k8s.io", Version: "v1", Resource: "endpointslices"},
-	{Group: "", Resource: "configmaps"}:                                   {Group: "", Version: "v1", Resource: "configmaps"},
-	{Group: "", Resource: "secrets"}:                                      {Group: "", Version: "v1", Resource: "secrets"},
-	{Group: "", Resource: "persistentvolumeclaims"}:                       {Group: "", Version: "v1", Resource: "persistentvolumeclaims"},
-	{Group: "", Resource: "resourcequotas"}:                               {Group: "", Version: "v1", Resource: "resourcequotas"},
-	{Group: "", Resource: "limitranges"}:                                  {Group: "", Version: "v1", Resource: "limitranges"},
-	{Group: "networking.k8s.io", Resource: "ingresses"}:                   {Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"},
-	{Group: "networking.k8s.io", Resource: "networkpolicies"}:             {Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"},
-	{Group: "autoscaling", Resource: "horizontalpodautoscalers"}:          {Group: "autoscaling", Version: "v1", Resource: "horizontalpodautoscalers"},
-	{Group: "rbac.authorization.k8s.io", Resource: "clusterroles"}:        {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"},
-	{Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings"}: {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"},
-	{Group: "rbac.authorization.k8s.io", Resource: "roles"}:               {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"},
-	{Group: "rbac.authorization.k8s.io", Resource: "rolebindings"}:        {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"},
-	{Group: "", Resource: "namespaces"}:                                   {Group: "", Version: "v1", Resource: "namespaces"},
-	{Group: "", Resource: "nodes"}:                                        {Group: "", Version: "v1", Resource: "nodes"},
-	{Group: "", Resource: "persistentvolumes"}:                            {Group: "", Version: "v1", Resource: "persistentvolumes"},
-	{Group: "storage.k8s.io", Resource: "storageclasses"}:                 {Group: "storage.k8s.io", Version: "v1", Resource: "storageclasses"},
-}
+// for incremental updates — the same shared-informer-backed kinds it collects, so
+// it derives from the single registry. registerWatchHandlers attaches a handler to
+// each via ForResource; no per-kind informer is wired here.
+var watchInformerGroupResources = catalogGroupResources(kindspec.CatalogShared)
 
 type watchNotifier struct {
 	service            *Service
