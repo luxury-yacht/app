@@ -200,35 +200,26 @@ type objectMapOptions struct {
 }
 
 type objectMapRecord struct {
-	ref                ObjectMapReference
-	creationTimestamp  string
-	status             *ObjectMapStatus
-	actionFacts        *ObjectMapActionFacts
-	owners             []metav1.OwnerReference
-	labels             map[string]string
-	pod                *corev1.Pod
-	service            *corev1.Service
-	slice              *discoveryv1.EndpointSlice
-	pvc                *corev1.PersistentVolumeClaim
-	pv                 *corev1.PersistentVolume
-	storage            *storagev1.StorageClass
-	ingress            *networkingv1.Ingress
-	ingClass           *networkingv1.IngressClass
-	hpa                *autoscalingv2.HorizontalPodAutoscaler
-	pdb                *policyv1.PodDisruptionBudget
-	networkPolicy      *networkingv1.NetworkPolicy
-	clusterRole        *rbacv1.ClusterRole
-	clusterRoleBinding *rbacv1.ClusterRoleBinding
-	gatewayClass       *gatewayv1.GatewayClass
-	gateway            *gatewayv1.Gateway
-	httpRoute          *gatewayv1.HTTPRoute
-	grpcRoute          *gatewayv1.GRPCRoute
-	tlsRoute           *gatewayv1.TLSRoute
-	listenerSet        *gatewayv1.ListenerSet
-	referenceGrant     *gatewayv1.ReferenceGrant
-	backendTLSPolicy   *gatewayv1.BackendTLSPolicy
-	template           *corev1.PodTemplateSpec
-	cronJobTpl         *corev1.PodTemplateSpec
+	ref               ObjectMapReference
+	obj               metav1.Object
+	creationTimestamp string
+	status            *ObjectMapStatus
+	actionFacts       *ObjectMapActionFacts
+	owners            []metav1.OwnerReference
+	labels            map[string]string
+	pod               *corev1.Pod
+	service           *corev1.Service
+	slice             *discoveryv1.EndpointSlice
+	pvc               *corev1.PersistentVolumeClaim
+	pv                *corev1.PersistentVolume
+	storage           *storagev1.StorageClass
+	ingress           *networkingv1.Ingress
+	ingClass          *networkingv1.IngressClass
+	pdb               *policyv1.PodDisruptionBudget
+	networkPolicy     *networkingv1.NetworkPolicy
+	clusterRole       *rbacv1.ClusterRole
+	template          *corev1.PodTemplateSpec
+	cronJobTpl        *corev1.PodTemplateSpec
 }
 
 type objectMapIndex struct {
@@ -531,6 +522,7 @@ func collectKind[T metav1.Object](
 	for _, item := range items {
 		rec := &objectMapRecord{
 			ref:               refFromObject(item, group, version, kind, resource, item.GetNamespace()),
+			obj:               item,
 			creationTimestamp: objectCreationTimestamp(item),
 			owners:            item.GetOwnerReferences(),
 			labels:            cloneStringMap(item.GetLabels()),
@@ -716,11 +708,11 @@ func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.In
 		hpa := list.Items[i]
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&hpa.ObjectMeta, "autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", hpa.Namespace),
+			obj:               &hpa,
 			creationTimestamp: objectCreationTimestamp(&hpa.ObjectMeta),
 			status:            hpapkg.ObjectMapStatus(idx.meta.ClusterID, hpa),
 			owners:            hpa.OwnerReferences,
 			labels:            cloneStringMap(hpa.Labels),
-			hpa:               &hpa,
 		})
 	}
 }
@@ -775,7 +767,6 @@ func (idx *objectMapIndex) collectClusterRoleBindings(lister rbaclisters.Cluster
 		func() ([]*rbacv1.ClusterRoleBinding, error) { return lister.List(labels.Everything()) },
 		func(binding *rbacv1.ClusterRoleBinding, rec *objectMapRecord) {
 			rec.status = clusterrolebinding.ObjectMapStatus(idx.meta.ClusterID, *binding)
-			rec.clusterRoleBinding = binding
 		})
 }
 
@@ -790,7 +781,6 @@ func (idx *objectMapIndex) collectGatewayClasses(ctx context.Context, client gat
 		},
 		func(gatewayClass *gatewayv1.GatewayClass, rec *objectMapRecord) {
 			rec.status = gatewayclass.ObjectMapStatus(idx.meta.ClusterID, *gatewayClass)
-			rec.gatewayClass = gatewayClass
 		})
 }
 
@@ -805,7 +795,6 @@ func (idx *objectMapIndex) collectGateways(ctx context.Context, client gatewayve
 		},
 		func(gateway *gatewayv1.Gateway, rec *objectMapRecord) {
 			rec.status = gatewaypkg.ObjectMapStatus(idx.meta.ClusterID, *gateway)
-			rec.gateway = gateway
 		})
 }
 
@@ -820,7 +809,6 @@ func (idx *objectMapIndex) collectHTTPRoutes(ctx context.Context, client gateway
 		},
 		func(route *gatewayv1.HTTPRoute, rec *objectMapRecord) {
 			rec.status = httproute.ObjectMapStatus(idx.meta.ClusterID, *route)
-			rec.httpRoute = route
 		})
 }
 
@@ -835,7 +823,6 @@ func (idx *objectMapIndex) collectGRPCRoutes(ctx context.Context, client gateway
 		},
 		func(route *gatewayv1.GRPCRoute, rec *objectMapRecord) {
 			rec.status = grpcroute.ObjectMapStatus(idx.meta.ClusterID, *route)
-			rec.grpcRoute = route
 		})
 }
 
@@ -850,7 +837,6 @@ func (idx *objectMapIndex) collectTLSRoutes(ctx context.Context, client gatewayv
 		},
 		func(route *gatewayv1.TLSRoute, rec *objectMapRecord) {
 			rec.status = tlsroute.ObjectMapStatus(idx.meta.ClusterID, *route)
-			rec.tlsRoute = route
 		})
 }
 
@@ -865,7 +851,6 @@ func (idx *objectMapIndex) collectListenerSets(ctx context.Context, client gatew
 		},
 		func(listenerSet *gatewayv1.ListenerSet, rec *objectMapRecord) {
 			rec.status = listenerset.ObjectMapStatus(idx.meta.ClusterID, *listenerSet)
-			rec.listenerSet = listenerSet
 		})
 }
 
@@ -880,7 +865,6 @@ func (idx *objectMapIndex) collectReferenceGrants(ctx context.Context, client ga
 		},
 		func(grant *gatewayv1.ReferenceGrant, rec *objectMapRecord) {
 			rec.status = referencegrant.ObjectMapStatus(idx.meta.ClusterID, *grant)
-			rec.referenceGrant = grant
 		})
 }
 
@@ -895,7 +879,6 @@ func (idx *objectMapIndex) collectBackendTLSPolicies(ctx context.Context, client
 		},
 		func(policy *gatewayv1.BackendTLSPolicy, rec *objectMapRecord) {
 			rec.status = backendtlspolicy.ObjectMapStatus(idx.meta.ClusterID, *policy)
-			rec.backendTLSPolicy = policy
 		})
 }
 
@@ -968,6 +951,9 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	if len(dst.labels) == 0 {
 		dst.labels = src.labels
 	}
+	if src.obj != nil {
+		dst.obj = src.obj
+	}
 	if src.pod != nil {
 		dst.pod = src.pod
 	}
@@ -992,9 +978,6 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	if src.ingClass != nil {
 		dst.ingClass = src.ingClass
 	}
-	if src.hpa != nil {
-		dst.hpa = src.hpa
-	}
 	if src.pdb != nil {
 		dst.pdb = src.pdb
 	}
@@ -1003,33 +986,6 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	}
 	if src.clusterRole != nil {
 		dst.clusterRole = src.clusterRole
-	}
-	if src.clusterRoleBinding != nil {
-		dst.clusterRoleBinding = src.clusterRoleBinding
-	}
-	if src.gatewayClass != nil {
-		dst.gatewayClass = src.gatewayClass
-	}
-	if src.gateway != nil {
-		dst.gateway = src.gateway
-	}
-	if src.httpRoute != nil {
-		dst.httpRoute = src.httpRoute
-	}
-	if src.grpcRoute != nil {
-		dst.grpcRoute = src.grpcRoute
-	}
-	if src.tlsRoute != nil {
-		dst.tlsRoute = src.tlsRoute
-	}
-	if src.listenerSet != nil {
-		dst.listenerSet = src.listenerSet
-	}
-	if src.referenceGrant != nil {
-		dst.referenceGrant = src.referenceGrant
-	}
-	if src.backendTLSPolicy != nil {
-		dst.backendTLSPolicy = src.backendTLSPolicy
 	}
 	if src.template != nil {
 		dst.template = src.template
@@ -1045,10 +1001,14 @@ func (idx *objectMapIndex) enrichActionFacts() {
 	}
 	managedTargets := make(map[string]struct{})
 	for _, record := range idx.records {
-		if record == nil || record.hpa == nil {
+		if record == nil {
 			continue
 		}
-		facts := hpapkg.BuildFacts(idx.meta.ClusterID, record.hpa)
+		hpa, ok := record.obj.(*autoscalingv2.HorizontalPodAutoscaler)
+		if !ok {
+			continue
+		}
+		facts := hpapkg.BuildFacts(idx.meta.ClusterID, hpa)
 		target := idx.recordForResourceLink(facts.ScaleTarget)
 		if target == nil {
 			continue
@@ -1483,21 +1443,12 @@ func isNamespaceMapSupportedRecord(record *objectMapRecord) bool {
 		record.storage != nil ||
 		record.ingress != nil ||
 		record.ingClass != nil ||
-		record.hpa != nil ||
 		record.pdb != nil ||
 		record.networkPolicy != nil ||
 		record.clusterRole != nil ||
-		record.clusterRoleBinding != nil ||
-		record.gatewayClass != nil ||
-		record.gateway != nil ||
-		record.httpRoute != nil ||
-		record.grpcRoute != nil ||
-		record.tlsRoute != nil ||
-		record.listenerSet != nil ||
-		record.referenceGrant != nil ||
-		record.backendTLSPolicy != nil ||
 		record.template != nil ||
 		record.cronJobTpl != nil ||
+		objectMapLinkEdgeBuilders[record.ref.Kind] != nil ||
 		record.ref.Kind == "ConfigMap" ||
 		record.ref.Kind == "Secret" ||
 		record.ref.Kind == "ServiceAccount" ||
@@ -1607,12 +1558,6 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 				add(record, target, relationship.typ, relationship.label, "spec.backend.service")
 			}
 		}
-		if record.hpa != nil {
-			facts := hpapkg.BuildFacts(idx.meta.ClusterID, record.hpa)
-			target := idx.recordForResourceLink(facts.ScaleTarget)
-			relationship := objectMapRelationships[objectMapEdgeScales]
-			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-		}
 		if record.pdb != nil {
 			for _, pod := range idx.matchingPodsByLabelSelector(record.ref.Namespace, record.pdb.Spec.Selector) {
 				relationship := objectMapRelationships[objectMapEdgeSelector]
@@ -1633,56 +1578,20 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 				}
 			}
 		}
-		if record.clusterRoleBinding != nil {
-			facts := clusterrolebinding.BuildFacts(idx.meta.ClusterID, record.clusterRoleBinding)
-			target := idx.recordForResourceLink(facts.RoleRef)
-			relationship := objectMapRelationships[objectMapEdgeGrants]
-			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-			for _, subject := range facts.Subjects {
-				if subject.Link == nil {
-					continue
+		// Kinds whose edges are pure "build facts → link to the facts' resource
+		// links" declare them in their own package; the registry dispatches by kind.
+		if build := objectMapLinkEdgeBuilders[record.ref.Kind]; build != nil {
+			for _, e := range build(idx.meta.ClusterID, record.obj) {
+				relationship := objectMapRelationships[e.Type]
+				label := e.Label
+				if label == "" {
+					label = relationship.label
 				}
-				target := idx.recordForResourceLink(*subject.Link)
-				relationship := objectMapRelationships[objectMapEdgeBinds]
-				add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-			}
-		}
-		if record.gatewayClass != nil {
-			facts := gatewayclass.BuildFacts(idx.meta.ClusterID, record.gatewayClass)
-			if facts.Parameters != nil {
-				relationship := objectMapRelationships[objectMapEdgeUses]
-				add(record, idx.recordForResourceLink(*facts.Parameters), relationship.typ, relationship.label, "spec.parametersRef")
-			}
-		}
-		if record.gateway != nil {
-			if class := gatewaypkg.BuildFacts(idx.meta.ClusterID, record.gateway).Class; class != nil {
-				relationship := objectMapRelationships[objectMapEdgeUses]
-				add(record, idx.recordForResourceLink(*class), relationship.typ, "uses class", "spec.gatewayClassName")
-			}
-		}
-		if record.httpRoute != nil {
-			idx.addGatewayRouteEdges(record, httproute.BuildFacts(idx.meta.ClusterID, record.httpRoute).RouteCommonFacts, add)
-		}
-		if record.grpcRoute != nil {
-			idx.addGatewayRouteEdges(record, grpcroute.BuildFacts(idx.meta.ClusterID, record.grpcRoute).RouteCommonFacts, add)
-		}
-		if record.tlsRoute != nil {
-			idx.addGatewayRouteEdges(record, tlsroute.BuildFacts(idx.meta.ClusterID, record.tlsRoute).RouteCommonFacts, add)
-		}
-		if record.listenerSet != nil {
-			relationship := objectMapRelationships[objectMapEdgeUses]
-			add(record, idx.recordForResourceLink(listenerset.BuildFacts(idx.meta.ClusterID, record.listenerSet).ParentRef), relationship.typ, relationship.label, "spec.parentRef")
-		}
-		if record.referenceGrant != nil {
-			relationship := objectMapRelationships[objectMapEdgeGrants]
-			for _, targetRef := range referencegrant.BuildFacts(idx.meta.ClusterID, record.referenceGrant).To {
-				add(record, idx.recordForResourceLink(targetRef), relationship.typ, relationship.label, "spec.to")
-			}
-		}
-		if record.backendTLSPolicy != nil {
-			relationship := objectMapRelationships[objectMapEdgeUses]
-			for _, targetRef := range backendtlspolicy.BuildFacts(idx.meta.ClusterID, record.backendTLSPolicy).TargetRefs {
-				add(record, idx.recordForResourceLink(targetRef), relationship.typ, relationship.label, "spec.targetRefs")
+				tracedBy := e.TracedBy
+				if tracedBy == "" {
+					tracedBy = relationship.defaultTracedBy
+				}
+				add(record, idx.recordForResourceLink(e.Link), e.Type, label, tracedBy)
 			}
 		}
 		if record.template != nil {
@@ -1734,17 +1643,6 @@ func (idx *objectMapIndex) addPodTemplateEdges(record *objectMapRecord, tpl *cor
 	}
 	for _, container := range append(append([]corev1.Container{}, tpl.Spec.InitContainers...), tpl.Spec.Containers...) {
 		idx.addContainerEdges(record, record.ref.Namespace, container, add)
-	}
-}
-
-func (idx *objectMapIndex) addGatewayRouteEdges(record *objectMapRecord, facts resourcemodel.RouteCommonFacts, add func(*objectMapRecord, *objectMapRecord, string, string, string)) {
-	parentRelationship := objectMapRelationships[objectMapEdgeUses]
-	for _, parentRef := range facts.ParentRefs {
-		add(record, idx.recordForResourceLink(parentRef), parentRelationship.typ, parentRelationship.label, "spec.parentRefs")
-	}
-	backendRelationship := objectMapRelationships[objectMapEdgeRoutes]
-	for _, backendRef := range facts.Backends {
-		add(record, idx.recordForResourceLink(backendRef), backendRelationship.typ, backendRelationship.label, "spec.rules.backendRefs")
 	}
 }
 

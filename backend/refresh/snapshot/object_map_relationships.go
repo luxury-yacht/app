@@ -2,20 +2,24 @@
 // relationship graph.
 package snapshot
 
+import "github.com/luxury-yacht/app/backend/refresh/objectmapspec"
+
+// The edge-type identifiers live in the objectmapspec leaf so kind packages can
+// declare edges of these types; these aliases keep the snapshot-side names.
 const (
-	objectMapEdgeOwner         = "owner"
-	objectMapEdgeSelector      = "selector"
-	objectMapEdgeEndpoint      = "endpoint"
-	objectMapEdgeRoutes        = "routes"
-	objectMapEdgeScales        = "scales"
-	objectMapEdgeGrants        = "grants"
-	objectMapEdgeBinds         = "binds"
-	objectMapEdgeAggregates    = "aggregates"
-	objectMapEdgeUses          = "uses"
-	objectMapEdgeMounts        = "mounts"
-	objectMapEdgeSchedules     = "schedules"
-	objectMapEdgeVolumeBinding = "volume-binding"
-	objectMapEdgeStorageClass  = "storage-class"
+	objectMapEdgeOwner         = objectmapspec.EdgeOwner
+	objectMapEdgeSelector      = objectmapspec.EdgeSelector
+	objectMapEdgeEndpoint      = objectmapspec.EdgeEndpoint
+	objectMapEdgeRoutes        = objectmapspec.EdgeRoutes
+	objectMapEdgeScales        = objectmapspec.EdgeScales
+	objectMapEdgeGrants        = objectmapspec.EdgeGrants
+	objectMapEdgeBinds         = objectmapspec.EdgeBinds
+	objectMapEdgeAggregates    = objectmapspec.EdgeAggregates
+	objectMapEdgeUses          = objectmapspec.EdgeUses
+	objectMapEdgeMounts        = objectmapspec.EdgeMounts
+	objectMapEdgeSchedules     = objectmapspec.EdgeSchedules
+	objectMapEdgeVolumeBinding = objectmapspec.EdgeVolumeBinding
+	objectMapEdgeStorageClass  = objectmapspec.EdgeStorageClass
 )
 
 type objectMapReverseTraversalPolicy int

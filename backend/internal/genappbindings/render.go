@@ -23,6 +23,45 @@ import (
 	"go/format"
 	"sort"
 	"strings"
+
+	"github.com/luxury-yacht/app/backend/resourcekind"
+	"github.com/luxury-yacht/app/backend/resources/admission"
+	"github.com/luxury-yacht/app/backend/resources/appbinding"
+	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
+	"github.com/luxury-yacht/app/backend/resources/clusterrole"
+	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/daemonset"
+	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/gateway"
+	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
+	"github.com/luxury-yacht/app/backend/resources/grpcroute"
+	"github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/httproute"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	"github.com/luxury-yacht/app/backend/resources/job"
+	"github.com/luxury-yacht/app/backend/resources/limitrange"
+	"github.com/luxury-yacht/app/backend/resources/listenerset"
+	"github.com/luxury-yacht/app/backend/resources/namespaces"
+	"github.com/luxury-yacht/app/backend/resources/networkpolicy"
+	"github.com/luxury-yacht/app/backend/resources/nodes"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
+	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
+	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	"github.com/luxury-yacht/app/backend/resources/referencegrant"
+	"github.com/luxury-yacht/app/backend/resources/replicaset"
+	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	"github.com/luxury-yacht/app/backend/resources/role"
+	"github.com/luxury-yacht/app/backend/resources/rolebinding"
+	"github.com/luxury-yacht/app/backend/resources/secret"
+	"github.com/luxury-yacht/app/backend/resources/service"
+	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
+	"github.com/luxury-yacht/app/backend/resources/statefulset"
+	"github.com/luxury-yacht/app/backend/resources/storageclass"
+	"github.com/luxury-yacht/app/backend/resources/tlsroute"
 )
 
 const resourcesPkg = "github.com/luxury-yacht/app/backend/resources/"
@@ -90,56 +129,83 @@ func (b binding) fetchExpr() string {
 	return fmt.Sprintf("%s.%s(name)", b.Service, b.method())
 }
 
-// Bindings is the single source for the generated App.Get wrappers. Keep it
-// sorted by Name; the generator re-sorts anyway for stable output.
-var Bindings = []binding{
-	{Name: "BackendTLSPolicy", Namespaced: true, Service: "backendtlspolicy.NewService(deps)", Import: resourcesPkg + "backendtlspolicy"},
-	{Name: "ClusterRole", Service: "clusterrole.NewService(deps)", Import: resourcesPkg + "clusterrole"},
-	{Name: "ClusterRoleBinding", Service: "clusterrolebinding.NewService(deps)", Import: resourcesPkg + "clusterrolebinding"},
-	{Name: "ConfigMap", Namespaced: true, Service: "configmap.NewService(deps)", Import: resourcesPkg + "configmap"},
-	{Name: "CronJob", Namespaced: true, Service: "cronjob.NewService(deps)", Import: resourcesPkg + "cronjob"},
-	{Name: "DaemonSet", Namespaced: true, Service: "daemonset.NewService(deps)", Import: resourcesPkg + "daemonset"},
-	{Name: "Deployment", Namespaced: true, Service: "deployment.NewService(deps)", Import: resourcesPkg + "deployment"},
-	{Name: "EndpointSlice", Namespaced: true, Service: "endpointslice.NewService(deps)", Import: resourcesPkg + "endpointslice"},
-	{Name: "Gateway", Namespaced: true, Service: "gateway.NewService(deps)", Import: resourcesPkg + "gateway"},
-	{Name: "GatewayClass", Service: "gatewayclass.NewService(deps)", Import: resourcesPkg + "gatewayclass"},
-	{Name: "GRPCRoute", Namespaced: true, Service: "grpcroute.NewService(deps)", Import: resourcesPkg + "grpcroute", DTOImport: resourcesPkg + "types"},
-	{Name: "HorizontalPodAutoscaler", Namespaced: true, Key: "HPA", Service: "hpa.NewService(deps)", Import: resourcesPkg + "hpa"},
-	{Name: "HTTPRoute", Namespaced: true, Service: "httproute.NewService(deps)", Import: resourcesPkg + "httproute", DTOImport: resourcesPkg + "types"},
-	{Name: "Ingress", Namespaced: true, Service: "ingress.NewService(deps)", Import: resourcesPkg + "ingress"},
-	{Name: "IngressClass", Service: "ingressclass.NewService(deps)", Import: resourcesPkg + "ingressclass"},
-	{Name: "Job", Namespaced: true, Service: "job.NewService(deps)", Import: resourcesPkg + "job"},
-	{Name: "LimitRange", Namespaced: true, Service: "limitrange.NewService(deps)", Import: resourcesPkg + "limitrange"},
-	{Name: "ListenerSet", Namespaced: true, Service: "listenerset.NewService(deps)", Import: resourcesPkg + "listenerset"},
-	{Name: "MutatingWebhookConfiguration", Service: "admission.NewService(deps)", Import: resourcesPkg + "admission"},
-	{Name: "Namespace", Service: "namespaces.NewService(deps)", Import: resourcesPkg + "namespaces"},
-	{Name: "NetworkPolicy", Namespaced: true, Service: "networkpolicy.NewService(deps)", Import: resourcesPkg + "networkpolicy"},
-	{Name: "Node", Service: "nodes.NewService(deps)", Import: resourcesPkg + "nodes"},
-	{Name: "PersistentVolume", Service: "persistentvolume.NewService(deps)", Import: resourcesPkg + "persistentvolume"},
-	{Name: "PersistentVolumeClaim", Namespaced: true, Key: "PVC", Service: "persistentvolumeclaim.NewService(deps)", Import: resourcesPkg + "persistentvolumeclaim"},
-	{Name: "PodDisruptionBudget", Namespaced: true, Service: "poddisruptionbudget.NewService(deps)", Import: resourcesPkg + "poddisruptionbudget"},
-	{Name: "ReferenceGrant", Namespaced: true, Service: "referencegrant.NewService(deps)", Import: resourcesPkg + "referencegrant"},
-	{Name: "ReplicaSet", Namespaced: true, Service: "replicaset.NewService(deps)", Import: resourcesPkg + "replicaset"},
-	{Name: "ResourceQuota", Namespaced: true, Service: "resourcequota.NewService(deps)", Import: resourcesPkg + "resourcequota"},
-	{Name: "Role", Namespaced: true, Service: "role.NewService(deps)", Import: resourcesPkg + "role"},
-	{Name: "RoleBinding", Namespaced: true, Service: "rolebinding.NewService(deps)", Import: resourcesPkg + "rolebinding"},
-	{Name: "Secret", Namespaced: true, Service: "secret.NewService(deps)", Import: resourcesPkg + "secret"},
-	{Name: "Service", Namespaced: true, Method: "GetService", Service: "service.NewService(deps)", Import: resourcesPkg + "service"},
-	{Name: "ServiceAccount", Namespaced: true, Service: "serviceaccount.NewService(deps)", Import: resourcesPkg + "serviceaccount"},
-	{Name: "StatefulSet", Namespaced: true, Service: "statefulset.NewService(deps)", Import: resourcesPkg + "statefulset"},
-	{Name: "StorageClass", Service: "storageclass.NewService(deps)", Import: resourcesPkg + "storageclass"},
-	{Name: "TLSRoute", Namespaced: true, Service: "tlsroute.NewService(deps)", Import: resourcesPkg + "tlsroute", DTOImport: resourcesPkg + "types"},
-	{Name: "ValidatingWebhookConfiguration", Service: "admission.NewService(deps)", Import: resourcesPkg + "admission"},
+// fromSpec adapts a kind package's appbinding.Spec to the generator's internal
+// binding, taking the kind name and scope from the spec's Identity so neither is
+// a second copy.
+func fromSpec(s appbinding.Spec) binding {
+	return binding{
+		Name:       s.Identity.Kind,
+		Namespaced: s.Identity.Namespaced,
+		Key:        s.Key,
+		Method:     s.Method,
+		Service:    s.Service,
+		Import:     s.Import,
+		DTOImport:  s.DTOImport,
+		Fetch:      s.Fetch,
+	}
 }
+
+func fromSpecs(specs []appbinding.Spec) []binding {
+	out := make([]binding, len(specs))
+	for i, s := range specs {
+		out[i] = fromSpec(s)
+	}
+	return out
+}
+
+// Bindings is the aggregated source for the generated App.Get wrappers: every kind
+// declares its own appbinding.Spec (resources/<kind>/appbinding.go) and this lists
+// each once, like the stream registry. The generator sorts by Name for stable
+// output, so the order here is immaterial.
+var Bindings = fromSpecs([]appbinding.Spec{
+	backendtlspolicy.DetailBinding,
+	clusterrole.DetailBinding,
+	clusterrolebinding.DetailBinding,
+	configmap.DetailBinding,
+	cronjob.DetailBinding,
+	daemonset.DetailBinding,
+	deployment.DetailBinding,
+	endpointslice.DetailBinding,
+	gateway.DetailBinding,
+	gatewayclass.DetailBinding,
+	grpcroute.DetailBinding,
+	hpa.DetailBinding,
+	httproute.DetailBinding,
+	ingress.DetailBinding,
+	ingressclass.DetailBinding,
+	job.DetailBinding,
+	limitrange.DetailBinding,
+	listenerset.DetailBinding,
+	admission.MutatingDetailBinding,
+	namespaces.DetailBinding,
+	networkpolicy.DetailBinding,
+	nodes.DetailBinding,
+	persistentvolume.DetailBinding,
+	persistentvolumeclaim.DetailBinding,
+	poddisruptionbudget.DetailBinding,
+	referencegrant.DetailBinding,
+	replicaset.DetailBinding,
+	resourcequota.DetailBinding,
+	role.DetailBinding,
+	rolebinding.DetailBinding,
+	secret.DetailBinding,
+	service.DetailBinding,
+	serviceaccount.DetailBinding,
+	statefulset.DetailBinding,
+	storageclass.DetailBinding,
+	tlsroute.DetailBinding,
+	admission.ValidatingDetailBinding,
+})
 
 // detailExtras are kinds that have a runtime object-panel detail fetcher but whose
 // App.Get binding is hand-written, so they are absent from Bindings. They take part
-// only in detail-fetcher generation, never in App.Get binding generation.
-var detailExtras = []binding{
-	{Name: "Pod", Namespaced: true, Fetch: "pods.GetPod(deps, namespace, name, true)", Import: resourcesPkg + "pods"},
-	{Name: "HelmRelease", Namespaced: true, Fetch: "helm.NewService(helm.Dependencies{Common: deps}).ReleaseDetails(namespace, name)", Import: resourcesPkg + "helm"},
-	{Name: "CustomResourceDefinition", Service: "apiextensions.NewService(deps)", Import: resourcesPkg + "apiextensions"},
-}
+// only in detail-fetcher generation, never in App.Get binding generation. Their
+// Identity is declared inline because HelmRelease is not a built-in Kubernetes kind.
+var detailExtras = fromSpecs([]appbinding.Spec{
+	{Identity: resourcekind.Identity{Kind: "Pod", Namespaced: true}, Fetch: "pods.GetPod(deps, namespace, name, true)", Import: resourcesPkg + "pods"},
+	{Identity: resourcekind.Identity{Kind: "HelmRelease", Namespaced: true}, Fetch: "helm.NewService(helm.Dependencies{Common: deps}).ReleaseDetails(namespace, name)", Import: resourcesPkg + "helm"},
+	{Identity: resourcekind.Identity{Kind: "CustomResourceDefinition"}, Service: "apiextensions.NewService(deps)", Import: resourcesPkg + "apiextensions"},
+})
 
 // Render returns the gofmt'd source of the generated bindings file.
 func Render() ([]byte, error) {
