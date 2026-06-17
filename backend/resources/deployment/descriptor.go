@@ -15,4 +15,5 @@ var Descriptor = kindspec.Descriptor{
 	Binding:         &DetailBinding,
 	Graph:           kindspec.ObjectMapGraph{ScalableWorkload: true},
 	Workload:        &kindspec.WorkloadOperations{Restart: workloadRestart, Scale: workloadScale, CurrentReplicas: workloadCurrentReplicas, RevisionHistory: revisionHistory, ApplyPodTemplate: applyPodTemplate},
+	PortForward:     &kindspec.PortForwardTarget{ResolvePod: ForwardPodName, Reconnect: true},
 }

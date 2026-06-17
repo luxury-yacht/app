@@ -31,7 +31,7 @@ func (a *App) deletePod(clusterID, namespace, name string) error {
 			clusterID,
 			"",
 			"v1",
-			"Pod",
+			pods.Identity.Kind,
 			namespace,
 			name,
 		),
@@ -40,8 +40,8 @@ func (a *App) deletePod(clusterID, namespace, name string) error {
 }
 
 func (a *App) deletePodAction(target ObjectActionTargetRef) error {
-	if target.Group != "" || target.Version != "v1" || target.Kind != "Pod" {
-		return errUnsupportedActionTarget(ObjectActionDelete, target, "/v1", "Pod")
+	if target.Group != "" || target.Version != "v1" || target.Kind != pods.Identity.Kind {
+		return errUnsupportedActionTarget(ObjectActionDelete, target, "/v1", pods.Identity.Kind)
 	}
 	if err := requirePodObject(target.Namespace, target.Name); err != nil {
 		return err
@@ -108,7 +108,7 @@ func (a *App) createDebugContainer(clusterID string, req DebugContainerRequest) 
 			clusterID,
 			"",
 			"v1",
-			"Pod",
+			pods.Identity.Kind,
 			req.Namespace,
 			req.PodName,
 		),
@@ -124,8 +124,8 @@ func (a *App) createDebugContainer(clusterID string, req DebugContainerRequest) 
 }
 
 func (a *App) createDebugContainerAction(target ObjectActionTargetRef, options ObjectActionDebugContainerOptions) (*DebugContainerResponse, error) {
-	if target.Group != "" || target.Version != "v1" || target.Kind != "Pod" {
-		return nil, errUnsupportedActionTarget(ObjectActionCreateDebugContainer, target, "/v1", "Pod")
+	if target.Group != "" || target.Version != "v1" || target.Kind != pods.Identity.Kind {
+		return nil, errUnsupportedActionTarget(ObjectActionCreateDebugContainer, target, "/v1", pods.Identity.Kind)
 	}
 	if err := requirePodObject(target.Namespace, target.Name); err != nil {
 		return nil, err

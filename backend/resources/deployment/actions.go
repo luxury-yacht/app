@@ -90,3 +90,24 @@ func applyPodTemplate(ctx context.Context, client kubernetes.Interface, namespac
 	}
 	return nil
 }
+
+// ForwardPodName finds a ready pod for the named Deployment (via its ReplicaSets).
+func ForwardPodName(ctx context.Context, client kubernetes.Interface, namespace, name string) (string, error) {
+	deployment, err := client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get deployment: %w", err)
+	}
+	pods, err := common.ListPodsForSelector(ctx, client, namespace, deployment.Spec.Selector)
+	if err != nil {
+		return "", err
+	}
+	labelSelector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
+	if err != nil {
+		return "", fmt.Errorf("failed to build deployment selector: %w", err)
+	}
+	replicaSets, err := client.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector.String()})
+	if err != nil {
+		return "", fmt.Errorf("failed to list replicasets: %w", err)
+	}
+	return common.PickReadyPodName(filterPodsForDeployment(deployment, pods, replicaSets), "Deployment", name)
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
+	"github.com/luxury-yacht/app/backend/resources/pods"
 	kubectldrain "k8s.io/kubectl/pkg/drain"
 )
 
@@ -24,7 +25,7 @@ func (a *App) cordonNode(clusterID, nodeName string) error {
 	}
 	_, err := a.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionCordon,
-		Target: objectActionTarget(clusterID, "", "v1", "Node", "", nodeName),
+		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
 	})
 	return err
 }
@@ -53,7 +54,7 @@ func (a *App) uncordonNode(clusterID, nodeName string) error {
 	}
 	_, err := a.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionUncordon,
-		Target: objectActionTarget(clusterID, "", "v1", "Node", "", nodeName),
+		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
 	})
 	return err
 }
@@ -82,7 +83,7 @@ func (a *App) drainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	}
 	_, err := a.RunObjectAction(ObjectActionRequest{
 		Action:       ObjectActionDrain,
-		Target:       objectActionTarget(clusterID, "", "v1", "Node", "", nodeName),
+		Target:       objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
 		DrainOptions: &options,
 	})
 	return err
@@ -145,8 +146,8 @@ func (a *App) startDrainNodeAction(target ObjectActionTargetRef, options DrainNo
 }
 
 func requireNodeActionTarget(action string, target ObjectActionTargetRef) error {
-	if target.Group != "" || target.Version != "v1" || target.Kind != "Node" {
-		return errUnsupportedActionTarget(action, target, "/v1", "Node")
+	if target.Group != "" || target.Version != "v1" || target.Kind != nodes.Identity.Kind {
+		return errUnsupportedActionTarget(action, target, "/v1", nodes.Identity.Kind)
 	}
 	return requireObjectName(target.Name)
 }
@@ -154,7 +155,7 @@ func requireNodeActionTarget(action string, target ObjectActionTargetRef) error 
 func (a *App) requireNodeMaintenancePermission(deps common.Dependencies, nodeName string) error {
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
 		Version: "v1",
-		Kind:    "Node",
+		Kind:    nodes.Identity.Kind,
 		Name:    nodeName,
 		Verb:    "get",
 	}); err != nil {
@@ -162,7 +163,7 @@ func (a *App) requireNodeMaintenancePermission(deps common.Dependencies, nodeNam
 	}
 	return a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
 		Version: "v1",
-		Kind:    "Node",
+		Kind:    nodes.Identity.Kind,
 		Name:    nodeName,
 		Verb:    "patch",
 	})
@@ -171,19 +172,19 @@ func (a *App) requireNodeMaintenancePermission(deps common.Dependencies, nodeNam
 func (a *App) requireDrainPodPermission(deps common.Dependencies, options DrainNodeOptions) error {
 	podCheck := resourcePermissionCheck{
 		Version:     "v1",
-		Kind:        "Pod",
+		Kind:        pods.Identity.Kind,
 		Verb:        "create",
 		Subresource: "eviction",
 	}
 	if options.DisableEviction {
-		podCheck = resourcePermissionCheck{Version: "v1", Kind: "Pod", Verb: "delete"}
+		podCheck = resourcePermissionCheck{Version: "v1", Kind: pods.Identity.Kind, Verb: "delete"}
 	} else {
 		evictionGroupVersion, err := kubectldrain.CheckEvictionSupport(deps.KubernetesClient)
 		if err != nil {
 			return fmt.Errorf("failed to check eviction support: %w", err)
 		}
 		if evictionGroupVersion.Empty() {
-			podCheck = resourcePermissionCheck{Version: "v1", Kind: "Pod", Verb: "delete"}
+			podCheck = resourcePermissionCheck{Version: "v1", Kind: pods.Identity.Kind, Verb: "delete"}
 		}
 	}
 	return a.requireResourcePermission(deps.Context, deps, podCheck)
@@ -218,7 +219,7 @@ func runtimeOperationFromDrainJob(job *nodemaintenance.DrainJob) RuntimeOperatio
 		Type:        RuntimeOperationDrain,
 		ClusterID:   job.ClusterID,
 		ClusterName: job.ClusterName,
-		Target:      runtimeOperationTarget(job.ClusterID, "", "v1", "Node", "", job.NodeName),
+		Target:      runtimeOperationTarget(job.ClusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", job.NodeName),
 		Status:      string(job.Status),
 		StartedAt:   time.UnixMilli(job.StartedAt).Format(time.RFC3339),
 		DisplayName: fmt.Sprintf("Drain %s", job.NodeName),
@@ -234,7 +235,7 @@ func (a *App) deleteNode(clusterID, nodeName string) error {
 	}
 	_, err := a.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionDelete,
-		Target: objectActionTarget(clusterID, "", "v1", "Node", "", nodeName),
+		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
 	})
 	return err
 }
@@ -245,7 +246,7 @@ func (a *App) forceDeleteNode(clusterID, nodeName string) error {
 	}
 	_, err := a.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionForceDelete,
-		Target: objectActionTarget(clusterID, "", "v1", "Node", "", nodeName),
+		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
 	})
 	return err
 }
@@ -275,7 +276,7 @@ func (a *App) deleteNodeAction(target ObjectActionTargetRef, force bool) error {
 }
 
 func (a *App) clearNodeCaches(selectionKey, nodeName string) {
-	a.invalidateResponseCache(selectionKey, "Node", "", nodeName)
+	a.invalidateResponseCache(selectionKey, nodes.Identity.Kind, "", nodeName)
 }
 
 func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryResponse {
@@ -288,7 +289,7 @@ func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryRespo
 	}
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
 		Version:     "v1",
-		Kind:        "Node",
+		Kind:        nodes.Identity.Kind,
 		Name:        nodeName,
 		Verb:        "get",
 		Subresource: "proxy",
@@ -308,7 +309,7 @@ func (a *App) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest)
 	}
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
 		Version:     "v1",
-		Kind:        "Node",
+		Kind:        nodes.Identity.Kind,
 		Name:        nodeName,
 		Verb:        "get",
 		Subresource: "proxy",

@@ -14,4 +14,5 @@ var Descriptor = kindspec.Descriptor{
 	Edges:           ObjectMapEdges,
 	Binding:         &DetailBinding,
 	Workload:        &kindspec.WorkloadOperations{Restart: workloadRestart, RevisionHistory: revisionHistory, ApplyPodTemplate: applyPodTemplate},
+	PortForward:     &kindspec.PortForwardTarget{ResolvePod: ForwardPodName, Reconnect: true},
 }

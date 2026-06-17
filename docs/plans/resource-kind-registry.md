@@ -30,23 +30,25 @@
 > kinds (PVC/PV/Ingress) via a `CoreRef{Group,…}` instead of resolvers hard-coded in
 > `object_map.go`.
 >
-> **Workload mutation operations are now registry-driven too** (beyond the 9): a
+> **Every operation and capability is registry-driven too** (beyond the 9): a
 > `kindspec.WorkloadOperations` facet (Restart/Scale/CurrentReplicas/RevisionHistory/
-> ApplyPodTemplate) carries each workload kind's own typed calls, so
-> `workload_actions.go` and `workload_rollback.go` switch on no kind; the
-> supported-kind sets derive from the registry. The catalog's `buildSummaryActionFacts`
-> now reuses each kind's object-map action-facts projection (one projection, not two).
+> ApplyPodTemplate) carries each workload kind's own typed calls — `workload_actions.go`
+> and `workload_rollback.go` switch on no kind. A `kindspec.PortForwardTarget` facet
+> carries each kind's pod-resolver + reconnect/service-port behaviour — port-forward
+> resolution and the capability table derive from the registry. CronJob trigger/suspend
+> and Node cordon/drain live in their kind packages and reference canonical Identities;
+> the object-action delete router and Pod ops reference Identities. The catalog reuses
+> each kind's object-map action-facts projection and the registry's scalable-workload
+> facet. **No shared subsystem hand-lists kinds for dispatch, definition, projection,
+> classification, operation, or capability anymore.**
 >
-> **What is NOT registry-driven (deliberately — relationships and single-kind ops,
-> not multi-kind definition dispatch):** cross-kind *relationship resolution* where
-> the target kind is intrinsic to the relationship mechanism — port-forward target→pod
-> resolution (Deployment→ReplicaSet→Pod, Service→EndpointSlice→Pod), object-map
-> selector/slice primitives, `resourcemodel` reverse-link index, pod-spec edge walkers;
-> *single-kind operations* that name only their own kind (CronJob trigger/suspend, Node
-> cordon/drain); the catalog's unstructured action-facts path (dynamic/CRD objects);
-> and workload-metrics streaming (no shared informer). These are per-kind by nature —
-> a relationship must name its target, a single-kind action names its kind — not the
-> hand-maintained multi-kind dispatch the plan targets.
+> **What still names a kind (irreducibly):** the kind's own package; cross-kind
+> *relationships* where naming the related kind IS the data — `resourcemodel` reverse-
+> link / gateway / rbac helpers, object-map selector/slice/ingress-class primitives,
+> pod owner refs, log-source→pod resolution, HPA→workload coverage; and documented
+> *exceptions* — workload-metrics streaming (no shared informer) and the catalog's
+> unstructured action-facts path (dynamically-listed objects). A relationship must
+> name its target; these are not the hand-maintained dispatch the plan targets.
 
 
 

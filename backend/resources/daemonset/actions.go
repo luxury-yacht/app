@@ -51,3 +51,16 @@ func applyPodTemplate(ctx context.Context, client kubernetes.Interface, namespac
 	}
 	return nil
 }
+
+// ForwardPodName finds a ready pod for the named DaemonSet (via its label selector).
+func ForwardPodName(ctx context.Context, client kubernetes.Interface, namespace, name string) (string, error) {
+	obj, err := client.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get daemonset: %w", err)
+	}
+	pods, err := common.ListPodsForSelector(ctx, client, namespace, obj.Spec.Selector)
+	if err != nil {
+		return "", err
+	}
+	return common.PickReadyPodName(common.FilterPodsByControllerOwner(pods, "DaemonSet", obj.Name), "DaemonSet", name)
+}

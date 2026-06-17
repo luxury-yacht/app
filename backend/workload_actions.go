@@ -7,14 +7,12 @@ import (
 	"strings"
 	"time"
 
-	batchv1 "k8s.io/api/batch/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh/kindspec"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/job"
 )
 
 const rolloutAnnotation = "kubectl.kubernetes.io/restartedAt"
@@ -286,9 +284,9 @@ func (a *App) triggerCronJob(clusterID, namespace, name string) (string, error) 
 		Action: ObjectActionTrigger,
 		Target: objectActionTarget(
 			clusterID,
-			"batch",
-			"v1",
-			"CronJob",
+			cronjob.Identity.Group,
+			cronjob.Identity.Version,
+			cronjob.Identity.Kind,
 			namespace,
 			name,
 		),
@@ -297,8 +295,8 @@ func (a *App) triggerCronJob(clusterID, namespace, name string) (string, error) 
 }
 
 func (a *App) triggerCronJobAction(target ObjectActionTargetRef) (string, error) {
-	if target.Group != "batch" || target.Version != "v1" || target.Kind != "CronJob" {
-		return "", errUnsupportedActionTarget(ObjectActionTrigger, target, "batch/v1", "CronJob")
+	if target.Group != cronjob.Identity.Group || target.Version != cronjob.Identity.Version || target.Kind != cronjob.Identity.Kind {
+		return "", errUnsupportedActionTarget(ObjectActionTrigger, target, cronjob.Identity.Group+"/"+cronjob.Identity.Version, cronjob.Identity.Kind)
 	}
 	return a.triggerCronJobInternal(target.ClusterID, target.Namespace, target.Name)
 }
@@ -320,68 +318,26 @@ func (a *App) triggerCronJobInternal(clusterID, namespace, name string) (string,
 		ctx = context.Background()
 	}
 
-	// Fetch the CronJob to get its jobTemplate
-	cronJob, err := deps.KubernetesClient.BatchV1().CronJobs(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return "", fmt.Errorf("failed to get cronjob %s/%s: %w", namespace, name, err)
-	}
-	if cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend {
-		return "", fmt.Errorf("cannot trigger suspended cronjob %s/%s", namespace, name)
-	}
+	// Permission to create the Job is checked here; the CronJob fetch, suspended
+	// guard, and Job creation live in the cronjob package.
 	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
-		Group:     "batch",
-		Version:   "v1",
-		Kind:      "Job",
+		Group:     job.Identity.Group,
+		Version:   job.Identity.Version,
+		Kind:      job.Identity.Kind,
 		Namespace: namespace,
 		Verb:      "create",
 	}); err != nil {
 		return "", err
 	}
 
-	// Generate a unique job name with timestamp
-	timestamp := time.Now().UTC().Format("20060102150405")
-	jobName := fmt.Sprintf("%s-manual-%s", name, timestamp)
-
-	// Create the Job from the CronJob's jobTemplate
-	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
-			Namespace: namespace,
-			Labels:    cronJob.Spec.JobTemplate.Labels,
-			Annotations: map[string]string{
-				"cronjob.kubernetes.io/instantiate": "manual",
-			},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "batch/v1",
-					Kind:       "CronJob",
-					Name:       cronJob.Name,
-					UID:        cronJob.UID,
-					Controller: boolPtr(true),
-				},
-			},
-		},
-		Spec: cronJob.Spec.JobTemplate.Spec,
-	}
-
-	// Copy annotations from jobTemplate if present
-	if cronJob.Spec.JobTemplate.Annotations != nil {
-		if job.ObjectMeta.Annotations == nil {
-			job.ObjectMeta.Annotations = make(map[string]string)
-		}
-		for k, v := range cronJob.Spec.JobTemplate.Annotations {
-			job.ObjectMeta.Annotations[k] = v
-		}
-	}
-
-	createdJob, err := deps.KubernetesClient.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
+	jobName, err := cronjob.TriggerManualJob(ctx, deps.KubernetesClient, namespace, name)
 	if err != nil {
-		return "", fmt.Errorf("failed to create job from cronjob %s/%s: %w", namespace, name, err)
+		return "", err
 	}
 
-	applog.Info(deps.Logger, fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", namespace, name, createdJob.Name), "triggerCronJob")
-	a.invalidateResponseCache(selectionKey, "CronJob", namespace, name)
-	return createdJob.Name, nil
+	applog.Info(deps.Logger, fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", namespace, name, jobName), "triggerCronJob")
+	a.invalidateResponseCache(selectionKey, cronjob.Identity.Kind, namespace, name)
+	return jobName, nil
 }
 
 // suspendCronJob sets the suspend field on a CronJob.
@@ -394,9 +350,9 @@ func (a *App) suspendCronJob(clusterID, namespace, name string, suspend bool) er
 		Action: ObjectActionSuspend,
 		Target: objectActionTarget(
 			clusterID,
-			"batch",
-			"v1",
-			"CronJob",
+			cronjob.Identity.Group,
+			cronjob.Identity.Version,
+			cronjob.Identity.Kind,
 			namespace,
 			name,
 		),
@@ -406,8 +362,8 @@ func (a *App) suspendCronJob(clusterID, namespace, name string, suspend bool) er
 }
 
 func (a *App) suspendCronJobAction(target ObjectActionTargetRef, suspend bool) error {
-	if target.Group != "batch" || target.Version != "v1" || target.Kind != "CronJob" {
-		return errUnsupportedActionTarget(ObjectActionSuspend, target, "batch/v1", "CronJob")
+	if target.Group != cronjob.Identity.Group || target.Version != cronjob.Identity.Version || target.Kind != cronjob.Identity.Kind {
+		return errUnsupportedActionTarget(ObjectActionSuspend, target, cronjob.Identity.Group+"/"+cronjob.Identity.Version, cronjob.Identity.Kind)
 	}
 	return a.suspendCronJobInternal(target.ClusterID, target.Namespace, target.Name, suspend)
 }
@@ -425,9 +381,9 @@ func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend 
 	}
 
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Group:     "batch",
-		Version:   "v1",
-		Kind:      "CronJob",
+		Group:     cronjob.Identity.Group,
+		Version:   cronjob.Identity.Version,
+		Kind:      cronjob.Identity.Kind,
 		Namespace: namespace,
 		Name:      name,
 		Verb:      "patch",
@@ -440,26 +396,8 @@ func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend 
 		ctx = context.Background()
 	}
 
-	patch := map[string]any{
-		"spec": map[string]any{
-			"suspend": suspend,
-		},
-	}
-
-	patchBytes, err := json.Marshal(patch)
-	if err != nil {
-		return fmt.Errorf("failed to marshal suspend patch: %w", err)
-	}
-
-	_, err = deps.KubernetesClient.BatchV1().CronJobs(namespace).Patch(
-		ctx,
-		name,
-		types.StrategicMergePatchType,
-		patchBytes,
-		metav1.PatchOptions{},
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update cronjob %s/%s suspend state: %w", namespace, name, err)
+	if err := cronjob.SetSuspend(ctx, deps.KubernetesClient, namespace, name, suspend); err != nil {
+		return err
 	}
 
 	action := "Suspended"
@@ -467,7 +405,7 @@ func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend 
 		action = "Resumed"
 	}
 	applog.Info(deps.Logger, fmt.Sprintf("%s CronJob %s/%s", action, namespace, name), "suspendCronJob")
-	a.invalidateResponseCache(selectionKey, "CronJob", namespace, name)
+	a.invalidateResponseCache(selectionKey, cronjob.Identity.Kind, namespace, name)
 	return nil
 }
 

@@ -129,4 +129,22 @@ type Descriptor struct {
 	// Workload is the kind's mutating workload actions (restart/scale); nil for
 	// non-workload kinds.
 	Workload *WorkloadOperations
+
+	// PortForward describes this kind as a port-forward target (how to resolve it to
+	// a backing pod, plus reconnect / service-port-spec behaviour); nil for kinds
+	// that cannot be port-forwarded.
+	PortForward *PortForwardTarget
+}
+
+// PortForwardTarget is a kind's port-forward behaviour, declared in the kind's
+// package so the port-forward handlers never switch on kind.
+type PortForwardTarget struct {
+	// Reconnect reports whether a dropped forward to this kind should auto-reconnect
+	// (workloads/services churn pods; a bare Pod does not).
+	Reconnect bool
+	// UsesServicePortSpec reports whether the requested port is a Service port that
+	// must be mapped to the backing pod's container port (true only for Service).
+	UsesServicePortSpec bool
+	// ResolvePod resolves the target to a ready backing pod name.
+	ResolvePod func(ctx context.Context, client kubernetes.Interface, namespace, name string) (string, error)
 }
