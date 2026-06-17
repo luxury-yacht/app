@@ -8,7 +8,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcecontract"
 )
 
-// TestAppBindingsGeneratedInSync fails if resources_generated.go drifts from what
+// TestAppBindingsGeneratedInSync fails if resource_details_generated.go drifts from what
 // the generator produces — i.e. it was hand-edited, or the binding table changed
 // without running `go generate ./backend`.
 func TestAppBindingsGeneratedInSync(t *testing.T) {
@@ -16,12 +16,12 @@ func TestAppBindingsGeneratedInSync(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	got, err := os.ReadFile("resources_generated.go")
+	got, err := os.ReadFile("resource_details_generated.go")
 	if err != nil {
 		t.Fatalf("read generated file: %v", err)
 	}
 	if string(got) != string(want) {
-		t.Fatal("resources_generated.go is stale; run `go generate ./backend`")
+		t.Fatal("resource_details_generated.go is stale; run `go generate ./backend`")
 	}
 }
 

@@ -20,7 +20,7 @@
   ├───────────────────────────────┼───────────────────────────────────────┤
   │ stream summary │ refresh/snapshot/streaming_helpers.go │
   ├───────────────────────────────┼───────────────────────────────────────┤
-  │ App binding │ resources_generated.go │
+  │ App binding │ resource_details_generated.go │
   └───────────────────────────────┴───────────────────────────────────────┘
 
   Plus per-kind code in objectcatalog, domainpermissions, resourcestream. That is exactly "scattered across multiple places," and it is not achieved.

@@ -8,7 +8,7 @@ import (
 )
 
 // Per-kind detail DTOs are no longer re-exported here. The generated
-// App.Get<Kind> wrappers (resources_generated.go) reference each kind's DTO by
+// App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
 // its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
 // nested sub-type through those parent structs — so no package-backend alias is
 // needed for any kind DTO or its sub-types. What remains is app-level and shared
