@@ -649,6 +649,66 @@ describe('useTypedResourceQuery', () => {
     expect(result?.rows).toEqual([{ name: 'pod-b' }]);
   });
 
+  it('never commits the previous cluster rows after a cluster switch (no cross-cluster flash)', async () => {
+    // Multi-cluster correctness: switching the active cluster must NOT paint the
+    // prior cluster's rows under the new cluster, even for one frame. Cluster A
+    // settles with rows; cluster B is held in flight so the ONLY way pod-a could
+    // appear under cluster-b is the stale in-flight `rows` state surviving the
+    // switch. We record every COMMITTED frame via a layout effect (which never
+    // fires for a render React discards) and assert no committed cluster-b frame
+    // carries cluster-a's rows.
+    requestRefreshDomainStateMock.mockImplementation((request: { scope?: string }) => {
+      if (typeof request?.scope === 'string' && request.scope.startsWith('cluster-a')) {
+        return Promise.resolve({
+          status: 'executed',
+          data: { status: 'ready', data: { rows: [{ name: 'pod-a' }] } },
+        });
+      }
+      // cluster-b: keep the fetch in flight so no cluster-b rows ever arrive.
+      return new Promise(() => {});
+    });
+
+    const committed: Array<{ clusterId: string; rows: TestRow[] }> = [];
+    const Probe: React.FC<{ clusterId: string }> = ({ clusterId }) => {
+      const query = useTypedResourceQuery<TestPayload, TestRow>({
+        enabled: true,
+        clusterId,
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        sortConfig,
+        liveDataVersion: 'v1',
+        selectRows,
+      });
+      result = query;
+      React.useLayoutEffect(() => {
+        committed.push({ clusterId, rows: query.rows });
+      });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<Probe clusterId="cluster-a" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
+
+    // Ignore cluster-a's own committed frames; only what commits under cluster-b matters.
+    committed.length = 0;
+
+    await act(async () => {
+      root.render(<Probe clusterId="cluster-b" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const leakedFrames = committed.filter(
+      (frame) => frame.clusterId === 'cluster-b' && frame.rows.some((row) => row.name === 'pod-a')
+    );
+    expect(leakedFrames).toEqual([]);
+  });
+
   it('keeps a blocked query request in the warm-up (not-loaded) state', async () => {
     // Blocked refreshes (auto-refresh paused, cluster still connecting) are
     // warm-up conditions, not failures. With auto-refresh paused the table's
