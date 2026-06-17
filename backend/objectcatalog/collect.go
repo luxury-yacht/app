@@ -85,8 +85,7 @@ func (s *Service) collectViaSharedInformer(index int, desc resourceDescriptor, n
 			// No permission - fall back to listResource which handles 403 gracefully
 			return emitSummaries(index, agg, nil, nil, false)
 		}
-		builder := sharedInformerListers[gr]
-		listFn := builder(factory)
+		listFn := sharedInformerLister(factory, sharedInformerGroupResources[gr])
 		if listFn == nil {
 			return emitSummaries(index, agg, nil, nil, false)
 		}
@@ -96,8 +95,7 @@ func (s *Service) collectViaSharedInformer(index int, desc resourceDescriptor, n
 		if s.deps.GatewayInformerFactory == nil {
 			return emitSummaries(index, agg, nil, nil, false)
 		}
-		builder := gatewayInformerListers[plan.groupResource]
-		listFn := builder(s.deps.GatewayInformerFactory)
+		listFn := gatewayInformerLister(s.deps.GatewayInformerFactory, gatewayInformerGroupResources[plan.groupResource])
 		if listFn == nil {
 			return emitSummaries(index, agg, nil, nil, false)
 		}

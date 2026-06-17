@@ -36,82 +36,36 @@ type watchEvent struct {
 	obj       metav1.Object
 }
 
-var watchInformerAccessor = map[schema.GroupResource]func(informers.SharedInformerFactory) cache.SharedIndexInformer{
-	{Group: "", Resource: "pods"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Core().V1().Pods().Informer()
-	},
-	{Group: "apps", Resource: "deployments"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Apps().V1().Deployments().Informer()
-	},
-	{Group: "apps", Resource: "statefulsets"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Apps().V1().StatefulSets().Informer()
-	},
-	{Group: "apps", Resource: "daemonsets"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Apps().V1().DaemonSets().Informer()
-	},
-	{Group: "apps", Resource: "replicasets"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Apps().V1().ReplicaSets().Informer()
-	},
-	{Group: "batch", Resource: "jobs"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Batch().V1().Jobs().Informer()
-	},
-	{Group: "batch", Resource: "cronjobs"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Batch().V1().CronJobs().Informer()
-	},
-	{Group: "", Resource: "services"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Core().V1().Services().Informer()
-	},
-	{Group: "discovery.k8s.io", Resource: "endpointslices"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Discovery().V1().EndpointSlices().Informer()
-	},
-	{Group: "", Resource: "configmaps"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Core().V1().ConfigMaps().Informer()
-	},
-	{Group: "", Resource: "secrets"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Core().V1().Secrets().Informer()
-	},
-	{Group: "", Resource: "persistentvolumeclaims"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Core().V1().PersistentVolumeClaims().Informer()
-	},
-	{Group: "", Resource: "resourcequotas"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Core().V1().ResourceQuotas().Informer()
-	},
-	{Group: "", Resource: "limitranges"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Core().V1().LimitRanges().Informer()
-	},
-	{Group: "networking.k8s.io", Resource: "ingresses"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Networking().V1().Ingresses().Informer()
-	},
-	{Group: "networking.k8s.io", Resource: "networkpolicies"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Networking().V1().NetworkPolicies().Informer()
-	},
-	{Group: "autoscaling", Resource: "horizontalpodautoscalers"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Autoscaling().V1().HorizontalPodAutoscalers().Informer()
-	},
-	{Group: "rbac.authorization.k8s.io", Resource: "clusterroles"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Rbac().V1().ClusterRoles().Informer()
-	},
-	{Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Rbac().V1().ClusterRoleBindings().Informer()
-	},
-	{Group: "rbac.authorization.k8s.io", Resource: "roles"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Rbac().V1().Roles().Informer()
-	},
-	{Group: "rbac.authorization.k8s.io", Resource: "rolebindings"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Rbac().V1().RoleBindings().Informer()
-	},
-	{Group: "", Resource: "namespaces"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Core().V1().Namespaces().Informer()
-	},
-	{Group: "", Resource: "nodes"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Core().V1().Nodes().Informer()
-	},
-	{Group: "", Resource: "persistentvolumes"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Core().V1().PersistentVolumes().Informer()
-	},
-	{Group: "storage.k8s.io", Resource: "storageclasses"}: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return f.Storage().V1().StorageClasses().Informer()
-	},
+// watchInformerGroupResources is the set of built-in resources the catalog watches
+// for incremental updates, each mapped to the GVR its shared informer registers
+// under. registerWatchHandlers attaches a handler to each via ForResource — no
+// per-kind informer is wired here.
+var watchInformerGroupResources = map[schema.GroupResource]schema.GroupVersionResource{
+	{Group: "", Resource: "pods"}:                                         {Group: "", Version: "v1", Resource: "pods"},
+	{Group: "apps", Resource: "deployments"}:                              {Group: "apps", Version: "v1", Resource: "deployments"},
+	{Group: "apps", Resource: "statefulsets"}:                             {Group: "apps", Version: "v1", Resource: "statefulsets"},
+	{Group: "apps", Resource: "daemonsets"}:                               {Group: "apps", Version: "v1", Resource: "daemonsets"},
+	{Group: "apps", Resource: "replicasets"}:                              {Group: "apps", Version: "v1", Resource: "replicasets"},
+	{Group: "batch", Resource: "jobs"}:                                    {Group: "batch", Version: "v1", Resource: "jobs"},
+	{Group: "batch", Resource: "cronjobs"}:                                {Group: "batch", Version: "v1", Resource: "cronjobs"},
+	{Group: "", Resource: "services"}:                                     {Group: "", Version: "v1", Resource: "services"},
+	{Group: "discovery.k8s.io", Resource: "endpointslices"}:               {Group: "discovery.k8s.io", Version: "v1", Resource: "endpointslices"},
+	{Group: "", Resource: "configmaps"}:                                   {Group: "", Version: "v1", Resource: "configmaps"},
+	{Group: "", Resource: "secrets"}:                                      {Group: "", Version: "v1", Resource: "secrets"},
+	{Group: "", Resource: "persistentvolumeclaims"}:                       {Group: "", Version: "v1", Resource: "persistentvolumeclaims"},
+	{Group: "", Resource: "resourcequotas"}:                               {Group: "", Version: "v1", Resource: "resourcequotas"},
+	{Group: "", Resource: "limitranges"}:                                  {Group: "", Version: "v1", Resource: "limitranges"},
+	{Group: "networking.k8s.io", Resource: "ingresses"}:                   {Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"},
+	{Group: "networking.k8s.io", Resource: "networkpolicies"}:             {Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"},
+	{Group: "autoscaling", Resource: "horizontalpodautoscalers"}:          {Group: "autoscaling", Version: "v1", Resource: "horizontalpodautoscalers"},
+	{Group: "rbac.authorization.k8s.io", Resource: "clusterroles"}:        {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"},
+	{Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings"}: {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"},
+	{Group: "rbac.authorization.k8s.io", Resource: "roles"}:               {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"},
+	{Group: "rbac.authorization.k8s.io", Resource: "rolebindings"}:        {Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"},
+	{Group: "", Resource: "namespaces"}:                                   {Group: "", Version: "v1", Resource: "namespaces"},
+	{Group: "", Resource: "nodes"}:                                        {Group: "", Version: "v1", Resource: "nodes"},
+	{Group: "", Resource: "persistentvolumes"}:                            {Group: "", Version: "v1", Resource: "persistentvolumes"},
+	{Group: "storage.k8s.io", Resource: "storageclasses"}:                 {Group: "storage.k8s.io", Version: "v1", Resource: "storageclasses"},
 }
 
 type watchNotifier struct {
@@ -367,12 +321,12 @@ func registerWatchHandlers(
 	if factory == nil {
 		return
 	}
-	for gr, accessor := range watchInformerAccessor {
-		inf := accessor(factory)
-		if inf == nil {
+	for gr, gvr := range watchInformerGroupResources {
+		generic, err := factory.ForResource(gvr)
+		if err != nil {
 			continue
 		}
-		inf.AddEventHandler(makeHandler(gr, notifier, svc))
+		generic.Informer().AddEventHandler(makeHandler(gr, notifier, svc))
 	}
 	if apiextFactory != nil {
 		crdInformer := apiextFactory.Apiextensions().V1().CustomResourceDefinitions().Informer()
