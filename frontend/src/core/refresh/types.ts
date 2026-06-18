@@ -711,6 +711,9 @@ export interface PodSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFi
 
 export interface ObjectDetailsSnapshotPayload extends ClusterMeta {
   details: any;
+  // Relative "last modified" time (same format as Age); omitted by the backend
+  // when it can't be determined. Mirrors snapshot.ObjectDetailsSnapshotPayload.
+  lastModified?: string;
   resourceModel?: ResourceModel;
 }
 

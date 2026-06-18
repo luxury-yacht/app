@@ -197,7 +197,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     });
 
   // Only poll when this tab is active in its group (Step 8: active-tab-only polling).
-  const { detailPayload, detailsLoading, detailsError, fetchResourceDetails } =
+  const { detailPayload, lastModified, detailsLoading, detailsError, fetchResourceDetails } =
     useObjectPanelRefresh({
       detailScope,
       objectKind,
@@ -431,7 +431,12 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   const panelScopeRef = useRef<HTMLDivElement>(null);
 
   // Memoize the per-instance context value so child components get the correct objectData.
-  const currentObjectPanelValue = useMemo(() => ({ objectData, panelId }), [objectData, panelId]);
+  // lastModified rides along so the shared ResourceHeader can render it without
+  // every per-kind overview having to thread it through.
+  const currentObjectPanelValue = useMemo(
+    () => ({ objectData, panelId, lastModified }),
+    [objectData, panelId, lastModified]
+  );
 
   return (
     <CurrentObjectPanelContext.Provider value={currentObjectPanelValue}>

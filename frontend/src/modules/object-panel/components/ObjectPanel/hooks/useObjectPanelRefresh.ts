@@ -28,6 +28,9 @@ interface UseObjectPanelRefreshArgs {
 
 interface ObjectPanelRefreshResult {
   detailPayload: unknown;
+  // Relative "last modified" time from the details envelope (same format as
+  // Age); null when the backend can't determine it.
+  lastModified: string | null;
   detailsLoading: boolean;
   detailsError: string | null;
   fetchResourceDetails: (reason?: DataRequestReason) => Promise<void>;
@@ -45,6 +48,7 @@ export const useObjectPanelRefresh = ({
   const detailSnapshot = useRefreshScopedDomain('object-details', detailScope ?? INACTIVE_SCOPE);
 
   const detailPayload = detailScope ? (detailSnapshot.data?.details ?? null) : null;
+  const lastModified = detailScope ? (detailSnapshot.data?.lastModified ?? null) : null;
   const detailStatus = detailScope ? detailSnapshot.status : 'idle';
 
   const detailsLoadingState = applyPassiveLoadingPolicy({
@@ -131,6 +135,7 @@ export const useObjectPanelRefresh = ({
 
   return {
     detailPayload,
+    lastModified,
     detailsLoading,
     detailsError,
     fetchResourceDetails,

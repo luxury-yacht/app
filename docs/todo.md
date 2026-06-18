@@ -1,2 +1,1 @@
-- Show time of last modified in Obj Panel Details
 - Make Impossible States Impossible

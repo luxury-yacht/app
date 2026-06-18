@@ -26,7 +26,7 @@ export const ResourceHeader: React.FC<ResourceHeaderProps> = ({
   age,
   displayKind,
 }) => {
-  const { objectData } = useObjectPanel();
+  const { objectData, lastModified } = useObjectPanel();
 
   return (
     <>
@@ -50,6 +50,9 @@ export const ResourceHeader: React.FC<ResourceHeaderProps> = ({
         />
       )}
       {age && <OverviewItem label="Age" value={age} />}
+      {/* Last spec/metadata change (managedFields-derived); omitted when the
+          backend can't determine it. Same relative format as Age. */}
+      {lastModified && <OverviewItem label="Last Modified" value={lastModified} />}
       <div className="overview-separator" aria-hidden="true" />
     </>
   );

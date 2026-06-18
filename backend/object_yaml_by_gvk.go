@@ -63,8 +63,25 @@ func (a *App) GetObjectYAMLByGVK(clusterID, apiVersion, kind, namespace, name st
 // return the object's YAML or an error. Exposed for reuse by the
 // refresh-domain provider at backend/object_detail_provider.go.
 func fetchObjectYAMLByGVK(ctx context.Context, deps common.Dependencies, gvk schema.GroupVersionKind, namespace, name string) (string, error) {
+	obj, err := fetchObjectByGVK(ctx, deps, gvk, namespace, name)
+	if err != nil {
+		return "", err
+	}
+
+	yamlBytes, err := yaml.Marshal(obj.Object)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert to YAML: %w", err)
+	}
+	return string(yamlBytes), nil
+}
+
+// fetchObjectByGVK resolves and returns the live object as unstructured, using
+// the same strict GVK resolution as the YAML fetch. The returned object retains
+// metadata.managedFields (only the editable-YAML projection strips them), so
+// callers can derive last-modified information from it.
+func fetchObjectByGVK(ctx context.Context, deps common.Dependencies, gvk schema.GroupVersionKind, namespace, name string) (*unstructured.Unstructured, error) {
 	if deps.DynamicClient == nil {
-		return "", fmt.Errorf("dynamic client not initialized")
+		return nil, fmt.Errorf("dynamic client not initialized")
 	}
 	if ctx == nil {
 		ctx = deps.Context
@@ -75,13 +92,13 @@ func fetchObjectYAMLByGVK(ctx context.Context, deps common.Dependencies, gvk sch
 
 	gvr, isNamespaced, err := resolveObjectYAMLGVR(ctx, deps, gvk, objectYAMLResolverStrict)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	var obj *unstructured.Unstructured
 	if isNamespaced {
 		if strings.TrimSpace(namespace) == "" {
-			return "", fmt.Errorf("namespaced resource %s requires a namespace", gvr.String())
+			return nil, fmt.Errorf("namespaced resource %s requires a namespace", gvr.String())
 		}
 		obj, err = deps.DynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	} else {
@@ -89,14 +106,9 @@ func fetchObjectYAMLByGVK(ctx context.Context, deps common.Dependencies, gvk sch
 	}
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return "", fmt.Errorf("%s %q not found in namespace %q", gvk.String(), name, namespace)
+			return nil, fmt.Errorf("%s %q not found in namespace %q", gvk.String(), name, namespace)
 		}
-		return "", fmt.Errorf("failed to get %s %s: %w", gvk.String(), name, err)
+		return nil, fmt.Errorf("failed to get %s %s: %w", gvk.String(), name, err)
 	}
-
-	yamlBytes, err := yaml.Marshal(obj.Object)
-	if err != nil {
-		return "", fmt.Errorf("failed to convert to YAML: %w", err)
-	}
-	return string(yamlBytes), nil
+	return obj, nil
 }

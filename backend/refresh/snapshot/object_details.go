@@ -30,15 +30,26 @@ type ObjectDetailProvider interface {
 	FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (interface{}, string, error)
 }
 
+// ObjectLastModifiedProvider optionally resolves a "last modified" string for
+// an object (the most recent spec/metadata change). The builder uses it when
+// the configured provider implements it; otherwise the field is omitted.
+type ObjectLastModifiedProvider interface {
+	FetchObjectLastModified(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (string, error)
+}
+
 // ObjectDetailsBuilder resolves object details for the object panel.
 type ObjectDetailsBuilder struct {
-	provider ObjectDetailProvider
+	provider             ObjectDetailProvider
+	lastModifiedProvider ObjectLastModifiedProvider
 }
 
 // ObjectDetailsSnapshotPayload is returned to the frontend.
 type ObjectDetailsSnapshotPayload struct {
 	ClusterMeta
-	Details       interface{}                  `json:"details"`
+	Details interface{} `json:"details"`
+	// LastModified is the relative time of the object's most recent
+	// spec/metadata change (same format as Age); omitted when unavailable.
+	LastModified  string                       `json:"lastModified,omitempty"`
 	ResourceModel *resourcemodel.ResourceModel `json:"resourceModel,omitempty"`
 }
 
@@ -52,6 +63,11 @@ func RegisterObjectDetailsDomain(
 	}
 	builder := &ObjectDetailsBuilder{
 		provider: provider,
+	}
+	// Last-modified resolution is optional: only wired when the provider
+	// supports it, so other providers remain unaffected.
+	if lm, ok := provider.(ObjectLastModifiedProvider); ok {
+		builder.lastModifiedProvider = lm
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          objectDetailsDomain,
@@ -71,7 +87,8 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 
 	if b.provider != nil {
 		if details, resourceVersion, err := b.provider.FetchObjectDetails(ctx, gvk, namespace, name); err == nil {
-			return b.buildSnapshot(ctx, scope, details, resourceVersion), nil
+			lastModified := b.fetchLastModified(ctx, gvk, namespace, name)
+			return b.buildSnapshot(ctx, scope, details, resourceVersion, lastModified), nil
 		} else if !errors.Is(err, ErrObjectDetailNotImplemented) {
 			return nil, err
 		}
@@ -95,15 +112,30 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 	if namespace != "" {
 		details["namespace"] = namespace
 	}
+	lastModified := b.fetchLastModified(ctx, gvk, namespace, name)
 	resourceModel := genericObjectResourceModel(ClusterMetaFromContext(ctx), gvk, namespace, name)
-	return b.buildSnapshotWithModel(ctx, scope, details, "", &resourceModel), nil
+	return b.buildSnapshotWithModel(ctx, scope, details, "", lastModified, &resourceModel), nil
 }
 
-func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, details interface{}, resourceVersion string) *refresh.Snapshot {
-	return b.buildSnapshotWithModel(ctx, scope, details, resourceVersion, nil)
+// fetchLastModified resolves the object's last-modified string when the
+// provider supports it. It is best-effort: any error yields "" so a failed
+// lookup never blocks detail rendering.
+func (b *ObjectDetailsBuilder) fetchLastModified(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) string {
+	if b.lastModifiedProvider == nil {
+		return ""
+	}
+	value, err := b.lastModifiedProvider.FetchObjectLastModified(ctx, gvk, namespace, name)
+	if err != nil {
+		return ""
+	}
+	return value
 }
 
-func (b *ObjectDetailsBuilder) buildSnapshotWithModel(ctx context.Context, scope string, details interface{}, resourceVersion string, resourceModel *resourcemodel.ResourceModel) *refresh.Snapshot {
+func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, details interface{}, resourceVersion, lastModified string) *refresh.Snapshot {
+	return b.buildSnapshotWithModel(ctx, scope, details, resourceVersion, lastModified, nil)
+}
+
+func (b *ObjectDetailsBuilder) buildSnapshotWithModel(ctx context.Context, scope string, details interface{}, resourceVersion, lastModified string, resourceModel *resourcemodel.ResourceModel) *refresh.Snapshot {
 	version := parseVersion(resourceVersion)
 
 	return &refresh.Snapshot{
@@ -113,6 +145,7 @@ func (b *ObjectDetailsBuilder) buildSnapshotWithModel(ctx context.Context, scope
 		Payload: ObjectDetailsSnapshotPayload{
 			ClusterMeta:   ClusterMetaFromContext(ctx),
 			Details:       details,
+			LastModified:  lastModified,
 			ResourceModel: resourceModel,
 		},
 		Stats: refresh.SnapshotStats{
