@@ -21,7 +21,7 @@ import (
 // CatalogSource facet, or a new kind, fails loudly. The four sources partition
 // every kind (CatalogDynamic is the zero value), so adding any kind also breaks one
 // of these sets. Literal kind names in tests are sanctioned by the
-// resource-kind-registry plan.
+// resource-kind-registry contract (docs/architecture/resource-kind-registry.md).
 
 func catalogSourceKinds(source kindspec.CatalogSource) []string {
 	var out []string

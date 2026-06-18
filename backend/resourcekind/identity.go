@@ -6,10 +6,10 @@
  * in the repo, so each resources/<kind> package can declare its Identity with
  * this type while resourcecontract aggregates them all without an import cycle.
  *
- * This is the seed of the per-kind descriptor described in
- * docs/plans/resource-kind-registry.md: identity lives here today; behaviours
- * (model, summary, detail, object-map, permissions) grow onto the same per-kind
- * declaration so each kind is defined in exactly one place.
+ * This is the foundational facet of the per-kind descriptor; the contract is in
+ * docs/architecture/resource-kind-registry.md. Identity is declared once per
+ * kind, and a kindspec.Descriptor bundles the rest (model, summary, detail,
+ * object-map, permissions) so each kind is defined in exactly one place.
  */
 
 package resourcekind

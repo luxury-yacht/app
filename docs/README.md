@@ -21,6 +21,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 | How do refresh domains, snapshots, streams, and scopes work? | [architecture/refresh-system.md](architecture/refresh-system.md) |
 | What owns object existence and GVK/GVR identity? | [architecture/catalog.md](architecture/catalog.md) |
 | What owns object refs, status, facts, and links? | [architecture/shared-resource-model.md](architecture/shared-resource-model.md) |
+| How is per-kind behavior declared and dispatched, and where does the kind vocabulary live? | [architecture/resource-kind-registry.md](architecture/resource-kind-registry.md) |
 | Where should cross-layer contracts live? | [architecture/shared-contracts.md](architecture/shared-contracts.md) |
 | How should frontend reads reach backend data? | [architecture/data-access.md](architecture/data-access.md) |
 | How do permission gates and action capabilities work? | [architecture/permissions.md](architecture/permissions.md) |

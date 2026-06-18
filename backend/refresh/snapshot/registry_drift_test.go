@@ -18,7 +18,7 @@ import (
 // to an explicit golden list so either change fails loudly and must be made
 // deliberately. The golden lists are independent string literals on purpose: they
 // pin behaviour even if a kind's Identity.Kind is renamed. The literal kind names
-// here are sanctioned — the resource-kind-registry plan exempts tests from the
+// here are sanctioned — the resource-kind-registry contract exempts tests from the
 // one-place-per-kind rule.
 
 // assertKindSet fails unless got equals want as a set, reporting kinds that are
